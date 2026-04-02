@@ -53,6 +53,47 @@ export type Database = {
           },
         ]
       }
+      creditos_uso: {
+        Row: {
+          anio: number
+          created_at: string
+          docs_acumulados: number
+          docs_incluidos: number
+          docs_usados: number
+          empresa_id: string
+          id: string
+          mes: number
+        }
+        Insert: {
+          anio: number
+          created_at?: string
+          docs_acumulados?: number
+          docs_incluidos?: number
+          docs_usados?: number
+          empresa_id: string
+          id?: string
+          mes: number
+        }
+        Update: {
+          anio?: number
+          created_at?: string
+          docs_acumulados?: number
+          docs_incluidos?: number
+          docs_usados?: number
+          empresa_id?: string
+          id?: string
+          mes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creditos_uso_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documentos_subidos: {
         Row: {
           created_at: string
@@ -176,6 +217,9 @@ export type Database = {
           email_sii: string | null
           giro: string | null
           id: string
+          plan: string | null
+          plan_activo: boolean
+          plan_vence_at: string | null
           razon_social: string
           regimen_tributario: string | null
           region: string | null
@@ -189,6 +233,9 @@ export type Database = {
           email_sii?: string | null
           giro?: string | null
           id?: string
+          plan?: string | null
+          plan_activo?: boolean
+          plan_vence_at?: string | null
           razon_social: string
           regimen_tributario?: string | null
           region?: string | null
@@ -202,6 +249,9 @@ export type Database = {
           email_sii?: string | null
           giro?: string | null
           id?: string
+          plan?: string | null
+          plan_activo?: boolean
+          plan_vence_at?: string | null
           razon_social?: string
           regimen_tributario?: string | null
           region?: string | null
@@ -539,6 +589,7 @@ export type Database = {
           id: string
           nombre: string
           rol: string
+          vetado: boolean
         }
         Insert: {
           created_at?: string
@@ -547,6 +598,7 @@ export type Database = {
           id: string
           nombre: string
           rol?: string
+          vetado?: boolean
         }
         Update: {
           created_at?: string
@@ -555,6 +607,7 @@ export type Database = {
           id?: string
           nombre?: string
           rol?: string
+          vetado?: boolean
         }
         Relationships: [
           {

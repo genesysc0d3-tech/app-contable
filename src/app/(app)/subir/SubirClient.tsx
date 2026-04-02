@@ -6,16 +6,17 @@ import DocumentList from "@/components/upload/DocumentList";
 import { getDocumentosRecientes } from "@/lib/upload";
 import type { DocumentoSubido, UploadResult } from "@/lib/upload";
 
-// TODO: obtener desde sesión del usuario autenticado
-const EMPRESA_ID_PLACEHOLDER = "demo";
+interface SubirClientProps {
+  empresaId: string;
+}
 
-export default function SubirPage() {
+export default function SubirClient({ empresaId }: SubirClientProps) {
   const [documentos, setDocumentos] = useState<DocumentoSubido[]>([]);
 
   const fetchDocumentos = useCallback(async () => {
-    const docs = await getDocumentosRecientes(EMPRESA_ID_PLACEHOLDER);
+    const docs = await getDocumentosRecientes(empresaId);
     setDocumentos(docs);
-  }, []);
+  }, [empresaId]);
 
   useEffect(() => {
     fetchDocumentos();
@@ -33,7 +34,6 @@ export default function SubirPage() {
   return (
     <div className="flex-1 pb-20">
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-white">Subir documentos</h1>
           <p className="text-sm text-white/50 mt-1">
@@ -41,13 +41,11 @@ export default function SubirPage() {
           </p>
         </div>
 
-        {/* Upload */}
         <FileUpload
-          empresaId={EMPRESA_ID_PLACEHOLDER}
+          empresaId={empresaId}
           onUploadComplete={handleUploadComplete}
         />
 
-        {/* Historial */}
         <div>
           <h2 className="text-lg font-semibold text-white/90 mb-3">
             Historial
