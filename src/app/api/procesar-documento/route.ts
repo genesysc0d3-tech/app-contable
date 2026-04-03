@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { procesarDocumento } from "@/lib/ai/processor";
+import { parseExcel } from "@/lib/parsers";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -72,14 +73,15 @@ export async function POST(request: Request) {
   // Extract text content based on file type
   let contenido: string;
 
-  if (["excel", "csv", "whatsapp"].includes(documento.tipo)) {
-    // Text-based files: read directly
+  if (documento.tipo === "excel") {
+    const buffer = await fileData.arrayBuffer();
+    contenido = parseExcel(buffer);
+  } else if (["csv", "whatsapp"].includes(documento.tipo)) {
     contenido = await fileData.text();
   } else if (documento.tipo === "pdf") {
     // PDF: send as text for now (OCR integration pending)
     contenido = await fileData.text();
   } else if (documento.tipo === "imagen") {
-    // Images: would need OCR — for now return error
     // TODO: integrate OCR (Mistral vision or Tesseract)
     return NextResponse.json(
       { error: "Procesamiento de imagenes pendiente de integracion OCR" },
