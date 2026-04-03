@@ -13,9 +13,10 @@ import { parseFecha } from "./fecha";
 
 const CHUNK_SIZE = 50;
 const MAX_RETRIES = 3;
+const MAX_CONCURRENT = 3;
+const DB_BATCH_SIZE = 100;
 const MIN_CONFIANZA = 0.6;
 
-// Service role client for server-side operations (bypasses RLS)
 function getServiceClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +28,10 @@ async function updateProgreso(documentoId: string, progreso: ProgresoIA) {
   const supabase = getServiceClient();
   await supabase
     .from("documentos_subidos")
-    .update({ progreso_ia: progreso as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"] })
+    .update({
+      progreso_ia:
+        progreso as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
+    })
     .eq("id", documentoId);
 }
 
@@ -39,26 +43,71 @@ function splitIntoChunks(lines: string[]): string[][] {
   return chunks;
 }
 
+interface ChunkResult {
+  index: number;
+  movimientos: MovimientoExtraido[];
+  propuestas: PropuestaExtraida[];
+  tokens_input: number;
+  tokens_output: number;
+  modelo: string;
+}
+
 async function processChunkWithRetry(
-  chunk: string,
-  systemPrompt: string,
-  retries = MAX_RETRIES
-): Promise<{ result: AIExtractionResult; tokens_input: number; tokens_output: number; modelo: string }> {
+  chunkIndex: number,
+  chunkText: string,
+  systemPrompt: string
+): Promise<ChunkResult> {
   const provider = getAIProvider();
   let lastError: Error | null = null;
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await provider.extractMovimientos(chunk, systemPrompt);
+      const response = await provider.extractMovimientos(
+        chunkText,
+        systemPrompt
+      );
+      return {
+        index: chunkIndex,
+        movimientos: response.result.movimientos ?? [],
+        propuestas: response.result.propuestas ?? [],
+        tokens_input: response.tokens_input,
+        tokens_output: response.tokens_output,
+        modelo: response.modelo,
+      };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < retries) {
+      if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, 1000 * attempt));
       }
     }
   }
 
   throw lastError;
+}
+
+async function insertInBatches<T extends Record<string, unknown>>(
+  table: "movimientos_raw" | "propuestas_ia",
+  rows: T[]
+): Promise<{ ids: string[]; error: string | null }> {
+  const supabase = getServiceClient();
+  const allIds: string[] = [];
+
+  for (let i = 0; i < rows.length; i += DB_BATCH_SIZE) {
+    const batch = rows.slice(i, i + DB_BATCH_SIZE);
+    const { data, error } = await supabase
+      .from(table)
+      .insert(batch as never[])
+      .select("id");
+
+    if (error) {
+      return { ids: allIds, error: `Error en ${table} batch ${Math.floor(i / DB_BATCH_SIZE) + 1}: ${error.message}` };
+    }
+    if (data) {
+      allIds.push(...data.map((r: { id: string }) => r.id));
+    }
+  }
+
+  return { ids: allIds, error: null };
 }
 
 export async function procesarDocumento(
@@ -69,52 +118,74 @@ export async function procesarDocumento(
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
 
-  // Mark as processing
   await supabase
     .from("documentos_subidos")
     .update({ estado: "procesando" })
     .eq("id", documentoId);
 
   try {
-    // Split content into lines and chunk if needed
     const lines = contenido.split("\n").filter((l) => l.trim());
-    const chunks = lines.length > CHUNK_SIZE ? splitIntoChunks(lines) : [lines];
+    const chunks =
+      lines.length > CHUNK_SIZE ? splitIntoChunks(lines) : [lines];
     const totalLotes = chunks.length;
 
+    // Process chunks in parallel, max MAX_CONCURRENT at a time
+    const results: ChunkResult[] = new Array(chunks.length);
+    let completedCount = 0;
+    let totalMovsFound = 0;
+
+    for (let start = 0; start < chunks.length; start += MAX_CONCURRENT) {
+      const batch = chunks.slice(start, start + MAX_CONCURRENT);
+      const promises = batch.map((chunk, i) => {
+        const chunkIndex = start + i;
+        return processChunkWithRetry(
+          chunkIndex,
+          chunk.join("\n"),
+          systemPrompt
+        );
+      });
+
+      const batchResults = await Promise.all(promises);
+
+      for (const r of batchResults) {
+        results[r.index] = r;
+        completedCount++;
+        totalMovsFound += r.movimientos.length;
+      }
+
+      await updateProgreso(documentoId, {
+        estado: "procesando",
+        lote_actual: completedCount,
+        total_lotes: totalLotes,
+        movimientos_encontrados: totalMovsFound,
+      });
+    }
+
+    // Combine results in order, tracking offsets for propuesta indices
     const allMovimientos: MovimientoExtraido[] = [];
     const allPropuestas: PropuestaExtraida[] = [];
     let totalTokensInput = 0;
     let totalTokensOutput = 0;
     let modelo = "";
 
-    for (let i = 0; i < chunks.length; i++) {
-      await updateProgreso(documentoId, {
-        estado: "procesando",
-        lote_actual: i + 1,
-        total_lotes: totalLotes,
-        movimientos_encontrados: allMovimientos.length,
-      });
-
-      const chunkText = chunks[i].join("\n");
-      const response = await processChunkWithRetry(chunkText, systemPrompt);
-
-      modelo = response.modelo;
-      totalTokensInput += response.tokens_input;
-      totalTokensOutput += response.tokens_output;
-
-      // Adjust movimiento_index offset for combined results
+    for (const r of results) {
+      if (!r) continue;
       const offset = allMovimientos.length;
-      allMovimientos.push(...response.result.movimientos);
+      allMovimientos.push(...r.movimientos);
 
-      for (const p of response.result.propuestas) {
+      for (const p of r.propuestas) {
         allPropuestas.push({
           ...p,
           movimiento_index: p.movimiento_index + offset,
         });
       }
+
+      totalTokensInput += r.tokens_input;
+      totalTokensOutput += r.tokens_output;
+      modelo = r.modelo;
     }
 
-    // Save movimientos_raw
+    // Save movimientos_raw in batches
     const movimientosToInsert = allMovimientos.map((m) => ({
       empresa_id: empresaId,
       documento_id: documentoId,
@@ -125,43 +196,47 @@ export async function procesarDocumento(
       origen: m.origen,
     }));
 
-    const { data: savedMovimientos, error: movError } = await supabase
-      .from("movimientos_raw")
-      .insert(movimientosToInsert)
-      .select("id");
+    const { ids: savedIds, error: movError } = await insertInBatches(
+      "movimientos_raw",
+      movimientosToInsert
+    );
 
-    if (movError) throw new Error(`Error guardando movimientos: ${movError.message}`);
+    if (movError)
+      throw new Error(`Error guardando movimientos: ${movError}`);
 
-    // Save propuestas_ia linked to saved movimientos
-    if (savedMovimientos && savedMovimientos.length > 0) {
+    // Save propuestas_ia in batches, linked to saved movimiento IDs
+    if (savedIds.length > 0 && allPropuestas.length > 0) {
       const propuestasToInsert = allPropuestas
-        .filter((p) => p.movimiento_index < savedMovimientos.length)
-        .map((p) => ({
-          empresa_id: empresaId,
-          movimiento_id: savedMovimientos[p.movimiento_index].id,
-          tipo_propuesto: p.tipo_propuesto,
-          receptor_nombre: p.receptor_nombre,
-          receptor_rut: p.receptor_rut,
-          monto_neto: p.monto_neto,
-          iva: p.iva,
-          total: p.total,
-          confianza: p.confianza,
-          notas: p.notas,
-          // Auto-flag low confidence for manual review
-          estado: p.confianza < MIN_CONFIANZA ? "pendiente" as const : "pendiente" as const,
-          spread_compra: p.spread_compra,
-          spread_venta: p.spread_venta,
-          spread_ganancia: p.spread_ganancia,
-        }));
+        .filter((p) => p.movimiento_index >= 0 && p.movimiento_index < savedIds.length)
+        .map((p) => {
+          const isLow = p.confianza != null && p.confianza < MIN_CONFIANZA;
+          return {
+            empresa_id: empresaId,
+            movimiento_id: savedIds[p.movimiento_index],
+            tipo_propuesto: p.tipo_propuesto,
+            receptor_nombre: p.receptor_nombre,
+            receptor_rut: p.receptor_rut,
+            monto_neto: p.monto_neto,
+            iva: p.iva,
+            total: p.total,
+            confianza: p.confianza,
+            notas: isLow
+              ? `[REVISION MANUAL - confianza ${Math.round((p.confianza ?? 0) * 100)}%] ${p.notas || ""}`.trim()
+              : p.notas,
+            estado: "pendiente" as const,
+            spread_compra: p.spread_compra,
+            spread_venta: p.spread_venta,
+            spread_ganancia: p.spread_ganancia,
+          };
+        });
 
-      // Add note for low confidence
-      for (const prop of propuestasToInsert) {
-        if (prop.confianza !== null && prop.confianza < MIN_CONFIANZA) {
-          prop.notas = `[REVISION MANUAL - confianza ${Math.round((prop.confianza ?? 0) * 100)}%] ${prop.notas || ""}`.trim();
-        }
-      }
+      const { error: propError } = await insertInBatches(
+        "propuestas_ia",
+        propuestasToInsert
+      );
 
-      await supabase.from("propuestas_ia").insert(propuestasToInsert);
+      if (propError)
+        throw new Error(`Error guardando propuestas: ${propError}`);
     }
 
     // Track token usage
