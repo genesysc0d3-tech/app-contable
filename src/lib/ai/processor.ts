@@ -9,6 +9,7 @@ import type {
   PropuestaExtraida,
   ProgresoIA,
 } from "./types";
+import { parseFecha } from "./fecha";
 
 const CHUNK_SIZE = 50;
 const MAX_RETRIES = 3;
@@ -117,7 +118,7 @@ export async function procesarDocumento(
     const movimientosToInsert = allMovimientos.map((m) => ({
       empresa_id: empresaId,
       documento_id: documentoId,
-      fecha: m.fecha,
+      fecha: parseFecha(m.fecha),
       descripcion: m.descripcion,
       monto: m.monto,
       tipo_flujo: m.tipo_flujo,
