@@ -2,6 +2,15 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+
+function getServiceClient() {
+  return createServiceClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function crearEmpresa(formData: FormData) {
   const supabase = await createClient();
@@ -18,8 +27,11 @@ export async function crearEmpresa(formData: FormData) {
   const razon_social = formData.get("razon_social") as string;
   const giro = formData.get("giro") as string;
 
+  // Use service role to bypass RLS (user has no empresa yet)
+  const admin = getServiceClient();
+
   // Create empresa
-  const { data: empresa, error: empresaError } = await supabase
+  const { data: empresa, error: empresaError } = await admin
     .from("empresas")
     .insert({ rut, razon_social, giro })
     .select()
@@ -33,7 +45,7 @@ export async function crearEmpresa(formData: FormData) {
   const nombre =
     user.user_metadata?.nombre || user.user_metadata?.full_name || user.email || "";
 
-  const { error: usuarioError } = await supabase.from("usuarios").insert({
+  const { error: usuarioError } = await admin.from("usuarios").insert({
     id: user.id,
     empresa_id: empresa.id,
     email: user.email!,
@@ -43,7 +55,7 @@ export async function crearEmpresa(formData: FormData) {
 
   if (usuarioError) {
     // Rollback empresa
-    await supabase.from("empresas").delete().eq("id", empresa.id);
+    await admin.from("empresas").delete().eq("id", empresa.id);
     return { error: usuarioError.message };
   }
 
