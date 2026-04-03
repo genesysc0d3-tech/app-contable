@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import type { DocumentoSubido } from "@/lib/upload";
 import type { ProgresoIA } from "@/lib/ai/types";
 
 interface DocumentListProps {
   documentos: DocumentoSubido[];
-  onDocumentoUpdate?: () => void;
 }
 
 const ESTADO_BADGE: Record<string, { label: string; className: string }> = {
@@ -29,7 +26,18 @@ const TIPO_ICON: Record<string, string> = {
 };
 
 function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
-  if (!progreso || progreso.estado === "completado") return null;
+  if (!progreso) return null;
+
+  if (progreso.estado === "completado") {
+    if (progreso.duplicados_saltados && progreso.duplicados_saltados > 0) {
+      return (
+        <p className="text-[10px] text-yellow-400/70 mt-1">
+          {progreso.duplicados_saltados} duplicados omitidos
+        </p>
+      );
+    }
+    return null;
+  }
 
   if (progreso.estado === "error") {
     return (
@@ -39,7 +47,7 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
     );
   }
 
-  const { lote_actual, total_lotes, movimientos_encontrados } = progreso;
+  const { lote_actual, total_lotes, movimientos_encontrados, duplicados_saltados } = progreso;
 
   return (
     <div className="mt-1.5">
@@ -64,40 +72,14 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
       {movimientos_encontrados !== undefined && movimientos_encontrados > 0 && (
         <p className="text-[10px] text-white/30 mt-0.5">
           {movimientos_encontrados} movimientos encontrados
+          {duplicados_saltados ? ` · ${duplicados_saltados} duplicados` : ""}
         </p>
       )}
     </div>
   );
 }
 
-export default function DocumentList({
-  documentos,
-  onDocumentoUpdate,
-}: DocumentListProps) {
-  // Subscribe to realtime changes on documentos_subidos
-  useEffect(() => {
-    if (documentos.length === 0) return;
-
-    const channel = supabase
-      .channel("documentos-progreso")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "documentos_subidos",
-        },
-        () => {
-          onDocumentoUpdate?.();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [documentos.length, onDocumentoUpdate]);
-
+export default function DocumentList({ documentos }: DocumentListProps) {
   if (documentos.length === 0) {
     return (
       <div className="text-center py-12 text-white/40">
