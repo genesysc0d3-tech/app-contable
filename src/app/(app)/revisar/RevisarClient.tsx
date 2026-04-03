@@ -10,11 +10,19 @@ type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw">;
 };
 
+type ClienteResumen = { id: string; nombre: string; rut: string | null };
+
 interface RevisarClientProps {
   propuestas: Propuesta[];
+  clientes: ClienteResumen[];
+  empresaId: string;
 }
 
-export default function RevisarClient({ propuestas }: RevisarClientProps) {
+export default function RevisarClient({
+  propuestas,
+  clientes,
+  empresaId,
+}: RevisarClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -76,6 +84,8 @@ export default function RevisarClient({ propuestas }: RevisarClientProps) {
               <PropuestaCard
                 key={p.id}
                 propuesta={p}
+                clientes={clientes}
+                empresaId={empresaId}
                 onAction={() => router.refresh()}
               />
             ))}

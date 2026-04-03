@@ -6,14 +6,19 @@ import {
   aprobarPropuesta,
   descartarPropuesta,
   editarPropuesta,
+  crearClienteDesdeRevisar,
 } from "@/app/(app)/revisar/actions";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw">;
 };
 
+type ClienteResumen = { id: string; nombre: string; rut: string | null };
+
 interface PropuestaCardProps {
   propuesta: Propuesta;
+  clientes: ClienteResumen[];
+  empresaId: string;
   onAction?: () => void;
 }
 
@@ -44,12 +49,22 @@ function ConfianzaBadge({ confianza }: { confianza: number | null }) {
 
 export default function PropuestaCard({
   propuesta,
+  clientes,
+  empresaId,
   onAction,
 }: PropuestaCardProps) {
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notas, setNotas] = useState(propuesta.notas || "");
   const [tipoEdit, setTipoEdit] = useState(propuesta.tipo_propuesto);
+  const [selectedClienteId, setSelectedClienteId] = useState<string>("");
+  const [showNewCliente, setShowNewCliente] = useState(false);
+  const [newClienteNombre, setNewClienteNombre] = useState(
+    propuesta.receptor_nombre || ""
+  );
+  const [newClienteRut, setNewClienteRut] = useState(
+    propuesta.receptor_rut || ""
+  );
 
   const mov = propuesta.movimientos_raw;
   const tipo = TIPO_LABEL[propuesta.tipo_propuesto] ?? TIPO_LABEL.ignorar;
@@ -59,7 +74,22 @@ export default function PropuestaCard({
 
   async function handleAprobar() {
     setLoading(true);
-    await aprobarPropuesta(propuesta.id);
+
+    let clienteId: string | null = selectedClienteId || null;
+
+    // Create new client inline if requested
+    if (showNewCliente && newClienteNombre.trim()) {
+      const res = await crearClienteDesdeRevisar({
+        empresa_id: empresaId,
+        nombre: newClienteNombre,
+        rut: newClienteRut || undefined,
+      });
+      if (res.ok && res.cliente) {
+        clienteId = res.cliente.id;
+      }
+    }
+
+    await aprobarPropuesta(propuesta.id, clienteId);
     onAction?.();
     setLoading(false);
   }
@@ -207,6 +237,53 @@ export default function PropuestaCard({
           {propuesta.notas && (
             <p className="text-xs text-white/40 italic">{propuesta.notas}</p>
           )}
+
+          {/* Client selector */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <select
+                value={showNewCliente ? "__new__" : selectedClienteId}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setShowNewCliente(true);
+                    setSelectedClienteId("");
+                  } else {
+                    setShowNewCliente(false);
+                    setSelectedClienteId(e.target.value);
+                  }
+                }}
+                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-400/50"
+              >
+                <option value="">Sin cliente asignado</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                    {c.rut ? ` (${c.rut})` : ""}
+                  </option>
+                ))}
+                <option value="__new__">+ Crear cliente nuevo</option>
+              </select>
+            </div>
+
+            {showNewCliente && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nombre *"
+                  value={newClienteNombre}
+                  onChange={(e) => setNewClienteNombre(e.target.value)}
+                  className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+                />
+                <input
+                  type="text"
+                  placeholder="RUT"
+                  value={newClienteRut}
+                  onChange={(e) => setNewClienteRut(e.target.value)}
+                  className="w-28 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+                />
+              </div>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-2">

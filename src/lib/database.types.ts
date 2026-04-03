@@ -7,6 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -21,7 +23,9 @@ export type Database = {
           giro: string | null
           id: string
           nombre: string
+          notas: string | null
           rut: string | null
+          telefono: string | null
         }
         Insert: {
           created_at?: string
@@ -31,7 +35,9 @@ export type Database = {
           giro?: string | null
           id?: string
           nombre: string
+          notas?: string | null
           rut?: string | null
+          telefono?: string | null
         }
         Update: {
           created_at?: string
@@ -41,7 +47,9 @@ export type Database = {
           giro?: string | null
           id?: string
           nombre?: string
+          notas?: string | null
           rut?: string | null
+          telefono?: string | null
         }
         Relationships: [
           {
@@ -527,6 +535,7 @@ export type Database = {
       }
       propuestas_ia: {
         Row: {
+          cliente_id: string | null
           confianza: number | null
           created_at: string
           empresa_id: string
@@ -545,6 +554,7 @@ export type Database = {
           total: number | null
         }
         Insert: {
+          cliente_id?: string | null
           confianza?: number | null
           created_at?: string
           empresa_id: string
@@ -563,6 +573,7 @@ export type Database = {
           total?: number | null
         }
         Update: {
+          cliente_id?: string | null
           confianza?: number | null
           created_at?: string
           empresa_id?: string
@@ -581,6 +592,13 @@ export type Database = {
           total?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "propuestas_ia_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "propuestas_ia_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -771,3 +789,43 @@ export type TablesUpdate<
       ? U
       : never
     : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
