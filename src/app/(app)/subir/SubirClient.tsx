@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
 import FileUpload from "@/components/upload/FileUpload";
 import DocumentList from "@/components/upload/DocumentList";
 import { getDocumentosRecientes } from "@/lib/upload";
@@ -22,13 +23,56 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     fetchDocumentos();
   }, [fetchDocumentos]);
 
+  // Realtime: update individual documents in-place from payload
+  useEffect(() => {
+    const channel = supabase
+      .channel("documentos-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "documentos_subidos",
+          filter: `empresa_id=eq.${empresaId}`,
+        },
+        (payload) => {
+          const updated = payload.new as DocumentoSubido;
+          setDocumentos((prev) =>
+            prev.map((doc) => (doc.id === updated.id ? updated : doc))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "documentos_subidos",
+          filter: `empresa_id=eq.${empresaId}`,
+        },
+        (payload) => {
+          const inserted = payload.new as DocumentoSubido;
+          setDocumentos((prev) => [inserted, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [empresaId]);
+
   const handleUploadComplete = useCallback(
     (result: UploadResult) => {
-      if (result.success) {
-        fetchDocumentos();
+      if (result.success && result.documento) {
+        // Add optimistically — realtime INSERT will dedupe via id check
+        setDocumentos((prev) => {
+          const exists = prev.some((d) => d.id === result.documento!.id);
+          return exists ? prev : [result.documento!, ...prev];
+        });
       }
     },
-    [fetchDocumentos]
+    []
   );
 
   return (
@@ -50,7 +94,7 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
           <h2 className="text-lg font-semibold text-white/90 mb-3">
             Historial
           </h2>
-          <DocumentList documentos={documentos} onDocumentoUpdate={fetchDocumentos} />
+          <DocumentList documentos={documentos} />
         </div>
       </div>
     </div>
