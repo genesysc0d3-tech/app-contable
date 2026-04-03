@@ -9,9 +9,8 @@ export default async function RevisarPage() {
   const [{ data: propuestas }, { data: clientes }] = await Promise.all([
     supabase
       .from("propuestas_ia")
-      .select("*, movimientos_raw(*)")
+      .select("*, movimientos_raw(*, documentos_subidos(id, nombre_archivo, created_at))")
       .eq("empresa_id", usuario.empresa_id)
-      .eq("estado", "pendiente")
       .order("created_at", { ascending: false }),
     supabase
       .from("clientes")
