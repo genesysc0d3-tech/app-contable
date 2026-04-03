@@ -185,8 +185,8 @@ export async function procesarDocumento(
       modelo = r.modelo;
     }
 
-    // Save movimientos_raw in batches
-    const movimientosToInsert = allMovimientos.map((m) => ({
+    // Detect duplicates: check existing movimientos for this empresa
+    const movimientosParsed = allMovimientos.map((m) => ({
       empresa_id: empresaId,
       documento_id: documentoId,
       fecha: parseFecha(m.fecha),
@@ -196,6 +196,45 @@ export async function procesarDocumento(
       origen: m.origen,
     }));
 
+    const { data: existentes } = await supabase
+      .from("movimientos_raw")
+      .select("fecha, monto, descripcion")
+      .eq("empresa_id", empresaId);
+
+    const existenteSet = new Set(
+      (existentes ?? []).map(
+        (e: { fecha: string; monto: number; descripcion: string }) =>
+          `${e.fecha}|${e.monto}|${e.descripcion}`
+      )
+    );
+
+    const indicesToKeep: number[] = [];
+    let duplicadosSaltados = 0;
+
+    for (let i = 0; i < movimientosParsed.length; i++) {
+      const m = movimientosParsed[i];
+      const key = `${m.fecha}|${m.monto}|${m.descripcion}`;
+      if (existenteSet.has(key)) {
+        duplicadosSaltados++;
+      } else {
+        indicesToKeep.push(i);
+        existenteSet.add(key); // prevent intra-batch duplicates too
+      }
+    }
+
+    const movimientosToInsert = indicesToKeep.map((i) => movimientosParsed[i]);
+
+    if (duplicadosSaltados > 0) {
+      await updateProgreso(documentoId, {
+        estado: "procesando",
+        lote_actual: totalLotes,
+        total_lotes: totalLotes,
+        movimientos_encontrados: totalMovsFound,
+        duplicados_saltados: duplicadosSaltados,
+      });
+    }
+
+    // Save movimientos_raw in batches
     const { ids: savedIds, error: movError } = await insertInBatches(
       "movimientos_raw",
       movimientosToInsert
@@ -204,15 +243,22 @@ export async function procesarDocumento(
     if (movError)
       throw new Error(`Error guardando movimientos: ${movError}`);
 
+    // Build a map from original index to new savedIds index
+    const originalToNewIndex = new Map<number, number>();
+    indicesToKeep.forEach((origIdx, newIdx) => {
+      originalToNewIndex.set(origIdx, newIdx);
+    });
+
     // Save propuestas_ia in batches, linked to saved movimiento IDs
     if (savedIds.length > 0 && allPropuestas.length > 0) {
       const propuestasToInsert = allPropuestas
-        .filter((p) => p.movimiento_index >= 0 && p.movimiento_index < savedIds.length)
+        .filter((p) => originalToNewIndex.has(p.movimiento_index))
         .map((p) => {
+          const newIndex = originalToNewIndex.get(p.movimiento_index)!;
           const isLow = p.confianza != null && p.confianza < MIN_CONFIANZA;
           return {
             empresa_id: empresaId,
-            movimiento_id: savedIds[p.movimiento_index],
+            movimiento_id: savedIds[newIndex],
             tipo_propuesto: p.tipo_propuesto,
             receptor_nombre: p.receptor_nombre,
             receptor_rut: p.receptor_rut,
@@ -251,19 +297,21 @@ export async function procesarDocumento(
     });
 
     // Mark as completed
+    const insertados = movimientosToInsert.length;
     await supabase
       .from("documentos_subidos")
       .update({
         estado: "procesado",
-        movimientos_detectados: allMovimientos.length,
+        movimientos_detectados: insertados,
         progreso_ia: {
           estado: "completado",
           movimientos_encontrados: allMovimientos.length,
+          duplicados_saltados: duplicadosSaltados,
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);
 
-    return { movimientos_total: allMovimientos.length };
+    return { movimientos_total: insertados };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
 

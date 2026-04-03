@@ -45,5 +45,6 @@ export interface ProgresoIA {
   lote_actual?: number;
   total_lotes?: number;
   movimientos_encontrados?: number;
+  duplicados_saltados?: number;
   error?: string;
 }
