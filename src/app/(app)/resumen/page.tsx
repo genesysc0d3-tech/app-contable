@@ -1,16 +1,26 @@
-export default function ResumenPage() {
+import { requireActiveEmpresa } from "@/lib/dal";
+import { getResumenMes, getHistorico6Meses } from "./actions";
+import ResumenClient from "./ResumenClient";
+
+export default async function ResumenPage() {
+  const usuario = await requireActiveEmpresa();
+  const now = new Date();
+  const mes = now.getMonth() + 1;
+  const anio = now.getFullYear();
+
+  const [resumen, historico] = await Promise.all([
+    getResumenMes(usuario.empresa_id, anio, mes),
+    getHistorico6Meses(usuario.empresa_id, anio, mes),
+  ]);
+
   return (
-    <div className="flex-1 pb-20">
-      <div className="max-w-lg mx-auto px-4 py-6">
-        <h1 className="text-2xl font-bold text-white">Resumen mensual</h1>
-        <p className="text-sm text-white/50 mt-1">
-          Metricas, IVA y estimacion F29
-        </p>
-        <div className="mt-12 text-center text-white/30">
-          <p className="text-3xl mb-2">📊</p>
-          <p className="text-sm">Proximamente</p>
-        </div>
-      </div>
-    </div>
+    <ResumenClient
+      empresaId={usuario.empresa_id}
+      empresaNombre={usuario.empresas.razon_social}
+      initialResumen={resumen}
+      initialHistorico={historico}
+      initialMes={mes}
+      initialAnio={anio}
+    />
   );
 }
