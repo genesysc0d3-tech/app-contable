@@ -50,7 +50,7 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
           <h2 className="text-lg font-semibold text-white/90 mb-3">
             Historial
           </h2>
-          <DocumentList documentos={documentos} />
+          <DocumentList documentos={documentos} onDocumentoUpdate={fetchDocumentos} />
         </div>
       </div>
     </div>

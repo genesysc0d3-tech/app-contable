@@ -444,13 +444,14 @@ USING (empresa_id = (
 - [x] Lógica tributaria definida
 - [x] Modelo de precios definido
 - [x] Auth y roles definidos
-- [ ] **Siguiente:** crear rama `feature/supabase-setup` y crear tablas en Supabase
-- [ ] Configurar Supabase Storage
-- [ ] Configurar RLS policies
-- [ ] Implementar auth (email + Google OAuth)
-- [ ] Implementar paywall
+- [x] Crear tablas en Supabase (11 tablas + creditos_uso)
+- [x] Configurar Supabase Storage (bucket documentos, 50MB, RLS)
+- [x] Configurar RLS policies (todas las tablas)
+- [x] Implementar auth (email + password, proxy, DAL, onboarding, paywall)
+- [x] Implementar subida de archivos (drag & drop desktop, input mobile)
+- [x] Pantalla de ingesta (/subir)
+- [ ] Configurar Google OAuth en Supabase Dashboard + Google Cloud Console
 - [ ] Integrar Mistral API
-- [ ] Pantalla de ingesta
 - [ ] Bandeja de propuestas IA
 - [ ] CRM clientes P2P
 - [ ] Resumen mensual + F29

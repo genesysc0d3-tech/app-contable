@@ -102,6 +102,7 @@ export type Database = {
           id: string
           movimientos_detectados: number | null
           nombre_archivo: string
+          progreso_ia: Json | null
           storage_path: string
           tipo: string
         }
@@ -112,6 +113,7 @@ export type Database = {
           id?: string
           movimientos_detectados?: number | null
           nombre_archivo: string
+          progreso_ia?: Json | null
           storage_path: string
           tipo: string
         }
@@ -122,6 +124,7 @@ export type Database = {
           id?: string
           movimientos_detectados?: number | null
           nombre_archivo?: string
+          progreso_ia?: Json | null
           storage_path?: string
           tipo?: string
         }
@@ -322,6 +325,57 @@ export type Database = {
             columns: ["proveedor_id"]
             isOneToOne: false
             referencedRelation: "proveedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ia_uso: {
+        Row: {
+          costo_usd: number
+          created_at: string
+          documento_id: string | null
+          empresa_id: string
+          fecha: string
+          id: string
+          modelo: string
+          tokens_input: number
+          tokens_output: number
+        }
+        Insert: {
+          costo_usd?: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id: string
+          fecha?: string
+          id?: string
+          modelo: string
+          tokens_input?: number
+          tokens_output?: number
+        }
+        Update: {
+          costo_usd?: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string
+          fecha?: string
+          id?: string
+          modelo?: string
+          tokens_input?: number
+          tokens_output?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ia_uso_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ia_uso_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]

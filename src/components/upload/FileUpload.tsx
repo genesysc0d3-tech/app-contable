@@ -59,6 +59,17 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
         );
 
         onUploadComplete?.(result);
+
+        // Auto-trigger AI processing for successful uploads
+        if (result.success && result.documento) {
+          fetch("/api/procesar-documento", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documento_id: result.documento.id }),
+          }).catch(() => {
+            // Processing errors are tracked via realtime on progreso_ia
+          });
+        }
       }
     },
     [empresaId, onUploadComplete]
