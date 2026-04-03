@@ -34,21 +34,139 @@ interface RevisarClientProps {
   empresaId: string;
 }
 
+const ALTA = 0.85;
+const MEDIA = 0.5;
+
+function classifyConfianza(p: Propuesta): "alta" | "media" | "baja" {
+  const c = p.confianza ?? 0;
+  if (c >= ALTA) return "alta";
+  if (c >= MEDIA) return "media";
+  return "baja";
+}
+
+// --- Confidence group within a document ---
+
+function ConfianzaGroup({
+  tipo,
+  propuestas,
+  clientes,
+  empresaId,
+  onAction,
+}: {
+  tipo: "alta" | "media" | "baja";
+  propuestas: Propuesta[];
+  clientes: ClienteResumen[];
+  empresaId: string;
+  onAction: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  if (propuestas.length === 0) return null;
+
+  const config = {
+    alta: {
+      icon: "🟢",
+      label: `Alta confianza · ${propuestas.length} propuesta${propuestas.length !== 1 ? "s" : ""}`,
+      color: "text-emerald-300",
+    },
+    media: {
+      icon: "🟡",
+      label: `Requiere revisión · ${propuestas.length} propuesta${propuestas.length !== 1 ? "s" : ""}`,
+      color: "text-yellow-300",
+    },
+    baja: {
+      icon: "🔴",
+      label: `Falta información · ${propuestas.length} propuesta${propuestas.length !== 1 ? "s" : ""}`,
+      color: "text-red-300",
+    },
+  }[tipo];
+
+  const sorted = [...propuestas].sort(
+    (a, b) => (b.confianza ?? 0) - (a.confianza ?? 0)
+  );
+
+  async function handleAprobarGrupo(e: React.MouseEvent) {
+    e.stopPropagation();
+    setLoading(true);
+    await aprobarTodas(propuestas.map((p) => p.id));
+    router.refresh();
+    onAction();
+    setLoading(false);
+  }
+
+  return (
+    <div className="rounded-xl bg-white/[0.02] border border-white/5 overflow-hidden">
+      {/* Group header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-white/5 transition-colors"
+      >
+        <span
+          className="text-white/40 text-[10px] transition-transform duration-200"
+          style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
+        >
+          ▶
+        </span>
+        <span className="text-xs">{config.icon}</span>
+        <span className={`text-xs font-medium ${config.color} flex-1 text-left`}>
+          {config.label}
+        </span>
+        {tipo === "alta" && (
+          <button
+            onClick={handleAprobarGrupo}
+            disabled={loading}
+            className="rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 px-3 py-1 text-[10px] font-semibold text-emerald-300 transition-colors"
+          >
+            {loading ? "..." : `Aprobar todas`}
+          </button>
+        )}
+      </button>
+
+      {/* Expanded cards */}
+      {expanded && (
+        <div className="px-3 pb-3 space-y-3">
+          {sorted.map((p) => (
+            <div key={p.id}>
+              {tipo === "baja" && (
+                <p className="text-[10px] text-red-400/70 bg-red-500/5 rounded-lg px-2.5 py-1.5 mb-2">
+                  Esta propuesta necesita más datos antes de aprobar
+                </p>
+              )}
+              <PropuestaCard
+                propuesta={p}
+                clientes={clientes}
+                empresaId={empresaId}
+                onAction={onAction}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Document section ---
+
 function DocumentSection({
   group,
   clientes,
   empresaId,
-  defaultExpanded,
   onAction,
 }: {
   group: DocumentGroup;
   clientes: ClienteResumen[];
   empresaId: string;
-  defaultExpanded: boolean;
   onAction: () => void;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(false);
+
   const pendientes = group.propuestas.filter((p) => p.estado === "pendiente");
+  const alta = pendientes.filter((p) => classifyConfianza(p) === "alta");
+  const media = pendientes.filter((p) => classifyConfianza(p) === "media");
+  const baja = pendientes.filter((p) => classifyConfianza(p) === "baja");
 
   const fecha = new Date(group.fechaSubida).toLocaleDateString("es-CL", {
     day: "2-digit",
@@ -59,12 +177,13 @@ function DocumentSection({
 
   return (
     <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
-      {/* Document header — collapsible */}
+      {/* Document header */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
       >
-        <span className="text-white/40 text-sm transition-transform duration-200"
+        <span
+          className="text-white/40 text-sm transition-transform duration-200"
           style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
         >
           ▶
@@ -73,12 +192,23 @@ function DocumentSection({
           <p className="text-sm font-medium text-white/90 truncate">
             {group.nombreArchivo}
           </p>
-          <p className="text-[10px] text-white/40 mt-0.5">{fecha}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] text-white/40">{fecha}</span>
+            {pendientes.length > 0 && (
+              <span className="text-[10px] text-white/30">
+                {alta.length > 0 && `${alta.length} listas`}
+                {alta.length > 0 && media.length > 0 && " · "}
+                {media.length > 0 && `${media.length} por revisar`}
+                {(alta.length > 0 || media.length > 0) && baja.length > 0 && " · "}
+                {baja.length > 0 && `${baja.length} con problemas`}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-1.5 shrink-0">
           {group.pendientes > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 font-medium">
-              {group.pendientes} pendiente{group.pendientes !== 1 ? "s" : ""}
+              {group.pendientes}
             </span>
           )}
           {group.aprobados > 0 && (
@@ -94,29 +224,45 @@ function DocumentSection({
         </div>
       </button>
 
-      {/* Expanded content */}
-      {expanded && pendientes.length > 0 && (
-        <div className="px-4 pb-4 space-y-3">
-          {pendientes.map((p) => (
-            <PropuestaCard
-              key={p.id}
-              propuesta={p}
-              clientes={clientes}
-              empresaId={empresaId}
-              onAction={onAction}
-            />
-          ))}
-        </div>
-      )}
-
-      {expanded && pendientes.length === 0 && (
-        <div className="px-4 pb-4 text-center text-white/30 text-xs py-4">
-          Todo revisado en este documento
+      {/* Expanded: confidence groups */}
+      {expanded && (
+        <div className="px-3 pb-3 space-y-2">
+          {pendientes.length === 0 ? (
+            <div className="text-center text-white/30 text-xs py-4">
+              Todo revisado en este documento
+            </div>
+          ) : (
+            <>
+              <ConfianzaGroup
+                tipo="alta"
+                propuestas={alta}
+                clientes={clientes}
+                empresaId={empresaId}
+                onAction={onAction}
+              />
+              <ConfianzaGroup
+                tipo="media"
+                propuestas={media}
+                clientes={clientes}
+                empresaId={empresaId}
+                onAction={onAction}
+              />
+              <ConfianzaGroup
+                tipo="baja"
+                propuestas={baja}
+                clientes={clientes}
+                empresaId={empresaId}
+                onAction={onAction}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+// --- Main ---
 
 export default function RevisarClient({
   propuestas,
@@ -153,7 +299,6 @@ export default function RevisarClient({
       else if (p.estado === "descartado") group.descartados++;
     }
 
-    // Sort by fecha_subida descending (most recent first)
     return Array.from(map.values()).sort(
       (a, b) => new Date(b.fechaSubida).getTime() - new Date(a.fechaSubida).getTime()
     );
@@ -164,7 +309,7 @@ export default function RevisarClient({
     (p) =>
       p.estado === "pendiente" &&
       p.confianza !== null &&
-      p.confianza >= 0.8
+      p.confianza >= ALTA
   );
 
   async function handleAprobarTodas() {
@@ -203,8 +348,7 @@ export default function RevisarClient({
 
         {allHighConfidence.length > 1 && (
           <p className="text-xs text-white/30">
-            &quot;Aprobar todo&quot; solo aprueba propuestas con confianza mayor
-            o igual a 80%
+            &quot;Aprobar todo&quot; solo aprueba propuestas con confianza &ge; 85%
           </p>
         )}
 
@@ -216,13 +360,12 @@ export default function RevisarClient({
           </div>
         ) : (
           <div className="space-y-3">
-            {groups.map((group, i) => (
+            {groups.map((group) => (
               <DocumentSection
                 key={group.documentoId}
                 group={group}
                 clientes={clientes}
                 empresaId={empresaId}
-                defaultExpanded={i === 0}
                 onAction={() => router.refresh()}
               />
             ))}
