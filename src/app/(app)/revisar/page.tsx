@@ -1,16 +1,17 @@
-export default function RevisarPage() {
-  return (
-    <div className="flex-1 pb-20">
-      <div className="max-w-lg mx-auto px-4 py-6">
-        <h1 className="text-2xl font-bold text-white">Revisar propuestas</h1>
-        <p className="text-sm text-white/50 mt-1">
-          Aprueba o edita las propuestas de la IA
-        </p>
-        <div className="mt-12 text-center text-white/30">
-          <p className="text-3xl mb-2">✓</p>
-          <p className="text-sm">Proximamente</p>
-        </div>
-      </div>
-    </div>
-  );
+import { requireActiveEmpresa } from "@/lib/dal";
+import { createClient } from "@/lib/supabase/server";
+import RevisarClient from "./RevisarClient";
+
+export default async function RevisarPage() {
+  const usuario = await requireActiveEmpresa();
+  const supabase = await createClient();
+
+  const { data: propuestas } = await supabase
+    .from("propuestas_ia")
+    .select("*, movimientos_raw(*)")
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("estado", "pendiente")
+    .order("created_at", { ascending: false });
+
+  return <RevisarClient propuestas={propuestas ?? []} />;
 }
