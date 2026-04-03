@@ -10,6 +10,7 @@ import type {
   ProgresoIA,
 } from "./types";
 import { parseFecha } from "./fecha";
+import { validarRut, formatRut } from "../rut";
 
 const CHUNK_SIZE = 50;
 const MAX_RETRIES = 3;
@@ -249,6 +250,14 @@ export async function procesarDocumento(
       originalToNewIndex.set(origIdx, newIdx);
     });
 
+    // Auto-detect clients from propuesta descriptions/receptor data
+    const clienteCache = await detectAndCreateClients(
+      supabase,
+      empresaId,
+      allPropuestas,
+      allMovimientos
+    );
+
     // Save propuestas_ia in batches, linked to saved movimiento IDs
     if (savedIds.length > 0 && allPropuestas.length > 0) {
       const propuestasToInsert = allPropuestas
@@ -256,6 +265,8 @@ export async function procesarDocumento(
         .map((p) => {
           const newIndex = originalToNewIndex.get(p.movimiento_index)!;
           const isLow = p.confianza != null && p.confianza < MIN_CONFIANZA;
+          const mov = allMovimientos[p.movimiento_index];
+          const clienteId = resolveClienteId(clienteCache, p, mov);
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
@@ -273,6 +284,7 @@ export async function procesarDocumento(
             spread_compra: p.spread_compra,
             spread_venta: p.spread_venta,
             spread_ganancia: p.spread_ganancia,
+            cliente_id: clienteId,
           };
         });
 
@@ -328,4 +340,111 @@ export async function procesarDocumento(
 
     return { movimientos_total: 0, error: errorMsg };
   }
+}
+
+// --- Client auto-detection ---
+
+const RUT_REGEX = /(?:RUT\s*:?\s*)?(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])/gi;
+
+function extractRutFromText(text: string): string | null {
+  const match = RUT_REGEX.exec(text);
+  RUT_REGEX.lastIndex = 0; // reset global regex
+  if (!match) return null;
+  const candidate = match[1];
+  if (validarRut(candidate)) return formatRut(candidate);
+  return null;
+}
+
+type ClienteMap = Map<string, string>; // rut -> cliente_id
+
+async function detectAndCreateClients(
+  supabase: ReturnType<typeof getServiceClient>,
+  empresaId: string,
+  propuestas: PropuestaExtraida[],
+  movimientos: MovimientoExtraido[]
+): Promise<ClienteMap> {
+  // Collect all RUTs found in propuestas and movimiento descriptions
+  const rutsFound = new Map<string, string>(); // rut -> best name
+
+  for (const p of propuestas) {
+    const mov = movimientos[p.movimiento_index];
+    if (!mov) continue;
+
+    // Try receptor_rut first (from AI extraction)
+    const rutFromPropuesta = p.receptor_rut
+      ? validarRut(p.receptor_rut) ? formatRut(p.receptor_rut) : null
+      : null;
+
+    // Try regex on description
+    const rutFromDesc = extractRutFromText(mov.descripcion);
+
+    const rut = rutFromPropuesta || rutFromDesc;
+    if (!rut) continue;
+
+    // Use receptor_nombre if available, otherwise leave empty
+    if (!rutsFound.has(rut) || (p.receptor_nombre && !rutsFound.get(rut))) {
+      rutsFound.set(rut, p.receptor_nombre || "");
+    }
+  }
+
+  if (rutsFound.size === 0) return new Map();
+
+  // Fetch existing clients for this empresa
+  const { data: existingClientes } = await supabase
+    .from("clientes")
+    .select("id, rut")
+    .eq("empresa_id", empresaId)
+    .not("rut", "is", null);
+
+  const clienteMap: ClienteMap = new Map();
+  for (const c of existingClientes ?? []) {
+    if (c.rut) clienteMap.set(c.rut, c.id);
+  }
+
+  // Create missing clients
+  const toCreate: { empresa_id: string; nombre: string; rut: string }[] = [];
+  for (const [rut, nombre] of rutsFound) {
+    if (!clienteMap.has(rut)) {
+      toCreate.push({
+        empresa_id: empresaId,
+        nombre: nombre || `Cliente ${rut}`,
+        rut,
+      });
+    }
+  }
+
+  if (toCreate.length > 0) {
+    const { data: created } = await supabase
+      .from("clientes")
+      .insert(toCreate)
+      .select("id, rut");
+
+    for (const c of created ?? []) {
+      if (c.rut) clienteMap.set(c.rut, c.id);
+    }
+  }
+
+  return clienteMap;
+}
+
+function resolveClienteId(
+  clienteMap: ClienteMap,
+  propuesta: PropuestaExtraida,
+  movimiento: MovimientoExtraido
+): string | null {
+  // Try receptor_rut from propuesta
+  if (propuesta.receptor_rut && validarRut(propuesta.receptor_rut)) {
+    const formatted = formatRut(propuesta.receptor_rut);
+    const id = clienteMap.get(formatted);
+    if (id) return id;
+  }
+
+  // Try regex on description
+  const rutFromDesc = extractRutFromText(movimiento.descripcion);
+  if (rutFromDesc) {
+    const id = clienteMap.get(rutFromDesc);
+    if (id) return id;
+  }
+
+  return null;
 }
