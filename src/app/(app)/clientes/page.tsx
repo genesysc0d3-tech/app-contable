@@ -1,16 +1,29 @@
-export default function ClientesPage() {
+import { requireActiveEmpresa } from "@/lib/dal";
+import { createClient } from "@/lib/supabase/server";
+import ClientesClient from "./ClientesClient";
+
+export default async function ClientesPage() {
+  const usuario = await requireActiveEmpresa();
+  const supabase = await createClient();
+
+  // Fetch clientes with count of linked movimientos via propuestas_ia
+  const { data: clientes } = await supabase
+    .from("clientes")
+    .select("*, propuestas_ia(count)")
+    .eq("empresa_id", usuario.empresa_id)
+    .order("nombre", { ascending: true });
+
+  const clientesConCount = (clientes ?? []).map((c) => ({
+    ...c,
+    propuestas_ia: undefined,
+    movimientos_count:
+      (c.propuestas_ia as unknown as { count: number }[])?.[0]?.count ?? 0,
+  }));
+
   return (
-    <div className="flex-1 pb-20">
-      <div className="max-w-lg mx-auto px-4 py-6">
-        <h1 className="text-2xl font-bold text-white">Clientes</h1>
-        <p className="text-sm text-white/50 mt-1">
-          CRM de clientes P2P y empresas
-        </p>
-        <div className="mt-12 text-center text-white/30">
-          <p className="text-3xl mb-2">👤</p>
-          <p className="text-sm">Proximamente</p>
-        </div>
-      </div>
-    </div>
+    <ClientesClient
+      clientes={clientesConCount}
+      empresaId={usuario.empresa_id}
+    />
   );
 }
