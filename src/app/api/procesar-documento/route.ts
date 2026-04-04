@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { parseExcel } from "@/lib/parsers";
@@ -98,13 +99,25 @@ export async function POST(request: Request) {
     );
   }
 
-  // Process async — don't block the response
-  // The client will track progress via Supabase realtime on progreso_ia
-  procesarDocumento(documento.id, usuario.empresa_id, contenido).catch(
-    (err) => {
-      console.error(`Error procesando documento ${documento.id}:`, err);
+  // Use after() to keep the serverless function alive after sending the response.
+  // Without this, Vercel freezes the function once the response is sent,
+  // killing the Mistral processing mid-flight.
+  after(async () => {
+    try {
+      const start = Date.now();
+      const result = await procesarDocumento(
+        documento.id,
+        usuario.empresa_id,
+        contenido
+      );
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(
+        `[procesar-documento] ${documento.id} completado en ${elapsed}s — ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`
+      );
+    } catch (err) {
+      console.error(`[procesar-documento] ${documento.id} error fatal:`, err);
     }
-  );
+  });
 
   return NextResponse.json({
     ok: true,
