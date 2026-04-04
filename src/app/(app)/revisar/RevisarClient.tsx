@@ -60,8 +60,12 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction }: {
 
   async function handleAprobarGrupo(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
-    await aprobarTodas(propuestas.map((p) => p.id));
-    toast(`${propuestas.length} aprobadas`);
+    const result = await aprobarTodas(propuestas.map((p) => p.id));
+    if (result.error) {
+      toast(`Error: ${result.error}`, "error");
+    } else {
+      toast(`${result.count} aprobadas`);
+    }
     router.refresh(); onAction(); setLoading(false);
   }
 
@@ -185,8 +189,12 @@ export default function RevisarClient({ propuestas, clientes, empresaId }: Revis
   async function handleAprobarTodas() {
     if (allHigh.length === 0) return;
     setLoading(true);
-    await aprobarTodas(allHigh.map((p) => p.id));
-    toast(`${allHigh.length} aprobadas`);
+    const result = await aprobarTodas(allHigh.map((p) => p.id));
+    if (result.error) {
+      toast(`Error: ${result.error}`, "error");
+    } else {
+      toast(`${result.count} aprobadas`);
+    }
     router.refresh();
     setLoading(false);
   }
