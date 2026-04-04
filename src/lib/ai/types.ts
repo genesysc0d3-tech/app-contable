@@ -40,11 +40,22 @@ export interface AIProvider {
   ): Promise<AIResponse>;
 }
 
+export interface DuplicadoDetalle {
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  tipo_flujo: string;
+  origen_movimiento_id: string;
+  origen_documento_nombre: string;
+  origen_documento_fecha: string;
+}
+
 export interface ProgresoIA {
   estado: "procesando" | "completado" | "error";
   lote_actual?: number;
   total_lotes?: number;
   movimientos_encontrados?: number;
   duplicados_saltados?: number;
+  duplicados_detalle?: DuplicadoDetalle[];
   error?: string;
 }
