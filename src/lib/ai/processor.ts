@@ -209,10 +209,40 @@ export async function procesarDocumento(
     const indexRemap = new Map<number, number>();
     validIndices.forEach((origIdx, newIdx) => indexRemap.set(origIdx, newIdx));
 
-    const validMovimientos = validIndices.map((i) => allMovimientos[i]);
-    const validPropuestas = allPropuestas
+    let validMovimientos = validIndices.map((i) => allMovimientos[i]);
+    let validPropuestas = allPropuestas
       .filter((p) => indexRemap.has(p.movimiento_index))
       .map((p) => ({ ...p, movimiento_index: indexRemap.get(p.movimiento_index)! }));
+
+    // Filter out probable saldo/balance values extracted by mistake.
+    // Rule: if a single monto is >50% of total abonos, it's a balance not a tx.
+    const totalAbonos = validMovimientos
+      .filter((m) => m.tipo_flujo === "entrada")
+      .reduce((sum, m) => sum + (toNum(m.monto) ?? 0), 0);
+
+    if (totalAbonos > 0) {
+      const threshold = totalAbonos * 0.5;
+      const saldoFilter = new Set<number>();
+      for (let i = 0; i < validMovimientos.length; i++) {
+        const monto = toNum(validMovimientos[i].monto) ?? 0;
+        if (monto > threshold) {
+          saldoFilter.add(i);
+        }
+      }
+      if (saldoFilter.size > 0) {
+        const kept: number[] = [];
+        for (let i = 0; i < validMovimientos.length; i++) {
+          if (!saldoFilter.has(i)) kept.push(i);
+        }
+        const saldoRemap = new Map<number, number>();
+        kept.forEach((origIdx, newIdx) => saldoRemap.set(origIdx, newIdx));
+
+        validMovimientos = kept.map((i) => validMovimientos[i]);
+        validPropuestas = validPropuestas
+          .filter((p) => saldoRemap.has(p.movimiento_index))
+          .map((p) => ({ ...p, movimiento_index: saldoRemap.get(p.movimiento_index)! }));
+      }
+    }
 
     // Detect duplicates: check existing movimientos for this empresa
     const movimientosParsed = validMovimientos.map((m) => ({
