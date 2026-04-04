@@ -224,10 +224,9 @@ export async function procesarDocumento(
       .select("id, fecha, monto, descripcion, n_documento, documento_id, documentos_subidos(nombre_archivo, created_at)")
       .eq("empresa_id", empresaId);
 
-    // Build two maps: one with n_documento (strict), one without (loose)
-    type ExistenteInfo = { id: string; n_documento: string | null; doc_nombre: string; doc_fecha: string };
-    const existenteByStrict = new Map<string, ExistenteInfo>(); // fecha|monto|desc|n_doc
-    const existenteByLoose = new Map<string, ExistenteInfo>();  // fecha|monto|desc
+    type ExistenteInfo = { id: string; n_documento: string | null; doc_nombre: string; doc_fecha: string; documento_id: string };
+    const existenteByStrict = new Map<string, ExistenteInfo>();
+    const existenteByLoose = new Map<string, ExistenteInfo>();
 
     for (const e of existentes ?? []) {
       const doc = e.documentos_subidos as unknown as { nombre_archivo: string; created_at: string } | null;
@@ -236,6 +235,7 @@ export async function procesarDocumento(
         n_documento: e.n_documento,
         doc_nombre: doc?.nombre_archivo ?? "Documento desconocido",
         doc_fecha: doc?.created_at ?? "",
+        documento_id: e.documento_id,
       };
       const looseKey = `${e.fecha}|${e.monto}|${e.descripcion}`;
       existenteByLoose.set(looseKey, info);
@@ -244,12 +244,15 @@ export async function procesarDocumento(
       }
     }
 
+    // Track intra-batch: n_doc counts and loose counts within this file
+    const batchStrictSeen = new Map<string, { firstIndex: number; count: number }>();
+    const batchLooseSeen = new Map<string, { firstIndex: number; count: number }>();
+    // Track same-person same-day transfers (type 6)
+    const personDayKey = new Map<string, number[]>(); // "nombre|fecha" -> indices
+
     const indicesToKeep: number[] = [];
     let duplicadosSaltados = 0;
     const duplicadosDetalle: DuplicadoDetalle[] = [];
-    const seenStrict = new Set(existenteByStrict.keys());
-    const seenLoose = new Set(existenteByLoose.keys());
-    // Track descriptions with multiple loose-only duplicates for warning
     const looseOnlyDupCounts = new Map<string, number>();
 
     for (let i = 0; i < movimientosParsed.length; i++) {
@@ -259,28 +262,51 @@ export async function procesarDocumento(
 
       let isDuplicate = false;
       let motivo = "";
+      let tipo: import("./types").TipoDuplicado = "otro_doc_confirmado";
       let orig: ExistenteInfo | undefined;
+      let repeticiones: number | undefined;
+      let indiceConflicto: number | undefined;
 
       if (strictKey) {
-        // Has n_documento: only duplicate if strict key matches
-        if (seenStrict.has(strictKey)) {
+        // Check against DB first
+        if (existenteByStrict.has(strictKey)) {
           isDuplicate = true;
-          orig = existenteByStrict.get(strictKey);
-          motivo = orig
-            ? `Mismo N° de documento (#${m.n_documento}) — ya existe en ${orig.doc_nombre}`
-            : `Mismo N° de documento (#${m.n_documento}) en este lote`;
+          orig = existenteByStrict.get(strictKey)!;
+          tipo = "mismo_ndoc_otro_arch";
+          motivo = `N° de transacción #${m.n_documento} ya existe en '${orig.doc_nombre}' — misma operación bancaria`;
+        }
+        // Check intra-batch
+        else if (batchStrictSeen.has(strictKey)) {
+          isDuplicate = true;
+          const seen = batchStrictSeen.get(strictKey)!;
+          seen.count++;
+          tipo = "mismo_ndoc_mismo_arch";
+          indiceConflicto = seen.firstIndex;
+          repeticiones = seen.count;
+          motivo = `N° de transacción #${m.n_documento} aparece ${seen.count + 1} veces en este archivo — posible error del banco o del export`;
         } else {
-          seenStrict.add(strictKey);
+          batchStrictSeen.set(strictKey, { firstIndex: i, count: 0 });
         }
       } else {
-        // No n_documento: duplicate if loose key matches
-        if (seenLoose.has(looseKey)) {
+        // No n_documento — check DB
+        if (existenteByLoose.has(looseKey)) {
           isDuplicate = true;
-          orig = existenteByLoose.get(looseKey);
-          motivo = `Mismo monto, descripción y fecha, pero sin N° de documento para confirmar si es operación distinta`;
+          orig = existenteByLoose.get(looseKey)!;
+          tipo = "loose_otro_arch";
+          motivo = `Posible solapamiento con '${orig.doc_nombre}' (mismo monto, fecha y descripción). Si son cartolas de períodos distintos que comparten días, puede ser legítimo.`;
+          looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
+        }
+        // Check intra-batch
+        else if (batchLooseSeen.has(looseKey)) {
+          isDuplicate = true;
+          const seen = batchLooseSeen.get(looseKey)!;
+          seen.count++;
+          tipo = "loose_mismo_arch";
+          indiceConflicto = seen.firstIndex;
+          motivo = `Mismo monto y descripción en filas ${seen.firstIndex + 1} y ${i + 1} de este archivo — podrían ser personas distintas que enviaron el mismo monto. Verificar manualmente.`;
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
         } else {
-          seenLoose.add(looseKey);
+          batchLooseSeen.set(looseKey, { firstIndex: i, count: 0 });
         }
       }
 
@@ -292,13 +318,47 @@ export async function procesarDocumento(
           monto: m.monto,
           tipo_flujo: m.tipo_flujo,
           n_documento: m.n_documento,
+          tipo,
           origen_movimiento_id: orig?.id ?? "",
-          origen_documento_nombre: orig?.doc_nombre ?? "Mismo lote",
+          origen_documento_nombre: orig?.doc_nombre ?? "Este archivo",
           origen_documento_fecha: orig?.doc_fecha ?? "",
           motivo,
+          indice_archivo: i,
+          indice_conflicto: indiceConflicto,
+          repeticiones,
         });
       } else {
         indicesToKeep.push(i);
+
+        // Track person+day for type 6 detection (post-pass)
+        // Extract name-like patterns from description
+        const nameMatch = m.descripcion.match(/(?:DE|DESDE|A|PARA)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)/);
+        if (nameMatch) {
+          const pdKey = `${nameMatch[1]}|${m.fecha}`;
+          const indices = personDayKey.get(pdKey) ?? [];
+          indices.push(i);
+          personDayKey.set(pdKey, indices);
+        }
+      }
+    }
+
+    // Type 6: detect multiple transfers to same person same day (informational, don't skip)
+    for (const [pdKey, indices] of personDayKey) {
+      if (indices.length >= 2) {
+        const nombre = pdKey.split("|")[0];
+        // Add as informational — these are NOT skipped, just flagged
+        duplicadosDetalle.push({
+          fecha: movimientosParsed[indices[0]].fecha,
+          descripcion: `Múltiples operaciones con '${nombre}'`,
+          monto: 0,
+          tipo_flujo: "entrada",
+          tipo: "multi_transfer_p2p",
+          origen_movimiento_id: "",
+          origen_documento_nombre: "Este archivo",
+          origen_documento_fecha: "",
+          motivo: `Múltiples transfers a '${nombre}' el mismo día (${indices.length} operaciones) — verificar si son operaciones P2P distintas`,
+          repeticiones: indices.length,
+        });
       }
     }
 
