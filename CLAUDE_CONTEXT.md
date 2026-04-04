@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #19, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #20, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -98,6 +98,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #17 | fix/criterio-duplicados | Criterio duplicados por N° documento + motivo + warning + deshacer |
 | #18 | fix/duplicados-mensaje | 6 tipos de duplicado con motivos específicos e íconos por severidad |
 | #19 | fix/propuestas-invalid-input | Fix: sanitizar "null" string en campos numéricos de Mistral |
+| #20 | fix/ndoc-ia-deteccion | Clasificar n_documento con Mistral IA: ID transacción vs RUT |
 
 ---
 
@@ -137,6 +138,7 @@ src/
     ai/prompt.ts                        # System prompt P2P/crypto optimizado
     ai/fecha.ts                         # Parser de fechas chilenas
     ai/ocr.ts                           # Mistral OCR (mistral-ocr-latest) + agrupación imágenes
+    ai/ndoc-classifier.ts               # Clasificar n_documento: ID transacción vs RUT (cache por patrón)
     ai/processor.ts                     # Orquestador: chunking, paralelo, retry, duplicados, auto-clientes
     ai/providers/mistral.ts             # Implementacion Mistral
   app/
@@ -283,4 +285,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#19 mergeados*
+*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#20 mergeados*
