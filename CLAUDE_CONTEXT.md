@@ -4,9 +4,15 @@
 
 ---
 
-## ⚠️ REGLA CRÍTICA — SIEMPRE TRABAJAR EN RAMAS
+## REGLA: ACTUALIZAR ESTE ARCHIVO
 
-**NUNCA trabajar directamente en `main` ni en `dev`.**
+Después de cada merge a `dev`, actualizar este archivo con lo que se construyó y commitear directo en `dev` con mensaje `docs: actualizar contexto`.
+
+---
+
+## REGLA CRÍTICA — SIEMPRE TRABAJAR EN RAMAS
+
+**NUNCA trabajar directamente en `main` ni en `dev`** (excepto commits `docs:` de este archivo).
 
 Antes de cualquier tarea, crear una rama desde `dev`:
 
@@ -18,14 +24,7 @@ git checkout -b feature/nombre-descriptivo
 
 Al terminar, hacer PR a `dev`. Solo después de revisión se mergea.
 
-Ejemplos de nombres de rama:
-- `feature/auth-login`
-- `feature/supabase-tablas`
-- `feature/pantalla-ingesta`
-- `feature/integracion-mistral`
-- `fix/bug-descripcion`
-
-**Si Claude Code está a punto de modificar código y no hay rama activa → DETENER y crear la rama primero.**
+**Convención:** `feature/nombre` o `fix/nombre`, siempre desde `dev`.
 
 ---
 
@@ -44,13 +43,17 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Frontend | Next.js + TypeScript + Tailwind CSS |
 | Base de datos + Auth | Supabase (PostgreSQL + RLS + Storage) |
 | Automatizaciones | n8n en Railway |
-| IA procesamiento docs | Mistral API |
-| Control de versiones | GitHub |
+| IA procesamiento docs | Mistral API (Small) |
+| Iconos | @phosphor-icons/react |
+| PDF export | jsPDF (import dinámico) |
+| Deploy | Vercel (preview en dev, prod en main) |
+| Control de versiones | GitHub (holaavisoapp-del/app-contable) |
 | Herramienta de desarrollo | Claude Code |
 
 - **URL n8n Railway:** `https://n8n-production-47ecb.up.railway.app`
-- **Directorio local:** `~/Desktop/app-contable`
-- **IA:** Mistral API (credenciales en `.env.local`)
+- **Supabase project ID:** `nbvcngvwgbktjpxmuoto`
+- **Vercel project ID:** `prj_ILQxTy1z7SJEct8T05kfNiUtrWwg`
+- **Vercel team ID:** `team_SqCcEnlXE3TF0H55OjDhXnUi`
 
 ---
 
@@ -61,6 +64,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | `n8n-mcp` | Conectado a Railway vía HTTP |
 | `n8n-mcp-docs` | Documentación y creación de workflows |
 | `supabase` | Conectado al proyecto Supabase |
+| `vercel` | Deploy y logs del proyecto |
 
 ---
 
@@ -68,394 +72,193 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 
 | Rama | Uso |
 |---|---|
-| `main` | Producción — solo merges aprobados |
-| `dev` | Integración — base para todas las features |
-| `feature/setup-inicial` | Configuración base inicial |
+| `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
+| `dev` | Integración — contiene PRs #1 al #12, toda la funcionalidad |
 
-**Convención:** `feature/nombre` o `fix/nombre`, siempre desde `dev`.
+**PRs mergeados a dev:**
 
----
-
-## Convenciones importantes
-
-- Antes de modificar workflows en n8n → exportar respaldo a `/n8n-workflows/respaldos/` con fecha (ej: `2026-04-02-nombre-workflow.json`)
-- Nunca trabajar directo en `main` ni `dev`
-- Decisiones de arquitectura se toman en equipo antes de implementar
-- Cada feature nueva = rama nueva
-
----
-
-## Plataformas objetivo
-
-- **Web desktop:** Next.js responsive, drag & drop habilitado
-- **Móvil:** mobile-first, input file nativo del sistema (sin drag & drop)
-- **PWA:** instalable en Android e iOS desde el browser
+| PR | Rama | Descripción |
+|---|---|---|
+| #1 | feature/supabase-setup | Setup base: Supabase, auth, Mistral AI, bandeja propuestas |
+| #2 | feature/realtime-duplicados | Realtime progreso + detección duplicados |
+| #3 | feature/crm-clientes | CRM clientes con CRUD, RUT, alertas SII |
+| #4 | feature/revisar-mejoras | Clientes automáticos por RUT + /revisar agrupado por documento |
+| #5 | feature/resumen-f29 | Resumen mensual con métricas, histórico, F29, PDF |
+| #6 | feature/revisar-confianza | Grupos por confianza en /revisar (alta/media/baja) |
+| #7 | feature/editar-propuesta-p2p | Formulario edición P2P/crypto con categorías tributarias |
+| #8 | feature/prompt-mistral | System prompt optimizado para clasificación P2P/crypto/forex |
+| #9 | fix/procesamiento-vercel | Fix: after() para que Vercel no mate el procesamiento IA |
+| #10 | feature/ui-rediseno | Rediseño UI: tema claro, acento coral, cards blancas |
+| #11 | feature/ui-polish | Phosphor icons, animaciones, toast, toggle dark/light |
+| #12 | feature/loading-states | Skeleton loaders en todas las rutas |
 
 ---
 
-## Diseño UI
+## Diseño UI (actual)
 
-- **Estética:** iOS Tahoe — glassmorphism, fondos con gradiente sutil, bordes traslúcidos flotantes, tipografía grande y bold, barra de navegación con blur
-- **Tema:** dark mode por defecto
-- **Personalidad:** simple y directo, pocas pantallas, todo a la vista
-- **Mobile first**
-
-### Pantallas principales
-
-**1. Auth / Onboarding**
-- Login: email + contraseña y Google OAuth
-- Registro: crea cuenta → datos de empresa (RUT, razón social, giro) → elige plan → paga
-- Frase en registro: "Tu cuenta quedará sujeta a aprobación" (respaldo para vetar)
-
-**2. Paywall (usuario sin plan activo)**
-- Muestra planes antes de entrar a la app
-- Sin plan activo → bloqueado en esta pantalla
-- 3 planes: Starter / Pro / Empresa
-
-**3. Ingesta de documentos**
-- Móvil: botón input file nativo (NO drag & drop)
-- Desktop: zona drag & drop + input file
-- Botones: Cámara, Archivos (XLS/PDF/CSV), Galería, WhatsApp
-- Alerta SII en tiempo real: "Llevas X de 50 transferencias este mes"
-- Historial de documentos procesados con estado
-
-**4. Propuestas IA**
-- Tarjetas por movimiento: quién, monto, fecha, tipo, confianza IA (%)
-- Para P2P/crypto: spread calculator integrado
-- Campo de nota por operación
-- Acciones: Aprobar / Editar / Ignorar
-- Botón "Aprobar todo"
-
-**5. CRM de clientes P2P**
-- Lista con estado: Pagado / Pendiente / Verificar
-- Nombres extraídos automáticamente
-
-**6. Resumen mensual**
-- Métricas: ventas netas, spread P2P, compras, IVA a pagar
-- Estimación F29 automática
-- Botón "Exportar para contador" → PDF
-- Botón "Declarar F29"
-- Selector de mes
-
-### Navegación bottom (4 ítems)
-Subir → Revisar (badge pendientes) → Clientes → Resumen
+- **Tema dual:** claro (default) + oscuro (toggle Sun/Moon en header)
+- **Claro:** fondo #F5F5F3, cards blancas, texto #111, acento coral #E8553E
+- **Oscuro:** glassmorphism iOS Tahoe, fondo #0a0a0a, cards glass
+- **CSS variables:** --background, --foreground, --accent, --accent-light, --card, --border, --muted, --surface
+- **Iconos:** @phosphor-icons/react (tree-shakeable)
+- **Cards:** rounded-[20px], shadow sutil, border variable
+- **Navegación bottom:** 72px, iconos Phosphor 28px, bounce activo
+- **Animaciones:** fade-in-up, slide-out-right, bounce-icon, btn-press
+- **Toast:** notificaciones 2s con CheckCircle/XCircle
+- **Skeleton loaders:** loading.tsx en cada ruta
 
 ---
 
-## Auth y roles (Supabase Auth)
+## Estructura de archivos (actualizada)
 
-### Flujo de registro
-1. Usuario crea cuenta (email+contraseña o Google OAuth)
-2. Completa onboarding: datos de empresa
-3. Elige plan y paga
-4. Accede a la app
-
-### Estados de usuario
-| Estado | Acceso |
-|---|---|
-| Registrado sin plan | Solo ve pantalla de pago |
-| Plan activo | Acceso completo |
-| Vetado por admin | Pantalla bloqueada con mensaje y contacto soporte |
-
-### Roles
-- `admin` — acceso total, puede vetar cuentas, ver todas las empresas
-- `owner` — dueño de la empresa, acceso completo a su empresa
-- `contador` — acceso de lectura + exportar
-- `viewer` — solo lectura
+```
+src/
+  proxy.ts                              # Auth proxy (Next.js 16)
+  lib/
+    supabase.ts                         # Re-export browser client
+    supabase/client.ts                  # Browser client (@supabase/ssr)
+    supabase/server.ts                  # Server client con cookies
+    supabase/proxy.ts                   # Proxy client para refresh tokens
+    database.types.ts                   # Tipos generados desde Supabase
+    dal.ts                              # Data Access Layer (auth checks)
+    upload.ts                           # Upload a Storage + registro BD
+    parsers.ts                          # Excel parser (xlsx → TSV)
+    rut.ts                              # Validación y formateo RUT chileno
+    ai/types.ts                         # Interfaces AI provider
+    ai/provider.ts                      # Factory de proveedores
+    ai/prompt.ts                        # System prompt P2P/crypto optimizado
+    ai/fecha.ts                         # Parser de fechas chilenas
+    ai/processor.ts                     # Orquestador: chunking, paralelo, retry, duplicados, auto-clientes
+    ai/providers/mistral.ts             # Implementacion Mistral
+  app/
+    layout.tsx                          # Root layout (ToastProvider, anti-FOUT script)
+    page.tsx                            # Smart redirect segun auth state
+    globals.css                         # CSS variables dual theme + keyframes
+    bloqueado/page.tsx                  # Pantalla usuario vetado
+    api/procesar-documento/route.ts     # API con after() para Vercel
+    (auth)/auth/
+      actions.ts                        # signIn, signUp, signOut, signInWithGoogle
+      callback/route.ts                 # OAuth callback handler
+      login/page.tsx
+      registro/page.tsx
+    (onboarding)/onboarding/
+      actions.ts                        # crearEmpresa (service role)
+      page.tsx
+    (paywall)/planes/
+      actions.ts                        # activarPlan + creditos
+      page.tsx
+    (app)/
+      layout.tsx                        # requireActiveEmpresa + BottomNav + ThemeToggle
+      subir/page.tsx                    # Server wrapper
+      subir/SubirClient.tsx             # Upload + historial + realtime
+      subir/loading.tsx                 # Skeleton loader
+      revisar/page.tsx                  # Server: propuestas + clientes + documentos
+      revisar/RevisarClient.tsx         # Agrupado por documento + confianza
+      revisar/actions.ts                # aprobar (con cliente_id), editar, descartar
+      revisar/loading.tsx               # Skeleton loader
+      clientes/page.tsx                 # Server: clientes con count movimientos
+      clientes/ClientesClient.tsx       # CRUD, buscador, avatares, alertas SII
+      clientes/actions.ts               # crear, editar, eliminar cliente
+      clientes/loading.tsx              # Skeleton loader
+      resumen/page.tsx                  # Server: resumen + historico
+      resumen/ResumenClient.tsx         # Métricas, gráfico, histórico, F29, PDF
+      resumen/actions.ts                # getResumenMes, getHistorico, getPropuestas
+      resumen/loading.tsx               # Skeleton loader
+  components/
+    ThemeToggle.tsx                      # Sun/Moon toggle con localStorage
+    Toast.tsx                           # ToastProvider + useToast hook
+    SkeletonCard.tsx                    # Card placeholder pulsante
+    layout/BottomNav.tsx                # Nav con Phosphor icons + badge realtime
+    upload/FileUpload.tsx               # Drag & drop + botones Phosphor
+    upload/DocumentList.tsx             # Historial con iconos por tipo
+    propuestas/PropuestaCard.tsx        # Card con categorías tributarias P2P/crypto
+```
 
 ---
 
-## Modelo de precios
+## Esquema de base de datos (Supabase) — actualizado
 
-### Planes
+### Tablas con columnas nuevas (desde sesión 1):
 
-| Plan | Mensual | Docs incluidos | Precio doc extra |
+**`clientes`** — agregadas: `telefono text`, `notas text`
+
+**`propuestas_ia`** — agregadas:
+- `cliente_id uuid FK → clientes` (vinculación automática y manual)
+- `moneda_origen text DEFAULT 'CLP'`
+- `monto_moneda_origen numeric`
+- `tipo_propuesto` ahora acepta: boleta, factura, gasto, registro_crypto, ignorar, boleta_honorarios, factura_afecta, compraventa_crypto, transferencia_p2p, operacion_forex, gasto_egreso, no_comercial
+
+### RLS
+Todas las tablas con `empresa_id` tienen policy:
+```sql
+USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
+```
+
+---
+
+## Lógica tributaria chilena (7 categorías)
+
+| Categoría | IVA | Declara en | Norma |
 |---|---|---|---|
-| Starter | $7.990 | 10 | $490/doc |
-| Pro | $19.990 | 50 | $290/doc |
-| Empresa | $39.990 | 200 | $150/doc |
+| boleta_honorarios | 19% | F29 | — |
+| factura_afecta | 19% | F29 | — |
+| compraventa_crypto | Sin IVA | F22 | SII Oficio 963-2018 |
+| transferencia_p2p | Sin IVA | F22 | Ley Cumplimiento 2024 (50 tx) |
+| operacion_forex | Sin IVA | F22 | Diferencia de cambio |
+| gasto_egreso | Crédito fiscal | F29 | — |
+| no_comercial | N/A | N/A | Ignorar |
 
-### Reglas de negocio
-- Documentos incluidos no usados acumulan hasta 3 meses
-- "Documentos" = boletas y facturas emitidas al SII (no los registros de crypto ni gastos internos)
-- Procesamiento IA ilimitado en todos los planes (subir archivos no consume créditos)
-- Descuento 20% pago anual
-
-### Referencia de mercado
-- Un contador cobra $80.000–$250.000/mes por el mismo trabajo manual
-- OpenFactura cobra ~$30.000/mes por emisión ilimitada pero sin IA ni procesamiento automático
-- La app hace el trabajo del contador a mitad de precio
+**Regla de los 50:** alertar cuando >= 40 (warning) y >= 50 (danger).
 
 ---
 
-## Esquema de base de datos (Supabase)
-
-### `empresas`
-```sql
-id uuid PK
-rut text
-razon_social text
-giro text
-direccion text
-comuna text
-region text
-email_sii text
-clave_sii text  -- encriptada
-regimen_tributario text
-plan text  -- starter / pro / empresa / null
-plan_activo boolean
-plan_vence_at timestamp
-created_at timestamp
-```
-
-### `usuarios`
-```sql
-id uuid PK  -- = auth.users.id
-empresa_id uuid FK → empresas
-email text
-nombre text
-rol text  -- admin / owner / contador / viewer
-vetado boolean default false
-created_at timestamp
-```
-
-### `clientes`
-```sql
-id uuid PK
-empresa_id uuid FK
-rut text
-nombre text
-giro text
-direccion text
-email text
-created_at timestamp
-```
-
-### `proveedores`
-```sql
-id uuid PK
-empresa_id uuid FK
-rut text
-nombre text
-giro text
-email text
-created_at timestamp
-```
-
-### `documentos_subidos`
-```sql
-id uuid PK
-empresa_id uuid FK
-tipo text  -- excel / imagen / pdf / whatsapp / csv
-nombre_archivo text
-storage_path text
-estado text  -- subido / procesando / procesado / error
-movimientos_detectados int
-created_at timestamp
-```
-
-### `movimientos_raw`
-```sql
-id uuid PK
-empresa_id uuid FK
-documento_id uuid FK → documentos_subidos
-fecha date
-descripcion text
-monto decimal
-tipo_flujo text  -- entrada / salida
-origen text  -- banco_chile / binance / whatsapp / manual
-created_at timestamp
-```
-
-### `propuestas_ia`
-```sql
-id uuid PK
-empresa_id uuid FK
-movimiento_id uuid FK → movimientos_raw
-tipo_propuesto text  -- boleta / factura / gasto / registro_crypto / ignorar
-receptor_nombre text
-receptor_rut text
-monto_neto decimal
-iva decimal
-total decimal
-confianza decimal  -- 0 a 1
-notas text
-estado text  -- pendiente / aprobado / editado / descartado
-spread_compra decimal
-spread_venta decimal
-spread_ganancia decimal
-created_at timestamp
-```
-
-### `documentos_tributarios`
-```sql
-id uuid PK
-empresa_id uuid FK
-propuesta_id uuid FK → propuestas_ia
-cliente_id uuid FK → clientes
-tipo_dte text  -- 33=factura / 39=boleta / 61=nota_credito
-folio int
-fecha_emision date
-estado text  -- borrador / enviado / aceptado / rechazado
-neto decimal
-iva decimal
-total decimal
-xml_sii text
-track_id text
-created_at timestamp
-```
-
-### `items_documento`
-```sql
-id uuid PK
-documento_id uuid FK
-descripcion text
-cantidad int
-precio_unitario decimal
-descuento decimal
-subtotal decimal
-```
-
-### `gastos`
-```sql
-id uuid PK
-empresa_id uuid FK
-proveedor_id uuid FK
-propuesta_id uuid FK
-fecha date
-categoria text
-descripcion text
-monto_neto decimal
-iva decimal
-total decimal
-comprobante_url text
-created_at timestamp
-```
-
-### `periodos_contables`
-```sql
-id uuid PK
-empresa_id uuid FK
-anio int
-mes int
-estado text  -- abierto / cerrado
-total_ventas decimal
-total_compras decimal
-iva_debito decimal
-iva_credito decimal
-iva_a_pagar decimal
-spread_total_p2p decimal
-transferencias_mes int  -- para alerta SII límite 50
-cerrado_at timestamp
-```
-
-### `creditos_uso`
-```sql
-id uuid PK
-empresa_id uuid FK
-mes int
-anio int
-docs_incluidos int
-docs_usados int
-docs_acumulados int  -- máx 3 meses
-created_at timestamp
-```
-
-### RLS (Row Level Security)
-Todas las tablas con `empresa_id` deben tener política:
-```sql
-USING (empresa_id = (
-  SELECT empresa_id FROM usuarios WHERE id = auth.uid()
-))
-```
-
----
-
-## Lógica tributaria chilena
-
-| Movimiento | Acción |
-|---|---|
-| Venta a persona natural | Boleta (tipo 39) + IVA 19% |
-| Venta a empresa (RUT empresa) | Factura (tipo 33) + IVA 19% |
-| Compraventa crypto/activos digitales | Solo registro — SIN IVA — tributa en Renta anual |
-| Comisión intermediación P2P/forex | Boleta/factura solo por la comisión + IVA |
-| Transferencia no comercial | Ignorar — sin documento |
-| Gasto con proveedor empresa | Registrar como gasto — factura recibida |
-
-**Regla de los 50:** alertar cuando `transferencias_mes >= 38` (76% del límite de 50 que los bancos reportan al SII). Ref: Ley de Cumplimiento Tributario Chile 2024.
-
-**Crypto sin IVA:** SII Oficio 963-2018. Activos digitales sin corporalidad → no aplica hecho gravado "venta" en IVA. Ganancias tributan en IGC o Primera Categoría.
-
----
-
-## Flujo principal
+## Flujo principal (actualizado)
 
 ```
-1. Usuario sube documento
+1. Usuario sube documento en /subir
       ↓
 2. Supabase Storage guarda archivo
       ↓
-3. n8n webhook → llama Mistral API
+3. POST /api/procesar-documento → after() mantiene función viva
       ↓
-4. Mistral extrae movimientos → movimientos_raw
+4. Mistral Small extrae movimientos (chunking 50, paralelo 3, retry 3)
       ↓
-5. Mistral clasifica → propuestas_ia
+5. Detección de duplicados (fecha+monto+descripción)
       ↓
-6. Frontend muestra bandeja de propuestas
+6. Auto-detección de clientes por RUT en descripciones
       ↓
-7. Usuario aprueba / edita / descarta
+7. Propuestas con 7 categorías tributarias + confianza
       ↓
-8. Aprobados → documentos_tributarios o gastos
+8. Progreso realtime via Supabase (in-place update, sin refetch)
       ↓
-9. Documentos → SII
+9. /revisar: agrupado por documento → por confianza (alta/media/baja)
       ↓
-10. periodos_contables se actualiza
+10. Usuario aprueba (con cliente) / edita / descarta
+      ↓
+11. /resumen: métricas, gráfico, F29, exportar PDF
 ```
 
 ---
 
-## Uso de n8n (solo periférico)
+## Deploy (Vercel)
 
-- Webhook: "documento subido" en Supabase → llama Mistral
-- Scheduler: recordatorio F29 el día 15 de cada mes
-- Scheduler: resumen semanal por email
-- **NO usar n8n para lógica crítica**
-
----
-
-## Documentos que procesa la IA (Mistral)
-
-- Cartolas bancarias Excel (Banco de Chile, BCI, Santander, etc.)
-- Screenshots del banco (OCR)
-- Screenshots de Binance, Buda, Orionx
-- Exports de WhatsApp (.txt)
-- Grillas Excel manuales
-- PDFs de cartolas bancarias
+- **Production (main):** `app-contable-rho.vercel.app` — solo Initial commit
+- **Preview (dev):** se genera automáticamente en cada push a dev
+- **Limite:** 60s Vercel Hobby — procesamiento IA cabe para ~600 tx
+- **Para 1000+ tx:** migrar procesamiento a n8n webhook
 
 ---
 
-## Estado actual del proyecto
+## Pendiente
 
-- [x] Stack configurado
-- [x] MCPs conectados en Claude Code
-- [x] Ramas Git definidas
-- [x] Diseño UI definido (iOS Tahoe dark mode)
-- [x] Esquema de base de datos definido
-- [x] Lógica tributaria definida
-- [x] Modelo de precios definido
-- [x] Auth y roles definidos
-- [x] Crear tablas en Supabase (11 tablas + creditos_uso)
-- [x] Configurar Supabase Storage (bucket documentos, 50MB, RLS)
-- [x] Configurar RLS policies (todas las tablas)
-- [x] Implementar auth (email + password, proxy, DAL, onboarding, paywall)
-- [x] Implementar subida de archivos (drag & drop desktop, input mobile)
-- [x] Pantalla de ingesta (/subir)
 - [ ] Configurar Google OAuth en Supabase Dashboard + Google Cloud Console
-- [ ] Integrar Mistral API
-- [ ] Bandeja de propuestas IA
-- [ ] CRM clientes P2P
-- [ ] Resumen mensual + F29
-- [ ] Integración SII
+- [ ] Mergear dev → main para deploy a producción
+- [ ] Integración SII (emisión real de DTEs)
+- [ ] OCR para imágenes (Mistral vision o Tesseract)
+- [ ] Integración de pagos real (actualmente se activa plan sin cobro)
+- [ ] n8n webhooks: recordatorio F29, resumen semanal por email
+- [ ] PWA: manifest.json, service worker, iconos
+- [ ] Para cartolas 1000+ tx: migrar procesamiento a n8n webhook
 
 ---
 
@@ -466,4 +269,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: Abril 2026 · rama `dev`*
+*Última actualización: 3 Abril 2026 · rama `dev` · PRs #1-#12 mergeados*
