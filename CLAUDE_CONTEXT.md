@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #12, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #13, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -91,6 +91,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #10 | feature/ui-rediseno | Rediseño UI: tema claro, acento coral, cards blancas |
 | #11 | feature/ui-polish | Phosphor icons, animaciones, toast, toggle dark/light |
 | #12 | feature/loading-states | Skeleton loaders en todas las rutas |
+| #13 | feature/subir-ocr-imagenes | Rediseño /subir con OCR imágenes, cola, badges de grupo |
 
 ---
 
@@ -123,11 +124,13 @@ src/
     dal.ts                              # Data Access Layer (auth checks)
     upload.ts                           # Upload a Storage + registro BD
     parsers.ts                          # Excel parser (xlsx → TSV)
+    file-classifier.ts                  # Clasifica archivos: grande/chico/imagen + colores badge
     rut.ts                              # Validación y formateo RUT chileno
     ai/types.ts                         # Interfaces AI provider
     ai/provider.ts                      # Factory de proveedores
     ai/prompt.ts                        # System prompt P2P/crypto optimizado
     ai/fecha.ts                         # Parser de fechas chilenas
+    ai/ocr.ts                           # Mistral OCR (mistral-ocr-latest) + agrupación imágenes
     ai/processor.ts                     # Orquestador: chunking, paralelo, retry, duplicados, auto-clientes
     ai/providers/mistral.ts             # Implementacion Mistral
   app/
@@ -150,7 +153,7 @@ src/
     (app)/
       layout.tsx                        # requireActiveEmpresa + BottomNav + ThemeToggle
       subir/page.tsx                    # Server wrapper
-      subir/SubirClient.tsx             # Upload + historial + realtime
+      subir/SubirClient.tsx             # Cola de subida + grupos + realtime
       subir/loading.tsx                 # Skeleton loader
       revisar/page.tsx                  # Server: propuestas + clientes + documentos
       revisar/RevisarClient.tsx         # Agrupado por documento + confianza
@@ -169,7 +172,7 @@ src/
     Toast.tsx                           # ToastProvider + useToast hook
     SkeletonCard.tsx                    # Card placeholder pulsante
     layout/BottomNav.tsx                # Nav con Phosphor icons + badge realtime
-    upload/FileUpload.tsx               # Drag & drop + botones Phosphor
+    upload/FileUpload.tsx               # Zona drop única + cola + badges grupo 1-5
     upload/DocumentList.tsx             # Historial con iconos por tipo
     propuestas/PropuestaCard.tsx        # Card con categorías tributarias P2P/crypto
 ```
@@ -215,27 +218,32 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
 ## Flujo principal (actualizado)
 
 ```
-1. Usuario sube documento en /subir
+1. Usuario arrastra archivos en /subir → clasificación grande/chico/imagen
       ↓
-2. Supabase Storage guarda archivo
+2. Badge de grupo 1-5 para agrupar chicos/imágenes (nombre editable)
       ↓
-3. POST /api/procesar-documento → after() mantiene función viva
+3. "Subir todo" → Supabase Storage + registro BD
       ↓
-4. Mistral Small extrae movimientos (chunking 50, paralelo 3, retry 3)
+4. POST /api/procesar-documento → after() mantiene función viva
       ↓
-5. Detección de duplicados (fecha+monto+descripción)
+5. Si imagen → Mistral OCR (mistral-ocr-latest) → texto estructurado
+   Si grupo imágenes → OCR + agrupación inteligente por operación
       ↓
-6. Auto-detección de clientes por RUT en descripciones
+6. Mistral Small extrae movimientos (chunking 50, paralelo 3, retry 3)
       ↓
-7. Propuestas con 7 categorías tributarias + confianza
+7. Detección de duplicados (fecha+monto+descripción)
       ↓
-8. Progreso realtime via Supabase (in-place update, sin refetch)
+8. Auto-detección de clientes por RUT en descripciones
       ↓
-9. /revisar: agrupado por documento → por confianza (alta/media/baja)
+9. Propuestas con 7 categorías tributarias + confianza
       ↓
-10. Usuario aprueba (con cliente) / edita / descarta
+10. Progreso realtime via Supabase (in-place update, sin refetch)
       ↓
-11. /resumen: métricas, gráfico, F29, exportar PDF
+11. /revisar: agrupado por documento → por confianza (alta/media/baja)
+      ↓
+12. Usuario aprueba (con cliente) / edita / descarta
+      ↓
+13. /resumen: métricas, gráfico, F29, exportar PDF
 ```
 
 ---
@@ -254,7 +262,7 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
 - [ ] Configurar Google OAuth en Supabase Dashboard + Google Cloud Console
 - [ ] Mergear dev → main para deploy a producción
 - [ ] Integración SII (emisión real de DTEs)
-- [ ] OCR para imágenes (Mistral vision o Tesseract)
+- [x] OCR para imágenes (Mistral OCR + agrupación inteligente)
 - [ ] Integración de pagos real (actualmente se activa plan sin cobro)
 - [ ] n8n webhooks: recordatorio F29, resumen semanal por email
 - [ ] PWA: manifest.json, service worker, iconos
@@ -269,4 +277,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 3 Abril 2026 · rama `dev` · PRs #1-#12 mergeados*
+*Última actualización: 3 Abril 2026 · rama `dev` · PRs #1-#13 mergeados*
