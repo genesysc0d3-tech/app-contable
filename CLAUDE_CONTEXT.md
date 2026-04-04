@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #13, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #14, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -92,6 +92,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #11 | feature/ui-polish | Phosphor icons, animaciones, toast, toggle dark/light |
 | #12 | feature/loading-states | Skeleton loaders en todas las rutas |
 | #13 | feature/subir-ocr-imagenes | Rediseño /subir con OCR imágenes, cola, badges de grupo |
+| #14 | feature/fix-clasificacion-documentos | Fix: clasificar Excel/CSV por filas reales, no solo tamaño |
 
 ---
 
@@ -277,4 +278,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 3 Abril 2026 · rama `dev` · PRs #1-#13 mergeados*
+*Última actualización: 3 Abril 2026 · rama `dev` · PRs #1-#14 mergeados*
