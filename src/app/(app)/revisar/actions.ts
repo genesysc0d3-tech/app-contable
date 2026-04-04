@@ -60,6 +60,8 @@ export async function editarPropuesta(
     iva?: number;
     total?: number;
     notas?: string | null;
+    moneda_origen?: string | null;
+    monto_moneda_origen?: number | null;
   }
 ) {
   const supabase = await createClient();
