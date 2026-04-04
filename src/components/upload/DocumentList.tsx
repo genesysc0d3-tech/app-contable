@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { DocumentoSubido } from "@/lib/upload";
 import type { ProgresoIA, DuplicadoDetalle, TipoDuplicado } from "@/lib/ai/types";
-import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle } from "@phosphor-icons/react";
+import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle, EyeSlash, Eye } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
 interface DocumentListProps {
@@ -57,21 +57,28 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
   duplicados: DuplicadoDetalle[]; documentoId: string; hasWarning: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [expandedOcultos, setExpandedOcultos] = useState(false);
   const [forcing, setForcing] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const [localOcultos, setLocalOcultos] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
   const { toast } = useToast();
 
-  const visibleDuplicados = duplicados.filter(
-    (dup, idx) => !removed.has(`${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`)
-  );
+  function dupKey(dup: DuplicadoDetalle, idx: number) {
+    return `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`;
+  }
 
-  if (visibleDuplicados.length === 0) return null;
+  // Separate into active / hidden
+  const allVisible = duplicados.filter((dup, idx) => !removed.has(dupKey(dup, idx)));
+  const activos = allVisible.filter((dup, idx) => !dup.oculto && !localOcultos.has(dupKey(dup, duplicados.indexOf(dup))));
+  const ocultos = allVisible.filter((dup, idx) => dup.oculto || localOcultos.has(dupKey(dup, duplicados.indexOf(dup))));
+
+  if (activos.length === 0 && ocultos.length === 0) return null;
 
   async function handleForceInsert(dup: DuplicadoDetalle, idx: number) {
-    const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`;
+    const key = dupKey(dup, idx);
     setForcing(key);
     try {
       const res = await fetch("/api/forzar-movimiento", {
@@ -79,23 +86,43 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }),
       });
-      if (res.ok) {
-        toast("Movimiento agregado");
-        setRemoved((prev) => new Set(prev).add(key));
-      } else {
-        toast("Error al agregar", "error");
-      }
+      if (res.ok) { toast("Enviado a revisar"); setRemoved((prev) => new Set(prev).add(key)); }
+      else toast("Error al agregar", "error");
     } catch { toast("Error al agregar", "error"); }
     setForcing(null); setConfirmId(null);
   }
 
-  // Selectable items: non-info duplicados that are visible
-  const selectableKeys = visibleDuplicados
+  async function handleOcultar(dup: DuplicadoDetalle, idx: number) {
+    const key = dupKey(dup, idx);
+    setLocalOcultos((prev) => new Set(prev).add(key));
+    try {
+      await fetch("/api/ocultar-omitido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, monto: dup.monto, descripcion: dup.descripcion, ocultar: true }),
+      });
+    } catch { /* persist failed but local state updated */ }
+  }
+
+  async function handleRecuperar(dup: DuplicadoDetalle, idx: number) {
+    const key = dupKey(dup, idx);
+    setLocalOcultos((prev) => { const n = new Set(prev); n.delete(key); return n; });
+    try {
+      await fetch("/api/ocultar-omitido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, monto: dup.monto, descripcion: dup.descripcion, ocultar: false }),
+      });
+    } catch { /* persist failed but local state updated */ }
+  }
+
+  // Selectable: non-info activos
+  const selectableKeys = activos
     .map((dup) => {
       const origIdx = duplicados.indexOf(dup);
       const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
       if (dupTipo === "multi_transfer_p2p") return null;
-      return { key: `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${origIdx}`, dup, origIdx };
+      return { key: dupKey(dup, origIdx), dup, origIdx };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
@@ -103,19 +130,10 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
   const selectedCount = selectableKeys.filter((s) => selected.has(s.key)).length;
 
   function toggleSelect(key: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
+    setSelected((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   }
-
   function toggleSelectAll() {
-    if (allSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(selectableKeys.map((s) => s.key)));
-    }
+    setSelected(allSelected ? new Set() : new Set(selectableKeys.map((s) => s.key)));
   }
 
   async function handleBatchInsert() {
@@ -123,27 +141,105 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
     if (items.length === 0) return;
     setBatchLoading(true);
     const newRemoved = new Set(removed);
-    let successCount = 0;
+    let ok = 0;
     for (const { key, dup } of items) {
       try {
-        const res = await fetch("/api/forzar-movimiento", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }),
-        });
-        if (res.ok) { newRemoved.add(key); successCount++; }
-      } catch { /* skip failed */ }
+        const res = await fetch("/api/forzar-movimiento", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }) });
+        if (res.ok) { newRemoved.add(key); ok++; }
+      } catch { /* skip */ }
     }
-    setRemoved(newRemoved);
-    setSelected(new Set());
-    if (successCount > 0) toast(`${successCount} movimiento${successCount !== 1 ? "s" : ""} agregado${successCount !== 1 ? "s" : ""}`);
-    if (successCount < items.length) toast(`${items.length - successCount} fallaron`, "error");
+    setRemoved(newRemoved); setSelected(new Set());
+    if (ok > 0) toast(`${ok} enviado${ok !== 1 ? "s" : ""} a revisar`);
+    if (ok < items.length) toast(`${items.length - ok} fallaron`, "error");
     setBatchLoading(false);
+  }
+
+  async function handleBatchOcultar() {
+    const items = selectableKeys.filter((s) => selected.has(s.key));
+    for (const { key, dup } of items) {
+      const origIdx = duplicados.indexOf(dup);
+      await handleOcultar(dup, origIdx);
+    }
+    setSelected(new Set());
+    toast(`${items.length} oculto${items.length !== 1 ? "s" : ""}`);
+  }
+
+  function renderItem(dup: DuplicadoDetalle, showCheckbox: boolean, showActions: boolean) {
+    const origIdx = duplicados.indexOf(dup);
+    const key = dupKey(dup, origIdx);
+    const isConfirming = confirmId === key;
+    const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
+    const isConfirmed = dupTipo === "otro_doc_confirmado" || dupTipo === "mismo_ndoc_mismo_arch" || dupTipo === "mismo_ndoc_otro_arch";
+    const isInfo = dupTipo === "multi_transfer_p2p";
+    const iconColor = isInfo ? "text-[#3B82F6]" : isConfirmed ? "text-[#E8553E]" : "text-[#F59E0B]";
+    const IconComp = isInfo ? Info : isConfirmed ? XCircle : WarningCircle;
+    const btnLabel = isConfirmed ? "Agregar igual" : "Agregar";
+
+    return (
+      <div key={origIdx} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 animate-fade-in">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            {showCheckbox && !isInfo && (
+              <input type="checkbox" checked={selected.has(key)} onChange={() => toggleSelect(key)}
+                className="w-3 h-3 rounded accent-[#E8553E] shrink-0" />
+            )}
+            <IconComp size={12} weight="fill" className={`${iconColor} shrink-0`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[var(--foreground)] truncate">{dup.descripcion}</p>
+              <div className="flex items-center gap-2 text-[var(--muted-light)] mt-0.5">
+                <span>{formatFechaCorta(dup.fecha)}</span>
+                {dup.monto > 0 && <span className="tabular-nums">{fmt(dup.monto)}</span>}
+                {dup.n_documento && <span className="text-[var(--muted)]">#{dup.n_documento}</span>}
+              </div>
+            </div>
+          </div>
+          {showActions && !isConfirming && !isInfo && (
+            <div className="flex gap-1 shrink-0">
+              <button onClick={() => setConfirmId(key)} disabled={!!forcing}
+                className="btn-press text-[9px] text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0] rounded px-2 py-1 transition-colors">
+                {btnLabel}
+              </button>
+              <button onClick={() => handleOcultar(dup, origIdx)}
+                className="btn-press text-[9px] text-[var(--muted-light)] bg-[var(--surface)] hover:bg-[var(--border)] rounded px-1.5 py-1 transition-colors">
+                <EyeSlash size={12} />
+              </button>
+            </div>
+          )}
+          {!showActions && (
+            <button onClick={() => handleRecuperar(dup, origIdx)}
+              className="btn-press text-[9px] text-[#3B82F6] hover:text-[#2563EB] transition-colors flex items-center gap-1">
+              <Eye size={10} /> Recuperar
+            </button>
+          )}
+        </div>
+        <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>{dup.motivo}</p>
+        {dup.origen_documento_nombre !== "Este archivo" && (
+          <p className="text-[var(--muted-light)] flex items-center gap-1">
+            <Warning size={10} className="text-[#F59E0B] shrink-0" />
+            Ya registrado en {dup.origen_documento_nombre}
+            {dup.origen_documento_fecha && ` (${formatFechaCorta(dup.origen_documento_fecha)})`}
+          </p>
+        )}
+        {isConfirming && (
+          <div className="bg-[var(--accent-light)] rounded-lg px-2.5 py-2 space-y-1.5 animate-fade-in">
+            <p className="text-[var(--foreground)]">Se enviará a /revisar como pendiente. ¿Continuar?</p>
+            <div className="flex gap-1.5">
+              <button onClick={() => handleForceInsert(dup, origIdx)} disabled={!!forcing}
+                className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">
+                {forcing === key ? "..." : "Confirmar"}
+              </button>
+              <button onClick={() => setConfirmId(null)}
+                className="btn-press text-[9px] bg-[var(--surface)] text-[var(--muted)] rounded px-2 py-1">Cancelar</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div className="mt-1.5 space-y-1.5">
-      {/* Warning for false duplicates */}
       {hasWarning && (
         <div className="flex items-start gap-1.5 text-[10px] text-[#F59E0B] bg-[#FFF8ED] dark:bg-[#F59E0B]/10 rounded-lg px-2.5 py-2">
           <Warning size={12} weight="fill" className="shrink-0 mt-0.5" />
@@ -151,117 +247,60 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
         </div>
       )}
 
-      <button onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] hover:text-[#D97706] transition-colors">
-        <ArrowUUpLeft size={12} weight="bold" />
-        <span>Ver {visibleDuplicados.length} omitido{visibleDuplicados.length !== 1 ? "s" : ""}</span>
-        <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
-      </button>
+      {/* Active omitidos */}
+      {activos.length > 0 && (
+        <>
+          <button onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] hover:text-[#D97706] transition-colors">
+            <ArrowUUpLeft size={12} weight="bold" />
+            <span>Ver {activos.length} omitido{activos.length !== 1 ? "s" : ""}</span>
+            <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+          </button>
 
-      {expanded && (
-        <div className="space-y-1.5 animate-fade-in">
-          {/* Select all + batch action */}
-          {selectableKeys.length > 1 && (
-            <div className="flex items-center justify-between px-1">
-              <label className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
-                  className="w-3 h-3 rounded accent-[#E8553E]"
-                />
-                Seleccionar todos
-              </label>
-              {selectedCount > 0 && (
-                <button
-                  onClick={handleBatchInsert}
-                  disabled={batchLoading}
-                  className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2.5 py-1 disabled:opacity-50 transition-colors"
-                >
-                  {batchLoading ? "Agregando..." : `Agregar seleccionados (${selectedCount})`}
-                </button>
-              )}
-            </div>
-          )}
-          {visibleDuplicados.map((dup, visIdx) => {
-            const origIdx = duplicados.indexOf(dup);
-            const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${origIdx}`;
-            const isConfirming = confirmId === key;
-            const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
-            const isConfirmed = dupTipo === "otro_doc_confirmado" || dupTipo === "mismo_ndoc_mismo_arch" || dupTipo === "mismo_ndoc_otro_arch";
-            const isAmbiguous = dupTipo === "loose_mismo_arch" || dupTipo === "loose_otro_arch" || dupTipo === "multi_transfer_p2p";
-            const isInfo = dupTipo === "multi_transfer_p2p";
-
-            const iconColor = isInfo ? "text-[#3B82F6]" : isConfirmed ? "text-[#E8553E]" : "text-[#F59E0B]";
-            const IconComp = isInfo ? Info : isConfirmed ? XCircle : WarningCircle;
-            const btnLabel = isConfirmed ? "Agregar igual" : "Agregar de todas formas";
-            const confirmMsg = isConfirmed
-              ? "Este movimiento ya está registrado con certeza. ¿Agregarlo de todas formas puede crear duplicados contables?"
-              : `Este movimiento ya existe en ${dup.origen_documento_nombre}. Agregarlo puede crear duplicados contables.`;
-
-            return (
-              <div key={origIdx} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 animate-fade-in">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    {!isInfo && (
-                      <input
-                        type="checkbox"
-                        checked={selected.has(key)}
-                        onChange={() => toggleSelect(key)}
-                        className="w-3 h-3 rounded accent-[#E8553E] shrink-0"
-                      />
-                    )}
-                    <IconComp size={12} weight="fill" className={`${iconColor} shrink-0`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[var(--foreground)] truncate">{dup.descripcion}</p>
-                      <div className="flex items-center gap-2 text-[var(--muted-light)] mt-0.5">
-                        <span>{formatFechaCorta(dup.fecha)}</span>
-                        {dup.monto > 0 && <span className="tabular-nums">{fmt(dup.monto)}</span>}
-                        {dup.n_documento && <span className="text-[var(--muted)]">#{dup.n_documento}</span>}
-                      </div>
+          {expanded && (
+            <div className="space-y-1.5 animate-fade-in">
+              {selectableKeys.length > 1 && (
+                <div className="flex items-center justify-between px-1 gap-1.5">
+                  <label className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] cursor-pointer">
+                    <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3 h-3 rounded accent-[#E8553E]" />
+                    Seleccionar todos
+                  </label>
+                  {selectedCount > 0 && (
+                    <div className="flex gap-1">
+                      <button onClick={handleBatchInsert} disabled={batchLoading}
+                        className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">
+                        {batchLoading ? "..." : `Agregar (${selectedCount})`}
+                      </button>
+                      <button onClick={handleBatchOcultar} disabled={batchLoading}
+                        className="btn-press text-[9px] text-[var(--muted)] bg-[var(--surface)] hover:bg-[var(--border)] rounded px-2 py-1">
+                        Ocultar ({selectedCount})
+                      </button>
                     </div>
-                  </div>
-                  {!isConfirming && !isInfo && (
-                    <button onClick={() => setConfirmId(key)} disabled={!!forcing}
-                      className={`btn-press shrink-0 text-[9px] rounded px-2 py-1 transition-colors ${
-                        isAmbiguous
-                          ? "text-[#F59E0B] bg-[#FFF8ED] dark:bg-[#F59E0B]/10 hover:bg-[#FFF0D4]"
-                          : "text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0]"
-                      }`}>
-                      {btnLabel}
-                    </button>
                   )}
                 </div>
+              )}
+              {activos.map((dup) => renderItem(dup, true, true))}
+            </div>
+          )}
+        </>
+      )}
 
-                <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>{dup.motivo}</p>
+      {/* Hidden omitidos */}
+      {ocultos.length > 0 && (
+        <>
+          <button onClick={() => setExpandedOcultos(!expandedOcultos)}
+            className="flex items-center gap-1.5 text-[10px] text-[var(--muted-light)] hover:text-[var(--muted)] transition-colors">
+            <EyeSlash size={12} />
+            <span>{ocultos.length} oculto{ocultos.length !== 1 ? "s" : ""}</span>
+            <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expandedOcultos ? "rotate-180" : ""}`} />
+          </button>
 
-                {dup.origen_documento_nombre !== "Este archivo" && (
-                  <p className="text-[var(--muted-light)] flex items-center gap-1">
-                    <Warning size={10} className="text-[#F59E0B] shrink-0" />
-                    Ya registrado en {dup.origen_documento_nombre}
-                    {dup.origen_documento_fecha && ` (${formatFechaCorta(dup.origen_documento_fecha)})`}
-                  </p>
-                )}
-
-                {isConfirming && (
-                  <div className={`rounded-lg px-2.5 py-2 space-y-1.5 animate-fade-in ${
-                    isConfirmed ? "bg-[var(--accent-light)]" : "bg-[#FFF8ED] dark:bg-[#F59E0B]/10"
-                  }`}>
-                    <p className="text-[var(--foreground)]">{confirmMsg}</p>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => handleForceInsert(dup, origIdx)} disabled={!!forcing}
-                        className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">
-                        {forcing === key ? "..." : "Confirmar"}
-                      </button>
-                      <button onClick={() => setConfirmId(null)}
-                        className="btn-press text-[9px] bg-[var(--surface)] text-[var(--muted)] rounded px-2 py-1">Cancelar</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+          {expandedOcultos && (
+            <div className="space-y-1.5 animate-fade-in opacity-60">
+              {ocultos.map((dup) => renderItem(dup, false, false))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -63,6 +63,7 @@ export interface DuplicadoDetalle {
   indice_archivo?: number;
   indice_conflicto?: number;
   repeticiones?: number;
+  oculto?: boolean;
 }
 
 export interface ProgresoIA {
