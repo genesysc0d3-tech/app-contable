@@ -39,18 +39,20 @@ export async function POST(request: Request) {
 
   const fechaParsed = parseFecha(fecha);
 
-  // Fix 1: Idempotent — check if already exists
+  // Idempotent check: only skip if a forzar-movimiento insert already exists
+  // (identified by propuesta with nota "Agregado desde visor de omitidos").
+  // Do NOT match against original movimientos from the processor.
   const { data: existing } = await svc
     .from("movimientos_raw")
-    .select("id")
+    .select("id, propuestas_ia!inner(notas)")
     .eq("documento_id", documento_id)
     .eq("fecha", fechaParsed)
     .eq("monto", monto)
     .eq("descripcion", descripcion)
+    .like("propuestas_ia.notas", "Agregado desde visor de omitidos%")
     .limit(1);
 
   if (existing && existing.length > 0) {
-    // Already exists — remove from duplicados_detalle anyway and return ok
     await removeDuplicadoFromProgreso(svc, documento_id, fecha, monto, descripcion);
     return NextResponse.json({ ok: true, movimiento_id: existing[0].id, already_existed: true });
   }
