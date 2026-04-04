@@ -8,7 +8,7 @@ export interface MovimientoExtraido {
 
 export interface PropuestaExtraida {
   movimiento_index: number;
-  tipo_propuesto: "boleta" | "factura" | "gasto" | "registro_crypto" | "ignorar";
+  tipo_propuesto: "boleta" | "factura" | "gasto" | "registro_crypto" | "ignorar" | "boleta_honorarios" | "factura_afecta" | "compraventa_crypto" | "transferencia_p2p" | "operacion_forex" | "gasto_egreso" | "no_comercial";
   receptor_nombre: string | null;
   receptor_rut: string | null;
   monto_neto: number;
