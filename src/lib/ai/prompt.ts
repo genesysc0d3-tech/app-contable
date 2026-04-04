@@ -79,6 +79,7 @@ INSTRUCCIONES:
 - n_documento: numero de comprobante/documento si aparece en la cartola. IMPORTANTE para diferenciar transferencias del mismo monto y descripcion el mismo dia
 - Nunca inventar RUTs. Si no lo ves en el documento, receptor_rut = null
 - No incluir datos sensibles como claves o passwords en la respuesta
+- CRITICO: En cartolas bancarias, extraer SOLO el monto de la transacción (columna Cargo o Abono). NUNCA extraer el Saldo/Balance como monto — el saldo es acumulado y no representa una transacción. Si una fila tiene Cargo=30000 y Saldo=1286479202, el monto correcto es 30000. Extraer UN solo movimiento por fila de la cartola.
 - Responde SOLO con el JSON, sin texto adicional`;
 
 export function getSystemPrompt(): string {
