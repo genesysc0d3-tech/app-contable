@@ -433,6 +433,7 @@ export type Database = {
           fecha: string
           id: string
           monto: number
+          n_documento: string | null
           origen: string | null
           tipo_flujo: string
         }
@@ -444,6 +445,7 @@ export type Database = {
           fecha: string
           id?: string
           monto: number
+          n_documento?: string | null
           origen?: string | null
           tipo_flujo: string
         }
@@ -455,6 +457,7 @@ export type Database = {
           fecha?: string
           id?: string
           monto?: number
+          n_documento?: string | null
           origen?: string | null
           tipo_flujo?: string
         }

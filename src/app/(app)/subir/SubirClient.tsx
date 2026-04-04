@@ -164,7 +164,7 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
 
         <div>
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">Historial</h2>
-          <DocumentList documentos={documentos} />
+          <DocumentList documentos={documentos} onDocumentoUpdate={fetchDocumentos} />
         </div>
       </div>
     </div>

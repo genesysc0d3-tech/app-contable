@@ -4,6 +4,7 @@ export interface MovimientoExtraido {
   monto: number;
   tipo_flujo: "entrada" | "salida";
   origen: string;
+  n_documento?: string | null;
 }
 
 export interface PropuestaExtraida {
@@ -45,9 +46,11 @@ export interface DuplicadoDetalle {
   descripcion: string;
   monto: number;
   tipo_flujo: string;
+  n_documento?: string | null;
   origen_movimiento_id: string;
   origen_documento_nombre: string;
   origen_documento_fecha: string;
+  motivo: string;
 }
 
 export interface ProgresoIA {
@@ -57,5 +60,6 @@ export interface ProgresoIA {
   movimientos_encontrados?: number;
   duplicados_saltados?: number;
   duplicados_detalle?: DuplicadoDetalle[];
+  falsos_duplicados_warning?: boolean;
   error?: string;
 }
