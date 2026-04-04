@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: movError.message }, { status: 500 });
   }
 
-  // 2. Create propuesta_ia with estado "aprobado"
+  // 2. Create propuesta_ia with estado "pendiente" — user reviews in /revisar
   const montoNum = Number(monto) || 0;
   const tipoFinal = tipo_propuesto || "transferencia_p2p";
   const tieneIva = tipoFinal === "boleta" || tipoFinal === "boleta_honorarios" || tipoFinal === "factura" || tipoFinal === "factura_afecta" || tipoFinal === "gasto" || tipoFinal === "gasto_egreso";
@@ -90,9 +90,9 @@ export async function POST(request: Request) {
       monto_neto: montoNeto,
       iva,
       total: montoNum,
-      confianza: 1.0,
-      estado: "aprobado",
-      notas: "Agregado manualmente desde visor de omitidos",
+      confianza: 0.7,
+      estado: "pendiente",
+      notas: "Agregado desde visor de omitidos — revisar antes de aprobar",
     });
 
   if (propError) {

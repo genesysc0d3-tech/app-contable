@@ -96,6 +96,7 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
   const displayCat = getCat(propuesta.tipo_propuesto);
   const isCrypto = propuesta.tipo_propuesto === "registro_crypto";
   const isLowConfidence = propuesta.confianza !== null && propuesta.confianza < 0.5;
+  const isFromOmitidos = propuesta.notas?.startsWith("Agregado desde visor de omitidos");
   const confianzaPct = propuesta.confianza !== null ? Math.round(propuesta.confianza * 100) : null;
   const confianzaColor = confianzaPct !== null ? (confianzaPct >= 80 ? "text-[#22C55E]" : confianzaPct >= 60 ? "text-[#F59E0B]" : "text-[#E8553E]") : "";
 
@@ -149,10 +150,17 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${displayCat.color}`}>
-          {isCrypto && <CurrencyBtc size={12} weight="bold" className="inline mr-1 -mt-0.5" />}
-          {displayCat.label}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${displayCat.color}`}>
+            {isCrypto && <CurrencyBtc size={12} weight="bold" className="inline mr-1 -mt-0.5" />}
+            {displayCat.label}
+          </span>
+          {isFromOmitidos && (
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#FFF8ED] dark:bg-[#F59E0B]/10 text-[#F59E0B] font-medium">
+              Desde omitidos
+            </span>
+          )}
+        </div>
         {confianzaPct !== null && <span className={`text-xs font-mono tabular-nums ${confianzaColor}`}>{confianzaPct}%</span>}
       </div>
 
