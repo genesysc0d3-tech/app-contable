@@ -1,131 +1,219 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { uploadDocumento, validateFile, getAcceptString } from "@/lib/upload";
-import type { UploadResult } from "@/lib/upload";
-import { Camera, FileXls, Images, ChatText, UploadSimple, Check, X } from "@phosphor-icons/react";
+import { validateFile, getAcceptString } from "@/lib/upload";
+import { classifyFile, getCategoryColor, BADGE_COLORS } from "@/lib/file-classifier";
+import type { FileCategory } from "@/lib/file-classifier";
+import {
+  UploadSimple,
+  FileXls,
+  FilePdf,
+  Image,
+  File as FileIcon,
+  X,
+  PencilSimple,
+  Check,
+} from "@phosphor-icons/react";
 
-interface FileUploadProps {
-  empresaId: string;
-  onUploadComplete?: (result: UploadResult) => void;
+export interface QueuedFile {
+  id: string;
+  file: File;
+  category: FileCategory;
+  group: number; // 1-5 badge
+  customName: string;
+  error?: string;
 }
 
-type FileStatus = {
-  file: File;
-  status: "pending" | "uploading" | "success" | "error";
-  error?: string;
-};
+interface FileUploadProps {
+  onFilesQueued: (files: QueuedFile[]) => void;
+}
 
-export default function FileUpload({ empresaId, onUploadComplete }: FileUploadProps) {
-  const [files, setFiles] = useState<FileStatus[]>([]);
+let fileIdCounter = 0;
+
+export default function FileUpload({ onFilesQueued }: FileUploadProps) {
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const processFiles = useCallback(
-    async (newFiles: FileList | File[]) => {
-      const fileArray = Array.from(newFiles);
-      const fileStatuses: FileStatus[] = fileArray.map((file) => {
-        const error = validateFile(file);
-        return { file, status: error ? "error" : "pending", error: error ?? undefined };
-      });
-      setFiles((prev) => [...fileStatuses, ...prev]);
+  const addFiles = useCallback((newFiles: FileList | File[]) => {
+    const fileArray = Array.from(newFiles);
+    const queued: QueuedFile[] = fileArray.map((file) => {
+      const error = validateFile(file) ?? undefined;
+      const category = classifyFile(file);
+      return {
+        id: `f-${++fileIdCounter}`,
+        file,
+        category,
+        group: 1,
+        customName: file.name.replace(/\.[^.]+$/, ""),
+        error,
+      };
+    });
+    setQueue((prev) => [...prev, ...queued]);
+  }, []);
 
-      for (const fs of fileStatuses) {
-        if (fs.status === "error") continue;
-        setFiles((prev) => prev.map((f) => f.file === fs.file ? { ...f, status: "uploading" } : f));
-        const result = await uploadDocumento(fs.file, empresaId);
-        setFiles((prev) => prev.map((f) => f.file === fs.file ? { ...f, status: result.success ? "success" : "error", error: result.error } : f));
-        onUploadComplete?.(result);
-        if (result.success && result.documento) {
-          fetch("/api/procesar-documento", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ documento_id: result.documento.id }),
-          }).catch(() => {});
-        }
-      }
-    },
-    [empresaId, onUploadComplete]
-  );
+  function cycleGroup(id: string) {
+    setQueue((prev) =>
+      prev.map((f) => {
+        if (f.id !== id || f.category === "grande") return f;
+        return { ...f, group: f.group >= 5 ? 1 : f.group + 1 };
+      })
+    );
+  }
+
+  function removeFile(id: string) {
+    setQueue((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function startEditName(f: QueuedFile) {
+    setEditingId(f.id);
+    setEditName(f.customName);
+  }
+
+  function saveName(id: string) {
+    setQueue((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, customName: editName || f.file.name } : f))
+    );
+    setEditingId(null);
+  }
+
+  function handleSubmit() {
+    const valid = queue.filter((f) => !f.error);
+    if (valid.length === 0) return;
+    onFilesQueued(valid);
+    setQueue([]);
+  }
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); }, []);
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setIsDragging(false);
-    if (e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files);
-  }, [processFiles]);
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) { processFiles(e.target.files); e.target.value = ""; }
-  }, [processFiles]);
+    if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
+  }, [addFiles]);
 
   return (
     <div className="space-y-4">
-      {/* Drop zone — desktop */}
+      {/* Single drop zone */}
       <div
-        onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`hidden md:flex flex-col items-center justify-center rounded-[20px] border-2 border-dashed cursor-pointer transition-all duration-200 py-20 px-6 ${
+        className={`flex flex-col items-center justify-center rounded-[20px] border-2 border-dashed cursor-pointer transition-all duration-200 py-14 px-6 ${
           isDragging
             ? "border-[#E8553E] bg-[var(--accent-light)]"
             : "border-[#E8553E]/40 dark:border-[#E8553E]/30 bg-[#FFF8F7] dark:bg-[var(--accent-light)] hover:border-[#E8553E] hover:bg-[var(--accent-light)]"
         }`}
       >
-        <UploadSimple size={48} weight="light" className="text-[#E8553E] mb-3" />
-        <p className="text-lg font-semibold text-[var(--foreground)]">Arrastra archivos aquí</p>
-        <p className="text-sm text-[var(--muted)] mt-1">Excel, PDF, imágenes, CSV o chats de WhatsApp</p>
-      </div>
-
-      {/* Action buttons — 2x2 grid with large icons */}
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: "Cámara", Icon: Camera, accept: "image/*", capture: true },
-          { label: "Archivos", Icon: FileXls, accept: ".xls,.xlsx,.pdf,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,text/csv" },
-          { label: "Galería", Icon: Images, accept: "image/*" },
-          { label: "WhatsApp", Icon: ChatText, accept: ".txt,text/plain" },
-        ].map(({ label, Icon, accept, capture }) => (
-          <button
-            key={label} type="button"
-            onClick={() => {
-              if (fileInputRef.current) {
-                fileInputRef.current.accept = accept;
-                if (capture) fileInputRef.current.capture = "environment";
-                else fileInputRef.current.removeAttribute("capture");
-                fileInputRef.current.click();
-              }
-            }}
-            className="btn-press flex flex-col items-center justify-center gap-2 rounded-[16px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none dark:border dark:border-white/10 px-4 py-5 text-sm font-medium text-[var(--foreground)] hover:shadow-[0_2px_16px_rgba(0,0,0,0.1)] transition-all duration-150"
-          >
-            <Icon size={32} weight="light" className="text-[#E8553E]" />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <input ref={fileInputRef} type="file" multiple accept={getAcceptString()} onChange={handleFileInput} className="hidden" />
-
-      {/* Upload list */}
-      {files.length > 0 && (
-        <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none divide-y divide-[var(--border)]">
-          {files.map((fs, i) => (
-            <div key={`${fs.file.name}-${i}`} className="flex items-center gap-3 px-4 py-3 animate-fade-in">
-              <span className="text-lg">
-                {fs.status === "success" ? <Check size={20} weight="bold" className="text-[#22C55E]" /> :
-                 fs.status === "error" ? <X size={20} weight="bold" className="text-[#E8553E]" /> :
-                 <UploadSimple size={20} className="text-[var(--muted)] animate-pulse" />}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-[var(--foreground)] truncate">{fs.file.name}</p>
-                {fs.error && <p className="text-xs text-[#E8553E] mt-0.5">{fs.error}</p>}
-                {fs.status === "uploading" && (
-                  <div className="mt-1.5 h-1 rounded-full bg-[var(--border)] overflow-hidden">
-                    <div className="h-full bg-[#E8553E] rounded-full animate-pulse w-2/3 transition-all duration-500" />
-                  </div>
-                )}
-              </div>
-              <span className="text-xs text-[var(--muted-light)] shrink-0 tabular-nums">{(fs.file.size / 1024).toFixed(0)} KB</span>
-            </div>
-          ))}
+        <UploadSimple size={40} weight="light" className="text-[#E8553E] mb-3" />
+        <p className="text-base font-semibold text-[var(--foreground)]">
+          Arrastra archivos o toca para seleccionar
+        </p>
+        <div className="flex items-center gap-4 mt-3 text-[var(--muted-light)]">
+          <FileXls size={20} weight="light" />
+          <FilePdf size={20} weight="light" />
+          <Image size={20} weight="light" />
+          <FileIcon size={20} weight="light" />
         </div>
+        <p className="text-xs text-[var(--muted-light)] mt-2">Excel, PDF, imágenes, CSV</p>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={getAcceptString()}
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }
+        }}
+        className="hidden"
+      />
+
+      {/* Queue */}
+      {queue.length > 0 && (
+        <>
+          <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none divide-y divide-[var(--border)]">
+            {queue.map((f) => {
+              const catColor = getCategoryColor(f.category);
+              const badgeColor = BADGE_COLORS[f.group] ?? BADGE_COLORS[1];
+              const isEditing = editingId === f.id;
+
+              return (
+                <div key={f.id} className="px-4 py-3 animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    {/* Badge (clickable for chico/imagen) */}
+                    {f.category === "grande" ? (
+                      <span className="w-7 h-7 rounded-full bg-[var(--accent-light)] flex items-center justify-center text-[10px] font-bold text-[#E8553E] shrink-0">
+                        !
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => cycleGroup(f.id)}
+                        className={`w-7 h-7 rounded-full ${badgeColor} flex items-center justify-center text-[10px] font-bold text-white shrink-0 btn-press transition-transform duration-150 hover:scale-110`}
+                      >
+                        {f.group}
+                      </button>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && saveName(f.id)}
+                            autoFocus
+                            className="flex-1 text-sm bg-[var(--surface)] border border-[var(--border)] rounded-lg px-2 py-1 text-[var(--foreground)] focus:outline-none focus:border-[#E8553E]"
+                          />
+                          <button onClick={() => saveName(f.id)} className="text-[#22C55E]">
+                            <Check size={16} weight="bold" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm text-[var(--foreground)] truncate">{f.customName}</p>
+                          <button onClick={() => startEditName(f)} className="text-[var(--muted-light)] hover:text-[var(--muted)]">
+                            <PencilSimple size={12} />
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-medium ${catColor}`}>
+                          {f.category === "grande" ? "Procesa solo" : f.category === "imagen" ? "OCR" : "Agrupable"}
+                        </span>
+                        <span className="text-[10px] text-[var(--muted-light)] tabular-nums">{(f.file.size / 1024).toFixed(0)} KB</span>
+                      </div>
+                      {f.error && <p className="text-[10px] text-[#E8553E] mt-0.5">{f.error}</p>}
+                    </div>
+
+                    <button onClick={() => removeFile(f.id)} className="text-[var(--muted-light)] hover:text-[#E8553E] shrink-0">
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Disclaimer */}
+          <p className="text-[10px] text-[var(--muted-light)] px-1">
+            Documentos grandes (&gt;50 tx) se procesan individualmente. Para screenshots, agrúpalos por operación usando el badge de color.
+          </p>
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={queue.every((f) => !!f.error)}
+            className="btn-press w-full rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-all duration-150"
+          >
+            Subir todo ({queue.filter((f) => !f.error).length} archivo{queue.filter((f) => !f.error).length !== 1 ? "s" : ""})
+          </button>
+        </>
       )}
     </div>
   );
