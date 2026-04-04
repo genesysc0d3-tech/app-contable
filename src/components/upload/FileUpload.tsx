@@ -37,20 +37,22 @@ export default function FileUpload({ onFilesQueued }: FileUploadProps) {
   const [editName, setEditName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const addFiles = useCallback((newFiles: FileList | File[]) => {
+  const addFiles = useCallback(async (newFiles: FileList | File[]) => {
     const fileArray = Array.from(newFiles);
-    const queued: QueuedFile[] = fileArray.map((file) => {
-      const error = validateFile(file) ?? undefined;
-      const category = classifyFile(file);
-      return {
-        id: `f-${++fileIdCounter}`,
-        file,
-        category,
-        group: 1,
-        customName: file.name.replace(/\.[^.]+$/, ""),
-        error,
-      };
-    });
+    const queued: QueuedFile[] = await Promise.all(
+      fileArray.map(async (file) => {
+        const error = validateFile(file) ?? undefined;
+        const category = await classifyFile(file);
+        return {
+          id: `f-${++fileIdCounter}`,
+          file,
+          category,
+          group: 1,
+          customName: file.name.replace(/\.[^.]+$/, ""),
+          error,
+        };
+      })
+    );
     setQueue((prev) => [...prev, ...queued]);
   }, []);
 
