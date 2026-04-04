@@ -40,9 +40,9 @@ function fmt(n: number): string {
 
 function Card({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-center">
-      <p className="text-[10px] text-white/40">{label}</p>
-      <p className={`text-sm font-semibold mt-0.5 ${color ?? "text-white"}`}>{value}</p>
+    <div className="rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-center">
+      <p className="text-[10px] text-[#AAA]">{label}</p>
+      <p className={`text-sm font-semibold mt-0.5 ${color ?? "text-[#111]"}`}>{value}</p>
     </div>
   );
 }
@@ -55,33 +55,33 @@ function BarChart({
   const max = Math.max(...data.flatMap((d) => [d.ingresos, d.egresos]), 1);
 
   return (
-    <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-      <p className="text-xs text-white/50 mb-3">Últimos 6 meses</p>
+    <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] p-4">
+      <p className="text-xs text-[#888] mb-3">Últimos 6 meses</p>
       <div className="flex items-end gap-2 h-32">
         {data.map((d) => (
           <div key={`${d.anio}-${d.mes}`} className="flex-1 flex flex-col items-center gap-1">
             <div className="w-full flex gap-0.5 items-end" style={{ height: "100px" }}>
               <div
-                className="flex-1 bg-emerald-500/60 rounded-t"
+                className="flex-1 bg-[#22C55E] rounded-t"
                 style={{ height: `${(d.ingresos / max) * 100}%`, minHeight: d.ingresos > 0 ? "2px" : 0 }}
               />
               <div
-                className="flex-1 bg-red-500/50 rounded-t"
+                className="flex-1 bg-[#E8553E]/50 rounded-t"
                 style={{ height: `${(d.egresos / max) * 100}%`, minHeight: d.egresos > 0 ? "2px" : 0 }}
               />
             </div>
-            <span className="text-[9px] text-white/30">
+            <span className="text-[9px] text-[#BBB]">
               {MESES[d.mes - 1]?.slice(0, 3)}
             </span>
           </div>
         ))}
       </div>
       <div className="flex gap-4 mt-2 justify-center">
-        <span className="text-[10px] text-white/40 flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-emerald-500/60" /> Ingresos
+        <span className="text-[10px] text-[#AAA] flex items-center gap-1">
+          <span className="w-2 h-2 rounded-sm bg-[#22C55E]" /> Ingresos
         </span>
-        <span className="text-[10px] text-white/40 flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-red-500/50" /> Egresos
+        <span className="text-[10px] text-[#AAA] flex items-center gap-1">
+          <span className="w-2 h-2 rounded-sm bg-[#E8553E]/50" /> Egresos
         </span>
       </div>
     </div>
@@ -93,18 +93,18 @@ function TipoPieTable({ porTipo }: { porTipo: Record<string, { count: number; to
   if (entries.length === 0) return null;
 
   return (
-    <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-white/10">
-        <p className="text-xs text-white/50">Por tipo tributario</p>
+    <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-[#EEE]">
+        <p className="text-xs text-[#888]">Por tipo tributario</p>
       </div>
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-[#EEEEEE]">
         {entries.map(([tipo, { count, total }]) => (
           <div key={tipo} className="px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-white/70">{TIPO_LABEL[tipo] ?? tipo}</span>
-              <span className="text-[10px] text-white/30">{count}</span>
+              <span className="text-xs text-[#555]">{TIPO_LABEL[tipo] ?? tipo}</span>
+              <span className="text-[10px] text-[#BBB]">{count}</span>
             </div>
-            <span className="text-xs font-medium text-white/80">{fmt(total)}</span>
+            <span className="text-xs font-medium text-[#333]">{fmt(total)}</span>
           </div>
         ))}
       </div>
@@ -151,18 +151,18 @@ function BorradorF29({
   }
 
   return (
-    <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+    <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
+        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-[#F5F5F3] transition-colors"
       >
         <span
-          className="text-white/40 text-sm transition-transform duration-200"
+          className="text-[#AAA] text-sm transition-transform duration-200"
           style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
         >
           ▶
         </span>
-        <span className="text-sm font-medium text-white/90">
+        <span className="text-sm font-medium text-[#111]">
           Borrador F29 — {MESES[mes - 1]} {anio}
         </span>
       </button>
@@ -174,18 +174,18 @@ function BorradorF29({
             <Row label="Línea 20 — Crédito fiscal (IVA compras)" value={fmt(resumen.ivaCredito)} />
             <Row label="Línea 48 — IVA a pagar" value={fmt(ivaPagar)} highlight />
             <Row label="Línea 142 — PPM (0,25% ingresos brutos)" value={fmt(ppm)} />
-            <div className="border-t border-white/10 pt-2">
+            <div className="border-t border-[#EEE] pt-2">
               <Row label="Total a pagar mes" value={fmt(totalPagar)} highlight />
             </div>
           </div>
 
-          <p className="text-[10px] text-yellow-400/60 bg-yellow-500/5 rounded-lg px-3 py-2">
+          <p className="text-[10px] text-[#F59E0B]/60 bg-[#FFF8ED] rounded-lg px-3 py-2">
             Este es un borrador estimado. Debe ser revisado y presentado por un contador habilitado.
           </p>
 
           <button
             onClick={handleCopiar}
-            className="w-full rounded-xl bg-blue-500/20 hover:bg-blue-500/30 px-4 py-2.5 text-xs font-medium text-blue-300 transition-colors"
+            className="w-full rounded-xl bg-[#FFF0EE] hover:bg-blue-500/30 px-4 py-2.5 text-xs font-medium text-[#E8553E] transition-colors"
           >
             {copied ? "Copiado al portapapeles" : "Compartir con contador"}
           </button>
@@ -198,8 +198,8 @@ function BorradorF29({
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-white/50">{label}</span>
-      <span className={`text-xs font-medium ${highlight ? "text-white" : "text-white/70"}`}>
+      <span className="text-xs text-[#888]">{label}</span>
+      <span className={`text-xs font-medium ${highlight ? "text-[#111]" : "text-[#555]"}`}>
         {value}
       </span>
     </div>
@@ -277,7 +277,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
             key={v}
             onClick={() => { setVista(v); setPage(0); }}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-medium transition-colors ${
-              vista === v ? "bg-blue-500/20 text-blue-300" : "bg-white/5 text-white/40 hover:bg-white/10"
+              vista === v ? "bg-[#FFF0EE] text-[#E8553E]" : "bg-[#F5F5F3] text-[#AAA] hover:bg-[#F5F5F3]"
             }`}
           >
             {v.charAt(0).toUpperCase() + v.slice(1)}
@@ -291,7 +291,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
           type="date"
           value={fecha}
           onChange={(e) => setFecha(e.target.value)}
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400/50 [color-scheme:dark]"
+          className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-[#111] focus:outline-none focus:border-[#E8553E]"
         />
       )}
       {(vista === "mensual" || vista === "anual") && (
@@ -300,7 +300,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
             <select
               value={mesH}
               onChange={(e) => setMesH(Number(e.target.value))}
-              className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400/50"
+              className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#E8553E]"
             >
               {MESES.map((m, i) => (
                 <option key={i} value={i + 1}>{m}</option>
@@ -310,7 +310,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
           <select
             value={anioH}
             onChange={(e) => setAnioH(Number(e.target.value))}
-            className={`${vista === "mensual" ? "w-24" : "flex-1"} rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400/50`}
+            className={`${vista === "mensual" ? "w-24" : "flex-1"} rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#E8553E]`}
           >
             {[2024, 2025, 2026, 2027].map((a) => (
               <option key={a} value={a}>{a}</option>
@@ -321,26 +321,26 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
 
       {/* Results */}
       {loading ? (
-        <p className="text-center text-white/30 text-xs py-8">Cargando...</p>
+        <p className="text-center text-[#BBB] text-xs py-8">Cargando...</p>
       ) : propuestas.length === 0 ? (
-        <p className="text-center text-white/30 text-xs py-8">Sin movimientos aprobados</p>
+        <p className="text-center text-[#BBB] text-xs py-8">Sin movimientos aprobados</p>
       ) : (
-        <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
-          <div className="divide-y divide-white/5">
+        <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] overflow-hidden">
+          <div className="divide-y divide-[#EEEEEE]">
             {propuestas.map((p) => {
               const mov = p.movimientos_raw;
               return (
                 <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-white/80 truncate">{mov.descripcion}</p>
-                    <div className="flex gap-2 mt-0.5 text-[10px] text-white/40">
+                    <p className="text-xs text-[#333] truncate">{mov.descripcion}</p>
+                    <div className="flex gap-2 mt-0.5 text-[10px] text-[#AAA]">
                       <span>{mov.fecha}</span>
                       <span>{TIPO_LABEL[p.tipo_propuesto] ?? p.tipo_propuesto}</span>
                       {p.receptor_nombre && <span className="truncate">{p.receptor_nombre}</span>}
                     </div>
                   </div>
                   <span className={`text-xs font-medium shrink-0 ${
-                    mov.tipo_flujo === "entrada" ? "text-emerald-400" : "text-red-400"
+                    mov.tipo_flujo === "entrada" ? "text-[#22C55E]" : "text-[#E8553E]"
                   }`}>
                     {mov.tipo_flujo === "entrada" ? "+" : "-"}{fmt(mov.monto)}
                   </span>
@@ -357,17 +357,17 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 px-3 py-1.5 text-[10px] text-white/50 transition-colors"
+            className="rounded-lg bg-[#F5F5F3] hover:bg-[#F5F5F3] disabled:opacity-30 px-3 py-1.5 text-[10px] text-[#888] transition-colors"
           >
             Anterior
           </button>
-          <span className="text-[10px] text-white/30">
+          <span className="text-[10px] text-[#BBB]">
             {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} de {total}
           </span>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={(page + 1) * PAGE_SIZE >= total}
-            className="rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 px-3 py-1.5 text-[10px] text-white/50 transition-colors"
+            className="rounded-lg bg-[#F5F5F3] hover:bg-[#F5F5F3] disabled:opacity-30 px-3 py-1.5 text-[10px] text-[#888] transition-colors"
           >
             Siguiente
           </button>
@@ -492,12 +492,12 @@ export default function ResumenClient({
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Resumen</h1>
-            <p className="text-sm text-white/50 mt-0.5">{empresaNombre}</p>
+            <h1 className="text-2xl font-bold text-[#111]">Resumen</h1>
+            <p className="text-sm text-[#888] mt-0.5">{empresaNombre}</p>
           </div>
           <button
             onClick={() => exportarPDF(empresaNombre, mes, anio, resumen)}
-            className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+            className="rounded-xl bg-[#E8553E] hover:bg-[#d44a35] px-4 py-2.5 text-xs font-semibold text-white transition-colors"
           >
             Exportar PDF
           </button>
@@ -508,7 +508,7 @@ export default function ResumenClient({
           <select
             value={mes}
             onChange={(e) => setMes(Number(e.target.value))}
-            className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-400/50"
+            className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#E8553E]"
           >
             {MESES.map((m, i) => (
               <option key={i} value={i + 1}>{m}</option>
@@ -517,7 +517,7 @@ export default function ResumenClient({
           <select
             value={anio}
             onChange={(e) => setAnio(Number(e.target.value))}
-            className="w-24 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-400/50"
+            className="w-24 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#E8553E]"
           >
             {[2024, 2025, 2026, 2027].map((a) => (
               <option key={a} value={a}>{a}</option>
@@ -526,20 +526,20 @@ export default function ResumenClient({
         </div>
 
         {loading ? (
-          <p className="text-center text-white/30 text-xs py-8">Cargando...</p>
+          <p className="text-center text-[#BBB] text-xs py-8">Cargando...</p>
         ) : (
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-2 gap-2">
-              <Card label="Ingresos" value={fmt(resumen.totalIngresos)} color="text-emerald-400" />
-              <Card label="Egresos" value={fmt(resumen.totalEgresos)} color="text-red-400" />
+              <Card label="Ingresos" value={fmt(resumen.totalIngresos)} color="text-[#22C55E]" />
+              <Card label="Egresos" value={fmt(resumen.totalEgresos)} color="text-[#E8553E]" />
               <Card label="IVA débito" value={fmt(resumen.ivaDebito)} />
               <Card label="IVA crédito" value={fmt(resumen.ivaCredito)} />
             </div>
             <Card
               label="Resultado del mes"
               value={fmt(resumen.resultado)}
-              color={resumen.resultado >= 0 ? "text-emerald-400" : "text-red-400"}
+              color={resumen.resultado >= 0 ? "text-[#22C55E]" : "text-[#E8553E]"}
             />
 
             {/* Bar chart */}
@@ -559,8 +559,8 @@ export default function ResumenClient({
         )}
 
         {/* Historico */}
-        <div className="border-t border-white/10 pt-4">
-          <h2 className="text-lg font-semibold text-white/90 mb-3">Histórico</h2>
+        <div className="border-t border-[#EEE] pt-4">
+          <h2 className="text-lg font-semibold text-[#111] mb-3">Histórico</h2>
           <HistoricoSection empresaId={empresaId} />
         </div>
       </div>

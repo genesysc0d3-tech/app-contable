@@ -23,10 +23,10 @@ function TransferBadge({ count }: { count: number }) {
 
   const color =
     count >= TRANSFER_DANGER
-      ? "bg-red-500/20 text-red-300"
+      ? "bg-[#FFF0EE] text-[#E8553E] font-semibold"
       : count >= TRANSFER_WARNING
-        ? "bg-yellow-500/20 text-yellow-300"
-        : "bg-white/10 text-white/50";
+        ? "bg-[#FFF8ED] text-[#F59E0B]"
+        : "bg-[#F5F5F3] text-[#888]";
 
   return (
     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${color}`}>
@@ -78,28 +78,22 @@ function ClienteForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-lg bg-[#1c1c1e] border border-white/10 rounded-t-2xl sm:rounded-2xl p-5 space-y-4"
+        className="w-full max-w-lg bg-white rounded-t-[20px] sm:rounded-[20px] p-5 space-y-4 shadow-[0_-4px_24px_rgba(0,0,0,0.1)]"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">
+          <h2 className="text-lg font-bold text-[#111]">
             {cliente ? "Editar cliente" : "Nuevo cliente"}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-white/40 hover:text-white/70 text-xl"
-          >
+          <button type="button" onClick={onClose} className="text-[#AAA] hover:text-[#888] text-xl">
             ×
           </button>
         </div>
 
         {error && (
-          <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2">
-            {error}
-          </p>
+          <p className="text-xs text-[#E8553E] bg-[#FFF0EE] rounded-lg px-3 py-2">{error}</p>
         )}
 
         <input
@@ -108,7 +102,7 @@ function ClienteForm({
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           required
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+          className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
         />
 
         <div>
@@ -117,55 +111,30 @@ function ClienteForm({
             placeholder="RUT (ej: 12.345.678-5)"
             value={rut}
             onChange={(e) => setRut(e.target.value)}
-            onBlur={() => {
-              if (rut.trim() && validarRut(rut)) setRut(formatRut(rut));
-            }}
-            className={`w-full rounded-xl bg-white/5 border px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 ${
-              rutError ? "border-red-500/50" : "border-white/10"
+            onBlur={() => { if (rut.trim() && validarRut(rut)) setRut(formatRut(rut)); }}
+            className={`w-full rounded-xl bg-[#F5F5F3] border px-3 py-2.5 text-sm text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E] ${
+              rutError ? "border-[#E8553E]" : "border-[#EEE]"
             }`}
           />
-          {rutError && (
-            <p className="text-[10px] text-red-400 mt-1">{rutError}</p>
-          )}
+          {rutError && <p className="text-[10px] text-[#E8553E] mt-1">{rutError}</p>}
         </div>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
-        />
+        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+          className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]" />
 
-        <input
-          type="tel"
-          placeholder="Teléfono"
-          value={telefono}
-          onChange={(e) => setTelefono(e.target.value)}
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
-        />
+        <input type="tel" placeholder="Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)}
+          className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]" />
 
-        <textarea
-          placeholder="Notas"
-          value={notas}
-          onChange={(e) => setNotas(e.target.value)}
-          rows={2}
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 resize-none"
-        />
+        <textarea placeholder="Notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
+          className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E] resize-none" />
 
         <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={loading || !!rutError}
-            className="flex-1 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors"
-          >
+          <button type="submit" disabled={loading || !!rutError}
+            className="flex-1 rounded-xl bg-[#E8553E] hover:bg-[#d44a35] disabled:opacity-50 px-4 py-2.5 text-sm font-semibold text-white transition-colors">
             {loading ? "Guardando..." : cliente ? "Guardar" : "Crear"}
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl bg-white/10 hover:bg-white/15 px-4 py-2.5 text-sm text-white/70 transition-colors"
-          >
+          <button type="button" onClick={onClose}
+            className="rounded-xl bg-[#F5F5F3] hover:bg-[#EEEEEE] px-4 py-2.5 text-sm text-[#888] transition-colors">
             Cancelar
           </button>
         </div>
@@ -174,10 +143,7 @@ function ClienteForm({
   );
 }
 
-export default function ClientesClient({
-  clientes,
-  empresaId,
-}: ClientesClientProps) {
+export default function ClientesClient({ clientes, empresaId }: ClientesClientProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -186,10 +152,7 @@ export default function ClientesClient({
 
   const filtered = clientes.filter((c) => {
     const q = search.toLowerCase();
-    return (
-      c.nombre.toLowerCase().includes(q) ||
-      (c.rut && c.rut.toLowerCase().includes(q))
-    );
+    return c.nombre.toLowerCase().includes(q) || (c.rut && c.rut.toLowerCase().includes(q));
   });
 
   async function handleDelete(id: string) {
@@ -202,80 +165,52 @@ export default function ClientesClient({
   return (
     <div className="flex-1 pb-20">
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Clientes</h1>
-            <p className="text-sm text-white/50 mt-0.5">
+            <h1 className="text-2xl font-bold text-[#111]">Clientes</h1>
+            <p className="text-sm text-[#888] mt-0.5">
               {clientes.length} cliente{clientes.length !== 1 ? "s" : ""}
             </p>
           </div>
           <button
-            onClick={() => {
-              setEditingCliente(undefined);
-              setShowForm(true);
-            }}
-            className="rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
-          >
+            onClick={() => { setEditingCliente(undefined); setShowForm(true); }}
+            className="rounded-xl bg-[#E8553E] hover:bg-[#d44a35] px-4 py-2.5 text-xs font-semibold text-white transition-colors">
             + Agregar
           </button>
         </div>
 
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="Buscar por nombre o RUT..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
-        />
+        <input type="text" placeholder="Buscar por nombre o RUT..." value={search} onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-xl bg-white border border-[#EEE] px-3 py-2.5 text-sm text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E] shadow-[0_2px_12px_rgba(0,0,0,0.06)]" />
 
-        {/* List */}
         {filtered.length === 0 ? (
-          <div className="text-center py-12 text-white/40">
+          <div className="text-center py-12 text-[#AAA]">
             <p className="text-3xl mb-2">👤</p>
-            <p className="text-sm">
-              {search ? "Sin resultados" : "No hay clientes aun"}
-            </p>
+            <p className="text-sm">{search ? "Sin resultados" : "No hay clientes aun"}</p>
           </div>
         ) : (
-          <div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 divide-y divide-white/10">
+          <div className="rounded-[20px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] divide-y divide-[#EEEEEE]">
             {filtered.map((c) => (
               <div key={c.id} className="px-4 py-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white/90 truncate">
-                        {c.nombre}
-                      </p>
+                      <p className="text-sm font-medium text-[#111] truncate">{c.nombre}</p>
                       <TransferBadge count={c.movimientos_count} />
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-white/40">
+                    <div className="flex items-center gap-3 mt-1 text-xs text-[#AAA]">
                       {c.rut && <span>{c.rut}</span>}
                       {c.email && <span className="truncate">{c.email}</span>}
                       {c.telefono && <span>{c.telefono}</span>}
                     </div>
-                    {c.notas && (
-                      <p className="text-[10px] text-white/30 mt-1 truncate">
-                        {c.notas}
-                      </p>
-                    )}
+                    {c.notas && <p className="text-[10px] text-[#BBB] mt-1 truncate">{c.notas}</p>}
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button
-                      onClick={() => {
-                        setEditingCliente(c);
-                        setShowForm(true);
-                      }}
-                      className="rounded-lg bg-white/5 hover:bg-white/10 px-2.5 py-1.5 text-[10px] text-white/50 transition-colors"
-                    >
+                    <button onClick={() => { setEditingCliente(c); setShowForm(true); }}
+                      className="rounded-lg bg-[#F5F5F3] hover:bg-[#EEE] px-2.5 py-1.5 text-[10px] text-[#888] transition-colors">
                       Editar
                     </button>
-                    <button
-                      onClick={() => handleDelete(c.id)}
-                      disabled={deletingId === c.id}
-                      className="rounded-lg bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 px-2.5 py-1.5 text-[10px] text-red-300/70 transition-colors"
-                    >
+                    <button onClick={() => handleDelete(c.id)} disabled={deletingId === c.id}
+                      className="rounded-lg bg-[#FFF0EE] hover:bg-[#FFE4E0] disabled:opacity-50 px-2.5 py-1.5 text-[10px] text-[#E8553E] transition-colors">
                       {deletingId === c.id ? "..." : "Eliminar"}
                     </button>
                   </div>
@@ -285,13 +220,8 @@ export default function ClientesClient({
           </div>
         )}
 
-        {/* Modal form */}
         {showForm && (
-          <ClienteForm
-            empresaId={empresaId}
-            cliente={editingCliente}
-            onClose={() => setShowForm(false)}
-          />
+          <ClienteForm empresaId={empresaId} cliente={editingCliente} onClose={() => setShowForm(false)} />
         )}
       </div>
     </div>

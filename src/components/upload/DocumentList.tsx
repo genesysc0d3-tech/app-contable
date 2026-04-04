@@ -8,13 +8,10 @@ interface DocumentListProps {
 }
 
 const ESTADO_BADGE: Record<string, { label: string; className: string }> = {
-  subido: { label: "Subido", className: "bg-blue-500/20 text-blue-300" },
-  procesando: {
-    label: "Procesando",
-    className: "bg-yellow-500/20 text-yellow-300",
-  },
-  procesado: { label: "Listo", className: "bg-emerald-500/20 text-emerald-300" },
-  error: { label: "Error", className: "bg-red-500/20 text-red-300" },
+  subido: { label: "Subido", className: "bg-[#F5F5F3] text-[#888]" },
+  procesando: { label: "Procesando", className: "bg-[#FFF0EE] text-[#E8553E]" },
+  procesado: { label: "Listo", className: "bg-[#ECFDF5] text-[#22C55E]" },
+  error: { label: "Error", className: "bg-[#FFF0EE] text-[#E8553E]" },
 };
 
 const TIPO_ICON: Record<string, string> = {
@@ -31,7 +28,7 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
   if (progreso.estado === "completado") {
     if (progreso.duplicados_saltados && progreso.duplicados_saltados > 0) {
       return (
-        <p className="text-[10px] text-yellow-400/70 mt-1">
+        <p className="text-[10px] text-[#E8553E] mt-1">
           {progreso.duplicados_saltados} duplicados omitidos
         </p>
       );
@@ -41,7 +38,7 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
 
   if (progreso.estado === "error") {
     return (
-      <p className="text-xs text-red-400 mt-1 truncate">
+      <p className="text-xs text-[#E8553E] mt-1 truncate">
         Error: {progreso.error}
       </p>
     );
@@ -52,9 +49,9 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
   return (
     <div className="mt-1.5">
       <div className="flex items-center gap-2">
-        <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+        <div className="flex-1 h-1 rounded-full bg-[#EEEEEE] overflow-hidden">
           <div
-            className="h-full bg-yellow-400 rounded-full transition-all duration-500"
+            className="h-full bg-[#E8553E] rounded-full transition-all duration-500"
             style={{
               width:
                 total_lotes && lote_actual
@@ -63,14 +60,14 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
             }}
           />
         </div>
-        <span className="text-[10px] text-white/40 shrink-0">
+        <span className="text-[10px] text-[#888] shrink-0">
           {total_lotes && total_lotes > 1
             ? `Lote ${lote_actual} de ${total_lotes}`
             : "Analizando..."}
         </span>
       </div>
       {movimientos_encontrados !== undefined && movimientos_encontrados > 0 && (
-        <p className="text-[10px] text-white/30 mt-0.5">
+        <p className="text-[10px] text-[#AAA] mt-0.5">
           {movimientos_encontrados} movimientos encontrados
           {duplicados_saltados ? ` · ${duplicados_saltados} duplicados` : ""}
         </p>
@@ -82,7 +79,7 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
 export default function DocumentList({ documentos }: DocumentListProps) {
   if (documentos.length === 0) {
     return (
-      <div className="text-center py-12 text-white/40">
+      <div className="text-center py-12 text-[#AAA]">
         <p className="text-3xl mb-2">📭</p>
         <p className="text-sm">No hay documentos aun</p>
       </div>
@@ -90,7 +87,7 @@ export default function DocumentList({ documentos }: DocumentListProps) {
   }
 
   return (
-    <div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 divide-y divide-white/10">
+    <div className="rounded-[20px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] divide-y divide-[#EEEEEE]">
       {documentos.map((doc) => {
         const badge = ESTADO_BADGE[doc.estado] ?? ESTADO_BADGE.subido;
         const icon = TIPO_ICON[doc.tipo] ?? "📄";
@@ -107,23 +104,18 @@ export default function DocumentList({ documentos }: DocumentListProps) {
             <div className="flex items-center gap-3">
               <span className="text-xl">{icon}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white/90 truncate">
-                  {doc.nombre_archivo}
-                </p>
-                <p className="text-xs text-white/40 mt-0.5">{fecha}</p>
+                <p className="text-sm text-[#111] truncate">{doc.nombre_archivo}</p>
+                <p className="text-xs text-[#AAA] mt-0.5">{fecha}</p>
               </div>
               <div className="text-right shrink-0">
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.className}`}
-                >
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.className}`}>
                   {badge.label}
                 </span>
-                {doc.estado === "procesado" &&
-                  doc.movimientos_detectados !== null && (
-                    <p className="text-[10px] text-white/30 mt-1">
-                      {doc.movimientos_detectados} mov.
-                    </p>
-                  )}
+                {doc.estado === "procesado" && doc.movimientos_detectados !== null && (
+                  <p className="text-[10px] text-[#AAA] mt-1">
+                    {doc.movimientos_detectados} mov.
+                  </p>
+                )}
               </div>
             </div>
             <ProgresoBar progreso={progreso} />

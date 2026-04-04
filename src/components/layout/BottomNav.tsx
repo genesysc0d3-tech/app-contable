@@ -42,7 +42,7 @@ export default function BottomNav() {
   }, []);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/60 backdrop-blur-xl border-t border-white/10">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-[0_-1px_12px_rgba(0,0,0,0.06)]">
       <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-4">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname.startsWith(item.href);
@@ -54,14 +54,14 @@ export default function BottomNav() {
               href={item.href}
               className={`relative flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${
                 isActive
-                  ? "text-blue-400"
-                  : "text-white/40 hover:text-white/70"
+                  ? "text-[#E8553E]"
+                  : "text-[#AAAAAA] hover:text-[#888888]"
               }`}
             >
               <span className="text-xl">{item.icon}</span>
               <span className="text-[10px] font-medium">{item.label}</span>
               {showBadge && (
-                <span className="absolute -top-0.5 right-0 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white px-1">
+                <span className="absolute -top-0.5 right-0 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#E8553E] text-[9px] font-bold text-white px-1">
                   {pendientes > 99 ? "99+" : pendientes}
                 </span>
               )}
