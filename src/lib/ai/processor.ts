@@ -187,8 +187,26 @@ export async function procesarDocumento(
       modelo = r.modelo;
     }
 
+    // Filter out movimientos with null/empty required fields (Mistral sometimes
+    // returns nulls for summary rows, totals, or headers in cartolas)
+    const validIndices: number[] = [];
+    for (let i = 0; i < allMovimientos.length; i++) {
+      const m = allMovimientos[i];
+      if (m.descripcion && m.monto != null && m.tipo_flujo) {
+        validIndices.push(i);
+      }
+    }
+
+    const indexRemap = new Map<number, number>();
+    validIndices.forEach((origIdx, newIdx) => indexRemap.set(origIdx, newIdx));
+
+    const validMovimientos = validIndices.map((i) => allMovimientos[i]);
+    const validPropuestas = allPropuestas
+      .filter((p) => indexRemap.has(p.movimiento_index))
+      .map((p) => ({ ...p, movimiento_index: indexRemap.get(p.movimiento_index)! }));
+
     // Detect duplicates: check existing movimientos for this empresa
-    const movimientosParsed = allMovimientos.map((m) => ({
+    const movimientosParsed = validMovimientos.map((m) => ({
       empresa_id: empresaId,
       documento_id: documentoId,
       fecha: parseFecha(m.fecha),
@@ -255,18 +273,18 @@ export async function procesarDocumento(
     const clienteCache = await detectAndCreateClients(
       supabase,
       empresaId,
-      allPropuestas,
-      allMovimientos
+      validPropuestas,
+      validMovimientos
     );
 
     // Save propuestas_ia in batches, linked to saved movimiento IDs
-    if (savedIds.length > 0 && allPropuestas.length > 0) {
-      const propuestasToInsert = allPropuestas
+    if (savedIds.length > 0 && validPropuestas.length > 0) {
+      const propuestasToInsert = validPropuestas
         .filter((p) => originalToNewIndex.has(p.movimiento_index))
         .map((p) => {
           const newIndex = originalToNewIndex.get(p.movimiento_index)!;
           const isLow = p.confianza != null && p.confianza < MIN_CONFIANZA;
-          const mov = allMovimientos[p.movimiento_index];
+          const mov = validMovimientos[p.movimiento_index];
           const clienteId = resolveClienteId(clienteCache, p, mov);
           return {
             empresa_id: empresaId,
