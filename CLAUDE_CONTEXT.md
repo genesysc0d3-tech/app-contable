@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #31, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #32, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -110,6 +110,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #29 | feature/fix-omitido-persiste | Fix: forzar-movimiento idempotente + remueve omitido de progreso_ia |
 | #30 | feature/omitidos-flujo-mejorado | Omitidos van a /revisar como pendientes + botón ocultar/recuperar |
 | #31 | feature/revisar-omitidos-anidados | Omitidos anidados en /revisar con aprobar/ignorar/devolver |
+| #32 | feature/fix-idempotente-omitidos | Fix: check idempotente bloqueaba omitidos legítimos |
 
 ---
 
@@ -296,4 +297,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#31 mergeados*
+*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#32 mergeados*
