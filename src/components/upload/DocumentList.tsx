@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { DocumentoSubido } from "@/lib/upload";
-import type { ProgresoIA, DuplicadoDetalle } from "@/lib/ai/types";
-import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play } from "@phosphor-icons/react";
+import type { ProgresoIA, DuplicadoDetalle, TipoDuplicado } from "@/lib/ai/types";
+import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
 interface DocumentListProps {
@@ -99,47 +99,63 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
       {expanded && (
         <div className="space-y-1.5 animate-fade-in">
           {duplicados.map((dup, idx) => {
-            const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}`;
+            const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`;
             const isInserted = inserted.has(key);
             const isConfirming = confirmId === key;
+            const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
+            const isConfirmed = dupTipo === "otro_doc_confirmado" || dupTipo === "mismo_ndoc_mismo_arch" || dupTipo === "mismo_ndoc_otro_arch";
+            const isAmbiguous = dupTipo === "loose_mismo_arch" || dupTipo === "loose_otro_arch" || dupTipo === "multi_transfer_p2p";
+            const isInfo = dupTipo === "multi_transfer_p2p";
+
+            const iconColor = isInfo ? "text-[#3B82F6]" : isConfirmed ? "text-[#E8553E]" : "text-[#F59E0B]";
+            const IconComp = isInfo ? Info : isConfirmed ? XCircle : WarningCircle;
+            const btnLabel = isConfirmed ? "Agregar igual" : "Agregar de todas formas";
+            const confirmMsg = isConfirmed
+              ? "Este movimiento ya está registrado con certeza. ¿Agregarlo de todas formas puede crear duplicados contables?"
+              : `Este movimiento ya existe en ${dup.origen_documento_nombre}. Agregarlo puede crear duplicados contables.`;
 
             return (
               <div key={idx} className={`rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 ${isInserted ? "opacity-50" : ""}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[var(--foreground)] truncate">{dup.descripcion}</p>
-                    <div className="flex items-center gap-2 text-[var(--muted-light)] mt-0.5">
-                      <span>{formatFechaCorta(dup.fecha)}</span>
-                      <span className="tabular-nums">{fmt(dup.monto)}</span>
-                      {dup.n_documento && <span className="text-[var(--muted)]">#{dup.n_documento}</span>}
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <IconComp size={12} weight="fill" className={`${iconColor} shrink-0`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[var(--foreground)] truncate">{dup.descripcion}</p>
+                      <div className="flex items-center gap-2 text-[var(--muted-light)] mt-0.5">
+                        <span>{formatFechaCorta(dup.fecha)}</span>
+                        {dup.monto > 0 && <span className="tabular-nums">{fmt(dup.monto)}</span>}
+                        {dup.n_documento && <span className="text-[var(--muted)]">#{dup.n_documento}</span>}
+                      </div>
                     </div>
                   </div>
-                  {!isInserted && !isConfirming && (
+                  {!isInserted && !isConfirming && !isInfo && (
                     <button onClick={() => setConfirmId(key)} disabled={!!forcing}
-                      className="btn-press shrink-0 text-[9px] text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0] rounded px-2 py-1 transition-colors">
-                      Agregar
+                      className={`btn-press shrink-0 text-[9px] rounded px-2 py-1 transition-colors ${
+                        isAmbiguous
+                          ? "text-[#F59E0B] bg-[#FFF8ED] dark:bg-[#F59E0B]/10 hover:bg-[#FFF0D4]"
+                          : "text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0]"
+                      }`}>
+                      {btnLabel}
                     </button>
                   )}
                   {isInserted && <span className="text-[9px] text-[#22C55E]">Agregado</span>}
                 </div>
 
-                {/* Motivo */}
-                <p className="text-[var(--muted-light)] italic">{dup.motivo}</p>
+                <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>{dup.motivo}</p>
 
-                {/* Origin */}
-                {dup.origen_documento_nombre !== "Mismo lote" && (
+                {dup.origen_documento_nombre !== "Este archivo" && (
                   <p className="text-[var(--muted-light)] flex items-center gap-1">
                     <Warning size={10} className="text-[#F59E0B] shrink-0" />
-                    En {dup.origen_documento_nombre}
+                    Ya registrado en {dup.origen_documento_nombre}
                     {dup.origen_documento_fecha && ` (${formatFechaCorta(dup.origen_documento_fecha)})`}
                   </p>
                 )}
 
                 {isConfirming && (
-                  <div className="bg-[var(--accent-light)] rounded-lg px-2.5 py-2 space-y-1.5 animate-fade-in">
-                    <p className="text-[var(--foreground)]">
-                      Este movimiento ya existe en {dup.origen_documento_nombre}. Agregarlo puede crear duplicados contables.
-                    </p>
+                  <div className={`rounded-lg px-2.5 py-2 space-y-1.5 animate-fade-in ${
+                    isConfirmed ? "bg-[var(--accent-light)]" : "bg-[#FFF8ED] dark:bg-[#F59E0B]/10"
+                  }`}>
+                    <p className="text-[var(--foreground)]">{confirmMsg}</p>
                     <div className="flex gap-1.5">
                       <button onClick={() => handleForceInsert(dup)} disabled={!!forcing}
                         className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">

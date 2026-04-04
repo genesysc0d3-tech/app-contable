@@ -41,16 +41,28 @@ export interface AIProvider {
   ): Promise<AIResponse>;
 }
 
+export type TipoDuplicado =
+  | "otro_doc_confirmado"    // 1: exists in another processed document
+  | "mismo_ndoc_mismo_arch"  // 2: same n_documento within same file
+  | "mismo_ndoc_otro_arch"   // 3: same n_documento in another file
+  | "loose_mismo_arch"       // 4: same monto+desc+fecha no n_doc, same file
+  | "loose_otro_arch"        // 5: same monto+desc+fecha no n_doc, other file
+  | "multi_transfer_p2p";    // 6: multiple transfers to same person same day
+
 export interface DuplicadoDetalle {
   fecha: string;
   descripcion: string;
   monto: number;
   tipo_flujo: string;
   n_documento?: string | null;
+  tipo: TipoDuplicado;
   origen_movimiento_id: string;
   origen_documento_nombre: string;
   origen_documento_fecha: string;
   motivo: string;
+  indice_archivo?: number;
+  indice_conflicto?: number;
+  repeticiones?: number;
 }
 
 export interface ProgresoIA {
