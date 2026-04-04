@@ -192,15 +192,18 @@ export default function RevisarClient({ propuestas, clientes, empresaId }: Revis
       let g = map.get(doc.id);
       if (!g) { g = { documentoId: doc.id, nombreArchivo: doc.nombre_archivo, fechaSubida: doc.created_at, propuestas: [], pendientes: 0, aprobados: 0, descartados: 0 }; map.set(doc.id, g); }
       g.propuestas.push(p);
-      if (p.estado === "pendiente") g.pendientes++;
+      const fromOmitidos = p.notas?.startsWith("Agregado desde visor de omitidos");
+      if (p.estado === "pendiente" && !fromOmitidos) g.pendientes++;
       else if (p.estado === "aprobado" || p.estado === "editado") g.aprobados++;
       else if (p.estado === "descartado") g.descartados++;
+      // pendientes from omitidos are not counted — they show inside parent's dropdown
     }
     return Array.from(map.values()).sort((a, b) => new Date(b.fechaSubida).getTime() - new Date(a.fechaSubida).getTime());
   }, [propuestas]);
 
   const totalPendientes = groups.reduce((s, g) => s + g.pendientes, 0);
-  const allHigh = propuestas.filter((p) => p.estado === "pendiente" && p.confianza !== null && p.confianza >= ALTA);
+  const isNotFromOmitidos = (p: Propuesta) => !p.notas?.startsWith("Agregado desde visor de omitidos");
+  const allHigh = propuestas.filter((p) => p.estado === "pendiente" && isNotFromOmitidos(p) && p.confianza !== null && p.confianza >= ALTA);
 
   async function handleAprobarTodas() {
     if (allHigh.length === 0) return;
