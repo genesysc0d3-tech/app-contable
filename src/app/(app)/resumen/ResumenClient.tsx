@@ -7,6 +7,7 @@ import {
   getHistorico6Meses,
   getPropuestasAprobadas,
 } from "./actions";
+import { FilePdf, ShareNetwork, CaretRight } from "@phosphor-icons/react";
 
 interface ResumenClientProps {
   empresaId: string;
@@ -40,9 +41,9 @@ function fmt(n: number): string {
 
 function Card({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-center">
-      <p className="text-[10px] text-[#AAA]">{label}</p>
-      <p className={`text-sm font-semibold mt-0.5 ${color ?? "text-[#111]"}`}>{value}</p>
+    <div className="rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2.5 text-center">
+      <p className="text-[10px] text-[var(--muted-light)]">{label}</p>
+      <p className={`text-sm font-semibold mt-0.5 ${color ?? "text-[var(--foreground)]"}`}>{value}</p>
     </div>
   );
 }
@@ -55,8 +56,8 @@ function BarChart({
   const max = Math.max(...data.flatMap((d) => [d.ingresos, d.egresos]), 1);
 
   return (
-    <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] p-4">
-      <p className="text-xs text-[#888] mb-3">Últimos 6 meses</p>
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] p-4">
+      <p className="text-xs text-[var(--muted)] mb-3">Últimos 6 meses</p>
       <div className="flex items-end gap-2 h-32">
         {data.map((d) => (
           <div key={`${d.anio}-${d.mes}`} className="flex-1 flex flex-col items-center gap-1">
@@ -70,17 +71,17 @@ function BarChart({
                 style={{ height: `${(d.egresos / max) * 100}%`, minHeight: d.egresos > 0 ? "2px" : 0 }}
               />
             </div>
-            <span className="text-[9px] text-[#BBB]">
+            <span className="text-[9px] text-[var(--muted-light)]">
               {MESES[d.mes - 1]?.slice(0, 3)}
             </span>
           </div>
         ))}
       </div>
       <div className="flex gap-4 mt-2 justify-center">
-        <span className="text-[10px] text-[#AAA] flex items-center gap-1">
+        <span className="text-[10px] text-[var(--muted-light)] flex items-center gap-1">
           <span className="w-2 h-2 rounded-sm bg-[#22C55E]" /> Ingresos
         </span>
-        <span className="text-[10px] text-[#AAA] flex items-center gap-1">
+        <span className="text-[10px] text-[var(--muted-light)] flex items-center gap-1">
           <span className="w-2 h-2 rounded-sm bg-[#E8553E]/50" /> Egresos
         </span>
       </div>
@@ -93,18 +94,18 @@ function TipoPieTable({ porTipo }: { porTipo: Record<string, { count: number; to
   if (entries.length === 0) return null;
 
   return (
-    <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-[#EEE]">
-        <p className="text-xs text-[#888]">Por tipo tributario</p>
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-[var(--border)]">
+        <p className="text-xs text-[var(--muted)]">Por tipo tributario</p>
       </div>
-      <div className="divide-y divide-[#EEEEEE]">
+      <div className="divide-y divide-[var(--border)]">
         {entries.map(([tipo, { count, total }]) => (
           <div key={tipo} className="px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-[#555]">{TIPO_LABEL[tipo] ?? tipo}</span>
-              <span className="text-[10px] text-[#BBB]">{count}</span>
+              <span className="text-xs text-[var(--muted)]">{TIPO_LABEL[tipo] ?? tipo}</span>
+              <span className="text-[10px] text-[var(--muted-light)]">{count}</span>
             </div>
-            <span className="text-xs font-medium text-[#333]">{fmt(total)}</span>
+            <span className="text-xs font-medium text-[var(--foreground)]">{fmt(total)}</span>
           </div>
         ))}
       </div>
@@ -151,18 +152,18 @@ function BorradorF29({
   }
 
   return (
-    <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] overflow-hidden">
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-[#F5F5F3] transition-colors"
+        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-[var(--surface)] transition-colors"
       >
         <span
-          className="text-[#AAA] text-sm transition-transform duration-200"
+          className="text-[var(--muted-light)] text-sm transition-transform duration-200"
           style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
         >
           ▶
         </span>
-        <span className="text-sm font-medium text-[#111]">
+        <span className="text-sm font-medium text-[var(--foreground)]">
           Borrador F29 — {MESES[mes - 1]} {anio}
         </span>
       </button>
@@ -174,7 +175,7 @@ function BorradorF29({
             <Row label="Línea 20 — Crédito fiscal (IVA compras)" value={fmt(resumen.ivaCredito)} />
             <Row label="Línea 48 — IVA a pagar" value={fmt(ivaPagar)} highlight />
             <Row label="Línea 142 — PPM (0,25% ingresos brutos)" value={fmt(ppm)} />
-            <div className="border-t border-[#EEE] pt-2">
+            <div className="border-t border-[var(--border)] pt-2">
               <Row label="Total a pagar mes" value={fmt(totalPagar)} highlight />
             </div>
           </div>
@@ -185,9 +186,9 @@ function BorradorF29({
 
           <button
             onClick={handleCopiar}
-            className="w-full rounded-xl bg-[#FFF0EE] hover:bg-blue-500/30 px-4 py-2.5 text-xs font-medium text-[#E8553E] transition-colors"
+            className="w-full rounded-xl bg-[var(--accent-light)] hover:bg-blue-500/30 px-4 py-2.5 text-xs font-medium text-[#E8553E] transition-colors"
           >
-            {copied ? "Copiado al portapapeles" : "Compartir con contador"}
+            <ShareNetwork size={14} weight="bold" className="inline mr-1 -mt-0.5" />{copied ? "Copiado al portapapeles" : "Compartir con contador"}
           </button>
         </div>
       )}
@@ -198,8 +199,8 @@ function BorradorF29({
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-[#888]">{label}</span>
-      <span className={`text-xs font-medium ${highlight ? "text-[#111]" : "text-[#555]"}`}>
+      <span className="text-xs text-[var(--muted)]">{label}</span>
+      <span className={`text-xs font-medium ${highlight ? "text-[var(--foreground)]" : "text-[var(--muted)]"}`}>
         {value}
       </span>
     </div>
@@ -277,7 +278,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
             key={v}
             onClick={() => { setVista(v); setPage(0); }}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-medium transition-colors ${
-              vista === v ? "bg-[#FFF0EE] text-[#E8553E]" : "bg-[#F5F5F3] text-[#AAA] hover:bg-[#F5F5F3]"
+              vista === v ? "bg-[var(--accent-light)] text-[#E8553E]" : "bg-[var(--surface)] text-[var(--muted-light)] hover:bg-[var(--surface)]"
             }`}
           >
             {v.charAt(0).toUpperCase() + v.slice(1)}
@@ -291,7 +292,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
           type="date"
           value={fecha}
           onChange={(e) => setFecha(e.target.value)}
-          className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-[#111] focus:outline-none focus:border-[#E8553E]"
+          className="w-full rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)]"
         />
       )}
       {(vista === "mensual" || vista === "anual") && (
@@ -300,7 +301,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
             <select
               value={mesH}
               onChange={(e) => setMesH(Number(e.target.value))}
-              className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#E8553E]"
+              className="flex-1 rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--accent)]"
             >
               {MESES.map((m, i) => (
                 <option key={i} value={i + 1}>{m}</option>
@@ -310,7 +311,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
           <select
             value={anioH}
             onChange={(e) => setAnioH(Number(e.target.value))}
-            className={`${vista === "mensual" ? "w-24" : "flex-1"} rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#E8553E]`}
+            className={`${vista === "mensual" ? "w-24" : "flex-1"} rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--accent)]`}
           >
             {[2024, 2025, 2026, 2027].map((a) => (
               <option key={a} value={a}>{a}</option>
@@ -321,19 +322,19 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
 
       {/* Results */}
       {loading ? (
-        <p className="text-center text-[#BBB] text-xs py-8">Cargando...</p>
+        <p className="text-center text-[var(--muted-light)] text-xs py-8">Cargando...</p>
       ) : propuestas.length === 0 ? (
-        <p className="text-center text-[#BBB] text-xs py-8">Sin movimientos aprobados</p>
+        <p className="text-center text-[var(--muted-light)] text-xs py-8">Sin movimientos aprobados</p>
       ) : (
-        <div className="rounded-2xl bg-[#F5F5F3] border border-[#EEE] overflow-hidden">
-          <div className="divide-y divide-[#EEEEEE]">
+        <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] overflow-hidden">
+          <div className="divide-y divide-[var(--border)]">
             {propuestas.map((p) => {
               const mov = p.movimientos_raw;
               return (
                 <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-[#333] truncate">{mov.descripcion}</p>
-                    <div className="flex gap-2 mt-0.5 text-[10px] text-[#AAA]">
+                    <p className="text-xs text-[var(--foreground)] truncate">{mov.descripcion}</p>
+                    <div className="flex gap-2 mt-0.5 text-[10px] text-[var(--muted-light)]">
                       <span>{mov.fecha}</span>
                       <span>{TIPO_LABEL[p.tipo_propuesto] ?? p.tipo_propuesto}</span>
                       {p.receptor_nombre && <span className="truncate">{p.receptor_nombre}</span>}
@@ -357,17 +358,17 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="rounded-lg bg-[#F5F5F3] hover:bg-[#F5F5F3] disabled:opacity-30 px-3 py-1.5 text-[10px] text-[#888] transition-colors"
+            className="rounded-lg bg-[var(--surface)] hover:bg-[var(--surface)] disabled:opacity-30 px-3 py-1.5 text-[10px] text-[var(--muted)] transition-colors"
           >
             Anterior
           </button>
-          <span className="text-[10px] text-[#BBB]">
+          <span className="text-[10px] text-[var(--muted-light)]">
             {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} de {total}
           </span>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={(page + 1) * PAGE_SIZE >= total}
-            className="rounded-lg bg-[#F5F5F3] hover:bg-[#F5F5F3] disabled:opacity-30 px-3 py-1.5 text-[10px] text-[#888] transition-colors"
+            className="rounded-lg bg-[var(--surface)] hover:bg-[var(--surface)] disabled:opacity-30 px-3 py-1.5 text-[10px] text-[var(--muted)] transition-colors"
           >
             Siguiente
           </button>
@@ -492,14 +493,14 @@ export default function ResumenClient({
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#111]">Resumen</h1>
-            <p className="text-sm text-[#888] mt-0.5">{empresaNombre}</p>
+            <h1 className="text-[28px] font-extrabold text-[var(--foreground)]">Resumen</h1>
+            <p className="text-sm text-[var(--muted)] mt-0.5">{empresaNombre}</p>
           </div>
           <button
             onClick={() => exportarPDF(empresaNombre, mes, anio, resumen)}
-            className="rounded-xl bg-[#E8553E] hover:bg-[#d44a35] px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+            className="rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] px-4 py-2.5 text-xs font-semibold text-white transition-colors"
           >
-            Exportar PDF
+            <FilePdf size={16} weight="bold" className="inline mr-1 -mt-0.5" />Exportar PDF
           </button>
         </div>
 
@@ -508,7 +509,7 @@ export default function ResumenClient({
           <select
             value={mes}
             onChange={(e) => setMes(Number(e.target.value))}
-            className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#E8553E]"
+            className="flex-1 rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]"
           >
             {MESES.map((m, i) => (
               <option key={i} value={i + 1}>{m}</option>
@@ -517,7 +518,7 @@ export default function ResumenClient({
           <select
             value={anio}
             onChange={(e) => setAnio(Number(e.target.value))}
-            className="w-24 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#E8553E]"
+            className="w-24 rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]"
           >
             {[2024, 2025, 2026, 2027].map((a) => (
               <option key={a} value={a}>{a}</option>
@@ -526,7 +527,7 @@ export default function ResumenClient({
         </div>
 
         {loading ? (
-          <p className="text-center text-[#BBB] text-xs py-8">Cargando...</p>
+          <p className="text-center text-[var(--muted-light)] text-xs py-8">Cargando...</p>
         ) : (
           <>
             {/* Summary cards */}
@@ -559,8 +560,8 @@ export default function ResumenClient({
         )}
 
         {/* Historico */}
-        <div className="border-t border-[#EEE] pt-4">
-          <h2 className="text-lg font-semibold text-[#111] mb-3">Histórico</h2>
+        <div className="border-t border-[var(--border)] pt-4">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">Histórico</h2>
           <HistoricoSection empresaId={empresaId} />
         </div>
       </div>

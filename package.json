@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mistralai/mistralai": "^2.1.2",
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "jspdf": "^4.2.1",

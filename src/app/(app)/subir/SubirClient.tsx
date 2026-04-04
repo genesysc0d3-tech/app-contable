@@ -19,79 +19,44 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     setDocumentos(docs);
   }, [empresaId]);
 
-  useEffect(() => {
-    fetchDocumentos();
-  }, [fetchDocumentos]);
+  useEffect(() => { fetchDocumentos(); }, [fetchDocumentos]);
 
   useEffect(() => {
     const channel = supabase
       .channel("documentos-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "documentos_subidos",
-          filter: `empresa_id=eq.${empresaId}`,
-        },
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
         (payload) => {
           const updated = payload.new as DocumentoSubido;
-          setDocumentos((prev) =>
-            prev.map((doc) => (doc.id === updated.id ? updated : doc))
-          );
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "documentos_subidos",
-          filter: `empresa_id=eq.${empresaId}`,
-        },
+          setDocumentos((prev) => prev.map((doc) => (doc.id === updated.id ? updated : doc)));
+        })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
         (payload) => {
           const inserted = payload.new as DocumentoSubido;
           setDocumentos((prev) => [inserted, ...prev]);
-        }
-      )
+        })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [empresaId]);
 
-  const handleUploadComplete = useCallback(
-    (result: UploadResult) => {
-      if (result.success && result.documento) {
-        setDocumentos((prev) => {
-          const exists = prev.some((d) => d.id === result.documento!.id);
-          return exists ? prev : [result.documento!, ...prev];
-        });
-      }
-    },
-    []
-  );
+  const handleUploadComplete = useCallback((result: UploadResult) => {
+    if (result.success && result.documento) {
+      setDocumentos((prev) => {
+        const exists = prev.some((d) => d.id === result.documento!.id);
+        return exists ? prev : [result.documento!, ...prev];
+      });
+    }
+  }, []);
 
   return (
-    <div className="flex-1 pb-20">
+    <div className="flex-1 pb-24">
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#111]">Subir documentos</h1>
-          <p className="text-sm text-[#888] mt-1">
-            Cartolas, boletas, screenshots o chats
-          </p>
+          <h1 className="text-[28px] font-extrabold text-[var(--foreground)]">Subir documentos</h1>
+          <p className="text-sm text-[var(--muted)] mt-1">Cartolas, boletas, screenshots o chats</p>
         </div>
-
-        <FileUpload
-          empresaId={empresaId}
-          onUploadComplete={handleUploadComplete}
-        />
-
+        <FileUpload empresaId={empresaId} onUploadComplete={handleUploadComplete} />
         <div>
-          <h2 className="text-lg font-semibold text-[#111] mb-3">
-            Historial
-          </h2>
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">Historial</h2>
           <DocumentList documentos={documentos} />
         </div>
       </div>
