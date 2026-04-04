@@ -3,11 +3,11 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { parseExcel } from "@/lib/parsers";
+import { ocrAndGroupImages } from "@/lib/ai/ocr";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
 
-  // Verify auth
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -16,7 +16,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  // Get user's empresa
   const { data: usuario } = await supabase
     .from("usuarios")
     .select("empresa_id")
@@ -28,16 +27,12 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { documento_id } = body;
+  const { documento_id, grouped_images } = body;
 
   if (!documento_id) {
-    return NextResponse.json(
-      { error: "documento_id requerido" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
   }
 
-  // Verify document belongs to user's empresa
   const { data: documento } = await supabase
     .from("documentos_subidos")
     .select("id, empresa_id, storage_path, tipo, estado")
@@ -46,32 +41,90 @@ export async function POST(request: Request) {
     .single();
 
   if (!documento) {
-    return NextResponse.json(
-      { error: "Documento no encontrado" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   }
 
   if (documento.estado === "procesando") {
-    return NextResponse.json(
-      { error: "Documento ya esta siendo procesado" },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: "Documento ya esta siendo procesado" }, { status: 409 });
   }
 
-  // Download file content from Storage
+  // For grouped images, download all and OCR them
+  if (grouped_images && Array.isArray(grouped_images) && grouped_images.length > 0) {
+    after(async () => {
+      try {
+        const start = Date.now();
+
+        // Download all images from storage
+        const images: { base64: string; mimeType: string; fileName: string }[] = [];
+        for (const imgPath of grouped_images) {
+          const { data: fileData } = await supabase.storage
+            .from("documentos")
+            .download(imgPath.path);
+          if (fileData) {
+            const buffer = await fileData.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString("base64");
+            images.push({
+              base64,
+              mimeType: imgPath.mime || "image/jpeg",
+              fileName: imgPath.name || "imagen",
+            });
+          }
+        }
+
+        if (images.length === 0) {
+          throw new Error("No se pudieron descargar las imágenes");
+        }
+
+        // OCR + group
+        const { groupedText, totalTokensInput, totalTokensOutput } = await ocrAndGroupImages(images);
+
+        if (!groupedText.trim()) {
+          throw new Error("OCR no extrajo texto de las imágenes");
+        }
+
+        // Feed OCR text into the existing processor
+        const result = await procesarDocumento(
+          documento.id,
+          usuario.empresa_id,
+          groupedText,
+          { ocrTokensInput: totalTokensInput, ocrTokensOutput: totalTokensOutput }
+        );
+
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        console.log(
+          `[procesar-documento] ${documento.id} OCR+procesado en ${elapsed}s — ${images.length} imgs → ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`
+        );
+      } catch (err) {
+        console.error(`[procesar-documento] ${documento.id} OCR error:`, err);
+        // Update document as error
+        const { createClient: createServiceClient } = await import("@supabase/supabase-js");
+        const svc = createServiceClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        await svc.from("documentos_subidos").update({
+          estado: "error",
+          progreso_ia: { estado: "error", error: err instanceof Error ? err.message : String(err) },
+        }).eq("id", documento.id);
+      }
+    });
+
+    return NextResponse.json({
+      ok: true,
+      documento_id: documento.id,
+      message: "OCR + procesamiento iniciado.",
+    });
+  }
+
+  // Standard file processing (Excel, CSV, PDF, etc.)
   const { data: fileData, error: downloadError } = await supabase.storage
     .from("documentos")
     .download(documento.storage_path);
 
   if (downloadError || !fileData) {
-    return NextResponse.json(
-      { error: "Error descargando archivo" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Error descargando archivo" }, { status: 500 });
   }
 
-  // Extract text content based on file type
   let contenido: string;
 
   if (documento.tipo === "excel") {
@@ -80,36 +133,57 @@ export async function POST(request: Request) {
   } else if (["csv", "whatsapp"].includes(documento.tipo)) {
     contenido = await fileData.text();
   } else if (documento.tipo === "pdf") {
-    // PDF: send as text for now (OCR integration pending)
     contenido = await fileData.text();
   } else if (documento.tipo === "imagen") {
-    // TODO: integrate OCR (Mistral vision or Tesseract)
-    return NextResponse.json(
-      { error: "Procesamiento de imagenes pendiente de integracion OCR" },
-      { status: 501 }
-    );
+    // Single image OCR
+    after(async () => {
+      try {
+        const start = Date.now();
+        const buffer = await fileData.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString("base64");
+        const { groupedText, totalTokensInput, totalTokensOutput } = await ocrAndGroupImages([{
+          base64,
+          mimeType: "image/jpeg",
+          fileName: documento.storage_path.split("/").pop() || "imagen",
+        }]);
+
+        if (!groupedText.trim()) {
+          throw new Error("OCR no extrajo texto de la imagen");
+        }
+
+        const result = await procesarDocumento(
+          documento.id,
+          usuario.empresa_id,
+          groupedText,
+          { ocrTokensInput: totalTokensInput, ocrTokensOutput: totalTokensOutput }
+        );
+
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        console.log(
+          `[procesar-documento] ${documento.id} OCR single en ${elapsed}s — ${result.movimientos_total} movimientos`
+        );
+      } catch (err) {
+        console.error(`[procesar-documento] ${documento.id} OCR error:`, err);
+      }
+    });
+
+    return NextResponse.json({
+      ok: true,
+      documento_id: documento.id,
+      message: "OCR + procesamiento iniciado.",
+    });
   } else {
     contenido = await fileData.text();
   }
 
   if (!contenido.trim()) {
-    return NextResponse.json(
-      { error: "Documento vacio o sin contenido legible" },
-      { status: 422 }
-    );
+    return NextResponse.json({ error: "Documento vacio o sin contenido legible" }, { status: 422 });
   }
 
-  // Use after() to keep the serverless function alive after sending the response.
-  // Without this, Vercel freezes the function once the response is sent,
-  // killing the Mistral processing mid-flight.
   after(async () => {
     try {
       const start = Date.now();
-      const result = await procesarDocumento(
-        documento.id,
-        usuario.empresa_id,
-        contenido
-      );
+      const result = await procesarDocumento(documento.id, usuario.empresa_id, contenido);
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       console.log(
         `[procesar-documento] ${documento.id} completado en ${elapsed}s — ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`

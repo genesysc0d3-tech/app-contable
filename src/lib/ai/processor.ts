@@ -114,7 +114,8 @@ async function insertInBatches<T extends Record<string, unknown>>(
 export async function procesarDocumento(
   documentoId: string,
   empresaId: string,
-  contenido: string
+  contenido: string,
+  ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number }
 ): Promise<{ movimientos_total: number; error?: string }> {
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
@@ -297,13 +298,15 @@ export async function procesarDocumento(
         throw new Error(`Error guardando propuestas: ${propError}`);
     }
 
-    // Track token usage
-    const costo = calcularCosto(totalTokensInput, totalTokensOutput);
+    // Track token usage (include OCR tokens if present)
+    const finalTokensInput = totalTokensInput + (ocrTokens?.ocrTokensInput ?? 0);
+    const finalTokensOutput = totalTokensOutput + (ocrTokens?.ocrTokensOutput ?? 0);
+    const costo = calcularCosto(finalTokensInput, finalTokensOutput);
     await supabase.from("ia_uso").insert({
       empresa_id: empresaId,
       documento_id: documentoId,
-      tokens_input: totalTokensInput,
-      tokens_output: totalTokensOutput,
+      tokens_input: finalTokensInput,
+      tokens_output: finalTokensOutput,
       modelo,
       costo_usd: costo,
     });
