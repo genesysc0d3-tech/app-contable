@@ -215,50 +215,97 @@ export async function procesarDocumento(
       monto: m.monto,
       tipo_flujo: m.tipo_flujo,
       origen: m.origen,
+      n_documento: m.n_documento || null,
     }));
 
-    // Fetch existing movimientos with their document info for duplicate detail
+    // Fetch existing movimientos with document info and n_documento
     const { data: existentes } = await supabase
       .from("movimientos_raw")
-      .select("id, fecha, monto, descripcion, documento_id, documentos_subidos(nombre_archivo, created_at)")
+      .select("id, fecha, monto, descripcion, n_documento, documento_id, documentos_subidos(nombre_archivo, created_at)")
       .eq("empresa_id", empresaId);
 
-    const existenteMap = new Map<string, { id: string; doc_nombre: string; doc_fecha: string }>();
+    // Build two maps: one with n_documento (strict), one without (loose)
+    type ExistenteInfo = { id: string; n_documento: string | null; doc_nombre: string; doc_fecha: string };
+    const existenteByStrict = new Map<string, ExistenteInfo>(); // fecha|monto|desc|n_doc
+    const existenteByLoose = new Map<string, ExistenteInfo>();  // fecha|monto|desc
+
     for (const e of existentes ?? []) {
-      const key = `${e.fecha}|${e.monto}|${e.descripcion}`;
       const doc = e.documentos_subidos as unknown as { nombre_archivo: string; created_at: string } | null;
-      existenteMap.set(key, {
+      const info: ExistenteInfo = {
         id: e.id,
+        n_documento: e.n_documento,
         doc_nombre: doc?.nombre_archivo ?? "Documento desconocido",
         doc_fecha: doc?.created_at ?? "",
-      });
+      };
+      const looseKey = `${e.fecha}|${e.monto}|${e.descripcion}`;
+      existenteByLoose.set(looseKey, info);
+      if (e.n_documento) {
+        existenteByStrict.set(`${looseKey}|${e.n_documento}`, info);
+      }
     }
 
     const indicesToKeep: number[] = [];
     let duplicadosSaltados = 0;
     const duplicadosDetalle: DuplicadoDetalle[] = [];
-    const seenKeys = new Set(existenteMap.keys());
+    const seenStrict = new Set(existenteByStrict.keys());
+    const seenLoose = new Set(existenteByLoose.keys());
+    // Track descriptions with multiple loose-only duplicates for warning
+    const looseOnlyDupCounts = new Map<string, number>();
 
     for (let i = 0; i < movimientosParsed.length; i++) {
       const m = movimientosParsed[i];
-      const key = `${m.fecha}|${m.monto}|${m.descripcion}`;
-      if (seenKeys.has(key)) {
+      const looseKey = `${m.fecha}|${m.monto}|${m.descripcion}`;
+      const strictKey = m.n_documento ? `${looseKey}|${m.n_documento}` : null;
+
+      let isDuplicate = false;
+      let motivo = "";
+      let orig: ExistenteInfo | undefined;
+
+      if (strictKey) {
+        // Has n_documento: only duplicate if strict key matches
+        if (seenStrict.has(strictKey)) {
+          isDuplicate = true;
+          orig = existenteByStrict.get(strictKey);
+          motivo = orig
+            ? `Mismo N° de documento (#${m.n_documento}) — ya existe en ${orig.doc_nombre}`
+            : `Mismo N° de documento (#${m.n_documento}) en este lote`;
+        } else {
+          seenStrict.add(strictKey);
+        }
+      } else {
+        // No n_documento: duplicate if loose key matches
+        if (seenLoose.has(looseKey)) {
+          isDuplicate = true;
+          orig = existenteByLoose.get(looseKey);
+          motivo = `Mismo monto, descripción y fecha, pero sin N° de documento para confirmar si es operación distinta`;
+          looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
+        } else {
+          seenLoose.add(looseKey);
+        }
+      }
+
+      if (isDuplicate) {
         duplicadosSaltados++;
-        const orig = existenteMap.get(key);
         duplicadosDetalle.push({
           fecha: m.fecha,
           descripcion: m.descripcion,
           monto: m.monto,
           tipo_flujo: m.tipo_flujo,
+          n_documento: m.n_documento,
           origen_movimiento_id: orig?.id ?? "",
           origen_documento_nombre: orig?.doc_nombre ?? "Mismo lote",
           origen_documento_fecha: orig?.doc_fecha ?? "",
+          motivo,
         });
       } else {
         indicesToKeep.push(i);
-        seenKeys.add(key); // prevent intra-batch duplicates too
       }
     }
+
+    // Check for false-duplicate warning (>5 loose-only dups for same desc+monto)
+    const falsosDuplicadosWarning = Array.from(looseOnlyDupCounts.entries())
+      .filter(([, count]) => count > 5)
+      .length > 0;
 
     const movimientosToInsert = indicesToKeep.map((i) => movimientosParsed[i]);
 
@@ -360,6 +407,7 @@ export async function procesarDocumento(
           movimientos_encontrados: allMovimientos.length,
           duplicados_saltados: duplicadosSaltados,
           duplicados_detalle: duplicadosDetalle.length > 0 ? duplicadosDetalle : undefined,
+          falsos_duplicados_warning: falsosDuplicadosWarning || undefined,
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);

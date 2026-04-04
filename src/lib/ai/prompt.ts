@@ -48,7 +48,8 @@ FORMATO DE RESPUESTA (JSON estricto):
       "descripcion": "texto original del movimiento",
       "monto": 50000,
       "tipo_flujo": "entrada" | "salida",
-      "origen": "banco_chile" | "bci" | "santander" | "binance" | "buda" | "orionx" | "whatsapp" | "manual" | "otro"
+      "origen": "banco_chile" | "bci" | "santander" | "binance" | "buda" | "orionx" | "whatsapp" | "manual" | "otro",
+      "n_documento": "numero de documento/comprobante si aparece, o null"
     }
   ],
   "propuestas": [
@@ -75,6 +76,7 @@ INSTRUCCIONES:
 - Si tiene IVA: monto_neto = total / 1.19, iva = total - monto_neto
 - Si NO tiene IVA: monto_neto = total, iva = 0
 - confianza entre 0.0 y 1.0 — se honesto con la certeza
+- n_documento: numero de comprobante/documento si aparece en la cartola. IMPORTANTE para diferenciar transferencias del mismo monto y descripcion el mismo dia
 - Nunca inventar RUTs. Si no lo ves en el documento, receptor_rut = null
 - No incluir datos sensibles como claves o passwords en la respuesta
 - Responde SOLO con el JSON, sin texto adicional`;
