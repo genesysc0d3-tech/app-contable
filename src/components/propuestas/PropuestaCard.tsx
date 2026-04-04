@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import type { Tables } from "@/lib/database.types";
 import { validarRut, formatRut } from "@/lib/rut";
+import { CheckCircle, XCircle, PencilSimple, CurrencyBtc } from "@phosphor-icons/react";
+import { useToast } from "@/components/Toast";
 import {
   aprobarPropuesta,
   descartarPropuesta,
@@ -23,8 +25,6 @@ interface PropuestaCardProps {
   onAction?: () => void;
 }
 
-// --- Category config ---
-
 interface CategoriaConfig {
   label: string;
   tipoDb: string;
@@ -34,68 +34,22 @@ interface CategoriaConfig {
 }
 
 const CATEGORIAS: CategoriaConfig[] = [
-  {
-    label: "Boleta de honorarios",
-    tipoDb: "boleta",
-    tieneIva: true,
-    tooltip: "IVA 19%. Declara en F29 mensual.",
-    color: "bg-[#FFF0EE] text-[#E8553E]",
-  },
-  {
-    label: "Factura afecta",
-    tipoDb: "factura",
-    tieneIva: true,
-    tooltip: "IVA 19%. Declara en F29 mensual.",
-    color: "bg-[#F3EEFF] text-[#7C3AED]",
-  },
-  {
-    label: "Compraventa crypto/activo digital",
-    tipoDb: "registro_crypto",
-    tieneIva: false,
-    tooltip: "Sin IVA (SII Oficio 963-2018). Declara mayor valor en F22 anual.",
-    color: "bg-[#FFF8ED] text-[#B45309]",
-  },
-  {
-    label: "Transferencia P2P",
-    tipoDb: "transferencia_p2p",
-    tieneIva: false,
-    tooltip: "Sin IVA. Puede generar obligacion F22 si supera 50 tx/mes (Ley Cumplimiento 2024).",
-    color: "bg-[#ECFEFF] text-[#0891B2]",
-  },
-  {
-    label: "Operacion forex/divisa",
-    tipoDb: "forex",
-    tieneIva: false,
-    tooltip: "Sin IVA. Declara diferencia de cambio en F22 anual.",
-    color: "bg-[#EEF2FF] text-[#4F46E5]",
-  },
-  {
-    label: "Gasto/egreso",
-    tipoDb: "gasto",
-    tieneIva: true,
-    tooltip: "Gasto con factura recibida. IVA credito fiscal.",
-    color: "bg-[#FFF7ED] text-[#C2410C]",
-  },
-  {
-    label: "No comercial / personal",
-    tipoDb: "ignorar",
-    tieneIva: false,
-    tooltip: "Sin efecto tributario. Se ignora para F29 y F22.",
-    color: "bg-[#F5F5F3] text-[#888]",
-  },
+  { label: "Boleta de honorarios", tipoDb: "boleta", tieneIva: true, tooltip: "IVA 19%. Declara en F29 mensual.", color: "bg-[var(--accent-light)] text-[#E8553E]" },
+  { label: "Factura afecta", tipoDb: "factura", tieneIva: true, tooltip: "IVA 19%. Declara en F29 mensual.", color: "bg-[#F3EEFF] dark:bg-[#7C3AED]/15 text-[#7C3AED]" },
+  { label: "Compraventa crypto", tipoDb: "registro_crypto", tieneIva: false, tooltip: "Sin IVA (SII Oficio 963-2018). Mayor valor en F22.", color: "bg-[#FFF8ED] dark:bg-[#B45309]/15 text-[#B45309]" },
+  { label: "Transferencia P2P", tipoDb: "transferencia_p2p", tieneIva: false, tooltip: "Sin IVA. Monitorear si supera 50 tx (Ley Cumplimiento 2024).", color: "bg-[#ECFEFF] dark:bg-[#0891B2]/15 text-[#0891B2]" },
+  { label: "Operacion forex", tipoDb: "forex", tieneIva: false, tooltip: "Sin IVA. Diferencia de cambio en F22.", color: "bg-[#EEF2FF] dark:bg-[#4F46E5]/15 text-[#4F46E5]" },
+  { label: "Gasto/egreso", tipoDb: "gasto", tieneIva: true, tooltip: "Gasto con factura recibida. IVA credito fiscal.", color: "bg-[#FFF7ED] dark:bg-[#C2410C]/15 text-[#C2410C]" },
+  { label: "No comercial", tipoDb: "ignorar", tieneIva: false, tooltip: "Sin efecto tributario.", color: "bg-[var(--surface)] text-[var(--muted)]" },
 ];
 
-function getCategoriaByTipo(tipo: string): CategoriaConfig {
-  return CATEGORIAS.find((c) => c.tipoDb === tipo) ?? CATEGORIAS[CATEGORIAS.length - 1];
-}
+function getCat(tipo: string) { return CATEGORIAS.find((c) => c.tipoDb === tipo) ?? CATEGORIAS[CATEGORIAS.length - 1]; }
 
 const MONEDAS = ["CLP", "USD", "USDT", "BTC", "ETH", "Otro"];
 
-// --- Helpers ---
-
-function formatMonto(monto: number | null): string {
-  if (monto === null) return "$0";
-  return `$${Math.round(monto).toLocaleString("es-CL")}`;
+function fmt(n: number | null): string {
+  if (n === null) return "$0";
+  return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
 function recalcIva(total: number, tieneIva: boolean) {
@@ -104,87 +58,67 @@ function recalcIva(total: number, tieneIva: boolean) {
   return { neto, iva: total - neto };
 }
 
-function ConfianzaBadge({ confianza }: { confianza: number | null }) {
-  if (confianza === null) return null;
-  const pct = Math.round(confianza * 100);
-  const color =
-    pct >= 80
-      ? "text-[#22C55E]"
-      : pct >= 60
-        ? "text-[#F59E0B]"
-        : "text-[#E8553E]";
-  return <span className={`text-xs font-mono ${color}`}>{pct}%</span>;
+function formatFecha(d: string): string {
+  const dt = new Date(d);
+  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return `${dt.getDate()} ${meses[dt.getMonth()]}`;
 }
 
-// --- Main ---
-
-export default function PropuestaCard({
-  propuesta,
-  clientes,
-  empresaId,
-  onAction,
-}: PropuestaCardProps) {
+export default function PropuestaCard({ propuesta, clientes, empresaId, onAction }: PropuestaCardProps) {
+  const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
-  // Edit state
   const [tipoEdit, setTipoEdit] = useState(propuesta.tipo_propuesto);
   const [notas, setNotas] = useState(propuesta.notas || "");
   const [receptorNombre, setReceptorNombre] = useState(propuesta.receptor_nombre || "");
   const [receptorRut, setReceptorRut] = useState(propuesta.receptor_rut || "");
   const [monedaOrigen, setMonedaOrigen] = useState(propuesta.moneda_origen || "CLP");
-  const [montoMonedaOrigen, setMontoMonedaOrigen] = useState<string>(
-    propuesta.monto_moneda_origen?.toString() || ""
-  );
+  const [montoMonedaOrigen, setMontoMonedaOrigen] = useState(propuesta.monto_moneda_origen?.toString() || "");
 
-  // IVA recalculation
-  const cat = getCategoriaByTipo(tipoEdit);
+  const cat = getCat(tipoEdit);
   const totalNum = Number(propuesta.total) || 0;
   const { neto: editNeto, iva: editIva } = recalcIva(totalNum, cat.tieneIva);
 
-  // Auto-complete receptor name from RUT
   useEffect(() => {
     if (!receptorRut.trim() || !validarRut(receptorRut)) return;
-    const formatted = formatRut(receptorRut);
-    const match = clientes.find((c) => c.rut === formatted);
-    if (match && !receptorNombre.trim()) {
-      setReceptorNombre(match.nombre);
-    }
+    const match = clientes.find((c) => c.rut === formatRut(receptorRut));
+    if (match && !receptorNombre.trim()) setReceptorNombre(match.nombre);
   }, [receptorRut, clientes, receptorNombre]);
 
-  // Approve state
-  const [selectedClienteId, setSelectedClienteId] = useState<string>("");
+  const [selectedClienteId, setSelectedClienteId] = useState("");
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [newClienteNombre, setNewClienteNombre] = useState(propuesta.receptor_nombre || "");
   const [newClienteRut, setNewClienteRut] = useState(propuesta.receptor_rut || "");
 
   const mov = propuesta.movimientos_raw;
-  const displayCat = getCategoriaByTipo(propuesta.tipo_propuesto);
+  const displayCat = getCat(propuesta.tipo_propuesto);
   const isCrypto = propuesta.tipo_propuesto === "registro_crypto";
   const isLowConfidence = propuesta.confianza !== null && propuesta.confianza < 0.5;
+  const confianzaPct = propuesta.confianza !== null ? Math.round(propuesta.confianza * 100) : null;
+  const confianzaColor = confianzaPct !== null ? (confianzaPct >= 80 ? "text-[#22C55E]" : confianzaPct >= 60 ? "text-[#F59E0B]" : "text-[#E8553E]") : "";
 
   async function handleAprobar() {
     setLoading(true);
     let clienteId: string | null = selectedClienteId || null;
-
     if (showNewCliente && newClienteNombre.trim()) {
-      const res = await crearClienteDesdeRevisar({
-        empresa_id: empresaId,
-        nombre: newClienteNombre,
-        rut: newClienteRut || undefined,
-      });
+      const res = await crearClienteDesdeRevisar({ empresa_id: empresaId, nombre: newClienteNombre, rut: newClienteRut || undefined });
       if (res.ok && res.cliente) clienteId = res.cliente.id;
     }
-
     await aprobarPropuesta(propuesta.id, clienteId);
-    onAction?.();
+    toast("Aprobado");
+    setDismissed(true);
+    setTimeout(() => onAction?.(), 250);
     setLoading(false);
   }
 
   async function handleDescartar() {
     setLoading(true);
     await descartarPropuesta(propuesta.id);
-    onAction?.();
+    toast("Ignorado");
+    setDismissed(true);
+    setTimeout(() => onAction?.(), 250);
     setLoading(false);
   }
 
@@ -195,295 +129,175 @@ export default function PropuestaCard({
       tipo_propuesto: tipoEdit,
       receptor_nombre: receptorNombre || null,
       receptor_rut: rutValid ? formatRut(receptorRut) : receptorRut || null,
-      monto_neto: editNeto,
-      iva: editIva,
-      total: totalNum,
+      monto_neto: editNeto, iva: editIva, total: totalNum,
       notas: notas || null,
       moneda_origen: monedaOrigen !== "CLP" ? monedaOrigen : null,
       monto_moneda_origen: montoMonedaOrigen ? Number(montoMonedaOrigen) : null,
     });
+    toast("Guardado");
     setEditing(false);
     onAction?.();
     setLoading(false);
   }
 
+  const inputCls = "w-full rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-light)] focus:outline-none focus:border-[#E8553E] transition-colors";
+
   return (
-    <div
-      className={`rounded-[20px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 space-y-3 ${
-        isLowConfidence ? "border border-[#E8553E]/30" : ""
-      }`}
-    >
-      {/* Header: tipo + confianza */}
+    <div className={`rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none p-5 space-y-3 transition-all duration-250 ${
+      dismissed ? "animate-slide-out-right" : "animate-fade-in"
+    } ${isLowConfidence ? "border border-[#E8553E]/30" : ""}`}>
+
+      {/* Header */}
       <div className="flex items-center justify-between">
         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${displayCat.color}`}>
+          {isCrypto && <CurrencyBtc size={12} weight="bold" className="inline mr-1 -mt-0.5" />}
           {displayCat.label}
         </span>
-        <ConfianzaBadge confianza={propuesta.confianza} />
+        {confianzaPct !== null && <span className={`text-xs font-mono tabular-nums ${confianzaColor}`}>{confianzaPct}%</span>}
       </div>
 
-      {/* Movimiento info */}
+      {/* Movimiento */}
       <div>
-        <p className="text-sm text-[#111]">{mov.descripcion}</p>
-        <div className="flex items-center gap-3 mt-1.5 text-xs text-[#888]">
-          <span>{mov.fecha}</span>
-          <span className={mov.tipo_flujo === "entrada" ? "text-[#22C55E]" : "text-[#E8553E]"}>
-            {mov.tipo_flujo === "entrada" ? "+" : "-"}{formatMonto(mov.monto)}
+        <p className="text-sm text-[var(--foreground)]">{mov.descripcion}</p>
+        <div className="flex items-center gap-3 mt-1.5 text-xs text-[var(--muted)]">
+          <span>{formatFecha(mov.fecha)}</span>
+          <span className={`tabular-nums ${mov.tipo_flujo === "entrada" ? "text-[#22C55E]" : "text-[#E8553E]"}`}>
+            {mov.tipo_flujo === "entrada" ? "+" : "-"}{fmt(mov.monto)}
           </span>
-          {propuesta.receptor_nombre && (
-            <span className="truncate">{propuesta.receptor_nombre}</span>
-          )}
+          {propuesta.receptor_nombre && <span className="truncate">{propuesta.receptor_nombre}</span>}
         </div>
       </div>
 
-      {/* Desglose montos */}
+      {/* Desglose */}
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-[#F5F5F3] px-2 py-1.5">
-          <p className="text-[10px] text-[#AAA]">Neto</p>
-          <p className="text-xs font-medium">
-            {editing ? formatMonto(editNeto) : formatMonto(propuesta.monto_neto)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-[#F5F5F3] px-2 py-1.5">
-          <p className="text-[10px] text-[#AAA]">IVA</p>
-          <p className="text-xs font-medium">
-            {editing ? formatMonto(editIva) : formatMonto(propuesta.iva)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-[#F5F5F3] px-2 py-1.5">
-          <p className="text-[10px] text-[#AAA]">Total</p>
-          <p className="text-xs font-semibold">{formatMonto(propuesta.total)}</p>
-        </div>
+        {[
+          { label: "Neto", val: editing ? editNeto : propuesta.monto_neto },
+          { label: "IVA", val: editing ? editIva : propuesta.iva },
+          { label: "Total", val: propuesta.total, bold: true },
+        ].map(({ label, val, bold }) => (
+          <div key={label} className="rounded-xl bg-[var(--surface)] px-2 py-1.5">
+            <p className="text-[10px] text-[var(--muted-light)]">{label}</p>
+            <p className={`text-xs tabular-nums ${bold ? "font-semibold" : "font-medium"} text-[var(--foreground)]`}>{fmt(val)}</p>
+          </div>
+        ))}
       </div>
 
       {/* Spread crypto */}
       {isCrypto && (propuesta.spread_compra || propuesta.spread_venta) && (
         <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-xl bg-yellow-500/5 px-2 py-1.5">
-            <p className="text-[10px] text-yellow-400/60">Compra</p>
-            <p className="text-xs font-medium text-yellow-300">{formatMonto(propuesta.spread_compra)}</p>
-          </div>
-          <div className="rounded-xl bg-yellow-500/5 px-2 py-1.5">
-            <p className="text-[10px] text-yellow-400/60">Venta</p>
-            <p className="text-xs font-medium text-yellow-300">{formatMonto(propuesta.spread_venta)}</p>
-          </div>
-          <div className="rounded-xl bg-yellow-500/5 px-2 py-1.5">
-            <p className="text-[10px] text-yellow-400/60">Ganancia</p>
-            <p className="text-xs font-semibold text-[#22C55E]">{formatMonto(propuesta.spread_ganancia)}</p>
-          </div>
+          {[
+            { label: "Compra", val: propuesta.spread_compra },
+            { label: "Venta", val: propuesta.spread_venta },
+            { label: "Ganancia", val: propuesta.spread_ganancia, green: true },
+          ].map(({ label, val, green }) => (
+            <div key={label} className="rounded-xl bg-[#FFF8ED] dark:bg-[#B45309]/10 px-2 py-1.5">
+              <p className="text-[10px] text-[#B45309]/60">{label}</p>
+              <p className={`text-xs font-medium tabular-nums ${green ? "text-[#22C55E]" : "text-[#B45309]"}`}>{fmt(val)}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Moneda origen (display) */}
       {!editing && propuesta.moneda_origen && propuesta.moneda_origen !== "CLP" && (
-        <p className="text-[10px] text-[#BBB]">
-          Moneda origen: {propuesta.monto_moneda_origen} {propuesta.moneda_origen}
-        </p>
+        <p className="text-[10px] text-[var(--muted-light)]">Moneda origen: {propuesta.monto_moneda_origen} {propuesta.moneda_origen}</p>
       )}
 
-      {/* Low confidence warning */}
       {isLowConfidence && !editing && (
-        <p className="text-xs text-[#E8553E]/80 bg-[#FFF0EE] rounded-lg px-3 py-1.5">
-          Confianza baja — revisa antes de aprobar
-        </p>
+        <p className="text-xs text-[#E8553E] bg-[var(--accent-light)] rounded-lg px-3 py-1.5">Confianza baja — revisa antes de aprobar</p>
       )}
 
       {/* EDIT MODE */}
       {editing ? (
         <div className="space-y-2.5">
-          {/* Categoria tributaria */}
           <div>
-            <label className="text-[10px] text-[#AAA] mb-1 block">Categoria tributaria</label>
-            <select
-              value={tipoEdit}
-              onChange={(e) => setTipoEdit(e.target.value)}
-              className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-[#111] focus:outline-none focus:border-[#E8553E]"
-            >
-              {CATEGORIAS.map((c) => (
-                <option key={c.tipoDb} value={c.tipoDb}>{c.label}</option>
-              ))}
+            <label className="text-[10px] text-[var(--muted-light)] mb-1 block">Categoria tributaria</label>
+            <select value={tipoEdit} onChange={(e) => setTipoEdit(e.target.value)} className={inputCls}>
+              {CATEGORIAS.map((c) => <option key={c.tipoDb} value={c.tipoDb}>{c.label}</option>)}
             </select>
-            {/* Tooltip */}
-            <p className="text-[10px] text-[#BBB] mt-1">{cat.tooltip}</p>
+            <p className="text-[10px] text-[var(--muted-light)] mt-1">{cat.tooltip}</p>
           </div>
-
-          {/* Live IVA preview */}
           <div className="flex gap-2 text-center">
-            <div className="flex-1 rounded-lg bg-[#F5F5F3] border border-[#EEE] px-2 py-1.5">
-              <p className="text-[9px] text-[#BBB]">Neto</p>
-              <p className="text-[11px] font-medium text-[#555]">{formatMonto(editNeto)}</p>
+            <div className="flex-1 rounded-lg bg-[var(--surface)] border border-[var(--border)] px-2 py-1.5">
+              <p className="text-[9px] text-[var(--muted-light)]">Neto</p>
+              <p className="text-[11px] font-medium tabular-nums text-[var(--foreground)]">{fmt(editNeto)}</p>
             </div>
-            <div className="flex-1 rounded-lg bg-[#F5F5F3] border border-[#EEE] px-2 py-1.5">
-              <p className="text-[9px] text-[#BBB]">IVA {cat.tieneIva ? "19%" : "exento"}</p>
-              <p className="text-[11px] font-medium text-[#555]">{formatMonto(editIva)}</p>
+            <div className="flex-1 rounded-lg bg-[var(--surface)] border border-[var(--border)] px-2 py-1.5">
+              <p className="text-[9px] text-[var(--muted-light)]">IVA {cat.tieneIva ? "19%" : "exento"}</p>
+              <p className="text-[11px] font-medium tabular-nums text-[var(--foreground)]">{fmt(editIva)}</p>
             </div>
           </div>
-
-          {/* Receptor/Pagador */}
           <div>
-            <label className="text-[10px] text-[#AAA] mb-1 block">Receptor / Pagador</label>
+            <label className="text-[10px] text-[var(--muted-light)] mb-1 block">Receptor / Pagador</label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Nombre"
-                value={receptorNombre}
-                onChange={(e) => setReceptorNombre(e.target.value)}
-                className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
-              />
+              <input type="text" placeholder="Nombre" value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} className={`flex-1 ${inputCls}`} />
               <div className="w-32">
-                <input
-                  type="text"
-                  placeholder="RUT"
-                  value={receptorRut}
-                  onChange={(e) => setReceptorRut(e.target.value)}
-                  onBlur={() => {
-                    if (receptorRut.trim() && validarRut(receptorRut))
-                      setReceptorRut(formatRut(receptorRut));
-                  }}
-                  className={`w-full rounded-xl bg-[#F5F5F3] border px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E] ${
-                    receptorRut.trim() && !validarRut(receptorRut)
-                      ? "border-[#E8553E]"
-                      : "border-[#EEE]"
-                  }`}
-                />
-                {receptorRut.trim() && !validarRut(receptorRut) && (
-                  <p className="text-[9px] text-[#E8553E] mt-0.5">RUT invalido</p>
-                )}
+                <input type="text" placeholder="RUT" value={receptorRut} onChange={(e) => setReceptorRut(e.target.value)}
+                  onBlur={() => { if (receptorRut.trim() && validarRut(receptorRut)) setReceptorRut(formatRut(receptorRut)); }}
+                  className={`${inputCls} ${receptorRut.trim() && !validarRut(receptorRut) ? "!border-[#E8553E]" : ""}`} />
+                {receptorRut.trim() && !validarRut(receptorRut) && <p className="text-[9px] text-[#E8553E] mt-0.5">RUT invalido</p>}
               </div>
             </div>
           </div>
-
-          {/* Moneda origen (for crypto/forex/p2p) */}
           {(cat.tipoDb === "registro_crypto" || cat.tipoDb === "forex" || cat.tipoDb === "transferencia_p2p") && (
             <div>
-              <label className="text-[10px] text-[#AAA] mb-1 block">Moneda origen (opcional)</label>
+              <label className="text-[10px] text-[var(--muted-light)] mb-1 block">Moneda origen</label>
               <div className="flex gap-2">
-                <select
-                  value={monedaOrigen}
-                  onChange={(e) => setMonedaOrigen(e.target.value)}
-                  className="w-24 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] focus:outline-none focus:border-[#E8553E]"
-                >
-                  {MONEDAS.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
+                <select value={monedaOrigen} onChange={(e) => setMonedaOrigen(e.target.value)} className={`w-24 ${inputCls}`}>
+                  {MONEDAS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
                 {monedaOrigen !== "CLP" && (
-                  <input
-                    type="number"
-                    placeholder={`Monto en ${monedaOrigen}`}
-                    value={montoMonedaOrigen}
-                    onChange={(e) => setMontoMonedaOrigen(e.target.value)}
-                    className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
-                  />
+                  <input type="number" placeholder={`Monto en ${monedaOrigen}`} value={montoMonedaOrigen} onChange={(e) => setMontoMonedaOrigen(e.target.value)} className={`flex-1 ${inputCls}`} />
                 )}
               </div>
-              {monedaOrigen !== "CLP" && montoMonedaOrigen && totalNum > 0 && (
-                <p className="text-[9px] text-[#BBB] mt-1">
-                  {formatMonto(totalNum)} CLP = {montoMonedaOrigen} {monedaOrigen}
-                </p>
-              )}
             </div>
           )}
-
-          {/* Notas */}
-          <textarea
-            value={notas}
-            onChange={(e) => setNotas(e.target.value)}
-            placeholder="Notas..."
-            rows={2}
-            className="w-full rounded-xl bg-white/5 border border-[#EEE] px-3 py-2 text-sm text-white placeholder:text-[#BBB] focus:outline-none focus:border-blue-400/50 resize-none"
-          />
-
-          {/* Save / Cancel */}
+          <textarea value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Notas..." rows={2} className={`${inputCls} resize-none`} />
           <div className="flex gap-2">
-            <button
-              onClick={handleGuardarEdicion}
-              disabled={loading}
-              className="flex-1 rounded-xl bg-[#E8553E] hover:bg-[#d44a35] disabled:opacity-50 px-3 py-2 text-xs font-semibold text-white transition-colors"
-            >
-              Guardar
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="rounded-xl bg-[#F5F5F3] hover:bg-[#EEE] px-3 py-2 text-xs text-[#555] transition-colors"
-            >
-              Cancelar
-            </button>
+            <button onClick={handleGuardarEdicion} disabled={loading}
+              className="btn-press flex-1 rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-3 py-2 text-xs font-semibold text-white transition-all duration-150">Guardar</button>
+            <button onClick={() => setEditing(false)}
+              className="btn-press rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] px-3 py-2 text-xs text-[var(--muted)] transition-all duration-150">Cancelar</button>
           </div>
         </div>
       ) : (
         <>
-          {propuesta.notas && (
-            <p className="text-xs text-[#AAA] italic">{propuesta.notas}</p>
-          )}
+          {propuesta.notas && <p className="text-xs text-[var(--muted)] italic">{propuesta.notas}</p>}
 
           {/* Client selector */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <select
-                value={showNewCliente ? "__new__" : selectedClienteId}
-                onChange={(e) => {
-                  if (e.target.value === "__new__") {
-                    setShowNewCliente(true);
-                    setSelectedClienteId("");
-                  } else {
-                    setShowNewCliente(false);
-                    setSelectedClienteId(e.target.value);
-                  }
-                }}
-                className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] focus:outline-none focus:border-[#E8553E]"
-              >
-                <option value="">Sin cliente asignado</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}{c.rut ? ` (${c.rut})` : ""}
-                  </option>
-                ))}
-                <option value="__new__">+ Crear cliente nuevo</option>
-              </select>
-            </div>
-
+            <select
+              value={showNewCliente ? "__new__" : selectedClienteId}
+              onChange={(e) => {
+                if (e.target.value === "__new__") { setShowNewCliente(true); setSelectedClienteId(""); }
+                else { setShowNewCliente(false); setSelectedClienteId(e.target.value); }
+              }}
+              className={inputCls}
+            >
+              <option value="">Sin cliente asignado</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.rut ? ` (${c.rut})` : ""}</option>)}
+              <option value="__new__">+ Crear cliente nuevo</option>
+            </select>
             {showNewCliente && (
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nombre *"
-                  value={newClienteNombre}
-                  onChange={(e) => setNewClienteNombre(e.target.value)}
-                  className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
-                />
-                <input
-                  type="text"
-                  placeholder="RUT"
-                  value={newClienteRut}
-                  onChange={(e) => setNewClienteRut(e.target.value)}
-                  className="w-28 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
-                />
+                <input type="text" placeholder="Nombre *" value={newClienteNombre} onChange={(e) => setNewClienteNombre(e.target.value)} className={`flex-1 ${inputCls}`} />
+                <input type="text" placeholder="RUT" value={newClienteRut} onChange={(e) => setNewClienteRut(e.target.value)} className={`w-28 ${inputCls}`} />
               </div>
             )}
           </div>
 
           {/* Actions */}
           <div className="flex gap-2">
-            <button
-              onClick={handleAprobar}
-              disabled={loading}
-              className="flex-1 rounded-xl bg-[#E8553E] hover:bg-[#d44a35] disabled:opacity-50 px-3 py-2.5 text-xs font-semibold text-white transition-colors"
-            >
-              Aprobar
+            <button onClick={handleAprobar} disabled={loading}
+              className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-3 py-2.5 text-xs font-semibold text-white transition-all duration-150">
+              <CheckCircle size={16} weight="bold" /> Aprobar
             </button>
-            <button
-              onClick={() => setEditing(true)}
-              disabled={loading}
-              className="flex-1 rounded-xl bg-[#F5F5F3] hover:bg-[#EEE] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#555] transition-colors"
-            >
-              Editar
+            <button onClick={() => setEditing(true)} disabled={loading}
+              className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#E8553E] bg-transparent hover:bg-[var(--accent-light)] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#E8553E] transition-all duration-150">
+              <PencilSimple size={16} /> Editar
             </button>
-            <button
-              onClick={handleDescartar}
-              disabled={loading}
-              className="flex-1 rounded-xl bg-[#F5F5F3] hover:bg-[#EEE] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#888] transition-colors"
-            >
-              Ignorar
+            <button onClick={handleDescartar} disabled={loading}
+              className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[var(--muted)] transition-all duration-150">
+              <XCircle size={16} /> Ignorar
             </button>
           </div>
         </>
