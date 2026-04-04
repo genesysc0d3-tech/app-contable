@@ -41,13 +41,14 @@ export async function getResumenMes(
       ? `${anio + 1}-01-01`
       : `${anio}-${String(mes + 1).padStart(2, "0")}-01`;
 
-  // Query from movimientos_raw with proper date filter, join propuestas
+  // Query from movimientos_raw with proper date filter, join only approved propuestas
   const { data } = await supabase
     .from("movimientos_raw")
-    .select("monto, tipo_flujo, propuestas_ia(tipo_propuesto, iva)")
+    .select("monto, tipo_flujo, propuestas_ia!inner(tipo_propuesto, iva, estado)")
     .eq("empresa_id", empresaId)
     .gte("fecha", startDate)
-    .lt("fecha", endDate);
+    .lt("fecha", endDate)
+    .in("propuestas_ia.estado", ["aprobado", "editado"]);
 
   let totalIngresos = 0;
   let totalEgresos = 0;
@@ -108,17 +109,15 @@ export async function getHistorico6Meses(
 
     const { data } = await supabase
       .from("movimientos_raw")
-      .select("monto, tipo_flujo, propuestas_ia(id)")
+      .select("monto, tipo_flujo, propuestas_ia!inner(id, estado)")
       .eq("empresa_id", empresaId)
+      .in("propuestas_ia.estado", ["aprobado", "editado"])
       .gte("fecha", startDate)
       .lt("fecha", endDate);
 
     let ingresos = 0;
     let egresos = 0;
     for (const mov of data ?? []) {
-      // Only count movimientos that have at least one propuesta
-      const props = mov.propuestas_ia as unknown as { id: string }[] | null;
-      if (!props || (Array.isArray(props) && props.length === 0)) continue;
       const monto = Number(mov.monto) || 0;
       if (mov.tipo_flujo === "entrada") ingresos += monto;
       else egresos += monto;
