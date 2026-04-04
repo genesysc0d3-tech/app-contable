@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #28, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #29, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -107,6 +107,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #26 | feature/fix-omitidos-ui | Fix: omitido desaparece de lista al agregar + limpieza duplicados BD |
 | #27 | feature/omitidos-seleccion-multiple | Selección múltiple en visor de omitidos para agregar en lote |
 | #28 | feature/fix-forzar-movimiento | Fix: forzar-movimiento crea propuesta_ia aprobada + limpieza huérfanos |
+| #29 | feature/fix-omitido-persiste | Fix: forzar-movimiento idempotente + remueve omitido de progreso_ia |
 
 ---
 
@@ -293,4 +294,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#28 mergeados*
+*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#29 mergeados*
