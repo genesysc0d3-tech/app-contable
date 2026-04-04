@@ -19,6 +19,13 @@ const MAX_CONCURRENT = 3;
 const DB_BATCH_SIZE = 100;
 const MIN_CONFIANZA = 0.6;
 
+/** Sanitize a value that should be numeric but Mistral may return as "null" string */
+function toNum(val: unknown): number | null {
+  if (val === null || val === undefined || val === "null" || val === "") return null;
+  const n = Number(val);
+  return isNaN(n) ? null : n;
+}
+
 function getServiceClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -211,10 +218,10 @@ export async function procesarDocumento(
       empresa_id: empresaId,
       documento_id: documentoId,
       fecha: parseFecha(m.fecha),
-      descripcion: m.descripcion,
-      monto: m.monto,
-      tipo_flujo: m.tipo_flujo,
-      origen: m.origen,
+      descripcion: String(m.descripcion ?? ""),
+      monto: toNum(m.monto) ?? 0,
+      tipo_flujo: m.tipo_flujo || "entrada",
+      origen: m.origen || null,
       n_documento: m.n_documento || null,
     }));
 
@@ -412,23 +419,25 @@ export async function procesarDocumento(
           const isLow = p.confianza != null && p.confianza < MIN_CONFIANZA;
           const mov = validMovimientos[p.movimiento_index];
           const clienteId = resolveClienteId(clienteCache, p, mov);
+          const confianza = toNum(p.confianza);
+          const confianzaLow = confianza != null && confianza < MIN_CONFIANZA;
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
-            tipo_propuesto: p.tipo_propuesto,
-            receptor_nombre: p.receptor_nombre,
-            receptor_rut: p.receptor_rut,
-            monto_neto: p.monto_neto,
-            iva: p.iva,
-            total: p.total,
-            confianza: p.confianza,
-            notas: isLow
-              ? `[REVISION MANUAL - confianza ${Math.round((p.confianza ?? 0) * 100)}%] ${p.notas || ""}`.trim()
-              : p.notas,
+            tipo_propuesto: p.tipo_propuesto || "ignorar",
+            receptor_nombre: p.receptor_nombre || null,
+            receptor_rut: p.receptor_rut || null,
+            monto_neto: toNum(p.monto_neto),
+            iva: toNum(p.iva),
+            total: toNum(p.total),
+            confianza,
+            notas: confianzaLow
+              ? `[REVISION MANUAL - confianza ${Math.round((confianza ?? 0) * 100)}%] ${p.notas || ""}`.trim()
+              : p.notas || null,
             estado: "pendiente" as const,
-            spread_compra: p.spread_compra,
-            spread_venta: p.spread_venta,
-            spread_ganancia: p.spread_ganancia,
+            spread_compra: toNum(p.spread_compra),
+            spread_venta: toNum(p.spread_venta),
+            spread_ganancia: toNum(p.spread_ganancia),
             cliente_id: clienteId,
           };
         });
