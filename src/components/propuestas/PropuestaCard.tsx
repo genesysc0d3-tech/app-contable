@@ -39,49 +39,49 @@ const CATEGORIAS: CategoriaConfig[] = [
     tipoDb: "boleta",
     tieneIva: true,
     tooltip: "IVA 19%. Declara en F29 mensual.",
-    color: "bg-blue-500/20 text-blue-300",
+    color: "bg-[#FFF0EE] text-[#E8553E]",
   },
   {
     label: "Factura afecta",
     tipoDb: "factura",
     tieneIva: true,
     tooltip: "IVA 19%. Declara en F29 mensual.",
-    color: "bg-purple-500/20 text-purple-300",
+    color: "bg-[#F3EEFF] text-[#7C3AED]",
   },
   {
     label: "Compraventa crypto/activo digital",
     tipoDb: "registro_crypto",
     tieneIva: false,
     tooltip: "Sin IVA (SII Oficio 963-2018). Declara mayor valor en F22 anual.",
-    color: "bg-yellow-500/20 text-yellow-300",
+    color: "bg-[#FFF8ED] text-[#B45309]",
   },
   {
     label: "Transferencia P2P",
     tipoDb: "transferencia_p2p",
     tieneIva: false,
     tooltip: "Sin IVA. Puede generar obligacion F22 si supera 50 tx/mes (Ley Cumplimiento 2024).",
-    color: "bg-cyan-500/20 text-cyan-300",
+    color: "bg-[#ECFEFF] text-[#0891B2]",
   },
   {
     label: "Operacion forex/divisa",
     tipoDb: "forex",
     tieneIva: false,
     tooltip: "Sin IVA. Declara diferencia de cambio en F22 anual.",
-    color: "bg-indigo-500/20 text-indigo-300",
+    color: "bg-[#EEF2FF] text-[#4F46E5]",
   },
   {
     label: "Gasto/egreso",
     tipoDb: "gasto",
     tieneIva: true,
     tooltip: "Gasto con factura recibida. IVA credito fiscal.",
-    color: "bg-orange-500/20 text-orange-300",
+    color: "bg-[#FFF7ED] text-[#C2410C]",
   },
   {
     label: "No comercial / personal",
     tipoDb: "ignorar",
     tieneIva: false,
     tooltip: "Sin efecto tributario. Se ignora para F29 y F22.",
-    color: "bg-white/10 text-white/40",
+    color: "bg-[#F5F5F3] text-[#888]",
   },
 ];
 
@@ -109,10 +109,10 @@ function ConfianzaBadge({ confianza }: { confianza: number | null }) {
   const pct = Math.round(confianza * 100);
   const color =
     pct >= 80
-      ? "text-emerald-400"
+      ? "text-[#22C55E]"
       : pct >= 60
-        ? "text-yellow-400"
-        : "text-red-400";
+        ? "text-[#F59E0B]"
+        : "text-[#E8553E]";
   return <span className={`text-xs font-mono ${color}`}>{pct}%</span>;
 }
 
@@ -209,8 +209,8 @@ export default function PropuestaCard({
 
   return (
     <div
-      className={`rounded-2xl bg-white/5 backdrop-blur-sm border p-4 space-y-3 ${
-        isLowConfidence ? "border-red-500/30" : "border-white/10"
+      className={`rounded-[20px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 space-y-3 ${
+        isLowConfidence ? "border border-[#E8553E]/30" : ""
       }`}
     >
       {/* Header: tipo + confianza */}
@@ -223,10 +223,10 @@ export default function PropuestaCard({
 
       {/* Movimiento info */}
       <div>
-        <p className="text-sm text-white/90">{mov.descripcion}</p>
-        <div className="flex items-center gap-3 mt-1.5 text-xs text-white/50">
+        <p className="text-sm text-[#111]">{mov.descripcion}</p>
+        <div className="flex items-center gap-3 mt-1.5 text-xs text-[#888]">
           <span>{mov.fecha}</span>
-          <span className={mov.tipo_flujo === "entrada" ? "text-emerald-400" : "text-red-400"}>
+          <span className={mov.tipo_flujo === "entrada" ? "text-[#22C55E]" : "text-[#E8553E]"}>
             {mov.tipo_flujo === "entrada" ? "+" : "-"}{formatMonto(mov.monto)}
           </span>
           {propuesta.receptor_nombre && (
@@ -237,20 +237,20 @@ export default function PropuestaCard({
 
       {/* Desglose montos */}
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-white/5 px-2 py-1.5">
-          <p className="text-[10px] text-white/40">Neto</p>
+        <div className="rounded-xl bg-[#F5F5F3] px-2 py-1.5">
+          <p className="text-[10px] text-[#AAA]">Neto</p>
           <p className="text-xs font-medium">
             {editing ? formatMonto(editNeto) : formatMonto(propuesta.monto_neto)}
           </p>
         </div>
-        <div className="rounded-xl bg-white/5 px-2 py-1.5">
-          <p className="text-[10px] text-white/40">IVA</p>
+        <div className="rounded-xl bg-[#F5F5F3] px-2 py-1.5">
+          <p className="text-[10px] text-[#AAA]">IVA</p>
           <p className="text-xs font-medium">
             {editing ? formatMonto(editIva) : formatMonto(propuesta.iva)}
           </p>
         </div>
-        <div className="rounded-xl bg-white/5 px-2 py-1.5">
-          <p className="text-[10px] text-white/40">Total</p>
+        <div className="rounded-xl bg-[#F5F5F3] px-2 py-1.5">
+          <p className="text-[10px] text-[#AAA]">Total</p>
           <p className="text-xs font-semibold">{formatMonto(propuesta.total)}</p>
         </div>
       </div>
@@ -268,21 +268,21 @@ export default function PropuestaCard({
           </div>
           <div className="rounded-xl bg-yellow-500/5 px-2 py-1.5">
             <p className="text-[10px] text-yellow-400/60">Ganancia</p>
-            <p className="text-xs font-semibold text-emerald-400">{formatMonto(propuesta.spread_ganancia)}</p>
+            <p className="text-xs font-semibold text-[#22C55E]">{formatMonto(propuesta.spread_ganancia)}</p>
           </div>
         </div>
       )}
 
       {/* Moneda origen (display) */}
       {!editing && propuesta.moneda_origen && propuesta.moneda_origen !== "CLP" && (
-        <p className="text-[10px] text-white/30">
+        <p className="text-[10px] text-[#BBB]">
           Moneda origen: {propuesta.monto_moneda_origen} {propuesta.moneda_origen}
         </p>
       )}
 
       {/* Low confidence warning */}
       {isLowConfidence && !editing && (
-        <p className="text-xs text-red-400/80 bg-red-500/10 rounded-lg px-3 py-1.5">
+        <p className="text-xs text-[#E8553E]/80 bg-[#FFF0EE] rounded-lg px-3 py-1.5">
           Confianza baja — revisa antes de aprobar
         </p>
       )}
@@ -292,42 +292,42 @@ export default function PropuestaCard({
         <div className="space-y-2.5">
           {/* Categoria tributaria */}
           <div>
-            <label className="text-[10px] text-white/40 mb-1 block">Categoria tributaria</label>
+            <label className="text-[10px] text-[#AAA] mb-1 block">Categoria tributaria</label>
             <select
               value={tipoEdit}
               onChange={(e) => setTipoEdit(e.target.value)}
-              className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400/50"
+              className="w-full rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-sm text-[#111] focus:outline-none focus:border-[#E8553E]"
             >
               {CATEGORIAS.map((c) => (
                 <option key={c.tipoDb} value={c.tipoDb}>{c.label}</option>
               ))}
             </select>
             {/* Tooltip */}
-            <p className="text-[10px] text-white/25 mt-1">{cat.tooltip}</p>
+            <p className="text-[10px] text-[#BBB] mt-1">{cat.tooltip}</p>
           </div>
 
           {/* Live IVA preview */}
           <div className="flex gap-2 text-center">
-            <div className="flex-1 rounded-lg bg-white/[0.03] border border-white/5 px-2 py-1.5">
-              <p className="text-[9px] text-white/30">Neto</p>
-              <p className="text-[11px] font-medium text-white/70">{formatMonto(editNeto)}</p>
+            <div className="flex-1 rounded-lg bg-[#F5F5F3] border border-[#EEE] px-2 py-1.5">
+              <p className="text-[9px] text-[#BBB]">Neto</p>
+              <p className="text-[11px] font-medium text-[#555]">{formatMonto(editNeto)}</p>
             </div>
-            <div className="flex-1 rounded-lg bg-white/[0.03] border border-white/5 px-2 py-1.5">
-              <p className="text-[9px] text-white/30">IVA {cat.tieneIva ? "19%" : "exento"}</p>
-              <p className="text-[11px] font-medium text-white/70">{formatMonto(editIva)}</p>
+            <div className="flex-1 rounded-lg bg-[#F5F5F3] border border-[#EEE] px-2 py-1.5">
+              <p className="text-[9px] text-[#BBB]">IVA {cat.tieneIva ? "19%" : "exento"}</p>
+              <p className="text-[11px] font-medium text-[#555]">{formatMonto(editIva)}</p>
             </div>
           </div>
 
           {/* Receptor/Pagador */}
           <div>
-            <label className="text-[10px] text-white/40 mb-1 block">Receptor / Pagador</label>
+            <label className="text-[10px] text-[#AAA] mb-1 block">Receptor / Pagador</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 placeholder="Nombre"
                 value={receptorNombre}
                 onChange={(e) => setReceptorNombre(e.target.value)}
-                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+                className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
               />
               <div className="w-32">
                 <input
@@ -339,14 +339,14 @@ export default function PropuestaCard({
                     if (receptorRut.trim() && validarRut(receptorRut))
                       setReceptorRut(formatRut(receptorRut));
                   }}
-                  className={`w-full rounded-xl bg-white/5 border px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 ${
+                  className={`w-full rounded-xl bg-[#F5F5F3] border px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E] ${
                     receptorRut.trim() && !validarRut(receptorRut)
-                      ? "border-red-500/50"
-                      : "border-white/10"
+                      ? "border-[#E8553E]"
+                      : "border-[#EEE]"
                   }`}
                 />
                 {receptorRut.trim() && !validarRut(receptorRut) && (
-                  <p className="text-[9px] text-red-400 mt-0.5">RUT invalido</p>
+                  <p className="text-[9px] text-[#E8553E] mt-0.5">RUT invalido</p>
                 )}
               </div>
             </div>
@@ -355,12 +355,12 @@ export default function PropuestaCard({
           {/* Moneda origen (for crypto/forex/p2p) */}
           {(cat.tipoDb === "registro_crypto" || cat.tipoDb === "forex" || cat.tipoDb === "transferencia_p2p") && (
             <div>
-              <label className="text-[10px] text-white/40 mb-1 block">Moneda origen (opcional)</label>
+              <label className="text-[10px] text-[#AAA] mb-1 block">Moneda origen (opcional)</label>
               <div className="flex gap-2">
                 <select
                   value={monedaOrigen}
                   onChange={(e) => setMonedaOrigen(e.target.value)}
-                  className="w-24 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-400/50"
+                  className="w-24 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] focus:outline-none focus:border-[#E8553E]"
                 >
                   {MONEDAS.map((m) => (
                     <option key={m} value={m}>{m}</option>
@@ -372,12 +372,12 @@ export default function PropuestaCard({
                     placeholder={`Monto en ${monedaOrigen}`}
                     value={montoMonedaOrigen}
                     onChange={(e) => setMontoMonedaOrigen(e.target.value)}
-                    className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+                    className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
                   />
                 )}
               </div>
               {monedaOrigen !== "CLP" && montoMonedaOrigen && totalNum > 0 && (
-                <p className="text-[9px] text-white/25 mt-1">
+                <p className="text-[9px] text-[#BBB] mt-1">
                   {formatMonto(totalNum)} CLP = {montoMonedaOrigen} {monedaOrigen}
                 </p>
               )}
@@ -390,7 +390,7 @@ export default function PropuestaCard({
             onChange={(e) => setNotas(e.target.value)}
             placeholder="Notas..."
             rows={2}
-            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 resize-none"
+            className="w-full rounded-xl bg-white/5 border border-[#EEE] px-3 py-2 text-sm text-white placeholder:text-[#BBB] focus:outline-none focus:border-blue-400/50 resize-none"
           />
 
           {/* Save / Cancel */}
@@ -398,13 +398,13 @@ export default function PropuestaCard({
             <button
               onClick={handleGuardarEdicion}
               disabled={loading}
-              className="flex-1 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-50 px-3 py-2 text-xs font-semibold text-white transition-colors"
+              className="flex-1 rounded-xl bg-[#E8553E] hover:bg-[#d44a35] disabled:opacity-50 px-3 py-2 text-xs font-semibold text-white transition-colors"
             >
               Guardar
             </button>
             <button
               onClick={() => setEditing(false)}
-              className="rounded-xl bg-white/10 hover:bg-white/15 px-3 py-2 text-xs text-white/70 transition-colors"
+              className="rounded-xl bg-[#F5F5F3] hover:bg-[#EEE] px-3 py-2 text-xs text-[#555] transition-colors"
             >
               Cancelar
             </button>
@@ -413,7 +413,7 @@ export default function PropuestaCard({
       ) : (
         <>
           {propuesta.notas && (
-            <p className="text-xs text-white/40 italic">{propuesta.notas}</p>
+            <p className="text-xs text-[#AAA] italic">{propuesta.notas}</p>
           )}
 
           {/* Client selector */}
@@ -430,7 +430,7 @@ export default function PropuestaCard({
                     setSelectedClienteId(e.target.value);
                   }
                 }}
-                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-400/50"
+                className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] focus:outline-none focus:border-[#E8553E]"
               >
                 <option value="">Sin cliente asignado</option>
                 {clientes.map((c) => (
@@ -449,14 +449,14 @@ export default function PropuestaCard({
                   placeholder="Nombre *"
                   value={newClienteNombre}
                   onChange={(e) => setNewClienteNombre(e.target.value)}
-                  className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+                  className="flex-1 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
                 />
                 <input
                   type="text"
                   placeholder="RUT"
                   value={newClienteRut}
                   onChange={(e) => setNewClienteRut(e.target.value)}
-                  className="w-28 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50"
+                  className="w-28 rounded-xl bg-[#F5F5F3] border border-[#EEE] px-3 py-2 text-xs text-[#111] placeholder:text-[#AAA] focus:outline-none focus:border-[#E8553E]"
                 />
               </div>
             )}
@@ -467,21 +467,21 @@ export default function PropuestaCard({
             <button
               onClick={handleAprobar}
               disabled={loading}
-              className="flex-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-50 px-3 py-2.5 text-xs font-semibold text-emerald-300 transition-colors"
+              className="flex-1 rounded-xl bg-[#E8553E] hover:bg-[#d44a35] disabled:opacity-50 px-3 py-2.5 text-xs font-semibold text-white transition-colors"
             >
               Aprobar
             </button>
             <button
               onClick={() => setEditing(true)}
               disabled={loading}
-              className="flex-1 rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-white/70 transition-colors"
+              className="flex-1 rounded-xl bg-[#F5F5F3] hover:bg-[#EEE] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#555] transition-colors"
             >
               Editar
             </button>
             <button
               onClick={handleDescartar}
               disabled={loading}
-              className="flex-1 rounded-xl bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-red-300/70 transition-colors"
+              className="flex-1 rounded-xl bg-[#F5F5F3] hover:bg-[#EEE] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#888] transition-colors"
             >
               Ignorar
             </button>
