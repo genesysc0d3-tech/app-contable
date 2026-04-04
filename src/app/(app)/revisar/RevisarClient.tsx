@@ -40,8 +40,10 @@ function classifyConfianza(p: Propuesta): "alta" | "media" | "baja" {
   return c >= ALTA ? "alta" : c >= MEDIA ? "media" : "baja";
 }
 
-function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction }: {
-  tipo: "alta" | "media" | "baja"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
+type OmitidosMap = Map<string, Propuesta[]>;
+
+function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap }: {
+  tipo: "alta" | "media" | "baja"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -97,7 +99,8 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction }: {
                   Esta propuesta necesita más datos antes de aprobar
                 </p>
               )}
-              <PropuestaCard propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction} />
+              <PropuestaCard propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction}
+                omitidosAnidados={omitidosMap.get(`${p.movimientos_raw.documento_id}|${p.movimientos_raw.descripcion}|${p.movimientos_raw.monto}`) ?? []} />
             </div>
           ))}
         </div>
@@ -110,7 +113,20 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
   group: DocumentGroup; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const pendientes = group.propuestas.filter((p) => p.estado === "pendiente");
+
+  const isFromOmitidos = (p: Propuesta) => p.notas?.startsWith("Agregado desde visor de omitidos");
+  const pendientes = group.propuestas.filter((p) => p.estado === "pendiente" && !isFromOmitidos(p));
+  const omitidosPendientes = group.propuestas.filter((p) => p.estado === "pendiente" && isFromOmitidos(p));
+
+  // Build map: "docId|descripcion|monto" -> omitidos for that combination
+  const omitidosMap: OmitidosMap = new Map();
+  for (const o of omitidosPendientes) {
+    const key = `${o.movimientos_raw.documento_id}|${o.movimientos_raw.descripcion}|${o.movimientos_raw.monto}`;
+    const arr = omitidosMap.get(key) ?? [];
+    arr.push(o);
+    omitidosMap.set(key, arr);
+  }
+
   const alta = pendientes.filter((p) => classifyConfianza(p) === "alta");
   const media = pendientes.filter((p) => classifyConfianza(p) === "media");
   const baja = pendientes.filter((p) => classifyConfianza(p) === "baja");
@@ -152,9 +168,9 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
             <div className="text-center text-[var(--muted-light)] text-xs py-4">Todo revisado</div>
           ) : (
             <>
-              <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={onAction} />
-              <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={onAction} />
-              <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={onAction} />
+              <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
+              <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
+              <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
             </>
           )}
         </div>

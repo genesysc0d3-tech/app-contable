@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import type { Tables } from "@/lib/database.types";
 import { validarRut, formatRut } from "@/lib/rut";
-import { CheckCircle, XCircle, PencilSimple, CurrencyBtc } from "@phosphor-icons/react";
+import { CheckCircle, XCircle, PencilSimple, CurrencyBtc, CaretRight } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import {
   aprobarPropuesta,
   descartarPropuesta,
   editarPropuesta,
   crearClienteDesdeRevisar,
+  devolverAOmitidos,
 } from "@/app/(app)/revisar/actions";
 
 type Propuesta = Tables<"propuestas_ia"> & {
@@ -23,6 +24,7 @@ interface PropuestaCardProps {
   clientes: ClienteResumen[];
   empresaId: string;
   onAction?: () => void;
+  omitidosAnidados?: Propuesta[];
 }
 
 interface CategoriaConfig {
@@ -64,7 +66,7 @@ function formatFecha(d: string): string {
   return `${dt.getDate()} ${meses[dt.getMonth()]}`;
 }
 
-export default function PropuestaCard({ propuesta, clientes, empresaId, onAction }: PropuestaCardProps) {
+export default function PropuestaCard({ propuesta, clientes, empresaId, onAction, omitidosAnidados = [] }: PropuestaCardProps) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -308,7 +310,90 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
               <XCircle size={16} /> Ignorar
             </button>
           </div>
+
+          {/* Omitidos anidados */}
+          {omitidosAnidados.length > 0 && (
+            <OmitidosAnidados omitidos={omitidosAnidados} onAction={onAction} />
+          )}
         </>
+      )}
+    </div>
+  );
+}
+
+function OmitidosAnidados({ omitidos, onAction }: { omitidos: Propuesta[]; onAction?: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  function formatFecha(d: string) {
+    const dt = new Date(d);
+    const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+    return `${dt.getDate()} ${meses[dt.getMonth()]}`;
+  }
+
+  async function handleAprobar(id: string) {
+    setLoadingId(id);
+    await aprobarPropuesta(id);
+    toast("Aprobado"); onAction?.(); setLoadingId(null);
+  }
+
+  async function handleIgnorar(id: string) {
+    setLoadingId(id);
+    await descartarPropuesta(id);
+    toast("Ignorado"); onAction?.(); setLoadingId(null);
+  }
+
+  async function handleDevolver(id: string) {
+    setLoadingId(id);
+    const result = await devolverAOmitidos(id);
+    if (result.ok) toast("Devuelto a omitidos");
+    else toast("Error al devolver", "error");
+    onAction?.(); setLoadingId(null);
+  }
+
+  return (
+    <div className="rounded-xl bg-[#FFF8ED] dark:bg-[#F59E0B]/5 border border-[#F59E0B]/20 p-2.5 space-y-2">
+      <button onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] font-medium w-full text-left">
+        <CaretRight size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
+        {omitidos.length} posible{omitidos.length !== 1 ? "s" : ""} duplicado{omitidos.length !== 1 ? "s" : ""} desde omitidos
+      </button>
+
+      {expanded && (
+        <div className="space-y-2 animate-fade-in">
+          {omitidos.map((o) => {
+            const mov = o.movimientos_raw;
+            const isLoading = loadingId === o.id;
+            return (
+              <div key={o.id} className="rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-[10px] space-y-1.5">
+                <div>
+                  <p className="text-[var(--foreground)] truncate">{mov.descripcion}</p>
+                  <div className="flex items-center gap-2 text-[var(--muted-light)] mt-0.5">
+                    <span>{formatFecha(mov.fecha)}</span>
+                    <span className={`tabular-nums ${mov.tipo_flujo === "entrada" ? "text-[#22C55E]" : "text-[#E8553E]"}`}>
+                      {mov.tipo_flujo === "entrada" ? "+" : "-"}${Math.round(mov.monto).toLocaleString("es-CL")}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button onClick={() => handleAprobar(o.id)} disabled={isLoading}
+                    className="btn-press flex-1 rounded-lg bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-2 py-1.5 text-[9px] font-semibold text-white transition-all duration-150">
+                    Aprobar
+                  </button>
+                  <button onClick={() => handleIgnorar(o.id)} disabled={isLoading}
+                    className="btn-press flex-1 rounded-lg bg-[var(--surface)] hover:bg-[var(--border)] disabled:opacity-50 px-2 py-1.5 text-[9px] text-[var(--muted)] transition-all duration-150">
+                    Ignorar
+                  </button>
+                  <button onClick={() => handleDevolver(o.id)} disabled={isLoading}
+                    className="btn-press flex-1 rounded-lg bg-[#FFF8ED] dark:bg-[#F59E0B]/10 hover:bg-[#FFF0D4] disabled:opacity-50 px-2 py-1.5 text-[9px] text-[#F59E0B] transition-all duration-150">
+                    Devolver
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

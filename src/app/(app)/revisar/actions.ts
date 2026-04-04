@@ -107,3 +107,33 @@ export async function aprobarTodas(
   revalidatePath("/revisar");
   return { ok: true, count: aprobadas };
 }
+
+export async function devolverAOmitidos(propuestaId: string) {
+  const supabase = await createClient();
+
+  // Get the propuesta + movimiento to delete
+  const { data: prop } = await supabase
+    .from("propuestas_ia")
+    .select("id, movimiento_id")
+    .eq("id", propuestaId)
+    .single();
+
+  if (!prop) return { error: "Propuesta no encontrada" };
+
+  // Delete propuesta first (FK), then movimiento
+  const { error: propErr } = await supabase
+    .from("propuestas_ia")
+    .delete()
+    .eq("id", propuestaId);
+
+  if (propErr) return { error: propErr.message };
+
+  await supabase
+    .from("movimientos_raw")
+    .delete()
+    .eq("id", prop.movimiento_id);
+
+  revalidatePath("/revisar");
+  revalidatePath("/subir");
+  return { ok: true };
+}
