@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { parseFecha } from "./fecha";
 import { validarRut, formatRut } from "../rut";
+import { clasificarNDocs } from "./ndoc-classifier";
 
 const CHUNK_SIZE = 50;
 const MAX_RETRIES = 3;
@@ -251,11 +252,45 @@ export async function procesarDocumento(
       }
     }
 
+    // Classify n_documento fields: transaction ID vs RUT/recipient
+    const itemsWithNDoc = movimientosParsed
+      .filter((m) => m.n_documento)
+      .map((m) => ({ n_documento: m.n_documento!, descripcion: m.descripcion }));
+
+    const ndocIsTransactionId = itemsWithNDoc.length > 0
+      ? await clasificarNDocs(itemsWithNDoc)
+      : new Map<string, boolean>();
+
+    // Also classify n_documento from existing DB records
+    const existingNDocs = (existentes ?? [])
+      .filter((e) => e.n_documento)
+      .map((e) => ({ n_documento: e.n_documento!, descripcion: e.descripcion }));
+
+    if (existingNDocs.length > 0) {
+      const existingClassified = await clasificarNDocs(existingNDocs);
+      for (const [k, v] of existingClassified) ndocIsTransactionId.set(k, v);
+    }
+
+    // Rebuild strict map using only actual transaction IDs
+    const existenteByStrictFiltered = new Map<string, ExistenteInfo>();
+    for (const e of existentes ?? []) {
+      if (e.n_documento && ndocIsTransactionId.get(e.n_documento)) {
+        const looseKey = `${e.fecha}|${e.monto}|${e.descripcion}`;
+        const doc = e.documentos_subidos as unknown as { nombre_archivo: string; created_at: string } | null;
+        existenteByStrictFiltered.set(`${looseKey}|${e.n_documento}`, {
+          id: e.id,
+          n_documento: e.n_documento,
+          doc_nombre: doc?.nombre_archivo ?? "Documento desconocido",
+          doc_fecha: doc?.created_at ?? "",
+          documento_id: e.documento_id,
+        });
+      }
+    }
+
     // Track intra-batch: n_doc counts and loose counts within this file
     const batchStrictSeen = new Map<string, { firstIndex: number; count: number }>();
     const batchLooseSeen = new Map<string, { firstIndex: number; count: number }>();
-    // Track same-person same-day transfers (type 6)
-    const personDayKey = new Map<string, number[]>(); // "nombre|fecha" -> indices
+    const personDayKey = new Map<string, number[]>();
 
     const indicesToKeep: number[] = [];
     let duplicadosSaltados = 0;
@@ -265,7 +300,9 @@ export async function procesarDocumento(
     for (let i = 0; i < movimientosParsed.length; i++) {
       const m = movimientosParsed[i];
       const looseKey = `${m.fecha}|${m.monto}|${m.descripcion}`;
-      const strictKey = m.n_documento ? `${looseKey}|${m.n_documento}` : null;
+      // Only use n_documento as strict key if classified as transaction ID
+      const isTransId = m.n_documento ? (ndocIsTransactionId.get(m.n_documento) ?? true) : false;
+      const strictKey = (m.n_documento && isTransId) ? `${looseKey}|${m.n_documento}` : null;
 
       let isDuplicate = false;
       let motivo = "";
@@ -275,10 +312,10 @@ export async function procesarDocumento(
       let indiceConflicto: number | undefined;
 
       if (strictKey) {
-        // Check against DB first
-        if (existenteByStrict.has(strictKey)) {
+        // Check against DB first (only transaction IDs, not RUTs)
+        if (existenteByStrictFiltered.has(strictKey)) {
           isDuplicate = true;
-          orig = existenteByStrict.get(strictKey)!;
+          orig = existenteByStrictFiltered.get(strictKey)!;
           tipo = "mismo_ndoc_otro_arch";
           motivo = `N° de transacción #${m.n_documento} ya existe en '${orig.doc_nombre}' — misma operación bancaria`;
         }
