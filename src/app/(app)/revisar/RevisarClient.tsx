@@ -67,7 +67,13 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction }: {
 
   return (
     <div className="rounded-xl bg-[var(--surface)] overflow-hidden">
-      <button onClick={() => setExpanded(!expanded)} className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-[var(--border)] transition-colors duration-200">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded(!expanded); }}
+        className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-[var(--border)] transition-colors duration-200 cursor-pointer"
+      >
         <CaretRight size={12} weight="bold" className={`text-[var(--muted-light)] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
         <span className="text-xs">{config.icon}</span>
         <span className={`text-xs font-medium ${config.color} flex-1 text-left`}>{config.label}</span>
@@ -77,7 +83,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction }: {
             {loading ? "..." : "Aprobar todas"}
           </button>
         )}
-      </button>
+      </div>
       {expanded && (
         <div className="px-3 pb-3 space-y-3 animate-fade-in">
           {sorted.map((p) => (
