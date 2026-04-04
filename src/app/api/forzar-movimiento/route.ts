@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { documento_id, fecha, descripcion, monto, tipo_flujo, origen } = body;
+  const { documento_id, fecha, descripcion, monto, tipo_flujo, origen, tipo_propuesto } = body;
 
   if (!documento_id || !descripcion || monto == null) {
     return NextResponse.json({ error: "Campos requeridos: documento_id, descripcion, monto" }, { status: 400 });
@@ -37,7 +37,8 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data, error } = await svc
+  // 1. Insert movimiento
+  const { data: movimiento, error: movError } = await svc
     .from("movimientos_raw")
     .insert({
       empresa_id: usuario.empresa_id,
@@ -51,9 +52,36 @@ export async function POST(request: Request) {
     .select("id")
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (movError) {
+    return NextResponse.json({ error: movError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, movimiento_id: data.id });
+  // 2. Create propuesta_ia with estado "aprobado"
+  const montoNum = Number(monto) || 0;
+  const tipoFinal = tipo_propuesto || "transferencia_p2p";
+  const tieneIva = tipoFinal === "boleta" || tipoFinal === "boleta_honorarios" || tipoFinal === "factura" || tipoFinal === "factura_afecta" || tipoFinal === "gasto" || tipoFinal === "gasto_egreso";
+  const montoNeto = tieneIva ? Math.round(montoNum / 1.19) : montoNum;
+  const iva = tieneIva ? montoNum - montoNeto : 0;
+
+  const { error: propError } = await svc
+    .from("propuestas_ia")
+    .insert({
+      empresa_id: usuario.empresa_id,
+      movimiento_id: movimiento.id,
+      tipo_propuesto: tipoFinal,
+      monto_neto: montoNeto,
+      iva,
+      total: montoNum,
+      confianza: 1.0,
+      estado: "aprobado",
+      notas: "Agregado manualmente desde visor de omitidos",
+    });
+
+  if (propError) {
+    // Rollback: delete the movimiento if propuesta fails
+    await svc.from("movimientos_raw").delete().eq("id", movimiento.id);
+    return NextResponse.json({ error: propError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, movimiento_id: movimiento.id });
 }
