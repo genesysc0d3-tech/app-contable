@@ -60,6 +60,8 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
   const [forcing, setForcing] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchLoading, setBatchLoading] = useState(false);
   const { toast } = useToast();
 
   const visibleDuplicados = duplicados.filter(
@@ -87,6 +89,58 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
     setForcing(null); setConfirmId(null);
   }
 
+  // Selectable items: non-info duplicados that are visible
+  const selectableKeys = visibleDuplicados
+    .map((dup) => {
+      const origIdx = duplicados.indexOf(dup);
+      const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
+      if (dupTipo === "multi_transfer_p2p") return null;
+      return { key: `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${origIdx}`, dup, origIdx };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const allSelected = selectableKeys.length > 0 && selectableKeys.every((s) => selected.has(s.key));
+  const selectedCount = selectableKeys.filter((s) => selected.has(s.key)).length;
+
+  function toggleSelect(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(selectableKeys.map((s) => s.key)));
+    }
+  }
+
+  async function handleBatchInsert() {
+    const items = selectableKeys.filter((s) => selected.has(s.key));
+    if (items.length === 0) return;
+    setBatchLoading(true);
+    const newRemoved = new Set(removed);
+    let successCount = 0;
+    for (const { key, dup } of items) {
+      try {
+        const res = await fetch("/api/forzar-movimiento", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }),
+        });
+        if (res.ok) { newRemoved.add(key); successCount++; }
+      } catch { /* skip failed */ }
+    }
+    setRemoved(newRemoved);
+    setSelected(new Set());
+    if (successCount > 0) toast(`${successCount} movimiento${successCount !== 1 ? "s" : ""} agregado${successCount !== 1 ? "s" : ""}`);
+    if (successCount < items.length) toast(`${items.length - successCount} fallaron`, "error");
+    setBatchLoading(false);
+  }
+
   return (
     <div className="mt-1.5 space-y-1.5">
       {/* Warning for false duplicates */}
@@ -106,6 +160,29 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
 
       {expanded && (
         <div className="space-y-1.5 animate-fade-in">
+          {/* Select all + batch action */}
+          {selectableKeys.length > 1 && (
+            <div className="flex items-center justify-between px-1">
+              <label className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="w-3 h-3 rounded accent-[#E8553E]"
+                />
+                Seleccionar todos
+              </label>
+              {selectedCount > 0 && (
+                <button
+                  onClick={handleBatchInsert}
+                  disabled={batchLoading}
+                  className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2.5 py-1 disabled:opacity-50 transition-colors"
+                >
+                  {batchLoading ? "Agregando..." : `Agregar seleccionados (${selectedCount})`}
+                </button>
+              )}
+            </div>
+          )}
           {visibleDuplicados.map((dup, visIdx) => {
             const origIdx = duplicados.indexOf(dup);
             const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${origIdx}`;
@@ -126,6 +203,14 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
               <div key={origIdx} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 animate-fade-in">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    {!isInfo && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(key)}
+                        onChange={() => toggleSelect(key)}
+                        className="w-3 h-3 rounded accent-[#E8553E] shrink-0"
+                      />
+                    )}
                     <IconComp size={12} weight="fill" className={`${iconColor} shrink-0`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[var(--foreground)] truncate">{dup.descripcion}</p>
