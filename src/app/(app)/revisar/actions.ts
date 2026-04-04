@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+const BATCH_SIZE = 50;
+
 export async function aprobarPropuesta(
   propuestaId: string,
   clienteId?: string | null
@@ -75,14 +77,33 @@ export async function editarPropuesta(
   return { ok: true };
 }
 
-export async function aprobarTodas(propuestaIds: string[]) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("propuestas_ia")
-    .update({ estado: "aprobado" })
-    .in("id", propuestaIds);
+export async function aprobarTodas(
+  propuestaIds: string[]
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
 
-  if (error) return { error: error.message };
+  const supabase = await createClient();
+  let aprobadas = 0;
+
+  // Batch in chunks of BATCH_SIZE to avoid PostgREST URL length limit
+  // (.in() puts all IDs in the query string — 659 UUIDs = 24KB, exceeds limit)
+  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
+    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+    const { error, data } = await supabase
+      .from("propuestas_ia")
+      .update({ estado: "aprobado" })
+      .in("id", batch)
+      .select("id");
+
+    if (error) {
+      return {
+        error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`,
+        count: aprobadas,
+      };
+    }
+    aprobadas += data?.length ?? 0;
+  }
+
   revalidatePath("/revisar");
-  return { ok: true, count: propuestaIds.length };
+  return { ok: true, count: aprobadas };
 }
