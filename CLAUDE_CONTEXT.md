@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #18, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #19, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -97,6 +97,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #16 | feature/fix-duplicados-ui | Visor de duplicados con detalle de origen y forzar inserción |
 | #17 | fix/criterio-duplicados | Criterio duplicados por N° documento + motivo + warning + deshacer |
 | #18 | fix/duplicados-mensaje | 6 tipos de duplicado con motivos específicos e íconos por severidad |
+| #19 | fix/propuestas-invalid-input | Fix: sanitizar "null" string en campos numéricos de Mistral |
 
 ---
 
@@ -282,4 +283,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#18 mergeados*
+*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#19 mergeados*
