@@ -59,13 +59,17 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
   const [expanded, setExpanded] = useState(false);
   const [forcing, setForcing] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [inserted, setInserted] = useState<Set<string>>(new Set());
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  if (duplicados.length === 0) return null;
+  const visibleDuplicados = duplicados.filter(
+    (dup, idx) => !removed.has(`${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`)
+  );
 
-  async function handleForceInsert(dup: DuplicadoDetalle) {
-    const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}`;
+  if (visibleDuplicados.length === 0) return null;
+
+  async function handleForceInsert(dup: DuplicadoDetalle, idx: number) {
+    const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`;
     setForcing(key);
     try {
       const res = await fetch("/api/forzar-movimiento", {
@@ -73,8 +77,12 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }),
       });
-      if (res.ok) { setInserted((prev) => new Set(prev).add(key)); toast("Movimiento agregado"); }
-      else toast("Error al agregar", "error");
+      if (res.ok) {
+        toast("Movimiento agregado");
+        setRemoved((prev) => new Set(prev).add(key));
+      } else {
+        toast("Error al agregar", "error");
+      }
     } catch { toast("Error al agregar", "error"); }
     setForcing(null); setConfirmId(null);
   }
@@ -92,15 +100,15 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
       <button onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] hover:text-[#D97706] transition-colors">
         <ArrowUUpLeft size={12} weight="bold" />
-        <span>Ver {duplicados.length} omitido{duplicados.length !== 1 ? "s" : ""}</span>
+        <span>Ver {visibleDuplicados.length} omitido{visibleDuplicados.length !== 1 ? "s" : ""}</span>
         <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
       </button>
 
       {expanded && (
         <div className="space-y-1.5 animate-fade-in">
-          {duplicados.map((dup, idx) => {
-            const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${idx}`;
-            const isInserted = inserted.has(key);
+          {visibleDuplicados.map((dup, visIdx) => {
+            const origIdx = duplicados.indexOf(dup);
+            const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}|${dup.n_documento ?? ""}|${origIdx}`;
             const isConfirming = confirmId === key;
             const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
             const isConfirmed = dupTipo === "otro_doc_confirmado" || dupTipo === "mismo_ndoc_mismo_arch" || dupTipo === "mismo_ndoc_otro_arch";
@@ -115,7 +123,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
               : `Este movimiento ya existe en ${dup.origen_documento_nombre}. Agregarlo puede crear duplicados contables.`;
 
             return (
-              <div key={idx} className={`rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 ${isInserted ? "opacity-50" : ""}`}>
+              <div key={origIdx} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 animate-fade-in">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     <IconComp size={12} weight="fill" className={`${iconColor} shrink-0`} />
@@ -128,7 +136,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
                       </div>
                     </div>
                   </div>
-                  {!isInserted && !isConfirming && !isInfo && (
+                  {!isConfirming && !isInfo && (
                     <button onClick={() => setConfirmId(key)} disabled={!!forcing}
                       className={`btn-press shrink-0 text-[9px] rounded px-2 py-1 transition-colors ${
                         isAmbiguous
@@ -138,7 +146,6 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
                       {btnLabel}
                     </button>
                   )}
-                  {isInserted && <span className="text-[9px] text-[#22C55E]">Agregado</span>}
                 </div>
 
                 <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>{dup.motivo}</p>
@@ -157,7 +164,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
                   }`}>
                     <p className="text-[var(--foreground)]">{confirmMsg}</p>
                     <div className="flex gap-1.5">
-                      <button onClick={() => handleForceInsert(dup)} disabled={!!forcing}
+                      <button onClick={() => handleForceInsert(dup, origIdx)} disabled={!!forcing}
                         className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">
                         {forcing === key ? "..." : "Confirmar"}
                       </button>
