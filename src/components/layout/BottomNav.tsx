@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { UploadSimple, CheckSquare, Users, ChartBar } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
-  { href: "/subir", label: "Subir", icon: "↑" },
-  { href: "/revisar", label: "Revisar", icon: "✓", badge: true },
-  { href: "/clientes", label: "Clientes", icon: "👤" },
-  { href: "/resumen", label: "Resumen", icon: "📊" },
+  { href: "/subir", label: "Subir", Icon: UploadSimple },
+  { href: "/revisar", label: "Revisar", Icon: CheckSquare, badge: true },
+  { href: "/clientes", label: "Clientes", Icon: Users },
+  { href: "/resumen", label: "Resumen", Icon: ChartBar },
 ] as const;
 
 export default function BottomNav() {
@@ -42,8 +43,8 @@ export default function BottomNav() {
   }, []);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-[0_-1px_12px_rgba(0,0,0,0.06)]">
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-4">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#1c1c1e] shadow-[0_-1px_12px_rgba(0,0,0,0.06)] dark:shadow-none dark:border-t dark:border-white/10">
+      <div className="flex justify-around items-center h-[72px] max-w-lg mx-auto px-4">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const showBadge = "badge" in item && item.badge && pendientes > 0;
@@ -55,13 +56,17 @@ export default function BottomNav() {
               className={`relative flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${
                 isActive
                   ? "text-[#E8553E]"
-                  : "text-[#AAAAAA] hover:text-[#888888]"
+                  : "text-[#AAAAAA] dark:text-white/40 hover:text-[#888] dark:hover:text-white/70"
               }`}
             >
-              <span className="text-xl">{item.icon}</span>
+              <item.Icon
+                size={28}
+                weight={isActive ? "fill" : "regular"}
+                className={isActive ? "animate-bounce-icon" : ""}
+              />
               <span className="text-[10px] font-medium">{item.label}</span>
               {showBadge && (
-                <span className="absolute -top-0.5 right-0 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#E8553E] text-[9px] font-bold text-white px-1">
+                <span className="absolute -top-0.5 right-0 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#E8553E] text-[9px] font-bold text-white px-1 animate-fade-in">
                   {pendientes > 99 ? "99+" : pendientes}
                 </span>
               )}

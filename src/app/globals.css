@@ -5,9 +5,27 @@
   --foreground: #111111;
   --accent: #E8553E;
   --accent-light: #FFF0EE;
+  --accent-hover: #d44a35;
   --card: #FFFFFF;
+  --card-shadow: 0 2px 12px rgba(0,0,0,0.06);
   --border: #EEEEEE;
   --muted: #888888;
+  --muted-light: #AAAAAA;
+  --surface: #F5F5F3;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --accent: #E8553E;
+  --accent-light: rgba(232,85,62,0.15);
+  --accent-hover: #f06a55;
+  --card: rgba(255,255,255,0.05);
+  --card-shadow: none;
+  --border: rgba(255,255,255,0.1);
+  --muted: rgba(255,255,255,0.5);
+  --muted-light: rgba(255,255,255,0.3);
+  --surface: rgba(255,255,255,0.05);
 }
 
 @theme inline {
@@ -18,6 +36,7 @@
   --color-card: var(--card);
   --color-border: var(--border);
   --color-muted: var(--muted);
+  --color-surface: var(--surface);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -26,10 +45,64 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, Arial, Helvetica, sans-serif;
+  transition: background-color 300ms ease, color 300ms ease;
 }
 
-/* Force light selects */
+.dark body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
 select option {
   background: #fff;
   color: #111;
+}
+.dark select option {
+  background: #1c1c1e;
+  color: #eee;
+}
+
+/* Tabular numbers for amounts */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Animations */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-out-right {
+  to { opacity: 0; transform: translateX(100px); }
+}
+@keyframes bounce-icon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 200ms ease-out;
+}
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+.animate-slide-out-right {
+  animation: slide-out-right 250ms ease-in forwards;
+}
+.animate-bounce-icon {
+  animation: bounce-icon 400ms ease;
+}
+
+/* Button press effect */
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Smooth collapse */
+.collapse-transition {
+  transition: grid-template-rows 300ms ease-in-out;
 }
