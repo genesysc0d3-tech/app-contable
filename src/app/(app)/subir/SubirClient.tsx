@@ -23,7 +23,6 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     fetchDocumentos();
   }, [fetchDocumentos]);
 
-  // Realtime: update individual documents in-place from payload
   useEffect(() => {
     const channel = supabase
       .channel("documentos-realtime")
@@ -65,7 +64,6 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
   const handleUploadComplete = useCallback(
     (result: UploadResult) => {
       if (result.success && result.documento) {
-        // Add optimistically — realtime INSERT will dedupe via id check
         setDocumentos((prev) => {
           const exists = prev.some((d) => d.id === result.documento!.id);
           return exists ? prev : [result.documento!, ...prev];
@@ -79,8 +77,8 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     <div className="flex-1 pb-20">
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Subir documentos</h1>
-          <p className="text-sm text-white/50 mt-1">
+          <h1 className="text-2xl font-bold text-[#111]">Subir documentos</h1>
+          <p className="text-sm text-[#888] mt-1">
             Cartolas, boletas, screenshots o chats
           </p>
         </div>
@@ -91,7 +89,7 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
         />
 
         <div>
-          <h2 className="text-lg font-semibold text-white/90 mb-3">
+          <h2 className="text-lg font-semibold text-[#111] mb-3">
             Historial
           </h2>
           <DocumentList documentos={documentos} />

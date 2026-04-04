@@ -34,7 +34,6 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
 
       setFiles((prev) => [...fileStatuses, ...prev]);
 
-      // Subir archivos válidos
       for (const fs of fileStatuses) {
         if (fs.status === "error") continue;
 
@@ -60,15 +59,12 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
 
         onUploadComplete?.(result);
 
-        // Auto-trigger AI processing for successful uploads
         if (result.success && result.documento) {
           fetch("/api/procesar-documento", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ documento_id: result.documento.id }),
-          }).catch(() => {
-            // Processing errors are tracked via realtime on progreso_ia
-          });
+          }).catch(() => {});
         }
       }
     },
@@ -108,33 +104,25 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
 
   const statusIcon = (status: FileStatus["status"]) => {
     switch (status) {
-      case "pending":
-        return "⏳";
-      case "uploading":
-        return "⏳";
-      case "success":
-        return "✓";
-      case "error":
-        return "✗";
+      case "pending": return "⏳";
+      case "uploading": return "⏳";
+      case "success": return "✓";
+      case "error": return "✗";
     }
   };
 
   const statusColor = (status: FileStatus["status"]) => {
     switch (status) {
-      case "uploading":
-        return "text-blue-400";
-      case "success":
-        return "text-emerald-400";
-      case "error":
-        return "text-red-400";
-      default:
-        return "text-white/50";
+      case "uploading": return "text-[#E8553E]";
+      case "success": return "text-[#22C55E]";
+      case "error": return "text-[#E8553E]";
+      default: return "text-[#888]";
     }
   };
 
   return (
     <div className="space-y-4">
-      {/* Zona drag & drop — solo visible en desktop */}
+      {/* Zona drag & drop — solo desktop */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -142,25 +130,25 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
         onClick={() => fileInputRef.current?.click()}
         className={`
           hidden md:flex flex-col items-center justify-center
-          rounded-2xl border-2 border-dashed cursor-pointer
+          rounded-[20px] border-2 border-dashed cursor-pointer
           transition-all duration-200 py-16 px-6
           ${
             isDragging
-              ? "border-blue-400 bg-blue-400/10"
-              : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
+              ? "border-[#E8553E] bg-[#FFF0EE]"
+              : "border-[#E8553E]/40 bg-[#FFF8F7] hover:border-[#E8553E] hover:bg-[#FFF0EE]"
           }
         `}
       >
         <div className="text-4xl mb-3">📄</div>
-        <p className="text-lg font-semibold text-white/90">
+        <p className="text-lg font-semibold text-[#111]">
           Arrastra archivos aquí
         </p>
-        <p className="text-sm text-white/50 mt-1">
+        <p className="text-sm text-[#888] mt-1">
           Excel, PDF, imágenes, CSV o chats de WhatsApp
         </p>
       </div>
 
-      {/* Botones de acción — siempre visibles */}
+      {/* Botones de acción */}
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -171,7 +159,7 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
               fileInputRef.current.click();
             }
           }}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 px-4 py-3.5 text-sm font-medium text-white/90 hover:bg-white/15 transition-colors"
+          className="flex items-center justify-center gap-2 rounded-[16px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] px-4 py-3.5 text-sm font-medium text-[#111] hover:shadow-[0_2px_16px_rgba(0,0,0,0.1)] transition-shadow"
         >
           <span>📷</span> Cámara
         </button>
@@ -185,7 +173,7 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
               fileInputRef.current.click();
             }
           }}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 px-4 py-3.5 text-sm font-medium text-white/90 hover:bg-white/15 transition-colors"
+          className="flex items-center justify-center gap-2 rounded-[16px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] px-4 py-3.5 text-sm font-medium text-[#111] hover:shadow-[0_2px_16px_rgba(0,0,0,0.1)] transition-shadow"
         >
           <span>📊</span> Archivos
         </button>
@@ -198,7 +186,7 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
               fileInputRef.current.click();
             }
           }}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 px-4 py-3.5 text-sm font-medium text-white/90 hover:bg-white/15 transition-colors"
+          className="flex items-center justify-center gap-2 rounded-[16px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] px-4 py-3.5 text-sm font-medium text-[#111] hover:shadow-[0_2px_16px_rgba(0,0,0,0.1)] transition-shadow"
         >
           <span>🖼️</span> Galería
         </button>
@@ -211,13 +199,12 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
               fileInputRef.current.click();
             }
           }}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 px-4 py-3.5 text-sm font-medium text-white/90 hover:bg-white/15 transition-colors"
+          className="flex items-center justify-center gap-2 rounded-[16px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] px-4 py-3.5 text-sm font-medium text-[#111] hover:shadow-[0_2px_16px_rgba(0,0,0,0.1)] transition-shadow"
         >
           <span>💬</span> WhatsApp
         </button>
       </div>
 
-      {/* Input file oculto */}
       <input
         ref={fileInputRef}
         type="file"
@@ -229,7 +216,7 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
 
       {/* Lista de archivos subidos */}
       {files.length > 0 && (
-        <div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 divide-y divide-white/10">
+        <div className="rounded-[20px] bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] divide-y divide-[#EEEEEE]">
           {files.map((fs, i) => (
             <div
               key={`${fs.file.name}-${i}`}
@@ -239,19 +226,17 @@ export default function FileUpload({ empresaId, onUploadComplete }: FileUploadPr
                 {statusIcon(fs.status)}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white/90 truncate">
-                  {fs.file.name}
-                </p>
+                <p className="text-sm text-[#111] truncate">{fs.file.name}</p>
                 {fs.error && (
-                  <p className="text-xs text-red-400 mt-0.5">{fs.error}</p>
+                  <p className="text-xs text-[#E8553E] mt-0.5">{fs.error}</p>
                 )}
                 {fs.status === "uploading" && (
-                  <div className="mt-1.5 h-1 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-blue-400 rounded-full animate-pulse w-2/3" />
+                  <div className="mt-1.5 h-1 rounded-full bg-[#EEEEEE] overflow-hidden">
+                    <div className="h-full bg-[#E8553E] rounded-full animate-pulse w-2/3" />
                   </div>
                 )}
               </div>
-              <span className="text-xs text-white/40 shrink-0">
+              <span className="text-xs text-[#888] shrink-0">
                 {(fs.file.size / 1024).toFixed(0)} KB
               </span>
             </div>
