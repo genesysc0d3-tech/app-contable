@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #23, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #25, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -102,6 +102,8 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #21 | fix/aprobar-todas | Fix: botón Aprobar todas no funcionaba por button anidado |
 | #22 | fix/aprobar-todas-bd | Fix: aprobarTodas en batches de 50 — 659 UUIDs excedía PostgREST |
 | #23 | fix/resumen-montos | Fix: montos inflados — Mistral extraía saldo como transacción |
+| #24 | feature/fix-resumen-montos | Fix: resumen filtra solo aprobados + limpieza saldos y datos prueba |
+| #25 | feature/fix-saldos-corruptos | Fix: descartar saldos bancarios >50% total abonos en processor |
 
 ---
 
@@ -288,4 +290,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#23 mergeados*
+*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#25 mergeados*
