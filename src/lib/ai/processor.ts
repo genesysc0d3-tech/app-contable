@@ -8,6 +8,7 @@ import type {
   MovimientoExtraido,
   PropuestaExtraida,
   ProgresoIA,
+  DuplicadoDetalle,
 } from "./types";
 import { parseFecha } from "./fecha";
 import { validarRut, formatRut } from "../rut";
@@ -216,29 +217,46 @@ export async function procesarDocumento(
       origen: m.origen,
     }));
 
+    // Fetch existing movimientos with their document info for duplicate detail
     const { data: existentes } = await supabase
       .from("movimientos_raw")
-      .select("fecha, monto, descripcion")
+      .select("id, fecha, monto, descripcion, documento_id, documentos_subidos(nombre_archivo, created_at)")
       .eq("empresa_id", empresaId);
 
-    const existenteSet = new Set(
-      (existentes ?? []).map(
-        (e: { fecha: string; monto: number; descripcion: string }) =>
-          `${e.fecha}|${e.monto}|${e.descripcion}`
-      )
-    );
+    const existenteMap = new Map<string, { id: string; doc_nombre: string; doc_fecha: string }>();
+    for (const e of existentes ?? []) {
+      const key = `${e.fecha}|${e.monto}|${e.descripcion}`;
+      const doc = e.documentos_subidos as unknown as { nombre_archivo: string; created_at: string } | null;
+      existenteMap.set(key, {
+        id: e.id,
+        doc_nombre: doc?.nombre_archivo ?? "Documento desconocido",
+        doc_fecha: doc?.created_at ?? "",
+      });
+    }
 
     const indicesToKeep: number[] = [];
     let duplicadosSaltados = 0;
+    const duplicadosDetalle: DuplicadoDetalle[] = [];
+    const seenKeys = new Set(existenteMap.keys());
 
     for (let i = 0; i < movimientosParsed.length; i++) {
       const m = movimientosParsed[i];
       const key = `${m.fecha}|${m.monto}|${m.descripcion}`;
-      if (existenteSet.has(key)) {
+      if (seenKeys.has(key)) {
         duplicadosSaltados++;
+        const orig = existenteMap.get(key);
+        duplicadosDetalle.push({
+          fecha: m.fecha,
+          descripcion: m.descripcion,
+          monto: m.monto,
+          tipo_flujo: m.tipo_flujo,
+          origen_movimiento_id: orig?.id ?? "",
+          origen_documento_nombre: orig?.doc_nombre ?? "Mismo lote",
+          origen_documento_fecha: orig?.doc_fecha ?? "",
+        });
       } else {
         indicesToKeep.push(i);
-        existenteSet.add(key); // prevent intra-batch duplicates too
+        seenKeys.add(key); // prevent intra-batch duplicates too
       }
     }
 
@@ -251,6 +269,7 @@ export async function procesarDocumento(
         total_lotes: totalLotes,
         movimientos_encontrados: totalMovsFound,
         duplicados_saltados: duplicadosSaltados,
+        duplicados_detalle: duplicadosDetalle,
       });
     }
 
@@ -340,6 +359,7 @@ export async function procesarDocumento(
           estado: "completado",
           movimientos_encontrados: allMovimientos.length,
           duplicados_saltados: duplicadosSaltados,
+          duplicados_detalle: duplicadosDetalle.length > 0 ? duplicadosDetalle : undefined,
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);

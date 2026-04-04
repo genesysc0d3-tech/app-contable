@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import type { DocumentoSubido } from "@/lib/upload";
-import type { ProgresoIA } from "@/lib/ai/types";
-import { FileText, FileXls, Image, ChatText, File } from "@phosphor-icons/react";
+import type { ProgresoIA, DuplicadoDetalle } from "@/lib/ai/types";
+import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft } from "@phosphor-icons/react";
+import { useToast } from "@/components/Toast";
 
 interface DocumentListProps {
   documentos: DocumentoSubido[];
@@ -29,21 +31,20 @@ function formatFechaCorta(dateStr: string): string {
   return `${d.getDate()} ${meses[d.getMonth()]}`;
 }
 
+function fmt(n: number): string {
+  return `$${Math.round(n).toLocaleString("es-CL")}`;
+}
+
 function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
   if (!progreso) return null;
-
-  if (progreso.estado === "completado") {
-    if (progreso.duplicados_saltados && progreso.duplicados_saltados > 0) {
-      return <p className="text-[10px] text-[#E8553E] mt-1">{progreso.duplicados_saltados} duplicados omitidos</p>;
-    }
-    return null;
-  }
 
   if (progreso.estado === "error") {
     return <p className="text-xs text-[#E8553E] mt-1 truncate">Error: {progreso.error}</p>;
   }
 
-  const { lote_actual, total_lotes, movimientos_encontrados, duplicados_saltados } = progreso;
+  if (progreso.estado === "completado") return null;
+
+  const { lote_actual, total_lotes, movimientos_encontrados } = progreso;
 
   return (
     <div className="mt-1.5">
@@ -60,8 +61,139 @@ function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
       </div>
       {movimientos_encontrados !== undefined && movimientos_encontrados > 0 && (
         <p className="text-[10px] text-[var(--muted-light)] mt-0.5">
-          {movimientos_encontrados} movimientos{duplicados_saltados ? ` · ${duplicados_saltados} duplicados` : ""}
+          {movimientos_encontrados} movimientos encontrados
         </p>
+      )}
+    </div>
+  );
+}
+
+function DuplicadoVisor({
+  duplicados,
+  documentoId,
+}: {
+  duplicados: DuplicadoDetalle[];
+  documentoId: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [forcing, setForcing] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [inserted, setInserted] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
+  if (duplicados.length === 0) return null;
+
+  async function handleForceInsert(dup: DuplicadoDetalle) {
+    const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}`;
+    setForcing(key);
+    try {
+      const res = await fetch("/api/forzar-movimiento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documento_id: documentoId,
+          fecha: dup.fecha,
+          descripcion: dup.descripcion,
+          monto: dup.monto,
+          tipo_flujo: dup.tipo_flujo,
+        }),
+      });
+      if (res.ok) {
+        setInserted((prev) => new Set(prev).add(key));
+        toast("Movimiento agregado");
+      } else {
+        toast("Error al agregar", "error");
+      }
+    } catch {
+      toast("Error al agregar", "error");
+    }
+    setForcing(null);
+    setConfirmId(null);
+  }
+
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] hover:text-[#D97706] transition-colors"
+      >
+        <ArrowUUpLeft size={12} weight="bold" />
+        <span>{duplicados.length} movimiento{duplicados.length !== 1 ? "s" : ""} ya existía{duplicados.length !== 1 ? "n" : ""} en otras cartolas</span>
+        <CaretDown
+          size={10}
+          weight="bold"
+          className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="mt-2 space-y-1.5 animate-fade-in">
+          {duplicados.map((dup) => {
+            const key = `${dup.fecha}|${dup.monto}|${dup.descripcion}`;
+            const isInserted = inserted.has(key);
+            const isConfirming = confirmId === key;
+
+            return (
+              <div
+                key={key}
+                className={`rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 ${isInserted ? "opacity-50" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[var(--foreground)] truncate">{dup.descripcion}</p>
+                    <div className="flex items-center gap-2 text-[var(--muted-light)] mt-0.5">
+                      <span>{formatFechaCorta(dup.fecha)}</span>
+                      <span className="tabular-nums">{fmt(dup.monto)}</span>
+                    </div>
+                  </div>
+                  {!isInserted && !isConfirming && (
+                    <button
+                      onClick={() => setConfirmId(key)}
+                      disabled={!!forcing}
+                      className="btn-press shrink-0 text-[9px] text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0] rounded px-2 py-1 transition-colors"
+                    >
+                      Agregar
+                    </button>
+                  )}
+                  {isInserted && (
+                    <span className="text-[9px] text-[#22C55E]">Agregado</span>
+                  )}
+                </div>
+
+                {/* Origin info */}
+                <p className="text-[var(--muted-light)] flex items-center gap-1">
+                  <Warning size={10} className="text-[#F59E0B] shrink-0" />
+                  En {dup.origen_documento_nombre}
+                  {dup.origen_documento_fecha && ` (${formatFechaCorta(dup.origen_documento_fecha)})`}
+                </p>
+
+                {/* Confirm dialog */}
+                {isConfirming && (
+                  <div className="bg-[var(--accent-light)] rounded-lg px-2.5 py-2 space-y-1.5 animate-fade-in">
+                    <p className="text-[var(--foreground)]">
+                      Este movimiento ya existe en {dup.origen_documento_nombre}. Agregarlo puede crear duplicados contables.
+                    </p>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => handleForceInsert(dup)}
+                        disabled={!!forcing}
+                        className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50"
+                      >
+                        {forcing === key ? "..." : "Confirmar"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="btn-press text-[9px] bg-[var(--surface)] text-[var(--muted)] rounded px-2 py-1"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -83,6 +215,8 @@ export default function DocumentList({ documentos }: DocumentListProps) {
         const badge = ESTADO_BADGE[doc.estado] ?? ESTADO_BADGE.subido;
         const IconComp = TIPO_ICON[doc.tipo] ?? FileText;
         const progreso = doc.progreso_ia as ProgresoIA | null;
+        const duplicados = progreso?.duplicados_detalle ?? [];
+        const dupCount = progreso?.duplicados_saltados ?? 0;
 
         return (
           <div key={doc.id} className="px-4 py-3 animate-fade-in">
@@ -99,7 +233,20 @@ export default function DocumentList({ documentos }: DocumentListProps) {
                 )}
               </div>
             </div>
+
             <ProgresoBar progreso={progreso} />
+
+            {/* Duplicate info */}
+            {doc.estado === "procesado" && dupCount > 0 && (
+              duplicados.length > 0 ? (
+                <DuplicadoVisor duplicados={duplicados} documentoId={doc.id} />
+              ) : (
+                <p className="text-[10px] text-[#F59E0B] mt-1 flex items-center gap-1">
+                  <ArrowUUpLeft size={10} weight="bold" />
+                  {dupCount} movimiento{dupCount !== 1 ? "s" : ""} ya existía{dupCount !== 1 ? "n" : ""} en otras cartolas
+                </p>
+              )
+            )}
           </div>
         );
       })}
