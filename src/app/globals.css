@@ -106,3 +106,48 @@ select option {
 .collapse-transition {
   transition: grid-template-rows 300ms ease-in-out;
 }
+
+/* Skeleton shimmer (replaces pulse) */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--border) 25%, rgba(255,255,255,0.4) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.dark .animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+  background-size: 200% 100%;
+}
+
+/* Card hover lift — desktop only via md: prefix in Tailwind */
+
+/* Check draw animation */
+@keyframes draw-check {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes scale-in {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes particle-burst {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-check-circle {
+  animation: scale-in 0.4s ease-out forwards;
+}
+.animate-check-draw {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: draw-check 0.35s ease-out 0.3s forwards;
+}
+.animate-particle {
+  animation: particle-burst 0.5s ease-out 0.5s forwards;
+  opacity: 0;
+}
+.animate-particle { animation-fill-mode: forwards; }

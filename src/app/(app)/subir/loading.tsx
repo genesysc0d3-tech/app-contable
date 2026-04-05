@@ -1,7 +1,7 @@
 export default function SubirLoading() {
   return (
     <div className="flex-1 pb-24">
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6 animate-pulse">
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-6 animate-shimmer">
         {/* Header */}
         <div>
           <div className="h-8 w-56 rounded-lg bg-[var(--border)]" />
