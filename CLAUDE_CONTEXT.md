@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #37, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #38, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -116,6 +116,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #35 | feature/ui-improvements | Sticky header, skeleton shimmer, hover lift, completion burst |
 | #36 | feature/fade-navigation | Fade-in navigation reemplaza skeleton loaders entre pestañas |
 | #37 | feature/ui-polish-v2 | Gráfico Chart.js premium + transición slide entre pestañas |
+| #38 | feature/client-cache | Caché Zustand para navegación instantánea entre pestañas |
 
 ---
 
@@ -302,4 +303,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 4 Abril 2026 · rama `dev` · PRs #1-#37 mergeados*
+*Última actualización: 5 Abril 2026 · rama `dev` · PRs #1-#38 mergeados*
