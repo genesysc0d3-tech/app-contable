@@ -56,7 +56,7 @@ function BarChart({
   const max = Math.max(...data.flatMap((d) => [d.ingresos, d.egresos]), 1);
 
   return (
-    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] p-4">
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200 p-4">
       <p className="text-xs text-[var(--muted)] mb-3">Últimos 6 meses</p>
       <div className="flex items-end gap-2 h-32">
         {data.map((d) => (
@@ -94,7 +94,7 @@ function TipoPieTable({ porTipo }: { porTipo: Record<string, { count: number; to
   if (entries.length === 0) return null;
 
   return (
-    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] overflow-hidden">
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden">
       <div className="px-4 py-2.5 border-b border-[var(--border)]">
         <p className="text-xs text-[var(--muted)]">Por tipo tributario</p>
       </div>
@@ -152,7 +152,7 @@ function BorradorF29({
   }
 
   return (
-    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] overflow-hidden">
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-[var(--surface)] transition-colors"
@@ -326,7 +326,7 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
       ) : propuestas.length === 0 ? (
         <p className="text-center text-[var(--muted-light)] text-xs py-8">Sin movimientos aprobados</p>
       ) : (
-        <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] overflow-hidden">
+        <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden">
           <div className="divide-y divide-[var(--border)]">
             {propuestas.map((p) => {
               const mov = p.movimientos_raw;

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
+import CompletionBurst from "@/components/CompletionBurst";
 import { aprobarTodas } from "./actions";
 import { useToast } from "@/components/Toast";
 import type { Tables } from "@/lib/database.types";
@@ -113,6 +114,10 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
   group: DocumentGroup; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showBurst, setShowBurst] = useState(false);
+  const [burstDone, setBurstDone] = useState(false);
+
+  const handleBurstDone = useCallback(() => setBurstDone(true), []);
 
   const isFromOmitidos = (p: Propuesta) => p.notas?.startsWith("Agregado desde visor de omitidos");
   const pendientes = group.propuestas.filter((p) => p.estado === "pendiente" && !isFromOmitidos(p));
@@ -136,7 +141,7 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
   const fecha = `${d.getDate()} ${meses[d.getMonth()]}`;
 
   return (
-    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none overflow-hidden">
+    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none overflow-hidden md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200">
       <button onClick={() => setExpanded(!expanded)}
         className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-[#FAFAFA] dark:hover:bg-white/5 transition-colors duration-200 border-b border-[var(--border)]">
         <CaretRight size={16} weight="bold" className={`text-[var(--muted-light)] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
@@ -167,15 +172,18 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
         </div>
       </button>
       {expanded && (
-        <div className="px-3 pb-3 pt-2 space-y-2 animate-fade-in">
+        <div className="px-3 pb-3 pt-2 space-y-2 animate-fade-in relative">
+          {showBurst && !burstDone && <CompletionBurst onDone={handleBurstDone} />}
           {pendientes.length === 0 ? (
             <div className="text-center text-[var(--muted-light)] text-xs py-4">Todo revisado</div>
           ) : (
-            <>
-              <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
-              <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
-              <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
-            </>
+            <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
+              <div className="space-y-2">
+                <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (pendientes.length <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (pendientes.length <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (pendientes.length <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -235,21 +243,24 @@ export default function RevisarClient({ propuestas, clientes, empresaId }: Revis
 
   return (
     <div className="flex-1 pb-24">
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[28px] font-extrabold text-[var(--foreground)]">Revisar</h1>
-            <p className="text-sm text-[var(--muted)] mt-0.5">
-              {totalPendientes} pendiente{totalPendientes !== 1 ? "s" : ""} en {groups.length} documento{groups.length !== 1 ? "s" : ""}
-            </p>
+      <div className="max-w-lg mx-auto px-4 space-y-4">
+        {/* Sticky header */}
+        <div className="sticky top-0 z-40 bg-[var(--background)] pt-6 pb-3 -mx-4 px-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-[28px] font-extrabold text-[var(--foreground)]">Revisar</h1>
+              <p className="text-sm text-[var(--muted)] mt-0.5">
+                {totalPendientes} pendiente{totalPendientes !== 1 ? "s" : ""} en {groups.length} documento{groups.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            {allHigh.length > 1 && (
+              <button onClick={handleAprobarTodas} disabled={loading}
+                className="btn-press flex items-center gap-1.5 rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150">
+                <CheckCircle size={16} weight="bold" />
+                {loading ? "Aprobando..." : `Aprobar todo (${allHigh.length})`}
+              </button>
+            )}
           </div>
-          {allHigh.length > 1 && (
-            <button onClick={handleAprobarTodas} disabled={loading}
-              className="btn-press flex items-center gap-1.5 rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150">
-              <CheckCircle size={16} weight="bold" />
-              {loading ? "Aprobando..." : `Aprobar todo (${allHigh.length})`}
-            </button>
-          )}
         </div>
 
         {allHigh.length > 1 && (

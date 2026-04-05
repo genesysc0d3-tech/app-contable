@@ -3,7 +3,7 @@ import SkeletonCard from "@/components/SkeletonCard";
 export default function RevisarLoading() {
   return (
     <div className="flex-1 pb-24">
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 animate-pulse">
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 animate-shimmer">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

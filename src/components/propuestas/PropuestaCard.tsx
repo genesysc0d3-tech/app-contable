@@ -146,7 +146,7 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
   const inputCls = "w-full rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-light)] focus:outline-none focus:border-[#E8553E] transition-colors";
 
   return (
-    <div className={`rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none p-5 space-y-3 transition-all duration-250 ${
+    <div className={`rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none p-5 space-y-3 transition-all duration-200 md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] ${
       dismissed ? "animate-slide-out-right" : "animate-fade-in"
     } ${isLowConfidence ? "border border-[#E8553E]/30" : ""} ${omitidosAnidados.length > 0 ? "border-l-[3px] border-l-[#F59E0B]" : ""}`}>
 
