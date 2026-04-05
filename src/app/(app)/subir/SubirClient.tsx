@@ -8,22 +8,35 @@ import DocumentList from "@/components/upload/DocumentList";
 import { getDocumentosRecientes, uploadDocumento } from "@/lib/upload";
 import type { DocumentoSubido } from "@/lib/upload";
 import { useToast } from "@/components/Toast";
+import { useAppStore } from "@/store/appStore";
 
 interface SubirClientProps {
   empresaId: string;
 }
 
 export default function SubirClient({ empresaId }: SubirClientProps) {
-  const [documentos, setDocumentos] = useState<DocumentoSubido[]>([]);
+  const cached = useAppStore((s) => s.documentos);
+  const setStoreDocumentos = useAppStore((s) => s.setDocumentos);
+  const updateStoreDoc = useAppStore((s) => s.updateDocumento);
+  const addStoreDoc = useAppStore((s) => s.addDocumento);
+
+  const [documentos, setDocumentos] = useState<DocumentoSubido[]>(cached.data ?? []);
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
 
   const fetchDocumentos = useCallback(async () => {
     const docs = await getDocumentosRecientes(empresaId);
     setDocumentos(docs);
-  }, [empresaId]);
+    setStoreDocumentos(docs);
+  }, [empresaId, setStoreDocumentos]);
 
-  useEffect(() => { fetchDocumentos(); }, [fetchDocumentos]);
+  useEffect(() => {
+    if (cached.data && cached.isFresh()) {
+      setDocumentos(cached.data);
+    } else {
+      fetchDocumentos();
+    }
+  }, []);
 
   useEffect(() => {
     const channel = supabase
@@ -32,10 +45,12 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
         (payload) => {
           const updated = payload.new as DocumentoSubido;
           setDocumentos((prev) => prev.map((doc) => (doc.id === updated.id ? updated : doc)));
+          updateStoreDoc(updated);
         })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
         (payload) => {
           const inserted = payload.new as DocumentoSubido;
+          addStoreDoc(inserted);
           setDocumentos((prev) => {
             const exists = prev.some((d) => d.id === inserted.id);
             return exists ? prev : [inserted, ...prev];

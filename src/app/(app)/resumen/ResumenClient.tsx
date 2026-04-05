@@ -9,6 +9,7 @@ import {
 } from "./actions";
 import { FilePdf, ShareNetwork, CaretRight } from "@phosphor-icons/react";
 import LineChart from "@/components/charts/LineChart";
+import { useAppStore } from "@/store/appStore";
 
 interface ResumenClientProps {
   empresaId: string;
@@ -435,6 +436,14 @@ export default function ResumenClient({
   const [resumen, setResumen] = useState<ResumenMes>(initialResumen);
   const [historico, setHistorico] = useState(initialHistorico);
   const [loading, setLoading] = useState(false);
+  const setStoreResumen = useAppStore((s) => s.setResumen);
+  const setStoreHistorico = useAppStore((s) => s.setHistorico);
+
+  // Sync to store
+  useEffect(() => {
+    setStoreResumen(initialResumen);
+    setStoreHistorico(initialHistorico);
+  }, [initialResumen, initialHistorico, setStoreResumen, setStoreHistorico]);
 
   useEffect(() => {
     if (mes === initialMes && anio === initialAnio) return;

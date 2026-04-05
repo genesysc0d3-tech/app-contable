@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Tables } from "@/lib/database.types";
 import { formatRut, validarRut } from "@/lib/rut";
 import { crearCliente, editarCliente, eliminarCliente } from "./actions";
 import { PencilSimple, Trash, Plus, Users } from "@phosphor-icons/react";
+import { useAppStore } from "@/store/appStore";
 
 type Cliente = Tables<"clientes"> & { movimientos_count: number };
 
@@ -98,6 +99,9 @@ export default function ClientesClient({ clientes, empresaId }: ClientesClientPr
   const [showForm, setShowForm] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | undefined>();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const setClientesList = useAppStore((s) => s.setClientesList);
+
+  useEffect(() => { setClientesList(clientes); }, [clientes, setClientesList]);
 
   const filtered = clientes.filter((c) => {
     const q = search.toLowerCase();
