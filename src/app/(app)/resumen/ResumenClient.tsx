@@ -8,6 +8,7 @@ import {
   getPropuestasAprobadas,
 } from "./actions";
 import { FilePdf, ShareNetwork, CaretRight } from "@phosphor-icons/react";
+import LineChart from "@/components/charts/LineChart";
 
 interface ResumenClientProps {
   empresaId: string;
@@ -48,46 +49,7 @@ function Card({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function BarChart({
-  data,
-}: {
-  data: { mes: number; anio: number; ingresos: number; egresos: number }[];
-}) {
-  const max = Math.max(...data.flatMap((d) => [d.ingresos, d.egresos]), 1);
-
-  return (
-    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none border border-[var(--border)] md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200 p-4">
-      <p className="text-xs text-[var(--muted)] mb-3">Últimos 6 meses</p>
-      <div className="flex items-end gap-2 h-32">
-        {data.map((d) => (
-          <div key={`${d.anio}-${d.mes}`} className="flex-1 flex flex-col items-center gap-1">
-            <div className="w-full flex gap-0.5 items-end" style={{ height: "100px" }}>
-              <div
-                className="flex-1 bg-[#22C55E] rounded-t"
-                style={{ height: `${(d.ingresos / max) * 100}%`, minHeight: d.ingresos > 0 ? "2px" : 0 }}
-              />
-              <div
-                className="flex-1 bg-[#E8553E]/50 rounded-t"
-                style={{ height: `${(d.egresos / max) * 100}%`, minHeight: d.egresos > 0 ? "2px" : 0 }}
-              />
-            </div>
-            <span className="text-[9px] text-[var(--muted-light)]">
-              {MESES[d.mes - 1]?.slice(0, 3)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-4 mt-2 justify-center">
-        <span className="text-[10px] text-[var(--muted-light)] flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-[#22C55E]" /> Ingresos
-        </span>
-        <span className="text-[10px] text-[var(--muted-light)] flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-[#E8553E]/50" /> Egresos
-        </span>
-      </div>
-    </div>
-  );
-}
+// BarChart replaced by LineChart component
 
 function TipoPieTable({ porTipo }: { porTipo: Record<string, { count: number; total: number }> }) {
   const entries = Object.entries(porTipo).sort((a, b) => b[1].total - a[1].total);
@@ -544,7 +506,7 @@ export default function ResumenClient({
             />
 
             {/* Bar chart */}
-            <BarChart data={historico} />
+            <LineChart data={historico} />
 
             {/* Por tipo */}
             <TipoPieTable porTipo={resumen.porTipo} />

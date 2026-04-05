@@ -107,13 +107,13 @@ select option {
   transition: grid-template-rows 300ms ease-in-out;
 }
 
-/* Page transition fade */
+/* Page transition fade + slide */
 @keyframes page-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .animate-page-in {
-  animation: page-in 150ms ease both;
+  animation: page-in 300ms ease both;
 }
 
 /* Skeleton shimmer (replaces pulse) */
