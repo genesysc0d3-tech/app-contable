@@ -1,5 +1,6 @@
 import { requireActiveEmpresa } from "@/lib/dal";
 import { getResumenMes, getHistorico6Meses } from "./actions";
+import PageTransition from "@/components/PageTransition";
 import ResumenClient from "./ResumenClient";
 
 export default async function ResumenPage() {
@@ -14,13 +15,15 @@ export default async function ResumenPage() {
   ]);
 
   return (
-    <ResumenClient
-      empresaId={usuario.empresa_id}
-      empresaNombre={usuario.empresas.razon_social}
-      initialResumen={resumen}
-      initialHistorico={historico}
-      initialMes={mes}
-      initialAnio={anio}
-    />
+    <PageTransition>
+      <ResumenClient
+        empresaId={usuario.empresa_id}
+        empresaNombre={usuario.empresas.razon_social}
+        initialResumen={resumen}
+        initialHistorico={historico}
+        initialMes={mes}
+        initialAnio={anio}
+      />
+    </PageTransition>
   );
 }
