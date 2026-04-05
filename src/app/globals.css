@@ -107,6 +107,15 @@ select option {
   transition: grid-template-rows 300ms ease-in-out;
 }
 
+/* Page transition fade */
+@keyframes page-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-page-in {
+  animation: page-in 150ms ease both;
+}
+
 /* Skeleton shimmer (replaces pulse) */
 @keyframes shimmer {
   0% { background-position: -200% 0; }

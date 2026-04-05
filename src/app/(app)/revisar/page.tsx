@@ -1,5 +1,6 @@
 import { requireActiveEmpresa } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
+import PageTransition from "@/components/PageTransition";
 import RevisarClient from "./RevisarClient";
 
 export default async function RevisarPage() {
@@ -20,10 +21,10 @@ export default async function RevisarPage() {
   ]);
 
   return (
-    <RevisarClient
+    <PageTransition><RevisarClient
       propuestas={propuestas ?? []}
       clientes={clientes ?? []}
       empresaId={usuario.empresa_id}
-    />
+    /></PageTransition>
   );
 }

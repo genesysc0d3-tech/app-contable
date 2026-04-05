@@ -1,5 +1,6 @@
 import { requireActiveEmpresa } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
+import PageTransition from "@/components/PageTransition";
 import ClientesClient from "./ClientesClient";
 
 export default async function ClientesPage() {
@@ -21,9 +22,11 @@ export default async function ClientesPage() {
   }));
 
   return (
-    <ClientesClient
-      clientes={clientesConCount}
-      empresaId={usuario.empresa_id}
-    />
+    <PageTransition>
+      <ClientesClient
+        clientes={clientesConCount}
+        empresaId={usuario.empresa_id}
+      />
+    </PageTransition>
   );
 }
