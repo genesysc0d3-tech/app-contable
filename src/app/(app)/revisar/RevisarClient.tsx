@@ -157,7 +157,11 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
           </div>
         </div>
         <div className="flex gap-1.5 shrink-0">
-          {group.pendientes > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-light)] text-[#E8553E] font-medium tabular-nums">{group.pendientes}</span>}
+          {group.pendientes > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-light)] text-[#E8553E] font-medium tabular-nums">
+              {group.pendientes}{omitidosPendientes.length > 0 && <span className="text-[#F59E0B]"> +{omitidosPendientes.length}</span>}
+            </span>
+          )}
           {group.aprobados > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#ECFDF5] dark:bg-[#22C55E]/15 text-[#22C55E] font-medium tabular-nums">{group.aprobados}</span>}
           {group.descartados > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--muted-light)] font-medium tabular-nums">{group.descartados}</span>}
         </div>

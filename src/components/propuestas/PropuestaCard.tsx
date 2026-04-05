@@ -148,7 +148,7 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
   return (
     <div className={`rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none p-5 space-y-3 transition-all duration-250 ${
       dismissed ? "animate-slide-out-right" : "animate-fade-in"
-    } ${isLowConfidence ? "border border-[#E8553E]/30" : ""}`}>
+    } ${isLowConfidence ? "border border-[#E8553E]/30" : ""} ${omitidosAnidados.length > 0 ? "border-l-[3px] border-l-[#F59E0B]" : ""}`}>
 
       {/* Header */}
       <div className="flex items-center justify-between">
