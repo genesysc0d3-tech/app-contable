@@ -5,6 +5,7 @@ import type { Tables } from "@/lib/database.types";
 import { validarRut, formatRut } from "@/lib/rut";
 import { CheckCircle, XCircle, PencilSimple, CurrencyBtc, CaretRight } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
+import { useAppStore } from "@/store/appStore";
 import {
   aprobarPropuesta,
   descartarPropuesta,
@@ -68,6 +69,7 @@ function formatFecha(d: string): string {
 
 export default function PropuestaCard({ propuesta, clientes, empresaId, onAction, omitidosAnidados = [] }: PropuestaCardProps) {
   const { toast } = useToast();
+  const invalidateResumen = useAppStore((s) => s.invalidateResumen);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -110,6 +112,7 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
       if (res.ok && res.cliente) clienteId = res.cliente.id;
     }
     await aprobarPropuesta(propuesta.id, clienteId);
+    invalidateResumen();
     toast("Aprobado");
     setDismissed(true);
     setTimeout(() => onAction?.(), 250);
@@ -119,6 +122,7 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
   async function handleDescartar() {
     setLoading(true);
     await descartarPropuesta(propuesta.id);
+    invalidateResumen();
     toast("Ignorado");
     setDismissed(true);
     setTimeout(() => onAction?.(), 250);

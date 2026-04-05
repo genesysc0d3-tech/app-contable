@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import CompletionBurst from "@/components/CompletionBurst";
 import { aprobarTodas } from "./actions";
 import { useToast } from "@/components/Toast";
+import { useAppStore } from "@/store/appStore";
 import type { Tables } from "@/lib/database.types";
 import { CaretRight, FileText, CheckCircle } from "@phosphor-icons/react";
 
@@ -195,6 +196,15 @@ export default function RevisarClient({ propuestas, clientes, empresaId }: Revis
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const setPropuestas = useAppStore((s) => s.setPropuestas);
+  const setRevisarClientes = useAppStore((s) => s.setRevisarClientes);
+  const invalidateResumen = useAppStore((s) => s.invalidateResumen);
+
+  // Sync server data to store
+  useEffect(() => {
+    setPropuestas(propuestas);
+    setRevisarClientes(clientes);
+  }, [propuestas, clientes, setPropuestas, setRevisarClientes]);
 
   const groups = useMemo(() => {
     const map = new Map<string, DocumentGroup>();
@@ -226,6 +236,7 @@ export default function RevisarClient({ propuestas, clientes, empresaId }: Revis
     } else {
       toast(`${result.count} aprobadas`);
     }
+    invalidateResumen();
     router.refresh();
     setLoading(false);
   }
