@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #38, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #39, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -117,6 +117,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #36 | feature/fade-navigation | Fade-in navigation reemplaza skeleton loaders entre pestañas |
 | #37 | feature/ui-polish-v2 | Gráfico Chart.js premium + transición slide entre pestañas |
 | #38 | feature/client-cache | Caché Zustand para navegación instantánea entre pestañas |
+| #39 | feature/n8n-processing | Migrar procesamiento de cartolas a n8n webhook |
 
 ---
 
@@ -250,12 +251,12 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
       ↓
 3. "Subir todo" → Supabase Storage + registro BD
       ↓
-4. POST /api/procesar-documento → after() mantiene función viva
+4. POST /api/procesar-documento → webhook a n8n en Railway
       ↓
-5. Si imagen → Mistral OCR (mistral-ocr-latest) → texto estructurado
-   Si grupo imágenes → OCR + agrupación inteligente por operación
+5. n8n descarga archivo de Storage, parsea Excel/CSV
+   Si imagen → Mistral OCR (mistral-ocr-latest) → texto estructurado
       ↓
-6. Mistral Small extrae movimientos (chunking 50, paralelo 3, retry 3)
+6. n8n: Mistral Small extrae movimientos (chunking 50, retry 3)
       ↓
 7. Detección de duplicados (fecha+monto+descripción)
       ↓
@@ -278,8 +279,10 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
 
 - **Production (main):** `app-contable-rho.vercel.app` — solo Initial commit
 - **Preview (dev):** se genera automáticamente en cada push a dev
-- **Limite:** 60s Vercel Hobby — procesamiento IA cabe para ~600 tx
-- **Para 1000+ tx:** migrar procesamiento a n8n webhook
+- **Procesamiento:** migrado a n8n webhook (sin límite de tiempo)
+- **n8n workflow ID:** rZoZmdAAW8csRrjU (activo)
+- **Webhook:** https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento
+- **Env var Vercel:** N8N_WEBHOOK_URL (pendiente configurar en dashboard)
 
 ---
 
@@ -303,4 +306,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 5 Abril 2026 · rama `dev` · PRs #1-#38 mergeados*
+*Última actualización: 5 Abril 2026 · rama `dev` · PRs #1-#39 mergeados*
