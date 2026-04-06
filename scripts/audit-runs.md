@@ -280,3 +280,155 @@ subscription no está detectando el cambio de estado a "procesado".
 - **0 omitidos** — ningún movimiento descartado por RUT/heurística
 - **Solo 2 tipos**: desaparecieron factura_afecta y no_comercial (estaban en todos los runs 1-6)
 - Ingresos y egresos ambos ~20-30% bajo el esperado — probable tipo_flujo invertido en varios chunks
+
+---
+
+## RUN 8 — 6 Abril 2026 (con finish_reason audit)
+- **Movimientos**: 645
+- **Propuestas**: 645 (1:1 ✅)
+- **Clientes**: 29
+- **Audit chunks**: 7
+
+### Por tipo
+| Tipo | Total | Conf avg |
+|---|---|---|
+| transferencia_p2p | 629 | 0.95 |
+| gasto_egreso | 15 | 0.95 |
+| factura_afecta | 1 | 0.80 |
+
+### Montos
+| Métrica | Valor |
+|---|---|
+| Ingresos | $2,616,341,079 ⚠️ saldo de vuelta |
+| Egresos | $39,061,019 |
+
+### Audit chunks (finish_reason + response_length)
+| Chunk | Movs | finish | resp_len | tokens_out |
+|---|---|---|---|---|
+| 0 | 87 | stop | 55,474 | 21,269 |
+| 1 | 100 | stop | 65,566 | 24,289 |
+| 2 | 100 | stop | 62,993 | 24,115 |
+| 3 | 100 | stop | 66,620 | 24,164 |
+| 4 | 100 | stop | 65,785 | 24,678 |
+| 5 | 100 | stop | 66,741 | 24,219 |
+| 6 | 86 | stop | 57,313 | 21,015 |
+
+### Hallazgos clave RUN 8
+- **finish_reason=stop en TODOS los chunks** — NO hay truncation por max_tokens
+- **tokens_output ~21-24K por chunk** — cerca del límite típico pero Mistral termina con "stop"
+- **RUN 7 chunk 2 (18 movs) NO fue por length** — Mistral "decidió" parar antes. Bug distinto: respuesta incompleta con finish="stop". Posible: el modelo generó `"movimientos": [...18 items...]` y luego cerró el JSON prematuramente.
+- **Saldo corrupto volvió** ($2.6B) — intermitente
+- **645 movs**: consistente con rango alto (644-646) de runs previos
+
+---
+
+## RUN 9 — 6 Abril 2026
+- **Movimientos**: 643
+- **Propuestas**: 644 (+1 extra)
+- **Clientes**: 29
+- **Audit chunks**: 7
+
+### Por tipo
+| Tipo | Total | Conf avg |
+|---|---|---|
+| transferencia_p2p | 622 | 0.94 |
+| gasto_egreso | 19 | 0.94 |
+| no_comercial | 2 | 0.95 |
+| factura_afecta | 1 | 0.80 |
+
+### Montos
+| Métrica | Valor |
+|---|---|
+| Ingresos | $3,908,719,986 ⚠️ saldo de vuelta |
+| Egresos | $32,905,289 |
+
+### Audit chunks
+| Chunk | Movs | finish | resp_len | tokens_out |
+|---|---|---|---|---|
+| 0 | 87 | stop | 48,689 | 19,436 |
+| 1 | 100 | stop | 56,766 | 21,489 |
+| 2 | 100 | stop | 66,431 | 25,312 |
+| 3 | 99 | stop | 65,409 | 24,299 |
+| 4 | 100 | stop | 63,987 | 23,279 |
+| 5 | 100 | stop | 62,372 | 22,984 |
+| 6 | 86 | stop | 44,348 | 18,297 |
+
+### Hallazgos RUN 9
+- Todos finish=stop, consistente con RUN 8 — chunks completos
+- Chunk 3 con 99 en vez de 100 (pequeña variación dentro de chunks medios)
+- +1 propuesta extra (644 props vs 643 movs) — doble propuesta en algún mov
+- Confianza mostró variación 0.80-0.95 (p2p y gasto bajaron a 0.94 avg por primera vez ligeramente)
+- Saldo corrupto volvió
+- Egresos $32.9M — más bajo aún que RUN 7 ($34M), consistente con tipo_flujo invertido
+
+---
+
+## RUN 10 — 6 Abril 2026 (final)
+- **Movimientos**: 642
+- **Propuestas**: 643 (+1 extra)
+- **Clientes**: 29
+- **Audit chunks**: 7
+
+### Por tipo
+| Tipo | Total | Conf avg |
+|---|---|---|
+| transferencia_p2p | 628 | 0.95 |
+| gasto_egreso | 12 | 0.95 |
+| no_comercial | 2 | 0.95 |
+| factura_afecta | 1 | 0.85 |
+
+### Montos
+| Métrica | Valor |
+|---|---|
+| Ingresos | $3,902,449,281 ⚠️ saldo |
+| Egresos | $39,061,019 |
+
+### Audit chunks
+| Chunk | Movs | finish | resp_len | tokens_out |
+|---|---|---|---|---|
+| 0 | 87 | stop | 58,576 | 22,475 |
+| 1 | 100 | stop | 57,998 | 21,457 |
+| 2 | 99 | stop | 65,981 | 25,174 |
+| 3 | 99 | stop | 65,432 | 24,309 |
+| 4 | 100 | stop | 56,814 | 21,645 |
+| 5 | 99 | stop | 64,989 | 24,263 |
+| 6 | 87 | stop | 49,393 | 18,921 |
+
+---
+
+## RESUMEN FINAL RUN 1-10
+
+| RUN | Movs | Props | Clientes | Ingresos | Egresos | Saldo? |
+|---|---|---|---|---|---|---|
+| 1 | 642 | 642 | 29 | $2.6B | $37M | sí |
+| 2 | 644 | 646 | 29 | $5.1B | $39M | sí |
+| 3 | 634 | 634 | 38 | $2.6B | $42M | sí |
+| 4 | 635 | 636 | 29 | $2.6B | $42M | sí |
+| 5 | 644 | 645 | 38 | **$37M** | $43M | **no** ✅ |
+| 6 | 641 | 641 | 29 | $3.9B | $42M | sí |
+| 7 | 563 | 563 | 24 | **$35M** | $34M | **no** ✅ |
+| 8 | 645 | 645 | 29 | $2.6B | $39M | sí |
+| 9 | 643 | 644 | 29 | $3.9B | $33M | sí |
+| 10 | 642 | 643 | 29 | $3.9B | $39M | sí |
+
+### Estadísticas
+- **Movs**: rango 563-645 (variación 13%, mediana ~643)
+- **Propuestas**: casi siempre 1:1, ocasional +1 extra
+- **Saldo corrupto**: 8/10 runs ❌ (bug no resuelto)
+- **Runs limpias (sin saldo)**: RUN 5 y RUN 7 — ambas con ingresos ~$35-37M (cerca del real $50M pero bajo)
+- **Egresos**: rango $32.9M-$43M (variación 30%, vs esperado $51M)
+- **finish_reason**: 14/14 chunks en RUN 8-10 = "stop", confirmado sin truncation por length
+- **Confianza**: casi siempre 0.95, rarísimo 0.80-0.85
+
+### Conclusiones del audit
+1. **Saldo corrupto (80% de runs)** — bug principal. Mistral extrae "Saldo diario" como movimiento. Filtro >50% falla porque saldo domina. **Requiere fix**: filtrar la columna saldo antes del TSV o detectar línea-saldo por patrón.
+2. **tipo_flujo invertido** — incluso en runs limpias (5 y 7), ingresos quedan bajos y egresos dispares. Mistral confunde "Depósitos/Abono" vs "Cheques/Cargos" sin headers claros. **Requiere fix**: preservar headers del Excel o pasar flag de columna.
+3. **Variabilidad aceptable (±1-2%)** en chunks normales — ruido esperado de LLM. Solo RUN 7 tuvo un outlier (chunk 2 con 18 movs, finish=stop sin truncation → Mistral "decide" terminar antes).
+4. **Confianza plana (0.95)** — no sirve para priorizar revisión. **Requiere fix**: mejorar prompt para forzar variación.
+5. **Tipos**: 96-97% transferencia_p2p estable. Mistral no detecta cargos a SKIPO como gastos operacionales.
+
+### Próximos pasos sugeridos
+- **Fix A (alta prioridad)**: detectar y filtrar líneas de saldo diario antes de enviar a Mistral
+- **Fix B**: preservar headers del Excel en el TSV para dar contexto de columnas
+- **Fix C**: prompt tuning para forzar variación en confianza
+- **Fix D (UI)**: bugs de "Reprocesar" y realtime refresh pendientes

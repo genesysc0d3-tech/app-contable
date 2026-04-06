@@ -336,6 +336,8 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#46 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#47 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #47** — parser: pre-parseo determinístico de cartolas chilenas. Detecta header real (Fecha, Descripción, Cheques/Cargos, Abonos/Depósitos), salta metadata (Resumen del Período, Retenciones), descarta columna Saldo diario, y emite líneas auto-descriptivas `TIPO|FECHA|MONTO|DESCRIPCION|NDOC` con tipo_flujo pre-calculado. Validado contra Cartola real: match exacto con banco (636 abonos $50.206.203 / 39 cargos $51.715.000). Resuelve bugs del audit 10 runs: saldo corrupto (8/10) e inversión tipo_flujo. Fallback a sheet_to_csv genérico para Excels no-cartola.
 
 **PR #46** — audit: capturar `finish_reason`, `response_full_length` y `tokens_output` en `audit_chunks` para diagnosticar truncation de Mistral por max_tokens. Motivado por RUN 7 chunk 2 que devolvió 18 movs vs ~100 esperados. Migración: `ALTER TABLE audit_chunks ADD COLUMN finish_reason/response_full_length/tokens_output`. Provider Mistral retorna `finishReason` del choice y largo del JSON crudo.
