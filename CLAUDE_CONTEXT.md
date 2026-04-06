@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#48 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#49 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #49** — bypass de Mistral extraction. Cierra el último bug del audit: Mistral dropeando movimientos incluso con input pre-parseado. Nuevo método `AIProvider.classifyMovimientos()` + prompt clasificación-solo. `parseExcel` devuelve `{content, preExtracted, capa_usada}`. `procesarDocumento` acepta `preExtracted` opcional: si está presente, chunks la lista directamente y llama a `classifyChunkWithRetry` que echoa los movs (nunca los modifica) y fuerza `total=monto`. Fallback neutral si Mistral no devuelve propuesta para algún índice → zero pérdida. Skip saldo-filter en bypass (parser ya filtró). Garantiza 636/39/$50.2M/$51.7M exactos para Cartola N°02; variabilidad residual solo en campos clasificatorios (tipo_propuesto, receptor, confianza). Flujo no-cartola intacto.
 
 **PR #48** — parser por capas con adapter cache + heurística universal. Reemplaza parseo monolítico de Excel por orchestrator con 4 capas: (0) cache por fingerprint estructural, (2) heurística universal sin nombres, (3) named matching, (4) legacy fallback. Validador con 6 checks bloqueantes (min_rows, fechas, montos>0, max_monto anti-saldo, max_rows, saldo_monotonía matemática) + 2 warnings. Cache global multi-tenant (`parser_adapters` sin empresa_id, zero leak — solo índices de columna) con health tracking (confianza 0-1, auto-disable <0.5). Auditoría en `parser_logs` por documento. Validado contra Cartola N°02: parse 1 capa 2 → 675/636/39 (\$50.206.203/\$51.715.000, match exacto); parse 2 capa 0 cache hit (4x más rápido). Capa 1 (Mistral structural analyzer) diferida a próximo PR.
 
