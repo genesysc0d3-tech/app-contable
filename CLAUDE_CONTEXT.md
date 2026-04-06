@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #41, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #42, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -120,6 +120,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #39 | feature/n8n-processing | Migrar procesamiento de cartolas a n8n webhook |
 | #40 | fix/revert-vercel-processing | Revertir a Vercel con after() — n8n era más lento (secuencial) |
 | #41 | fix/faster-processing | CHUNK_SIZE 50→100, MAX_CONCURRENT 3→7 para procesamiento 4x más rápido |
+| #42 | fix/remove-ndoc-classifier | Heurística regex reemplaza clasificarNDocs (Mistral) — elimina timeout |
 
 ---
 
@@ -332,4 +333,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#41 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#42 mergeados · n8n workflow desactivado (guardado)*
