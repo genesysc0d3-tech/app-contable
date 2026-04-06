@@ -498,8 +498,13 @@ export async function procesarDocumento(
           tipo = "mismo_ndoc_otro_arch";
           motivo = `N° de transacción #${m.n_documento} ya existe en '${orig.doc_nombre}' — misma operación bancaria`;
         }
-        // Check intra-batch
-        else if (batchStrictSeen.has(strictKey)) {
+        // Intra-batch strict dedup only applies in legacy (non-bypass) mode.
+        // In bypass mode, the parser guarantees 1 Excel row = 1 movimiento,
+        // so two rows with the same strictKey are LEGITIMATE separate
+        // transactions (e.g. multiple cargos a SKIPO same day same monto,
+        // where the "n_documento" is actually the beneficiary RUT, not a
+        // unique transaction ID).
+        else if (!bypassMode && batchStrictSeen.has(strictKey)) {
           isDuplicate = true;
           const seen = batchStrictSeen.get(strictKey)!;
           seen.count++;
@@ -519,8 +524,9 @@ export async function procesarDocumento(
           motivo = `Posible solapamiento con '${orig.doc_nombre}' (mismo monto, fecha y descripción). Si son cartolas de períodos distintos que comparten días, puede ser legítimo.`;
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
         }
-        // Check intra-batch
-        else if (batchLooseSeen.has(looseKey)) {
+        // Intra-batch loose dedup also skipped in bypass mode — parser
+        // guarantees no spurious duplication.
+        else if (!bypassMode && batchLooseSeen.has(looseKey)) {
           isDuplicate = true;
           const seen = batchLooseSeen.get(looseKey)!;
           seen.count++;
