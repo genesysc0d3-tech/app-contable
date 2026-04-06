@@ -12,7 +12,6 @@ import type {
 } from "./types";
 import { parseFecha } from "./fecha";
 import { validarRut, formatRut } from "../rut";
-import { clasificarNDocs } from "./ndoc-classifier";
 
 const CHUNK_SIZE = 100;
 const MAX_RETRIES = 3;
@@ -282,29 +281,21 @@ export async function procesarDocumento(
       }
     }
 
-    // Classify n_documento fields: transaction ID vs RUT/recipient
-    const itemsWithNDoc = movimientosParsed
-      .filter((m) => m.n_documento)
-      .map((m) => ({ n_documento: m.n_documento!, descripcion: m.descripcion }));
+    // Classify n_documento: simple heuristic instead of Mistral calls
+    // RUT pattern: 1-2 digits + dot + 3 digits + dot + 3 digits + dash + 1 digit/K
+    // or without dots: 7-8 digits + dash + 1 digit/K
+    function isRutPattern(ndoc: string): boolean {
+      return /^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$/.test(ndoc.trim());
+    }
 
-    const ndocIsTransactionId = itemsWithNDoc.length > 0
-      ? await clasificarNDocs(itemsWithNDoc)
-      : new Map<string, boolean>();
-
-    // Also classify n_documento from existing DB records
-    const existingNDocs = (existentes ?? [])
-      .filter((e) => e.n_documento)
-      .map((e) => ({ n_documento: e.n_documento!, descripcion: e.descripcion }));
-
-    if (existingNDocs.length > 0) {
-      const existingClassified = await clasificarNDocs(existingNDocs);
-      for (const [k, v] of existingClassified) ndocIsTransactionId.set(k, v);
+    function isTransactionId(ndoc: string): boolean {
+      return !isRutPattern(ndoc);
     }
 
     // Rebuild strict map using only actual transaction IDs
     const existenteByStrictFiltered = new Map<string, ExistenteInfo>();
     for (const e of existentes ?? []) {
-      if (e.n_documento && ndocIsTransactionId.get(e.n_documento)) {
+      if (e.n_documento && isTransactionId(e.n_documento)) {
         const looseKey = `${e.fecha}|${e.monto}|${e.descripcion}`;
         const doc = e.documentos_subidos as unknown as { nombre_archivo: string; created_at: string } | null;
         existenteByStrictFiltered.set(`${looseKey}|${e.n_documento}`, {
@@ -331,7 +322,7 @@ export async function procesarDocumento(
       const m = movimientosParsed[i];
       const looseKey = `${m.fecha}|${m.monto}|${m.descripcion}`;
       // Only use n_documento as strict key if classified as transaction ID
-      const isTransId = m.n_documento ? (ndocIsTransactionId.get(m.n_documento) ?? true) : false;
+      const isTransId = m.n_documento ? isTransactionId(m.n_documento) : false;
       const strictKey = (m.n_documento && isTransId) ? `${looseKey}|${m.n_documento}` : null;
 
       let isDuplicate = false;
