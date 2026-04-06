@@ -116,6 +116,16 @@ select option {
   animation: page-in 300ms ease both;
 }
 
+/* Indeterminate progress bar */
+@keyframes progress-indeterminate {
+  0% { width: 5%; margin-left: 0; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 5%; margin-left: 95%; }
+}
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
 /* Skeleton shimmer (replaces pulse) */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
