@@ -14,9 +14,9 @@ import { parseFecha } from "./fecha";
 import { validarRut, formatRut } from "../rut";
 import { clasificarNDocs } from "./ndoc-classifier";
 
-const CHUNK_SIZE = 50;
+const CHUNK_SIZE = 100;
 const MAX_RETRIES = 3;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 7;
 const DB_BATCH_SIZE = 100;
 const MIN_CONFIANZA = 0.6;
 
