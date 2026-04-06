@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #39, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #41, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -118,6 +118,8 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #37 | feature/ui-polish-v2 | Gráfico Chart.js premium + transición slide entre pestañas |
 | #38 | feature/client-cache | Caché Zustand para navegación instantánea entre pestañas |
 | #39 | feature/n8n-processing | Migrar procesamiento de cartolas a n8n webhook |
+| #40 | fix/revert-vercel-processing | Revertir a Vercel con after() — n8n era más lento (secuencial) |
+| #41 | fix/faster-processing | CHUNK_SIZE 50→100, MAX_CONCURRENT 3→7 para procesamiento 4x más rápido |
 
 ---
 
@@ -279,10 +281,10 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
 
 - **Production (main):** `app-contable-rho.vercel.app` — solo Initial commit
 - **Preview (dev):** se genera automáticamente en cada push a dev
-- **Procesamiento:** migrado a n8n webhook (sin límite de tiempo)
-- **n8n workflow ID:** rZoZmdAAW8csRrjU (activo)
-- **Webhook:** https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento
-- **Env var Vercel:** N8N_WEBHOOK_URL (configurada)
+- **Procesamiento:** Vercel con after() + Promise.all (CHUNK_SIZE=100, MAX_CONCURRENT=7)
+- **n8n workflow ID:** rZoZmdAAW8csRrjU (desactivado, guardado para futuro)
+- **Webhook n8n:** https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento
+- **Env var Vercel:** N8N_WEBHOOK_URL (configurada, no en uso actualmente)
 
 ---
 
@@ -330,4 +332,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#39 mergeados · n8n workflow activo*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#41 mergeados · n8n workflow desactivado (guardado)*
