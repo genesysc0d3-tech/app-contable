@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#49 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#50 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #50** — fix: saltar dedup intra-archivo en bypass mode. RUN 13 perdió 14 salidas legítimas: la cartola tiene múltiples cargos reales a SKIPO el mismo día con mismo monto, y el n_documento de esas filas es el RUT del destinatario (932758405), que isRutPattern no reconoce por falta de guión. En bypass mode skipeamos intra-batch dedup porque el parser garantiza 1 fila = 1 movimiento. Cross-file dedup se mantiene intacto.
 
 **PR #49** — bypass de Mistral extraction. Cierra el último bug del audit: Mistral dropeando movimientos incluso con input pre-parseado. Nuevo método `AIProvider.classifyMovimientos()` + prompt clasificación-solo. `parseExcel` devuelve `{content, preExtracted, capa_usada}`. `procesarDocumento` acepta `preExtracted` opcional: si está presente, chunks la lista directamente y llama a `classifyChunkWithRetry` que echoa los movs (nunca los modifica) y fuerza `total=monto`. Fallback neutral si Mistral no devuelve propuesta para algún índice → zero pérdida. Skip saldo-filter en bypass (parser ya filtró). Garantiza 636/39/$50.2M/$51.7M exactos para Cartola N°02; variabilidad residual solo en campos clasificatorios (tipo_propuesto, receptor, confianza). Flujo no-cartola intacto.
 
