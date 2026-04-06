@@ -282,7 +282,7 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
 - **Procesamiento:** migrado a n8n webhook (sin límite de tiempo)
 - **n8n workflow ID:** rZoZmdAAW8csRrjU (activo)
 - **Webhook:** https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento
-- **Env var Vercel:** N8N_WEBHOOK_URL (pendiente configurar en dashboard)
+- **Env var Vercel:** N8N_WEBHOOK_URL (configurada)
 
 ---
 
@@ -295,7 +295,7 @@ USING (empresa_id = (SELECT empresa_id FROM usuarios WHERE id = auth.uid()))
 - [ ] Integración de pagos real (actualmente se activa plan sin cobro)
 - [ ] n8n webhooks: recordatorio F29, resumen semanal por email
 - [ ] PWA: manifest.json, service worker, iconos
-- [ ] Para cartolas 1000+ tx: migrar procesamiento a n8n webhook
+- [x] Para cartolas 1000+ tx: migrar procesamiento a n8n webhook
 
 ---
 
@@ -306,4 +306,28 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 5 Abril 2026 · rama `dev` · PRs #1-#39 mergeados*
+## Notas de integración n8n (aprendizajes)
+
+### Headers para Supabase con `sb_secret_` keys (nuevo formato)
+- PostgREST y Storage: `apikey` + `Authorization: Bearer` con el mismo valor
+- Las legacy JWT keys (`eyJ...`) funcionan igual pero están deprecadas
+
+### Normalización de datos de Mistral en n8n
+- `tipo_flujo`: Mistral puede devolver "Abono"/"Cargo" → normalizar a "entrada"/"salida"
+- `confianza`: puede venir como "alta"/"media"/"baja" → normalizar a número
+- Siempre sanitizar antes de insertar en Supabase
+
+### n8n Code nodes
+- `require()` bloqueado para módulos externos — usar nodos nativos (extractFromFile para Excel)
+- Para HTTP: usar `this.helpers.httpRequest()` con `json: true`
+- No interpolar texto en JSON literal — usar `JSON.stringify()` programático
+
+### Credenciales — REGLA ABSOLUTA
+- NUNCA commitear claves en código, contexto, ni logs
+- Variables de entorno: Railway (n8n), Vercel (app), .env.local (local)
+- n8n: `$env.VARIABLE` para leer de Railway
+- Railway: `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` para permitir `$env`
+
+---
+
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#39 mergeados · n8n workflow activo*
