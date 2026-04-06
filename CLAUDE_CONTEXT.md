@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#51 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#52 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #52** — chore: ESLint 0 errores 0 warnings. 14 issues heredados arreglados: (1) setState-in-effect en ThemeToggle reemplazado por lazy useState, (2) disable comments justificados en PropuestaCard/SubirClient/ResumenClient para casos legítimos de fetch-on-deps y autocomplete desde datos externos, (3) import Image → ImageIcon en FileUpload (falso positivo jsx-a11y/alt-text), (4) remove unused vars en DocumentList, processor, ResumenClient. Parser validado: sigue dando 675/636/39 exactos.
 
 **PR #51** — fix bugs de UI en /subir: (A) botón "Reprocesar" parpadeaba al subir archivo porque estado="subido" quedaba visible antes del cambio a "procesando" en after(). Fix: update síncrono en la route antes de retornar. (B) UI se quedaba en "Procesando" cuando el realtime perdía el UPDATE final. Fix: polling backup cada 3s mientras haya docs en procesando/subido + refetch al window focus. Zero cost cuando no hay docs procesándose.
 
