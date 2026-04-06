@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#47 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#48 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #48** — parser por capas con adapter cache + heurística universal. Reemplaza parseo monolítico de Excel por orchestrator con 4 capas: (0) cache por fingerprint estructural, (2) heurística universal sin nombres, (3) named matching, (4) legacy fallback. Validador con 6 checks bloqueantes (min_rows, fechas, montos>0, max_monto anti-saldo, max_rows, saldo_monotonía matemática) + 2 warnings. Cache global multi-tenant (`parser_adapters` sin empresa_id, zero leak — solo índices de columna) con health tracking (confianza 0-1, auto-disable <0.5). Auditoría en `parser_logs` por documento. Validado contra Cartola N°02: parse 1 capa 2 → 675/636/39 (\$50.206.203/\$51.715.000, match exacto); parse 2 capa 0 cache hit (4x más rápido). Capa 1 (Mistral structural analyzer) diferida a próximo PR.
 
 **PR #47** — parser: pre-parseo determinístico de cartolas chilenas. Detecta header real (Fecha, Descripción, Cheques/Cargos, Abonos/Depósitos), salta metadata (Resumen del Período, Retenciones), descarta columna Saldo diario, y emite líneas auto-descriptivas `TIPO|FECHA|MONTO|DESCRIPCION|NDOC` con tipo_flujo pre-calculado. Validado contra Cartola real: match exacto con banco (636 abonos $50.206.203 / 39 cargos $51.715.000). Resuelve bugs del audit 10 runs: saldo corrupto (8/10) e inversión tipo_flujo. Fallback a sheet_to_csv genérico para Excels no-cartola.
 
