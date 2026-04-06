@@ -26,6 +26,26 @@ function toNum(val: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
+/** Normalize tipo_propuesto to valid check constraint values */
+const VALID_TIPOS = new Set([
+  "boleta", "factura", "gasto", "registro_crypto", "ignorar",
+  "boleta_honorarios", "factura_afecta", "compraventa_crypto",
+  "transferencia_p2p", "operacion_forex", "gasto_egreso", "no_comercial",
+]);
+function normTipo(val: string | null | undefined): string {
+  if (!val) return "no_comercial";
+  const s = val.trim().toLowerCase();
+  if (VALID_TIPOS.has(s)) return s;
+  // Common Mistral variations
+  if (s.includes("crypto") || s.includes("bitcoin") || s.includes("usdt")) return "compraventa_crypto";
+  if (s.includes("p2p") || s.includes("transferencia")) return "transferencia_p2p";
+  if (s.includes("forex") || s.includes("divisa")) return "operacion_forex";
+  if (s.includes("boleta") || s.includes("honorario")) return "boleta_honorarios";
+  if (s.includes("factura")) return "factura_afecta";
+  if (s.includes("gasto") || s.includes("egreso") || s.includes("pago")) return "gasto_egreso";
+  return "no_comercial";
+}
+
 function getServiceClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -482,7 +502,7 @@ export async function procesarDocumento(
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
-            tipo_propuesto: p.tipo_propuesto || "ignorar",
+            tipo_propuesto: normTipo(p.tipo_propuesto),
             receptor_nombre: p.receptor_nombre || null,
             receptor_rut: p.receptor_rut || null,
             monto_neto: toNum(p.monto_neto),
