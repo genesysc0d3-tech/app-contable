@@ -90,3 +90,87 @@ export function buildUserPrompt(contenido: string, loteInfo?: string): string {
   const prefix = loteInfo ? `[${loteInfo}]\n\n` : "";
   return `${prefix}Analiza el siguiente documento y extrae todos los movimientos con sus propuestas tributarias:\n\n${contenido}`;
 }
+
+const CLASSIFY_ONLY_SYSTEM_PROMPT = `Eres un clasificador tributario chileno experto. Recibes una lista de movimientos bancarios YA EXTRAÍDOS (fecha, descripción, monto, tipo_flujo) y debes producir SOLO las propuestas tributarias — una por movimiento, en el mismo orden.
+
+IMPORTANTE: NO debes extraer, corregir ni modificar los movimientos. Vienen ya parseados determinísticamente desde el Excel. Tu único trabajo es clasificar cada uno.
+
+CATEGORÍAS (usa EXACTAMENTE estos valores):
+- boleta_honorarios: Servicios de personas naturales. CON IVA 19%.
+- factura_afecta: Servicios de empresas. CON IVA 19%.
+- compraventa_crypto: Bitcoin, Ethereum, USDT, USDC, BTC, ETH, activos digitales. SIN IVA (SII Oficio 963-2018).
+- transferencia_p2p: Transferencia entre personas, sin servicio explícito. SIN IVA.
+- operacion_forex: Compra/venta USD, EUR, divisas extranjeras. SIN IVA.
+- gasto_egreso: Pago de gastos, arriendo, servicios. Si tipo_flujo=salida y no calza en otra categoría.
+- no_comercial: Personal, familiar, no tributario.
+
+REGLAS DE PRIORIDAD:
+1. Crypto keywords (BTC/ETH/USDT/crypto) → compraventa_crypto
+2. Forex keywords (USD/EUR/forex/dólar) → operacion_forex
+3. Si descripción tiene nombre de persona y tipo_flujo=entrada → transferencia_p2p
+4. Si descripción menciona boleta/honorarios → boleta_honorarios
+5. Si descripción menciona factura/empresa → factura_afecta
+6. Si tipo_flujo=salida y no calza arriba → gasto_egreso
+7. Resto → no_comercial
+
+CONFIANZA (sé honesto, usa el rango completo):
+- 0.95: descripción clara y unívoca
+- 0.80: inferencia con alta probabilidad
+- 0.60: ambigua
+- 0.40: insuficiente información
+
+FORMATO DE RESPUESTA (JSON estricto, SOLO propuestas):
+{
+  "propuestas": [
+    {
+      "movimiento_index": 0,
+      "tipo_propuesto": "transferencia_p2p",
+      "receptor_nombre": "nombre o null",
+      "receptor_rut": "RUT o null",
+      "monto_neto": 50000,
+      "iva": 0,
+      "total": 50000,
+      "confianza": 0.95,
+      "notas": "razón breve",
+      "spread_compra": null,
+      "spread_venta": null,
+      "spread_ganancia": null
+    }
+  ]
+}
+
+REGLAS NUMÉRICAS:
+- Para cada movimiento, el campo total DEBE ser EXACTAMENTE el monto del movimiento de entrada. NO lo modifiques.
+- Si tipo_propuesto tiene IVA (boleta_honorarios/factura_afecta): monto_neto = total / 1.19, iva = total - monto_neto
+- Si NO tiene IVA: monto_neto = total, iva = 0
+- Debe haber EXACTAMENTE una propuesta por movimiento, con movimiento_index igual a la posición del movimiento en la lista de entrada (0-based)
+- NUNCA inventes RUTs. Si no se menciona, receptor_rut = null
+- Responde SOLO con el JSON, sin texto adicional`;
+
+export function getClassifyOnlySystemPrompt(): string {
+  return process.env.AI_CLASSIFY_SYSTEM_PROMPT || CLASSIFY_ONLY_SYSTEM_PROMPT;
+}
+
+export function buildClassifyUserPrompt(
+  movimientos: Array<{
+    fecha: string;
+    descripcion: string;
+    monto: number;
+    tipo_flujo: string;
+    n_documento?: string | null;
+  }>,
+  loteInfo?: string
+): string {
+  const prefix = loteInfo ? `[${loteInfo}]\n\n` : "";
+  const json = JSON.stringify(
+    movimientos.map((m, i) => ({
+      movimiento_index: i,
+      fecha: m.fecha,
+      descripcion: m.descripcion,
+      monto: m.monto,
+      tipo_flujo: m.tipo_flujo,
+      n_documento: m.n_documento ?? null,
+    }))
+  );
+  return `${prefix}Clasifica los siguientes movimientos ya extraídos (${movimientos.length} items). Devuelve UNA propuesta por movimiento en el mismo orden, usando movimiento_index = posición en la lista.\n\n${json}`;
+}

@@ -1,19 +1,28 @@
 import { parseExcelWithOrchestrator } from "./parsers/orchestrator";
+import type { PreExtractedMovimiento } from "./parsers/types";
 
 /**
  * Public entry point for Excel parsing.
  *
  * Delegates to the layered orchestrator (adapter cache → heuristic → named
- * → legacy fallback). Always returns a string of newline-separated text
- * ready for the downstream AI processor. Never throws — the legacy fallback
- * guarantees a string is always produced.
+ * → legacy fallback). Always returns a content string plus, when a
+ * deterministic layer succeeded, a list of pre-extracted movimientos the
+ * processor can use to bypass Mistral extraction entirely.
  *
  * Optional `documento_id` enables parser_logs auditing for that document.
  */
 export async function parseExcel(
   buffer: ArrayBuffer,
   opts?: { documento_id?: string }
-): Promise<string> {
-  const { content } = await parseExcelWithOrchestrator(buffer, opts);
-  return content;
+): Promise<{
+  content: string;
+  preExtracted: PreExtractedMovimiento[] | null;
+  capa_usada: number;
+}> {
+  const { content, result } = await parseExcelWithOrchestrator(buffer, opts);
+  return {
+    content,
+    preExtracted: result.preExtracted,
+    capa_usada: result.capa_usada,
+  };
 }

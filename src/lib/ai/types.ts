@@ -36,11 +36,30 @@ export interface AIResponse {
   raw_response_length?: number;
 }
 
+export interface ClassifyOnlyResponse {
+  propuestas: PropuestaExtraida[];
+  tokens_input: number;
+  tokens_output: number;
+  modelo: string;
+  finish_reason?: string | null;
+  raw_response_length?: number;
+}
+
 export interface AIProvider {
   extractMovimientos(
     contenido: string,
     systemPrompt: string
   ): Promise<AIResponse>;
+  /**
+   * Classify a batch of already-extracted movimientos.
+   * Used by the pre-extracted bypass path: the parser did deterministic
+   * extraction so we only need Mistral to assign tipo_propuesto, receptor,
+   * confianza, etc. — never touching fechas/montos.
+   */
+  classifyMovimientos?(
+    movimientos: MovimientoExtraido[],
+    systemPrompt: string
+  ): Promise<ClassifyOnlyResponse>;
 }
 
 export type TipoDuplicado =

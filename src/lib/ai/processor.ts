@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../database.types";
 import { getAIProvider } from "./provider";
-import { getSystemPrompt } from "./prompt";
+import { getSystemPrompt, getClassifyOnlySystemPrompt } from "./prompt";
 import { calcularCosto } from "./providers/mistral";
 import type {
   AIExtractionResult,
@@ -10,6 +10,7 @@ import type {
   ProgresoIA,
   DuplicadoDetalle,
 } from "./types";
+import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { validarRut, formatRut } from "../rut";
 
@@ -118,6 +119,81 @@ async function processChunkWithRetry(
   throw lastError;
 }
 
+/**
+ * Bypass-mode chunk: the movimientos are already extracted deterministically
+ * by the parser. We only ask Mistral to classify each one. The returned
+ * movimientos in ChunkResult echo the input (never modified) so the
+ * downstream code works unchanged.
+ */
+async function classifyChunkWithRetry(
+  chunkIndex: number,
+  chunkMovs: MovimientoExtraido[],
+  systemPrompt: string
+): Promise<ChunkResult> {
+  const provider = getAIProvider();
+  if (!provider.classifyMovimientos) {
+    throw new Error("AI provider does not implement classifyMovimientos — bypass mode unavailable");
+  }
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await provider.classifyMovimientos(chunkMovs, systemPrompt);
+      // Propuestas with movimiento_index referencing position WITHIN this chunk.
+      // If Mistral dropped or mis-indexed some, we fill with defaults so every
+      // movimiento has a corresponding propuesta.
+      const propuestasByIdx = new Map<number, PropuestaExtraida>();
+      for (const p of response.propuestas) {
+        if (typeof p.movimiento_index === "number") {
+          propuestasByIdx.set(p.movimiento_index, p);
+        }
+      }
+      const completed: PropuestaExtraida[] = chunkMovs.map((m, i) => {
+        const existing = propuestasByIdx.get(i);
+        if (existing) {
+          // Force total to match the deterministic monto — never let Mistral
+          // alter the amount.
+          return { ...existing, movimiento_index: i, total: m.monto };
+        }
+        // Fallback: if Mistral didn't return a propuesta for this index,
+        // synthesize a neutral one so nothing is lost.
+        return {
+          movimiento_index: i,
+          tipo_propuesto: m.tipo_flujo === "salida" ? "gasto_egreso" : "no_comercial",
+          receptor_nombre: null,
+          receptor_rut: null,
+          monto_neto: m.monto,
+          iva: 0,
+          total: m.monto,
+          confianza: 0.4,
+          notas: "fallback: Mistral no devolvió propuesta para este índice",
+          spread_compra: null,
+          spread_venta: null,
+          spread_ganancia: null,
+        };
+      });
+
+      return {
+        index: chunkIndex,
+        movimientos: chunkMovs,
+        propuestas: completed,
+        tokens_input: response.tokens_input,
+        tokens_output: response.tokens_output,
+        modelo: response.modelo,
+        finish_reason: response.finish_reason ?? null,
+        raw_response_length: response.raw_response_length ?? 0,
+      };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 async function insertInBatches<T extends Record<string, unknown>>(
   table: "movimientos_raw" | "propuestas_ia",
   rows: T[]
@@ -147,10 +223,13 @@ export async function procesarDocumento(
   documentoId: string,
   empresaId: string,
   contenido: string,
-  ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number }
+  ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number },
+  preExtracted?: PreExtractedMovimiento[]
 ): Promise<{ movimientos_total: number; error?: string }> {
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
+  const classifyPrompt = getClassifyOnlySystemPrompt();
+  const bypassMode = Array.isArray(preExtracted) && preExtracted.length > 0;
 
   await supabase
     .from("documentos_subidos")
@@ -158,28 +237,51 @@ export async function procesarDocumento(
     .eq("id", documentoId);
 
   try {
-    const lines = contenido.split("\n").filter((l) => l.trim());
-    const chunks =
-      lines.length > CHUNK_SIZE ? splitIntoChunks(lines) : [lines];
-    const totalLotes = chunks.length;
+    // Build the chunked work units. In bypass mode we chunk the deterministic
+    // movimientos array directly. In legacy mode we chunk text lines.
+    type MovChunk = { movs: MovimientoExtraido[] };
+    type TextChunk = { text: string[] };
+    const movChunks: MovChunk[] = [];
+    let textChunks: TextChunk[] = [];
+
+    if (bypassMode) {
+      const movs = preExtracted! as MovimientoExtraido[];
+      for (let i = 0; i < movs.length; i += CHUNK_SIZE) {
+        movChunks.push({ movs: movs.slice(i, i + CHUNK_SIZE) });
+      }
+    } else {
+      const lines = contenido.split("\n").filter((l) => l.trim());
+      const chunked = lines.length > CHUNK_SIZE ? splitIntoChunks(lines) : [lines];
+      textChunks = chunked.map((t) => ({ text: t }));
+    }
+
+    const totalLotes = bypassMode ? movChunks.length : textChunks.length;
 
     // Process chunks in parallel, max MAX_CONCURRENT at a time
-    const results: ChunkResult[] = new Array(chunks.length);
+    const results: ChunkResult[] = new Array(totalLotes);
     let completedCount = 0;
     let totalMovsFound = 0;
 
-    for (let start = 0; start < chunks.length; start += MAX_CONCURRENT) {
-      const batch = chunks.slice(start, start + MAX_CONCURRENT);
-      const promises = batch.map((chunk, i) => {
-        const chunkIndex = start + i;
-        return processChunkWithRetry(
-          chunkIndex,
-          chunk.join("\n"),
-          systemPrompt
+    const runBatch = async (start: number): Promise<ChunkResult[]> => {
+      if (bypassMode) {
+        const batch = movChunks.slice(start, start + MAX_CONCURRENT);
+        return Promise.all(
+          batch.map((c, i) =>
+            classifyChunkWithRetry(start + i, c.movs, classifyPrompt)
+          )
         );
-      });
+      } else {
+        const batch = textChunks.slice(start, start + MAX_CONCURRENT);
+        return Promise.all(
+          batch.map((c, i) =>
+            processChunkWithRetry(start + i, c.text.join("\n"), systemPrompt)
+          )
+        );
+      }
+    };
 
-      const batchResults = await Promise.all(promises);
+    for (let start = 0; start < totalLotes; start += MAX_CONCURRENT) {
+      const batchResults = await runBatch(start);
 
       for (const r of batchResults) {
         results[r.index] = r;
@@ -188,6 +290,9 @@ export async function procesarDocumento(
 
         // Audit logging — save chunk input + Mistral response
         try {
+          const chunkInputPreview = bypassMode
+            ? JSON.stringify(movChunks[r.index]?.movs.slice(0, 3) ?? []).slice(0, 5000)
+            : (textChunks[r.index]?.text.join("\n") ?? "").slice(0, 5000);
           const auditUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/audit_chunks`;
           await fetch(auditUrl, {
             method: "POST",
@@ -199,7 +304,7 @@ export async function procesarDocumento(
             body: JSON.stringify({
               documento_id: documentoId,
               chunk_index: r.index,
-              chunk_input: chunks[r.index].join("\n").slice(0, 5000),
+              chunk_input: chunkInputPreview,
               mistral_response: JSON.stringify({ movimientos: r.movimientos.slice(0, 3), propuestas: r.propuestas.slice(0, 3) }).slice(0, 5000),
               movimientos_count: r.movimientos.length,
               propuestas_count: r.propuestas.length,
@@ -263,9 +368,14 @@ export async function procesarDocumento(
 
     // Filter out probable saldo/balance values extracted by mistake.
     // Rule: if a single monto is >50% of total abonos, it's a balance not a tx.
-    const totalAbonos = validMovimientos
-      .filter((m) => m.tipo_flujo === "entrada")
-      .reduce((sum, m) => sum + (toNum(m.monto) ?? 0), 0);
+    // In bypass mode the parser already filtered the saldo column, so this
+    // heuristic can only produce false positives (e.g. a legitimate $1.7M
+    // transfer in a cartola full of $50K tx). Skip it.
+    const totalAbonos = bypassMode
+      ? 0
+      : validMovimientos
+          .filter((m) => m.tipo_flujo === "entrada")
+          .reduce((sum, m) => sum + (toNum(m.monto) ?? 0), 0);
 
     if (totalAbonos > 0) {
       const threshold = totalAbonos * 0.5;

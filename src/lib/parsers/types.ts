@@ -64,4 +64,20 @@ export interface OrchestratorResult {
   validator_failed_checks: string[];
   warnings: string[];
   error: string | null;
+  /**
+   * Pre-extracted movimientos in the AI layer format. Populated whenever a
+   * deterministic layer (0, 2, 3) succeeds, enabling the bypass path in the
+   * processor that skips Mistral extraction entirely.
+   * `null` when the legacy fallback (layer 4) was used.
+   */
+  preExtracted: PreExtractedMovimiento[] | null;
+}
+
+export interface PreExtractedMovimiento {
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  tipo_flujo: "entrada" | "salida";
+  origen: string;
+  n_documento: string | null;
 }

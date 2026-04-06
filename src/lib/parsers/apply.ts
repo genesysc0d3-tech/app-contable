@@ -1,4 +1,4 @@
-import type { AdapterConfig, ParsedLine, Row } from "./types";
+import type { AdapterConfig, ParsedLine, PreExtractedMovimiento, Row } from "./types";
 
 /**
  * Parse a Chilean-formatted number: "1.600.000", "80,000", "1.234,56" → integer.
@@ -84,6 +84,22 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
   }
 
   return lines;
+}
+
+/**
+ * Convert ParsedLine[] to the AI layer's MovimientoExtraido-compatible shape
+ * used by the bypass path. This is what we hand to Mistral when we skip
+ * extraction and only ask for classification.
+ */
+export function linesToPreExtracted(lines: ParsedLine[]): PreExtractedMovimiento[] {
+  return lines.map((l) => ({
+    fecha: l.fecha,
+    descripcion: l.descripcion,
+    monto: l.monto,
+    tipo_flujo: l.tipo === "ENTRADA" ? "entrada" : "salida",
+    origen: "cartola_preparseada",
+    n_documento: l.n_documento || null,
+  }));
 }
 
 /**

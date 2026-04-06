@@ -1,9 +1,14 @@
 import * as XLSX from "xlsx";
-import type { AdapterConfig, OrchestratorResult, Row } from "./types";
+import type {
+  AdapterConfig,
+  OrchestratorResult,
+  PreExtractedMovimiento,
+  Row,
+} from "./types";
 import { computeFingerprint } from "./fingerprint";
 import { detectHeuristic } from "./heuristic";
 import { detectByNames } from "./named";
-import { applyAdapter, serializeLines } from "./apply";
+import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
 import { validate } from "./validator";
 import {
   getAdapterByFingerprint,
@@ -62,6 +67,7 @@ export async function parseExcelWithOrchestrator(
           validator_failed_checks: [],
           warnings: result.warnings,
           error: null,
+          preExtracted: result.preExtracted,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -103,6 +109,7 @@ export async function parseExcelWithOrchestrator(
           validator_failed_checks: [],
           warnings: result.warnings,
           error: null,
+          preExtracted: result.preExtracted,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -139,6 +146,7 @@ export async function parseExcelWithOrchestrator(
           validator_failed_checks: [],
           warnings: result.warnings,
           error: null,
+          preExtracted: result.preExtracted,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -182,6 +190,7 @@ export async function parseExcelWithOrchestrator(
       validator_failed_checks: [],
       warnings: ["fell_back_to_legacy_sheet_to_csv"],
       error: null,
+      preExtracted: null,
     },
   };
 }
@@ -190,7 +199,12 @@ function tryApply(
   rows: Row[],
   cfg: AdapterConfig,
   sheetName: string
-): { content: string; rowsExtracted: number; warnings: string[] } | null {
+): {
+  content: string;
+  rowsExtracted: number;
+  warnings: string[];
+  preExtracted: PreExtractedMovimiento[];
+} | null {
   const lines = applyAdapter(rows, cfg);
   const validation = validate(lines, rows, cfg);
   if (!validation.ok) return null;
@@ -198,6 +212,7 @@ function tryApply(
     content: serializeLines(lines, sheetName),
     rowsExtracted: lines.length,
     warnings: validation.warnings,
+    preExtracted: linesToPreExtracted(lines),
   };
 }
 

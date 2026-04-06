@@ -124,10 +124,13 @@ export async function POST(request: Request) {
   }
 
   let contenido: string;
+  let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
 
   if (documento.tipo === "excel") {
     const buffer = await fileData.arrayBuffer();
-    contenido = await parseExcel(buffer, { documento_id: documento.id });
+    const parsed = await parseExcel(buffer, { documento_id: documento.id });
+    contenido = parsed.content;
+    preExtracted = parsed.preExtracted;
   } else if (["csv", "whatsapp"].includes(documento.tipo)) {
     contenido = await fileData.text();
   } else if (documento.tipo === "pdf") {
@@ -176,10 +179,16 @@ export async function POST(request: Request) {
   after(async () => {
     try {
       const start = Date.now();
-      const result = await procesarDocumento(documento.id, usuario.empresa_id, contenido);
+      const result = await procesarDocumento(
+        documento.id,
+        usuario.empresa_id,
+        contenido,
+        undefined,
+        preExtracted ?? undefined
+      );
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       console.log(
-        `[procesar-documento] ${documento.id} completado en ${elapsed}s — ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`
+        `[procesar-documento] ${documento.id} completado en ${elapsed}s — ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}${preExtracted ? ` (bypass)` : ""}`
       );
     } catch (err) {
       console.error(`[procesar-documento] ${documento.id} error fatal:`, err);
