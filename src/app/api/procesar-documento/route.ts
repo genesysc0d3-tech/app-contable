@@ -56,6 +56,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Documento ya esta siendo procesado" }, { status: 409 });
   }
 
+  // Synchronously mark as "procesando" BEFORE scheduling the background work.
+  // Without this, the client briefly sees estado="subido" (the initial insert
+  // state) and shows the "Reprocesar" button until procesarDocumento() inside
+  // after() updates the row. The synchronous update closes that gap.
+  {
+    const { createClient: createServiceClient } = await import("@supabase/supabase-js");
+    const svc = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    await svc
+      .from("documentos_subidos")
+      .update({ estado: "procesando" })
+      .eq("id", documento.id);
+  }
+
   // For grouped images, download all and OCR them
   if (grouped_images && Array.isArray(grouped_images) && grouped_images.length > 0) {
     after(async () => {

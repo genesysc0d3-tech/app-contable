@@ -60,6 +60,25 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     return () => { supabase.removeChannel(channel); };
   }, [empresaId]);
 
+  // Backup polling + focus refetch in case realtime misses the final UPDATE.
+  // Only runs while at least one doc is being processed — zero cost otherwise.
+  const hasProcessing = documentos.some(
+    (d) => d.estado === "procesando" || d.estado === "subido"
+  );
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const interval = setInterval(() => {
+      fetchDocumentos();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [hasProcessing, fetchDocumentos]);
+
+  useEffect(() => {
+    const onFocus = () => fetchDocumentos();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchDocumentos]);
+
   const handleFilesQueued = useCallback(async (files: QueuedFile[]) => {
     setUploading(true);
 
