@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#50 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#51 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #51** — fix bugs de UI en /subir: (A) botón "Reprocesar" parpadeaba al subir archivo porque estado="subido" quedaba visible antes del cambio a "procesando" en after(). Fix: update síncrono en la route antes de retornar. (B) UI se quedaba en "Procesando" cuando el realtime perdía el UPDATE final. Fix: polling backup cada 3s mientras haya docs en procesando/subido + refetch al window focus. Zero cost cuando no hay docs procesándose.
 
 **PR #50** — fix: saltar dedup intra-archivo en bypass mode. RUN 13 perdió 14 salidas legítimas: la cartola tiene múltiples cargos reales a SKIPO el mismo día con mismo monto, y el n_documento de esas filas es el RUT del destinatario (932758405), que isRutPattern no reconoce por falta de guión. En bypass mode skipeamos intra-batch dedup porque el parser garantiza 1 fila = 1 movimiento. Cross-file dedup se mantiene intacto.
 
