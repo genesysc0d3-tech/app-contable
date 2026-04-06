@@ -88,6 +88,9 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
   useEffect(() => {
     if (!receptorRut.trim() || !validarRut(receptorRut)) return;
     const match = clientes.find((c) => c.rut === formatRut(receptorRut));
+    // Autocomplete name from cliente list when user types a known RUT.
+    // Intentional setState-in-effect: derives from external data (clientes).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (match && !receptorNombre.trim()) setReceptorNombre(match.nombre);
   }, [receptorRut, clientes, receptorNombre]);
 

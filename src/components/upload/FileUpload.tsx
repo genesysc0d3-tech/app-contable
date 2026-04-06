@@ -8,7 +8,7 @@ import {
   UploadSimple,
   FileXls,
   FilePdf,
-  Image,
+  Image as ImageIcon,
   File as FileIcon,
   X,
   PencilSimple,
@@ -116,7 +116,7 @@ export default function FileUpload({ onFilesQueued }: FileUploadProps) {
         <div className="flex items-center gap-4 mt-3 text-[var(--muted-light)]">
           <FileXls size={20} weight="light" />
           <FilePdf size={20} weight="light" />
-          <Image size={20} weight="light" />
+          <ImageIcon size={20} weight="light" />
           <FileIcon size={20} weight="light" />
         </div>
         <p className="text-xs text-[var(--muted-light)] mt-2">Excel, PDF, imágenes, CSV</p>

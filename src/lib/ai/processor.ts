@@ -4,7 +4,6 @@ import { getAIProvider } from "./provider";
 import { getSystemPrompt, getClassifyOnlySystemPrompt } from "./prompt";
 import { calcularCosto } from "./providers/mistral";
 import type {
-  AIExtractionResult,
   MovimientoExtraido,
   PropuestaExtraida,
   ProgresoIA,
@@ -638,7 +637,6 @@ export async function procesarDocumento(
         .filter((p) => originalToNewIndex.has(p.movimiento_index))
         .map((p) => {
           const newIndex = originalToNewIndex.get(p.movimiento_index)!;
-          const isLow = p.confianza != null && p.confianza < MIN_CONFIANZA;
           const mov = validMovimientos[p.movimiento_index];
           const clienteId = resolveClienteId(clienteCache, p, mov);
           const confianza = toNum(p.confianza);

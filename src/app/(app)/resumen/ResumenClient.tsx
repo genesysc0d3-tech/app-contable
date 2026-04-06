@@ -7,7 +7,7 @@ import {
   getHistorico6Meses,
   getPropuestasAprobadas,
 } from "./actions";
-import { FilePdf, ShareNetwork, CaretRight } from "@phosphor-icons/react";
+import { FilePdf, ShareNetwork } from "@phosphor-icons/react";
 import LineChart from "@/components/charts/LineChart";
 import { useAppStore } from "@/store/appStore";
 
@@ -229,6 +229,8 @@ function HistoricoSection({ empresaId }: { empresaId: string }) {
   }, [empresaId, vista, fecha, mesH, anioH, page]);
 
   useEffect(() => {
+    // Legit fetch-on-deps effect: internal setState via fetchData is expected.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
@@ -447,6 +449,8 @@ export default function ResumenClient({
 
   useEffect(() => {
     if (mes === initialMes && anio === initialAnio) return;
+    // Fetch-on-deps effect for month/year changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     Promise.all([
       getResumenMes(empresaId, anio, mes),

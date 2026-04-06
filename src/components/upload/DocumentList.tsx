@@ -102,8 +102,8 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
 
   // Separate into active / hidden
   const allVisible = duplicados.filter((dup, idx) => !removed.has(dupKey(dup, idx)));
-  const activos = allVisible.filter((dup, idx) => !dup.oculto && !localOcultos.has(dupKey(dup, duplicados.indexOf(dup))));
-  const ocultos = allVisible.filter((dup, idx) => dup.oculto || localOcultos.has(dupKey(dup, duplicados.indexOf(dup))));
+  const activos = allVisible.filter((dup) => !dup.oculto && !localOcultos.has(dupKey(dup, duplicados.indexOf(dup))));
+  const ocultos = allVisible.filter((dup) => dup.oculto || localOcultos.has(dupKey(dup, duplicados.indexOf(dup))));
 
   if (activos.length === 0 && ocultos.length === 0) return null;
 
@@ -187,7 +187,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
 
   async function handleBatchOcultar() {
     const items = selectableKeys.filter((s) => selected.has(s.key));
-    for (const { key, dup } of items) {
+    for (const { dup } of items) {
       const origIdx = duplicados.indexOf(dup);
       await handleOcultar(dup, origIdx);
     }

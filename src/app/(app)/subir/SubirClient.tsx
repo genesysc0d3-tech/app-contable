@@ -30,12 +30,14 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     setStoreDocumentos(docs);
   }, [empresaId, setStoreDocumentos]);
 
+  // On mount, fetch from server if cache is stale. When cache is fresh we
+  // already seeded `documentos` from the initial useState — no setState needed.
   useEffect(() => {
-    if (cached.data && cached.isFresh()) {
-      setDocumentos(cached.data);
-    } else {
+    if (!cached.data || !cached.isFresh()) {
       fetchDocumentos();
     }
+    // Intentional: we only want this to run on mount, cached is a snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -58,6 +60,8 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+    // Zustand store actions are stable references across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId]);
 
   // Backup polling + focus refetch in case realtime misses the final UPDATE.

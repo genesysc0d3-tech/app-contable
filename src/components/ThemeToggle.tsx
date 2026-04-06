@@ -3,15 +3,19 @@
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "@phosphor-icons/react";
 
-export default function ThemeToggle() {
-  const [dark, setDark] = useState(false);
+function initialDark(): boolean {
+  if (typeof window === "undefined") return false;
+  const saved = localStorage.getItem("theme");
+  return saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
 
+export default function ThemeToggle() {
+  const [dark, setDark] = useState<boolean>(initialDark);
+
+  // Sync the html class once on mount (and whenever `dark` changes below).
   useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    const prefersDark = saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setDark(prefersDark);
-    document.documentElement.classList.toggle("dark", prefersDark);
-  }, []);
+    document.documentElement.classList.toggle("dark", dark);
+  }, [dark]);
 
   function toggle() {
     const next = !dark;
