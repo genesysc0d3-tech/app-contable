@@ -32,23 +32,53 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
-function ProgresoBar({ progreso }: { progreso: ProgresoIA | null }) {
-  if (!progreso || progreso.estado === "completado" || progreso.estado === "error") return null;
-  const { lote_actual, total_lotes, movimientos_encontrados } = progreso;
+function ProgresoBar({ progreso, estado }: { progreso: ProgresoIA | null; estado: string }) {
+  // Show for "procesando" state even if progreso is empty
+  if (estado !== "procesando" && (!progreso || progreso.estado === "completado" || progreso.estado === "error")) return null;
+
+  const lote_actual = progreso?.lote_actual;
+  const total_lotes = progreso?.total_lotes;
+  const movimientos_encontrados = progreso?.movimientos_encontrados;
+  const hasProgress = total_lotes && lote_actual;
+  const pct = hasProgress ? (lote_actual / total_lotes) * 100 : 0;
+
+  // Phase labels
+  let label = "Preparando documento...";
+  if (hasProgress && pct < 100) label = `Analizando lote ${lote_actual} de ${total_lotes}`;
+  else if (hasProgress && pct >= 100 && !movimientos_encontrados) label = "Detectando duplicados...";
+  else if (movimientos_encontrados && movimientos_encontrados > 0 && estado === "procesando") label = "Guardando movimientos...";
+
   return (
-    <div className="mt-1.5">
+    <div className="mt-2 space-y-1.5">
+      {/* Progress bar with animation */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 h-1 rounded-full bg-[var(--border)] overflow-hidden">
-          <div className="h-full bg-[#E8553E] rounded-full transition-all duration-500"
-            style={{ width: total_lotes && lote_actual ? `${(lote_actual / total_lotes) * 100}%` : "33%" }} />
+        <div className="flex-1 h-1.5 rounded-full bg-[var(--border)] overflow-hidden">
+          {hasProgress ? (
+            <div className="h-full bg-[#E8553E] rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${Math.max(pct, 5)}%` }} />
+          ) : (
+            <div className="h-full bg-[#E8553E] rounded-full animate-progress-indeterminate" />
+          )}
         </div>
-        <span className="text-[10px] text-[var(--muted)] shrink-0">
-          {total_lotes && total_lotes > 1 ? `Lote ${lote_actual} de ${total_lotes}` : "Analizando..."}
-        </span>
+        {hasProgress && (
+          <span className="text-[10px] text-[var(--muted)] shrink-0 tabular-nums font-medium">
+            {Math.round(pct)}%
+          </span>
+        )}
       </div>
-      {movimientos_encontrados !== undefined && movimientos_encontrados > 0 && (
-        <p className="text-[10px] text-[var(--muted-light)] mt-0.5">{movimientos_encontrados} movimientos</p>
-      )}
+
+      {/* Status label */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-[var(--muted-light)] flex items-center gap-1.5">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#E8553E] animate-pulse" />
+          {label}
+        </p>
+        {movimientos_encontrados !== undefined && movimientos_encontrados > 0 && (
+          <p className="text-[10px] text-[var(--foreground)] font-medium tabular-nums">
+            {movimientos_encontrados} encontrados
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -411,7 +441,7 @@ export default function DocumentList({ documentos, onDocumentoUpdate }: Document
               </div>
             </div>
 
-            <ProgresoBar progreso={progreso} />
+            <ProgresoBar progreso={progreso} estado={doc.estado} />
 
             {progreso?.estado === "error" && (
               <p className="text-xs text-[#E8553E] mt-1 truncate">Error: {progreso.error}</p>
