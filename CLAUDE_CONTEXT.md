@@ -73,7 +73,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | Rama | Uso |
 |---|---|
 | `main` | Producción — solo tiene Initial commit (no se ha mergeado dev aún) |
-| `dev` | Integración — contiene PRs #1 al #44, toda la funcionalidad |
+| `dev` | Integración — contiene PRs #1 al #45, toda la funcionalidad |
 
 **PRs mergeados a dev:**
 
@@ -123,6 +123,7 @@ Esta es la v3 del proyecto. Las versiones anteriores fallaron por acoplamiento f
 | #42 | fix/remove-ndoc-classifier | Heurística regex reemplaza clasificarNDocs (Mistral) — elimina timeout |
 | #43 | fix/normalize-tipo-propuesto | Normalizar tipo_propuesto con fallback — evita check constraint |
 | #44 | fix/progress-animation | Progreso realtime con fases y barra animada en /subir |
+| #45 | feature/audit-logging | Audit logging — chunk input + Mistral response por chunk |
 
 ---
 
@@ -335,4 +336,4 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#44 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#45 mergeados · n8n workflow desactivado (guardado)*
