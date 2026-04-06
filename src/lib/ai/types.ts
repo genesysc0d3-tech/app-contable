@@ -32,6 +32,8 @@ export interface AIResponse {
   tokens_input: number;
   tokens_output: number;
   modelo: string;
+  finish_reason?: string | null;
+  raw_response_length?: number;
 }
 
 export interface AIProvider {

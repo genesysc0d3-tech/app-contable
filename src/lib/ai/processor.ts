@@ -79,6 +79,8 @@ interface ChunkResult {
   tokens_input: number;
   tokens_output: number;
   modelo: string;
+  finish_reason?: string | null;
+  raw_response_length?: number;
 }
 
 async function processChunkWithRetry(
@@ -102,6 +104,8 @@ async function processChunkWithRetry(
         tokens_input: response.tokens_input,
         tokens_output: response.tokens_output,
         modelo: response.modelo,
+        finish_reason: response.finish_reason ?? null,
+        raw_response_length: response.raw_response_length ?? 0,
       };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -199,6 +203,9 @@ export async function procesarDocumento(
               mistral_response: JSON.stringify({ movimientos: r.movimientos.slice(0, 3), propuestas: r.propuestas.slice(0, 3) }).slice(0, 5000),
               movimientos_count: r.movimientos.length,
               propuestas_count: r.propuestas.length,
+              finish_reason: r.finish_reason ?? null,
+              response_full_length: r.raw_response_length ?? 0,
+              tokens_output: r.tokens_output,
             }),
           });
         } catch { /* audit is non-blocking */ }

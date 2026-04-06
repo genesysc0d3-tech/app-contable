@@ -45,6 +45,8 @@ export class MistralProvider implements AIProvider {
       tokens_input: tokensInput,
       tokens_output: tokensOutput,
       modelo: this.model,
+      finish_reason: (choice?.finishReason as string | undefined) ?? null,
+      raw_response_length: text.length,
     };
   }
 }
