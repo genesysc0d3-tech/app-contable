@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { procesarDocumento } from "@/lib/ai/processor";
+import { parseExcel } from "@/lib/parsers";
+import { ocrAndGroupImages } from "@/lib/ai/ocr";
 
-const N8N_WEBHOOK_URL =
-  process.env.N8N_WEBHOOK_URL ||
-  "https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento";
+/**
+ * Procesamiento directo en Vercel con after().
+ * Usa Promise.all para paralelizar chunks (3 concurrentes).
+ * Para cartolas gigantes (2000+ tx) en el futuro, activar workflow n8n:
+ *   ID: rZoZmdAAW8csRrjU
+ *   Webhook: https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento
+ */
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -27,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { documento_id } = body;
+  const { documento_id, grouped_images } = body;
 
   if (!documento_id) {
     return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
@@ -48,44 +56,139 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Documento ya esta siendo procesado" }, { status: 409 });
   }
 
-  // Dispatch to n8n webhook — responds immediately, n8n processes in background
-  try {
-    const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        documento_id: documento.id,
-        empresa_id: usuario.empresa_id,
-        storage_path: documento.storage_path,
-        tipo: documento.tipo,
-      }),
+  // For grouped images, download all and OCR them
+  if (grouped_images && Array.isArray(grouped_images) && grouped_images.length > 0) {
+    after(async () => {
+      try {
+        const start = Date.now();
+        const images: { base64: string; mimeType: string; fileName: string }[] = [];
+        for (const imgPath of grouped_images) {
+          const { data: fileData } = await supabase.storage
+            .from("documentos")
+            .download(imgPath.path);
+          if (fileData) {
+            const buffer = await fileData.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString("base64");
+            images.push({
+              base64,
+              mimeType: imgPath.mime || "image/jpeg",
+              fileName: imgPath.name || "imagen",
+            });
+          }
+        }
+
+        if (images.length === 0) throw new Error("No se pudieron descargar las imágenes");
+
+        const { groupedText, totalTokensInput, totalTokensOutput } = await ocrAndGroupImages(images);
+        if (!groupedText.trim()) throw new Error("OCR no extrajo texto de las imágenes");
+
+        const result = await procesarDocumento(
+          documento.id,
+          usuario.empresa_id,
+          groupedText,
+          { ocrTokensInput: totalTokensInput, ocrTokensOutput: totalTokensOutput }
+        );
+
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        console.log(
+          `[procesar-documento] ${documento.id} OCR+procesado en ${elapsed}s — ${images.length} imgs → ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`
+        );
+      } catch (err) {
+        console.error(`[procesar-documento] ${documento.id} OCR error:`, err);
+        const { createClient: createServiceClient } = await import("@supabase/supabase-js");
+        const svc = createServiceClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        await svc.from("documentos_subidos").update({
+          estado: "error",
+          progreso_ia: { estado: "error", error: err instanceof Error ? err.message : String(err) },
+        }).eq("id", documento.id);
+      }
     });
 
-    if (!n8nResponse.ok) {
-      console.error(`[procesar-documento] n8n webhook error: ${n8nResponse.status}`);
-      return NextResponse.json({ error: "Error al iniciar procesamiento" }, { status: 502 });
-    }
-  } catch (err) {
-    console.error("[procesar-documento] n8n webhook unreachable:", err);
-    return NextResponse.json({ error: "Servicio de procesamiento no disponible" }, { status: 503 });
+    return NextResponse.json({
+      ok: true,
+      documento_id: documento.id,
+      message: "OCR + procesamiento iniciado.",
+    });
   }
+
+  // Standard file processing
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from("documentos")
+    .download(documento.storage_path);
+
+  if (downloadError || !fileData) {
+    return NextResponse.json({ error: "Error descargando archivo" }, { status: 500 });
+  }
+
+  let contenido: string;
+
+  if (documento.tipo === "excel") {
+    const buffer = await fileData.arrayBuffer();
+    contenido = parseExcel(buffer);
+  } else if (["csv", "whatsapp"].includes(documento.tipo)) {
+    contenido = await fileData.text();
+  } else if (documento.tipo === "pdf") {
+    contenido = await fileData.text();
+  } else if (documento.tipo === "imagen") {
+    after(async () => {
+      try {
+        const start = Date.now();
+        const buffer = await fileData.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString("base64");
+        const { groupedText, totalTokensInput, totalTokensOutput } = await ocrAndGroupImages([{
+          base64,
+          mimeType: "image/jpeg",
+          fileName: documento.storage_path.split("/").pop() || "imagen",
+        }]);
+
+        if (!groupedText.trim()) throw new Error("OCR no extrajo texto de la imagen");
+
+        const result = await procesarDocumento(
+          documento.id,
+          usuario.empresa_id,
+          groupedText,
+          { ocrTokensInput: totalTokensInput, ocrTokensOutput: totalTokensOutput }
+        );
+
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        console.log(`[procesar-documento] ${documento.id} OCR single en ${elapsed}s — ${result.movimientos_total} movimientos`);
+      } catch (err) {
+        console.error(`[procesar-documento] ${documento.id} OCR error:`, err);
+      }
+    });
+
+    return NextResponse.json({
+      ok: true,
+      documento_id: documento.id,
+      message: "OCR + procesamiento iniciado.",
+    });
+  } else {
+    contenido = await fileData.text();
+  }
+
+  if (!contenido.trim()) {
+    return NextResponse.json({ error: "Documento vacio o sin contenido legible" }, { status: 422 });
+  }
+
+  after(async () => {
+    try {
+      const start = Date.now();
+      const result = await procesarDocumento(documento.id, usuario.empresa_id, contenido);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(
+        `[procesar-documento] ${documento.id} completado en ${elapsed}s — ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`
+      );
+    } catch (err) {
+      console.error(`[procesar-documento] ${documento.id} error fatal:`, err);
+    }
+  });
 
   return NextResponse.json({
     ok: true,
     documento_id: documento.id,
-    message: "Procesamiento iniciado en n8n. Sigue el progreso en tiempo real.",
+    message: "Procesamiento iniciado. Sigue el progreso en tiempo real.",
   });
 }
-
-/*
- * FALLBACK: Procesamiento directo en Vercel (comentado)
- * Descomentar si n8n no está disponible y se necesita procesamiento local.
- * Limitado a 60s en Vercel Hobby.
- *
- * import { after } from "next/server";
- * import { procesarDocumento } from "@/lib/ai/processor";
- * import { parseExcel } from "@/lib/parsers";
- * import { ocrAndGroupImages } from "@/lib/ai/ocr";
- *
- * // ... (descargar archivo, parsear, llamar procesarDocumento con after())
- */
