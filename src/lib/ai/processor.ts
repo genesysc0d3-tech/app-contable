@@ -181,6 +181,27 @@ export async function procesarDocumento(
         results[r.index] = r;
         completedCount++;
         totalMovsFound += r.movimientos.length;
+
+        // Audit logging — save chunk input + Mistral response
+        try {
+          const auditUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/audit_chunks`;
+          await fetch(auditUrl, {
+            method: "POST",
+            headers: {
+              "apikey": process.env.SUPABASE_SERVICE_ROLE_KEY!,
+              "Authorization": `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              documento_id: documentoId,
+              chunk_index: r.index,
+              chunk_input: chunks[r.index].join("\n").slice(0, 5000),
+              mistral_response: JSON.stringify({ movimientos: r.movimientos.slice(0, 3), propuestas: r.propuestas.slice(0, 3) }).slice(0, 5000),
+              movimientos_count: r.movimientos.length,
+              propuestas_count: r.propuestas.length,
+            }),
+          });
+        } catch { /* audit is non-blocking */ }
       }
 
       await updateProgreso(documentoId, {
