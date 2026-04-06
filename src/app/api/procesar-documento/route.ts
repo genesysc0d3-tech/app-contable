@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 
   if (documento.tipo === "excel") {
     const buffer = await fileData.arrayBuffer();
-    contenido = parseExcel(buffer);
+    contenido = await parseExcel(buffer, { documento_id: documento.id });
   } else if (["csv", "whatsapp"].includes(documento.tipo)) {
     contenido = await fileData.text();
   } else if (documento.tipo === "pdf") {
