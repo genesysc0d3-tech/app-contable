@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import CompletionBurst from "@/components/CompletionBurst";
-import { aprobarTodas } from "./actions";
+import { aprobarTodas, aprobarPropuesta, ocultarPropuesta } from "./actions";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
 import type { Tables } from "@/lib/database.types";
-import { CaretRight, FileText, CheckCircle } from "@phosphor-icons/react";
+import { CaretRight, FileText, CheckCircle, Check, PencilSimple, EyeSlash } from "@phosphor-icons/react";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -54,6 +54,90 @@ function fmtFechaCorta(dateStr: string | null | undefined): string {
   if (isNaN(d.getTime())) return "";
   const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   return `${d.getDate()} ${meses[d.getMonth()]}`;
+}
+
+function ThinRow({ propuesta, onExpand, onAction }: {
+  propuesta: Propuesta; onExpand: () => void; onAction: () => void;
+}) {
+  const [busy, setBusy] = useState<"aprobar" | "ocultar" | null>(null);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  async function handleAprobar(e: React.MouseEvent) {
+    e.stopPropagation();
+    setBusy("aprobar");
+    const res = await aprobarPropuesta(propuesta.id, propuesta.cliente_id ?? null);
+    if (res.error) toast(`Error: ${res.error}`, "error");
+    else toast("Aprobada");
+    router.refresh(); onAction(); setBusy(null);
+  }
+
+  async function handleOcultar(e: React.MouseEvent) {
+    e.stopPropagation();
+    setBusy("ocultar");
+    const res = await ocultarPropuesta(propuesta.id);
+    if (res.error) toast(`Error: ${res.error}`, "error");
+    else toast("Oculta");
+    router.refresh(); onAction(); setBusy(null);
+  }
+
+  function handleEditar(e: React.MouseEvent) {
+    e.stopPropagation();
+    onExpand();
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onExpand}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onExpand(); }}
+      className="w-full rounded-lg bg-white dark:bg-white/5 hover:bg-[var(--accent-light)] dark:hover:bg-white/10 transition-colors px-3 py-2 flex items-center gap-2 text-left animate-fade-in cursor-pointer"
+    >
+      <CaretRight size={10} weight="bold" className="text-[var(--muted-light)] shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-[var(--foreground)] truncate">
+          {propuesta.movimientos_raw.descripcion}
+        </p>
+        <div className="flex items-center gap-2 text-[9px] text-[var(--muted-light)] mt-0.5">
+          <span>{fmtFechaCorta(propuesta.movimientos_raw.fecha)}</span>
+          <span className="tabular-nums font-medium text-[var(--foreground)]">{fmtCLP(propuesta.movimientos_raw.monto)}</span>
+          {propuesta.receptor_nombre && <span className="truncate">· {propuesta.receptor_nombre}</span>}
+        </div>
+      </div>
+      <span className="text-[9px] text-[var(--muted)] tabular-nums shrink-0">
+        {Math.round((propuesta.confianza ?? 0) * 100)}%
+      </span>
+      <div className="flex gap-1 shrink-0 ml-1">
+        <button
+          type="button"
+          onClick={handleAprobar}
+          disabled={busy !== null}
+          title="Aprobar"
+          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20 disabled:opacity-50 transition-colors"
+        >
+          <Check size={12} weight="bold" />
+        </button>
+        <button
+          type="button"
+          onClick={handleEditar}
+          title="Editar"
+          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[var(--accent-light)] text-[#E8553E] hover:bg-[#FFE4E0] transition-colors"
+        >
+          <PencilSimple size={12} weight="bold" />
+        </button>
+        <button
+          type="button"
+          onClick={handleOcultar}
+          disabled={busy !== null}
+          title="Ocultar"
+          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--border)] disabled:opacity-50 transition-colors"
+        >
+          <EyeSlash size={12} weight="bold" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap }: {
@@ -147,26 +231,11 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                     omitidosAnidados={omitidosMap.get(`${p.movimientos_raw.documento_id}|${p.movimientos_raw.descripcion}|${p.movimientos_raw.monto}`) ?? []} />
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => toggleCard(p.id)}
-                  className="w-full rounded-lg bg-white dark:bg-white/5 hover:bg-[var(--accent-light)] dark:hover:bg-white/10 transition-colors px-3 py-2 flex items-center gap-2 text-left animate-fade-in"
-                >
-                  <CaretRight size={10} weight="bold" className="text-[var(--muted-light)] shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-[var(--foreground)] truncate">
-                      {p.movimientos_raw.descripcion}
-                    </p>
-                    <div className="flex items-center gap-2 text-[9px] text-[var(--muted-light)] mt-0.5">
-                      <span>{fmtFechaCorta(p.movimientos_raw.fecha)}</span>
-                      <span className="tabular-nums font-medium text-[var(--foreground)]">{fmtCLP(p.movimientos_raw.monto)}</span>
-                      {p.receptor_nombre && <span className="truncate">· {p.receptor_nombre}</span>}
-                    </div>
-                  </div>
-                  <span className="text-[9px] text-[var(--muted)] tabular-nums shrink-0">
-                    {Math.round((p.confianza ?? 0) * 100)}%
-                  </span>
-                </button>
+                <ThinRow
+                  propuesta={p}
+                  onExpand={() => toggleCard(p.id)}
+                  onAction={onAction}
+                />
               )}
             </div>
           ))}

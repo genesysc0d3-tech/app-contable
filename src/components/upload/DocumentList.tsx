@@ -211,7 +211,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
       <div key={origIdx} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px] space-y-1 animate-fade-in">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            {showCheckbox && !isInfo && (
+            {showCheckbox && (
               <input type="checkbox" checked={selected.has(key)} onChange={() => toggleSelect(key)}
                 className="w-3 h-3 rounded accent-[#E8553E] shrink-0" />
             )}
@@ -225,12 +225,14 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
               </div>
             </div>
           </div>
-          {showActions && !isConfirming && !isInfo && (
+          {showActions && !isConfirming && (
             <div className="flex gap-1 shrink-0">
-              <button onClick={() => setConfirmId(key)} disabled={!!forcing}
-                className="btn-press text-[9px] text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0] rounded px-2 py-1 transition-colors">
-                {btnLabel}
-              </button>
+              {!isInfo && (
+                <button onClick={() => setConfirmId(key)} disabled={!!forcing}
+                  className="btn-press text-[9px] text-[#E8553E] bg-[var(--accent-light)] hover:bg-[#FFE4E0] rounded px-2 py-1 transition-colors">
+                  {btnLabel}
+                </button>
+              )}
               <button onClick={() => handleOcultar(dup, origIdx)}
                 className="btn-press text-[9px] text-[var(--muted-light)] bg-[var(--surface)] hover:bg-[var(--border)] rounded px-1.5 py-1 transition-colors">
                 <EyeSlash size={12} />
