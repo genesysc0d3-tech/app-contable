@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#52 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#53 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #53** — classifier determinístico por reglas antes de Mistral. Tabla `clasificacion_reglas` con `empresa_id` nullable (NULL = global). Columns `fuente_clasificacion` + `regla_id` en `propuestas_ia` para trazabilidad SII. 15 reglas globales pre-cargadas cubriendo patrones chilenos: TRANSFER DE/A (p2p), ABONO POR TRF, CARGO POR TRANSF (gasto_egreso), crypto/forex, boletas/facturas, servicios (luz/agua/gas/internet), arriendo, remuneraciones, comisiones, impuestos SII, previsional. Processor bypass path: rules-first → Mistral fallback con confianza cap 0.75 (nunca auto-aprueba). Validación local: Cartola N°02 alcanza 100% de cobertura por reglas (675/675), cero llamadas a Mistral, tipos 650 p2p + 23 gasto_egreso + 2 crypto. Garantiza bit-exactitud repetible en clasificación.
 
 **PR #52** — chore: ESLint 0 errores 0 warnings. 14 issues heredados arreglados: (1) setState-in-effect en ThemeToggle reemplazado por lazy useState, (2) disable comments justificados en PropuestaCard/SubirClient/ResumenClient para casos legítimos de fetch-on-deps y autocomplete desde datos externos, (3) import Image → ImageIcon en FileUpload (falso positivo jsx-a11y/alt-text), (4) remove unused vars en DocumentList, processor, ResumenClient. Parser validado: sigue dando 675/636/39 exactos.
 
