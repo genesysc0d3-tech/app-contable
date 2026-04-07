@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#57 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#58 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #58** — fix UI: remover botón Ignorar del desplegable de propuestas duplicadas. El usuario pidió que el dup nunca desaparezca sin acción explícita. Quedan solo Aprobar y Devolver. El "ojito" para ocultar omitidos en /subir se mantiene intacto.
 
 **PR #57** — fix: restaurar flujo omitido para dups intra-archivo en bypass mode. Revierte PR #55 (auto-insert + warning informativo). El usuario pide control manual sobre cada duplicado para SII: dup → omitido por defecto → muestra en visor con motivo → "Agregar igual" para insertar. Acepta la fricción de SKIPO (14 dups manuales) a cambio de explícita verificación. processor.ts: shouldSkip=true para intra-file en bypass igual que legacy. DocumentList.tsx revertido al render unificado de omitidos. info_only queda como flag latente en types para futuro uso.
 
