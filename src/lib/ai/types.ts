@@ -85,6 +85,13 @@ export interface DuplicadoDetalle {
   indice_conflicto?: number;
   repeticiones?: number;
   oculto?: boolean;
+  /**
+   * True when this entry is informational only: the movimiento was KEPT
+   * in the database (not skipped) but flagged for the user to review.
+   * Used in bypass mode for intra-file duplicates that are legitimately
+   * separate transactions (e.g. multiple cargos same day same monto).
+   */
+  info_only?: boolean;
 }
 
 export interface ProgresoIA {

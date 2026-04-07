@@ -201,7 +201,8 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
     const isConfirming = confirmId === key;
     const dupTipo = (dup as DuplicadoDetalle & { tipo?: TipoDuplicado }).tipo;
     const isConfirmed = dupTipo === "otro_doc_confirmado" || dupTipo === "mismo_ndoc_mismo_arch" || dupTipo === "mismo_ndoc_otro_arch";
-    const isInfo = dupTipo === "multi_transfer_p2p";
+    // Informational: guardado, sin acciones — multi_transfer_p2p o info_only de bypass mode
+    const isInfo = dupTipo === "multi_transfer_p2p" || dup.info_only === true;
     const iconColor = isInfo ? "text-[#3B82F6]" : isConfirmed ? "text-[#E8553E]" : "text-[#F59E0B]";
     const IconComp = isInfo ? Info : isConfirmed ? XCircle : WarningCircle;
     const btnLabel = isConfirmed ? "Agregar igual" : "Agregar";
@@ -277,43 +278,68 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
         </div>
       )}
 
-      {/* Active omitidos */}
-      {activos.length > 0 && (
-        <>
-          <button onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] hover:text-[#D97706] transition-colors">
-            <ArrowUUpLeft size={12} weight="bold" />
-            <span>Ver {activos.length} omitido{activos.length !== 1 ? "s" : ""}</span>
-            <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
-          </button>
+      {/* Active items split into "omitidos" (skipped, action needed) and "warnings" (kept, info only) */}
+      {(() => {
+        const omitidos = activos.filter((d) => !d.info_only);
+        const warnings = activos.filter((d) => d.info_only);
+        return (
+          <>
+            {omitidos.length > 0 && (
+              <>
+                <button onClick={() => setExpanded(!expanded)}
+                  className="flex items-center gap-1.5 text-[10px] text-[#F59E0B] hover:text-[#D97706] transition-colors">
+                  <ArrowUUpLeft size={12} weight="bold" />
+                  <span>Ver {omitidos.length} omitido{omitidos.length !== 1 ? "s" : ""}</span>
+                  <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+                </button>
 
-          {expanded && (
-            <div className="space-y-1.5 animate-fade-in">
-              {selectableKeys.length > 1 && (
-                <div className="flex items-center justify-between px-1 gap-1.5">
-                  <label className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] cursor-pointer">
-                    <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3 h-3 rounded accent-[#E8553E]" />
-                    Seleccionar todos
-                  </label>
-                  {selectedCount > 0 && (
-                    <div className="flex gap-1">
-                      <button onClick={handleBatchInsert} disabled={batchLoading}
-                        className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">
-                        {batchLoading ? "..." : `Agregar (${selectedCount})`}
-                      </button>
-                      <button onClick={handleBatchOcultar} disabled={batchLoading}
-                        className="btn-press text-[9px] text-[var(--muted)] bg-[var(--surface)] hover:bg-[var(--border)] rounded px-2 py-1">
-                        Ocultar ({selectedCount})
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-              {activos.map((dup) => renderItem(dup, true, true))}
-            </div>
-          )}
-        </>
-      )}
+                {expanded && (
+                  <div className="space-y-1.5 animate-fade-in">
+                    {selectableKeys.length > 1 && (
+                      <div className="flex items-center justify-between px-1 gap-1.5">
+                        <label className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] cursor-pointer">
+                          <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3 h-3 rounded accent-[#E8553E]" />
+                          Seleccionar todos
+                        </label>
+                        {selectedCount > 0 && (
+                          <div className="flex gap-1">
+                            <button onClick={handleBatchInsert} disabled={batchLoading}
+                              className="btn-press text-[9px] bg-[#E8553E] text-white rounded px-2 py-1 disabled:opacity-50">
+                              {batchLoading ? "..." : `Agregar (${selectedCount})`}
+                            </button>
+                            <button onClick={handleBatchOcultar} disabled={batchLoading}
+                              className="btn-press text-[9px] text-[var(--muted)] bg-[var(--surface)] hover:bg-[var(--border)] rounded px-2 py-1">
+                              Ocultar ({selectedCount})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {omitidos.map((dup) => renderItem(dup, true, true))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {warnings.length > 0 && (
+              <>
+                <button onClick={() => setExpanded(!expanded)}
+                  className="flex items-center gap-1.5 text-[10px] text-[#3B82F6] hover:text-[#2563EB] transition-colors">
+                  <Info size={12} weight="fill" />
+                  <span>{warnings.length} aviso{warnings.length !== 1 ? "s" : ""} para revisar (guardado{warnings.length !== 1 ? "s" : ""})</span>
+                  <CaretDown size={10} weight="bold" className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+                </button>
+
+                {expanded && (
+                  <div className="space-y-1.5 animate-fade-in">
+                    {warnings.map((dup) => renderItem(dup, false, false))}
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {/* Hidden omitidos */}
       {ocultos.length > 0 && (
@@ -447,8 +473,8 @@ export default function DocumentList({ documentos, onDocumentoUpdate }: Document
               <p className="text-xs text-[#E8553E] mt-1 truncate">Error: {progreso.error}</p>
             )}
 
-            {/* Duplicates visor */}
-            {doc.estado === "procesado" && dupCount > 0 && (
+            {/* Duplicates visor — shown when there are skipped dups OR informational warnings */}
+            {doc.estado === "procesado" && (dupCount > 0 || duplicados.length > 0) && (
               duplicados.length > 0 ? (
                 <DuplicadoVisor duplicados={duplicados} documentoId={doc.id} hasWarning={hasWarning} />
               ) : (

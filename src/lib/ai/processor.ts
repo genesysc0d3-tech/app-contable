@@ -719,6 +719,7 @@ export async function procesarDocumento(
             indice_archivo: i,
             indice_conflicto: indiceConflicto,
             repeticiones,
+            info_only: true,
           });
         }
         indicesToKeep.push(i);
