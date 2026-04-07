@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#60 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#61 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #61** — parser: tercer layout `transactions_log`. Cuando subimos transacciones_prueba.xlsx (planilla manual de ventas P2P con fecha/desc/monto sin tipo flag ni saldo) cayó a capa 4 legacy. Nuevo layout: detecta fecha + desc + 1 monto, default_tipo_flujo configurable (entrada por defecto). Heurística para columna monto: solo numéricos en rango 1000-1B, excluye RUTs y teléfonos chilenos (~5.7e10). Validado: 5/5 extraídas con monto correcto, 5/5 clasificadas como compraventa_crypto.
 
 **PR #60** — feat /revisar: sección Omitidos huérfanos + Ocultar reversible + motivo preservado. (1) Los duplicados huérfanos (cuyo padre ya fue aprobado) ya no se mezclan con alta/media/baja: tienen su propia sección naranja con mensaje explicativo. (2) Botón "Ignorar" reemplazado por "Ocultar" reversible: nuevo estado='oculto' (migración add_oculto_estado), nuevas server actions ocultarPropuesta/restaurarPropuesta, sección "Ocultas" gris al final, botón se invierte a "Restaurar" con icono Eye cuando ya está oculta. (3) Motivo del omitido se pasa via API /forzar-movimiento y se prepende a notas como "Motivo original: ..." para que se vea en /revisar.
 
