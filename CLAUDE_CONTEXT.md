@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#71 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#72 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #72** — feat /revisar thin row con acciones + fix /subir omitidos info_only. **(1)** En `/revisar`, cada propuesta colapsada (PR #71) ahora muestra 3 íconos a la derecha: Check (aprobar — verde, llama `aprobarPropuesta` directo), PencilSimple (editar — naranja, expande la card), EyeSlash (ocultar — gris, llama `ocultarPropuesta`). Componente `ThinRow` extraído. **(2)** Fix /subir: la condición `!isInfo` en `DocumentList.renderItem` ocultaba checkbox y botones de acción para items `info_only` (introducidos en PR #68 para cartolas solo-abonos). Ahora checkbox y botón Ocultar siempre visibles; botón Agregar solo cuando NO es info_only (porque info_only ya está guardado).
 
 **PR #71** — feat /revisar: cards colapsables por defecto. Tercer nivel de colapso pedido por el usuario (doc → confianza → renglón delgado → card completa). Cada propuesta empieza como un thin row con descripción, fecha, monto, receptor (si existe) y % de confianza. Click → expande a `PropuestaCard` (sin tocar el componente, solo se envuelve en `RevisarClient`). Estado por `Set<id>` local en `ConfianzaGroup`. Botón "Contraer" arriba de la card cuando está expandida. Permite scanear backlogs grandes mucho más rápido sin abrir cada tx.
 
