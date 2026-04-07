@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#66 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#67 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #67** — fix processor: motivo de duplicado usa `excel_row` real del conflicto. El texto del motivo seguía usando `seen.firstIndex + 1` (posición parseada), mientras que el prefijo del UI ya usaba `excel_row`. Inconsistente: prefijo decía "Fila 43" pero motivo decía "fila 30". Fix: leer `excel_row` del registro conflictivo desde `movimientosParsed` y usarlo en los strings de motivo de `loose_mismo_arch` y `mismo_ndoc_mismo_arch`. Fallback a `firstIndex + 1` si excel_row no existe.
 
 **PR #66** — fix processor: strip `excel_row`/`saldo` antes del insert en `movimientos_raw`. Bug introducido en PR #65: `movimientosParsed` cargaba ambos campos para la validación de duplicados, pero la tabla no los tiene y PostgREST rechazaba con `Could not find the 'excel_row' column`. Fix: destructurar y descartar al construir `movimientosToInsert`. Solo viven en memoria para el dup check.
 
