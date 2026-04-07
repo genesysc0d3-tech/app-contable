@@ -39,8 +39,8 @@ function ProgresoBar({ progreso, estado }: { progreso: ProgresoIA | null; estado
   const lote_actual = progreso?.lote_actual;
   const total_lotes = progreso?.total_lotes;
   const movimientos_encontrados = progreso?.movimientos_encontrados;
-  const hasProgress = Boolean(total_lotes && lote_actual);
-  const pct = hasProgress ? (lote_actual / total_lotes) * 100 : 0;
+  const hasProgress = !!total_lotes && !!lote_actual;
+  const pct = hasProgress ? ((lote_actual as number) / (total_lotes as number)) * 100 : 0;
 
   // Phase labels
   let label = "Preparando documento...";
@@ -244,12 +244,32 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
             </button>
           )}
         </div>
-        <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>
-          {!isInfo && typeof dup.indice_archivo === "number" && (
-            <span className="not-italic font-medium text-[var(--foreground)]">Tx en fila {dup.indice_archivo + 1} — </span>
-          )}
-          {dup.motivo}
-        </p>
+        {(() => {
+          const filaPropia = dup.excel_row ?? (typeof dup.indice_archivo === "number" ? dup.indice_archivo + 1 : undefined);
+          const filaConflicto = dup.excel_row_conflicto ?? (typeof dup.indice_conflicto === "number" ? dup.indice_conflicto + 1 : undefined);
+          return (
+            <>
+              {dup.saldo_check === "real_banco" && !isInfo && (
+                <p className="text-[10px] text-[#22C55E] font-medium flex items-center gap-1">
+                  <XCircle size={10} weight="fill" />
+                  Duplicado de exportación del banco — saldo no cuadra. Recomendado: mantener omitido.
+                </p>
+              )}
+              {dup.saldo_check === "operaciones_reales" && !isInfo && (
+                <p className="text-[10px] text-[#E8553E] font-medium flex items-center gap-1">
+                  <WarningCircle size={10} weight="fill" />
+                  Dos operaciones reales — saldo cuadra con la fila {filaConflicto ?? "?"}. Sugerido: Agregar igual.
+                </p>
+              )}
+              <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>
+                {!isInfo && typeof filaPropia === "number" && (
+                  <span className="not-italic font-medium text-[var(--foreground)]">Fila {filaPropia} — </span>
+                )}
+                {dup.motivo}
+              </p>
+            </>
+          );
+        })()}
         {dup.origen_documento_nombre !== "Este archivo" && (
           <p className="text-[var(--muted-light)] flex items-center gap-1">
             <Warning size={10} className="text-[#F59E0B] shrink-0" />

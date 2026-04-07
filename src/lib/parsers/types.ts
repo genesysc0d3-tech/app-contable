@@ -67,6 +67,10 @@ export interface ParsedLine {
   monto: number;
   descripcion: string;
   n_documento: string;
+  /** 1-based row number in the original Excel sheet (for user-facing display). */
+  excel_row?: number;
+  /** Saldo de la fila si la cartola tiene columna saldo. Usado para validar duplicados. */
+  saldo?: number;
 }
 
 export interface OrchestratorResult {
@@ -94,4 +98,6 @@ export interface PreExtractedMovimiento {
   tipo_flujo: "entrada" | "salida";
   origen: string;
   n_documento: string | null;
+  excel_row?: number;
+  saldo?: number;
 }

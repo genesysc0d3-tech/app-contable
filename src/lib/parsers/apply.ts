@@ -122,8 +122,17 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
     const descripcion = String(r[c.descripcion] ?? "").trim();
     const n_documento =
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";
+    const saldo = c.saldo >= 0 ? parseChileanNumber(r[c.saldo]) : undefined;
 
-    lines.push({ tipo, fecha, monto, descripcion, n_documento });
+    lines.push({
+      tipo,
+      fecha,
+      monto,
+      descripcion,
+      n_documento,
+      excel_row: i + 1,
+      saldo,
+    });
   }
 
   return lines;
@@ -142,6 +151,8 @@ export function linesToPreExtracted(lines: ParsedLine[]): PreExtractedMovimiento
     tipo_flujo: l.tipo === "ENTRADA" ? "entrada" : "salida",
     origen: "cartola_preparseada",
     n_documento: l.n_documento || null,
+    excel_row: l.excel_row,
+    saldo: l.saldo,
   }));
 }
 
