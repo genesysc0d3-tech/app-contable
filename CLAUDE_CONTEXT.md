@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#67 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#68 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #68** — feat processor: cartola solo-abonos + saldo check solo positivo. Cambio basado en feedback de Contador Auditor: las cartolas filtradas solo-abonos son un caso de uso normal porque el contador solo procesa abonos (cada uno = potencial venta/op gravada para F29). Pagos P2P repetidos del mismo cliente el mismo día son legítimos en negocios de exchange. **(1)** Detecta `cartolaSoloAbonos = (≥10 filas && every entrada)`. **(2)** Intra-file loose dup en solo-abonos: NO omitir, se marca `isInfoWarning=true` → se guarda el mov + flag `info_only` en el visor (no bloquea). **(3)** `saldo_check` reducido a `"operaciones_reales" | undefined` — eliminada la rama "real_banco" porque cartolas filtradas u orden no-cronológico estricto generan falsos positivos recomendando omitir tx legítimas. **(4)** UI: removido el highlight rojo "duplicado del banco". Solo queda el verde "operaciones reales confirmadas" con monto y filas explícitas para auditabilidad SII.
 
 **PR #67** — fix processor: motivo de duplicado usa `excel_row` real del conflicto. El texto del motivo seguía usando `seen.firstIndex + 1` (posición parseada), mientras que el prefijo del UI ya usaba `excel_row`. Inconsistente: prefijo decía "Fila 43" pero motivo decía "fila 30". Fix: leer `excel_row` del registro conflictivo desde `movimientosParsed` y usarlo en los strings de motivo de `loose_mismo_arch` y `mismo_ndoc_mismo_arch`. Fallback a `firstIndex + 1` si excel_row no existe.
 
