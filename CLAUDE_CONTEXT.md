@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#54 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#55 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #55** — fix: intra-file dups como warning en bypass mode. RUN 18 guardaba 10/10 correctamente pero no avisaba del duplicado. PR #50 había deshabilitado completamente el intra-batch dedup en bypass para fix del caso SKIPO, matando también la señal informativa. Ahora separado: `shouldSkip` (descarta: cross-file + legacy intra-file) vs `isInfoWarning` (mantiene el mov + flaguea en duplicadosDetalle: bypass intra-file). Mensajes ajustados explicando que son operaciones reales guardadas para que el usuario revise.
 
 **PR #54** — parser: soporte layout `single_col` + reglas ampliadas. Nuevo layout en la heurística para cartolas con 1 columna Monto + 1 columna Tipo (Abono/Cargo) en vez de 2 mutuamente exclusivas. `AdapterConfig.layout` + `columns.monto/tipo_flujo_col` opcionales. `countEquationMatches()` usa `saldo[i] = saldo[i-1] ± monto[i]` para discriminar monto vs saldo de forma matemática (evita heurísticas de rango). `REQUIRED_CONSECUTIVE` bajado a 3 para cartolas chicas. Migración expand_global_rules: TRANSFERENCIA|TRANSFER RECIBIDA/ENVIADA, tipo_flujo_match=NULL en boletas/facturas, patrones COMPRA/PAGO/marketplaces/gateways, crypto prioridad 70 (gana sobre forex en USDT), forex regex con word boundaries. Validado contra cartola_prueba_10mov.xlsx: 10/10 extraídas con monto correcto, 100% clasificadas por reglas, cero Mistral.
 
