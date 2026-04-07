@@ -42,15 +42,34 @@ export function normalizeDate(
 }
 
 /**
+ * Classify a tipo_flujo string value from a "single_col" layout's tipo flag.
+ * Returns "SALIDA" for cargo/débito/egreso variants, "ENTRADA" for abono/
+ * crédito/ingreso variants. Returns null if unrecognized.
+ */
+function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
+  if (v == null) return null;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return null;
+  if (/^(cargo|d[eé]bito|debito|egreso|salida|giro|cheque)/.test(s)) return "SALIDA";
+  if (/^(abono|cr[eé]dito|credito|ingreso|entrada|dep[oó]sito|deposito)/.test(s)) return "ENTRADA";
+  return null;
+}
+
+/**
  * Apply an adapter config to raw rows → list of parsed transaction lines.
+ * Supports two layouts:
+ *  - two_cols: separate cargo and abono columns (mutually exclusive)
+ *  - single_col: one monto column + one tipo_flujo_col with "Abono"/"Cargo"
+ *
  * Skips:
  *  - Rows before skip_rows_before_data
  *  - Rows where the fecha column doesn't contain a date
- *  - Rows where BOTH cargo and abono are zero (metadata / summary lines)
+ *  - Rows without a valid amount / ambiguous type
  */
 export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
   const lines: ParsedLine[] = [];
   const { columns: c } = cfg;
+  const layout = cfg.layout ?? "two_cols";
   const start = cfg.skip_rows_before_data;
 
   for (let i = start; i < rows.length; i++) {
@@ -63,19 +82,31 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
     if (!fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))
       continue;
 
-    const cargo = parseChileanNumber(r[c.cargo]);
-    const abono = parseChileanNumber(r[c.abono]);
+    let tipo: ParsedLine["tipo"];
+    let monto: number;
 
-    // Both zero → metadata, summary, or blank line
-    if (!cargo && !abono) continue;
+    if (layout === "single_col") {
+      const montoCol = c.monto ?? -1;
+      const tipoCol = c.tipo_flujo_col ?? -1;
+      if (montoCol < 0 || tipoCol < 0) continue;
+      const amount = parseChileanNumber(r[montoCol]);
+      if (!amount) continue;
+      const t = classifyTipoFlag(r[tipoCol]);
+      if (!t) continue;
+      tipo = t;
+      monto = amount;
+    } else {
+      const cargo = parseChileanNumber(r[c.cargo]);
+      const abono = parseChileanNumber(r[c.abono]);
+      // Both zero → metadata, summary, or blank line
+      if (!cargo && !abono) continue;
+      // Both non-zero → ambiguous, skip
+      if (cargo && abono) continue;
+      tipo = cargo ? "SALIDA" : "ENTRADA";
+      monto = cargo || abono;
+    }
 
-    // Both non-zero → ambiguous, skip (shouldn't happen in well-formed cartolas)
-    if (cargo && abono) continue;
-
-    const tipo: ParsedLine["tipo"] = cargo ? "SALIDA" : "ENTRADA";
-    const monto = cargo || abono;
     const fecha = normalizeDate(fechaRaw, cfg.date_format);
-
     const descripcion = String(r[c.descripcion] ?? "").trim();
     const n_documento =
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";

@@ -13,7 +13,8 @@ import { parseChileanNumber } from "./apply";
  * should then fall back to the next layer.
  */
 export function detectHeuristic(rows: Row[]): AdapterConfig | null {
-  // Step 1: find the first run of >= 5 consecutive "transaction-looking" rows
+  // Step 1: find the first run of >= 3 consecutive "transaction-looking" rows
+  // (lowered from 5 to also accept smaller test cartolas)
   const txStart = findTransactionBlockStart(rows);
   if (txStart < 0) return null;
 
@@ -23,27 +24,40 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
     const r = rows[i];
     if (r && isTransactionRow(r)) sample.push(r);
   }
-  if (sample.length < 5) return null;
+  if (sample.length < 3) return null;
 
-  // Step 3: infer column roles across the sample
-  const cols = inferColumns(sample);
-  if (!cols) return null;
+  // Step 3: try layout detection (two_cols first, then single_col)
+  const twoColsCfg = inferColumns(sample);
+  if (twoColsCfg) {
+    const firstFecha = String(sample[0][twoColsCfg.fecha] ?? "");
+    return {
+      header_row: Math.max(0, txStart - 1),
+      skip_rows_before_data: txStart,
+      date_format: detectDateFormat(firstFecha),
+      number_format: "chilean",
+      layout: "two_cols",
+      columns: twoColsCfg,
+    };
+  }
 
-  // Step 4: figure out date format from the first fecha value
-  const firstFecha = String(sample[0][cols.fecha] ?? "");
-  const dateFormat = detectDateFormat(firstFecha);
+  const singleColCfg = inferSingleColLayout(sample);
+  if (singleColCfg) {
+    const firstFecha = String(sample[0][singleColCfg.fecha] ?? "");
+    return {
+      header_row: Math.max(0, txStart - 1),
+      skip_rows_before_data: txStart,
+      date_format: detectDateFormat(firstFecha),
+      number_format: "chilean",
+      layout: "single_col",
+      columns: singleColCfg,
+    };
+  }
 
-  return {
-    header_row: Math.max(0, txStart - 1),
-    skip_rows_before_data: txStart,
-    date_format: dateFormat,
-    number_format: "chilean",
-    columns: cols,
-  };
+  return null;
 }
 
 function findTransactionBlockStart(rows: Row[]): number {
-  const REQUIRED_CONSECUTIVE = 5;
+  const REQUIRED_CONSECUTIVE = 3;
   let consec = 0;
   let start = -1;
 
@@ -94,6 +108,8 @@ interface InferredCols {
   cargo: number;
   abono: number;
   saldo: number;
+  monto?: number;
+  tipo_flujo_col?: number;
 }
 
 function inferColumns(sample: Row[]): InferredCols | null {
@@ -265,6 +281,179 @@ function isLikelyRunningBalance(series: number[]): boolean {
     if (ratio > 100 || ratio < 0.01) bigJumps++;
   }
   return bigJumps / nonZero.length < 0.1;
+}
+
+/**
+ * Detect a "single_col" layout: one numeric column (monto) + one text column
+ * whose values are flags like "Abono"/"Cargo" or "Crédito"/"Débito". This
+ * covers simplified Chilean cartolas and test files with a single amount.
+ */
+function inferSingleColLayout(sample: Row[]): InferredCols | null {
+  const ncols = Math.max(...sample.map((r) => r.length));
+  if (ncols < 3) return null;
+
+  // Find fecha column
+  let fechaCol = -1;
+  for (let col = 0; col < ncols; col++) {
+    let dates = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim();
+      if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)) {
+        dates++;
+      }
+    }
+    if (dates / sample.length >= 0.8) {
+      fechaCol = col;
+      break;
+    }
+  }
+  if (fechaCol < 0) return null;
+
+  // Find descripcion column (longest average text, not fecha)
+  let descCol = -1;
+  let maxLen = 0;
+  for (let col = 0; col < ncols; col++) {
+    if (col === fechaCol) continue;
+    let totalLen = 0;
+    let textCount = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim();
+      if (!s) continue;
+      // Skip numeric-looking values
+      if (/^-?[\d.,]+$/.test(s) && /\d/.test(s)) continue;
+      totalLen += s.length;
+      textCount++;
+    }
+    const avg = textCount > 0 ? totalLen / textCount : 0;
+    if (avg > maxLen && avg > 10) {
+      maxLen = avg;
+      descCol = col;
+    }
+  }
+  if (descCol < 0) return null;
+
+  // Find tipo_flujo column: text column with values matching Abono/Cargo pattern
+  let tipoCol = -1;
+  for (let col = 0; col < ncols; col++) {
+    if (col === fechaCol || col === descCol) continue;
+    let matches = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim().toLowerCase();
+      if (!s) continue;
+      if (/^(abono|cargo|cr[eé]dito|d[eé]bito|ingreso|egreso|dep[oó]sito|giro)/.test(s)) {
+        matches++;
+      }
+    }
+    if (matches / sample.length >= 0.8) {
+      tipoCol = col;
+      break;
+    }
+  }
+  if (tipoCol < 0) return null;
+
+  // Collect all candidate numeric columns
+  const numericCols: number[] = [];
+  for (let col = 0; col < ncols; col++) {
+    if (col === fechaCol || col === descCol || col === tipoCol) continue;
+    let numericCount = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim();
+      if (!s) continue;
+      if (parseChileanNumberLocal(s) > 0) numericCount++;
+    }
+    if (numericCount / sample.length >= 0.7) numericCols.push(col);
+  }
+
+  let montoCol = -1;
+  let saldoCol = -1;
+
+  if (numericCols.length === 1) {
+    // Only one numeric column → that's monto, no saldo
+    montoCol = numericCols[0];
+  } else if (numericCols.length >= 2) {
+    // Try every pair (a=monto, b=saldo) and pick the one where the equation
+    //   saldo[i] = saldo[i-1] + sign(tipo[i]) * monto[i]
+    // matches the most consecutive rows. This is the mathematical
+    // discriminator between monto (transaction amount) and saldo (running
+    // balance) and is immune to range/variance heuristics.
+    let bestScore = -1;
+    let bestPair: { monto: number; saldo: number } | null = null;
+    for (let i = 0; i < numericCols.length; i++) {
+      for (let j = 0; j < numericCols.length; j++) {
+        if (i === j) continue;
+        const m = numericCols[i];
+        const s = numericCols[j];
+        const score = countEquationMatches(sample, m, s, tipoCol);
+        if (score > bestScore) {
+          bestScore = score;
+          bestPair = { monto: m, saldo: s };
+        }
+      }
+    }
+    // Require at least half of testable pairs to satisfy the equation.
+    if (bestPair && bestScore >= Math.floor((sample.length - 1) / 2)) {
+      montoCol = bestPair.monto;
+      saldoCol = bestPair.saldo;
+    } else if (bestPair) {
+      // Couldn't verify via equation → fall back to first numeric col as monto
+      montoCol = numericCols[0];
+      saldoCol = numericCols[1] ?? -1;
+    }
+  }
+
+  if (montoCol < 0) return null;
+
+  return {
+    fecha: fechaCol,
+    descripcion: descCol,
+    n_documento: -1,
+    cargo: montoCol,         // Re-used for storage; apply.ts uses monto in single_col mode
+    abono: montoCol,         // Same
+    saldo: saldoCol,
+    monto: montoCol,
+    tipo_flujo_col: tipoCol,
+  };
+}
+
+function parseChileanNumberLocal(s: string): number {
+  const digits = s.replace(/[^\d]/g, "");
+  return digits ? parseInt(digits, 10) : 0;
+}
+
+/**
+ * Count how many consecutive rows satisfy saldo[i] = saldo[i-1] ± monto[i],
+ * where the sign is determined by the tipo_flujo column. Used to pick the
+ * correct monto vs saldo assignment when two numeric columns are present.
+ */
+function countEquationMatches(
+  sample: Row[],
+  montoCol: number,
+  saldoCol: number,
+  tipoCol: number
+): number {
+  let matches = 0;
+  for (let i = 1; i < sample.length; i++) {
+    const prevSaldoRaw = sample[i - 1][saldoCol];
+    const currSaldoRaw = sample[i][saldoCol];
+    const currMontoRaw = sample[i][montoCol];
+    const currTipoRaw = sample[i][tipoCol];
+
+    const prevSaldo = parseChileanNumberLocal(String(prevSaldoRaw ?? ""));
+    const currSaldo = parseChileanNumberLocal(String(currSaldoRaw ?? ""));
+    const currMonto = parseChileanNumberLocal(String(currMontoRaw ?? ""));
+    if (!prevSaldo || !currSaldo || !currMonto) continue;
+
+    const tipoStr = String(currTipoRaw ?? "").trim().toLowerCase();
+    let sign = 0;
+    if (/^(abono|cr[eé]dito|credito|ingreso|dep[oó]sito|deposito)/.test(tipoStr)) sign = 1;
+    else if (/^(cargo|d[eé]bito|debito|egreso|giro)/.test(tipoStr)) sign = -1;
+    if (sign === 0) continue;
+
+    const expected = prevSaldo + sign * currMonto;
+    // Tolerance: 10 CLP absolute for rounding
+    if (Math.abs(currSaldo - expected) <= 10) matches++;
+  }
+  return matches;
 }
 
 function detectDateFormat(sample: string): AdapterConfig["date_format"] {

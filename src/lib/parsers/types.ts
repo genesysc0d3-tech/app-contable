@@ -7,13 +7,22 @@ export interface AdapterConfig {
   skip_rows_before_data: number;
   date_format: "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "unknown";
   number_format: "chilean" | "generic";
+  /**
+   * Layout variants:
+   *  - "two_cols": separate cargo and abono columns (Banco de Chile style)
+   *  - "single_col": one monto column + one tipo_flujo column with values
+   *    like "Abono"/"Cargo" or "Crédito"/"Débito"
+   */
+  layout?: "two_cols" | "single_col";
   columns: {
     fecha: number;
     descripcion: number;
     n_documento: number; // -1 if not present
-    cargo: number;
-    abono: number;
-    saldo: number; // -1 if not present
+    cargo: number;        // two_cols: cargo column | single_col: ignored (use monto)
+    abono: number;        // two_cols: abono column | single_col: ignored
+    saldo: number;        // -1 if not present
+    monto?: number;       // single_col only: the numeric amount column
+    tipo_flujo_col?: number; // single_col only: text column with "Abono"/"Cargo"
   };
 }
 
