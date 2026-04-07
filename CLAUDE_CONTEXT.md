@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#69 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#70 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #70** — fix UI BottomNav: badge de Revisar soporta miles. Antes: tope "99+". Ahora formato compacto: 999 → "999", 1000 → "1k", 1234 → "1.2k", 12345 → "12k", ≥100000 → "99k+". Útil para backlogs grandes.
 
 **PR #69** — fix UI /subir: prefijo `Fila X — ` también en items `info_only`. El prefijo del motivo estaba condicionado a `!isInfo`, así que en cartolas solo-abonos (PR #68) los duplicados info_only aparecían en azul pero sin indicar la fila del Excel. Fix: condicionar a `dupTipo !== "multi_transfer_p2p"` (único caso sin fila concreta) en vez de `!isInfo`. Color del prefijo se ajusta al esquema azul cuando isInfo.
 
