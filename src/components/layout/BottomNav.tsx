@@ -67,7 +67,13 @@ export default function BottomNav() {
               <span className="text-[10px] font-medium">{item.label}</span>
               {showBadge && (
                 <span className="absolute -top-0.5 right-0 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#E8553E] text-[9px] font-bold text-white px-1 animate-fade-in">
-                  {pendientes > 99 ? "99+" : pendientes}
+                  {pendientes >= 100000
+                    ? "99k+"
+                    : pendientes >= 10000
+                    ? `${Math.floor(pendientes / 1000)}k`
+                    : pendientes >= 1000
+                    ? `${(pendientes / 1000).toFixed(1).replace(/\.0$/, "")}k`
+                    : pendientes}
                 </span>
               )}
             </Link>
