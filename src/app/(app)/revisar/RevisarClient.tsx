@@ -44,11 +44,32 @@ function classifyConfianza(p: Propuesta): "alta" | "media" | "baja" {
 
 type OmitidosMap = Map<string, Propuesta[]>;
 
+function fmtCLP(n: number | null | undefined): string {
+  return `$${Math.round(n ?? 0).toLocaleString("es-CL")}`;
+}
+
+function fmtFechaCorta(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return `${d.getDate()} ${meses[d.getMonth()]}`;
+}
+
 function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap }: {
   tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+
+  function toggleCard(id: string) {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
   const router = useRouter();
   const { toast } = useToast();
 
@@ -113,8 +134,40 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                   Propuesta oculta — podés restaurarla aprobándola, editándola o devolviéndola.
                 </p>
               )}
-              <PropuestaCard propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction}
-                omitidosAnidados={omitidosMap.get(`${p.movimientos_raw.documento_id}|${p.movimientos_raw.descripcion}|${p.movimientos_raw.monto}`) ?? []} />
+              {expandedCards.has(p.id) ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => toggleCard(p.id)}
+                    className="w-full text-left text-[10px] text-[var(--muted)] hover:text-[var(--foreground)] mb-1.5 px-1 transition-colors"
+                  >
+                    ▾ Contraer
+                  </button>
+                  <PropuestaCard propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction}
+                    omitidosAnidados={omitidosMap.get(`${p.movimientos_raw.documento_id}|${p.movimientos_raw.descripcion}|${p.movimientos_raw.monto}`) ?? []} />
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleCard(p.id)}
+                  className="w-full rounded-lg bg-white dark:bg-white/5 hover:bg-[var(--accent-light)] dark:hover:bg-white/10 transition-colors px-3 py-2 flex items-center gap-2 text-left animate-fade-in"
+                >
+                  <CaretRight size={10} weight="bold" className="text-[var(--muted-light)] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-[var(--foreground)] truncate">
+                      {p.movimientos_raw.descripcion}
+                    </p>
+                    <div className="flex items-center gap-2 text-[9px] text-[var(--muted-light)] mt-0.5">
+                      <span>{fmtFechaCorta(p.movimientos_raw.fecha)}</span>
+                      <span className="tabular-nums font-medium text-[var(--foreground)]">{fmtCLP(p.movimientos_raw.monto)}</span>
+                      {p.receptor_nombre && <span className="truncate">· {p.receptor_nombre}</span>}
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-[var(--muted)] tabular-nums shrink-0">
+                    {Math.round((p.confianza ?? 0) * 100)}%
+                  </span>
+                </button>
+              )}
             </div>
           ))}
         </div>
