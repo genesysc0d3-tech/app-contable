@@ -618,7 +618,8 @@ export async function procesarDocumento(
       const isTransId = m.n_documento ? isTransactionId(m.n_documento) : false;
       const strictKey = (m.n_documento && isTransId) ? `${looseKey}|${m.n_documento}` : null;
 
-      let isDuplicate = false;
+      let shouldSkip = false;
+      let isInfoWarning = false; // bypass mode: flag but don't skip
       let motivo = "";
       let tipo: import("./types").TipoDuplicado = "otro_doc_confirmado";
       let orig: ExistenteInfo | undefined;
@@ -628,53 +629,63 @@ export async function procesarDocumento(
       if (strictKey) {
         // Check against DB first (only transaction IDs, not RUTs)
         if (existenteByStrictFiltered.has(strictKey)) {
-          isDuplicate = true;
+          shouldSkip = true;
           orig = existenteByStrictFiltered.get(strictKey)!;
           tipo = "mismo_ndoc_otro_arch";
           motivo = `N° de transacción #${m.n_documento} ya existe en '${orig.doc_nombre}' — misma operación bancaria`;
         }
-        // Intra-batch strict dedup only applies in legacy (non-bypass) mode.
-        // In bypass mode, the parser guarantees 1 Excel row = 1 movimiento,
-        // so two rows with the same strictKey are LEGITIMATE separate
-        // transactions (e.g. multiple cargos a SKIPO same day same monto,
-        // where the "n_documento" is actually the beneficiary RUT, not a
-        // unique transaction ID).
-        else if (!bypassMode && batchStrictSeen.has(strictKey)) {
-          isDuplicate = true;
+        // Intra-batch strict dedup: in bypass mode we record it as an
+        // informational warning (don't skip), because the parser guarantees
+        // 1 Excel row = 1 movimiento. Two rows with same strictKey are
+        // LEGITIMATE separate transactions (e.g. multiple cargos a SKIPO
+        // same day same monto, where n_documento is actually a RUT).
+        else if (batchStrictSeen.has(strictKey)) {
           const seen = batchStrictSeen.get(strictKey)!;
           seen.count++;
           tipo = "mismo_ndoc_mismo_arch";
           indiceConflicto = seen.firstIndex;
           repeticiones = seen.count;
-          motivo = `N° de transacción #${m.n_documento} aparece ${seen.count + 1} veces en este archivo — posible error del banco o del export`;
+          motivo = bypassMode
+            ? `Transferencias idénticas: mismo monto, fecha y contraparte — verificar si son operaciones distintas o el banco registró la misma dos veces`
+            : `N° de transacción #${m.n_documento} aparece ${seen.count + 1} veces en este archivo — posible error del banco o del export`;
+          if (bypassMode) {
+            isInfoWarning = true;
+          } else {
+            shouldSkip = true;
+          }
         } else {
           batchStrictSeen.set(strictKey, { firstIndex: i, count: 0 });
         }
       } else {
         // No n_documento — check DB
         if (existenteByLoose.has(looseKey)) {
-          isDuplicate = true;
+          shouldSkip = true;
           orig = existenteByLoose.get(looseKey)!;
           tipo = "loose_otro_arch";
           motivo = `Posible solapamiento con '${orig.doc_nombre}' (mismo monto, fecha y descripción). Si son cartolas de períodos distintos que comparten días, puede ser legítimo.`;
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
         }
-        // Intra-batch loose dedup also skipped in bypass mode — parser
-        // guarantees no spurious duplication.
-        else if (!bypassMode && batchLooseSeen.has(looseKey)) {
-          isDuplicate = true;
+        // Intra-batch loose dedup: also as info-warning in bypass mode.
+        else if (batchLooseSeen.has(looseKey)) {
           const seen = batchLooseSeen.get(looseKey)!;
           seen.count++;
           tipo = "loose_mismo_arch";
           indiceConflicto = seen.firstIndex;
-          motivo = `Mismo monto y descripción en filas ${seen.firstIndex + 1} y ${i + 1} de este archivo — podrían ser personas distintas que enviaron el mismo monto. Verificar manualmente.`;
+          motivo = bypassMode
+            ? `Filas idénticas en el archivo: mismo monto, fecha y descripción. Son 2 operaciones reales (se guardaron ambas), pero revisá si deberían ser distintas.`
+            : `Mismo monto y descripción en filas ${seen.firstIndex + 1} y ${i + 1} de este archivo — podrían ser personas distintas que enviaron el mismo monto. Verificar manualmente.`;
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
+          if (bypassMode) {
+            isInfoWarning = true;
+          } else {
+            shouldSkip = true;
+          }
         } else {
           batchLooseSeen.set(looseKey, { firstIndex: i, count: 0 });
         }
       }
 
-      if (isDuplicate) {
+      if (shouldSkip) {
         duplicadosSaltados++;
         duplicadosDetalle.push({
           fecha: m.fecha,
@@ -692,6 +703,24 @@ export async function procesarDocumento(
           repeticiones,
         });
       } else {
+        if (isInfoWarning) {
+          // Record as warning: not skipped, just flagged for user review
+          duplicadosDetalle.push({
+            fecha: m.fecha,
+            descripcion: m.descripcion,
+            monto: m.monto,
+            tipo_flujo: m.tipo_flujo,
+            n_documento: m.n_documento,
+            tipo,
+            origen_movimiento_id: "",
+            origen_documento_nombre: "Este archivo",
+            origen_documento_fecha: "",
+            motivo,
+            indice_archivo: i,
+            indice_conflicto: indiceConflicto,
+            repeticiones,
+          });
+        }
         indicesToKeep.push(i);
 
         // Track person+day for type 6 detection (post-pass)
