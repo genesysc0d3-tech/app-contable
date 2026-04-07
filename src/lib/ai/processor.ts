@@ -613,6 +613,16 @@ export async function procesarDocumento(
     const duplicadosDetalle: DuplicadoDetalle[] = [];
     const looseOnlyDupCounts = new Map<string, number>();
 
+    // Cartola filtrada solo abonos: cuando el cliente ya filtró el extracto
+    // bancario para entregar al contador, todas las filas son entradas. En
+    // ese caso, los "duplicados" intra-archivo (mismo monto+desc+fecha sin
+    // n_doc) son típicamente pagos P2P legítimos del mismo cliente y NO
+    // deben omitirse: se guardan y se marcan como info para revisión.
+    // Criterio: ≥10 filas y 100% son entradas.
+    const cartolaSoloAbonos =
+      movimientosParsed.length >= 10 &&
+      movimientosParsed.every((mp) => mp.tipo_flujo === "entrada");
+
     for (let i = 0; i < movimientosParsed.length; i++) {
       const m = movimientosParsed[i];
       const looseKey = `${m.fecha}|${m.monto}|${m.descripcion}`;
@@ -621,6 +631,7 @@ export async function procesarDocumento(
       const strictKey = (m.n_documento && isTransId) ? `${looseKey}|${m.n_documento}` : null;
 
       let shouldSkip = false;
+      let isInfoWarning = false;
       let motivo = "";
       let tipo: import("./types").TipoDuplicado = "otro_doc_confirmado";
       let orig: ExistenteInfo | undefined;
@@ -659,29 +670,45 @@ export async function procesarDocumento(
           motivo = `Posible solapamiento con '${orig.doc_nombre}' (mismo monto, fecha y descripción). Si son cartolas de períodos distintos que comparten días, puede ser legítimo.`;
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
         }
-        // Intra-batch loose dedup → también omitir, requiere aprobación manual
+        // Intra-batch loose dedup
+        // - Default: omitir y pedir confirmación manual (caso conservador
+        //   para cartolas completas con cargos+abonos).
+        // - Cartola solo-abonos: NO omitir. Pagos P2P repetidos del mismo
+        //   cliente el mismo día son normales en negocios de exchange/P2P.
+        //   Se guarda el movimiento y se marca como info para revisar.
         else if (batchLooseSeen.has(looseKey)) {
-          shouldSkip = true;
           const seen = batchLooseSeen.get(looseKey)!;
           seen.count++;
           tipo = "loose_mismo_arch";
           indiceConflicto = seen.firstIndex;
           const filaRefMsg =
             movimientosParsed[seen.firstIndex]?.excel_row ?? seen.firstIndex + 1;
-          motivo = `Misma fecha, monto y descripción que la fila ${filaRefMsg} de este archivo. Verificar si son operaciones distintas y aceptar manualmente.`;
+          if (cartolaSoloAbonos) {
+            isInfoWarning = true;
+            motivo = `Misma fecha, monto y descripción que la fila ${filaRefMsg}. Cartola solo-abonos: se guardó como pago independiente. Verificá si son operaciones reales del mismo cliente.`;
+          } else {
+            shouldSkip = true;
+            motivo = `Misma fecha, monto y descripción que la fila ${filaRefMsg} de este archivo. Verificar si son operaciones distintas y aceptar manualmente.`;
+          }
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
         } else {
           batchLooseSeen.set(looseKey, { firstIndex: i, count: 0 });
         }
       }
 
-      if (shouldSkip) {
-        duplicadosSaltados++;
+      if (shouldSkip || isInfoWarning) {
+        if (shouldSkip) duplicadosSaltados++;
 
-        // Validación matemática del saldo para duplicados intra-archivo:
-        // si la diferencia absoluta de saldos coincide con el monto, son dos
-        // operaciones reales; si no, es un duplicado de exportación del banco.
-        let saldoCheck: "real_banco" | "operaciones_reales" | undefined;
+        // Validación matemática del saldo para duplicados intra-archivo.
+        // SOLO usamos el resultado positivo: si la diferencia de saldos
+        // entre las dos filas coincide exactamente con el monto, tenemos
+        // certeza de que son dos operaciones reales y sugerimos Agregar.
+        //
+        // NO usamos el caso negativo: una cartola filtrada (solo abonos)
+        // o una cartola con orden no-cronológico estricto puede tener
+        // movimientos intercalados invisibles que rompen el cálculo. Mejor
+        // no clasificar que clasificar mal y recomendar omitir algo válido.
+        let saldoCheck: "operaciones_reales" | undefined;
         if (
           (tipo === "loose_mismo_arch" || tipo === "mismo_ndoc_mismo_arch") &&
           indiceConflicto !== undefined &&
@@ -692,7 +719,9 @@ export async function procesarDocumento(
             (m.saldo ?? 0) - (movimientosParsed[indiceConflicto].saldo ?? 0)
           );
           // Tolerancia de 1 peso por redondeos
-          saldoCheck = Math.abs(diff - m.monto) <= 1 ? "operaciones_reales" : "real_banco";
+          if (Math.abs(diff - m.monto) <= 1) {
+            saldoCheck = "operaciones_reales";
+          }
         }
 
         duplicadosDetalle.push({
@@ -715,8 +744,11 @@ export async function procesarDocumento(
               : undefined,
           saldo_check: saldoCheck,
           repeticiones,
+          info_only: isInfoWarning || undefined,
         });
-      } else {
+      }
+
+      if (!shouldSkip) {
         indicesToKeep.push(i);
 
         // Track person+day for type 6 detection (post-pass)
@@ -729,6 +761,7 @@ export async function procesarDocumento(
           personDayKey.set(pdKey, indices);
         }
       }
+
     }
 
     // Type 6: detect multiple transfers to same person same day (informational, don't skip)
