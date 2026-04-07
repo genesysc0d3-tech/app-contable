@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#70 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#71 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #71** — feat /revisar: cards colapsables por defecto. Tercer nivel de colapso pedido por el usuario (doc → confianza → renglón delgado → card completa). Cada propuesta empieza como un thin row con descripción, fecha, monto, receptor (si existe) y % de confianza. Click → expande a `PropuestaCard` (sin tocar el componente, solo se envuelve en `RevisarClient`). Estado por `Set<id>` local en `ConfianzaGroup`. Botón "Contraer" arriba de la card cuando está expandida. Permite scanear backlogs grandes mucho más rápido sin abrir cada tx.
 
 **PR #70** — fix UI BottomNav: badge de Revisar soporta miles. Antes: tope "99+". Ahora formato compacto: 999 → "999", 1000 → "1k", 1234 → "1.2k", 12345 → "12k", ≥100000 → "99k+". Útil para backlogs grandes.
 
