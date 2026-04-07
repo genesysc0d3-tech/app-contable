@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#68 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#69 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #69** — fix UI /subir: prefijo `Fila X — ` también en items `info_only`. El prefijo del motivo estaba condicionado a `!isInfo`, así que en cartolas solo-abonos (PR #68) los duplicados info_only aparecían en azul pero sin indicar la fila del Excel. Fix: condicionar a `dupTipo !== "multi_transfer_p2p"` (único caso sin fila concreta) en vez de `!isInfo`. Color del prefijo se ajusta al esquema azul cuando isInfo.
 
 **PR #68** — feat processor: cartola solo-abonos + saldo check solo positivo. Cambio basado en feedback de Contador Auditor: las cartolas filtradas solo-abonos son un caso de uso normal porque el contador solo procesa abonos (cada uno = potencial venta/op gravada para F29). Pagos P2P repetidos del mismo cliente el mismo día son legítimos en negocios de exchange. **(1)** Detecta `cartolaSoloAbonos = (≥10 filas && every entrada)`. **(2)** Intra-file loose dup en solo-abonos: NO omitir, se marca `isInfoWarning=true` → se guarda el mov + flag `info_only` en el visor (no bloquea). **(3)** `saldo_check` reducido a `"operaciones_reales" | undefined` — eliminada la rama "real_banco" porque cartolas filtradas u orden no-cronológico estricto generan falsos positivos recomendando omitir tx legítimas. **(4)** UI: removido el highlight rojo "duplicado del banco". Solo queda el verde "operaciones reales confirmadas" con monto y filas explícitas para auditabilidad SII.
 
