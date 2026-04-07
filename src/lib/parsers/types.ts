@@ -12,8 +12,13 @@ export interface AdapterConfig {
    *  - "two_cols": separate cargo and abono columns (Banco de Chile style)
    *  - "single_col": one monto column + one tipo_flujo column with values
    *    like "Abono"/"Cargo" or "Crédito"/"Débito"
+   *  - "transactions_log": one monto column, no tipo flag, no saldo. Used
+   *    for sales/income logs and exchange P2P exports where all rows are
+   *    entradas implícitas (or salidas — see default_tipo_flujo).
    */
-  layout?: "two_cols" | "single_col";
+  layout?: "two_cols" | "single_col" | "transactions_log";
+  /** Only meaningful when layout = "transactions_log". Default: "entrada". */
+  default_tipo_flujo?: "entrada" | "salida";
   columns: {
     fecha: number;
     descripcion: number;

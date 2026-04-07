@@ -53,6 +53,22 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
     };
   }
 
+  // Last resort: transactions_log layout (1 monto col, no tipo flag, no
+  // saldo). Common in manual sales spreadsheets and exchange P2P exports.
+  const txLogCfg = inferTransactionsLogLayout(sample);
+  if (txLogCfg) {
+    const firstFecha = String(sample[0][txLogCfg.fecha] ?? "");
+    return {
+      header_row: Math.max(0, txStart - 1),
+      skip_rows_before_data: txStart,
+      date_format: detectDateFormat(firstFecha),
+      number_format: "chilean",
+      layout: "transactions_log",
+      default_tipo_flujo: "entrada",
+      columns: txLogCfg,
+    };
+  }
+
   return null;
 }
 
@@ -412,6 +428,112 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
     saldo: saldoCol,
     monto: montoCol,
     tipo_flujo_col: tipoCol,
+  };
+}
+
+/**
+ * Detect a "transactions_log" layout: fecha + descripcion + 1 monto column,
+ * no tipo flag, no saldo, no cargo/abono split. Common in manual sales
+ * spreadsheets, planillas de honorarios, exchange P2P trade exports.
+ *
+ * Defaults all rows to entrada (tipo_flujo). The user can change the default
+ * by editing the adapter config later.
+ */
+function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
+  const ncols = Math.max(...sample.map((r) => r.length));
+  if (ncols < 3) return null;
+
+  // Find fecha column
+  let fechaCol = -1;
+  for (let col = 0; col < ncols; col++) {
+    let dates = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim();
+      if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)) {
+        dates++;
+      }
+    }
+    if (dates / sample.length >= 0.8) {
+      fechaCol = col;
+      break;
+    }
+  }
+  if (fechaCol < 0) return null;
+
+  // Find descripcion column (longest avg text, not fecha)
+  let descCol = -1;
+  let maxLen = 0;
+  for (let col = 0; col < ncols; col++) {
+    if (col === fechaCol) continue;
+    let totalLen = 0;
+    let textCount = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim();
+      if (!s) continue;
+      if (/^-?[\d.,]+$/.test(s) && /\d/.test(s)) continue;
+      totalLen += s.length;
+      textCount++;
+    }
+    const avg = textCount > 0 ? totalLen / textCount : 0;
+    if (avg > maxLen && avg > 10) {
+      maxLen = avg;
+      descCol = col;
+    }
+  }
+  if (descCol < 0) return null;
+
+  // Find monto column: monetary values typically 1000 ≤ n ≤ 10^9 CLP.
+  // Excludes phone numbers (~5.7×10^10), RUT-like values, IDs, etc.
+  // Also excludes columns where values look like RUTs (have a dash + digit).
+  const MIN_MONTO = 1000;
+  const MAX_MONTO = 1_000_000_000; // 1 billón CLP
+  let montoCol = -1;
+  let bestScore = 0;
+  for (let col = 0; col < ncols; col++) {
+    if (col === fechaCol || col === descCol) continue;
+    let inRangeCount = 0;
+    let totalNumeric = 0;
+    let looksLikeRut = 0;
+    let total = 0;
+    for (const r of sample) {
+      const s = String(r[col] ?? "").trim();
+      if (!s) continue;
+      // Skip RUT-like strings (e.g. "12345678-9")
+      if (/^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$/.test(s)) {
+        looksLikeRut++;
+        continue;
+      }
+      const n = parseChileanNumberLocal(s);
+      if (n > 0) {
+        totalNumeric++;
+        if (n >= MIN_MONTO && n <= MAX_MONTO) {
+          inRangeCount++;
+          total += n;
+        }
+      }
+    }
+    // Require at least 80% of values to be numeric AND in monetary range
+    if (totalNumeric / sample.length < 0.8) continue;
+    if (inRangeCount / sample.length < 0.8) continue;
+    if (looksLikeRut > 0) continue;
+    // Score = avg value (favor more meaningful monetary columns)
+    const avg = total / inRangeCount;
+    if (avg > bestScore) {
+      bestScore = avg;
+      montoCol = col;
+    }
+  }
+  if (montoCol < 0) return null;
+
+  return {
+    fecha: fechaCol,
+    descripcion: descCol,
+    n_documento: -1,
+    cargo: montoCol,
+    abono: montoCol,
+    saldo: -1,
+    monto: montoCol,
+    tipo_flujo_col: -1,
   };
 }
 

@@ -95,6 +95,14 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       if (!t) continue;
       tipo = t;
       monto = amount;
+    } else if (layout === "transactions_log") {
+      // 1 monto column, no tipo flag → use default_tipo_flujo (defaults to entrada)
+      const montoCol = c.monto ?? -1;
+      if (montoCol < 0) continue;
+      const amount = parseChileanNumber(r[montoCol]);
+      if (!amount) continue;
+      tipo = (cfg.default_tipo_flujo ?? "entrada") === "salida" ? "SALIDA" : "ENTRADA";
+      monto = amount;
     } else {
       const cargo = parseChileanNumber(r[c.cargo]);
       const abono = parseChileanNumber(r[c.abono]);
