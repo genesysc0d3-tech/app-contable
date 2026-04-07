@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#61 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#62 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #62** — parser: soporte Santander. Cuando subimos CartolasPruebaSantander.xlsx (238 movs) cayó a capa 4 legacy. 3 fixes: (1) tipo flag de 1 letra A/C/D/H — Santander usa "A" en vez de "Abono", (2) skip saldo monotonia check en single_col — fallaba 89% porque las filas Santander están en orden DESC y/o saldo es pre-tx; el check 6 solo aplica a two_cols donde no hay otra fuente de verdad para distinguir cargo/abono; en single_col tenemos un tipo flag explícito, (3) migración broaden_transfer_rules: regla `\b(TRANSFER|TRANSFERENCIA|TRANSF)\b` sin anchor ni tipo_flujo_match (Santander usa "<num cuenta> Transf de NOMBRE"), regla "Depósito en efectivo". Validado: 238/238 entradas $69.807.341, 238/238 clasificadas por reglas, cero Mistral.
 
 **PR #61** — parser: tercer layout `transactions_log`. Cuando subimos transacciones_prueba.xlsx (planilla manual de ventas P2P con fecha/desc/monto sin tipo flag ni saldo) cayó a capa 4 legacy. Nuevo layout: detecta fecha + desc + 1 monto, default_tipo_flujo configurable (entrada por defecto). Heurística para columna monto: solo numéricos en rango 1000-1B, excluye RUTs y teléfonos chilenos (~5.7e10). Validado: 5/5 extraídas con monto correcto, 5/5 clasificadas como compraventa_crypto.
 
