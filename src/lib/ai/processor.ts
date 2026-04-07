@@ -546,6 +546,8 @@ export async function procesarDocumento(
       tipo_flujo: m.tipo_flujo || "entrada",
       origen: m.origen || null,
       n_documento: m.n_documento || null,
+      excel_row: m.excel_row,
+      saldo: m.saldo,
     }));
 
     // Fetch existing movimientos with document info and n_documento
@@ -671,6 +673,24 @@ export async function procesarDocumento(
 
       if (shouldSkip) {
         duplicadosSaltados++;
+
+        // Validación matemática del saldo para duplicados intra-archivo:
+        // si la diferencia absoluta de saldos coincide con el monto, son dos
+        // operaciones reales; si no, es un duplicado de exportación del banco.
+        let saldoCheck: "real_banco" | "operaciones_reales" | undefined;
+        if (
+          (tipo === "loose_mismo_arch" || tipo === "mismo_ndoc_mismo_arch") &&
+          indiceConflicto !== undefined &&
+          typeof m.saldo === "number" &&
+          typeof movimientosParsed[indiceConflicto]?.saldo === "number"
+        ) {
+          const diff = Math.abs(
+            (m.saldo ?? 0) - (movimientosParsed[indiceConflicto].saldo ?? 0)
+          );
+          // Tolerancia de 1 peso por redondeos
+          saldoCheck = Math.abs(diff - m.monto) <= 1 ? "operaciones_reales" : "real_banco";
+        }
+
         duplicadosDetalle.push({
           fecha: m.fecha,
           descripcion: m.descripcion,
@@ -684,6 +704,12 @@ export async function procesarDocumento(
           motivo,
           indice_archivo: i,
           indice_conflicto: indiceConflicto,
+          excel_row: m.excel_row,
+          excel_row_conflicto:
+            indiceConflicto !== undefined
+              ? movimientosParsed[indiceConflicto]?.excel_row
+              : undefined,
+          saldo_check: saldoCheck,
           repeticiones,
         });
       } else {

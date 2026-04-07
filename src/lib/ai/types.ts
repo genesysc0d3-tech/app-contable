@@ -5,6 +5,10 @@ export interface MovimientoExtraido {
   tipo_flujo: "entrada" | "salida";
   origen: string;
   n_documento?: string | null;
+  /** 1-based row in the original Excel sheet (only set in bypass path). */
+  excel_row?: number;
+  /** Running balance at this row, if cartola has saldo column (bypass only). */
+  saldo?: number;
 }
 
 export interface PropuestaExtraida {
@@ -83,6 +87,19 @@ export interface DuplicadoDetalle {
   motivo: string;
   indice_archivo?: number;
   indice_conflicto?: number;
+  /** Fila real del Excel (1-based) — preferida sobre indice_archivo cuando existe. */
+  excel_row?: number;
+  /** Fila real del Excel del registro con el que duplica. */
+  excel_row_conflicto?: number;
+  /**
+   * Resultado de la validación matemática del saldo para duplicados intra-archivo:
+   *  - "real_banco": diferencia de saldos NO coincide con el monto → es un duplicado
+   *    de exportación del banco (recomendado mantener omitido).
+   *  - "operaciones_reales": diferencia de saldos coincide con el monto → son dos
+   *    operaciones reales separadas (recomendado agregar igual).
+   *  - undefined: no se pudo determinar (sin columna saldo, o no aplica).
+   */
+  saldo_check?: "real_banco" | "operaciones_reales";
   repeticiones?: number;
   oculto?: boolean;
   /**
