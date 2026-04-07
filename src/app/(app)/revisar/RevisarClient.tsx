@@ -121,17 +121,35 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
   const handleBurstDone = useCallback(() => setBurstDone(true), []);
 
   const isFromOmitidos = (p: Propuesta) => p.notas?.startsWith("Agregado desde visor de omitidos");
-  const pendientes = group.propuestas.filter((p) => p.estado === "pendiente" && !isFromOmitidos(p));
+  const parents = group.propuestas.filter((p) => p.estado === "pendiente" && !isFromOmitidos(p));
   const omitidosPendientes = group.propuestas.filter((p) => p.estado === "pendiente" && isFromOmitidos(p));
 
-  // Build map: "docId|descripcion|monto" -> omitidos for that combination
+  // Build map of parent keys to detect which omitidos have a matching parent
+  const parentKeys = new Set<string>();
+  for (const p of parents) {
+    parentKeys.add(`${p.movimientos_raw.documento_id}|${p.movimientos_raw.descripcion}|${p.movimientos_raw.monto}`);
+  }
+
+  // Omitidos with a matching parent → nested under that parent.
+  // Omitidos without a matching parent (parent already aprobado) → orphaned,
+  // shown standalone in pendientes so the user can decide what to do with
+  // them (the parent has been approved/removed, but the duplicate is still
+  // pending and shouldn't disappear silently).
   const omitidosMap: OmitidosMap = new Map();
+  const orphanedOmitidos: Propuesta[] = [];
   for (const o of omitidosPendientes) {
     const key = `${o.movimientos_raw.documento_id}|${o.movimientos_raw.descripcion}|${o.movimientos_raw.monto}`;
-    const arr = omitidosMap.get(key) ?? [];
-    arr.push(o);
-    omitidosMap.set(key, arr);
+    if (parentKeys.has(key)) {
+      const arr = omitidosMap.get(key) ?? [];
+      arr.push(o);
+      omitidosMap.set(key, arr);
+    } else {
+      orphanedOmitidos.push(o);
+    }
   }
+
+  // pendientes for rendering = parents + orphaned omitidos
+  const pendientes = [...parents, ...orphanedOmitidos];
 
   const alta = pendientes.filter((p) => classifyConfianza(p) === "alta");
   const media = pendientes.filter((p) => classifyConfianza(p) === "media");
