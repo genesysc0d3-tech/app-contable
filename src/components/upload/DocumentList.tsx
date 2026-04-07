@@ -244,7 +244,12 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
             </button>
           )}
         </div>
-        <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>{dup.motivo}</p>
+        <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>
+          {!isInfo && typeof dup.indice_archivo === "number" && (
+            <span className="not-italic font-medium text-[var(--foreground)]">Tx en fila {dup.indice_archivo + 1} — </span>
+          )}
+          {dup.motivo}
+        </p>
         {dup.origen_documento_nombre !== "Este archivo" && (
           <p className="text-[var(--muted-light)] flex items-center gap-1">
             <Warning size={10} className="text-[#F59E0B] shrink-0" />
