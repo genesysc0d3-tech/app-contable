@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import CompletionBurst from "@/components/CompletionBurst";
-import { aprobarTodas, aprobarPropuesta, ocultarPropuesta } from "./actions";
+import { aprobarTodas, aprobarPropuesta, ocultarPropuesta, restaurarPropuesta } from "./actions";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
 import type { Tables } from "@/lib/database.types";
-import { CaretRight, FileText, CheckCircle, Check, PencilSimple, EyeSlash } from "@phosphor-icons/react";
+import { CaretRight, FileText, CheckCircle, Check, PencilSimple, EyeSlash, Eye } from "@phosphor-icons/react";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -56,8 +56,8 @@ function fmtFechaCorta(dateStr: string | null | undefined): string {
   return `${d.getDate()} ${meses[d.getMonth()]}`;
 }
 
-function ThinRow({ propuesta, onExpand, onAction }: {
-  propuesta: Propuesta; onExpand: () => void; onAction: () => void;
+function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
+  propuesta: Propuesta; onExpand: () => void; onEdit: () => void; onAction: () => void; isOculta: boolean;
 }) {
   const [busy, setBusy] = useState<"aprobar" | "ocultar" | null>(null);
   const router = useRouter();
@@ -72,18 +72,20 @@ function ThinRow({ propuesta, onExpand, onAction }: {
     router.refresh(); onAction(); setBusy(null);
   }
 
-  async function handleOcultar(e: React.MouseEvent) {
+  async function handleOcultarOrRestaurar(e: React.MouseEvent) {
     e.stopPropagation();
     setBusy("ocultar");
-    const res = await ocultarPropuesta(propuesta.id);
+    const res = isOculta
+      ? await restaurarPropuesta(propuesta.id)
+      : await ocultarPropuesta(propuesta.id);
     if (res.error) toast(`Error: ${res.error}`, "error");
-    else toast("Oculta");
+    else toast(isOculta ? "Restaurada" : "Oculta");
     router.refresh(); onAction(); setBusy(null);
   }
 
   function handleEditar(e: React.MouseEvent) {
     e.stopPropagation();
-    onExpand();
+    onEdit();
   }
 
   return (
@@ -128,12 +130,12 @@ function ThinRow({ propuesta, onExpand, onAction }: {
         </button>
         <button
           type="button"
-          onClick={handleOcultar}
+          onClick={handleOcultarOrRestaurar}
           disabled={busy !== null}
-          title="Ocultar"
+          title={isOculta ? "Restaurar" : "Ocultar"}
           className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--border)] disabled:opacity-50 transition-colors"
         >
-          <EyeSlash size={12} weight="bold" />
+          {isOculta ? <Eye size={12} weight="bold" /> : <EyeSlash size={12} weight="bold" />}
         </button>
       </div>
     </div>
@@ -145,12 +147,33 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
 }) {
   const [expanded, setExpanded] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [editCards, setEditCards] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    setEditCards((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  function editCard(id: string) {
+    setExpandedCards((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setEditCards((prev) => {
+      const next = new Set(prev);
+      next.add(id);
       return next;
     });
   }
@@ -228,13 +251,16 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                     ▾ Contraer
                   </button>
                   <PropuestaCard propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction}
+                    initialEditing={editCards.has(p.id)}
                     omitidosAnidados={omitidosMap.get(`${p.movimientos_raw.documento_id}|${p.movimientos_raw.descripcion}|${p.movimientos_raw.monto}`) ?? []} />
                 </>
               ) : (
                 <ThinRow
                   propuesta={p}
                   onExpand={() => toggleCard(p.id)}
+                  onEdit={() => editCard(p.id)}
                   onAction={onAction}
+                  isOculta={tipo === "ocultas"}
                 />
               )}
             </div>

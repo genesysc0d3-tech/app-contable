@@ -27,6 +27,8 @@ interface PropuestaCardProps {
   empresaId: string;
   onAction?: () => void;
   omitidosAnidados?: Propuesta[];
+  /** Si es true, la card arranca directamente en modo edición. */
+  initialEditing?: boolean;
 }
 
 interface CategoriaConfig {
@@ -68,10 +70,10 @@ function formatFecha(d: string): string {
   return `${dt.getDate()} ${meses[dt.getMonth()]}`;
 }
 
-export default function PropuestaCard({ propuesta, clientes, empresaId, onAction, omitidosAnidados = [] }: PropuestaCardProps) {
+export default function PropuestaCard({ propuesta, clientes, empresaId, onAction, omitidosAnidados = [], initialEditing = false }: PropuestaCardProps) {
   const { toast } = useToast();
   const invalidateResumen = useAppStore((s) => s.invalidateResumen);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
