@@ -249,16 +249,10 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
           const filaConflicto = dup.excel_row_conflicto ?? (typeof dup.indice_conflicto === "number" ? dup.indice_conflicto + 1 : undefined);
           return (
             <>
-              {dup.saldo_check === "real_banco" && !isInfo && (
+              {dup.saldo_check === "operaciones_reales" && (
                 <p className="text-[10px] text-[#22C55E] font-medium flex items-center gap-1">
-                  <XCircle size={10} weight="fill" />
-                  Duplicado de exportación del banco — saldo no cuadra. Recomendado: mantener omitido.
-                </p>
-              )}
-              {dup.saldo_check === "operaciones_reales" && !isInfo && (
-                <p className="text-[10px] text-[#E8553E] font-medium flex items-center gap-1">
                   <WarningCircle size={10} weight="fill" />
-                  Dos operaciones reales — saldo cuadra con la fila {filaConflicto ?? "?"}. Sugerido: Agregar igual.
+                  Operaciones reales confirmadas — la columna SALDO se mueve exactamente {fmt(dup.monto)} entre la fila {filaPropia ?? "?"} y la fila {filaConflicto ?? "?"}. Sugerido: Agregar igual.
                 </p>
               )}
               <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>

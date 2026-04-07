@@ -92,14 +92,17 @@ export interface DuplicadoDetalle {
   /** Fila real del Excel del registro con el que duplica. */
   excel_row_conflicto?: number;
   /**
-   * Resultado de la validación matemática del saldo para duplicados intra-archivo:
-   *  - "real_banco": diferencia de saldos NO coincide con el monto → es un duplicado
-   *    de exportación del banco (recomendado mantener omitido).
-   *  - "operaciones_reales": diferencia de saldos coincide con el monto → son dos
-   *    operaciones reales separadas (recomendado agregar igual).
-   *  - undefined: no se pudo determinar (sin columna saldo, o no aplica).
+   * Resultado positivo de la validación matemática del saldo para duplicados
+   * intra-archivo. Solo se setea cuando `|saldo[i] − saldo[ref]| ≈ monto`
+   * con tolerancia de ±1 peso, lo que prueba que son dos operaciones reales
+   * separadas y no un duplicado de exportación.
+   *
+   * No usamos un valor negativo: cartolas filtradas (solo abonos) o con
+   * orden no-cronológico estricto pueden tener movimientos intercalados
+   * invisibles que rompen el cálculo, lo que daría falsos positivos
+   * recomendando omitir transacciones legítimas. Mejor no clasificar.
    */
-  saldo_check?: "real_banco" | "operaciones_reales";
+  saldo_check?: "operaciones_reales";
   repeticiones?: number;
   oculto?: boolean;
   /**
