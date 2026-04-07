@@ -345,12 +345,6 @@ function OmitidosAnidados({ omitidos, onAction }: { omitidos: Propuesta[]; onAct
     toast("Aprobado"); onAction?.(); setLoadingId(null);
   }
 
-  async function handleIgnorar(id: string) {
-    setLoadingId(id);
-    await descartarPropuesta(id);
-    toast("Ignorado"); onAction?.(); setLoadingId(null);
-  }
-
   async function handleDevolver(id: string) {
     setLoadingId(id);
     const result = await devolverAOmitidos(id);
@@ -387,10 +381,6 @@ function OmitidosAnidados({ omitidos, onAction }: { omitidos: Propuesta[]; onAct
                   <button onClick={() => handleAprobar(o.id)} disabled={isLoading}
                     className="btn-press flex-1 rounded-lg bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-2 py-1.5 text-[9px] font-semibold text-white transition-all duration-150">
                     Aprobar
-                  </button>
-                  <button onClick={() => handleIgnorar(o.id)} disabled={isLoading}
-                    className="btn-press flex-1 rounded-lg bg-[var(--surface)] hover:bg-[var(--border)] disabled:opacity-50 px-2 py-1.5 text-[9px] text-[var(--muted)] transition-all duration-150">
-                    Ignorar
                   </button>
                   <button onClick={() => handleDevolver(o.id)} disabled={isLoading}
                     className="btn-press flex-1 rounded-lg bg-[#FFF8ED] dark:bg-[#F59E0B]/10 hover:bg-[#FFF0D4] disabled:opacity-50 px-2 py-1.5 text-[9px] text-[#F59E0B] transition-all duration-150">
