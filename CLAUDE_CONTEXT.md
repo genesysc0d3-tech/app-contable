@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#64 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#65 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #65** — feat parser+upload: fila real Excel + validación matemática del saldo en duplicados intra-archivo. (1) `ParsedLine`/`PreExtractedMovimiento`/`MovimientoExtraido` ahora cargan `excel_row` (1-based desde `applyAdapter`). `DuplicadoDetalle` expone `excel_row` y `excel_row_conflicto`. La UI prefiere `excel_row` sobre `indice_archivo + 1` (que era posición en la lista parseada, no la fila del Excel). (2) Para `loose_mismo_arch` y `mismo_ndoc_mismo_arch`, si ambas filas tienen `saldo`, se compara `|saldo[i] − saldo[ref]| ≈ monto` con tolerancia ±1 peso. Match → `saldo_check="operaciones_reales"` (sugerir Agregar igual), mismatch → `saldo_check="real_banco"` (error de exportación del banco, mantener omitido). UI muestra highlight verde/rojo arriba del motivo. Caso real Santander: FRANKLIN (74541) marca real_banco, MILLACURA (1M) marca operaciones_reales.
 
 **PR #64** — fix UI /subir: leak de "0" en barra de progreso. `hasProgress = total_lotes && lote_actual` retornaba `0` (no `false`) cuando `lote_actual=0` y `total_lotes>0`, y React renderizaba ese 0 literal en `{hasProgress && (...)}`. Aparecía como un "0" suelto al lado del badge "Procesando" justo antes de completar. Fix: `Boolean(total_lotes && lote_actual)`. Bug clásico de coerción JSX.
 
