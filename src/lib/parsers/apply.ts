@@ -50,8 +50,12 @@ function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
   if (v == null) return null;
   const s = String(v).trim().toLowerCase();
   if (!s) return null;
+  // Single-letter flags (Santander style: A=Abono, C=Cargo, D=Débito, H=Haber)
+  if (s === "a" || s === "h") return "ENTRADA";
+  if (s === "c" || s === "d") return "SALIDA";
+  // Word flags
   if (/^(cargo|d[eé]bito|debito|egreso|salida|giro|cheque)/.test(s)) return "SALIDA";
-  if (/^(abono|cr[eé]dito|credito|ingreso|entrada|dep[oó]sito|deposito)/.test(s)) return "ENTRADA";
+  if (/^(abono|cr[eé]dito|credito|ingreso|entrada|dep[oó]sito|deposito|haber)/.test(s)) return "ENTRADA";
   return null;
 }
 

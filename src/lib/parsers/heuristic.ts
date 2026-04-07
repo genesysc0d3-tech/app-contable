@@ -348,7 +348,8 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
   }
   if (descCol < 0) return null;
 
-  // Find tipo_flujo column: text column with values matching Abono/Cargo pattern
+  // Find tipo_flujo column: text column with values matching Abono/Cargo
+  // pattern OR single-letter flags A/C/D/H (Santander style).
   let tipoCol = -1;
   for (let col = 0; col < ncols; col++) {
     if (col === fechaCol || col === descCol) continue;
@@ -356,7 +357,13 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
     for (const r of sample) {
       const s = String(r[col] ?? "").trim().toLowerCase();
       if (!s) continue;
-      if (/^(abono|cargo|cr[eé]dito|d[eé]bito|ingreso|egreso|dep[oó]sito|giro)/.test(s)) {
+      // Single-letter flags
+      if (s === "a" || s === "c" || s === "d" || s === "h") {
+        matches++;
+        continue;
+      }
+      // Word flags
+      if (/^(abono|cargo|cr[eé]dito|d[eé]bito|ingreso|egreso|dep[oó]sito|giro|haber)/.test(s)) {
         matches++;
       }
     }

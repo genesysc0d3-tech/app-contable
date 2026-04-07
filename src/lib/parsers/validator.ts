@@ -67,8 +67,12 @@ export function validate(
     errors.push(`check_5_too_many_rows: ${lines.length} > ${MAX_ROWS}`);
   }
 
-  // Check 6: saldo monotonia (strongest signal of correct column mapping)
-  if (rows && cfg && cfg.columns.saldo >= 0) {
+  // Check 6: saldo monotonia. Only meaningful for two_cols layout where the
+  // equation distinguishes cargo from abono mapping. In single_col and
+  // transactions_log layouts the tipo_flujo source is explicit (column flag
+  // or default), so the saldo equation is not needed and may give false
+  // negatives when rows are ordered DESC or saldo is registered pre-tx.
+  if (rows && cfg && cfg.columns.saldo >= 0 && (cfg.layout ?? "two_cols") === "two_cols") {
     const monotoniaError = checkSaldoMonotonia(rows, cfg);
     if (monotoniaError) errors.push(monotoniaError);
   }
