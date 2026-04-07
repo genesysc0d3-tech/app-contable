@@ -39,7 +39,7 @@ function ProgresoBar({ progreso, estado }: { progreso: ProgresoIA | null; estado
   const lote_actual = progreso?.lote_actual;
   const total_lotes = progreso?.total_lotes;
   const movimientos_encontrados = progreso?.movimientos_encontrados;
-  const hasProgress = total_lotes && lote_actual;
+  const hasProgress = Boolean(total_lotes && lote_actual);
   const pct = hasProgress ? (lote_actual / total_lotes) * 100 : 0;
 
   // Phase labels
