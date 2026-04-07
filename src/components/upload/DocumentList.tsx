@@ -256,8 +256,8 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
                 </p>
               )}
               <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>
-                {!isInfo && typeof filaPropia === "number" && (
-                  <span className="not-italic font-medium text-[var(--foreground)]">Fila {filaPropia} — </span>
+                {dupTipo !== "multi_transfer_p2p" && typeof filaPropia === "number" && (
+                  <span className={`not-italic font-medium ${isInfo ? "text-[#3B82F6]" : "text-[var(--foreground)]"}`}>Fila {filaPropia} — </span>
                 )}
                 {dup.motivo}
               </p>
