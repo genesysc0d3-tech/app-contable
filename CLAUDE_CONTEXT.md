@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#59 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#60 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #60** — feat /revisar: sección Omitidos huérfanos + Ocultar reversible + motivo preservado. (1) Los duplicados huérfanos (cuyo padre ya fue aprobado) ya no se mezclan con alta/media/baja: tienen su propia sección naranja con mensaje explicativo. (2) Botón "Ignorar" reemplazado por "Ocultar" reversible: nuevo estado='oculto' (migración add_oculto_estado), nuevas server actions ocultarPropuesta/restaurarPropuesta, sección "Ocultas" gris al final, botón se invierte a "Restaurar" con icono Eye cuando ya está oculta. (3) Motivo del omitido se pasa via API /forzar-movimiento y se prepende a notas como "Motivo original: ..." para que se vea en /revisar.
 
 **PR #59** — fix /revisar: omitidos huérfanos quedan visibles tras aprobar el parent. Bug: cuando un omitido (duplicado aceptado desde /subir) se nestaba bajo su propuesta original y el usuario aprobaba la original, el omitido quedaba pendiente en DB pero la UI dejaba de mostrarlo (su key ya no matcheaba ningún parent). Fix: detectar omitidos huérfanos y agregarlos a `pendientes` como cards standalone con su badge "Desde omitidos". Nunca desaparecen sin acción explícita.
 
