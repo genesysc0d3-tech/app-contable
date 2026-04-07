@@ -12,6 +12,20 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { validarRut, formatRut } from "../rut";
+import {
+  loadReglas,
+  classifyWithRules,
+  incrementRuleUsage,
+  type ClasificacionRegla,
+} from "./classifier";
+
+/** Extended propuesta with SII traceability fields used internally. */
+type EnrichedPropuesta = PropuestaExtraida & {
+  __fuente?: "regla_usuario" | "regla_global" | "mistral";
+  __regla_id?: string | null;
+};
+
+const MISTRAL_MAX_CONFIANZA = 0.75; // Cap Mistral classifications — never auto-approve
 
 const CHUNK_SIZE = 100;
 const MAX_RETRIES = 3;
@@ -236,17 +250,60 @@ export async function procesarDocumento(
     .eq("id", documentoId);
 
   try {
-    // Build the chunked work units. In bypass mode we chunk the deterministic
-    // movimientos array directly. In legacy mode we chunk text lines.
+    // Build the chunked work units. In bypass mode we first try to classify
+    // each movimiento with deterministic rules (user rules + global rules).
+    // Only the leftover unmatched movimientos are sent to Mistral for
+    // classification, capped at confianza 0.75 so they always require review.
     type MovChunk = { movs: MovimientoExtraido[] };
     type TextChunk = { text: string[] };
     const movChunks: MovChunk[] = [];
     let textChunks: TextChunk[] = [];
 
+    // Rules engine state (only populated in bypass mode)
+    let reglas: ClasificacionRegla[] = [];
+    type RuleClassification = {
+      propuesta: PropuestaExtraida;
+      regla_id: string;
+      fuente: "regla_usuario" | "regla_global";
+    };
+    const ruleClassifications = new Map<number, RuleClassification>();
+    // Maps the position of each mov inside the flat forMistral array back
+    // to its original index in preExtracted.
+    const origIndexByMistralIdx: number[] = [];
+
     if (bypassMode) {
       const movs = preExtracted! as MovimientoExtraido[];
-      for (let i = 0; i < movs.length; i += CHUNK_SIZE) {
-        movChunks.push({ movs: movs.slice(i, i + CHUNK_SIZE) });
+
+      // 1. Rules pass — try to classify each movimiento with user/global rules
+      reglas = await loadReglas(empresaId);
+      const ruleResult = classifyWithRules(movs, reglas);
+      for (const c of ruleResult.clasificados) {
+        ruleClassifications.set(c.movimiento_index, {
+          propuesta: c.propuesta,
+          regla_id: c.regla_id,
+          fuente: c.fuente,
+        });
+      }
+
+      // 2. Chunk only the leftover movs for Mistral classification
+      const forMistral: MovimientoExtraido[] = [];
+      for (const nc of ruleResult.noClasificados) {
+        origIndexByMistralIdx.push(nc.movimiento_index);
+        forMistral.push(nc.movimiento);
+      }
+
+      console.log(
+        `[bypass+rules] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${forMistral.length} a Mistral`
+      );
+
+      for (let i = 0; i < forMistral.length; i += CHUNK_SIZE) {
+        movChunks.push({ movs: forMistral.slice(i, i + CHUNK_SIZE) });
+      }
+
+      // Update rule usage counters (best-effort, non-blocking)
+      if (ruleResult.clasificados.length > 0) {
+        const ruleIds = ruleResult.clasificados.map((c) => c.regla_id);
+        void incrementRuleUsage(ruleIds);
       }
     } else {
       const lines = contenido.split("\n").filter((l) => l.trim());
@@ -323,28 +380,107 @@ export async function procesarDocumento(
       });
     }
 
-    // Combine results in order, tracking offsets for propuesta indices
+    // Combine results. In bypass+rules mode, allMovimientos is the original
+    // preExtracted list, and allPropuestas merges rule classifications +
+    // Mistral classifications (capped at MISTRAL_MAX_CONFIANZA).
     const allMovimientos: MovimientoExtraido[] = [];
-    const allPropuestas: PropuestaExtraida[] = [];
+    const allPropuestas: EnrichedPropuesta[] = [];
     let totalTokensInput = 0;
     let totalTokensOutput = 0;
     let modelo = "";
 
-    for (const r of results) {
-      if (!r) continue;
-      const offset = allMovimientos.length;
-      allMovimientos.push(...r.movimientos);
+    if (bypassMode) {
+      // allMovimientos mirrors preExtracted 1:1
+      allMovimientos.push(...(preExtracted as MovimientoExtraido[]));
 
-      for (const p of r.propuestas) {
+      // Start from rule classifications
+      for (const [origIdx, rc] of ruleClassifications) {
         allPropuestas.push({
-          ...p,
-          movimiento_index: p.movimiento_index + offset,
+          ...rc.propuesta,
+          movimiento_index: origIdx,
+          __fuente: rc.fuente,
+          __regla_id: rc.regla_id,
         });
       }
 
-      totalTokensInput += r.tokens_input;
-      totalTokensOutput += r.tokens_output;
-      modelo = r.modelo;
+      // Add Mistral classifications, remapping chunk-local → original index
+      // and capping confianza. Synthesize a neutral fallback if Mistral
+      // dropped an index so nothing is lost.
+      for (let ci = 0; ci < results.length; ci++) {
+        const r = results[ci];
+        if (!r) continue;
+        const chunkStart = ci * CHUNK_SIZE;
+        const chunkMovCount = movChunks[ci]?.movs.length ?? 0;
+
+        const propuestasByLocalIdx = new Map<number, PropuestaExtraida>();
+        for (const p of r.propuestas) {
+          if (typeof p.movimiento_index === "number") {
+            propuestasByLocalIdx.set(p.movimiento_index, p);
+          }
+        }
+
+        for (let localIdx = 0; localIdx < chunkMovCount; localIdx++) {
+          const origIdx = origIndexByMistralIdx[chunkStart + localIdx];
+          if (origIdx == null) continue;
+          const p = propuestasByLocalIdx.get(localIdx);
+          if (p) {
+            allPropuestas.push({
+              ...p,
+              movimiento_index: origIdx,
+              confianza: Math.min(p.confianza ?? 0.5, MISTRAL_MAX_CONFIANZA),
+              __fuente: "mistral",
+              __regla_id: null,
+            });
+          } else {
+            // Mistral dropped this index — add a fallback with low confidence
+            const mov = allMovimientos[origIdx];
+            allPropuestas.push({
+              movimiento_index: origIdx,
+              tipo_propuesto:
+                mov.tipo_flujo === "salida" ? "gasto_egreso" : "no_comercial",
+              receptor_nombre: null,
+              receptor_rut: null,
+              monto_neto: mov.monto,
+              iva: 0,
+              total: mov.monto,
+              confianza: 0.4,
+              notas: "Fallback: Mistral no devolvió propuesta para este movimiento",
+              spread_compra: null,
+              spread_venta: null,
+              spread_ganancia: null,
+              __fuente: "mistral",
+              __regla_id: null,
+            });
+          }
+        }
+
+        totalTokensInput += r.tokens_input;
+        totalTokensOutput += r.tokens_output;
+        modelo = r.modelo;
+      }
+
+      // Sort propuestas by movimiento_index so downstream code sees them in order
+      allPropuestas.sort((a, b) => a.movimiento_index - b.movimiento_index);
+    } else {
+      // Legacy (non-bypass) path: combine chunked text results with offset
+      for (const r of results) {
+        if (!r) continue;
+        const offset = allMovimientos.length;
+        allMovimientos.push(...r.movimientos);
+
+        for (const p of r.propuestas) {
+          allPropuestas.push({
+            ...p,
+            movimiento_index: p.movimiento_index + offset,
+            __fuente: "mistral",
+            __regla_id: null,
+          });
+        }
+
+        totalTokensInput += r.tokens_input;
+        totalTokensOutput += r.tokens_output;
+        modelo = r.modelo;
+      }
     }
 
     // Filter out movimientos with null/empty required fields (Mistral sometimes
@@ -641,6 +777,7 @@ export async function procesarDocumento(
           const clienteId = resolveClienteId(clienteCache, p, mov);
           const confianza = toNum(p.confianza);
           const confianzaLow = confianza != null && confianza < MIN_CONFIANZA;
+          const enriched = p as EnrichedPropuesta;
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
@@ -659,6 +796,8 @@ export async function procesarDocumento(
             spread_venta: toNum(p.spread_venta),
             spread_ganancia: toNum(p.spread_ganancia),
             cliente_id: clienteId,
+            fuente_clasificacion: enriched.__fuente ?? "mistral",
+            regla_id: enriched.__regla_id ?? null,
           };
         });
 
