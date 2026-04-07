@@ -644,7 +644,9 @@ export async function procesarDocumento(
           tipo = "mismo_ndoc_mismo_arch";
           indiceConflicto = seen.firstIndex;
           repeticiones = seen.count;
-          motivo = `Transferencia idéntica detectada: mismo monto, fecha y contraparte que la fila ${seen.firstIndex + 1}. Si son operaciones reales separadas (ej: pagos múltiples al mismo proveedor), aceptá manualmente.`;
+          const filaRefMsg =
+            movimientosParsed[seen.firstIndex]?.excel_row ?? seen.firstIndex + 1;
+          motivo = `Transferencia idéntica detectada: mismo monto, fecha y contraparte que la fila ${filaRefMsg}. Si son operaciones reales separadas (ej: pagos múltiples al mismo proveedor), aceptá manualmente.`;
         } else {
           batchStrictSeen.set(strictKey, { firstIndex: i, count: 0 });
         }
@@ -664,7 +666,9 @@ export async function procesarDocumento(
           seen.count++;
           tipo = "loose_mismo_arch";
           indiceConflicto = seen.firstIndex;
-          motivo = `Misma fecha, monto y descripción que la fila ${seen.firstIndex + 1} de este archivo. Verificar si son operaciones distintas y aceptar manualmente.`;
+          const filaRefMsg =
+            movimientosParsed[seen.firstIndex]?.excel_row ?? seen.firstIndex + 1;
+          motivo = `Misma fecha, monto y descripción que la fila ${filaRefMsg} de este archivo. Verificar si son operaciones distintas y aceptar manualmente.`;
           looseOnlyDupCounts.set(`${m.descripcion}|${m.monto}`, (looseOnlyDupCounts.get(`${m.descripcion}|${m.monto}`) ?? 0) + 1);
         } else {
           batchLooseSeen.set(looseKey, { firstIndex: i, count: 0 });
