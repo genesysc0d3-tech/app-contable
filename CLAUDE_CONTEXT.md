@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#58 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#59 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #59** — fix /revisar: omitidos huérfanos quedan visibles tras aprobar el parent. Bug: cuando un omitido (duplicado aceptado desde /subir) se nestaba bajo su propuesta original y el usuario aprobaba la original, el omitido quedaba pendiente en DB pero la UI dejaba de mostrarlo (su key ya no matcheaba ningún parent). Fix: detectar omitidos huérfanos y agregarlos a `pendientes` como cards standalone con su badge "Desde omitidos". Nunca desaparecen sin acción explícita.
 
 **PR #58** — fix UI: remover botón Ignorar del desplegable de propuestas duplicadas. El usuario pidió que el dup nunca desaparezca sin acción explícita. Quedan solo Aprobar y Devolver. El "ojito" para ocultar omitidos en /subir se mantiene intacto.
 
