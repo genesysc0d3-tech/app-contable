@@ -752,7 +752,13 @@ export async function procesarDocumento(
       .filter(([, count]) => count > 5)
       .length > 0;
 
-    const movimientosToInsert = indicesToKeep.map((i) => movimientosParsed[i]);
+    // Strip excel_row/saldo: those are in-memory only for dup detection,
+    // movimientos_raw schema doesn't have those columns.
+    const movimientosToInsert = indicesToKeep.map((i) => {
+      const { excel_row: _er, saldo: _s, ...row } = movimientosParsed[i];
+      void _er; void _s;
+      return row;
+    });
 
     if (duplicadosSaltados > 0) {
       await updateProgreso(documentoId, {
