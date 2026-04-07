@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#56 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#57 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #57** — fix: restaurar flujo omitido para dups intra-archivo en bypass mode. Revierte PR #55 (auto-insert + warning informativo). El usuario pide control manual sobre cada duplicado para SII: dup → omitido por defecto → muestra en visor con motivo → "Agregar igual" para insertar. Acepta la fricción de SKIPO (14 dups manuales) a cambio de explícita verificación. processor.ts: shouldSkip=true para intra-file en bypass igual que legacy. DocumentList.tsx revertido al render unificado de omitidos. info_only queda como flag latente en types para futuro uso.
 
 **PR #56** — UI: mostrar warnings informativos del bypass mode. RUN 19 guardaba 10/10 incluyendo duplicado pero la UI no avisaba porque la condición del visor era `dupCount > 0`. Ahora `DuplicadoDetalle.info_only` distingue warnings (movs guardados) de omitidos (movs descartados); processor.ts marca info_only=true para intra-file dups en bypass; DocumentList.tsx visor se renderiza si hay warnings, splitea en 2 secciones ("omitidos" con acciones y "avisos para revisar" informativos con icono azul).
 
