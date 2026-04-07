@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#53 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#54 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #54** — parser: soporte layout `single_col` + reglas ampliadas. Nuevo layout en la heurística para cartolas con 1 columna Monto + 1 columna Tipo (Abono/Cargo) en vez de 2 mutuamente exclusivas. `AdapterConfig.layout` + `columns.monto/tipo_flujo_col` opcionales. `countEquationMatches()` usa `saldo[i] = saldo[i-1] ± monto[i]` para discriminar monto vs saldo de forma matemática (evita heurísticas de rango). `REQUIRED_CONSECUTIVE` bajado a 3 para cartolas chicas. Migración expand_global_rules: TRANSFERENCIA|TRANSFER RECIBIDA/ENVIADA, tipo_flujo_match=NULL en boletas/facturas, patrones COMPRA/PAGO/marketplaces/gateways, crypto prioridad 70 (gana sobre forex en USDT), forex regex con word boundaries. Validado contra cartola_prueba_10mov.xlsx: 10/10 extraídas con monto correcto, 100% clasificadas por reglas, cero Mistral.
 
 **PR #53** — classifier determinístico por reglas antes de Mistral. Tabla `clasificacion_reglas` con `empresa_id` nullable (NULL = global). Columns `fuente_clasificacion` + `regla_id` en `propuestas_ia` para trazabilidad SII. 15 reglas globales pre-cargadas cubriendo patrones chilenos: TRANSFER DE/A (p2p), ABONO POR TRF, CARGO POR TRANSF (gasto_egreso), crypto/forex, boletas/facturas, servicios (luz/agua/gas/internet), arriendo, remuneraciones, comisiones, impuestos SII, previsional. Processor bypass path: rules-first → Mistral fallback con confianza cap 0.75 (nunca auto-aprueba). Validación local: Cartola N°02 alcanza 100% de cobertura por reglas (675/675), cero llamadas a Mistral, tipos 650 p2p + 23 gasto_egreso + 2 crypto. Garantiza bit-exactitud repetible en clasificación.
 
