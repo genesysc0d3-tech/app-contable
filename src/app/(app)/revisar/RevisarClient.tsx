@@ -45,7 +45,7 @@ function classifyConfianza(p: Propuesta): "alta" | "media" | "baja" {
 type OmitidosMap = Map<string, Propuesta[]>;
 
 function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap }: {
-  tipo: "alta" | "media" | "baja"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap;
+  tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,6 +58,8 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     alta: { icon: "🟢", label: `Alta confianza · ${propuestas.length}`, color: "text-[#22C55E]" },
     media: { icon: "🟡", label: `Requiere revisión · ${propuestas.length}`, color: "text-[#F59E0B]" },
     baja: { icon: "🔴", label: `Falta información · ${propuestas.length}`, color: "text-[#E8553E]" },
+    omitidos: { icon: "🟠", label: `Omitidos huérfanos · ${propuestas.length}`, color: "text-[#F59E0B]" },
+    ocultas: { icon: "⚫", label: `Ocultas · ${propuestas.length}`, color: "text-[var(--muted)]" },
   }[tipo];
 
   const sorted = [...propuestas].sort((a, b) => (b.confianza ?? 0) - (a.confianza ?? 0));
@@ -99,6 +101,16 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
               {tipo === "baja" && (
                 <p className="text-[10px] text-[#E8553E] bg-[var(--accent-light)] rounded-lg px-2.5 py-1.5 mb-2">
                   Esta propuesta necesita más datos antes de aprobar
+                </p>
+              )}
+              {tipo === "omitidos" && (
+                <p className="text-[10px] text-[#F59E0B] bg-[#FFF8ED] dark:bg-[#F59E0B]/10 rounded-lg px-2.5 py-1.5 mb-2">
+                  Duplicado huérfano: la propuesta original ya fue aprobada o devuelta. Decidí qué hacer con esta copia.
+                </p>
+              )}
+              {tipo === "ocultas" && (
+                <p className="text-[10px] text-[var(--muted)] bg-[var(--surface)] rounded-lg px-2.5 py-1.5 mb-2">
+                  Propuesta oculta — podés restaurarla aprobándola, editándola o devolviéndola.
                 </p>
               )}
               <PropuestaCard propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction}
@@ -148,12 +160,15 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
     }
   }
 
-  // pendientes for rendering = parents + orphaned omitidos
-  const pendientes = [...parents, ...orphanedOmitidos];
+  // pendientes (cards principales) = solo parents activos.
+  // Los huérfanos van a su propia sección "Omitidos huérfanos" abajo.
+  const pendientes = parents;
 
   const alta = pendientes.filter((p) => classifyConfianza(p) === "alta");
   const media = pendientes.filter((p) => classifyConfianza(p) === "media");
   const baja = pendientes.filter((p) => classifyConfianza(p) === "baja");
+  const ocultas = group.propuestas.filter((p) => p.estado === "oculto");
+  const totalVisible = pendientes.length + orphanedOmitidos.length;
 
   const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   const d = new Date(group.fechaSubida);
@@ -193,14 +208,16 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
       {expanded && (
         <div className="px-3 pb-3 pt-2 space-y-2 animate-fade-in relative">
           {showBurst && !burstDone && <CompletionBurst onDone={handleBurstDone} />}
-          {pendientes.length === 0 ? (
+          {totalVisible === 0 && ocultas.length === 0 ? (
             <div className="text-center text-[var(--muted-light)] text-xs py-4">Todo revisado</div>
           ) : (
             <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
               <div className="space-y-2">
-                <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (pendientes.length <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
-                <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (pendientes.length <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
-                <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (pendientes.length <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
               </div>
             </div>
           )}

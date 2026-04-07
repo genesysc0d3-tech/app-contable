@@ -114,7 +114,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
       const res = await fetch("/api/forzar-movimiento", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }),
+        body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo, motivo: dup.motivo }),
       });
       if (res.ok) { toast("Enviado a revisar"); setRemoved((prev) => new Set(prev).add(key)); }
       else toast("Error al agregar", "error");
@@ -175,7 +175,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
     for (const { key, dup } of items) {
       try {
         const res = await fetch("/api/forzar-movimiento", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo }) });
+          body: JSON.stringify({ documento_id: documentoId, fecha: dup.fecha, descripcion: dup.descripcion, monto: dup.monto, tipo_flujo: dup.tipo_flujo, motivo: dup.motivo }) });
         if (res.ok) { newRemoved.add(key); ok++; }
       } catch { /* skip */ }
     }

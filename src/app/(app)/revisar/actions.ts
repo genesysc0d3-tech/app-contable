@@ -52,6 +52,35 @@ export async function descartarPropuesta(propuestaId: string) {
   return { ok: true };
 }
 
+/**
+ * Ocultar una propuesta de la vista principal de /revisar sin destruirla.
+ * Se puede restaurar después con restaurarPropuesta(). Reemplaza al
+ * descartar como acción "negativa" no destructiva.
+ */
+export async function ocultarPropuesta(propuestaId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("propuestas_ia")
+    .update({ estado: "oculto" })
+    .eq("id", propuestaId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/revisar");
+  return { ok: true };
+}
+
+export async function restaurarPropuesta(propuestaId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("propuestas_ia")
+    .update({ estado: "pendiente" })
+    .eq("id", propuestaId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/revisar");
+  return { ok: true };
+}
+
 export async function editarPropuesta(
   propuestaId: string,
   campos: {

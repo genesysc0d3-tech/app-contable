@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { documento_id, fecha, descripcion, monto, tipo_flujo, origen, tipo_propuesto } = body;
+  const { documento_id, fecha, descripcion, monto, tipo_flujo, origen, tipo_propuesto, motivo } = body;
 
   if (!documento_id || !descripcion || monto == null) {
     return NextResponse.json({ error: "Campos requeridos: documento_id, descripcion, monto" }, { status: 400 });
@@ -83,6 +83,13 @@ export async function POST(request: Request) {
   const montoNeto = tieneIva ? Math.round(montoNum / 1.19) : montoNum;
   const iva = tieneIva ? montoNum - montoNeto : 0;
 
+  // Preserve the original duplicate motivo so the user knows WHY this was
+  // omitido in the first place when reviewing it in /revisar.
+  const notasParts = ["Agregado desde visor de omitidos"];
+  if (motivo && typeof motivo === "string") {
+    notasParts.push(`Motivo original: ${motivo}`);
+  }
+
   const { error: propError } = await svc
     .from("propuestas_ia")
     .insert({
@@ -94,7 +101,7 @@ export async function POST(request: Request) {
       total: montoNum,
       confianza: 0.7,
       estado: "pendiente",
-      notas: "Agregado desde visor de omitidos — revisar antes de aprobar",
+      notas: notasParts.join(" — "),
     });
 
   if (propError) {
