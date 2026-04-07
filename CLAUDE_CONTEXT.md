@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#63 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#64 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #64** — fix UI /subir: leak de "0" en barra de progreso. `hasProgress = total_lotes && lote_actual` retornaba `0` (no `false`) cuando `lote_actual=0` y `total_lotes>0`, y React renderizaba ese 0 literal en `{hasProgress && (...)}`. Aparecía como un "0" suelto al lado del badge "Procesando" justo antes de completar. Fix: `Boolean(total_lotes && lote_actual)`. Bug clásico de coerción JSX.
 
 **PR #63** — UI /subir: mostrar fila origen en omitidos. Cada item omitido ahora muestra `Tx en fila X — ` (en negrita) prefijando el motivo, para que el usuario sepa en qué fila del archivo está la transacción duplicada (no solo con cuál se compara). Usa `dup.indice_archivo + 1`, ya disponible en `DuplicadoDetalle`. Cambio solo en `DocumentList.tsx:renderItem`. No aplica a items informativos (multi_transfer_p2p, info_only).
 
