@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#72 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#73 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #73** — feat /revisar: editar directo desde thin row + ojo abierto en Ocultas. **(1)** `PropuestaCard` acepta nuevo prop opcional `initialEditing` que define el estado inicial de `editing`. `ConfianzaGroup` mantiene dos sets paralelos: `expandedCards` y `editCards`. Nueva función `editCard(id)` expande la card Y marca el flag de edición; `toggleCard` limpia el flag al contraer. El lápiz del ThinRow ahora abre la card directo en modo edición con los inputs visibles. **(2)** ThinRow recibe `isOculta` (true cuando `tipo === "ocultas"`). En esa sección el botón de ocultar muestra ícono Eye (ojo abierto), title "Restaurar" y llama `restaurarPropuesta` en lugar de `ocultarPropuesta`. Feedback visual claro: ojo abierto = click para desocultar.
 
 **PR #72** — feat /revisar thin row con acciones + fix /subir omitidos info_only. **(1)** En `/revisar`, cada propuesta colapsada (PR #71) ahora muestra 3 íconos a la derecha: Check (aprobar — verde, llama `aprobarPropuesta` directo), PencilSimple (editar — naranja, expande la card), EyeSlash (ocultar — gris, llama `ocultarPropuesta`). Componente `ThinRow` extraído. **(2)** Fix /subir: la condición `!isInfo` en `DocumentList.renderItem` ocultaba checkbox y botones de acción para items `info_only` (introducidos en PR #68 para cartolas solo-abonos). Ahora checkbox y botón Ocultar siempre visibles; botón Agregar solo cuando NO es info_only (porque info_only ya está guardado).
 
