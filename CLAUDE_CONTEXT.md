@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#55 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 6 Abril 2026 · rama `dev` · PRs #1-#56 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #56** — UI: mostrar warnings informativos del bypass mode. RUN 19 guardaba 10/10 incluyendo duplicado pero la UI no avisaba porque la condición del visor era `dupCount > 0`. Ahora `DuplicadoDetalle.info_only` distingue warnings (movs guardados) de omitidos (movs descartados); processor.ts marca info_only=true para intra-file dups en bypass; DocumentList.tsx visor se renderiza si hay warnings, splitea en 2 secciones ("omitidos" con acciones y "avisos para revisar" informativos con icono azul).
 
 **PR #55** — fix: intra-file dups como warning en bypass mode. RUN 18 guardaba 10/10 correctamente pero no avisaba del duplicado. PR #50 había deshabilitado completamente el intra-batch dedup en bypass para fix del caso SKIPO, matando también la señal informativa. Ahora separado: `shouldSkip` (descarta: cross-file + legacy intra-file) vs `isInfoWarning` (mantiene el mov + flaguea en duplicadosDetalle: bypass intra-file). Mensajes ajustados explicando que son operaciones reales guardadas para que el usuario revise.
 
