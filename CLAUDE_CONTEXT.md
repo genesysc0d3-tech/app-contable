@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#75 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#76 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #76** — style /subir: omitidos info en teal #14B8A6. Naranja (PR #75) chocaba con los warnings amarillos. Teal es complementario al naranja brand y se distingue claramente sin pelearse visualmente.
 
 **PR #75** — style /subir: omitidos info naranja + badge oscuro para "Fila X". Texto e ícono de omitidos `info_only` cambian de azul (#3B82F6) a naranja (#F59E0B) para alinearse con la paleta warning de la app. El prefijo "Fila X" del motivo se renderiza ahora como un badge cuadrado de bordes redondeados con fondo gris oscuro (`#374151` light / `#1F2937` dark) y texto blanco, en vez de texto inline.
 
