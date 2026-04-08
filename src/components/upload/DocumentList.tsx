@@ -203,7 +203,7 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
     const isConfirmed = dupTipo === "otro_doc_confirmado" || dupTipo === "mismo_ndoc_mismo_arch" || dupTipo === "mismo_ndoc_otro_arch";
     // Informational: guardado, sin acciones — multi_transfer_p2p o info_only de bypass mode
     const isInfo = dupTipo === "multi_transfer_p2p" || dup.info_only === true;
-    const iconColor = isInfo ? "text-[#3B82F6]" : isConfirmed ? "text-[#E8553E]" : "text-[#F59E0B]";
+    const iconColor = isInfo ? "text-[#F59E0B]" : isConfirmed ? "text-[#E8553E]" : "text-[#F59E0B]";
     const IconComp = isInfo ? Info : isConfirmed ? XCircle : WarningCircle;
     const btnLabel = isConfirmed ? "Agregar igual" : "Agregar";
 
@@ -257,9 +257,9 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
                   Operaciones reales confirmadas — la columna SALDO se mueve exactamente {fmt(dup.monto)} entre la fila {filaPropia ?? "?"} y la fila {filaConflicto ?? "?"}. Sugerido: Agregar igual.
                 </p>
               )}
-              <p className={`italic ${isInfo ? "text-[#3B82F6]" : "text-[var(--muted-light)]"}`}>
+              <p className={`italic ${isInfo ? "text-[#F59E0B]" : "text-[var(--muted-light)]"}`}>
                 {dupTipo !== "multi_transfer_p2p" && typeof filaPropia === "number" && (
-                  <span className={`not-italic font-medium ${isInfo ? "text-[#3B82F6]" : "text-[var(--foreground)]"}`}>Fila {filaPropia} — </span>
+                  <span className="not-italic font-medium text-[10px] text-white bg-[#374151] dark:bg-[#1F2937] rounded-md px-1.5 py-0.5 mr-1.5">Fila {filaPropia}</span>
                 )}
                 {dup.motivo}
               </p>
