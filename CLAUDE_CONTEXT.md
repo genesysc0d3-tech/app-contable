@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#73 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#74 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #74** — feat /revisar: iconos phosphor para grupos de confianza. Reemplaza emojis (🟢🟡🔴🟠⚫) por íconos phosphor coloreados manteniendo los mismos colores: alta=CheckCircle verde, media=Warning amarillo, baja=WarningOctagon rojo, omitidos=WarningCircle naranja, ocultas=EyeSlash gris. Look más profesional, mismo significado visual.
 
 **PR #73** — feat /revisar: editar directo desde thin row + ojo abierto en Ocultas. **(1)** `PropuestaCard` acepta nuevo prop opcional `initialEditing` que define el estado inicial de `editing`. `ConfianzaGroup` mantiene dos sets paralelos: `expandedCards` y `editCards`. Nueva función `editCard(id)` expande la card Y marca el flag de edición; `toggleCard` limpia el flag al contraer. El lápiz del ThinRow ahora abre la card directo en modo edición con los inputs visibles. **(2)** ThinRow recibe `isOculta` (true cuando `tipo === "ocultas"`). En esa sección el botón de ocultar muestra ícono Eye (ojo abierto), title "Restaurar" y llama `restaurarPropuesta` en lugar de `ocultarPropuesta`. Feedback visual claro: ojo abierto = click para desocultar.
 
