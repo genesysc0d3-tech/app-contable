@@ -9,7 +9,7 @@ import { aprobarTodas, aprobarPropuesta, ocultarPropuesta, restaurarPropuesta } 
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
 import type { Tables } from "@/lib/database.types";
-import { CaretRight, FileText, CheckCircle, Check, PencilSimple, EyeSlash, Eye } from "@phosphor-icons/react";
+import { CaretRight, FileText, CheckCircle, Check, PencilSimple, EyeSlash, Eye, Warning, WarningOctagon, WarningCircle } from "@phosphor-icons/react";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -183,11 +183,11 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   if (propuestas.length === 0) return null;
 
   const config = {
-    alta: { icon: "🟢", label: `Alta confianza · ${propuestas.length}`, color: "text-[#22C55E]" },
-    media: { icon: "🟡", label: `Requiere revisión · ${propuestas.length}`, color: "text-[#F59E0B]" },
-    baja: { icon: "🔴", label: `Falta información · ${propuestas.length}`, color: "text-[#E8553E]" },
-    omitidos: { icon: "🟠", label: `Omitidos huérfanos · ${propuestas.length}`, color: "text-[#F59E0B]" },
-    ocultas: { icon: "⚫", label: `Ocultas · ${propuestas.length}`, color: "text-[var(--muted)]" },
+    alta: { Icon: CheckCircle, label: `Alta confianza · ${propuestas.length}`, color: "text-[#22C55E]" },
+    media: { Icon: Warning, label: `Requiere revisión · ${propuestas.length}`, color: "text-[#F59E0B]" },
+    baja: { Icon: WarningOctagon, label: `Falta información · ${propuestas.length}`, color: "text-[#E8553E]" },
+    omitidos: { Icon: WarningCircle, label: `Omitidos huérfanos · ${propuestas.length}`, color: "text-[#F59E0B]" },
+    ocultas: { Icon: EyeSlash, label: `Ocultas · ${propuestas.length}`, color: "text-[var(--muted)]" },
   }[tipo];
 
   const sorted = [...propuestas].sort((a, b) => (b.confianza ?? 0) - (a.confianza ?? 0));
@@ -213,7 +213,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-[var(--border)] transition-colors duration-200 cursor-pointer"
       >
         <CaretRight size={12} weight="bold" className={`text-[var(--muted-light)] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
-        <span className="text-xs">{config.icon}</span>
+        <config.Icon size={14} weight="fill" className={`${config.color} shrink-0`} />
         <span className={`text-xs font-medium ${config.color} flex-1 text-left`}>{config.label}</span>
         {tipo === "alta" && (
           <button onClick={handleAprobarGrupo} disabled={loading}
