@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#76 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 7 Abril 2026 · rama `dev` · PRs #1-#77 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #77** — style: fuente Apple-like global + ajustes omitidos info. **(1)** `layout.tsx` reemplaza Geist por Inter (alternativa libre más cercana a SF Pro). `globals.css` antepone stack `-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"` así en macOS/iOS se renderiza con SF nativa; Inter queda como fallback en Linux/Windows. Agrega `-webkit-font-smoothing: antialiased`, `font-feature-settings: "cv11", "ss01", "ss03"` y `letter-spacing: -0.01em` para imitar el feel Apple. **(2)** `DocumentList`: ícono "i" de omitidos info vuelve a amarillo `#F59E0B`; texto del motivo siempre en `var(--muted-light)` (gris claro), sin diferenciación isInfo.
 
 **PR #76** — style /subir: omitidos info en teal #14B8A6. Naranja (PR #75) chocaba con los warnings amarillos. Teal es complementario al naranja brand y se distingue claramente sin pelearse visualmente.
 
