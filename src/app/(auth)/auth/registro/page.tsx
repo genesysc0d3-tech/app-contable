@@ -29,8 +29,8 @@ export default function RegistroPage() {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="mesh-bg flex-1 flex items-center justify-center px-4 py-12 min-h-screen">
+      <div className="w-full max-w-sm space-y-6 relative">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Crear cuenta</h1>
           <p className="text-white/50 mt-2 text-sm">
@@ -38,7 +38,7 @@ export default function RegistroPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 space-y-4">
+        <div className="glass rounded-2xl p-6 space-y-4 glow-accent-soft">
           {error && (
             <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
               {error}

@@ -16,10 +16,11 @@ export default async function EscritorioPage() {
   });
 
   return (
-    <div className="escritorio-root min-h-screen bg-[var(--background)]">
+    <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg">
+      <div className="mesh-blob-3" />
       <TopBar empresa={usuario.empresas.razon_social} fecha={fecha} />
 
-      <main className="max-w-[1500px] mx-auto px-6 pb-10 pt-4">
+      <main className="max-w-[1500px] mx-auto px-6 pb-10 pt-4 relative">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <aside className="lg:col-span-4 xl:col-span-3">
             <Panel
@@ -55,10 +56,13 @@ export default async function EscritorioPage() {
 
 function TopBar({ empresa, fecha }: { empresa: string; fecha: string }) {
   return (
-    <header className="sticky top-0 z-30 backdrop-blur-xl bg-[var(--background)]/80 border-b border-[var(--border)]">
+    <header className="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
       <div className="max-w-[1500px] mx-auto px-6 h-14 flex items-center gap-6">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-[#E8553E] shrink-0" />
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inset-0 rounded-full bg-[#E8553E] opacity-60 animate-ping" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#E8553E] shadow-[0_0_10px_rgba(232,85,62,0.7)]" />
+          </span>
           <h1 className="text-[15px] font-semibold text-[var(--foreground)] truncate">
             {empresa}
           </h1>
@@ -86,17 +90,15 @@ function Panel({
 }) {
   return (
     <section
-      className={`rounded-[20px] bg-white dark:bg-white/[0.03] border border-[var(--border)] overflow-hidden ${
-        spotlight
-          ? "shadow-[0_8px_32px_-12px_rgba(232,85,62,0.18)] dark:shadow-none"
-          : "shadow-[var(--card-shadow)] dark:shadow-none"
+      className={`glass rounded-[20px] overflow-hidden glow-on-hover ${
+        spotlight ? "glow-accent-soft" : ""
       }`}
     >
-      <header className="flex items-center gap-3 px-5 py-3.5 border-b border-[var(--border)] bg-[var(--surface)]/40 dark:bg-transparent">
+      <header className="flex items-center gap-3 px-5 py-3.5 border-b border-[var(--glass-border)]">
         <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${
             spotlight
-              ? "bg-[var(--accent-light)] text-[#E8553E]"
+              ? "bg-[var(--accent-light)] text-[#E8553E] shadow-[0_0_16px_-4px_rgba(232,85,62,0.5)]"
               : "bg-[var(--surface)] text-[var(--muted)]"
           }`}
         >
