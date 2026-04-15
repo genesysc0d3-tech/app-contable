@@ -13,9 +13,9 @@ const NAV_ITEMS = [
   { href: "/resumen", label: "Resumen", Icon: ChartBar },
 ] as const;
 
-export default function BottomNav() {
+export default function BottomNav({ initialPendientes = 0 }: { initialPendientes?: number }) {
   const pathname = usePathname();
-  const [pendientes, setPendientes] = useState(0);
+  const [pendientes, setPendientes] = useState(initialPendientes);
 
   useEffect(() => {
     async function fetchCount() {
@@ -25,8 +25,6 @@ export default function BottomNav() {
         .eq("estado", "pendiente");
       setPendientes(count ?? 0);
     }
-
-    fetchCount();
 
     const channel = supabase
       .channel("nav-propuestas")
