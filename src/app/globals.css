@@ -274,6 +274,19 @@ select option {
 }
 .animate-expand-block { animation: expand-block 320ms cubic-bezier(0.22, 1, 0.36, 1) both; overflow: hidden; }
 
+/* Item departure — fade + slide right + collapse height.
+   Used when approving/hiding propuestas so siblings slide up smoothly. */
+@keyframes depart {
+  0%   { opacity: 1; max-height: 500px; transform: translateX(0); }
+  35%  { opacity: 0; transform: translateX(32px); }
+  100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; transform: translateX(32px); }
+}
+.animate-depart {
+  animation: depart 450ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 /* =======================================================================
    Glassmorphism, glow, and animated mesh background
    All pure CSS — zero bundle cost. Uses backdrop-filter + CSS gradients.

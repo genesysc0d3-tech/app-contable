@@ -151,6 +151,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const [editCards, setEditCards] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [activeBlock, setActiveBlock] = useState(0);
+  const [departingIds, setDepartingIds] = useState<Set<string>>(new Set());
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
@@ -207,23 +208,58 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
 
   async function handleAprobarGrupo(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
-    const result = await aprobarTodas(propuestas.map((p) => p.id));
+    const ids = propuestas.map((p) => p.id);
+
+    // Optimistic: mark as departing so animate out while request is in flight
+    setDepartingIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    const result = await aprobarTodas(ids);
     if (result.error) {
+      // Rollback
+      setDepartingIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
       toast(`Error: ${result.error}`, "error");
-    } else {
-      toast(`${result.count} aprobadas`);
+      setLoading(false);
+      return;
     }
-    router.refresh(); onAction(); setLoading(false);
+    toast(`${result.count} aprobadas`);
+    setLoading(false);
+    // Wait for the exit animation to finish, then sync with server
+    setTimeout(() => { onAction(); }, 500);
   }
 
   async function handleAprobarBloque(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
     const ids = (blocks[safeBlock] ?? []).map((p) => p.id);
     if (ids.length === 0) { setLoading(false); return; }
+
+    setDepartingIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
     const result = await aprobarTodas(ids);
-    if (result.error) toast(`Error: ${result.error}`, "error");
-    else toast(`${result.count} aprobadas en bloque ${safeBlock + 1}`);
-    router.refresh(); onAction(); setLoading(false);
+    if (result.error) {
+      setDepartingIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      toast(`Error: ${result.error}`, "error");
+      setLoading(false);
+      return;
+    }
+    toast(`${result.count} aprobadas en bloque ${safeBlock + 1}`);
+    setLoading(false);
+    setTimeout(() => { onAction(); }, 500);
   }
 
   return (
@@ -279,10 +315,10 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
               })}
             </div>
           )}
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
           {visible.map((p) => (
             <Fragment key={p.id}>
-              <div>
+              <div className={departingIds.has(p.id) ? "animate-depart" : ""}>
               {tipo === "baja" && (
                 <p className="text-[10px] text-[#E8553E] bg-[var(--accent-light)] rounded-lg px-2.5 py-1.5 mb-2">
                   Esta propuesta necesita más datos antes de aprobar
