@@ -12,6 +12,14 @@
   --muted: #888888;
   --muted-light: #AAAAAA;
   --surface: #F5F5F3;
+  /* Glass + glow tokens (light mode) */
+  --glass-bg: rgba(255,255,255,0.62);
+  --glass-border: rgba(255,255,255,0.8);
+  --glow-accent: 0 0 32px -8px rgba(232,85,62,0.35);
+  --glow-accent-soft: 0 0 64px -16px rgba(232,85,62,0.22);
+  --mesh-1: rgba(232,85,62,0.10);
+  --mesh-2: rgba(245,158,11,0.08);
+  --mesh-3: rgba(59,130,246,0.06);
 }
 
 .dark {
@@ -26,6 +34,14 @@
   --muted: rgba(255,255,255,0.5);
   --muted-light: rgba(255,255,255,0.3);
   --surface: rgba(255,255,255,0.05);
+  /* Glass + glow tokens (dark mode) */
+  --glass-bg: rgba(28,28,30,0.55);
+  --glass-border: rgba(255,255,255,0.08);
+  --glow-accent: 0 0 40px -6px rgba(232,85,62,0.45);
+  --glow-accent-soft: 0 0 96px -16px rgba(232,85,62,0.30);
+  --mesh-1: rgba(232,85,62,0.18);
+  --mesh-2: rgba(245,158,11,0.10);
+  --mesh-3: rgba(99,102,241,0.10);
 }
 
 @theme inline {
@@ -234,6 +250,120 @@ select option {
   to   { opacity: 1; max-height: 600px; }
 }
 .animate-expand-block { animation: expand-block 320ms cubic-bezier(0.22, 1, 0.36, 1) both; overflow: hidden; }
+
+/* =======================================================================
+   Glassmorphism, glow, and animated mesh background
+   All pure CSS — zero bundle cost. Uses backdrop-filter + CSS gradients.
+   ======================================================================= */
+
+/* Glass surface — translucent card with blur and subtle border */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-strong {
+  background: var(--glass-bg);
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  border: 1px solid var(--glass-border);
+}
+
+/* Accent glow — orange halo around element */
+.glow-accent { box-shadow: var(--glow-accent); }
+.glow-accent-soft { box-shadow: var(--glow-accent-soft); }
+
+.glow-on-hover {
+  transition: box-shadow 400ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.glow-on-hover:hover {
+  box-shadow: var(--glow-accent-soft);
+  transform: translateY(-1px);
+}
+
+/* Animated mesh gradient background — three soft blobs drifting slowly.
+   Sits inside an absolutely positioned container, clipped by overflow.
+   Pure CSS, GPU-composited, ~0 runtime cost. */
+@keyframes mesh-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(6%, -4%) scale(1.08); }
+}
+@keyframes mesh-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1.1); }
+  50%      { transform: translate(-5%, 5%) scale(1); }
+}
+@keyframes mesh-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(0.95); }
+  50%      { transform: translate(4%, 6%) scale(1.1); }
+}
+
+.mesh-bg {
+  position: relative;
+  isolation: isolate;
+}
+.mesh-bg::before,
+.mesh-bg::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: -1;
+  will-change: transform;
+}
+.mesh-bg::before {
+  top: -10%;
+  left: -10%;
+  width: 55vw;
+  height: 55vw;
+  background: var(--mesh-1);
+  animation: mesh-drift-1 22s ease-in-out infinite;
+}
+.mesh-bg::after {
+  bottom: -15%;
+  right: -15%;
+  width: 50vw;
+  height: 50vw;
+  background: var(--mesh-2);
+  animation: mesh-drift-2 26s ease-in-out infinite;
+}
+/* Third blob via a child element in components that want it (optional) */
+.mesh-blob-3 {
+  position: fixed;
+  top: 40%;
+  left: 30%;
+  width: 40vw;
+  height: 40vw;
+  border-radius: 50%;
+  background: var(--mesh-3);
+  filter: blur(100px);
+  z-index: -1;
+  pointer-events: none;
+  animation: mesh-drift-3 30s ease-in-out infinite;
+}
+
+/* Subtle grain overlay for texture (optional, very cheap) */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+  border-radius: inherit;
+}
+
+/* Reduced-motion: disable mesh drift for users who prefer no motion */
+@media (prefers-reduced-motion: reduce) {
+  .mesh-bg::before,
+  .mesh-bg::after,
+  .mesh-blob-3 { animation: none; }
+}
 
 /* Desktop mode: neutralize mobile-only wrappers of reused client components */
 .escritorio-root .escritorio-col > div.flex-1 {
