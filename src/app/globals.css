@@ -36,39 +36,35 @@
 }
 
 .dark {
-  --background: #1B1917;
-  --neo-bg: #252320;
-  --foreground: #F0EDE8;
+  /* Cool neutral dark — OpenSea style, not warm brown */
+  --background: #18181B;
+  --neo-bg: #212125;
+  --foreground: #EDEDED;
   --accent: #E8553E;
   --accent-light: rgba(232,85,62,0.15);
   --accent-hover: #f06a55;
-  --card: rgba(255,255,255,0.05);
+  --card: rgba(255,255,255,0.04);
   --card-shadow: none;
-  --border: rgba(255,255,255,0.1);
-  --muted: rgba(235,230,220,0.55);
-  --muted-light: rgba(235,230,220,0.35);
-  --surface: rgba(255,255,255,0.05);
-  /* Glass + glow tokens (dark mode) */
-  --glass-bg: rgba(15,13,11,0.65);
-  --glass-border: rgba(255,255,255,0.08);
-  --glow-accent: 0 0 40px -6px rgba(232,85,62,0.45);
-  --glow-accent-soft: 0 0 96px -16px rgba(232,85,62,0.30);
-  /* Premium ambient gradient — orange halo strong in top, fading to deep warm black */
-  --mesh-1: rgba(232,85,62,0.22);
-  --mesh-2: rgba(245,158,11,0.12);
-  --mesh-3: rgba(232,85,62,0.08);
-  /* Neumorphism 2.0 (dark) */
-  --neo-light: rgba(255,255,255,0.04);
-  --neo-dark: rgba(0,0,0,0.55);
-  --neo-shadow:
-    8px 8px 24px var(--neo-dark),
-    -8px -8px 24px var(--neo-light);
-  --neo-shadow-sm:
-    4px 4px 12px var(--neo-dark),
-    -4px -4px 12px var(--neo-light);
-  --neo-inset:
-    inset 4px 4px 10px var(--neo-dark),
-    inset -4px -4px 10px var(--neo-light);
+  --border: rgba(255,255,255,0.08);
+  --muted: rgba(255,255,255,0.55);
+  --muted-light: rgba(255,255,255,0.35);
+  --surface: rgba(255,255,255,0.04);
+  /* Glass tokens (dark mode) */
+  --glass-bg: rgba(24,24,27,0.75);
+  --glass-border: rgba(255,255,255,0.06);
+  --glow-accent: 0 0 40px -6px rgba(232,85,62,0.35);
+  --glow-accent-soft: 0 0 80px -16px rgba(232,85,62,0.22);
+  /* Subtle brand tint in ambient gradient (dimmed per principle #4) */
+  --mesh-1: rgba(232,85,62,0.12);
+  --mesh-2: rgba(245,158,11,0.06);
+  --mesh-3: rgba(232,85,62,0.04);
+  /* Dark mode: shadows are weak (principle #6 — no heavy shadows).
+     Cards separate via lighter bg + subtle border, not via elevation. */
+  --neo-light: rgba(255,255,255,0.02);
+  --neo-dark: rgba(0,0,0,0.25);
+  --neo-shadow: none;
+  --neo-shadow-sm: none;
+  --neo-inset: inset 0 0 0 1px rgba(255,255,255,0.04);
 }
 
 @theme inline {
@@ -374,6 +370,15 @@ select option {
   background: var(--neo-bg);
   box-shadow: var(--neo-inset);
   border-radius: 16px;
+}
+
+/* Dark mode overrides — cards separate via bg tone + clean border,
+   not via heavy shadows (dark UI principle #6: avoid shadows). */
+.dark .neo {
+  border: 1px solid var(--border);
+}
+.dark .neo-sm {
+  border: 1px solid var(--border);
 }
 .neo-press {
   transition: box-shadow 180ms ease, transform 180ms ease;
