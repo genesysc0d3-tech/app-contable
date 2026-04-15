@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
-import type { Row } from "@/lib/parsers/types";
+import { detectHeuristic } from "@/lib/parsers/heuristic";
+import { detectByNames } from "@/lib/parsers/named";
+import type { AdapterConfig, Row } from "@/lib/parsers/types";
 
 const PREVIEW_ROWS = 30;
 
@@ -41,7 +43,17 @@ export async function POST(request: Request) {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
 
-  const sheets = workbook.SheetNames.map((name) => {
+  type SheetData = {
+    name: string;
+    rows: string[][];
+    totalRows: number;
+    cols: number;
+    fingerprint: string;
+    suggested: AdapterConfig | null;
+    suggestedSource: "named" | "heuristic" | null;
+  };
+
+  const sheets: SheetData[] = workbook.SheetNames.map((name) => {
     const sheet = workbook.Sheets[name];
     const allRows = XLSX.utils.sheet_to_json<Row>(sheet, { header: 1, defval: "" });
     const preview = allRows.slice(0, PREVIEW_ROWS).map((r) =>
@@ -49,7 +61,20 @@ export async function POST(request: Request) {
     );
     const fingerprint = allRows.length > 0 ? computeFingerprint(allRows) : "";
     const cols = Math.max(0, ...preview.map((r) => r.length));
-    return { name, rows: preview, totalRows: allRows.length, cols, fingerprint };
+
+    // Run detectors against the FULL sheet (not just preview rows) for accuracy
+    let suggested: AdapterConfig | null = null;
+    let suggestedSource: "named" | "heuristic" | null = null;
+    if (allRows.length > 0) {
+      const named = detectByNames(allRows);
+      if (named) { suggested = named; suggestedSource = "named"; }
+      else {
+        const heur = detectHeuristic(allRows);
+        if (heur) { suggested = heur; suggestedSource = "heuristic"; }
+      }
+    }
+
+    return { name, rows: preview, totalRows: allRows.length, cols, fingerprint, suggested, suggestedSource };
   });
 
   const primary = sheets.find((s) => s.totalRows > 0) ?? sheets[0] ?? null;
@@ -62,6 +87,8 @@ export async function POST(request: Request) {
     totalRows: primary.totalRows,
     cols: primary.cols,
     rows: primary.rows,
+    suggested: primary.suggested,
+    suggestedSource: primary.suggestedSource,
     allSheets: sheets.map((s) => ({ name: s.name, totalRows: s.totalRows })),
   });
 }
