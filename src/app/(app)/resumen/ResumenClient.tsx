@@ -8,7 +8,12 @@ import {
   getPropuestasAprobadas,
 } from "./actions";
 import { FilePdf, ShareNetwork } from "@phosphor-icons/react";
-import LineChart from "@/components/charts/LineChart";
+import dynamic from "next/dynamic";
+
+const LineChart = dynamic(() => import("@/components/charts/LineChart"), {
+  ssr: false,
+  loading: () => <div className="animate-shimmer h-48 rounded-[20px]" />,
+});
 import { useAppStore } from "@/store/appStore";
 
 interface ResumenClientProps {

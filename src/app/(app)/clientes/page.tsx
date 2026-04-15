@@ -1,17 +1,25 @@
-import { requireActiveEmpresa } from "@/lib/dal";
+import { Suspense } from "react";
+import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
-import PageTransition from "@/components/PageTransition";
+import ClientesLoading from "./loading";
 import ClientesClient from "./ClientesClient";
 
 export default async function ClientesPage() {
-  const usuario = await requireActiveEmpresa();
+  const usuario = (await getUsuario())!;
+  return (
+    <Suspense fallback={<ClientesLoading />}>
+      <ClientesData empresaId={usuario.empresa_id} />
+    </Suspense>
+  );
+}
+
+async function ClientesData({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
 
-  // Fetch clientes with count of linked movimientos via propuestas_ia
   const { data: clientes } = await supabase
     .from("clientes")
     .select("*, propuestas_ia(count)")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", empresaId)
     .order("nombre", { ascending: true });
 
   const clientesConCount = (clientes ?? []).map((c) => ({
@@ -21,12 +29,5 @@ export default async function ClientesPage() {
       (c.propuestas_ia as unknown as { count: number }[])?.[0]?.count ?? 0,
   }));
 
-  return (
-    <PageTransition>
-      <ClientesClient
-        clientes={clientesConCount}
-        empresaId={usuario.empresa_id}
-      />
-    </PageTransition>
-  );
+  return <ClientesClient clientes={clientesConCount} empresaId={empresaId} />;
 }
