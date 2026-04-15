@@ -62,6 +62,18 @@ const ROLES: Record<Role, { label: string; hint: string; dot: string; chip: stri
 
 const UNIQUE_ROLES: Role[] = ["fecha", "descripcion", "n_documento", "cargo", "abono", "monto", "tipo_flujo", "saldo"];
 
+const ROLE_HEX: Record<Role, string> = {
+  ignorar: "",
+  fecha: "#3B82F6",
+  descripcion: "#14B8A6",
+  n_documento: "#6366F1",
+  cargo: "#E8553E",
+  abono: "#22C55E",
+  monto: "#F59E0B",
+  tipo_flujo: "#8B5CF6",
+  saldo: "#64748B",
+};
+
 export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapperProps) {
   const { toast } = useToast();
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -71,6 +83,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [roles, setRoles] = useState<Role[]>([]);
+  const [initialSuggestedRoles, setInitialSuggestedRoles] = useState<Role[]>([]);
   const [headerRow, setHeaderRow] = useState(0);
   const [firstDataRow, setFirstDataRow] = useState(1);
   const [dateFormat, setDateFormat] = useState<DateFmt>("dd/mm/yyyy");
@@ -114,6 +127,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
           assign(s.columns.tipo_flujo_col, "tipo_flujo");
         }
         setRoles(initialRoles);
+        setInitialSuggestedRoles(initialRoles);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
@@ -244,6 +258,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
               firstDataRow={firstDataRow}
               setFirstDataRow={setFirstDataRow}
               layout={layout}
+              initialSuggestedRoles={initialSuggestedRoles}
             />
           )}
         </div>
@@ -334,7 +349,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
 // --- GridView ---
 
 function GridView({
-  preview, roles, setRole, headerRow, setHeaderRow, firstDataRow, setFirstDataRow, layout,
+  preview, roles, setRole, headerRow, setHeaderRow, firstDataRow, setFirstDataRow, layout, initialSuggestedRoles,
 }: {
   preview: Preview;
   roles: Role[];
@@ -344,52 +359,80 @@ function GridView({
   firstDataRow: number;
   setFirstDataRow: (n: number) => void;
   layout: Layout;
+  initialSuggestedRoles: Role[];
 }) {
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const ignoredRows = preview.rows.slice(0, Math.max(0, headerRow));
   const dataRowsPreview = preview.rows.slice(firstDataRow, Math.min(preview.rows.length, firstDataRow + 8));
-  const rangeBetween = preview.rows.slice(headerRow + 1, firstDataRow); // skipped rows between header & data
+  const rangeBetween = preview.rows.slice(headerRow + 1, firstDataRow);
+
+  function columnTint(c: number): React.CSSProperties {
+    const role = roles[c] ?? "ignorar";
+    if (role === "ignorar") {
+      return hoveredCol === c ? { backgroundColor: "rgba(148,163,184,0.08)", transition: "background-color 180ms ease" } : {};
+    }
+    const hex = ROLE_HEX[role];
+    const isHovered = hoveredCol === c;
+    return {
+      backgroundColor: `${hex}${isHovered ? "2a" : "12"}`,
+      transition: "background-color 180ms ease",
+    };
+  }
+  const colHandlers = (c: number) => ({
+    onMouseEnter: () => setHoveredCol(c),
+    onMouseLeave: () => setHoveredCol(null),
+  });
 
   return (
     <div className="p-5 space-y-4">
-      {/* Ignored / header metadata block */}
       {ignoredRows.length > 0 && (
-        <BlockIgnored
-          label={`Información de cabecera — ${ignoredRows.length} fila${ignoredRows.length !== 1 ? "s" : ""} NO se agregan`}
-          rows={ignoredRows}
-          cols={preview.cols}
-          onSelectAsHeader={(idx) => { setHeaderRow(idx); if (firstDataRow <= idx) setFirstDataRow(idx + 1); }}
-        />
+        <div className="mapper-stagger mapper-stagger-1">
+          <BlockIgnored
+            label={`Información de cabecera — ${ignoredRows.length} fila${ignoredRows.length !== 1 ? "s" : ""} NO se agregan`}
+            rows={ignoredRows}
+            cols={preview.cols}
+            onSelectAsHeader={(idx) => { setHeaderRow(idx); if (firstDataRow <= idx) setFirstDataRow(idx + 1); }}
+          />
+        </div>
       )}
 
-      {/* Header row block */}
-      <BlockHeader
-        row={preview.rows[headerRow] ?? []}
-        cols={preview.cols}
-        roles={roles}
-        setRole={setRole}
-        layout={layout}
-      />
+      <div className="mapper-stagger mapper-stagger-2">
+        <BlockHeader
+          row={preview.rows[headerRow] ?? []}
+          cols={preview.cols}
+          roles={roles}
+          setRole={setRole}
+          layout={layout}
+          initialSuggestedRoles={initialSuggestedRoles}
+          columnTint={columnTint}
+          colHandlers={colHandlers}
+        />
+      </div>
 
-      {/* Between header and data (usually empty or labels) */}
       {rangeBetween.length > 0 && (
-        <BlockIgnored
-          label={`${rangeBetween.length} fila${rangeBetween.length !== 1 ? "s" : ""} saltada${rangeBetween.length !== 1 ? "s" : ""} antes de los datos`}
-          rows={rangeBetween}
-          cols={preview.cols}
-          onSelectAsHeader={(idx) => { setHeaderRow(headerRow + 1 + idx); }}
-          compact
-        />
+        <div className="mapper-stagger mapper-stagger-2">
+          <BlockIgnored
+            label={`${rangeBetween.length} fila${rangeBetween.length !== 1 ? "s" : ""} saltada${rangeBetween.length !== 1 ? "s" : ""} antes de los datos`}
+            rows={rangeBetween}
+            cols={preview.cols}
+            onSelectAsHeader={(idx) => { setHeaderRow(headerRow + 1 + idx); }}
+            compact
+          />
+        </div>
       )}
 
-      {/* Data rows block */}
-      <BlockData
-        rows={dataRowsPreview}
-        cols={preview.cols}
-        startRow={firstDataRow}
-        totalRows={preview.totalRows}
-        roles={roles}
-        onMoveFirstDataRow={(delta) => setFirstDataRow(Math.max(headerRow + 1, firstDataRow + delta))}
-      />
+      <div className="mapper-stagger mapper-stagger-3">
+        <BlockData
+          rows={dataRowsPreview}
+          cols={preview.cols}
+          startRow={firstDataRow}
+          totalRows={preview.totalRows}
+          roles={roles}
+          onMoveFirstDataRow={(delta) => setFirstDataRow(Math.max(headerRow + 1, firstDataRow + delta))}
+          columnTint={columnTint}
+          colHandlers={colHandlers}
+        />
+      </div>
     </div>
   );
 }
@@ -451,10 +494,13 @@ function BlockIgnored({
 }
 
 function BlockHeader({
-  row, cols, roles, setRole, layout,
+  row, cols, roles, setRole, layout, initialSuggestedRoles, columnTint, colHandlers,
 }: {
   row: string[]; cols: number; roles: Role[];
   setRole: (idx: number, role: Role) => void; layout: Layout;
+  initialSuggestedRoles: Role[];
+  columnTint: (c: number) => React.CSSProperties;
+  colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
 }) {
   return (
     <div className="rounded-xl border-2 border-[#F59E0B]/40 bg-[#FEF3C7]/40 dark:bg-[#F59E0B]/10 overflow-hidden">
@@ -465,18 +511,33 @@ function BlockHeader({
         </Tooltip>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-xs">
+        <table className="min-w-full text-xs border-separate border-spacing-0">
           <thead>
             <tr>
               <th className="w-8" />
-              {Array.from({ length: cols }).map((_, c) => (
-                <th key={c} className="px-2 pt-3 pb-1 text-center min-w-[140px]">
-                  <ColumnChip role={roles[c] ?? "ignorar"} onChange={(r) => setRole(c, r)} layout={layout} />
-                  <div className="flex justify-center mt-1 text-[var(--muted-light)]">
-                    <ArrowDown size={12} weight="bold" />
-                  </div>
-                </th>
-              ))}
+              {Array.from({ length: cols }).map((_, c) => {
+                const role = roles[c] ?? "ignorar";
+                const assigned = role !== "ignorar";
+                const wasAutoDetected = initialSuggestedRoles[c] === role && assigned;
+                return (
+                  <th
+                    key={c}
+                    style={columnTint(c)}
+                    {...colHandlers(c)}
+                    className="px-2 pt-3 pb-1 text-center min-w-[140px]"
+                  >
+                    <ColumnChip
+                      role={role}
+                      onChange={(r) => setRole(c, r)}
+                      layout={layout}
+                      animateDetected={wasAutoDetected}
+                    />
+                    <div className={`flex justify-center mt-1 ${assigned ? "text-[var(--muted)]" : "text-[var(--muted-light)]/40"}`}>
+                      <ArrowDown size={12} weight="bold" className={assigned ? "animate-arrow-hint" : ""} />
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -487,6 +548,8 @@ function BlockHeader({
               {Array.from({ length: cols }).map((_, c) => (
                 <td
                   key={c}
+                  style={columnTint(c)}
+                  {...colHandlers(c)}
                   className="px-2 py-2 text-[12px] font-bold text-[var(--foreground)] text-center truncate max-w-[200px]"
                 >
                   {row[c] || <span className="text-[var(--muted-light)] italic">(vacío)</span>}
@@ -501,10 +564,12 @@ function BlockHeader({
 }
 
 function BlockData({
-  rows, cols, startRow, totalRows, roles, onMoveFirstDataRow,
+  rows, cols, startRow, totalRows, roles, onMoveFirstDataRow, columnTint, colHandlers,
 }: {
   rows: string[][]; cols: number; startRow: number; totalRows: number;
   roles: Role[]; onMoveFirstDataRow: (delta: number) => void;
+  columnTint: (c: number) => React.CSSProperties;
+  colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
 }) {
   const realRows = totalRows - startRow;
   return (
@@ -539,25 +604,23 @@ function BlockData({
               </tr>
             )}
             {rows.map((row, i) => (
-              <tr key={i} className="border-t border-[#22C55E]/15 first:border-t-0">
+              <tr key={i} className="mapper-data-row border-t border-[#22C55E]/15 first:border-t-0 hover:bg-white/40 dark:hover:bg-white/5">
                 <td className="px-2 py-1.5 text-[9px] text-[var(--muted-light)] tabular-nums w-8 text-center">
                   {startRow + i}
                 </td>
                 {Array.from({ length: cols }).map((_, c) => {
                   const role = roles[c] ?? "ignorar";
-                  const meta = ROLES[role];
                   const isIgnored = role === "ignorar";
                   return (
                     <td
                       key={c}
-                      className={`px-2 py-1.5 text-[11px] truncate max-w-[200px] tabular-nums ${
+                      style={columnTint(c)}
+                      {...colHandlers(c)}
+                      className={`px-3 py-1.5 text-[11px] truncate max-w-[200px] tabular-nums ${
                         isIgnored ? "text-[var(--muted-light)]" : "text-[var(--foreground)] font-medium"
                       }`}
                     >
-                      <span className="flex items-center gap-1.5 justify-start">
-                        {!isIgnored && <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} shrink-0`} />}
-                        <span className="truncate">{row[c] ?? ""}</span>
-                      </span>
+                      <span className="truncate block">{row[c] ?? ""}</span>
                     </td>
                   );
                 })}
@@ -573,8 +636,8 @@ function BlockData({
 // --- Chip ---
 
 function ColumnChip({
-  role, onChange, layout,
-}: { role: Role; onChange: (r: Role) => void; layout: Layout }) {
+  role, onChange, layout, animateDetected,
+}: { role: Role; onChange: (r: Role) => void; layout: Layout; animateDetected?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -620,10 +683,11 @@ function ColumnChip({
     <>
       <Tooltip content={meta.hint}>
         <button
+          key={role}
           ref={buttonRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 ${meta.chip}`}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all hover:scale-110 hover:-translate-y-0.5 active:scale-95 animate-chip-pop ${animateDetected ? "animate-chip-detected" : ""} ${meta.chip}`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
           {meta.label}
