@@ -185,22 +185,23 @@ select option {
 .escritorio-root .escritorio-col .sticky {
   position: relative;
   top: auto;
+  background: transparent !important;
+  padding-top: 0 !important;
+  padding-bottom: 0.75rem !important;
+  margin: 0 !important;
+}
+/* Hide the Client's internal giant h1 title — the Panel header already shows the label */
+.escritorio-root .escritorio-col h1 {
+  display: none;
+}
+/* Hide the sticky header entirely when it only contained the h1 — keep the useful action buttons intact */
+.escritorio-root .escritorio-col .sticky > div > p {
+  display: none;
 }
 .escritorio-root .escritorio-col .pt-6 { padding-top: 0; }
-.escritorio-root .escritorio-col .py-6 { padding-top: 0; padding-bottom: 1rem; }
-.escritorio-root .escritorio-col > div > div {
+.escritorio-root .escritorio-col .py-6 { padding-top: 0.75rem; padding-bottom: 1rem; }
+.escritorio-root .escritorio-col > div.flex-1 > div {
   padding-left: 1.25rem;
   padding-right: 1.25rem;
-}
-/* Panel card appearance around each reused client */
-.escritorio-root .escritorio-col > div.flex-1 {
-  border-radius: 20px;
-  background: var(--background);
-  border: 1px solid var(--border);
-  box-shadow: var(--card-shadow);
-  overflow: hidden;
-}
-.dark .escritorio-root .escritorio-col > div.flex-1 {
-  background: rgba(255,255,255,0.03);
-  box-shadow: none;
+  padding-top: 1rem;
 }
