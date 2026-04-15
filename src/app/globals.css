@@ -2,6 +2,7 @@
 
 :root {
   --background: #EDE9E1;
+  --neo-bg: #F5F1E9;
   --foreground: #1A1612;
   --accent: #E8553E;
   --accent-light: #FFF0EE;
@@ -35,19 +36,20 @@
 }
 
 .dark {
-  --background: #0a0706;
-  --foreground: #ededed;
+  --background: #1B1917;
+  --neo-bg: #252320;
+  --foreground: #F0EDE8;
   --accent: #E8553E;
   --accent-light: rgba(232,85,62,0.15);
   --accent-hover: #f06a55;
   --card: rgba(255,255,255,0.05);
   --card-shadow: none;
   --border: rgba(255,255,255,0.1);
-  --muted: rgba(255,255,255,0.5);
-  --muted-light: rgba(255,255,255,0.3);
+  --muted: rgba(235,230,220,0.55);
+  --muted-light: rgba(235,230,220,0.35);
   --surface: rgba(255,255,255,0.05);
   /* Glass + glow tokens (dark mode) */
-  --glass-bg: rgba(20,18,17,0.55);
+  --glass-bg: rgba(15,13,11,0.65);
   --glass-border: rgba(255,255,255,0.08);
   --glow-accent: 0 0 40px -6px rgba(232,85,62,0.45);
   --glow-accent-soft: 0 0 96px -16px rgba(232,85,62,0.30);
@@ -358,18 +360,18 @@ select option {
    ======================================================================= */
 
 .neo {
-  background: var(--background);
+  background: var(--neo-bg);
   box-shadow: var(--neo-shadow);
   border-radius: 24px;
   border: 1px solid rgba(255,255,255,0.05);
 }
 .neo-sm {
-  background: var(--background);
+  background: var(--neo-bg);
   box-shadow: var(--neo-shadow-sm);
   border-radius: 16px;
 }
 .neo-inset {
-  background: var(--background);
+  background: var(--neo-bg);
   box-shadow: var(--neo-inset);
   border-radius: 16px;
 }

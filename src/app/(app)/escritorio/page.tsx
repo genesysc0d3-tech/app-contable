@@ -3,8 +3,7 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import HeroBubble from "@/components/HeroBubble";
-import { UploadSimple, CheckSquare, Lightning, TrendUp } from "@phosphor-icons/react/dist/ssr";
+import { UploadSimple, CheckSquare, Lightning } from "@phosphor-icons/react/dist/ssr";
 
 export default async function EscritorioPage() {
   const usuario = (await getUsuario())!;
@@ -12,11 +11,10 @@ export default async function EscritorioPage() {
 
   return (
     <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg">
-      <TopBar empresa={usuario.empresas.razon_social} />
-
-      {/* Hero flotante — bubble draggable en esquina, fade cuando no interactuás */}
-      <Suspense fallback={null}>
-        <Hero empresaId={empresaId} empresa={usuario.empresas.razon_social} />
+      <Suspense
+        fallback={<TopBarShell empresa={usuario.empresas.razon_social} />}
+      >
+        <TopBar empresa={usuario.empresas.razon_social} empresaId={empresaId} />
       </Suspense>
 
       <main className="max-w-[1400px] mx-auto px-6 pt-10 pb-16 relative">
@@ -43,9 +41,37 @@ export default async function EscritorioPage() {
   );
 }
 
-// --- Hero with data storytelling ---
+// --- TopBar with inline hero stats ---
 
-async function Hero({ empresaId, empresa }: { empresaId: string; empresa: string }) {
+function TopBarShell({ empresa, children }: { empresa: string; children?: React.ReactNode }) {
+  const fecha = new Date().toLocaleDateString("es-CL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  return (
+    <header className="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
+      <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center gap-5">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inset-0 rounded-full bg-[#E8553E] opacity-60 animate-ping" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#E8553E] shadow-[0_0_10px_rgba(232,85,62,0.7)]" />
+          </span>
+          <h1 className="text-[14px] font-medium text-[var(--foreground)] truncate tracking-wide">
+            {empresa}
+          </h1>
+        </div>
+        {children}
+        <span className="text-xs text-[var(--muted-light)] capitalize ml-auto hidden md:block shrink-0 pr-[92px]">
+          {fecha}
+        </span>
+      </div>
+    </header>
+  );
+}
+
+async function TopBar({ empresa, empresaId }: { empresa: string; empresaId: string }) {
   const supabase = await createClient();
   const now = new Date();
   const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -69,63 +95,29 @@ async function Hero({ empresaId, empresa }: { empresaId: string; empresa: string
   const mesNombre = now.toLocaleDateString("es-CL", { month: "long" });
 
   return (
-    <HeroBubble>
-      <div className="neo rounded-[22px] px-5 py-4 relative overflow-hidden animate-number-in">
-        {/* Accent orb */}
-        <div
-          aria-hidden
-          className="absolute -top-8 -right-8 w-28 h-28 rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(closest-side, rgba(232,85,62,0.28), transparent 70%)" }}
-        />
-        <p className="hero-label text-[9px] relative">{empresa}</p>
-        <div className="mt-1.5 flex items-baseline gap-2 relative">
-          <span
-            className="hero-number"
-            style={{ fontSize: "44px", lineHeight: 1 }}
-          >
-            <span className="hero-number-int">{pend}</span>
+    <TopBarShell empresa={empresa}>
+      {/* Divider */}
+      <span className="h-6 w-px bg-[var(--border)] shrink-0 hidden sm:block" />
+
+      {/* Inline hero stats */}
+      <div className="flex items-center gap-4 min-w-0 animate-number-in">
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="text-[22px] font-light tabular-nums text-[var(--foreground)] leading-none">
+            {pend}
           </span>
-          <span className="text-[12px] font-light text-[var(--muted)] leading-tight pb-1">
+          <span className="text-[11px] text-[var(--muted)] tracking-wide">
             {pend === 1 ? "esperando" : "esperando"}
           </span>
         </div>
-        <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)] relative">
-          <Lightning size={11} weight="fill" className="text-[#22C55E]" />
-          <span>
+        <span className="text-[var(--muted-light)] hidden sm:inline">·</span>
+        <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted)] hidden sm:flex min-w-0">
+          <Lightning size={11} weight="fill" className="text-[#22C55E] shrink-0" />
+          <span className="truncate">
             {apro} aprobada{apro !== 1 ? "s" : ""} en <span className="capitalize">{mesNombre}</span>
           </span>
-          {apro > 0 && <TrendUp size={11} weight="bold" className="text-[#22C55E]" />}
-        </p>
-      </div>
-    </HeroBubble>
-  );
-}
-
-// --- TopBar ---
-
-function TopBar({ empresa }: { empresa: string }) {
-  const fecha = new Date().toLocaleDateString("es-CL", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-  return (
-    <header className="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
-      <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center gap-6">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
-            <span className="absolute inset-0 rounded-full bg-[#E8553E] opacity-60 animate-ping" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#E8553E] shadow-[0_0_10px_rgba(232,85,62,0.7)]" />
-          </span>
-          <h1 className="text-[14px] font-medium text-[var(--muted)] truncate tracking-wide">
-            {empresa}
-          </h1>
         </div>
-        <span className="text-xs text-[var(--muted-light)] capitalize ml-auto hidden sm:block">
-          {fecha}
-        </span>
       </div>
-    </header>
+    </TopBarShell>
   );
 }
 
