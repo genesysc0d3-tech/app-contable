@@ -38,17 +38,26 @@ interface FieldMapperProps {
   onSaved?: () => void;
 }
 
-// Role → {label, colorClass}. Orange accent for monetarios, teal for info, grey for ignore.
-const ROLES: Record<Role, { label: string; dot: string; chip: string }> = {
-  ignorar:      { label: "Ignorar",        dot: "bg-[var(--muted-light)]",     chip: "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]" },
-  fecha:        { label: "Fecha",          dot: "bg-[#3B82F6]",                chip: "bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30" },
-  descripcion:  { label: "Descripción",    dot: "bg-[#14B8A6]",                chip: "bg-[#14B8A6]/10 text-[#14B8A6] border-[#14B8A6]/30" },
-  n_documento:  { label: "N° documento",   dot: "bg-[#6366F1]",                chip: "bg-[#6366F1]/10 text-[#6366F1] border-[#6366F1]/30" },
-  cargo:        { label: "Salida",         dot: "bg-[#E8553E]",                chip: "bg-[#E8553E]/10 text-[#E8553E] border-[#E8553E]/30" },
-  abono:        { label: "Entrada",        dot: "bg-[#22C55E]",                chip: "bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/30" },
-  monto:        { label: "Monto",          dot: "bg-[#F59E0B]",                chip: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" },
-  tipo_flujo:   { label: "Tipo flujo",     dot: "bg-[#8B5CF6]",                chip: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30" },
-  saldo:        { label: "Saldo",          dot: "bg-[#64748B]",                chip: "bg-[#64748B]/10 text-[#64748B] border-[#64748B]/30" },
+// Role → metadata. Chilean bank cartola terms (Cargo/Abono) + en cristiano tooltip.
+const ROLES: Record<Role, { label: string; hint: string; dot: string; chip: string }> = {
+  ignorar:      { label: "Ignorar",        dot: "bg-[var(--muted-light)]", chip: "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]",
+                  hint: "Esta columna no se usa. Típico: sucursal, oficina, moneda, o datos sin valor contable." },
+  fecha:        { label: "Fecha",          dot: "bg-[#3B82F6]",            chip: "bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30",
+                  hint: "El día del movimiento. Si hay dos columnas (Fecha operación y Fecha valor), usá la que dice cuándo se registró." },
+  descripcion:  { label: "Glosa",          dot: "bg-[#14B8A6]",            chip: "bg-[#14B8A6]/10 text-[#14B8A6] border-[#14B8A6]/30",
+                  hint: "El texto del movimiento: a quién se pagó, quién pagó, concepto. También se llama Descripción o Detalle." },
+  n_documento:  { label: "N° operación",   dot: "bg-[#6366F1]",            chip: "bg-[#6366F1]/10 text-[#6366F1] border-[#6366F1]/30",
+                  hint: "Número único que identifica el movimiento. Los bancos le dicen N° documento, N° operación, Referencia o Folio." },
+  cargo:        { label: "Cargo",          dot: "bg-[#E8553E]",            chip: "bg-[#E8553E]/10 text-[#E8553E] border-[#E8553E]/30",
+                  hint: "Plata que SALIÓ de la cuenta: pagos, transferencias enviadas, giros. En la cartola aparece como débito o cargo." },
+  abono:        { label: "Abono",          dot: "bg-[#22C55E]",            chip: "bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/30",
+                  hint: "Plata que ENTRÓ a la cuenta: depósitos, transferencias recibidas, cobros. En la cartola aparece como crédito o abono." },
+  monto:        { label: "Monto",          dot: "bg-[#F59E0B]",            chip: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30",
+                  hint: "La cantidad de plata del movimiento. Usá esta opción si hay UNA sola columna de monto (sin separar cargo y abono)." },
+  tipo_flujo:   { label: "Tipo (D/C)",     dot: "bg-[#8B5CF6]",            chip: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30",
+                  hint: "Columna que dice si cada fila es un Cargo o un Abono. Valores típicos: D/C, Débito/Crédito, Abono/Cargo." },
+  saldo:        { label: "Saldo",          dot: "bg-[#64748B]",            chip: "bg-[#64748B]/10 text-[#64748B] border-[#64748B]/30",
+                  hint: "Cuánta plata quedó en la cuenta después del movimiento. Sirve para detectar si faltan filas." },
 };
 
 const UNIQUE_ROLES: Role[] = ["fecha", "descripcion", "n_documento", "cargo", "abono", "monto", "tipo_flujo", "saldo"];
@@ -128,13 +137,13 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
   const validationErr = useMemo(() => {
     if (!preview) return null;
     if (findCol("fecha") < 0) return "Falta asignar la columna de Fecha";
-    if (findCol("descripcion") < 0) return "Falta asignar la columna de Descripción";
+    if (findCol("descripcion") < 0) return "Falta asignar la Glosa (descripción del movimiento)";
     if (layout === "two_cols" && findCol("cargo") < 0 && findCol("abono") < 0) {
-      return "Asigná Entrada o Salida (ambas para cartolas)";
+      return "Asigná Cargo y/o Abono";
     }
     if (layout === "single_col") {
       if (findCol("monto") < 0) return "Asigná Monto";
-      if (findCol("tipo_flujo") < 0) return "Asigná Tipo flujo";
+      if (findCol("tipo_flujo") < 0) return "Asigná la columna de Tipo (D/C)";
     }
     if (layout === "transactions_log" && findCol("monto") < 0) return "Asigná Monto";
     if (firstDataRow <= headerRow) return "La fila de datos debe estar después de la fila de títulos";
@@ -252,7 +261,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
             </button>
             {advancedOpen && (
               <div className="px-5 pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs animate-fade-in">
-                <Field label="Formato de fecha">
+                <Field label="Formato de fecha" hint="Cómo está escrita la fecha en el Excel. Mirá una fila: si dice 30/01/2026 es dd/mm/yyyy. Si dice 2026-01-30 es yyyy-mm-dd.">
                   <select value={dateFormat} onChange={(e) => setDateFormat(e.target.value as DateFmt)}
                     className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5">
                     <option value="dd/mm/yyyy">dd/mm/yyyy (30/01/2026)</option>
@@ -261,20 +270,20 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
                     <option value="unknown">No sé / mixto</option>
                   </select>
                 </Field>
-                <Field label="¿Cómo se expresan los montos?">
+                <Field label="¿Cómo vienen los montos?" hint="Cargo + Abono: típico cartola bancaria chilena, una columna para salidas y otra para entradas. Monto + Tipo: una columna con el monto y otra que dice D/C o Débito/Crédito. Una sola: planilla de ventas o de gastos donde todo es del mismo signo.">
                   <select value={layout} onChange={(e) => setLayout(e.target.value as Layout)}
                     className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5">
-                    <option value="two_cols">Dos columnas (Entrada + Salida)</option>
-                    <option value="single_col">Una columna de monto + tipo</option>
-                    <option value="transactions_log">Una columna (todos del mismo tipo)</option>
+                    <option value="two_cols">Cargo + Abono separados (cartola típica)</option>
+                    <option value="single_col">Monto + Tipo (D/C)</option>
+                    <option value="transactions_log">Una sola columna (todos cargos o todos abonos)</option>
                   </select>
                 </Field>
                 {layout === "transactions_log" && (
-                  <Field label="Todos son">
+                  <Field label="Todos son" hint="Si es planilla de ventas → Abonos. Si es planilla de gastos/pagos → Cargos.">
                     <select value={defaultFlujo} onChange={(e) => setDefaultFlujo(e.target.value as "entrada" | "salida")}
                       className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5">
-                      <option value="entrada">Entradas</option>
-                      <option value="salida">Salidas</option>
+                      <option value="entrada">Abonos (ingresos)</option>
+                      <option value="salida">Cargos (egresos)</option>
                     </select>
                   </Field>
                 )}
@@ -403,7 +412,9 @@ function BlockIgnored({
       >
         <CaretRight size={12} weight="bold" className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
         <Lock size={12} weight="bold" />
-        <span className="font-medium">{label}</span>
+        <Tooltip content="Datos del titular, cuenta, sucursal, moneda — todo lo que está ANTES de los movimientos. No se importa, es solo contexto.">
+          <span className="font-medium cursor-help underline decoration-dotted decoration-[var(--muted-light)] underline-offset-2">{label}</span>
+        </Tooltip>
         {open && (
           <span className="ml-auto text-[10px] text-[var(--muted-light)]">
             click en una fila para marcarla como títulos
@@ -449,7 +460,9 @@ function BlockHeader({
     <div className="rounded-xl border-2 border-[#F59E0B]/40 bg-[#FEF3C7]/40 dark:bg-[#F59E0B]/10 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[#F59E0B]/30 text-[11px] text-[#92400E] dark:text-[#F59E0B] font-semibold">
         <Table size={12} weight="bold" />
-        <span>Fila de títulos</span>
+        <Tooltip content="La fila del Excel que contiene los nombres de cada columna (FECHA, MONTO, GLOSA, etc). Sirve para saber qué hay abajo.">
+          <span className="cursor-help underline decoration-dotted decoration-[#F59E0B]/50 underline-offset-2">Fila de títulos</span>
+        </Tooltip>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
@@ -498,7 +511,9 @@ function BlockData({
     <div className="rounded-xl border-2 border-[#22C55E]/40 bg-[#ECFDF5]/60 dark:bg-[#22C55E]/5 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[#22C55E]/30 text-[11px] font-semibold text-[#166534] dark:text-[#22C55E]">
         <CheckCircle size={12} weight="fill" />
-        <span>Estos movimientos se van a agregar</span>
+        <Tooltip content="Cada fila se va a leer como un movimiento bancario. Los colores de los puntitos indican qué rol le asignaste a cada columna.">
+          <span className="cursor-help underline decoration-dotted decoration-[#22C55E]/50 underline-offset-2">Estos movimientos se van a agregar</span>
+        </Tooltip>
         <span className="text-[10px] text-[var(--muted)] font-normal ml-1">
           {realRows > 0 ? `${realRows} filas desde la fila ${startRow}` : "sin datos"}
         </span>
@@ -603,16 +618,18 @@ function ColumnChip({
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 ${meta.chip}`}
-      >
-        <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-        {meta.label}
-        <CaretDown size={10} weight="bold" />
-      </button>
+      <Tooltip content={meta.hint}>
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 ${meta.chip}`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+          {meta.label}
+          <CaretDown size={10} weight="bold" />
+        </button>
+      </Tooltip>
       {open && pos && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
@@ -639,11 +656,56 @@ function ColumnChip({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <label className="block">
-      {label && <span className="block text-[10px] text-[var(--muted-light)] font-medium mb-1">{label}</span>}
+      {label && (
+        <span className="flex items-center gap-1 text-[10px] text-[var(--muted-light)] font-medium mb-1">
+          {label}
+          {hint && <Tooltip content={hint}>
+            <span className="inline-flex w-3 h-3 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--muted)] text-[8px] font-bold cursor-help">?</span>
+          </Tooltip>}
+        </span>
+      )}
       {children}
     </label>
+  );
+}
+
+// --- Tooltip with portal (not clipped by overflow containers) ---
+
+function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+
+  function onEnter() {
+    if (!triggerRef.current) return;
+    const r = triggerRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, left: r.left + r.width / 2 });
+    setShow(true);
+  }
+  function onLeave() { setShow(false); }
+
+  return (
+    <span
+      ref={triggerRef}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      onFocus={onEnter}
+      onBlur={onLeave}
+      className="inline-block"
+    >
+      {children}
+      {show && pos && typeof document !== "undefined" && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
+          className="z-[300] pointer-events-none max-w-[260px] px-2.5 py-1.5 rounded-lg bg-[#1c1c1e] text-white text-[10px] leading-snug shadow-[0_8px_24px_rgba(0,0,0,0.3)] animate-fade-in"
+        >
+          {content}
+        </div>,
+        document.body,
+      )}
+    </span>
   );
 }
