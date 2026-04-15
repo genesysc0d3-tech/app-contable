@@ -17,13 +17,13 @@
   --glass-border: rgba(255,255,255,0.8);
   --glow-accent: 0 0 32px -8px rgba(232,85,62,0.35);
   --glow-accent-soft: 0 0 64px -16px rgba(232,85,62,0.22);
-  --mesh-1: rgba(232,85,62,0.06);
-  --mesh-2: rgba(245,158,11,0.04);
-  --mesh-3: rgba(59,130,246,0.04);
+  --mesh-1: rgba(232,85,62,0.08);
+  --mesh-2: rgba(245,158,11,0.05);
+  --mesh-3: rgba(232,85,62,0.04);
 }
 
 .dark {
-  --background: #0a0a0a;
+  --background: #0a0706;
   --foreground: #ededed;
   --accent: #E8553E;
   --accent-light: rgba(232,85,62,0.15);
@@ -35,13 +35,14 @@
   --muted-light: rgba(255,255,255,0.3);
   --surface: rgba(255,255,255,0.05);
   /* Glass + glow tokens (dark mode) */
-  --glass-bg: rgba(28,28,30,0.55);
+  --glass-bg: rgba(20,18,17,0.55);
   --glass-border: rgba(255,255,255,0.08);
   --glow-accent: 0 0 40px -6px rgba(232,85,62,0.45);
   --glow-accent-soft: 0 0 96px -16px rgba(232,85,62,0.30);
-  --mesh-1: rgba(232,85,62,0.09);
-  --mesh-2: rgba(245,158,11,0.05);
-  --mesh-3: rgba(99,102,241,0.06);
+  /* Premium ambient gradient — orange halo strong in top, fading to deep warm black */
+  --mesh-1: rgba(232,85,62,0.22);
+  --mesh-2: rgba(245,158,11,0.12);
+  --mesh-3: rgba(232,85,62,0.08);
 }
 
 @theme inline {
@@ -284,9 +285,9 @@ select option {
   transform: translateY(-1px);
 }
 
-/* Professional background: static ambient gradient.
-   Estilo Linear/Vercel — un halo muy sutil en una esquina + otro apagado,
-   sin animación, sin distracción. Pura profundidad. */
+/* Premium ambient background — gradient que envuelve la página
+   Fondo completo con un halo principal arriba-centro que se desvanece
+   hacia los bordes. Estilo fintech moderno. No animación. */
 .mesh-bg {
   position: relative;
   isolation: isolate;
@@ -294,25 +295,22 @@ select option {
 .mesh-bg::before {
   content: "";
   position: fixed;
-  top: -20vh;
-  right: -20vw;
-  width: 80vw;
-  height: 80vh;
-  background: radial-gradient(closest-side, var(--mesh-1) 0%, transparent 70%);
+  inset: 0;
+  /* Halo primario arriba-centro-derecha */
+  background:
+    radial-gradient(ellipse 60vw 50vh at 75% -10%, var(--mesh-1) 0%, transparent 55%),
+    radial-gradient(ellipse 50vw 40vh at 15% 110%, var(--mesh-2) 0%, transparent 60%);
   z-index: -1;
   pointer-events: none;
 }
 .mesh-bg::after {
   content: "";
   position: fixed;
-  bottom: -30vh;
-  left: -15vw;
-  width: 70vw;
-  height: 70vh;
-  background: radial-gradient(closest-side, var(--mesh-3) 0%, transparent 75%);
+  inset: 0;
+  /* Tinta ambiental general muy suave */
+  background: radial-gradient(ellipse 100vw 80vh at 50% 30%, var(--mesh-3) 0%, transparent 70%);
   z-index: -1;
   pointer-events: none;
-  opacity: 0.7;
 }
 
 /* Legacy helper kept for back-compat; now noop visual-wise */
