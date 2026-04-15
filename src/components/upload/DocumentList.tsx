@@ -3,8 +3,9 @@
 import { useState } from "react";
 import type { DocumentoSubido } from "@/lib/upload";
 import type { ProgresoIA, DuplicadoDetalle, TipoDuplicado } from "@/lib/ai/types";
-import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle, EyeSlash, Eye } from "@phosphor-icons/react";
+import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle, EyeSlash, Eye, MagicWand } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
+import FieldMapper from "./FieldMapper";
 
 interface DocumentListProps {
   documentos: DocumentoSubido[];
@@ -428,6 +429,8 @@ function UndoButton({ documentoId, estado, onUndo }: { documentoId: string; esta
 }
 
 export default function DocumentList({ documentos, onDocumentoUpdate }: DocumentListProps) {
+  const [mappingDocId, setMappingDocId] = useState<string | null>(null);
+
   if (documentos.length === 0) {
     return (
       <div className="text-center py-12 text-[var(--muted-light)]">
@@ -481,11 +484,32 @@ export default function DocumentList({ documentos, onDocumentoUpdate }: Document
               )
             )}
 
-            {/* Undo / Reprocess */}
-            <UndoButton documentoId={doc.id} estado={doc.estado} onUndo={() => onDocumentoUpdate?.()} />
+            <div className="flex items-center gap-3 flex-wrap mt-1">
+              {/* Undo / Reprocess */}
+              <UndoButton documentoId={doc.id} estado={doc.estado} onUndo={() => onDocumentoUpdate?.()} />
+
+              {/* Mapear campos — solo para Excel ya procesado o en error */}
+              {doc.tipo === "excel" && (doc.estado === "procesado" || doc.estado === "error") && (
+                <button
+                  onClick={() => setMappingDocId(doc.id)}
+                  className="btn-press flex items-center gap-1 text-[10px] text-[#E8553E] hover:text-[var(--accent-hover)] transition-colors"
+                  title="Enseñarle al parser dónde está cada columna"
+                >
+                  <MagicWand size={10} weight="bold" /> Mapear campos
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
+
+      {mappingDocId && (
+        <FieldMapper
+          documentoId={mappingDocId}
+          onClose={() => setMappingDocId(null)}
+          onSaved={() => onDocumentoUpdate?.()}
+        />
+      )}
     </div>
   );
 }
