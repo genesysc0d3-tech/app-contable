@@ -51,6 +51,58 @@ export async function getAdapterByFingerprint(
   }
 }
 
+export async function upsertManualAdapter(args: {
+  fingerprint: string;
+  nombre?: string;
+  tipo_doc?: string;
+  config: AdapterConfig;
+}): Promise<string | null> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return null;
+    const existing = await sb
+      .from("parser_adapters")
+      .select("id")
+      .eq("fingerprint", args.fingerprint)
+      .maybeSingle();
+
+    if (existing.data?.id) {
+      await sb
+        .from("parser_adapters")
+        .update({
+          source: "manual",
+          config: args.config,
+          nombre: args.nombre ?? null,
+          tipo_doc: args.tipo_doc ?? "cartola_bancaria",
+          confianza: 1.0,
+          disabled_until: null,
+          last_failure_reason: null,
+        })
+        .eq("id", existing.data.id);
+      return existing.data.id as string;
+    }
+
+    const { data } = await sb
+      .from("parser_adapters")
+      .insert({
+        fingerprint: args.fingerprint,
+        nombre: args.nombre ?? null,
+        tipo_doc: args.tipo_doc ?? "cartola_bancaria",
+        source: "manual",
+        config: args.config,
+        confianza: 1.0,
+        usage_count: 0,
+        success_count: 0,
+        last_used_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    return (data?.id as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function saveAdapter(args: {
   fingerprint: string;
   nombre?: string;
