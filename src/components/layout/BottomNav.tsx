@@ -16,6 +16,7 @@ const NAV_ITEMS = [
 export default function BottomNav({ initialPendientes = 0 }: { initialPendientes?: number }) {
   const pathname = usePathname();
   const [pendientes, setPendientes] = useState(initialPendientes);
+  const hidden = pathname.startsWith("/escritorio");
 
   useEffect(() => {
     async function fetchCount() {
@@ -39,6 +40,8 @@ export default function BottomNav({ initialPendientes = 0 }: { initialPendientes
       supabase.removeChannel(channel);
     };
   }, []);
+
+  if (hidden) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#1c1c1e] shadow-[0_-1px_12px_rgba(0,0,0,0.06)] dark:shadow-none dark:border-t dark:border-white/10">

@@ -2,6 +2,7 @@ import { requireActiveEmpresa } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import BottomNav from "@/components/layout/BottomNav";
 import ThemeToggle from "@/components/ThemeToggle";
+import SettingsMenu from "@/components/SettingsMenu";
 
 export default async function AppLayout({
   children,
@@ -18,7 +19,8 @@ export default async function AppLayout({
 
   return (
     <>
-      <div className="fixed top-4 right-4 z-50">
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+        <SettingsMenu />
         <ThemeToggle />
       </div>
       {children}
