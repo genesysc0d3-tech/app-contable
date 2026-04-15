@@ -382,17 +382,17 @@ function DocumentSection({ group, clientes, empresaId, onAction, layout }: {
   const fecha = `${d.getDate()} ${meses[d.getMonth()]}`;
 
   return (
-    <div className="rounded-[20px] bg-white dark:bg-white/5 shadow-[var(--card-shadow)] dark:shadow-none overflow-hidden md:hover:-translate-y-0.5 md:hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-200">
+    <div className={`rounded-[14px] bg-white dark:bg-white/[0.03] border border-[var(--border)] dark:shadow-none overflow-hidden transition-all duration-300 ${expanded ? "order-first" : "order-none"}`}>
       <button onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-[#FAFAFA] dark:hover:bg-white/5 transition-colors duration-200 border-b border-[var(--border)]">
-        <CaretRight size={16} weight="bold" className={`text-[var(--muted-light)] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
-        <FileText size={20} weight="light" className="text-[var(--muted)] shrink-0" />
+        className={`w-full px-3 py-2 flex items-center gap-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors duration-200 ${expanded ? "border-b border-[var(--border)]" : ""}`}>
+        <CaretRight size={12} weight="bold" className={`text-[var(--muted-light)] transition-transform duration-200 shrink-0 ${expanded ? "rotate-90" : ""}`} />
+        <FileText size={14} weight="light" className="text-[var(--muted)] shrink-0" />
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-medium text-[var(--foreground)] truncate">{group.nombreArchivo}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] text-[var(--muted-light)]">{fecha}</span>
+          <p className="text-[12px] font-medium text-[var(--foreground)] truncate leading-tight">{group.nombreArchivo}</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[9px] text-[var(--muted-light)]">{fecha}</span>
             {pendientes.length > 0 && (
-              <span className="text-[10px] text-[var(--muted-light)]">
+              <span className="text-[9px] text-[var(--muted-light)] truncate">
                 {alta.length > 0 && `${alta.length} listas`}
                 {alta.length > 0 && media.length > 0 && " · "}
                 {media.length > 0 && `${media.length} por revisar`}
@@ -402,14 +402,14 @@ function DocumentSection({ group, clientes, empresaId, onAction, layout }: {
             )}
           </div>
         </div>
-        <div className="flex gap-1.5 shrink-0">
+        <div className="flex gap-1 shrink-0">
           {group.pendientes > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-light)] text-[#E8553E] font-medium tabular-nums">
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--accent-light)] text-[#E8553E] font-semibold tabular-nums">
               {group.pendientes}{omitidosPendientes.length > 0 && <span className="text-[#F59E0B]"> +{omitidosPendientes.length}</span>}
             </span>
           )}
-          {group.aprobados > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#ECFDF5] dark:bg-[#22C55E]/15 text-[#22C55E] font-medium tabular-nums">{group.aprobados}</span>}
-          {group.descartados > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--muted-light)] font-medium tabular-nums">{group.descartados}</span>}
+          {group.aprobados > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#ECFDF5] dark:bg-[#22C55E]/15 text-[#22C55E] font-semibold tabular-nums">{group.aprobados}</span>}
+          {group.descartados > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--muted-light)] font-semibold tabular-nums">{group.descartados}</span>}
         </div>
       </button>
       {expanded && (
@@ -526,7 +526,7 @@ export default function RevisarClient({ propuestas, clientes, empresaId, layout 
             <p className="text-sm">Todo revisado</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-2">
             {groups.map((g) => (
               <DocumentSection key={g.documentoId} group={g} clientes={clientes} empresaId={empresaId} layout={layout} onAction={() => router.refresh()} />
             ))}

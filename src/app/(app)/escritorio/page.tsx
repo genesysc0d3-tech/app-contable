@@ -138,9 +138,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`neo rounded-[28px] overflow-hidden relative ${
-        spotlight ? "breathe-glow" : ""
-      }`}
+      className={`neo rounded-[28px] overflow-hidden relative panel-hover-glow ${spotlight ? "is-spotlight" : ""}`}
     >
       <header className="flex items-center gap-4 px-6 py-5 border-b border-black/5 dark:border-white/5">
         <div
