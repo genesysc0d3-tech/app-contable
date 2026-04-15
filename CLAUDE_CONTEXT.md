@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#91 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#92 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #92** — feat(ui): fondo premium gradient envolvente (estilo fintech). Feedback + referencia visual (mockup mobile dark morado): el fondo de PR #91 quedaba tímido. Ahora es un gradient atmosférico completo que envuelve toda la página. **(1)** `.mesh-bg::before` combina dos `radial-gradient` elipses con sizing `vw/vh`: top-right `ellipse 60vw 50vh at 75% -10%` (naranja fuerte), bottom-left `ellipse 50vw 40vh at 15% 110%` (ámbar). **(2)** `.mesh-bg::after` nueva capa: `ellipse 100vw 80vh at 50% 30%` para tinte ambient general. **(3)** Dark mode con intensidad premium: `--mesh-1: 0.22` (era `0.09`), `--mesh-2: 0.12` (era `0.05`), `--mesh-3: 0.08` coherente al brand. Background base `#0a0706` (leve warm shift desde `#0a0a0a`), `--glass-bg: rgba(20,18,17,0.55)` más warm. **(4)** Light mode bump suave `0.04→0.08` sin invadir. **(5)** Removido el tercer color indigo — todo paleta naranja/ámbar coherente. Zero animación, zero peso extra.
 
 **PR #91** — fix(ui): fondo profesional (halos estáticos tipo Linear/Vercel). Feedback: el mesh drifteando de PR #90 quedaba juguete. **(1)** `.mesh-bg::before/after` ahora son `radial-gradient`s posicionados (esquina top-right + bottom-left), sin keyframes ni `will-change`. Zero animación, zero GPU cost de fondo. **(2)** Opacidades de `--mesh-1/2/3` bajadas ~40%: light `0.04-0.06` (era `0.06-0.10`), dark `0.05-0.09` (era `0.10-0.18`). Da warmth sutil sin competir con el contenido. **(3)** Eliminados `@keyframes mesh-drift-1/2/3` y `.mesh-blob-3` queda como `display:none` (back-compat). **(4)** `escritorio/page.tsx`: removida la referencia a `<div.mesh-blob-3>`. La profundidad ahora viene de las cards glass con glow, no del fondo.
 
