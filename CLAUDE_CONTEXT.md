@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#82 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#83 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #83** — feat(revisar): bloques como pestañas en escritorio. Feedback: los dividers verticales de PR #82 obligaban a scrollear infinito. Reemplazados por **tab strip horizontal**. **(1)** `ConfianzaGroup` suma state `activeBlock`. Cuando `useBlocks=true`, arma chunks de 10 y renderiza tabs clickeables con `overflow-x-auto` arriba del listado. **(2)** Tab activo: `bg-[#E8553E]`, `text-white`, sombra sutil `shadow-[0_1px_3px_rgba(232,85,62,0.3)]`. Inactivos: `border border-[var(--border)]` + `text-[var(--muted)]` con hover. Cada tab muestra "Bloque N" + contador compacto. **(3)** `safeBlock = Math.min(activeBlock, blocks.length - 1)` clampa el índice si queda fuera de rango después de procesar todos los items del último bloque. **(4)** Solo el bloque activo renderiza sus items → no hay scroll largo. Mobile `/revisar` sin cambios.
 
 **PR #82** — feat(revisar): bloques de 10 en escritorio. Pedido del usuario: al mandar propuestas a revisar, agrupar visualmente de a 10 para trabajar por bloques sin que un straggler se mezcle con el siguiente batch. **(1)** `RevisarClient` acepta nuevo prop `layout?: "mobile" | "desktop"` (default `"mobile"`). Se thread-ea a `DocumentSection` y `ConfianzaGroup`. **(2)** `ConfianzaGroup`: cuando `layout === "desktop"` y `sorted.length > 10` y `tipo !== "ocultas"`, inserta un divisor cada 10 items con label "Bloque N" + línea + contador "X pend.". Tipo ocultas no lleva bloques (rara vez tiene volumen alto). **(3)** Secondary sort estable por `id.localeCompare` para que el orden (y por tanto la asignación a bloque) sea consistente entre refreshes. **(4)** `/escritorio` pasa `layout="desktop"`. Mobile `/revisar` no pasa nada → comportamiento actual intacto. **(5)** Usa `Fragment` para que cada divisor sea sibling del item-div y reciba el `space-y-3` del contenedor.
 
