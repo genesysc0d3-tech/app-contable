@@ -184,6 +184,57 @@ select option {
   display: none;
 }
 
+/* ----- FieldMapper motion ----- */
+
+/* Stagger-in: blocks fade up with delay */
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mapper-stagger { opacity: 0; animation: stagger-in 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mapper-stagger-1 { animation-delay: 60ms; }
+.mapper-stagger-2 { animation-delay: 140ms; }
+.mapper-stagger-3 { animation-delay: 220ms; }
+
+/* Chip role-change pop */
+@keyframes chip-pop {
+  0%   { opacity: 0; transform: scale(0.7) translateY(-4px); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-chip-pop { animation: chip-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* One-time glow on auto-detected chips */
+@keyframes chip-detected-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  30%  { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+.animate-chip-detected { animation: chip-detected-glow 1600ms ease-out 200ms 1; }
+
+/* Arrow bounce (between chip and column header) */
+@keyframes arrow-hint {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50%      { transform: translateY(3px); opacity: 1; }
+}
+.animate-arrow-hint { animation: arrow-hint 1600ms ease-in-out infinite; }
+
+/* Column hover bar (vertical gradient behind a column) */
+.mapper-col-hover {
+  background: linear-gradient(180deg, var(--tint, transparent) 0%, transparent 100%);
+}
+
+/* Data row subtle hover shift */
+.mapper-data-row { transition: transform 150ms ease, background 150ms ease; }
+.mapper-data-row:hover { transform: translateX(2px); }
+
+/* Smooth grid collapse (for BlockIgnored expand/collapse) */
+@keyframes expand-block {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 600px; }
+}
+.animate-expand-block { animation: expand-block 320ms cubic-bezier(0.22, 1, 0.36, 1) both; overflow: hidden; }
+
 /* Desktop mode: neutralize mobile-only wrappers of reused client components */
 .escritorio-root .escritorio-col > div.flex-1 {
   padding-bottom: 0;
