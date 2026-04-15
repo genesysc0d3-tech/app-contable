@@ -3,7 +3,7 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import { UploadSimple, CheckSquare, Lightning } from "@phosphor-icons/react/dist/ssr";
+import { UploadSimple, CheckSquare, Lightning, Receipt, Plus } from "@phosphor-icons/react/dist/ssr";
 
 export default async function EscritorioPage() {
   const usuario = (await getUsuario())!;
@@ -28,11 +28,21 @@ export default async function EscritorioPage() {
             </Panel>
           </aside>
 
-          <section className="lg:col-span-7">
-            <Panel icon={CheckSquare} label="Revisar" hint="Propuestas esperando tu aprobación" spotlight>
-              <Suspense fallback={<ShimmerBox h="h-[32rem]" />}>
+          <section className="lg:col-span-7 flex flex-col gap-6">
+            <Panel
+              icon={CheckSquare}
+              label="Revisar"
+              hint="Propuestas esperando tu aprobación"
+              spotlight
+              maxHeight="60vh"
+            >
+              <Suspense fallback={<ShimmerBox h="h-[28rem]" />}>
                 <RevisarPanel empresaId={empresaId} />
               </Suspense>
+            </Panel>
+
+            <Panel icon={Receipt} label="Boletas emitidas" hint="Documentos tributarios enviados">
+              <BoletasPanel />
             </Panel>
           </section>
         </div>
@@ -128,39 +138,73 @@ function Panel({
   label,
   hint,
   spotlight,
+  maxHeight,
   children,
 }: {
   icon: typeof UploadSimple;
   label: string;
   hint: string;
   spotlight?: boolean;
+  maxHeight?: string;
   children: React.ReactNode;
 }) {
   return (
     <section
-      className={`neo rounded-[28px] overflow-hidden relative panel-hover-glow ${spotlight ? "is-spotlight" : ""}`}
+      className={`neo rounded-[28px] overflow-hidden relative panel-hover-glow flex flex-col ${spotlight ? "is-spotlight" : ""}`}
     >
-      <header className="flex items-center gap-4 px-6 py-5 border-b border-black/5 dark:border-white/5">
+      <header className="flex items-center gap-3 px-5 py-3.5 border-b border-black/5 dark:border-white/5 shrink-0">
         <div
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500 ${
+          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-500 ${
             spotlight
               ? "bg-[#E8553E] text-white shadow-[0_6px_24px_-6px_rgba(232,85,62,0.6)]"
               : "neo-inset text-[var(--muted)]"
           }`}
         >
-          <Icon size={18} weight="bold" />
+          <Icon size={16} weight="bold" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-[18px] font-light tracking-tight text-[var(--foreground)] leading-none">
+          <h2 className="text-[16px] font-medium tracking-tight text-[var(--foreground)] leading-none">
             {label}
           </h2>
-          <p className="text-[11px] text-[var(--muted-light)] mt-1.5 leading-none tracking-wide">
+          <p className="text-[11px] text-[var(--muted-light)] mt-1 leading-none tracking-wide">
             {hint}
           </p>
         </div>
       </header>
-      <div className="escritorio-col pb-4">{children}</div>
+      <div
+        className="escritorio-col pb-3 flex-1 min-h-0"
+        style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
+      >
+        {children}
+      </div>
     </section>
+  );
+}
+
+function BoletasPanel() {
+  return (
+    <div className="flex items-center gap-4 p-5">
+      <div className="w-12 h-12 rounded-2xl neo-inset flex items-center justify-center text-[var(--muted)] shrink-0">
+        <Receipt size={20} weight="light" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-medium text-[var(--foreground)] leading-tight">
+          Aún no emitiste boletas
+        </p>
+        <p className="text-[11px] text-[var(--muted-light)] mt-1">
+          Conectá tu cuenta SII para empezar (modo prueba disponible)
+        </p>
+      </div>
+      <button
+        type="button"
+        disabled
+        className="btn-press flex items-center gap-1.5 rounded-xl bg-[#E8553E]/90 text-white px-3 py-2 text-[12px] font-semibold opacity-60 cursor-not-allowed shrink-0"
+        title="Próximamente"
+      >
+        <Plus size={14} weight="bold" />
+        Emitir
+      </button>
+    </div>
   );
 }
 
