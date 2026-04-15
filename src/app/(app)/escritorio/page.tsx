@@ -3,7 +3,7 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import FloatingHero from "@/components/FloatingHero";
+import HeroBubble from "@/components/HeroBubble";
 import { UploadSimple, CheckSquare, Lightning, TrendUp } from "@phosphor-icons/react/dist/ssr";
 
 export default async function EscritorioPage() {
@@ -14,14 +14,14 @@ export default async function EscritorioPage() {
     <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg">
       <TopBar empresa={usuario.empresas.razon_social} />
 
-      <main className="max-w-[1400px] mx-auto px-6 pb-16 relative">
-        {/* Hero zone — storytelling de datos */}
-        <Suspense fallback={<HeroSkeleton />}>
-          <Hero empresaId={empresaId} empresa={usuario.empresas.razon_social} />
-        </Suspense>
+      {/* Hero flotante — bubble draggable en esquina, fade cuando no interactuás */}
+      <Suspense fallback={null}>
+        <Hero empresaId={empresaId} empresa={usuario.empresas.razon_social} />
+      </Suspense>
 
-        {/* Panels — Revisar protagonista (7/12), Capturar compacto (3/12) */}
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 mt-16">
+      <main className="max-w-[1400px] mx-auto px-6 pt-10 pb-16 relative">
+        {/* Panels — Revisar protagonista (7/10), Capturar compacto (3/10) */}
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
           <aside className="lg:col-span-3">
             <Panel icon={UploadSimple} label="Capturar" hint="Arrastrá una cartola">
               <Suspense fallback={<ShimmerBox h="h-72" />}>
@@ -69,44 +69,35 @@ async function Hero({ empresaId, empresa }: { empresaId: string; empresa: string
   const mesNombre = now.toLocaleDateString("es-CL", { month: "long" });
 
   return (
-    <section className="pt-16 pb-4 animate-number-in">
-      <FloatingHero>
-        <div className="neo rounded-[32px] px-10 py-10 relative overflow-hidden">
-          {/* Subtle accent orb inside the card */}
-          <div
-            aria-hidden
-            className="absolute -top-20 -right-20 w-64 h-64 rounded-full pointer-events-none"
-            style={{ background: "radial-gradient(closest-side, rgba(232,85,62,0.18), transparent 70%)" }}
-          />
-          <p className="hero-label relative">{empresa}</p>
-          <div className="mt-5 flex items-baseline gap-3 relative">
-            <span className="hero-number">
-              <span className="hero-number-int">{pend}</span>
-            </span>
-            <span className="text-[20px] font-light text-[var(--muted)] pb-3">
-              {pend === 1 ? "propuesta esperando" : "propuestas esperando"}
-            </span>
-          </div>
-          <p className="hero-subtitle mt-4 flex items-center gap-2 relative">
-            <Lightning size={14} weight="fill" className="text-[#22C55E]" />
-            <span>
-              {apro} aprobada{apro !== 1 ? "s" : ""} en <span className="capitalize">{mesNombre}</span>
-            </span>
-            {apro > 0 && <TrendUp size={14} weight="bold" className="text-[#22C55E]" />}
-          </p>
+    <HeroBubble>
+      <div className="neo rounded-[22px] px-5 py-4 relative overflow-hidden animate-number-in">
+        {/* Accent orb */}
+        <div
+          aria-hidden
+          className="absolute -top-8 -right-8 w-28 h-28 rounded-full pointer-events-none"
+          style={{ background: "radial-gradient(closest-side, rgba(232,85,62,0.28), transparent 70%)" }}
+        />
+        <p className="hero-label text-[9px] relative">{empresa}</p>
+        <div className="mt-1.5 flex items-baseline gap-2 relative">
+          <span
+            className="hero-number"
+            style={{ fontSize: "44px", lineHeight: 1 }}
+          >
+            <span className="hero-number-int">{pend}</span>
+          </span>
+          <span className="text-[12px] font-light text-[var(--muted)] leading-tight pb-1">
+            {pend === 1 ? "esperando" : "esperando"}
+          </span>
         </div>
-      </FloatingHero>
-    </section>
-  );
-}
-
-function HeroSkeleton() {
-  return (
-    <section className="pt-20 pb-8">
-      <div className="animate-shimmer h-3 w-40 rounded-full" />
-      <div className="animate-shimmer h-20 w-64 rounded-2xl mt-4" />
-      <div className="animate-shimmer h-4 w-56 rounded-full mt-4" />
-    </section>
+        <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)] relative">
+          <Lightning size={11} weight="fill" className="text-[#22C55E]" />
+          <span>
+            {apro} aprobada{apro !== 1 ? "s" : ""} en <span className="capitalize">{mesNombre}</span>
+          </span>
+          {apro > 0 && <TrendUp size={11} weight="bold" className="text-[#22C55E]" />}
+        </p>
+      </div>
+    </HeroBubble>
   );
 }
 
