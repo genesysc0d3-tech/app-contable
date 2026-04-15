@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#83 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#84 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #84** — fix(revisar): scrollbar oculto en tab strip + botón "Aprobar bloque". **(1)** PR #83 usaba `className="scrollbar-none"` que no existe en Tailwind → scrollbar nativo asomaba feo bajo la tira de bloques. Agrego utility `.no-scrollbar` en `globals.css` (`scrollbar-width: none` + `::-webkit-scrollbar { display: none }`). **(2)** Focus ring azul default del browser salía en el tab activo. `focus:outline-none` + `focus-visible:ring-2 focus-visible:ring-[#E8553E]/40` para mantener a11y sin ruido visual. **(3)** Nuevo botón "Aprobar bloque (N)" al lado de "Aprobar todas" del grupo alta confianza cuando `useBlocks=true`. Ejecuta `aprobarTodas` solo sobre los IDs del bloque activo. Wrapper div con `onClick={(e) => e.stopPropagation()}` para que clickear el botón no colapse el grupo.
 
 **PR #83** — feat(revisar): bloques como pestañas en escritorio. Feedback: los dividers verticales de PR #82 obligaban a scrollear infinito. Reemplazados por **tab strip horizontal**. **(1)** `ConfianzaGroup` suma state `activeBlock`. Cuando `useBlocks=true`, arma chunks de 10 y renderiza tabs clickeables con `overflow-x-auto` arriba del listado. **(2)** Tab activo: `bg-[#E8553E]`, `text-white`, sombra sutil `shadow-[0_1px_3px_rgba(232,85,62,0.3)]`. Inactivos: `border border-[var(--border)]` + `text-[var(--muted)]` con hover. Cada tab muestra "Bloque N" + contador compacto. **(3)** `safeBlock = Math.min(activeBlock, blocks.length - 1)` clampa el índice si queda fuera de rango después de procesar todos los items del último bloque. **(4)** Solo el bloque activo renderiza sus items → no hay scroll largo. Mobile `/revisar` sin cambios.
 
