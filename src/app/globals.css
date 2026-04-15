@@ -174,3 +174,33 @@ select option {
   opacity: 0;
 }
 .animate-particle { animation-fill-mode: forwards; }
+
+/* Desktop mode: neutralize mobile-only wrappers of reused client components */
+.escritorio-root .escritorio-col > div.flex-1 {
+  padding-bottom: 0;
+}
+.escritorio-root .escritorio-col .max-w-lg {
+  max-width: none;
+}
+.escritorio-root .escritorio-col .sticky {
+  position: relative;
+  top: auto;
+}
+.escritorio-root .escritorio-col .pt-6 { padding-top: 0; }
+.escritorio-root .escritorio-col .py-6 { padding-top: 0; padding-bottom: 1rem; }
+.escritorio-root .escritorio-col > div > div {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+/* Panel card appearance around each reused client */
+.escritorio-root .escritorio-col > div.flex-1 {
+  border-radius: 20px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+.dark .escritorio-root .escritorio-col > div.flex-1 {
+  background: rgba(255,255,255,0.03);
+  box-shadow: none;
+}
