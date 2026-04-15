@@ -142,6 +142,7 @@ async function RevisarPanel({ empresaId }: { empresaId: string }) {
       propuestas={propuestas ?? []}
       clientes={clientes ?? []}
       empresaId={empresaId}
+      layout="desktop"
     />
   );
 }
