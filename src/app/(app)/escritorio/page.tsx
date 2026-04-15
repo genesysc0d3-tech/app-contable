@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
 import { UploadSimple, CheckSquare, Lightning, Receipt, Plus, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
-import CapturarBoletasTabs from "@/components/CapturarBoletasTabs";
+import RevisarBoletasTabs from "@/components/RevisarBoletasTabs";
 
 function todayStr(): string {
   const d = new Date();
@@ -33,31 +33,30 @@ export default async function EscritorioPage({
 
       <main className="max-w-[1400px] mx-auto px-6 pt-10 pb-16 relative">
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
-          {/* Left: Capturar + Boletas emitidas (como tabs en el mismo card) */}
+          {/* Left: Capturar */}
           <aside className="lg:col-span-3">
-            <CapturarBoletasTabs boletasContent={<BoletasPanel />}>
+            <Panel icon={UploadSimple} label="Capturar" hint="Arrastrá una cartola">
               <Suspense fallback={<ShimmerBox h="h-72" />}>
                 <SubirClient empresaId={empresaId} />
               </Suspense>
-            </CapturarBoletasTabs>
+            </Panel>
           </aside>
 
-          {/* Right: Calendar strip + Revisar */}
+          {/* Right: Calendar strip + Revisar (con Boletas como tab) */}
           <section className="lg:col-span-7 flex flex-col gap-6">
             <Suspense fallback={<CalendarSkeleton />}>
               <CalendarStrip empresaId={empresaId} selectedDate={selectedDate} />
             </Suspense>
 
-            <Panel
-              icon={CheckSquare}
-              label="Revisar"
-              hint={selectedDate ? `Del ${formatDateShort(selectedDate)}` : "Todas las fechas"}
-              spotlight
-            >
-              <Suspense fallback={<ShimmerBox h="h-[28rem]" />} key={selectedDate ?? "all"}>
-                <RevisarPanel empresaId={empresaId} filterDate={selectedDate} />
-              </Suspense>
-            </Panel>
+            <RevisarBoletasTabs
+              revisarHint={selectedDate ? `Del ${formatDateShort(selectedDate)}` : "Todas las fechas"}
+              revisarContent={
+                <Suspense fallback={<ShimmerBox h="h-[28rem]" />} key={selectedDate ?? "all"}>
+                  <RevisarPanel empresaId={empresaId} filterDate={selectedDate} />
+                </Suspense>
+              }
+              boletasContent={<BoletasPanel />}
+            />
           </section>
         </div>
       </main>
