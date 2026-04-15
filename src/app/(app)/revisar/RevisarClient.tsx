@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
@@ -32,6 +32,7 @@ interface RevisarClientProps {
   propuestas: Propuesta[];
   clientes: ClienteResumen[];
   empresaId: string;
+  layout?: "mobile" | "desktop";
 }
 
 const ALTA = 0.85;
@@ -142,8 +143,8 @@ function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
   );
 }
 
-function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap }: {
-  tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap;
+function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap, layout }: {
+  tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap; layout: "mobile" | "desktop";
 }) {
   const [expanded, setExpanded] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
@@ -190,7 +191,12 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     ocultas: { Icon: EyeSlash, label: `Ocultas · ${propuestas.length}`, color: "text-[var(--muted)]" },
   }[tipo];
 
-  const sorted = [...propuestas].sort((a, b) => (b.confianza ?? 0) - (a.confianza ?? 0));
+  const sorted = [...propuestas].sort((a, b) => {
+    const diff = (b.confianza ?? 0) - (a.confianza ?? 0);
+    if (diff !== 0) return diff;
+    return a.id.localeCompare(b.id); // secondary stable sort for consistent block assignment
+  });
+  const useBlocks = layout === "desktop" && sorted.length > 10 && tipo !== "ocultas";
 
   async function handleAprobarGrupo(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
@@ -224,8 +230,20 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
       </div>
       {expanded && (
         <div className="px-3 pb-3 space-y-3 animate-fade-in">
-          {sorted.map((p) => (
-            <div key={p.id}>
+          {sorted.map((p, i) => (
+            <Fragment key={p.id}>
+              {useBlocks && i % 10 === 0 && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] shrink-0">
+                    Bloque {Math.floor(i / 10) + 1}
+                  </span>
+                  <span className="h-px flex-1 bg-[var(--border)]" />
+                  <span className="text-[10px] text-[var(--muted-light)] tabular-nums shrink-0">
+                    {Math.min(10, sorted.length - i)} pend.
+                  </span>
+                </div>
+              )}
+              <div>
               {tipo === "baja" && (
                 <p className="text-[10px] text-[#E8553E] bg-[var(--accent-light)] rounded-lg px-2.5 py-1.5 mb-2">
                   Esta propuesta necesita más datos antes de aprobar
@@ -263,7 +281,8 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                   isOculta={tipo === "ocultas"}
                 />
               )}
-            </div>
+              </div>
+            </Fragment>
           ))}
         </div>
       )}
@@ -271,8 +290,8 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   );
 }
 
-function DocumentSection({ group, clientes, empresaId, onAction }: {
-  group: DocumentGroup; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
+function DocumentSection({ group, clientes, empresaId, onAction, layout }: {
+  group: DocumentGroup; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; layout: "mobile" | "desktop";
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showBurst, setShowBurst] = useState(false);
@@ -361,11 +380,11 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
           ) : (
             <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
               <div className="space-y-2">
-                <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
-                <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
-                <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
-                <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} />
-                <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} />
+                <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+                <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+                <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+                <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+                <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} />
               </div>
             </div>
           )}
@@ -375,7 +394,7 @@ function DocumentSection({ group, clientes, empresaId, onAction }: {
   );
 }
 
-export default function RevisarClient({ propuestas, clientes, empresaId }: RevisarClientProps) {
+export default function RevisarClient({ propuestas, clientes, empresaId, layout = "mobile" }: RevisarClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -469,7 +488,7 @@ export default function RevisarClient({ propuestas, clientes, empresaId }: Revis
         ) : (
           <div className="space-y-3">
             {groups.map((g) => (
-              <DocumentSection key={g.documentoId} group={g} clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} />
+              <DocumentSection key={g.documentoId} group={g} clientes={clientes} empresaId={empresaId} layout={layout} onAction={() => router.refresh()} />
             ))}
           </div>
         )}
