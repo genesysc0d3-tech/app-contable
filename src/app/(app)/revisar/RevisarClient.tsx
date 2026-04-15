@@ -216,6 +216,16 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     router.refresh(); onAction(); setLoading(false);
   }
 
+  async function handleAprobarBloque(e: React.MouseEvent) {
+    e.stopPropagation(); setLoading(true);
+    const ids = (blocks[safeBlock] ?? []).map((p) => p.id);
+    if (ids.length === 0) { setLoading(false); return; }
+    const result = await aprobarTodas(ids);
+    if (result.error) toast(`Error: ${result.error}`, "error");
+    else toast(`${result.count} aprobadas en bloque ${safeBlock + 1}`);
+    router.refresh(); onAction(); setLoading(false);
+  }
+
   return (
     <div className="rounded-xl bg-[var(--surface)] overflow-hidden">
       <div
@@ -229,16 +239,24 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         <config.Icon size={14} weight="fill" className={`${config.color} shrink-0`} />
         <span className={`text-xs font-medium ${config.color} flex-1 text-left`}>{config.label}</span>
         {tipo === "alta" && (
-          <button onClick={handleAprobarGrupo} disabled={loading}
-            className="btn-press rounded-lg bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-3 py-1 text-[10px] font-semibold text-white transition-all duration-150">
-            {loading ? "..." : "Aprobar todas"}
-          </button>
+          <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {useBlocks && (blocks[safeBlock]?.length ?? 0) > 0 && (
+              <button onClick={handleAprobarBloque} disabled={loading}
+                className="btn-press rounded-lg border border-[#E8553E] text-[#E8553E] hover:bg-[var(--accent-light)] disabled:opacity-50 px-2.5 py-1 text-[10px] font-semibold transition-all duration-150">
+                {loading ? "..." : `Aprobar bloque (${blocks[safeBlock]?.length ?? 0})`}
+              </button>
+            )}
+            <button onClick={handleAprobarGrupo} disabled={loading}
+              className="btn-press rounded-lg bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-3 py-1 text-[10px] font-semibold text-white transition-all duration-150">
+              {loading ? "..." : "Aprobar todas"}
+            </button>
+          </div>
         )}
       </div>
       {expanded && (
         <div className="px-3 pb-3 animate-fade-in">
           {useBlocks && (
-            <div className="flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-none">
+            <div className="flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar">
               {blocks.map((items, idx) => {
                 const isActive = idx === safeBlock;
                 return (
@@ -246,7 +264,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                     key={idx}
                     type="button"
                     onClick={() => setActiveBlock(idx)}
-                    className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E8553E]/40 ${
                       isActive
                         ? "bg-[#E8553E] text-white shadow-[0_1px_3px_rgba(232,85,62,0.3)]"
                         : "bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] border border-[var(--border)]"

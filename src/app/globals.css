@@ -175,6 +175,15 @@ select option {
 }
 .animate-particle { animation-fill-mode: forwards; }
 
+/* Utility: hide native scrollbar (for horizontal tab strips, chip rows, etc) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Desktop mode: neutralize mobile-only wrappers of reused client components */
 .escritorio-root .escritorio-col > div.flex-1 {
   padding-bottom: 0;
