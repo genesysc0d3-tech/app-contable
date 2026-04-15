@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { validateFile, getAcceptString } from "@/lib/upload";
 import { classifyFile, getCategoryColor, BADGE_COLORS } from "@/lib/file-classifier";
 import type { FileCategory } from "@/lib/file-classifier";
@@ -95,6 +95,46 @@ export default function FileUpload({ onFilesQueued }: FileUploadProps) {
     if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
   }, [addFiles]);
 
+  // Window-wide drag-drop — user can drop files ANYWHERE on the window,
+  // not just on the dropzone. Dropzone highlights while dragging.
+  useEffect(() => {
+    let depth = 0; // track nested dragenter/leave to avoid flicker
+    function hasFiles(e: DragEvent) {
+      return Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    }
+    function onWinDragEnter(e: DragEvent) {
+      if (!hasFiles(e)) return;
+      depth++;
+      setIsDragging(true);
+    }
+    function onWinDragLeave(e: DragEvent) {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setIsDragging(false);
+    }
+    function onWinDragOver(e: DragEvent) {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); // allow drop
+    }
+    function onWinDrop(e: DragEvent) {
+      if (!e.dataTransfer?.files?.length) return;
+      e.preventDefault();
+      depth = 0;
+      setIsDragging(false);
+      addFiles(e.dataTransfer.files);
+    }
+    window.addEventListener("dragenter", onWinDragEnter);
+    window.addEventListener("dragleave", onWinDragLeave);
+    window.addEventListener("dragover", onWinDragOver);
+    window.addEventListener("drop", onWinDrop);
+    return () => {
+      window.removeEventListener("dragenter", onWinDragEnter);
+      window.removeEventListener("dragleave", onWinDragLeave);
+      window.removeEventListener("dragover", onWinDragOver);
+      window.removeEventListener("drop", onWinDrop);
+    };
+  }, [addFiles]);
+
   return (
     <div className="space-y-4">
       {/* Single drop zone */}
@@ -103,23 +143,27 @@ export default function FileUpload({ onFilesQueued }: FileUploadProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`flex flex-col items-center justify-center rounded-[20px] border-2 border-dashed cursor-pointer transition-all duration-200 py-14 px-6 ${
+        className={`flex items-center gap-3 rounded-2xl border border-dashed cursor-pointer transition-all duration-200 py-3 px-4 ${
           isDragging
-            ? "border-[#E8553E] bg-[var(--accent-light)]"
-            : "border-[#E8553E]/40 dark:border-[#E8553E]/30 bg-[#FFF8F7] dark:bg-[var(--accent-light)] hover:border-[#E8553E] hover:bg-[var(--accent-light)]"
+            ? "border-[#E8553E] bg-[var(--accent-light)] scale-[1.01] shadow-[0_0_32px_-8px_rgba(232,85,62,0.5)]"
+            : "border-[#E8553E]/40 dark:border-[#E8553E]/30 bg-transparent hover:border-[#E8553E] hover:bg-[var(--accent-light)]/50"
         }`}
       >
-        <UploadSimple size={40} weight="light" className="text-[#E8553E] mb-3" />
-        <p className="text-base font-semibold text-[var(--foreground)]">
-          Arrastra archivos o toca para seleccionar
-        </p>
-        <div className="flex items-center gap-4 mt-3 text-[var(--muted-light)]">
-          <FileXls size={20} weight="light" />
-          <FilePdf size={20} weight="light" />
-          <ImageIcon size={20} weight="light" />
-          <FileIcon size={20} weight="light" />
+        <div className="w-10 h-10 rounded-xl bg-[var(--accent-light)] text-[#E8553E] flex items-center justify-center shrink-0">
+          <UploadSimple size={20} weight="bold" />
         </div>
-        <p className="text-xs text-[var(--muted-light)] mt-2">Excel, PDF, imágenes, CSV</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-[var(--foreground)] leading-tight">
+            {isDragging ? "Soltá para subir" : "Arrastrá o tocá"}
+          </p>
+          <p className="text-[10px] text-[var(--muted-light)] mt-0.5">Excel, PDF, imágenes, CSV</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-[var(--muted-light)] shrink-0">
+          <FileXls size={14} weight="light" />
+          <FilePdf size={14} weight="light" />
+          <ImageIcon size={14} weight="light" />
+          <FileIcon size={14} weight="light" />
+        </div>
       </div>
 
       <input
