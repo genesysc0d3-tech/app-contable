@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, Fragment } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
@@ -150,8 +150,12 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [editCards, setEditCards] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
-  const [activeBlock, setActiveBlock] = useState(0);
+  const [activeBlockNum, setActiveBlockNum] = useState<number | null>(null);
   const [departingIds, setDepartingIds] = useState<Set<string>>(new Set());
+  // Persistent block assignment: propuesta_id → block number (1-indexed).
+  // Once an id is assigned, it keeps its block number across renders so that
+  // approving items doesn't renumber the remaining blocks.
+  const blockMapRef = useRef<Map<string, number>>(new Map());
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
@@ -193,18 +197,61 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     ocultas: { Icon: EyeSlash, label: `Ocultas · ${propuestas.length}`, color: "text-[var(--muted)]" },
   }[tipo];
 
-  const sorted = [...propuestas].sort((a, b) => {
-    const diff = (b.confianza ?? 0) - (a.confianza ?? 0);
-    if (diff !== 0) return diff;
-    return a.id.localeCompare(b.id); // stable secondary sort
-  });
+  const sorted = useMemo(() => {
+    return [...propuestas].sort((a, b) => {
+      const diff = (b.confianza ?? 0) - (a.confianza ?? 0);
+      if (diff !== 0) return diff;
+      return a.id.localeCompare(b.id);
+    });
+  }, [propuestas]);
+
   const useBlocks = layout === "desktop" && sorted.length > 10 && tipo !== "ocultas";
-  const blocks: Propuesta[][] = [];
-  if (useBlocks) {
-    for (let i = 0; i < sorted.length; i += 10) blocks.push(sorted.slice(i, i + 10));
-  }
-  const safeBlock = useBlocks ? Math.min(activeBlock, Math.max(0, blocks.length - 1)) : 0;
-  const visible = useBlocks ? (blocks[safeBlock] ?? []) : sorted;
+
+  // Build stable block assignment. Items keep their block number across
+  // approvals. New items go to the next available block. Empty blocks
+  // (all items approved) disappear but remaining blocks keep their numbers.
+  const blocks = useMemo(() => {
+    if (!useBlocks) return [];
+    const map = blockMapRef.current;
+
+    // Assign new items (never-seen IDs) to the next block, chunked by 10
+    const unassigned = sorted.filter((p) => !map.has(p.id));
+    if (unassigned.length > 0) {
+      const values = Array.from(map.values());
+      let nextBlock = values.length === 0 ? 1 : Math.max(...values) + 1;
+      let countInBlock = 0;
+      for (const p of unassigned) {
+        if (countInBlock >= 10) { nextBlock++; countInBlock = 0; }
+        map.set(p.id, nextBlock);
+        countInBlock++;
+      }
+    }
+
+    // Group current items by their assigned block number
+    const byBlock = new Map<number, Propuesta[]>();
+    for (const p of sorted) {
+      const bn = map.get(p.id);
+      if (bn === undefined) continue; // shouldn't happen
+      if (!byBlock.has(bn)) byBlock.set(bn, []);
+      byBlock.get(bn)!.push(p);
+    }
+    return Array.from(byBlock.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([num, items]) => ({ num, items }));
+  }, [sorted, useBlocks]);
+
+  const activeBlock = blocks.find((b) => b.num === activeBlockNum) ?? blocks[0] ?? null;
+
+  // Sync activeBlockNum when blocks change (e.g., current block got emptied)
+  useEffect(() => {
+    if (!useBlocks) return;
+    if (blocks.length === 0) { setActiveBlockNum(null); return; }
+    if (activeBlockNum === null || !blocks.some((b) => b.num === activeBlockNum)) {
+      setActiveBlockNum(blocks[0].num);
+    }
+  }, [blocks, activeBlockNum, useBlocks]);
+
+  const visible = useBlocks ? (activeBlock?.items ?? []) : sorted;
 
   async function handleAprobarGrupo(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
@@ -237,7 +284,8 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
 
   async function handleAprobarBloque(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
-    const ids = (blocks[safeBlock] ?? []).map((p) => p.id);
+    const ids = (activeBlock?.items ?? []).map((p) => p.id);
+    const blockNum = activeBlock?.num ?? 0;
     if (ids.length === 0) { setLoading(false); return; }
 
     setDepartingIds((prev) => {
@@ -257,7 +305,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
       setLoading(false);
       return;
     }
-    toast(`${result.count} aprobadas en bloque ${safeBlock + 1}`);
+    toast(`${result.count} aprobadas en bloque ${blockNum}`);
     setLoading(false);
     setTimeout(() => { onAction(); }, 500);
   }
@@ -276,10 +324,10 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         <span className={`text-xs font-medium ${config.color} flex-1 text-left`}>{config.label}</span>
         {tipo === "alta" && (
           <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
-            {useBlocks && (blocks[safeBlock]?.length ?? 0) > 0 && (
+            {useBlocks && (activeBlock?.items.length ?? 0) > 0 && (
               <button onClick={handleAprobarBloque} disabled={loading}
                 className="btn-press rounded-lg border border-[#E8553E] text-[#E8553E] hover:bg-[var(--accent-light)] disabled:opacity-50 px-2.5 py-1 text-[10px] font-semibold transition-all duration-150">
-                {loading ? "..." : `Aprobar bloque (${blocks[safeBlock]?.length ?? 0})`}
+                {loading ? "..." : `Aprobar bloque ${activeBlock?.num} (${activeBlock?.items.length ?? 0})`}
               </button>
             )}
             <button onClick={handleAprobarGrupo} disabled={loading}
@@ -293,22 +341,22 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         <div className="px-3 pb-3 animate-fade-in">
           {useBlocks && (
             <div className="flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar">
-              {blocks.map((items, idx) => {
-                const isActive = idx === safeBlock;
+              {blocks.map((block) => {
+                const isActive = block.num === (activeBlock?.num ?? -1);
                 return (
                   <button
-                    key={idx}
+                    key={block.num}
                     type="button"
-                    onClick={() => setActiveBlock(idx)}
+                    onClick={() => setActiveBlockNum(block.num)}
                     className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E8553E]/40 ${
                       isActive
                         ? "bg-[#E8553E] text-white shadow-[0_1px_3px_rgba(232,85,62,0.3)]"
                         : "bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] border border-[var(--border)]"
                     }`}
                   >
-                    Bloque {idx + 1}
+                    Bloque {block.num}
                     <span className={`ml-1.5 tabular-nums ${isActive ? "text-white/80" : "text-[var(--muted-light)]"}`}>
-                      {items.length}
+                      {block.items.length}
                     </span>
                   </button>
                 );
