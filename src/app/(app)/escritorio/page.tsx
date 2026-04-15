@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getResumenMes, getHistorico6Meses } from "../resumen/actions";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import ClientesClient from "../clientes/ClientesClient";
 import ResumenClient from "../resumen/ResumenClient";
 
 export default async function EscritorioPage() {
@@ -44,8 +43,13 @@ export default async function EscritorioPage() {
               </Suspense>
             </Column>
             <Column>
-              <Suspense fallback={<div className="animate-shimmer h-80 rounded-[20px]" />}>
-                <ClientesPanel empresaId={empresaId} />
+              <Suspense fallback={<div className="animate-shimmer h-96 rounded-[20px]" />}>
+                <ResumenPanel
+                  empresaId={empresaId}
+                  empresaNombre={usuario.empresas.razon_social}
+                  mes={mes}
+                  anio={anio}
+                />
               </Suspense>
             </Column>
           </div>
@@ -54,16 +58,6 @@ export default async function EscritorioPage() {
             <Column>
               <Suspense fallback={<div className="animate-shimmer h-[32rem] rounded-[20px]" />}>
                 <RevisarPanel empresaId={empresaId} />
-              </Suspense>
-            </Column>
-            <Column>
-              <Suspense fallback={<div className="animate-shimmer h-96 rounded-[20px]" />}>
-                <ResumenPanel
-                  empresaId={empresaId}
-                  empresaNombre={usuario.empresas.razon_social}
-                  mes={mes}
-                  anio={anio}
-                />
               </Suspense>
             </Column>
           </div>
@@ -81,24 +75,6 @@ function Column({ children }: { children: React.ReactNode }) {
 
 async function SubirPanel({ empresaId }: { empresaId: string }) {
   return <SubirClient empresaId={empresaId} />;
-}
-
-async function ClientesPanel({ empresaId }: { empresaId: string }) {
-  const supabase = await createClient();
-  const { data: clientes } = await supabase
-    .from("clientes")
-    .select("*, propuestas_ia(count)")
-    .eq("empresa_id", empresaId)
-    .order("nombre", { ascending: true });
-
-  const clientesConCount = (clientes ?? []).map((c) => ({
-    ...c,
-    propuestas_ia: undefined,
-    movimientos_count:
-      (c.propuestas_ia as unknown as { count: number }[])?.[0]?.count ?? 0,
-  }));
-
-  return <ClientesClient clientes={clientesConCount} empresaId={empresaId} />;
 }
 
 async function RevisarPanel({ empresaId }: { empresaId: string }) {
