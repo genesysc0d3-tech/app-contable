@@ -150,6 +150,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [editCards, setEditCards] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [activeBlock, setActiveBlock] = useState(0);
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
@@ -194,9 +195,15 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const sorted = [...propuestas].sort((a, b) => {
     const diff = (b.confianza ?? 0) - (a.confianza ?? 0);
     if (diff !== 0) return diff;
-    return a.id.localeCompare(b.id); // secondary stable sort for consistent block assignment
+    return a.id.localeCompare(b.id); // stable secondary sort
   });
   const useBlocks = layout === "desktop" && sorted.length > 10 && tipo !== "ocultas";
+  const blocks: Propuesta[][] = [];
+  if (useBlocks) {
+    for (let i = 0; i < sorted.length; i += 10) blocks.push(sorted.slice(i, i + 10));
+  }
+  const safeBlock = useBlocks ? Math.min(activeBlock, Math.max(0, blocks.length - 1)) : 0;
+  const visible = useBlocks ? (blocks[safeBlock] ?? []) : sorted;
 
   async function handleAprobarGrupo(e: React.MouseEvent) {
     e.stopPropagation(); setLoading(true);
@@ -229,20 +236,34 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         )}
       </div>
       {expanded && (
-        <div className="px-3 pb-3 space-y-3 animate-fade-in">
-          {sorted.map((p, i) => (
+        <div className="px-3 pb-3 animate-fade-in">
+          {useBlocks && (
+            <div className="flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-none">
+              {blocks.map((items, idx) => {
+                const isActive = idx === safeBlock;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveBlock(idx)}
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                      isActive
+                        ? "bg-[#E8553E] text-white shadow-[0_1px_3px_rgba(232,85,62,0.3)]"
+                        : "bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] border border-[var(--border)]"
+                    }`}
+                  >
+                    Bloque {idx + 1}
+                    <span className={`ml-1.5 tabular-nums ${isActive ? "text-white/80" : "text-[var(--muted-light)]"}`}>
+                      {items.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="space-y-3">
+          {visible.map((p) => (
             <Fragment key={p.id}>
-              {useBlocks && i % 10 === 0 && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted)] shrink-0">
-                    Bloque {Math.floor(i / 10) + 1}
-                  </span>
-                  <span className="h-px flex-1 bg-[var(--border)]" />
-                  <span className="text-[10px] text-[var(--muted-light)] tabular-nums shrink-0">
-                    {Math.min(10, sorted.length - i)} pend.
-                  </span>
-                </div>
-              )}
               <div>
               {tipo === "baja" && (
                 <p className="text-[10px] text-[#E8553E] bg-[var(--accent-light)] rounded-lg px-2.5 py-1.5 mb-2">
@@ -284,6 +305,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
               </div>
             </Fragment>
           ))}
+          </div>
         </div>
       )}
     </div>
