@@ -434,22 +434,17 @@ select option {
 .breathe-glow { animation: breathe-glow 5s ease-in-out infinite; }
 
 /* Dynamic panel glow — only on mouse hover, smooth fade in/out.
-   Stronger on spotlight panels (Revisar). */
+   All panels share the same intensity for visual balance. */
 .panel-hover-glow {
   transition: box-shadow 600ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.panel-hover-glow:hover {
-  box-shadow: 0 0 48px -14px rgba(232,85,62,0.35);
-}
+.panel-hover-glow:hover,
 .panel-hover-glow.is-spotlight:hover {
-  box-shadow: 0 0 72px -12px rgba(232,85,62,0.55);
+  box-shadow: 0 0 60px -12px rgba(232,85,62,0.45);
 }
-/* Dark mode: slightly stronger glow to compensate for lower contrast */
-.dark .panel-hover-glow:hover {
-  box-shadow: 0 0 56px -12px rgba(232,85,62,0.40);
-}
+.dark .panel-hover-glow:hover,
 .dark .panel-hover-glow.is-spotlight:hover {
-  box-shadow: 0 0 88px -10px rgba(232,85,62,0.60);
+  box-shadow: 0 0 72px -10px rgba(232,85,62,0.50);
 }
 
 /* =======================================================================

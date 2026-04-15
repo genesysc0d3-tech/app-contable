@@ -127,19 +127,19 @@ async function CalendarStrip({ empresaId, selectedDate }: { empresaId: string; s
   }
 
   return (
-    <section className="neo rounded-[28px] overflow-hidden panel-hover-glow">
-      <header className="flex items-center gap-3 px-5 py-3 border-b border-black/5 dark:border-white/5">
-        <div className="w-9 h-9 rounded-xl neo-inset flex items-center justify-center text-[var(--muted)]">
-          <CalendarIcon size={16} weight="bold" />
+    <section className="neo rounded-[24px] overflow-hidden panel-hover-glow">
+      <header className="flex items-center gap-2.5 px-4 py-2 border-b border-black/5 dark:border-white/5">
+        <div className="w-7 h-7 rounded-lg neo-inset flex items-center justify-center text-[var(--muted)]">
+          <CalendarIcon size={13} weight="bold" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-[15px] font-medium text-[var(--foreground)] leading-none capitalize">
+          <h2 className="text-[13px] font-medium text-[var(--foreground)] leading-none capitalize">
             {mesNombre} {year}
           </h2>
-          <p className="text-[11px] text-[var(--muted-light)] mt-1 leading-none tracking-wide flex items-center gap-2">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#E8553E]" />{totalPend} pend.</span>
-            <span className="text-[var(--muted-light)]">·</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />{totalDocs} subidos</span>
+          <p className="text-[10px] text-[var(--muted-light)] mt-0.5 leading-none tracking-wide flex items-center gap-1.5">
+            <span className="flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-[#E8553E]" />{totalPend} pend.</span>
+            <span>·</span>
+            <span className="flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-[#3B82F6]" />{totalDocs} subidos</span>
           </p>
         </div>
         {selectedDate && (
@@ -147,15 +147,15 @@ async function CalendarStrip({ empresaId, selectedDate }: { empresaId: string; s
             href="/escritorio?date=all"
             prefetch={false}
             scroll={false}
-            className="flex items-center gap-1 text-[10px] font-medium text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--surface)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] rounded-lg px-2 py-1 transition-colors"
+            className="flex items-center gap-1 text-[10px] font-medium text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--surface)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] rounded-md px-1.5 py-0.5 transition-colors"
           >
             <X size={10} weight="bold" />
-            Ver todas
+            Todas
           </Link>
         )}
       </header>
-      <div className="px-4 py-3 overflow-x-auto no-scrollbar">
-        <div className="flex gap-1 min-w-max">
+      <div className="px-3 py-1.5 overflow-x-auto no-scrollbar">
+        <div className="flex gap-0.5 min-w-max">
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const info = byDay.get(day)!;
@@ -170,9 +170,9 @@ async function CalendarStrip({ empresaId, selectedDate }: { empresaId: string; s
                 href={`/escritorio?date=${dayStr}`}
                 prefetch={false}
                 scroll={false}
-                className={`shrink-0 w-10 py-2 px-1 rounded-xl flex flex-col items-center gap-1 transition-all ${
+                className={`shrink-0 w-8 py-1 px-1 rounded-lg flex flex-col items-center gap-0.5 transition-all ${
                   isSelected
-                    ? "bg-[#E8553E] text-white shadow-[0_0_14px_-4px_rgba(232,85,62,0.5)]"
+                    ? "bg-[#E8553E] text-white shadow-[0_0_12px_-4px_rgba(232,85,62,0.5)]"
                     : isToday
                     ? "ring-1 ring-inset ring-[#E8553E]/50 text-[var(--foreground)] hover:bg-[var(--accent-light)]"
                     : isWeekend
@@ -181,14 +181,14 @@ async function CalendarStrip({ empresaId, selectedDate }: { empresaId: string; s
                 }`}
                 title={`${day} ${mesNombre} · ${info.pendientes} pend · ${info.docs} subidos`}
               >
-                <span className={`text-[9px] uppercase tracking-wider ${isSelected ? "text-white/70" : "text-[var(--muted-light)]"}`}>
+                <span className={`text-[7px] uppercase tracking-wider leading-none ${isSelected ? "text-white/70" : "text-[var(--muted-light)]"}`}>
                   {weekdayInitials[weekday]}
                 </span>
-                <span className="text-[13px] font-medium tabular-nums leading-none">{day}</span>
-                <div className="flex items-center gap-0.5 h-1.5">
-                  {info.pendientes > 0 && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-white" : "bg-[#E8553E]"}`} />}
-                  {info.docs > 0 && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-white/80" : "bg-[#3B82F6]"}`} />}
-                  {info.aprobadas > 0 && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-white/70" : "bg-[#22C55E]"}`} />}
+                <span className="text-[11px] font-medium tabular-nums leading-none">{day}</span>
+                <div className="flex items-center gap-0.5 h-1">
+                  {info.pendientes > 0 && <span className={`w-0.5 h-0.5 rounded-full ${isSelected ? "bg-white" : "bg-[#E8553E]"}`} />}
+                  {info.docs > 0 && <span className={`w-0.5 h-0.5 rounded-full ${isSelected ? "bg-white/80" : "bg-[#3B82F6]"}`} />}
+                  {info.aprobadas > 0 && <span className={`w-0.5 h-0.5 rounded-full ${isSelected ? "bg-white/70" : "bg-[#22C55E]"}`} />}
                 </div>
               </Link>
             );
