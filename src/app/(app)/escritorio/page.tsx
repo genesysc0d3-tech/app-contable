@@ -1,14 +1,27 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import { UploadSimple, CheckSquare, Lightning, Receipt, Plus, Calendar as CalendarIcon } from "@phosphor-icons/react/dist/ssr";
+import { UploadSimple, CheckSquare, Lightning, Receipt, Plus, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
 import CapturarBoletasTabs from "@/components/CapturarBoletasTabs";
 
-export default async function EscritorioPage() {
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export default async function EscritorioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const usuario = (await getUsuario())!;
   const empresaId = usuario.empresa_id;
+  const { date: dateParam } = await searchParams;
+  // Default: today. Special value "all" removes the filter.
+  const selectedDate = dateParam === "all" ? null : (dateParam ?? todayStr());
 
   return (
     <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg">
@@ -32,17 +45,17 @@ export default async function EscritorioPage() {
           {/* Right: Calendar strip + Revisar */}
           <section className="lg:col-span-7 flex flex-col gap-6">
             <Suspense fallback={<CalendarSkeleton />}>
-              <CalendarStrip empresaId={empresaId} />
+              <CalendarStrip empresaId={empresaId} selectedDate={selectedDate} />
             </Suspense>
 
             <Panel
               icon={CheckSquare}
               label="Revisar"
-              hint="Propuestas esperando tu aprobación"
+              hint={selectedDate ? `Del ${formatDateShort(selectedDate)}` : "Todas las fechas"}
               spotlight
             >
-              <Suspense fallback={<ShimmerBox h="h-[28rem]" />}>
-                <RevisarPanel empresaId={empresaId} />
+              <Suspense fallback={<ShimmerBox h="h-[28rem]" />} key={selectedDate ?? "all"}>
+                <RevisarPanel empresaId={empresaId} filterDate={selectedDate} />
               </Suspense>
             </Panel>
           </section>
@@ -52,9 +65,16 @@ export default async function EscritorioPage() {
   );
 }
 
+function formatDateShort(dateStr: string): string {
+  // dateStr: YYYY-MM-DD
+  const [y, m, d] = dateStr.split("-").map((x) => parseInt(x));
+  const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  return `${d} ${meses[m - 1]} ${y}`;
+}
+
 // --- Calendar strip ---
 
-async function CalendarStrip({ empresaId }: { empresaId: string }) {
+async function CalendarStrip({ empresaId, selectedDate }: { empresaId: string; selectedDate: string | null }) {
   const supabase = await createClient();
   const now = new Date();
   const year = now.getFullYear();
@@ -99,6 +119,13 @@ async function CalendarStrip({ empresaId }: { empresaId: string }) {
   const totalDocs = Array.from(byDay.values()).reduce((s, d) => s + d.docs, 0);
   const weekdayInitials = ["D", "L", "M", "M", "J", "V", "S"];
 
+  // Parse selectedDate into day-of-month if within current month
+  let selectedDay: number | null = null;
+  if (selectedDate) {
+    const [sy, sm, sd] = selectedDate.split("-").map((x) => parseInt(x));
+    if (sy === year && sm === month + 1) selectedDay = sd;
+  }
+
   return (
     <section className="neo rounded-[28px] overflow-hidden panel-hover-glow">
       <header className="flex items-center gap-3 px-5 py-3 border-b border-black/5 dark:border-white/5">
@@ -115,6 +142,17 @@ async function CalendarStrip({ empresaId }: { empresaId: string }) {
             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />{totalDocs} subidos</span>
           </p>
         </div>
+        {selectedDate && (
+          <Link
+            href="/escritorio?date=all"
+            prefetch={false}
+            scroll={false}
+            className="flex items-center gap-1 text-[10px] font-medium text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--surface)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] rounded-lg px-2 py-1 transition-colors"
+          >
+            <X size={10} weight="bold" />
+            Ver todas
+          </Link>
+        )}
       </header>
       <div className="px-4 py-3 overflow-x-auto no-scrollbar">
         <div className="flex gap-1 min-w-max">
@@ -123,29 +161,36 @@ async function CalendarStrip({ empresaId }: { empresaId: string }) {
             const info = byDay.get(day)!;
             const weekday = new Date(year, month, day).getDay();
             const isToday = day === today;
+            const isSelected = day === selectedDay;
             const isWeekend = weekday === 0 || weekday === 6;
+            const dayStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             return (
-              <div
+              <Link
                 key={day}
-                className={`shrink-0 w-10 py-2 px-1 rounded-xl flex flex-col items-center gap-1 transition-colors ${
-                  isToday
+                href={`/escritorio?date=${dayStr}`}
+                prefetch={false}
+                scroll={false}
+                className={`shrink-0 w-10 py-2 px-1 rounded-xl flex flex-col items-center gap-1 transition-all ${
+                  isSelected
                     ? "bg-[#E8553E] text-white shadow-[0_0_14px_-4px_rgba(232,85,62,0.5)]"
+                    : isToday
+                    ? "ring-1 ring-inset ring-[#E8553E]/50 text-[var(--foreground)] hover:bg-[var(--accent-light)]"
                     : isWeekend
-                    ? "text-[var(--muted-light)]"
+                    ? "text-[var(--muted-light)] hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
                     : "text-[var(--foreground)] hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
                 }`}
                 title={`${day} ${mesNombre} · ${info.pendientes} pend · ${info.docs} subidos`}
               >
-                <span className={`text-[9px] uppercase tracking-wider ${isToday ? "text-white/70" : "text-[var(--muted-light)]"}`}>
+                <span className={`text-[9px] uppercase tracking-wider ${isSelected ? "text-white/70" : "text-[var(--muted-light)]"}`}>
                   {weekdayInitials[weekday]}
                 </span>
                 <span className="text-[13px] font-medium tabular-nums leading-none">{day}</span>
                 <div className="flex items-center gap-0.5 h-1.5">
-                  {info.pendientes > 0 && <span className={`w-1 h-1 rounded-full ${isToday ? "bg-white" : "bg-[#E8553E]"}`} />}
-                  {info.docs > 0 && <span className={`w-1 h-1 rounded-full ${isToday ? "bg-white/80" : "bg-[#3B82F6]"}`} />}
-                  {info.aprobadas > 0 && <span className={`w-1 h-1 rounded-full ${isToday ? "bg-white/70" : "bg-[#22C55E]"}`} />}
+                  {info.pendientes > 0 && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-white" : "bg-[#E8553E]"}`} />}
+                  {info.docs > 0 && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-white/80" : "bg-[#3B82F6]"}`} />}
+                  {info.aprobadas > 0 && <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-white/70" : "bg-[#22C55E]"}`} />}
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
@@ -326,7 +371,7 @@ function ShimmerBox({ h }: { h: string }) {
 
 // --- Data fetchers ---
 
-async function RevisarPanel({ empresaId }: { empresaId: string }) {
+async function RevisarPanel({ empresaId, filterDate }: { empresaId: string; filterDate: string | null }) {
   const supabase = await createClient();
   const [{ data: propuestas }, { data: clientes }] = await Promise.all([
     supabase
@@ -341,9 +386,20 @@ async function RevisarPanel({ empresaId }: { empresaId: string }) {
       .order("nombre", { ascending: true }),
   ]);
 
+  // Filter by document upload date when a date is selected.
+  // filterDate format: YYYY-MM-DD; doc.created_at is ISO with time, so prefix match works.
+  const all = propuestas ?? [];
+  const filtered = filterDate
+    ? all.filter((p) => {
+        const docCreated = p.movimientos_raw?.documentos_subidos?.created_at;
+        if (!docCreated) return false;
+        return docCreated.startsWith(filterDate);
+      })
+    : all;
+
   return (
     <RevisarClient
-      propuestas={propuestas ?? []}
+      propuestas={filtered}
       clientes={clientes ?? []}
       empresaId={empresaId}
       layout="desktop"
