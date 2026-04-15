@@ -4,12 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { UploadSimple, CheckSquare, Users, ChartBar } from "@phosphor-icons/react";
+import { UploadSimple, CheckSquare, ChartBar } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
   { href: "/subir", label: "Subir", Icon: UploadSimple },
   { href: "/revisar", label: "Revisar", Icon: CheckSquare, badge: true },
-  { href: "/clientes", label: "Clientes", Icon: Users },
   { href: "/resumen", label: "Resumen", Icon: ChartBar },
 ] as const;
 
