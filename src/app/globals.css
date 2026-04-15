@@ -17,9 +17,9 @@
   --glass-border: rgba(255,255,255,0.8);
   --glow-accent: 0 0 32px -8px rgba(232,85,62,0.35);
   --glow-accent-soft: 0 0 64px -16px rgba(232,85,62,0.22);
-  --mesh-1: rgba(232,85,62,0.10);
-  --mesh-2: rgba(245,158,11,0.08);
-  --mesh-3: rgba(59,130,246,0.06);
+  --mesh-1: rgba(232,85,62,0.06);
+  --mesh-2: rgba(245,158,11,0.04);
+  --mesh-3: rgba(59,130,246,0.04);
 }
 
 .dark {
@@ -39,9 +39,9 @@
   --glass-border: rgba(255,255,255,0.08);
   --glow-accent: 0 0 40px -6px rgba(232,85,62,0.45);
   --glow-accent-soft: 0 0 96px -16px rgba(232,85,62,0.30);
-  --mesh-1: rgba(232,85,62,0.18);
-  --mesh-2: rgba(245,158,11,0.10);
-  --mesh-3: rgba(99,102,241,0.10);
+  --mesh-1: rgba(232,85,62,0.09);
+  --mesh-2: rgba(245,158,11,0.05);
+  --mesh-3: rgba(99,102,241,0.06);
 }
 
 @theme inline {
@@ -284,66 +284,39 @@ select option {
   transform: translateY(-1px);
 }
 
-/* Animated mesh gradient background — three soft blobs drifting slowly.
-   Sits inside an absolutely positioned container, clipped by overflow.
-   Pure CSS, GPU-composited, ~0 runtime cost. */
-@keyframes mesh-drift-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%      { transform: translate(6%, -4%) scale(1.08); }
-}
-@keyframes mesh-drift-2 {
-  0%, 100% { transform: translate(0, 0) scale(1.1); }
-  50%      { transform: translate(-5%, 5%) scale(1); }
-}
-@keyframes mesh-drift-3 {
-  0%, 100% { transform: translate(0, 0) scale(0.95); }
-  50%      { transform: translate(4%, 6%) scale(1.1); }
-}
-
+/* Professional background: static ambient gradient.
+   Estilo Linear/Vercel — un halo muy sutil en una esquina + otro apagado,
+   sin animación, sin distracción. Pura profundidad. */
 .mesh-bg {
   position: relative;
   isolation: isolate;
 }
-.mesh-bg::before,
+.mesh-bg::before {
+  content: "";
+  position: fixed;
+  top: -20vh;
+  right: -20vw;
+  width: 80vw;
+  height: 80vh;
+  background: radial-gradient(closest-side, var(--mesh-1) 0%, transparent 70%);
+  z-index: -1;
+  pointer-events: none;
+}
 .mesh-bg::after {
   content: "";
   position: fixed;
-  pointer-events: none;
-  border-radius: 50%;
-  filter: blur(80px);
-  z-index: -1;
-  will-change: transform;
-}
-.mesh-bg::before {
-  top: -10%;
-  left: -10%;
-  width: 55vw;
-  height: 55vw;
-  background: var(--mesh-1);
-  animation: mesh-drift-1 22s ease-in-out infinite;
-}
-.mesh-bg::after {
-  bottom: -15%;
-  right: -15%;
-  width: 50vw;
-  height: 50vw;
-  background: var(--mesh-2);
-  animation: mesh-drift-2 26s ease-in-out infinite;
-}
-/* Third blob via a child element in components that want it (optional) */
-.mesh-blob-3 {
-  position: fixed;
-  top: 40%;
-  left: 30%;
-  width: 40vw;
-  height: 40vw;
-  border-radius: 50%;
-  background: var(--mesh-3);
-  filter: blur(100px);
+  bottom: -30vh;
+  left: -15vw;
+  width: 70vw;
+  height: 70vh;
+  background: radial-gradient(closest-side, var(--mesh-3) 0%, transparent 75%);
   z-index: -1;
   pointer-events: none;
-  animation: mesh-drift-3 30s ease-in-out infinite;
+  opacity: 0.7;
 }
+
+/* Legacy helper kept for back-compat; now noop visual-wise */
+.mesh-blob-3 { display: none; }
 
 /* Subtle grain overlay for texture (optional, very cheap) */
 .grain::after {
@@ -356,13 +329,6 @@ select option {
   mix-blend-mode: overlay;
   opacity: 0.5;
   border-radius: inherit;
-}
-
-/* Reduced-motion: disable mesh drift for users who prefer no motion */
-@media (prefers-reduced-motion: reduce) {
-  .mesh-bg::before,
-  .mesh-bg::after,
-  .mesh-blob-3 { animation: none; }
 }
 
 /* Desktop mode: neutralize mobile-only wrappers of reused client components */

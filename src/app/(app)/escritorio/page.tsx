@@ -17,7 +17,6 @@ export default async function EscritorioPage() {
 
   return (
     <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg">
-      <div className="mesh-blob-3" />
       <TopBar empresa={usuario.empresas.razon_social} fecha={fecha} />
 
       <main className="max-w-[1500px] mx-auto px-6 pb-10 pt-4 relative">
