@@ -3,6 +3,7 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
+import FloatingHero from "@/components/FloatingHero";
 import { UploadSimple, CheckSquare, Lightning, TrendUp } from "@phosphor-icons/react/dist/ssr";
 
 export default async function EscritorioPage() {
@@ -19,11 +20,11 @@ export default async function EscritorioPage() {
           <Hero empresaId={empresaId} empresa={usuario.empresas.razon_social} />
         </Suspense>
 
-        {/* Panels */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-16">
-          <aside className="lg:col-span-5">
-            <Panel icon={UploadSimple} label="Capturar" hint="Arrastrá una cartola o documento">
-              <Suspense fallback={<ShimmerBox h="h-80" />}>
+        {/* Panels — Revisar protagonista (7/12), Capturar compacto (3/12) */}
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 mt-16">
+          <aside className="lg:col-span-3">
+            <Panel icon={UploadSimple} label="Capturar" hint="Arrastrá una cartola">
+              <Suspense fallback={<ShimmerBox h="h-72" />}>
                 <SubirClient empresaId={empresaId} />
               </Suspense>
             </Panel>
@@ -68,32 +69,33 @@ async function Hero({ empresaId, empresa }: { empresaId: string; empresa: string
   const mesNombre = now.toLocaleDateString("es-CL", { month: "long" });
 
   return (
-    <section className="pt-20 pb-8 animate-number-in">
-      <div className="flex items-end justify-between gap-8 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <p className="hero-label">{empresa}</p>
-          <div className="mt-4 flex items-baseline gap-3">
+    <section className="pt-16 pb-4 animate-number-in">
+      <FloatingHero>
+        <div className="neo rounded-[32px] px-10 py-10 relative overflow-hidden">
+          {/* Subtle accent orb inside the card */}
+          <div
+            aria-hidden
+            className="absolute -top-20 -right-20 w-64 h-64 rounded-full pointer-events-none"
+            style={{ background: "radial-gradient(closest-side, rgba(232,85,62,0.18), transparent 70%)" }}
+          />
+          <p className="hero-label relative">{empresa}</p>
+          <div className="mt-5 flex items-baseline gap-3 relative">
             <span className="hero-number">
               <span className="hero-number-int">{pend}</span>
             </span>
-            <span className="text-[22px] font-light text-[var(--muted)] pb-3">
+            <span className="text-[20px] font-light text-[var(--muted)] pb-3">
               {pend === 1 ? "propuesta esperando" : "propuestas esperando"}
             </span>
           </div>
-          <p className="hero-subtitle mt-3 flex items-center gap-2 capitalize">
+          <p className="hero-subtitle mt-4 flex items-center gap-2 relative">
             <Lightning size={14} weight="fill" className="text-[#22C55E]" />
             <span>
-              {apro} aprobada{apro !== 1 ? "s" : ""} en {mesNombre}
+              {apro} aprobada{apro !== 1 ? "s" : ""} en <span className="capitalize">{mesNombre}</span>
             </span>
-            {apro > 0 && (
-              <>
-                <span className="text-[var(--muted-light)]">·</span>
-                <TrendUp size={14} weight="bold" className="text-[#22C55E]" />
-              </>
-            )}
+            {apro > 0 && <TrendUp size={14} weight="bold" className="text-[#22C55E]" />}
           </p>
         </div>
-      </div>
+      </FloatingHero>
     </section>
   );
 }
@@ -153,30 +155,30 @@ function Panel({
 }) {
   return (
     <section
-      className={`neo tilt-3d rounded-[28px] overflow-hidden ${
+      className={`neo rounded-[28px] overflow-hidden relative ${
         spotlight ? "breathe-glow" : ""
       }`}
     >
-      <header className="flex items-center gap-4 px-7 py-5">
+      <header className="flex items-center gap-4 px-6 py-5 border-b border-black/5 dark:border-white/5">
         <div
-          className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500 ${
             spotlight
               ? "bg-[#E8553E] text-white shadow-[0_6px_24px_-6px_rgba(232,85,62,0.6)]"
               : "neo-inset text-[var(--muted)]"
           }`}
         >
-          <Icon size={20} weight="bold" />
+          <Icon size={18} weight="bold" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-[20px] font-light tracking-tight text-[var(--foreground)] leading-none">
+          <h2 className="text-[18px] font-light tracking-tight text-[var(--foreground)] leading-none">
             {label}
           </h2>
-          <p className="text-[12px] text-[var(--muted-light)] mt-2 leading-none">
+          <p className="text-[11px] text-[var(--muted-light)] mt-1.5 leading-none tracking-wide">
             {hint}
           </p>
         </div>
       </header>
-      <div className="escritorio-col px-2 pb-2">{children}</div>
+      <div className="escritorio-col">{children}</div>
     </section>
   );
 }
