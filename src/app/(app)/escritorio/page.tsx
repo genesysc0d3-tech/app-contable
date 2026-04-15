@@ -159,7 +159,7 @@ function Panel({
           </p>
         </div>
       </header>
-      <div className="escritorio-col">{children}</div>
+      <div className="escritorio-col pb-4">{children}</div>
     </section>
   );
 }

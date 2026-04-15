@@ -330,10 +330,39 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   );
 }
 
-function DocumentSection({ group, clientes, empresaId, onAction, layout }: {
+function DocumentTab({ group, selected, onClick }: {
+  group: DocumentGroup; selected: boolean; onClick: () => void;
+}) {
+  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const d = new Date(group.fechaSubida);
+  const fecha = `${d.getDate()} ${meses[d.getMonth()]}`;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full border text-left transition-all duration-200 ${
+        selected
+          ? "border-[#E8553E] bg-[var(--accent-light)] text-[var(--foreground)] shadow-[0_0_16px_-6px_rgba(232,85,62,0.4)]"
+          : "border-[var(--border)] bg-transparent text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--muted-light)]"
+      }`}
+    >
+      <FileText size={12} weight="light" className="shrink-0" />
+      <span className="text-[11px] font-medium truncate max-w-[160px]">{group.nombreArchivo}</span>
+      <span className="text-[9px] text-[var(--muted-light)] shrink-0">{fecha}</span>
+      {group.pendientes > 0 && (
+        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold tabular-nums shrink-0 ${
+          selected ? "bg-[#E8553E] text-white" : "bg-[var(--accent-light)] text-[#E8553E]"
+        }`}>
+          {group.pendientes}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function DocumentBody({ group, clientes, empresaId, onAction, layout }: {
   group: DocumentGroup; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; layout: "mobile" | "desktop";
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [showBurst, setShowBurst] = useState(false);
   const [burstDone, setBurstDone] = useState(false);
 
@@ -377,57 +406,20 @@ function DocumentSection({ group, clientes, empresaId, onAction, layout }: {
   const ocultas = group.propuestas.filter((p) => p.estado === "oculto");
   const totalVisible = pendientes.length + orphanedOmitidos.length;
 
-  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  const d = new Date(group.fechaSubida);
-  const fecha = `${d.getDate()} ${meses[d.getMonth()]}`;
-
   return (
-    <div className={`rounded-[14px] bg-white dark:bg-white/[0.03] border border-[var(--border)] dark:shadow-none overflow-hidden transition-all duration-300 ${expanded ? "order-first" : "order-none"}`}>
-      <button onClick={() => setExpanded(!expanded)}
-        className={`w-full px-3 py-2 flex items-center gap-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors duration-200 ${expanded ? "border-b border-[var(--border)]" : ""}`}>
-        <CaretRight size={12} weight="bold" className={`text-[var(--muted-light)] transition-transform duration-200 shrink-0 ${expanded ? "rotate-90" : ""}`} />
-        <FileText size={14} weight="light" className="text-[var(--muted)] shrink-0" />
-        <div className="flex-1 min-w-0 text-left">
-          <p className="text-[12px] font-medium text-[var(--foreground)] truncate leading-tight">{group.nombreArchivo}</p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="text-[9px] text-[var(--muted-light)]">{fecha}</span>
-            {pendientes.length > 0 && (
-              <span className="text-[9px] text-[var(--muted-light)] truncate">
-                {alta.length > 0 && `${alta.length} listas`}
-                {alta.length > 0 && media.length > 0 && " · "}
-                {media.length > 0 && `${media.length} por revisar`}
-                {(alta.length > 0 || media.length > 0) && baja.length > 0 && " · "}
-                {baja.length > 0 && `${baja.length} con problemas`}
-              </span>
-            )}
+    <div className="pt-2 space-y-2 animate-fade-in relative">
+      {showBurst && !burstDone && <CompletionBurst onDone={handleBurstDone} />}
+      {totalVisible === 0 && ocultas.length === 0 ? (
+        <div className="text-center text-[var(--muted-light)] text-xs py-8">Todo revisado en este documento</div>
+      ) : (
+        <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
+          <div className="space-y-2">
+            <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+            <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+            <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+            <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
+            <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} />
           </div>
-        </div>
-        <div className="flex gap-1 shrink-0">
-          {group.pendientes > 0 && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--accent-light)] text-[#E8553E] font-semibold tabular-nums">
-              {group.pendientes}{omitidosPendientes.length > 0 && <span className="text-[#F59E0B]"> +{omitidosPendientes.length}</span>}
-            </span>
-          )}
-          {group.aprobados > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#ECFDF5] dark:bg-[#22C55E]/15 text-[#22C55E] font-semibold tabular-nums">{group.aprobados}</span>}
-          {group.descartados > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--surface)] text-[var(--muted-light)] font-semibold tabular-nums">{group.descartados}</span>}
-        </div>
-      </button>
-      {expanded && (
-        <div className="px-3 pb-3 pt-2 space-y-2 animate-fade-in relative">
-          {showBurst && !burstDone && <CompletionBurst onDone={handleBurstDone} />}
-          {totalVisible === 0 && ocultas.length === 0 ? (
-            <div className="text-center text-[var(--muted-light)] text-xs py-4">Todo revisado</div>
-          ) : (
-            <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
-              <div className="space-y-2">
-                <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-                <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-                <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-                <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-                <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} />
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -437,6 +429,7 @@ function DocumentSection({ group, clientes, empresaId, onAction, layout }: {
 export default function RevisarClient({ propuestas, clientes, empresaId, layout = "mobile" }: RevisarClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const { toast } = useToast();
   const setPropuestas = useAppStore((s) => s.setPropuestas);
   const setRevisarClientes = useAppStore((s) => s.setRevisarClientes);
@@ -526,13 +519,46 @@ export default function RevisarClient({ propuestas, clientes, empresaId, layout 
             <p className="text-sm">Todo revisado</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {groups.map((g) => (
-              <DocumentSection key={g.documentoId} group={g} clientes={clientes} empresaId={empresaId} layout={layout} onAction={() => router.refresh()} />
-            ))}
-          </div>
+          <>
+            <DocumentTabs
+              groups={groups}
+              selectedDocId={selectedDocId}
+              onSelect={setSelectedDocId}
+            />
+            {(() => {
+              const selected = groups.find((g) => g.documentoId === selectedDocId) ?? groups[0];
+              return selected ? (
+                <DocumentBody
+                  key={selected.documentoId}
+                  group={selected}
+                  clientes={clientes}
+                  empresaId={empresaId}
+                  layout={layout}
+                  onAction={() => router.refresh()}
+                />
+              ) : null;
+            })()}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+function DocumentTabs({ groups, selectedDocId, onSelect }: {
+  groups: DocumentGroup[]; selectedDocId: string | null; onSelect: (id: string) => void;
+}) {
+  const activeId = selectedDocId ?? groups[0]?.documentoId ?? null;
+  return (
+    <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 py-1">
+      {groups.map((g) => (
+        <DocumentTab
+          key={g.documentoId}
+          group={g}
+          selected={activeId === g.documentoId}
+          onClick={() => onSelect(g.documentoId)}
+        />
+      ))}
     </div>
   );
 }
