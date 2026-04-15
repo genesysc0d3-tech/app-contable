@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#105 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 15 Abril 2026 · rama `dev` · PRs #1-#106 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #106** — feat(escritorio): Boletas como tab dentro de Revisar (no Capturar). Feedback: Boletas encaja mejor junto a Revisar (ambos son flujos de "revisión + emisión de documentos tributarios") que junto a Capturar (flujo de entrada de datos). **(1)** Nuevo `components/RevisarBoletasTabs.tsx` (client, spotlight). Card único con tabs "Revisar" / "Boletas" como pills en la esquina derecha del header. Icon box solid `#E8553E` siempre (es el spotlight), el icon cambia según tab activa (`CheckSquare` / `Receipt`). Header muestra label + hint dinámico. Contenidos montados con `display: none/block` para preservar state al cambiar tab. Tab labels `hidden sm:inline` para caber bien en mobile. **(2)** Capturar vuelve a Panel simple sin tabs — solo `SubirClient` adentro. **(3)** `components/CapturarBoletasTabs.tsx` eliminado (reemplazado por el nuevo RevisarBoletasTabs).
 
 **PR #105** — fix(ui): glow parejo + calendar strip más flaco. **(1)** Glow uniforme: antes Revisar spotlight tenía `0.55` y otros `0.35` (disparejo). Ahora TODOS los panels comparten `box-shadow: 0 0 60px -12px rgba(232,85,62,0.45)` en light y `0 0 72px -10px rgba(232,85,62,0.50)` en dark. Hover-only fade 600ms se mantiene. Spotlight se distingue ahora solo por el icon-box solid `#E8553E`, no por el glow. **(2)** `CalendarStrip` ~35% más flaco: `rounded-[28px] → rounded-[24px]`, header `px-5 py-3 → px-4 py-2`, icon box `9x9 → 7x7` con icon 13px, label `15px → 13px`, subtitle `11px → 10px mt-0.5`, dots del summary `1.5px → 1px`. Body `px-4 py-3 → px-3 py-1.5`, gap entre cells `1 → 0.5`. Cells `w-10 py-2 → w-8 py-1`, weekday `9px → 7px`, day `13px → 11px`, dots `1x1 → 0.5x0.5`, `rounded-xl → rounded-lg`. Botón "Ver todas" → "Todas".
 
