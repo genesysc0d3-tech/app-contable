@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
-  X, MagicWand, CheckCircle, Warning, Lock, CaretDown, Gear, Table, ArrowDown,
+  X, MagicWand, CheckCircle, Warning, Lock, CaretDown, Gear, Table, ArrowDown, CaretRight,
 } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import type { AdapterConfig } from "@/lib/parsers/types";
@@ -387,38 +388,53 @@ function GridView({
 // --- Block components ---
 
 function BlockIgnored({
-  label, rows, cols, onSelectAsHeader, compact,
+  label, rows, cols, onSelectAsHeader, compact, defaultOpen,
 }: {
   label: string; rows: string[][]; cols: number;
-  onSelectAsHeader: (idx: number) => void; compact?: boolean;
+  onSelectAsHeader: (idx: number) => void; compact?: boolean; defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
   return (
     <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/50 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-dashed border-[var(--border)] text-[11px] text-[var(--muted)]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--muted)] hover:bg-[var(--surface)] transition-colors"
+      >
+        <CaretRight size={12} weight="bold" className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
         <Lock size={12} weight="bold" />
-        <span>{label}</span>
-        <span className="ml-auto text-[10px] text-[var(--muted-light)]">click en una fila para marcarla como títulos</span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-xs">
-          <tbody>
-            {rows.map((row, i) => (
-              <tr
-                key={i}
-                onClick={() => onSelectAsHeader(i)}
-                className="border-t border-[var(--border)] first:border-t-0 hover:bg-[var(--background)] cursor-pointer transition-colors opacity-60 hover:opacity-100"
-              >
-                <td className="px-2 py-1 text-[9px] text-[var(--muted-light)] tabular-nums w-8 text-center">{i}</td>
-                {Array.from({ length: cols }).map((_, c) => (
-                  <td key={c} className={`px-2 ${compact ? "py-0.5" : "py-1"} text-[11px] text-[var(--muted)] truncate max-w-[180px]`}>
-                    {row[c] ?? ""}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <span className="font-medium">{label}</span>
+        {open && (
+          <span className="ml-auto text-[10px] text-[var(--muted-light)]">
+            click en una fila para marcarla como títulos
+          </span>
+        )}
+        {!open && (
+          <span className="ml-auto text-[10px] text-[var(--muted-light)]">Mostrar</span>
+        )}
+      </button>
+      {open && (
+        <div className="overflow-x-auto border-t border-dashed border-[var(--border)] animate-fade-in">
+          <table className="min-w-full text-xs">
+            <tbody>
+              {rows.map((row, i) => (
+                <tr
+                  key={i}
+                  onClick={() => onSelectAsHeader(i)}
+                  className="border-t border-[var(--border)] first:border-t-0 hover:bg-[var(--background)] cursor-pointer transition-colors opacity-60 hover:opacity-100"
+                >
+                  <td className="px-2 py-1 text-[9px] text-[var(--muted-light)] tabular-nums w-8 text-center">{i}</td>
+                  {Array.from({ length: cols }).map((_, c) => (
+                    <td key={c} className={`px-2 ${compact ? "py-0.5" : "py-1"} text-[11px] text-[var(--muted)] truncate max-w-[180px]`}>
+                      {row[c] ?? ""}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -545,16 +561,36 @@ function ColumnChip({
   role, onChange, layout,
 }: { role: Role; onChange: (r: Role) => void; layout: Layout }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const meta = ROLES[role];
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2, width: rect.width });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (buttonRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
+    function onEsc(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    function onScroll() { setOpen(false); }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onEsc);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onEsc);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [open]);
 
   const availableRoles: Role[] = [
@@ -566,8 +602,9 @@ function ColumnChip({
   ];
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 ${meta.chip}`}
@@ -576,8 +613,12 @@ function ColumnChip({
         {meta.label}
         <CaretDown size={10} weight="bold" />
       </button>
-      {open && (
-        <div className="absolute z-30 top-full mt-1 left-1/2 -translate-x-1/2 min-w-[160px] rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)] overflow-hidden animate-fade-in py-1">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
+          className="z-[200] min-w-[170px] rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-hidden animate-fade-in py-1"
+        >
           {availableRoles.map((r) => (
             <button
               key={r}
@@ -591,9 +632,10 @@ function ColumnChip({
               {ROLES[r].label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
 
