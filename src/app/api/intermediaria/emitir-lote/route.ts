@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
-import { enviarDTE } from "@/lib/intermediario/client";
+import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/lib/intermediario/client";
 
 /**
  * Emisión en lote: dado un array de propuesta_ids, emite una boleta por cada
@@ -46,6 +46,20 @@ export async function POST(request: Request) {
   } | null;
   if (!empresa?.rut) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
+  }
+
+  // Gate: el intermediario no emite sin certificado digital del contribuyente.
+  // Replica el check que Haulmer/OpenFactura hacen antes de aceptar un DTE.
+  const certCheck = await verificarCertificado(usuario.empresa_id);
+  if (!certCheck.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: certCheck.error,
+        detalle: certCheck.mensaje,
+      },
+      { status: 422 },
+    );
   }
 
   // Body acepta:
@@ -172,7 +186,9 @@ export async function POST(request: Request) {
       continue;
     }
 
-    // Consume folio del CAF correspondiente al tipo
+    // El intermediario auto-solicita CAFs al SII cuando se agotan los folios
+    // (así funciona Haulmer/OpenFactura real — el contribuyente no lo toca).
+    await asegurarFoliosDisponibles(usuario.empresa_id, tipoDte);
     const { data: folioRes, error: folioErr } = await sb.rpc("consume_next_folio", {
       p_empresa_id: usuario.empresa_id,
       p_tipo_dte: tipoDte,
@@ -182,21 +198,9 @@ export async function POST(request: Request) {
         propuesta_id: pid,
         ok: false,
         error_code: "SIN_FOLIOS",
-        error_message: "No hay folios CAF disponibles. Solicitá un nuevo CAF.",
+        error_message: "El intermediario no pudo obtener folios del SII",
       });
-      // Si no hay folios, no tiene sentido seguir intentando con el resto
-      // — los marcamos todos como bloqueados
-      for (const remainingId of ids.slice(ids.indexOf(pid) + 1)) {
-        if (!results.find((r) => r.propuesta_id === remainingId)) {
-          results.push({
-            propuesta_id: remainingId,
-            ok: false,
-            error_code: "SIN_FOLIOS",
-            error_message: "Lote interrumpido — sin folios CAF",
-          });
-        }
-      }
-      break;
+      continue;
     }
     const { folio, caf_id } = folioRes[0] as { folio: number; caf_id: string };
 

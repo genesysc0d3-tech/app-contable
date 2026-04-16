@@ -1,6 +1,7 @@
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import EmisorForm from "./EmisorForm";
+import CertificadoToggle from "./CertificadoToggle";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
 
 export default async function EmpresaPage() {
@@ -28,7 +29,7 @@ export default async function EmpresaPage() {
       <header>
         <h1 className="text-2xl font-bold">Empresa</h1>
         <p className="text-sm text-[#888] dark:text-white/60 mt-1">
-          Datos del emisor que se imprimen en cada boleta, y tus folios CAF (mock SII).
+          Datos del emisor, delegación del certificado SII y stock de folios (mock).
         </p>
       </header>
 
@@ -38,9 +39,14 @@ export default async function EmpresaPage() {
       </section>
 
       <section>
+        <h2 className="text-sm font-semibold mb-2">Certificado digital SII</h2>
+        <CertificadoToggle inicial={empresa.tiene_certificado_sii} />
+      </section>
+
+      <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-sm font-semibold">Folios CAF</h2>
-          <span className="text-xs text-[#888] dark:text-white/60">Mock — simula solicitud al SII</span>
+          <span className="text-xs text-[#888] dark:text-white/60">Gestión automática</span>
         </div>
         <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
       </section>

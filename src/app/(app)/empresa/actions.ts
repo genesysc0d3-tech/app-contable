@@ -61,10 +61,9 @@ export async function setDatosEmisor(
   return { ok: true };
 }
 
-export async function solicitarCAFMock(
-  tipo_dte: 39 | 41 | 61,
-  cantidad: number,
-): Promise<{ ok?: boolean; error?: string; folio_desde?: number; folio_hasta?: number }> {
+export async function setCertificadoSii(
+  activo: boolean,
+): Promise<{ ok?: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
@@ -76,43 +75,19 @@ export async function solicitarCAFMock(
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
 
-  if (![39, 41, 61].includes(tipo_dte)) return { error: "Tipo DTE inválido" };
-  if (!Number.isInteger(cantidad) || cantidad < 10 || cantidad > 1000) {
-    return { error: "Cantidad debe ser entera entre 10 y 1000" };
-  }
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb: any = createServiceClient(url, key);
 
-  const { data: last } = await sb
-    .from("boletas_caf_mock")
-    .select("folio_hasta")
-    .eq("empresa_id", usuario.empresa_id)
-    .eq("tipo_dte", tipo_dte)
-    .order("folio_hasta", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const folio_desde = ((last?.folio_hasta as number | undefined) ?? 0) + 1;
-  const folio_hasta = folio_desde + cantidad - 1;
-
   const { error } = await sb
-    .from("boletas_caf_mock")
-    .insert({
-      empresa_id: usuario.empresa_id,
-      tipo_dte,
-      folio_desde,
-      folio_hasta,
-      folio_actual: folio_desde,
-      estado: "activo",
-    });
-
+    .from("empresas")
+    .update({ tiene_certificado_sii: activo })
+    .eq("id", usuario.empresa_id);
   if (error) return { error: error.message };
 
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
-  return { ok: true, folio_desde, folio_hasta };
+  return { ok: true };
 }
