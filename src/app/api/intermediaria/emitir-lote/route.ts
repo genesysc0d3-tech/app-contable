@@ -47,11 +47,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
-  let body: { propuesta_ids?: string[] } = {};
+  // Body acepta:
+  //   { propuesta_ids: string[] }  → todas como AFECTA (default histórico)
+  //   { items: [{ id, tipo_dte: 39|41 }, ...] }  → tipo per propuesta
+  let body: { propuesta_ids?: string[]; items?: { id: string; tipo_dte?: 39 | 41 }[] } = {};
   try { body = await request.json(); } catch {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
   }
-  const ids = Array.isArray(body.propuesta_ids) ? body.propuesta_ids.filter((x) => typeof x === "string") : [];
+  // Normalizar a Map<id, tipo_dte>
+  const tipoPorId = new Map<string, 39 | 41>();
+  if (Array.isArray(body.items)) {
+    for (const it of body.items) {
+      if (typeof it.id === "string") {
+        const t = it.tipo_dte === 41 ? 41 : 39;
+        tipoPorId.set(it.id, t);
+      }
+    }
+  }
+  const ids = Array.isArray(body.items)
+    ? body.items.map((i) => i.id).filter((x): x is string => typeof x === "string")
+    : Array.isArray(body.propuesta_ids)
+      ? body.propuesta_ids.filter((x) => typeof x === "string")
+      : [];
   if (ids.length === 0) {
     return NextResponse.json({ ok: false, error: "SIN_PROPUESTAS" }, { status: 400 });
   }
@@ -131,8 +148,11 @@ export async function POST(request: Request) {
       monto: total,
     }];
 
+    // Tipo DTE: 39 (afecta) por default, 41 (exenta) si la UI lo override
+    const tipoDte = (tipoPorId.get(pid) ?? 39) as 39 | 41;
+
     const validation = validarBoleta({
-      tipo_dte: 39,
+      tipo_dte: tipoDte,
       receptor_rut,
       receptor_razon_social,
       detalles,
@@ -150,10 +170,10 @@ export async function POST(request: Request) {
       continue;
     }
 
-    // Consume folio
+    // Consume folio del CAF correspondiente al tipo
     const { data: folioRes, error: folioErr } = await sb.rpc("consume_next_folio", {
       p_empresa_id: usuario.empresa_id,
-      p_tipo_dte: 39,
+      p_tipo_dte: tipoDte,
     });
     if (folioErr || !folioRes || folioRes.length === 0) {
       results.push({
@@ -179,7 +199,7 @@ export async function POST(request: Request) {
     const { folio, caf_id } = folioRes[0] as { folio: number; caf_id: string };
 
     const dteArgs = {
-      tipo_dte: 39 as const,
+      tipo_dte: tipoDte,
       folio,
       fecha_emision,
       emisor: {
@@ -202,7 +222,7 @@ export async function POST(request: Request) {
       .insert({
         empresa_id: usuario.empresa_id,
         propuesta_id: pid,
-        tipo_dte: 39,
+        tipo_dte: tipoDte,
         folio,
         caf_id,
         fecha_emision,

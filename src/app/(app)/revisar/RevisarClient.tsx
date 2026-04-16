@@ -152,20 +152,29 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const [loading, setLoading] = useState(false);
   const [activeBlockNum, setActiveBlockNum] = useState<number | null>(null);
   const [departingIds, setDepartingIds] = useState<Set<string>>(new Set());
+  // Mounted flag: evita hydration mismatch al usar localStorage.
+  // Server renderiza sin bloques (mounted=false), cliente recompone con
+  // datos del storage al montar.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   // Persistent block assignment: propuesta_id → block number (1-indexed).
-  // Persistido en localStorage para que sobreviva al recargo. Sin esto los
-  // bloques se renumeraban tras un refresh y se perdía el sentido de
-  // "ya procesé el bloque 2".
+  // Persistido en localStorage para que sobreviva al recargo.
   const storageKey = `app-contable:blockmap:${documentoId}:${tipo}`;
-  const [blockMap] = useState<Map<string, number>>(() => {
-    if (typeof window === "undefined") return new Map();
+  const blockMapRef = useRef<Map<string, number>>(new Map());
+
+  // Cargar/recargar localStorage cuando se monta o cambia el storageKey.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
       const raw = localStorage.getItem(storageKey);
-      if (raw) return new Map(JSON.parse(raw) as [string, number][]);
-    } catch { /* ignore */ }
-    return new Map();
-  });
-  const blockMapRef = useRef<Map<string, number>>(blockMap);
+      blockMapRef.current = raw
+        ? new Map(JSON.parse(raw) as [string, number][])
+        : new Map();
+    } catch {
+      blockMapRef.current = new Map();
+    }
+  }, [storageKey]);
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
@@ -215,7 +224,8 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     });
   }, [propuestas]);
 
-  const useBlocks = layout === "desktop" && sorted.length > 10 && tipo !== "ocultas";
+  // mounted gate: no compute blocks until client mounted (evita hydration mismatch)
+  const useBlocks = mounted && layout === "desktop" && sorted.length > 10 && tipo !== "ocultas";
 
   // Build stable block assignment. Items keep their block number across
   // approvals. New items go to the next available block. Empty blocks
