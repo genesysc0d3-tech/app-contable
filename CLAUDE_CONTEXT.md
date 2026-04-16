@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#122 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#123 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #123** — fix(escritorio): filtrar Revisar por `propuestas_ia.created_at` en vez de `documentos_subidos.created_at`. El usuario subió `santander.xlsx` el 7 abr y lo procesó hoy 16 abr; al tocar "16" en el calendar strip el panel Revisar mostraba "0 pendientes en 0 documentos" aunque hubiera 238 pendientes reales. Alinea con el calendar strip que ya pinta el dot de pendientes por día usando `propuesta.created_at`. El tab Revisar y la ruta `/revisar` mobile eran consistentes entre sí — solo el filtro por día del escritorio desktop estaba mal.
 
 **PR #122** — feat(intermediario): certificado toggle + auto-solicitud de CAFs. Replica fielmente el comportamiento de Haulmer/OpenFactura real. **Migración** `20260416_empresa_certificado_sii_flag.sql`: `empresas.tiene_certificado_sii boolean default false`. **Gate**: sin el flag, el intermediario no emite (error `NO_CERTIFICADO` 422). En `/empresa` el usuario lo activa con switch; en prod equivale a subir `.pfx` + clave tributaria. **Auto-CAF**: `lib/intermediario/client.ts` expone `verificarCertificado()` y `asegurarFoliosDisponibles()`. Esta última detecta falta de folios activos y solicita un batch (50) al SII mock continuando la secuencia de `folio_hasta`. Idempotente. Los endpoints `emitir-lote`/`emitir-boleta` verifican certificado al inicio y llaman a `asegurarFoliosDisponibles` antes de `consume_next_folio`. **UI `/empresa`**: panel de solicitud manual de CAF eliminado; `CAFPanel` es read-only (stock + emitidos + banner "Gestión automática"); nuevo `CertificadoToggle` con switch y explicación. Action `solicitarCAFMock` reemplazada por `setCertificadoSii`. El usuario final **nunca** toca folios — así funciona Haulmer.
 
