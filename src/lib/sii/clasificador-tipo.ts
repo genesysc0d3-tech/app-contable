@@ -41,6 +41,12 @@ export interface PatronContext {
   cantidad_mes_mismo_receptor: number;
 }
 
+/**
+ * Hint del usuario sobre la naturaleza de toda la cartola.
+ * Si está set, el clasificador lo usa como señal decisiva.
+ */
+export type DocumentoHint = "p2p_cripto" | "forex_divisas" | "servicios" | "ventas" | "mixto" | null;
+
 export interface ClasificacionResult {
   tipo_dte: TipoDTE;
   sugerencia: TipoBoletaSugerido;
@@ -184,6 +190,43 @@ function anglePatron(prop: PropuestaContext, patron: PatronContext): AngleResult
 }
 
 // ============================================================
+// Ángulo extra — Hint explícito del usuario sobre la cartola
+// ============================================================
+
+function angleHint(hint: DocumentoHint): AngleResult {
+  switch (hint) {
+    case "p2p_cripto":
+      return {
+        veredicto: "exenta",
+        peso: 0.90,
+        razon: "Usuario marcó cartola como P2P cripto — activo incorporal, no IVA",
+      };
+    case "forex_divisas":
+      return {
+        veredicto: "exenta",
+        peso: 0.90,
+        razon: "Usuario marcó cartola como forex/divisas — no IVA",
+      };
+    case "servicios":
+      return {
+        veredicto: "afecta",
+        peso: 0.80,
+        razon: "Usuario marcó cartola como servicios profesionales — afecta IVA",
+      };
+    case "ventas":
+      return {
+        veredicto: "afecta",
+        peso: 0.80,
+        razon: "Usuario marcó cartola como ventas de bienes — afecta IVA",
+      };
+    case "mixto":
+    case null:
+    default:
+      return { veredicto: "neutral", peso: 0, razon: "" };
+  }
+}
+
+// ============================================================
 // Ensemble — vota y decide
 // ============================================================
 
@@ -191,15 +234,24 @@ export function clasificarBoleta(
   prop: PropuestaContext,
   empresa: EmpresaContext,
   patron: PatronContext = { cantidad_mismo_dia_mismo_receptor: 0, cantidad_mes_mismo_receptor: 0 },
+  hint: DocumentoHint = null,
 ): ClasificacionResult {
   const glosa = angleGlosa(prop.descripcion);
   const giro = angleGiro(empresa.giro);
   const pat = anglePatron(prop, patron);
+  // El hint del usuario pisa los otros ángulos con peso alto (0.9) cuando
+  // está set. El usuario marcó la cartola entera como P2P cripto / servicios
+  // / etc. Más confiable que inferir de la glosa cuando la descripción es
+  // genérica ("Transf de Juan" sin mencionar USDT).
+  const hintAngle = angleHint(hint);
 
   const votos: Record<TipoBoletaSugerido, number> = { afecta: 0, exenta: 0, no_boletar: 0 };
-  for (const r of [glosa, giro, pat]) {
+  for (const r of [glosa, giro, pat, hintAngle]) {
     if (r.veredicto !== "neutral") votos[r.veredicto] += r.peso;
   }
+
+  // Priorizo el hint del usuario en las razones (lo ven primero)
+  const allAngles = [hintAngle, glosa, giro, pat];
 
   // NO_BOLETAR: decisión binaria. Si tiene peso fuerte, prevalece.
   if (votos.no_boletar > 0.5) {
@@ -208,13 +260,12 @@ export function clasificarBoleta(
       tipo_dte: null,
       sugerencia: "no_boletar",
       confianza: total > 0 ? votos.no_boletar / total : 0.5,
-      razones: [glosa, giro, pat].filter((r) => r.veredicto !== "neutral").map((r) => r.razon),
+      razones: allAngles.filter((r) => r.veredicto !== "neutral").map((r) => r.razon),
       angulos: { glosa, giro, patron: pat },
     };
   }
 
   // Entre afecta y exenta, gana el de mayor peso.
-  // Empate o ambos cero → defaultiar a afecta (más común en P2P).
   const sugerencia: TipoBoletaSugerido = votos.exenta > votos.afecta ? "exenta" : "afecta";
   const tipo_dte: TipoDTE = sugerencia === "afecta" ? 39 : 41;
   const total = votos.afecta + votos.exenta + votos.no_boletar;
@@ -224,7 +275,7 @@ export function clasificarBoleta(
     tipo_dte,
     sugerencia,
     confianza,
-    razones: [glosa, giro, pat].filter((r) => r.veredicto !== "neutral").map((r) => r.razon),
+    razones: allAngles.filter((r) => r.veredicto !== "neutral").map((r) => r.razon),
     angulos: { glosa, giro, patron: pat },
   };
 }

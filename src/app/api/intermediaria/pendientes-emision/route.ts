@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
-import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
+import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 
 /**
  * Tipos de propuesta IA que representan INGRESOS boletificables.
@@ -53,7 +53,7 @@ export async function GET() {
       created_at,
       cliente_id,
       clientes(id, nombre, rut),
-      movimientos_raw(fecha, descripcion, monto)
+      movimientos_raw(fecha, descripcion, monto, documentos_subidos(tipo_operacion_hint))
     `)
     .eq("empresa_id", usuario.empresa_id)
     .in("estado", ["aprobado", "editado"])
@@ -110,14 +110,18 @@ export async function GET() {
       } | null;
       const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as {
         fecha: string; descripcion: string; monto: number;
+        documentos_subidos?: { tipo_operacion_hint: string | null } | { tipo_operacion_hint: string | null }[] | null;
       } | null;
+      const docNested = mov?.documentos_subidos;
+      const docHintRaw = (Array.isArray(docNested) ? docNested[0]?.tipo_operacion_hint : docNested?.tipo_operacion_hint) ?? null;
+      const docHint = docHintRaw as DocumentoHint;
       const total = Number(p.total ?? mov?.monto ?? 0);
       const fecha = (mov?.fecha ?? p.created_at).slice(0, 10);
       const receptor_rut = p.receptor_rut ?? cliente?.rut ?? null;
       const receptor_nombre = p.receptor_nombre ?? cliente?.nombre ?? null;
       const recId = cliente?.id ?? p.receptor_nombre ?? "sin-receptor";
 
-      // Clasificación SII (3 ángulos)
+      // Clasificación SII (3 ángulos + hint explícito del usuario)
       const clasif = clasificarBoleta(
         {
           descripcion: mov?.descripcion ?? "",
@@ -130,6 +134,7 @@ export async function GET() {
           cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,
           cantidad_mes_mismo_receptor: (patronMes.get(`${recId}|${fecha.slice(0, 7)}`) ?? 1),
         },
+        docHint,
       );
 
       const requiereReceptor = total > RECEPTOR_OBLIGATORIO_DESDE;
