@@ -229,14 +229,41 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
 
   // Build stable block assignment. Items keep their block number across
   // approvals. New items go to the next available block. Empty blocks
-  // (all items approved) disappear but remaining blocks keep their numbers.
+  // (all items approved) disappear y los bloques posteriores se renumeran
+  // consecutivo (1, 2, 3…) para evitar números altos después de ciclos de
+  // reprocesado — si el usuario deshace y reprocesa un documento, los IDs
+  // viejos quedaron huérfanos en localStorage y los nuevos arrancaban desde
+  // max(viejos)+1.
   const blocks = useMemo(() => {
     if (!useBlocks) return [];
     const map = blockMapRef.current;
-
-    // Assign new items (never-seen IDs) to the next block, chunked by 10
-    const unassigned = sorted.filter((p) => !map.has(p.id));
     let mapChanged = false;
+
+    // 1. Purgar IDs huérfanos: entries del map que ya no existen en la data
+    // actual (propuestas borradas, reprocesado, limpieza).
+    const currentIds = new Set(sorted.map((p) => p.id));
+    for (const id of Array.from(map.keys())) {
+      if (!currentIds.has(id)) {
+        map.delete(id);
+        mapChanged = true;
+      }
+    }
+
+    // 2. Renumerar bloques consecutivamente desde 1. Si quedaban los bloques
+    // [3, 7, 24] → pasan a [1, 2, 3], preservando orden relativo.
+    const oldNums = Array.from(new Set(map.values())).sort((a, b) => a - b);
+    const renumber = new Map<number, number>();
+    oldNums.forEach((old, i) => renumber.set(old, i + 1));
+    for (const [id, old] of Array.from(map.entries())) {
+      const fresh = renumber.get(old)!;
+      if (fresh !== old) {
+        map.set(id, fresh);
+        mapChanged = true;
+      }
+    }
+
+    // 3. Asignar IDs nuevos (nunca vistos) al siguiente bloque, chunked por 10.
+    const unassigned = sorted.filter((p) => !map.has(p.id));
     if (unassigned.length > 0) {
       const values = Array.from(map.values());
       let nextBlock = values.length === 0 ? 1 : Math.max(...values) + 1;
