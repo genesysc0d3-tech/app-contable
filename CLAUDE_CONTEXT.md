@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#118 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#119 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #119** — fix(hint): auto-flip del dropdown. El menú con portal+fixed se salía del viewport cuando el card estaba cerca del bottom. Fix: `useLayoutEffect` calcula `spaceBelow` y `spaceAbove` del botón, si `spaceBelow < 280px` (altura estimada) y `spaceAbove > spaceBelow` → abre hacia arriba. También alinea horizontalmente si `left + menuWidth > viewport`. `maxHeight` del menú = `calc(100vh - top - 16px)` con `overflow-y auto` para viewports chicos.
 
 **PR #118** — fix(hint): dropdown del HintSelector via portal. El menú se cortaba por el `overflow-hidden` del card de doc en DocumentList. Mismo patrón usado en `ColumnChip` del FieldMapper (PR #87): `createPortal` a `document.body` con `position: fixed` calculada desde `getBoundingClientRect()` del botón via `useLayoutEffect`. Cierra en `scroll`/`resize` para no desalinearse, `z-[200]`.
 
