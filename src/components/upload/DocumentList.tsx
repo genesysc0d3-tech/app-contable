@@ -6,6 +6,7 @@ import type { ProgresoIA, DuplicadoDetalle, TipoDuplicado } from "@/lib/ai/types
 import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle, EyeSlash, Eye, MagicWand } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import FieldMapper from "./FieldMapper";
+import HintSelector from "./HintSelector";
 
 interface DocumentListProps {
   documentos: DocumentoSubido[];
@@ -487,6 +488,14 @@ export default function DocumentList({ documentos, onDocumentoUpdate }: Document
             <div className="flex items-center gap-3 flex-wrap mt-1">
               {/* Undo / Reprocess */}
               <UndoButton documentoId={doc.id} estado={doc.estado} onUndo={() => onDocumentoUpdate?.()} />
+
+              {/* Tipo de operaciones (hint para el clasificador) */}
+              {doc.estado === "procesado" && (
+                <HintSelector
+                  documentoId={doc.id}
+                  current={(doc as unknown as { tipo_operacion_hint: string | null }).tipo_operacion_hint ?? null}
+                />
+              )}
 
               {/* Mapear campos — solo para Excel ya procesado o en error */}
               {doc.tipo === "excel" && (doc.estado === "procesado" || doc.estado === "error") && (
