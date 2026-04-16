@@ -110,5 +110,25 @@ export async function GET() {
     monto_listo: items.filter((i) => i.listo_emitir).reduce((s, i) => s + i.monto_total, 0),
   };
 
-  return NextResponse.json({ ok: true, items, totales });
+  // Helper para el UX: si no hay boletas emitibles, ¿hay aprobadas de OTROS
+  // tipos? Útil para mostrar "tenés N propuestas tipo factura/gasto, cambialas
+  // a boleta en Revisar si querés emitirlas".
+  let aprobadas_otros_tipos: Record<string, number> = {};
+  if (items.length === 0) {
+    const { data: otras } = await supabase
+      .from("propuestas_ia")
+      .select("tipo_propuesto")
+      .eq("empresa_id", usuario.empresa_id)
+      .in("estado", ["aprobado", "editado"])
+      .neq("tipo_propuesto", "boleta");
+    if (otras) {
+      aprobadas_otros_tipos = otras.reduce((acc: Record<string, number>, r) => {
+        const t = r.tipo_propuesto || "desconocido";
+        acc[t] = (acc[t] ?? 0) + 1;
+        return acc;
+      }, {});
+    }
+  }
+
+  return NextResponse.json({ ok: true, items, totales, aprobadas_otros_tipos });
 }
