@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#123 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#124 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #124** — fix(revisar): purgar IDs huérfanos y renumerar bloques consecutivos. Al deshacer/reprocesar un documento, los bloques aparecían numerados alto (24, 25...) porque el `blockMap` de localStorage retenía entries con IDs viejos y los nuevos se asignaban a `max(values)+1`. Fix en `RevisarClient.tsx` agrega dos pasos antes de asignar nuevos: (1) purgar entries cuyos IDs no existen en `sorted` y (2) renumerar los bloques restantes consecutivos desde 1 (ej `[3, 7, 24] → [1, 2, 3]`). Validado: tras limpia y reproceso, 238 propuestas arrancan en Bloque 1, 2, 3... como debe ser.
 
 **PR #123** — fix(escritorio): filtrar Revisar por `propuestas_ia.created_at` en vez de `documentos_subidos.created_at`. El usuario subió `santander.xlsx` el 7 abr y lo procesó hoy 16 abr; al tocar "16" en el calendar strip el panel Revisar mostraba "0 pendientes en 0 documentos" aunque hubiera 238 pendientes reales. Alinea con el calendar strip que ya pinta el dot de pendientes por día usando `propuesta.created_at`. El tab Revisar y la ruta `/revisar` mobile eran consistentes entre sí — solo el filtro por día del escritorio desktop estaba mal.
 
