@@ -7,11 +7,302 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      audit_chunks: {
+        Row: {
+          chunk_index: number | null
+          chunk_input: string | null
+          created_at: string | null
+          documento_id: string | null
+          finish_reason: string | null
+          id: string
+          mistral_response: string | null
+          movimientos_count: number | null
+          propuestas_count: number | null
+          response_full_length: number | null
+          run_number: number | null
+          tokens_output: number | null
+        }
+        Insert: {
+          chunk_index?: number | null
+          chunk_input?: string | null
+          created_at?: string | null
+          documento_id?: string | null
+          finish_reason?: string | null
+          id?: string
+          mistral_response?: string | null
+          movimientos_count?: number | null
+          propuestas_count?: number | null
+          response_full_length?: number | null
+          run_number?: number | null
+          tokens_output?: number | null
+        }
+        Update: {
+          chunk_index?: number | null
+          chunk_input?: string | null
+          created_at?: string | null
+          documento_id?: string | null
+          finish_reason?: string | null
+          id?: string
+          mistral_response?: string | null
+          movimientos_count?: number | null
+          propuestas_count?: number | null
+          response_full_length?: number | null
+          run_number?: number | null
+          tokens_output?: number | null
+        }
+        Relationships: []
+      }
+      boletas_caf_mock: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          estado: string
+          fecha_solicitud: string
+          fecha_vence: string
+          folio_actual: number
+          folio_desde: number
+          folio_hasta: number
+          id: string
+          tipo_dte: number
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          estado?: string
+          fecha_solicitud?: string
+          fecha_vence?: string
+          folio_actual: number
+          folio_desde: number
+          folio_hasta: number
+          id?: string
+          tipo_dte: number
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          estado?: string
+          fecha_solicitud?: string
+          fecha_vence?: string
+          folio_actual?: number
+          folio_desde?: number
+          folio_hasta?: number
+          id?: string
+          tipo_dte?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boletas_caf_mock_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boletas_emitidas: {
+        Row: {
+          anulada_por_id: string | null
+          caf_id: string | null
+          created_at: string
+          detalles: Json
+          emisor_comuna: string | null
+          emisor_direccion: string | null
+          emisor_giro: string | null
+          emisor_razon_social: string
+          emisor_rut: string
+          empresa_id: string
+          estado: string
+          fecha_emision: string
+          folio: number
+          id: string
+          iva: number
+          monto_exento: number
+          monto_neto: number
+          monto_total: number
+          motivo_referencia: string | null
+          propuesta_id: string | null
+          receptor_comuna: string | null
+          receptor_direccion: string | null
+          receptor_razon_social: string | null
+          receptor_rut: string | null
+          referencia_id: string | null
+          ted: string
+          tipo_dte: number
+          track_id: string
+          xml_dte: string
+        }
+        Insert: {
+          anulada_por_id?: string | null
+          caf_id?: string | null
+          created_at?: string
+          detalles?: Json
+          emisor_comuna?: string | null
+          emisor_direccion?: string | null
+          emisor_giro?: string | null
+          emisor_razon_social: string
+          emisor_rut: string
+          empresa_id: string
+          estado?: string
+          fecha_emision?: string
+          folio: number
+          id?: string
+          iva?: number
+          monto_exento?: number
+          monto_neto?: number
+          monto_total: number
+          motivo_referencia?: string | null
+          propuesta_id?: string | null
+          receptor_comuna?: string | null
+          receptor_direccion?: string | null
+          receptor_razon_social?: string | null
+          receptor_rut?: string | null
+          referencia_id?: string | null
+          ted: string
+          tipo_dte: number
+          track_id: string
+          xml_dte: string
+        }
+        Update: {
+          anulada_por_id?: string | null
+          caf_id?: string | null
+          created_at?: string
+          detalles?: Json
+          emisor_comuna?: string | null
+          emisor_direccion?: string | null
+          emisor_giro?: string | null
+          emisor_razon_social?: string
+          emisor_rut?: string
+          empresa_id?: string
+          estado?: string
+          fecha_emision?: string
+          folio?: number
+          id?: string
+          iva?: number
+          monto_exento?: number
+          monto_neto?: number
+          monto_total?: number
+          motivo_referencia?: string | null
+          propuesta_id?: string | null
+          receptor_comuna?: string | null
+          receptor_direccion?: string | null
+          receptor_razon_social?: string | null
+          receptor_rut?: string | null
+          referencia_id?: string | null
+          ted?: string
+          tipo_dte?: number
+          track_id?: string
+          xml_dte?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boletas_emitidas_anulada_por_id_fkey"
+            columns: ["anulada_por_id"]
+            isOneToOne: false
+            referencedRelation: "boletas_emitidas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletas_emitidas_caf_id_fkey"
+            columns: ["caf_id"]
+            isOneToOne: false
+            referencedRelation: "boletas_caf_mock"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletas_emitidas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletas_emitidas_propuesta_id_fkey"
+            columns: ["propuesta_id"]
+            isOneToOne: false
+            referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletas_emitidas_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "boletas_emitidas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clasificacion_reglas: {
+        Row: {
+          activa: boolean
+          confianza: number
+          created_at: string
+          created_by: string | null
+          empresa_id: string | null
+          id: string
+          last_used_at: string | null
+          nombre: string
+          patron: string
+          patron_tipo: string
+          prioridad: number
+          receptor_nombre_default: string | null
+          receptor_rut_default: string | null
+          tipo_flujo_match: string | null
+          tipo_propuesto: string
+          veces_aplicada: number
+        }
+        Insert: {
+          activa?: boolean
+          confianza?: number
+          created_at?: string
+          created_by?: string | null
+          empresa_id?: string | null
+          id?: string
+          last_used_at?: string | null
+          nombre: string
+          patron: string
+          patron_tipo: string
+          prioridad?: number
+          receptor_nombre_default?: string | null
+          receptor_rut_default?: string | null
+          tipo_flujo_match?: string | null
+          tipo_propuesto: string
+          veces_aplicada?: number
+        }
+        Update: {
+          activa?: boolean
+          confianza?: number
+          created_at?: string
+          created_by?: string | null
+          empresa_id?: string | null
+          id?: string
+          last_used_at?: string | null
+          nombre?: string
+          patron?: string
+          patron_tipo?: string
+          prioridad?: number
+          receptor_nombre_default?: string | null
+          receptor_rut_default?: string | null
+          tipo_flujo_match?: string | null
+          tipo_propuesto?: string
+          veces_aplicada?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clasificacion_reglas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clientes: {
         Row: {
           created_at: string
@@ -111,6 +402,7 @@ export type Database = {
           progreso_ia: Json | null
           storage_path: string
           tipo: string
+          tipo_operacion_hint: string | null
         }
         Insert: {
           created_at?: string
@@ -122,6 +414,7 @@ export type Database = {
           progreso_ia?: Json | null
           storage_path: string
           tipo: string
+          tipo_operacion_hint?: string | null
         }
         Update: {
           created_at?: string
@@ -133,6 +426,7 @@ export type Database = {
           progreso_ia?: Json | null
           storage_path?: string
           tipo?: string
+          tipo_operacion_hint?: string | null
         }
         Relationships: [
           {
@@ -478,6 +772,110 @@ export type Database = {
           },
         ]
       }
+      parser_adapters: {
+        Row: {
+          confianza: number
+          config: Json
+          created_at: string
+          disabled_until: string | null
+          failure_count: number
+          fingerprint: string
+          id: string
+          last_failure_reason: string | null
+          last_used_at: string | null
+          nombre: string | null
+          source: string
+          success_count: number
+          tipo_doc: string | null
+          usage_count: number
+        }
+        Insert: {
+          confianza?: number
+          config: Json
+          created_at?: string
+          disabled_until?: string | null
+          failure_count?: number
+          fingerprint: string
+          id?: string
+          last_failure_reason?: string | null
+          last_used_at?: string | null
+          nombre?: string | null
+          source: string
+          success_count?: number
+          tipo_doc?: string | null
+          usage_count?: number
+        }
+        Update: {
+          confianza?: number
+          config?: Json
+          created_at?: string
+          disabled_until?: string | null
+          failure_count?: number
+          fingerprint?: string
+          id?: string
+          last_failure_reason?: string | null
+          last_used_at?: string | null
+          nombre?: string | null
+          source?: string
+          success_count?: number
+          tipo_doc?: string | null
+          usage_count?: number
+        }
+        Relationships: []
+      }
+      parser_logs: {
+        Row: {
+          adapter_id: string | null
+          capa_exitosa: number | null
+          capa_usada: number
+          created_at: string
+          documento_id: string | null
+          duration_ms: number | null
+          error: string | null
+          fingerprint: string | null
+          id: string
+          rows_extracted: number | null
+          validator_failed_checks: string[] | null
+          warnings: string[] | null
+        }
+        Insert: {
+          adapter_id?: string | null
+          capa_exitosa?: number | null
+          capa_usada: number
+          created_at?: string
+          documento_id?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          fingerprint?: string | null
+          id?: string
+          rows_extracted?: number | null
+          validator_failed_checks?: string[] | null
+          warnings?: string[] | null
+        }
+        Update: {
+          adapter_id?: string | null
+          capa_exitosa?: number | null
+          capa_usada?: number
+          created_at?: string
+          documento_id?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          fingerprint?: string | null
+          id?: string
+          rows_extracted?: number | null
+          validator_failed_checks?: string[] | null
+          warnings?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parser_logs_adapter_id_fkey"
+            columns: ["adapter_id"]
+            isOneToOne: false
+            referencedRelation: "parser_adapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       periodos_contables: {
         Row: {
           anio: number
@@ -541,6 +939,7 @@ export type Database = {
           created_at: string
           empresa_id: string
           estado: string
+          fuente_clasificacion: string | null
           id: string
           iva: number | null
           moneda_origen: string | null
@@ -550,6 +949,7 @@ export type Database = {
           notas: string | null
           receptor_nombre: string | null
           receptor_rut: string | null
+          regla_id: string | null
           spread_compra: number | null
           spread_ganancia: number | null
           spread_venta: number | null
@@ -562,6 +962,7 @@ export type Database = {
           created_at?: string
           empresa_id: string
           estado?: string
+          fuente_clasificacion?: string | null
           id?: string
           iva?: number | null
           moneda_origen?: string | null
@@ -571,6 +972,7 @@ export type Database = {
           notas?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
+          regla_id?: string | null
           spread_compra?: number | null
           spread_ganancia?: number | null
           spread_venta?: number | null
@@ -583,6 +985,7 @@ export type Database = {
           created_at?: string
           empresa_id?: string
           estado?: string
+          fuente_clasificacion?: string | null
           id?: string
           iva?: number | null
           moneda_origen?: string | null
@@ -592,6 +995,7 @@ export type Database = {
           notas?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
+          regla_id?: string | null
           spread_compra?: number | null
           spread_ganancia?: number | null
           spread_venta?: number | null
@@ -618,6 +1022,13 @@ export type Database = {
             columns: ["movimiento_id"]
             isOneToOne: false
             referencedRelation: "movimientos_raw"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propuestas_ia_regla_id_fkey"
+            columns: ["regla_id"]
+            isOneToOne: false
+            referencedRelation: "clasificacion_reglas"
             referencedColumns: ["id"]
           },
         ]
@@ -703,7 +1114,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      consume_next_folio: {
+        Args: { p_empresa_id: string; p_tipo_dte: number }
+        Returns: {
+          caf_id: string
+          folio: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

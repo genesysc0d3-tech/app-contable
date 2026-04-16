@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Receipt, FileText, ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { Receipt, FileText, ChartBar } from "@phosphor-icons/react/dist/ssr";
+import DescargarBoletaButton from "./DescargarBoletaButton";
 
 interface BoletaRow {
   id: string;
@@ -53,6 +55,15 @@ export default async function BoletasList({ empresaId }: { empresaId: string }) 
 
   return (
     <div className="px-2 py-2">
+      <div className="flex items-center justify-end px-3 pb-2">
+        <Link
+          href="/boletas/reportes"
+          className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)] hover:text-[#E8553E] transition-colors"
+        >
+          <ChartBar size={11} weight="bold" />
+          Ver reporte RCV
+        </Link>
+      </div>
       <ul className="divide-y divide-[var(--border)]">
         {boletas.map((b) => {
           const isExenta = b.tipo_dte === 41;
@@ -95,7 +106,7 @@ export default async function BoletasList({ empresaId }: { empresaId: string }) 
                   ${b.monto_total.toLocaleString("es-CL")}
                 </p>
               </div>
-              <ArrowRight size={12} weight="bold" className="text-[var(--muted-light)] shrink-0" />
+              <DescargarBoletaButton id={b.id} />
             </li>
           );
         })}

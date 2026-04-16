@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { UploadSimple, CheckSquare } from "@phosphor-icons/react";
+import { UploadSimple, CheckSquare, Buildings } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
   { href: "/subir", label: "Subir", Icon: UploadSimple },
   { href: "/revisar", label: "Revisar", Icon: CheckSquare, badge: true },
+  { href: "/empresa", label: "Empresa", Icon: Buildings },
 ] as const;
 
 export default function BottomNav({ initialPendientes = 0 }: { initialPendientes?: number }) {
