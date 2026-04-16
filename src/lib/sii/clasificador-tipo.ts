@@ -8,7 +8,14 @@
  *   3. Patrón de la transacción (frecuencia, monto, recurrencia)
  *
  * Si los 3 coinciden → confianza alta. Si discrepan → defaultiar a AFECTA
- * (caso más común en P2P) con confianza baja, marcar para revisión humana.
+ * con confianza baja, marcar para revisión humana.
+ *
+ * Además, si el usuario marca la cartola con un hint explícito
+ * ("p2p_cripto", "forex_divisas", "servicios", "ventas"), el hint es
+ * autoritativo y prevalece sobre los ángulos heurísticos — salvo que la
+ * glosa detecte "no_boletar" (transf entre cuentas propias, sueldo,
+ * préstamo, etc.), caso en que la fila específica no se boletea aunque
+ * la cartola entera sí sea cripto.
  *
  * NOTA: este clasificador se usa solo para SUGERIR el tipo a la UI. El
  * usuario puede override por item antes de emitir. La fuente de verdad
@@ -161,31 +168,13 @@ function angleGiro(giro: string | null | undefined): AngleResult {
 // Ángulo 3 — Patrón de la transacción
 // ============================================================
 
-function anglePatron(prop: PropuestaContext, patron: PatronContext): AngleResult {
-  // Múltiples del mismo receptor en el mismo día = típico exchange P2P
-  if (patron.cantidad_mismo_dia_mismo_receptor >= 2) {
-    return {
-      veredicto: "afecta",
-      peso: 0.65,
-      razon: `${patron.cantidad_mismo_dia_mismo_receptor} operaciones del mismo cliente el mismo día — patrón exchange habitual`,
-    };
-  }
-  // Recurrencia mensual fuerte = servicio recurrente
-  if (patron.cantidad_mes_mismo_receptor >= 4) {
-    return {
-      veredicto: "afecta",
-      peso: 0.40,
-      razon: `Cliente recurrente: ${patron.cantidad_mes_mismo_receptor} ops en el mes`,
-    };
-  }
-  // Monto redondo grande sin glosa = típico cripto P2P
-  if (prop.monto > 100_000 && prop.monto % 1000 === 0) {
-    return {
-      veredicto: "afecta",
-      peso: 0.25,
-      razon: "Monto redondo significativo — patrón cripto/intermediación",
-    };
-  }
+function anglePatron(_prop: PropuestaContext, _patron: PatronContext): AngleResult {
+  // El patrón (repetición del mismo receptor, monto redondo) NO determina
+  // afecta vs exenta por sí solo — es la misma huella tanto para P2P cripto
+  // (exenta, activo incorporal) como para un servicio recurrente (afecta) o
+  // retail con cliente fiel. Sin contenido en la glosa o un hint del usuario,
+  // es información insuficiente para votar. Se deja neutral para no
+  // contaminar al ensemble.
   return { veredicto: "neutral", peso: 0, razon: "" };
 }
 
@@ -239,11 +228,36 @@ export function clasificarBoleta(
   const glosa = angleGlosa(prop.descripcion);
   const giro = angleGiro(empresa.giro);
   const pat = anglePatron(prop, patron);
-  // El hint del usuario pisa los otros ángulos con peso alto (0.9) cuando
-  // está set. El usuario marcó la cartola entera como P2P cripto / servicios
-  // / etc. Más confiable que inferir de la glosa cuando la descripción es
-  // genérica ("Transf de Juan" sin mencionar USDT).
   const hintAngle = angleHint(hint);
+
+  // Una transf entre cuentas propias (o sueldo, préstamo, devolución) NO se
+  // boletea aunque la cartola entera esté marcada como cripto/servicios. La
+  // detección por glosa con peso ≥ 0.7 prevalece siempre — incluso sobre el
+  // hint del usuario.
+  if (glosa.veredicto === "no_boletar" && glosa.peso >= 0.7) {
+    return {
+      tipo_dte: null,
+      sugerencia: "no_boletar",
+      confianza: glosa.peso,
+      razones: [glosa.razon],
+      angulos: { glosa, giro, patron: pat },
+    };
+  }
+
+  // Si el usuario marcó la naturaleza de la cartola explícitamente
+  // (p2p_cripto, forex_divisas, servicios, ventas), eso es autoritativo.
+  // Las heurísticas son inferencias para cuando no tenemos la declaración
+  // del usuario; cuando la tenemos, son ruido que puede contradecirla.
+  if (hintAngle.veredicto === "afecta" || hintAngle.veredicto === "exenta") {
+    const otras = [glosa, giro, pat].filter((r) => r.veredicto !== "neutral").map((r) => r.razon);
+    return {
+      tipo_dte: hintAngle.veredicto === "afecta" ? 39 : 41,
+      sugerencia: hintAngle.veredicto,
+      confianza: hintAngle.peso,
+      razones: [hintAngle.razon, ...otras],
+      angulos: { glosa, giro, patron: pat },
+    };
+  }
 
   const votos: Record<TipoBoletaSugerido, number> = { afecta: 0, exenta: 0, no_boletar: 0 };
   for (const r of [glosa, giro, pat, hintAngle]) {
