@@ -26,6 +26,7 @@ interface PendientesResponse {
     monto_total: number;
     monto_listo: number;
   };
+  aprobadas_otros_tipos?: Record<string, number>;
 }
 
 interface BatchResult {
@@ -44,6 +45,7 @@ export default function EmitirBoletaForm() {
   const { toast } = useToast();
   const [items, setItems] = useState<PendienteItem[]>([]);
   const [totales, setTotales] = useState<PendientesResponse["totales"] | null>(null);
+  const [otrosTipos, setOtrosTipos] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [emitiendo, setEmitiendo] = useState(false);
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
@@ -58,6 +60,7 @@ export default function EmitirBoletaForm() {
       if (j.ok) {
         setItems(j.items);
         setTotales(j.totales);
+        setOtrosTipos(j.aprobadas_otros_tipos ?? {});
         // Auto-seleccionar las listas en el primer load
         setSeleccionadas((prev) => {
           if (prev.size > 0) return prev;
@@ -153,17 +156,41 @@ export default function EmitirBoletaForm() {
   }
 
   if (items.length === 0) {
+    const totalOtros = Object.values(otrosTipos).reduce((s, n) => s + n, 0);
     return (
-      <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+      <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
         <div className="w-12 h-12 rounded-2xl neo-inset flex items-center justify-center text-[var(--muted)] mb-3">
           <PaperPlaneTilt size={20} weight="light" />
         </div>
         <p className="text-[13px] font-medium text-[var(--foreground)]">
-          No hay propuestas listas para emitir
+          No hay propuestas tipo boleta listas
         </p>
-        <p className="text-[11px] text-[var(--muted-light)] mt-1 max-w-[280px]">
-          Aprobá propuestas tipo <b>boleta</b> en Revisar — aparecen acá automáticamente.
+        <p className="text-[11px] text-[var(--muted-light)] mt-1 max-w-[300px]">
+          Aprobá propuestas tipo <b>boleta</b> en la pestaña Revisar — aparecen acá automáticamente.
         </p>
+
+        {totalOtros > 0 && (
+          <div className="mt-5 max-w-[320px] w-full rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/30 px-3 py-2.5 text-left">
+            <p className="text-[11px] font-semibold text-[#F59E0B] flex items-center gap-1.5">
+              <Warning size={11} weight="fill" />
+              Tenés {totalOtros} propuesta{totalOtros !== 1 ? "s" : ""} aprobada{totalOtros !== 1 ? "s" : ""} de otro tipo
+            </p>
+            <p className="text-[10px] text-[var(--muted)] mt-1.5 leading-snug">
+              No son tipo boleta, así que no se pueden emitir como tal:
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {Object.entries(otrosTipos).map(([tipo, count]) => (
+                <li key={tipo} className="flex items-center justify-between text-[10px]">
+                  <span className="text-[var(--foreground)] font-medium">{tipoLabel(tipo)}</span>
+                  <span className="text-[var(--muted)] tabular-nums">{count}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[10px] text-[var(--muted-light)] mt-2 leading-snug">
+              Si querés emitirlas, andá a Revisar, tocá ✏ en cada una y cambiá el tipo a <b>Boleta</b>.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -314,6 +341,16 @@ export default function EmitirBoletaForm() {
       )}
     </div>
   );
+}
+
+const TIPO_LABELS: Record<string, string> = {
+  factura: "Factura",
+  gasto: "Gasto",
+  registro_crypto: "Registro crypto",
+  ignorar: "No comercial",
+};
+function tipoLabel(t: string): string {
+  return TIPO_LABELS[t] ?? t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 function formatFecha(d: string): string {

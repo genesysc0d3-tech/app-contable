@@ -143,8 +143,8 @@ function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
   );
 }
 
-function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap, layout }: {
-  tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap; layout: "mobile" | "desktop";
+function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap, layout, documentoId }: {
+  tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap; layout: "mobile" | "desktop"; documentoId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
@@ -153,9 +153,19 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const [activeBlockNum, setActiveBlockNum] = useState<number | null>(null);
   const [departingIds, setDepartingIds] = useState<Set<string>>(new Set());
   // Persistent block assignment: propuesta_id → block number (1-indexed).
-  // Once an id is assigned, it keeps its block number across renders so that
-  // approving items doesn't renumber the remaining blocks.
-  const blockMapRef = useRef<Map<string, number>>(new Map());
+  // Persistido en localStorage para que sobreviva al recargo. Sin esto los
+  // bloques se renumeraban tras un refresh y se perdía el sentido de
+  // "ya procesé el bloque 2".
+  const storageKey = `app-contable:blockmap:${documentoId}:${tipo}`;
+  const [blockMap] = useState<Map<string, number>>(() => {
+    if (typeof window === "undefined") return new Map();
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) return new Map(JSON.parse(raw) as [string, number][]);
+    } catch { /* ignore */ }
+    return new Map();
+  });
+  const blockMapRef = useRef<Map<string, number>>(blockMap);
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
@@ -216,6 +226,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
 
     // Assign new items (never-seen IDs) to the next block, chunked by 10
     const unassigned = sorted.filter((p) => !map.has(p.id));
+    let mapChanged = false;
     if (unassigned.length > 0) {
       const values = Array.from(map.values());
       let nextBlock = values.length === 0 ? 1 : Math.max(...values) + 1;
@@ -224,7 +235,15 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         if (countInBlock >= 10) { nextBlock++; countInBlock = 0; }
         map.set(p.id, nextBlock);
         countInBlock++;
+        mapChanged = true;
       }
+    }
+
+    // Persist if any new IDs were added
+    if (mapChanged && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(Array.from(map.entries())));
+      } catch { /* quota / private mode → ignore */ }
     }
 
     // Group current items by their assigned block number
@@ -238,7 +257,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     return Array.from(byBlock.entries())
       .sort(([a], [b]) => a - b)
       .map(([num, items]) => ({ num, items }));
-  }, [sorted, useBlocks]);
+  }, [sorted, useBlocks, storageKey]);
 
   const activeBlock = blocks.find((b) => b.num === activeBlockNum) ?? blocks[0] ?? null;
 
@@ -498,11 +517,11 @@ function DocumentBody({ group, clientes, empresaId, onAction, layout }: {
       ) : (
         <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
           <div className="space-y-2">
-            <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-            <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-            <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-            <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} />
-            <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} />
+            <ConfianzaGroup tipo="alta" propuestas={alta} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
+            <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
+            <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
+            <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
+            <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
           </div>
         </div>
       )}
