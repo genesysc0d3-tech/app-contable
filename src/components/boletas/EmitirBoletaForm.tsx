@@ -14,6 +14,10 @@ interface PendienteItem {
   monto_total: number;
   listo_emitir: boolean;
   motivo_no_listo: string | null;
+  tipo_sugerido: 39 | 41 | null;
+  sugerencia: "afecta" | "exenta" | "no_boletar";
+  confianza_clasif: number;
+  razones: string[];
 }
 
 interface PendientesResponse {
@@ -50,6 +54,9 @@ export default function EmitirBoletaForm() {
   const [emitiendo, setEmitiendo] = useState(false);
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState<Filtro>("listas");
+  // Tipo override por item: si el usuario cambia de afecta a exenta (o vice).
+  // Si no está en el map, usamos el sugerido del clasificador.
+  const [tipoOverride, setTipoOverride] = useState<Map<string, 39 | 41>>(new Map());
   const [progreso, setProgreso] = useState<{ procesadas: number; total: number } | null>(null);
 
   const cargar = useCallback(async () => {
@@ -110,15 +117,29 @@ export default function EmitirBoletaForm() {
     });
   }
 
+  function tipoFinal(it: PendienteItem): 39 | 41 {
+    const ov = tipoOverride.get(it.id);
+    if (ov) return ov;
+    return it.tipo_sugerido === 41 ? 41 : 39;
+  }
+
+  function setTipoFor(id: string, tipo: 39 | 41) {
+    setTipoOverride((prev) => { const n = new Map(prev); n.set(id, tipo); return n; });
+  }
+
   async function emitirSeleccionadas() {
     if (idsSelEmitibles.length === 0 || emitiendo) return;
     setEmitiendo(true);
     setProgreso({ procesadas: 0, total: idsSelEmitibles.length });
     try {
+      const itemsBody = idsSelEmitibles.map((id) => {
+        const it = items.find((x) => x.id === id)!;
+        return { id, tipo_dte: tipoFinal(it) };
+      });
       const res = await fetch("/api/intermediaria/emitir-lote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propuesta_ids: idsSelEmitibles }),
+        body: JSON.stringify({ items: itemsBody }),
       });
       const j = (await res.json()) as BatchResult;
       if (!res.ok || !j.ok) {
@@ -296,8 +317,21 @@ export default function EmitirBoletaForm() {
                     {it.motivo_no_listo}
                   </p>
                 )}
+                {!disabled && it.razones.length > 0 && (
+                  <p className="text-[9px] text-[var(--muted-light)] mt-0.5 truncate" title={it.razones.join(" · ")}>
+                    💡 {it.razones[0]}
+                  </p>
+                )}
               </div>
-              <p className="text-[12px] tabular-nums font-semibold text-[var(--foreground)] shrink-0">
+              {/* Toggle Afecta / Exenta — solo si emitible */}
+              {!disabled && (
+                <TipoToggle
+                  current={tipoFinal(it)}
+                  sugerido={it.tipo_sugerido === 41 ? 41 : 39}
+                  onChange={(t) => setTipoFor(it.id, t)}
+                />
+              )}
+              <p className="text-[12px] tabular-nums font-semibold text-[var(--foreground)] shrink-0 w-20 text-right">
                 ${it.monto_total.toLocaleString("es-CL")}
               </p>
             </div>
@@ -338,6 +372,49 @@ export default function EmitirBoletaForm() {
           </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function TipoToggle({ current, sugerido, onChange }: {
+  current: 39 | 41;
+  sugerido: 39 | 41;
+  onChange: (tipo: 39 | 41) => void;
+}) {
+  const overridden = current !== sugerido;
+  return (
+    <div
+      className="flex items-center gap-0.5 shrink-0"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {([39, 41] as const).map((t) => {
+        const isActive = current === t;
+        const isSugerido = sugerido === t;
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onChange(t)}
+            title={
+              t === 39
+                ? "Afecta — IVA 19% (servicios, ventas, P2P cripto habitual)"
+                : "Exenta — sin IVA (educación, salud, transporte de pasajeros, exportación)"
+            }
+            className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-all ${
+              isActive
+                ? t === 39
+                  ? "bg-[#E8553E] text-white"
+                  : "bg-[#3B82F6] text-white"
+                : "bg-[var(--surface)] text-[var(--muted-light)] hover:text-[var(--foreground)]"
+            } ${isSugerido && !isActive ? "ring-1 ring-[var(--muted-light)]/40" : ""}`}
+          >
+            {t === 39 ? "AFE" : "EXE"}
+          </button>
+        );
+      })}
+      {overridden && (
+        <span className="text-[8px] text-[#F59E0B] ml-0.5" title="Cambiado del sugerido">●</span>
       )}
     </div>
   );

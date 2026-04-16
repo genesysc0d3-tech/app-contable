@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
+import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 
 /**
  * Lista propuestas tipo "boleta" aprobadas/editadas que aún NO están emitidas.
@@ -16,12 +17,13 @@ export async function GET() {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, empresas(giro, razon_social)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
     return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
   }
+  const empresaCtx = (usuario.empresas as unknown as { giro: string | null; razon_social: string } | null) ?? { giro: null, razon_social: "" };
 
   // 1) Propuestas aprobadas tipo boleta (con cliente + movimiento)
   const { data: propuestas, error: pErr } = await supabase
@@ -68,10 +70,28 @@ export async function GET() {
     /* tabla aún no existe — todas son pendientes */
   }
 
-  // 3) Mapear y enriquecer
-  const items = (propuestas ?? [])
-    .filter((p) => !yaEmitidas.has(p.id))
-    .map((p) => {
+  // 3) Pre-procesar para clasificador: necesito patrones por (receptor, día) y mes
+  type PropuestaRaw = (typeof propuestas)[number];
+  const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id));
+
+  // Index de patrones (key: receptor_id+fecha) → cantidad mismo día
+  const patronDia = new Map<string, number>();
+  // Index mensual por receptor (key: receptor_id+yyyy-mm) → cantidad mes
+  const patronMes = new Map<string, number>();
+  for (const p of visibles) {
+    const cli = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as { id: string } | null;
+    const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as { fecha: string } | null;
+    const recId = cli?.id ?? p.receptor_nombre ?? "sin-receptor";
+    const fechaStr = (mov?.fecha ?? p.created_at).slice(0, 10);
+    const yyyymm = fechaStr.slice(0, 7);
+    const kDia = `${recId}|${fechaStr}`;
+    const kMes = `${recId}|${yyyymm}`;
+    patronDia.set(kDia, (patronDia.get(kDia) ?? 0) + 1);
+    patronMes.set(kMes, (patronMes.get(kMes) ?? 0) + 1);
+  }
+
+  // 4) Mapear y enriquecer con clasificación + listo_emitir
+  const items = visibles.map((p: PropuestaRaw) => {
       const cliente = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as {
         id: string; nombre: string; rut: string | null;
       } | null;
@@ -79,26 +99,53 @@ export async function GET() {
         fecha: string; descripcion: string; monto: number;
       } | null;
       const total = Number(p.total ?? mov?.monto ?? 0);
+      const fecha = (mov?.fecha ?? p.created_at).slice(0, 10);
       const receptor_rut = p.receptor_rut ?? cliente?.rut ?? null;
       const receptor_nombre = p.receptor_nombre ?? cliente?.nombre ?? null;
+      const recId = cliente?.id ?? p.receptor_nombre ?? "sin-receptor";
+
+      // Clasificación SII (3 ángulos)
+      const clasif = clasificarBoleta(
+        {
+          descripcion: mov?.descripcion ?? "",
+          monto: total,
+          fecha,
+          receptor_nombre,
+        },
+        empresaCtx,
+        {
+          cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,
+          cantidad_mes_mismo_receptor: (patronMes.get(`${recId}|${fecha.slice(0, 7)}`) ?? 1),
+        },
+      );
+
       const requiereReceptor = total > RECEPTOR_OBLIGATORIO_DESDE;
       const tieneReceptor = !!receptor_rut && !!receptor_nombre;
-      const listo_emitir = total > 0 && (!requiereReceptor || tieneReceptor);
+      const esEmitible = clasif.sugerencia !== "no_boletar";
+      const listo_emitir = esEmitible && total > 0 && (!requiereReceptor || tieneReceptor);
+
       const motivo_no_listo = !listo_emitir
-        ? total <= 0
-          ? "Monto inválido"
-          : "Falta RUT y razón social del receptor (monto > $180.000)"
+        ? !esEmitible
+          ? `No se boletea: ${clasif.razones[0] ?? "movimiento no comercial"}`
+          : total <= 0
+            ? "Monto inválido"
+            : "Falta RUT y razón social del receptor (monto > $180.000)"
         : null;
 
       return {
         id: p.id,
         descripcion: mov?.descripcion ?? "Sin descripción",
-        fecha: mov?.fecha ?? p.created_at.slice(0, 10),
+        fecha,
         receptor_rut,
         receptor_nombre,
         monto_total: total,
         listo_emitir,
         motivo_no_listo,
+        // Sugerencia del clasificador SII
+        tipo_sugerido: clasif.tipo_dte, // 39 | 41 | null
+        sugerencia: clasif.sugerencia, // "afecta" | "exenta" | "no_boletar"
+        confianza_clasif: Math.round(clasif.confianza * 100) / 100,
+        razones: clasif.razones,
       };
     });
 
