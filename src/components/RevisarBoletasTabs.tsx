@@ -1,18 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CheckSquare, Receipt } from "@phosphor-icons/react";
+import { CheckSquare, Receipt, PaperPlaneTilt } from "@phosphor-icons/react";
 
 interface RevisarBoletasTabsProps {
   revisarContent: React.ReactNode;
+  emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
   revisarHint: string;
 }
 
-type Tab = "revisar" | "boletas";
+type Tab = "revisar" | "emitir" | "boletas";
 
 export default function RevisarBoletasTabs({
   revisarContent,
+  emitirContent,
   boletasContent,
   revisarHint,
 }: RevisarBoletasTabsProps) {
@@ -20,6 +22,7 @@ export default function RevisarBoletasTabs({
 
   const tabs: { id: Tab; label: string; hint: string; Icon: typeof CheckSquare }[] = [
     { id: "revisar", label: "Revisar", hint: revisarHint, Icon: CheckSquare },
+    { id: "emitir", label: "Emitir", hint: "Crear boleta nueva", Icon: PaperPlaneTilt },
     { id: "boletas", label: "Boletas", hint: "Emitidas al SII", Icon: Receipt },
   ];
   const active = tabs.find((t) => t.id === tab)!;
@@ -39,7 +42,7 @@ export default function RevisarBoletasTabs({
           </p>
         </div>
 
-        {/* Tabs a la derecha — discretos como pills */}
+        {/* Tabs a la derecha — pills */}
         <div className="flex items-center gap-1 shrink-0">
           {tabs.map((t) => {
             const isActive = t.id === tab;
@@ -64,6 +67,7 @@ export default function RevisarBoletasTabs({
 
       <div className="flex-1 min-h-0 pb-3">
         <div className={`escritorio-col ${tab === "revisar" ? "block" : "hidden"}`}>{revisarContent}</div>
+        <div className={tab === "emitir" ? "block" : "hidden"}>{emitirContent}</div>
         <div className={tab === "boletas" ? "block" : "hidden"}>{boletasContent}</div>
       </div>
     </section>

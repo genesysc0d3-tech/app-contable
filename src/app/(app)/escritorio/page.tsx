@@ -4,8 +4,10 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import { UploadSimple, CheckSquare, Lightning, Receipt, Plus, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
+import { UploadSimple, CheckSquare, Lightning, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
 import RevisarBoletasTabs from "@/components/RevisarBoletasTabs";
+import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
+import BoletasList from "@/components/boletas/BoletasList";
 
 function todayStr(): string {
   const d = new Date();
@@ -55,7 +57,12 @@ export default async function EscritorioPage({
                   <RevisarPanel empresaId={empresaId} filterDate={selectedDate} />
                 </Suspense>
               }
-              boletasContent={<BoletasPanel />}
+              emitirContent={<EmitirBoletaForm />}
+              boletasContent={
+                <Suspense fallback={<ShimmerBox h="h-32" />}>
+                  <BoletasList empresaId={empresaId} />
+                </Suspense>
+              }
             />
           </section>
         </div>
@@ -334,33 +341,6 @@ function Panel({
         {children}
       </div>
     </section>
-  );
-}
-
-function BoletasPanel() {
-  return (
-    <div className="flex items-center gap-4 p-5">
-      <div className="w-12 h-12 rounded-2xl neo-inset flex items-center justify-center text-[var(--muted)] shrink-0">
-        <Receipt size={20} weight="light" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium text-[var(--foreground)] leading-tight">
-          Aún no emitiste boletas
-        </p>
-        <p className="text-[11px] text-[var(--muted-light)] mt-1">
-          Conectá tu cuenta SII para empezar (modo prueba disponible)
-        </p>
-      </div>
-      <button
-        type="button"
-        disabled
-        className="btn-press flex items-center gap-1.5 rounded-xl bg-[#E8553E]/90 text-white px-3 py-2 text-[12px] font-semibold opacity-60 cursor-not-allowed shrink-0"
-        title="Próximamente"
-      >
-        <Plus size={14} weight="bold" />
-        Emitir
-      </button>
-    </div>
   );
 }
 
