@@ -365,15 +365,14 @@ async function RevisarPanel({ empresaId, filterDate }: { empresaId: string; filt
       .order("nombre", { ascending: true }),
   ]);
 
-  // Filter by document upload date when a date is selected.
-  // filterDate format: YYYY-MM-DD; doc.created_at is ISO with time, so prefix match works.
+  // Filter by the date the proposal was created (= cuándo apareció para
+  // revisar). Antes filtraba por fecha de SUBIDA del documento, pero una
+  // cartola subida el día N puede procesarse el día N+M y el usuario
+  // espera ver las propuestas el día que aparecen en la bandeja.
+  // filterDate format: YYYY-MM-DD; created_at es ISO con hora, prefix match OK.
   const all = propuestas ?? [];
   const filtered = filterDate
-    ? all.filter((p) => {
-        const docCreated = p.movimientos_raw?.documentos_subidos?.created_at;
-        if (!docCreated) return false;
-        return docCreated.startsWith(filterDate);
-      })
+    ? all.filter((p) => p.created_at?.startsWith(filterDate))
     : all;
 
   return (
