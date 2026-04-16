@@ -5,6 +5,19 @@ import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 
 /**
+ * Tipos de propuesta IA que representan INGRESOS boletificables.
+ * Incluye el legacy "boleta" + los tipos específicos del procesador actual
+ * (transferencia_p2p, compraventa_crypto, operacion_forex). Facturas,
+ * gastos, no comerciales y honorarios quedan fuera.
+ */
+const TIPOS_EMITIBLES = [
+  "boleta",
+  "transferencia_p2p",
+  "compraventa_crypto",
+  "operacion_forex",
+];
+
+/**
  * Lista propuestas tipo "boleta" aprobadas/editadas que aún NO están emitidas.
  * Cada item incluye los datos necesarios para emitir + un flag listo_emitir
  * que indica si pasa las validaciones del SII (RUT receptor si > $180k).
@@ -44,7 +57,7 @@ export async function GET() {
     `)
     .eq("empresa_id", usuario.empresa_id)
     .in("estado", ["aprobado", "editado"])
-    .eq("tipo_propuesto", "boleta")
+    .in("tipo_propuesto", TIPOS_EMITIBLES)
     .order("created_at", { ascending: false });
 
   if (pErr) {
@@ -167,7 +180,7 @@ export async function GET() {
       .select("tipo_propuesto")
       .eq("empresa_id", usuario.empresa_id)
       .in("estado", ["aprobado", "editado"])
-      .neq("tipo_propuesto", "boleta");
+      .not("tipo_propuesto", "in", `(${TIPOS_EMITIBLES.map((t) => `"${t}"`).join(",")})`);
     if (otras) {
       aprobadas_otros_tipos = otras.reduce((acc: Record<string, number>, r) => {
         const t = r.tipo_propuesto || "desconocido";
