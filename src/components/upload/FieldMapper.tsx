@@ -379,9 +379,44 @@ function GridView({
   setColumnLabel: (colIdx: number, value: string) => void;
 }) {
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
+  const headerScrollRef = useRef<HTMLDivElement>(null);
+  const dataScrollRef = useRef<HTMLDivElement>(null);
   const ignoredRows = preview.rows.slice(0, Math.max(0, headerRow));
   const dataRowsPreview = preview.rows.slice(firstDataRow, Math.min(preview.rows.length, firstDataRow + 8));
   const rangeBetween = preview.rows.slice(headerRow + 1, firstDataRow);
+
+  // Detect columns that are truly empty (no header label AND no data content)
+  // → collapse them to a narrow width so the mapper fits in one screen.
+  const emptyCols = useMemo(() => {
+    const result = new Set<number>();
+    for (let c = 0; c < preview.cols; c++) {
+      const headerVal = String(preview.rows[headerRow]?.[c] ?? "").trim();
+      const hasDataContent = dataRowsPreview.some((r) => String(r[c] ?? "").trim() !== "");
+      if (headerVal === "" && !hasDataContent) result.add(c);
+    }
+    return result;
+  }, [preview, headerRow, dataRowsPreview]);
+
+  // Sync horizontal scroll between BlockHeader and BlockData
+  useEffect(() => {
+    const h = headerScrollRef.current;
+    const d = dataScrollRef.current;
+    if (!h || !d) return;
+    function syncFromHeader() {
+      if (!h || !d) return;
+      if (d.scrollLeft !== h.scrollLeft) d.scrollLeft = h.scrollLeft;
+    }
+    function syncFromData() {
+      if (!h || !d) return;
+      if (h.scrollLeft !== d.scrollLeft) h.scrollLeft = d.scrollLeft;
+    }
+    h.addEventListener("scroll", syncFromHeader, { passive: true });
+    d.addEventListener("scroll", syncFromData, { passive: true });
+    return () => {
+      h.removeEventListener("scroll", syncFromHeader);
+      d.removeEventListener("scroll", syncFromData);
+    };
+  }, []);
 
   function columnTint(c: number): React.CSSProperties {
     const role = roles[c] ?? "ignorar";
@@ -423,6 +458,8 @@ function GridView({
           initialSuggestedRoles={initialSuggestedRoles}
           columnTint={columnTint}
           colHandlers={colHandlers}
+          emptyCols={emptyCols}
+          scrollRef={headerScrollRef}
         />
       </div>
 
@@ -450,6 +487,8 @@ function GridView({
           colHandlers={colHandlers}
           columnLabels={columnLabels}
           setColumnLabel={setColumnLabel}
+          emptyCols={emptyCols}
+          scrollRef={dataScrollRef}
         />
       </div>
     </div>
@@ -513,13 +552,15 @@ function BlockIgnored({
 }
 
 function BlockHeader({
-  row, cols, roles, setRole, layout, initialSuggestedRoles, columnTint, colHandlers,
+  row, cols, roles, setRole, layout, initialSuggestedRoles, columnTint, colHandlers, emptyCols, scrollRef,
 }: {
   row: string[]; cols: number; roles: Role[];
   setRole: (idx: number, role: Role) => void; layout: Layout;
   initialSuggestedRoles: Role[];
   columnTint: (c: number) => React.CSSProperties;
   colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
+  emptyCols: Set<number>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div className="rounded-xl border-2 border-[#F59E0B]/40 bg-[#FEF3C7]/40 dark:bg-[#F59E0B]/10 overflow-hidden">
@@ -529,7 +570,7 @@ function BlockHeader({
           <span className="cursor-help underline decoration-dotted decoration-[#F59E0B]/50 underline-offset-2">Fila de títulos</span>
         </Tooltip>
       </div>
-      <div className="overflow-x-auto">
+      <div ref={scrollRef} className="overflow-x-auto no-scrollbar">
         <table className="min-w-full text-xs border-separate border-spacing-0">
           <thead>
             <tr>
@@ -538,22 +579,29 @@ function BlockHeader({
                 const role = roles[c] ?? "ignorar";
                 const assigned = role !== "ignorar";
                 const wasAutoDetected = initialSuggestedRoles[c] === role && assigned;
+                const isEmpty = emptyCols.has(c);
                 return (
                   <th
                     key={c}
                     style={columnTint(c)}
                     {...colHandlers(c)}
-                    className="px-2 pt-3 pb-1 text-center min-w-[140px]"
+                    className={`${isEmpty ? "w-8 min-w-8 max-w-8 px-0 py-1" : "px-2 pt-3 pb-1 min-w-[140px]"} text-center`}
                   >
-                    <ColumnChip
-                      role={role}
-                      onChange={(r) => setRole(c, r)}
-                      layout={layout}
-                      animateDetected={wasAutoDetected}
-                    />
-                    <div className={`flex justify-center mt-1 ${assigned ? "text-[var(--muted)]" : "text-[var(--muted-light)]/40"}`}>
-                      <ArrowDown size={12} weight="bold" className={assigned ? "animate-arrow-hint" : ""} />
-                    </div>
+                    {isEmpty ? (
+                      <span className="text-[var(--muted-light)]/60 text-[10px]" title="Columna vacía">–</span>
+                    ) : (
+                      <>
+                        <ColumnChip
+                          role={role}
+                          onChange={(r) => setRole(c, r)}
+                          layout={layout}
+                          animateDetected={wasAutoDetected}
+                        />
+                        <div className={`flex justify-center mt-1 ${assigned ? "text-[var(--muted)]" : "text-[var(--muted-light)]/40"}`}>
+                          <ArrowDown size={12} weight="bold" className={assigned ? "animate-arrow-hint" : ""} />
+                        </div>
+                      </>
+                    )}
                   </th>
                 );
               })}
@@ -564,16 +612,19 @@ function BlockHeader({
               <td className="px-2 py-1.5 text-[10px] text-[var(--muted-light)] tabular-nums w-8 text-center">
                 T
               </td>
-              {Array.from({ length: cols }).map((_, c) => (
-                <td
-                  key={c}
-                  style={columnTint(c)}
-                  {...colHandlers(c)}
-                  className="px-2 py-2 text-[12px] font-bold text-[var(--foreground)] text-center truncate max-w-[200px]"
-                >
-                  {row[c] || <span className="text-[var(--muted-light)] italic">(vacío)</span>}
-                </td>
-              ))}
+              {Array.from({ length: cols }).map((_, c) => {
+                const isEmpty = emptyCols.has(c);
+                return (
+                  <td
+                    key={c}
+                    style={columnTint(c)}
+                    {...colHandlers(c)}
+                    className={`${isEmpty ? "w-8 min-w-8 max-w-8 px-0" : "px-2 max-w-[200px]"} py-2 text-[12px] font-bold text-[var(--foreground)] text-center truncate`}
+                  >
+                    {isEmpty ? "" : (row[c] || <span className="text-[var(--muted-light)] italic">(vacío)</span>)}
+                  </td>
+                );
+              })}
             </tr>
           </tbody>
         </table>
@@ -584,7 +635,7 @@ function BlockHeader({
 
 function BlockData({
   rows, cols, startRow, totalRows, roles, onMoveFirstDataRow, columnTint, colHandlers,
-  columnLabels, setColumnLabel,
+  columnLabels, setColumnLabel, emptyCols, scrollRef,
 }: {
   rows: string[][]; cols: number; startRow: number; totalRows: number;
   roles: Role[]; onMoveFirstDataRow: (delta: number) => void;
@@ -592,6 +643,8 @@ function BlockData({
   colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
   columnLabels: string[];
   setColumnLabel: (colIdx: number, value: string) => void;
+  emptyCols: Set<number>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const realRows = totalRows - startRow;
   return (
@@ -615,7 +668,7 @@ function BlockData({
           </button>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div ref={scrollRef} className="overflow-x-auto no-scrollbar">
         <table className="min-w-full text-xs">
           <thead>
             {/* Editable column labels — visible title above each column's data */}
@@ -623,23 +676,28 @@ function BlockData({
               <th className="w-8 text-[9px] font-medium text-[var(--muted-light)] uppercase tracking-wide py-1">
                 T
               </th>
-              {Array.from({ length: cols }).map((_, c) => (
-                <th
-                  key={c}
-                  style={columnTint(c)}
-                  {...colHandlers(c)}
-                  className="px-1 py-1 min-w-[140px]"
-                >
-                  <input
-                    type="text"
-                    value={columnLabels[c] ?? ""}
-                    onChange={(e) => setColumnLabel(c, e.target.value)}
-                    placeholder="(escribí un título)"
-                    className="w-full bg-transparent text-[11px] font-bold text-[var(--foreground)] text-center placeholder:text-[var(--muted-light)] placeholder:font-normal placeholder:italic focus:outline-none focus:bg-white/60 dark:focus:bg-black/30 rounded px-1 py-0.5 transition-colors"
-                    aria-label={`Título de la columna ${c + 1}`}
-                  />
-                </th>
-              ))}
+              {Array.from({ length: cols }).map((_, c) => {
+                const isEmpty = emptyCols.has(c);
+                return (
+                  <th
+                    key={c}
+                    style={columnTint(c)}
+                    {...colHandlers(c)}
+                    className={isEmpty ? "w-8 min-w-8 max-w-8 px-0 py-1" : "px-1 py-1 min-w-[140px]"}
+                  >
+                    {isEmpty ? null : (
+                      <input
+                        type="text"
+                        value={columnLabels[c] ?? ""}
+                        onChange={(e) => setColumnLabel(c, e.target.value)}
+                        placeholder="(escribí un título)"
+                        className="w-full bg-transparent text-[11px] font-bold text-[var(--foreground)] text-center placeholder:text-[var(--muted-light)] placeholder:font-normal placeholder:italic focus:outline-none focus:bg-white/60 dark:focus:bg-black/30 rounded px-1 py-0.5 transition-colors"
+                        aria-label={`Título de la columna ${c + 1}`}
+                      />
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -658,16 +716,17 @@ function BlockData({
                 {Array.from({ length: cols }).map((_, c) => {
                   const role = roles[c] ?? "ignorar";
                   const isIgnored = role === "ignorar";
+                  const isEmpty = emptyCols.has(c);
                   return (
                     <td
                       key={c}
                       style={columnTint(c)}
                       {...colHandlers(c)}
-                      className={`px-3 py-1.5 text-[11px] truncate max-w-[200px] tabular-nums ${
+                      className={`${isEmpty ? "w-8 min-w-8 max-w-8 px-0" : "px-3 max-w-[200px]"} py-1.5 text-[11px] truncate tabular-nums ${
                         isIgnored ? "text-[var(--muted-light)]" : "text-[var(--foreground)] font-medium"
                       }`}
                     >
-                      <span className="truncate block">{row[c] ?? ""}</span>
+                      {isEmpty ? "" : <span className="truncate block">{row[c] ?? ""}</span>}
                     </td>
                   );
                 })}
