@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
-import { generarDTE, generarTED, generarTrackId } from "@/lib/sii/dte-xml";
+import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
+import { enviarDTE } from "@/lib/intermediario/client";
 
 /**
  * Emisión en lote: dado un array de propuesta_ids, emite una boleta por cada
@@ -216,7 +217,20 @@ export async function POST(request: Request) {
     };
     const xml_dte = generarDTE(dteArgs);
     const ted = generarTED(dteArgs);
-    const trackId = generarTrackId();
+
+    // El intermediario (emula Haulmer/OpenFactura) envía el DTE al SII mock
+    // y retorna track_id + estado. En producción esto sería un fetch HTTPS
+    // al proveedor real; acá se resuelve in-process.
+    const envio = await enviarDTE(xml_dte);
+    if (!envio.ok || !envio.track_id || !envio.estado_persistencia) {
+      results.push({
+        propuesta_id: pid,
+        ok: false,
+        error_code: envio.codigo_rechazo ?? "SII_RECHAZO",
+        error_message: envio.detalle ?? envio.mensaje ?? "El SII rechazó el DTE",
+      });
+      continue;
+    }
 
     const { data: boleta, error: insertErr } = await sb
       .from("boletas_emitidas")
@@ -241,8 +255,8 @@ export async function POST(request: Request) {
         detalles: detalles,
         xml_dte,
         ted,
-        track_id: trackId,
-        estado: "aceptado",
+        track_id: envio.track_id,
+        estado: envio.estado_persistencia,
       })
       .select("id, folio, monto_total")
       .single();

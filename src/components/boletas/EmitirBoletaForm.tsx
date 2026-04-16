@@ -43,6 +43,7 @@ interface BatchResult {
 }
 
 type Filtro = "todas" | "listas" | "bloqueadas";
+type TipoFiltro = "todos" | "afecta" | "exenta";
 
 export default function EmitirBoletaForm() {
   const router = useRouter();
@@ -54,6 +55,7 @@ export default function EmitirBoletaForm() {
   const [emitiendo, setEmitiendo] = useState(false);
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState<Filtro>("listas");
+  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>("todos");
   // Tipo override por item: si el usuario cambia de afecta a exenta (o vice).
   // Si no está en el map, usamos el sugerido del clasificador.
   const [tipoOverride, setTipoOverride] = useState<Map<string, 39 | 41>>(new Map());
@@ -83,10 +85,36 @@ export default function EmitirBoletaForm() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const filtradas = useMemo(() => {
-    if (filtro === "listas") return items.filter((i) => i.listo_emitir);
-    if (filtro === "bloqueadas") return items.filter((i) => !i.listo_emitir);
-    return items;
-  }, [items, filtro]);
+    let base = items;
+    if (filtro === "listas") base = base.filter((i) => i.listo_emitir);
+    else if (filtro === "bloqueadas") base = base.filter((i) => !i.listo_emitir);
+
+    if (tipoFiltro !== "todos") {
+      const tipoBuscado = tipoFiltro === "afecta" ? 39 : 41;
+      base = base.filter((i) => {
+        const ov = tipoOverride.get(i.id);
+        const actual = ov ?? (i.tipo_sugerido === 41 ? 41 : 39);
+        return actual === tipoBuscado;
+      });
+    }
+    return base;
+  }, [items, filtro, tipoFiltro, tipoOverride]);
+
+  const countPorTipo = useMemo(() => {
+    let afecta = 0, exenta = 0;
+    const base = filtro === "listas"
+      ? items.filter((i) => i.listo_emitir)
+      : filtro === "bloqueadas"
+        ? items.filter((i) => !i.listo_emitir)
+        : items;
+    for (const i of base) {
+      const ov = tipoOverride.get(i.id);
+      const t = ov ?? (i.tipo_sugerido === 41 ? 41 : 39);
+      if (t === 41) exenta++;
+      else afecta++;
+    }
+    return { afecta, exenta, total: base.length };
+  }, [items, filtro, tipoOverride]);
 
   const idsSelEmitibles = useMemo(
     () => filtradas.filter((i) => i.listo_emitir && seleccionadas.has(i.id)).map((i) => i.id),
@@ -265,6 +293,31 @@ export default function EmitirBoletaForm() {
           </button>
         ))}
       </div>
+
+      {/* Sub-filtro por tipo DTE */}
+      {countPorTipo.total > 0 && (
+        <div className="flex items-center gap-1 text-[10px]">
+          <span className="text-[var(--muted-light)] font-medium pr-1">Tipo:</span>
+          {([
+            { id: "todos" as TipoFiltro, label: `Todos (${countPorTipo.total})`, activeCls: "bg-[var(--accent-light)] text-[#E8553E]" },
+            { id: "afecta" as TipoFiltro, label: `Afecta (${countPorTipo.afecta})`, activeCls: "bg-[#E8553E]/15 text-[#E8553E]" },
+            { id: "exenta" as TipoFiltro, label: `Exenta (${countPorTipo.exenta})`, activeCls: "bg-[#3B82F6]/15 text-[#3B82F6]" },
+          ]).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setTipoFiltro(f.id)}
+              className={`px-2 py-1 rounded-md font-semibold transition-colors ${
+                tipoFiltro === f.id
+                  ? f.activeCls
+                  : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Toggle seleccionar todas */}
       {filtradas.some((i) => i.listo_emitir) && (

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
 import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
+import { enviarDTE } from "@/lib/intermediario/client";
 
 /**
  * Capa intermediaria (emula Haulmer / OpenFactura).
@@ -105,31 +106,22 @@ export async function POST(request: Request) {
   const xml_dte = generarDTE(dteArgs);
   const ted = generarTED(dteArgs);
 
-  // 7. "Enviar" al SII mock para obtener track_id + estado
-  const origin = new URL(request.url).origin;
-  let trackId = "";
-  let estadoSii = "aceptado";
-  try {
-    const siiRes = await fetch(`${origin}/api/sii-mock/dte/recibir`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ xml_dte }),
-    });
-    const siiJson = await siiRes.json();
-    if (!siiRes.ok || !siiJson.ok) {
-      return NextResponse.json(
-        { ok: false, error: "SII_RECHAZO", sii: siiJson },
-        { status: 502 },
-      );
-    }
-    trackId = siiJson.track_id;
-    estadoSii = String(siiJson.estado).toLowerCase();
-  } catch (err) {
+  // 7. Enviar el DTE al SII vía el cliente intermediario. In-process en mock;
+  // será fetch a Haulmer/OpenFactura cuando se integre con proveedor real.
+  const envio = await enviarDTE(xml_dte);
+  if (!envio.ok || !envio.track_id || !envio.estado_persistencia) {
     return NextResponse.json(
-      { ok: false, error: "SII_INACCESIBLE", detalle: err instanceof Error ? err.message : String(err) },
-      { status: 502 },
+      {
+        ok: false,
+        error: "SII_RECHAZO",
+        codigo_rechazo: envio.codigo_rechazo,
+        detalle: envio.detalle ?? envio.mensaje,
+      },
+      { status: 422 },
     );
   }
+  const trackId = envio.track_id;
+  const estadoSii = envio.estado_persistencia;
 
   // 8. Persistir boleta
   const { data: boleta, error: insertErr } = await sb
