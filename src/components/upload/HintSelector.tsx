@@ -26,16 +26,32 @@ export default function HintSelector({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [value, setValue] = useState<Hint>((current as Hint) ?? "mixto");
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Posicionamiento del menú en portal (fixed, evita clipping)
+  // Posicionamiento auto del menú: flip arriba si no entra abajo,
+  // alinear derecha si no entra por el lado.
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) return;
     const r = buttonRef.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 4, left: r.left });
+    const MENU_H_EST = 280; // estimado con 5 opciones + header + padding
+    const MENU_W = 256; // w-64 = 256px
+    const MARGIN = 8;
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+
+    const spaceBelow = vh - r.bottom;
+    const spaceAbove = r.top;
+    const openUp = spaceBelow < MENU_H_EST + MARGIN && spaceAbove > spaceBelow;
+
+    let left = r.left;
+    if (left + MENU_W + MARGIN > vw) {
+      left = Math.max(MARGIN, vw - MENU_W - MARGIN);
+    }
+    const top = openUp ? Math.max(MARGIN, r.top - MENU_H_EST - 4) : r.bottom + 4;
+    setPos({ top, left, openUp });
   }, [open]);
 
   useEffect(() => {
@@ -96,8 +112,13 @@ export default function HintSelector({
       {open && pos && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left }}
-          className="z-[200] w-64 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-hidden animate-fade-in py-1"
+          style={{
+            position: "fixed",
+            top: pos.top,
+            left: pos.left,
+            maxHeight: `calc(100vh - ${pos.top + 16}px)`,
+          }}
+          className="z-[200] w-64 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-y-auto animate-fade-in py-1"
         >
           <div className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
             Tipo de operaciones
