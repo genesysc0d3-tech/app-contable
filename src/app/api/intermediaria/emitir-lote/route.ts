@@ -130,8 +130,9 @@ export async function POST(request: Request) {
       results.push({ propuesta_id: pid, ok: false, error_code: "ESTADO_INVALIDO", error_message: `La propuesta está ${p.estado}, no aprobada` });
       continue;
     }
-    if (p.tipo_propuesto !== "boleta") {
-      results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no es boleta` });
+    const TIPOS_EMITIBLES = ["boleta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
+    if (!TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
+      results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como boleta` });
       continue;
     }
 
