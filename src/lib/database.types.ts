@@ -527,6 +527,7 @@ export type Database = {
           regimen_tributario: string | null
           region: string | null
           rut: string
+          tiene_certificado_sii: boolean
         }
         Insert: {
           clave_sii?: string | null
@@ -543,6 +544,7 @@ export type Database = {
           regimen_tributario?: string | null
           region?: string | null
           rut: string
+          tiene_certificado_sii?: boolean
         }
         Update: {
           clave_sii?: string | null
@@ -559,6 +561,7 @@ export type Database = {
           regimen_tributario?: string | null
           region?: string | null
           rut?: string
+          tiene_certificado_sii?: boolean
         }
         Relationships: []
       }

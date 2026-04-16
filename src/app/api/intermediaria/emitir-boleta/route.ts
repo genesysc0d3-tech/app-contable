@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
 import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
-import { enviarDTE } from "@/lib/intermediario/client";
+import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/lib/intermediario/client";
 
 /**
  * Capa intermediaria (emula Haulmer / OpenFactura).
@@ -39,6 +39,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const certCheck = await verificarCertificado(usuario.empresa_id);
+  if (!certCheck.ok) {
+    return NextResponse.json(
+      { ok: false, error: certCheck.error, detalle: certCheck.mensaje },
+      { status: 422 },
+    );
+  }
+
   // 2. Parse body
   let body: BoletaInput;
   try {
@@ -62,19 +70,17 @@ export async function POST(request: Request) {
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   const sb = createServiceClient(url, key);
 
-  // 5. Consumir folio del CAF (atómico)
+  // 5. Consumir folio del CAF (atómico). El intermediario auto-solicita al
+  // SII si no hay folios activos — como haría Haulmer/OpenFactura real.
+  await asegurarFoliosDisponibles(usuario.empresa_id, body.tipo_dte);
   const { data: folioRes, error: folioErr } = await sb.rpc("consume_next_folio", {
     p_empresa_id: usuario.empresa_id,
     p_tipo_dte: body.tipo_dte,
   });
   if (folioErr || !folioRes || folioRes.length === 0) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "SIN_FOLIOS_DISPONIBLES",
-        detalle: "Solicitá un nuevo CAF desde /api/sii-mock/caf/solicitar",
-      },
-      { status: 409 },
+      { ok: false, error: "SIN_FOLIOS_DISPONIBLES", detalle: "El intermediario no pudo obtener folios del SII" },
+      { status: 502 },
     );
   }
   const { folio, caf_id } = folioRes[0] as { folio: number; caf_id: string };

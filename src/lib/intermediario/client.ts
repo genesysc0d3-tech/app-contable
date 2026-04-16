@@ -3,17 +3,128 @@
  * Haulmer/OpenFactura. La app nunca habla directo con el SII: habla con este
  * cliente, y el cliente a su vez habla con el SII mock.
  *
+ * Responsabilidades que replica fielmente de la realidad:
+ *   1. Verificar que el contribuyente delegó su certificado digital al
+ *      intermediario (en prod: `.pfx` + clave tributaria subidos; acá: flag
+ *      `empresas.tiene_certificado_sii = true`).
+ *   2. Gestionar los CAFs automáticamente: si al momento de emitir no hay
+ *      folios, el intermediario (actuando como mandatario del contribuyente)
+ *      solicita un CAF nuevo al SII y reintenta. El usuario final NUNCA pide
+ *      folios a mano — así funciona Haulmer real.
+ *   3. Enviar el XML DTE al SII y devolver track_id + estado.
+ *   4. Consultar estado posterior del DTE.
+ *
  * Cuando se integre con un intermediario real (Haulmer, OpenFactura, etc.),
- * basta reemplazar las implementaciones de `enviarDTE` y `consultarEstado`
- * por fetches HTTP a su API pública. La firma del cliente queda estable.
+ * basta reemplazar las implementaciones de estas funciones por fetches HTTP
+ * a su API. La firma pública del módulo queda estable.
  */
 
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import {
   recibirDTE,
   consultarEstadoDTE,
   mapEstadoSiiAPersistencia,
   type EstadoDTESII,
 } from "@/lib/sii-mock/recepcion";
+
+// Cantidad por defecto que el intermediario pide al SII cuando detecta que
+// el contribuyente se está quedando sin folios. Haulmer/OpenFactura usan
+// lógicas similares (solicitan "batches" de 50-100 folios a la vez).
+const CAF_BATCH_SIZE = 50;
+
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("BACKEND_CONFIG_MISSING");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return createServiceClient(url, key) as any;
+}
+
+export interface VerificacionCertificado {
+  ok: boolean;
+  error?: "NO_CERTIFICADO" | "EMPRESA_NO_ENCONTRADA";
+  mensaje?: string;
+}
+
+/**
+ * Verifica que la empresa tenga certificado digital delegado al intermediario.
+ * Sin esto, Haulmer real no podría firmar en nombre del contribuyente.
+ */
+export async function verificarCertificado(
+  empresaId: string,
+): Promise<VerificacionCertificado> {
+  const sb = serviceClient();
+  const { data } = await sb
+    .from("empresas")
+    .select("tiene_certificado_sii")
+    .eq("id", empresaId)
+    .maybeSingle();
+  if (!data) return { ok: false, error: "EMPRESA_NO_ENCONTRADA", mensaje: "Empresa no encontrada" };
+  if (!data.tiene_certificado_sii) {
+    return {
+      ok: false,
+      error: "NO_CERTIFICADO",
+      mensaje: "El intermediario no puede emitir: el contribuyente aún no cargó su certificado digital SII",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Asegura que haya un CAF activo con folios disponibles para la empresa+tipo.
+ * Si no lo hay, "solicita" un CAF nuevo al SII mock de forma automática
+ * (replicando el comportamiento de Haulmer/OpenFactura reales, que gestionan
+ * el timbraje de forma transparente).
+ *
+ * Idempotente: si ya hay folios, no hace nada.
+ */
+export async function asegurarFoliosDisponibles(
+  empresaId: string,
+  tipoDte: 39 | 41 | 61,
+): Promise<{ ok: boolean; solicitado?: boolean; error?: string }> {
+  const sb = serviceClient();
+
+  // 1. ¿Hay CAF activo con folios disponibles?
+  const { data: activos } = await sb
+    .from("boletas_caf_mock")
+    .select("folio_actual, folio_hasta")
+    .eq("empresa_id", empresaId)
+    .eq("tipo_dte", tipoDte)
+    .eq("estado", "activo")
+    .gt("fecha_vence", new Date().toISOString());
+
+  const totalDisponibles = (activos ?? []).reduce(
+    (s: number, c: { folio_actual: number; folio_hasta: number }) =>
+      s + Math.max(0, c.folio_hasta - c.folio_actual + 1),
+    0,
+  );
+  if (totalDisponibles > 0) return { ok: true, solicitado: false };
+
+  // 2. No hay — solicitar al SII mock un rango nuevo. Continuar la secuencia.
+  const { data: last } = await sb
+    .from("boletas_caf_mock")
+    .select("folio_hasta")
+    .eq("empresa_id", empresaId)
+    .eq("tipo_dte", tipoDte)
+    .order("folio_hasta", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const folio_desde = ((last?.folio_hasta as number | undefined) ?? 0) + 1;
+  const folio_hasta = folio_desde + CAF_BATCH_SIZE - 1;
+
+  const { error } = await sb.from("boletas_caf_mock").insert({
+    empresa_id: empresaId,
+    tipo_dte: tipoDte,
+    folio_desde,
+    folio_hasta,
+    folio_actual: folio_desde,
+    estado: "activo",
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, solicitado: true };
+}
 
 export interface EnvioResultado {
   ok: boolean;
