@@ -84,6 +84,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
 
   const [roles, setRoles] = useState<Role[]>([]);
   const [initialSuggestedRoles, setInitialSuggestedRoles] = useState<Role[]>([]);
+  const [columnLabels, setColumnLabels] = useState<string[]>([]);
   const [headerRow, setHeaderRow] = useState(0);
   const [firstDataRow, setFirstDataRow] = useState(1);
   const [dateFormat, setDateFormat] = useState<DateFmt>("dd/mm/yyyy");
@@ -132,6 +133,17 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [documentoId]);
+
+  // Keep columnLabels in sync with the selected header row. The user can
+  // override any cell; changing headerRow resets labels to the new row's
+  // original values (so switching header is never destructive of visible info).
+  useEffect(() => {
+    if (!preview) return;
+    const headerRowValues = preview.rows[headerRow] ?? [];
+    setColumnLabels(
+      Array.from({ length: preview.cols }, (_, c) => String(headerRowValues[c] ?? "")),
+    );
+  }, [preview, headerRow]);
 
   function setRole(idx: number, role: Role) {
     setRoles((prev) => {
@@ -259,6 +271,8 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
               setFirstDataRow={setFirstDataRow}
               layout={layout}
               initialSuggestedRoles={initialSuggestedRoles}
+              columnLabels={columnLabels}
+              setColumnLabel={(c, v) => setColumnLabels((prev) => { const n = [...prev]; n[c] = v; return n; })}
             />
           )}
         </div>
@@ -350,6 +364,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
 
 function GridView({
   preview, roles, setRole, headerRow, setHeaderRow, firstDataRow, setFirstDataRow, layout, initialSuggestedRoles,
+  columnLabels, setColumnLabel,
 }: {
   preview: Preview;
   roles: Role[];
@@ -360,6 +375,8 @@ function GridView({
   setFirstDataRow: (n: number) => void;
   layout: Layout;
   initialSuggestedRoles: Role[];
+  columnLabels: string[];
+  setColumnLabel: (colIdx: number, value: string) => void;
 }) {
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const ignoredRows = preview.rows.slice(0, Math.max(0, headerRow));
@@ -431,6 +448,8 @@ function GridView({
           onMoveFirstDataRow={(delta) => setFirstDataRow(Math.max(headerRow + 1, firstDataRow + delta))}
           columnTint={columnTint}
           colHandlers={colHandlers}
+          columnLabels={columnLabels}
+          setColumnLabel={setColumnLabel}
         />
       </div>
     </div>
@@ -565,11 +584,14 @@ function BlockHeader({
 
 function BlockData({
   rows, cols, startRow, totalRows, roles, onMoveFirstDataRow, columnTint, colHandlers,
+  columnLabels, setColumnLabel,
 }: {
   rows: string[][]; cols: number; startRow: number; totalRows: number;
   roles: Role[]; onMoveFirstDataRow: (delta: number) => void;
   columnTint: (c: number) => React.CSSProperties;
   colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
+  columnLabels: string[];
+  setColumnLabel: (colIdx: number, value: string) => void;
 }) {
   const realRows = totalRows - startRow;
   return (
@@ -595,6 +617,31 @@ function BlockData({
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
+          <thead>
+            {/* Editable column labels — visible title above each column's data */}
+            <tr className="border-b border-[#22C55E]/25 bg-white/50 dark:bg-black/20">
+              <th className="w-8 text-[9px] font-medium text-[var(--muted-light)] uppercase tracking-wide py-1">
+                T
+              </th>
+              {Array.from({ length: cols }).map((_, c) => (
+                <th
+                  key={c}
+                  style={columnTint(c)}
+                  {...colHandlers(c)}
+                  className="px-1 py-1 min-w-[140px]"
+                >
+                  <input
+                    type="text"
+                    value={columnLabels[c] ?? ""}
+                    onChange={(e) => setColumnLabel(c, e.target.value)}
+                    placeholder="(escribí un título)"
+                    className="w-full bg-transparent text-[11px] font-bold text-[var(--foreground)] text-center placeholder:text-[var(--muted-light)] placeholder:font-normal placeholder:italic focus:outline-none focus:bg-white/60 dark:focus:bg-black/30 rounded px-1 py-0.5 transition-colors"
+                    aria-label={`Título de la columna ${c + 1}`}
+                  />
+                </th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>

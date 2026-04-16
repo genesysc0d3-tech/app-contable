@@ -63,7 +63,7 @@ export default function RevisarBoletasTabs({
       </header>
 
       <div className="flex-1 min-h-0 pb-3">
-        <div className={tab === "revisar" ? "block" : "hidden"}>{revisarContent}</div>
+        <div className={`escritorio-col ${tab === "revisar" ? "block" : "hidden"}`}>{revisarContent}</div>
         <div className={tab === "boletas" ? "block" : "hidden"}>{boletasContent}</div>
       </div>
     </section>
