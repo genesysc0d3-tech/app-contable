@@ -336,7 +336,9 @@ Canal de colaboración: Slack workspace `app-contable` con `@Claude`.
 
 ---
 
-*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#119 mergeados · n8n workflow desactivado (guardado)*
+*Última actualización: 16 Abril 2026 · rama `dev` · PRs #1-#120 mergeados · n8n workflow desactivado (guardado)*
+
+**PR #120** — fix(clasificador): hint del usuario prevalece sobre heurísticas. Al marcar cartola santander como P2P cripto, las filas se pintaban AFE porque la suma de `angleGlosa` (match "transf", 0.35) + `anglePatron` (match "mismo receptor mismo día ≥2", 0.65) = 1.0 superaba el hint 0.90 y ganaba afecta — tributariamente incorrecto (Art. 2 N°3 DL 825 + Of. SII 963/2018, cripto = activo incorporal exenta). **Fix** `lib/sii/clasificador-tipo.ts`: (1) short-circuit en `clasificarBoleta` — si hint ∈ {p2p_cripto, forex_divisas, servicios, ventas} el veredicto del hint es autoritativo y se salta el ensemble; (2) `anglePatron` siempre neutral, repetición/monto redondo son la misma huella en cripto y retail recurrente, sin glosa no discrimina afecta/exenta; (3) `glosa.no_boletar` con peso ≥ 0.7 sigue prevaleciendo sobre el hint (transf entre cuentas propias dentro de cartola cripto NO se boletea, aunque la cartola esté marcada como cripto). Las 3 migraciones de boletas pendientes (`boletas_sii_mock`, `boletas_propuesta_link`, `documento_tipo_hint`) aplicadas en Supabase vía MCP el 2026-04-16.
 
 **PR #119** — fix(hint): auto-flip del dropdown. El menú con portal+fixed se salía del viewport cuando el card estaba cerca del bottom. Fix: `useLayoutEffect` calcula `spaceBelow` y `spaceAbove` del botón, si `spaceBelow < 280px` (altura estimada) y `spaceAbove > spaceBelow` → abre hacia arriba. También alinea horizontalmente si `left + menuWidth > viewport`. `maxHeight` del menú = `calc(100vh - top - 16px)` con `overflow-y auto` para viewports chicos.
 
