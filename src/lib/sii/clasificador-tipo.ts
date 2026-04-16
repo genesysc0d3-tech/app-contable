@@ -82,12 +82,24 @@ function angleGlosa(descripcion: string | null | undefined): AngleResult {
   if (/\b(export|wire|swift|abroad|exterior|trf desde el extranjero)\b/.test(desc))
     return { veredicto: "exenta", peso: 0.70, razon: "Probable exportación (Art. 12 letra D)" };
 
-  // AFECTA — cripto P2P (clave para el público objetivo)
+  // EXENTA — cripto/P2P. Las cripto son ACTIVOS INCORPORALES (Of. SII
+  // 963/2018), no bienes corporales muebles → la venta NO es hecho
+  // gravado con IVA (Art. 2 N°3 DL 825). La renta sí tributa en
+  // Primera Categoría, pero eso va por F22/F29, no por el tipo de boleta.
+  // Default: EXENTA como documento tributario.
   if (/\b(usdt|btc|bitcoin|ethereum|eth|crypto|cripto|p2p|binance|buda|orionx|okx|kucoin|bybit|coinbase|tether)\b/.test(desc))
     return {
-      veredicto: "afecta",
+      veredicto: "exenta",
       peso: 0.85,
-      razon: "Cripto/P2P (Of. SII 963/2018 — habitual = afecta a IVA)",
+      razon: "Cripto/P2P — activo incorporal, no IVA (Of. SII 963/2018, Art. 2 N°3 DL 825)",
+    };
+
+  // EXENTA — forex (divisas no son bien corporal mueble tampoco)
+  if (/\b(forex|fx|usd|d[oó]lar|euro|cambio de divisa)\b/.test(desc))
+    return {
+      veredicto: "exenta",
+      peso: 0.70,
+      razon: "Forex — compraventa de divisas, no IVA",
     };
 
   // AFECTA — servicios gravados
@@ -128,7 +140,12 @@ function angleGiro(giro: string | null | undefined): AngleResult {
   if (/export|comercio exterior/.test(g))
     return { veredicto: "exenta", peso: 0.50, razon: `Giro exportación: "${giro}"` };
 
-  if (/comerci|venta|servicio|consultor|asesor|software|cripto|exchange|p2p|tecnolog|inform[aá]tica|ingenier[ií]a/.test(g))
+  // Giro cripto/exchange/forex → EXENTA: la venta de activos incorporales
+  // (cripto, divisas) no está gravada con IVA (Art. 2 N°3 DL 825).
+  if (/cripto|exchange|p2p|forex|divisa|criptomoneda|criptoactivo/.test(g))
+    return { veredicto: "exenta", peso: 0.50, razon: `Giro cripto/forex: "${giro}" — activo incorporal sin IVA` };
+
+  if (/comerci|venta|servicio|consultor|asesor|software|tecnolog|inform[aá]tica|ingenier[ií]a/.test(g))
     return { veredicto: "afecta", peso: 0.45, razon: `Giro comercio/servicios afectos: "${giro}"` };
 
   return { veredicto: "neutral", peso: 0, razon: "" };
