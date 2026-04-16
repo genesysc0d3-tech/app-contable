@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CaretDown, Check, Lightbulb } from "@phosphor-icons/react";
 import { setDocumentoHint } from "@/app/(app)/subir/actions";
 import { useToast } from "@/components/Toast";
@@ -25,16 +26,37 @@ export default function HintSelector({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [value, setValue] = useState<Hint>((current as Hint) ?? "mixto");
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Posicionamiento del menú en portal (fixed, evita clipping)
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const r = buttonRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (buttonRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
+    function onEsc(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    function onScroll() { setOpen(false); }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onEsc);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onEsc);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [open]);
 
   async function seleccionar(h: Hint) {
@@ -42,7 +64,7 @@ export default function HintSelector({
     if (h === value) return;
     setSaving(true);
     const prev = value;
-    setValue(h); // optimistic
+    setValue(h);
     const res = await setDocumentoHint(documentoId, h === "mixto" ? null : h);
     if (res.error) {
       setValue(prev);
@@ -57,8 +79,9 @@ export default function HintSelector({
   const opcionActual = OPCIONES.find((o) => o.id === value) ?? OPCIONES[0]!;
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={saving}
@@ -70,8 +93,12 @@ export default function HintSelector({
         <CaretDown size={8} weight="bold" className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
-      {open && (
-        <div className="absolute z-40 top-full mt-1 left-0 w-64 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)] overflow-hidden animate-fade-in py-1">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          className="z-[200] w-64 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-hidden animate-fade-in py-1"
+        >
           <div className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
             Tipo de operaciones
           </div>
@@ -95,8 +122,9 @@ export default function HintSelector({
               </div>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
