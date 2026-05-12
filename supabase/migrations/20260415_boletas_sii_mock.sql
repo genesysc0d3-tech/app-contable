@@ -23,6 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_caf_empresa_tipo_estado
 
 ALTER TABLE public.boletas_caf_mock ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users see own empresa caf" ON public.boletas_caf_mock;
 CREATE POLICY "users see own empresa caf"
   ON public.boletas_caf_mock FOR SELECT
   USING (
@@ -91,6 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_boletas_referencia
 
 ALTER TABLE public.boletas_emitidas ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users see own empresa boletas" ON public.boletas_emitidas;
 CREATE POLICY "users see own empresa boletas"
   ON public.boletas_emitidas FOR SELECT
   USING (
