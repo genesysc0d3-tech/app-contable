@@ -20,10 +20,16 @@ App contable SaaS para Chile. IA procesa cartolas bancarias, clasifica movimient
 - Vercel: `genesysc0d3-1037s-projects/app-contable` → https://app-contable-five.vercel.app
 - Supabase: proyecto `aluuuyecwifaakehvcam`
 
+### Setup rapido
+Solo necesita:
+1. `npm install`
+2. Crear `.env.local` con las keys (pedirlas al compa)
+3. `npm run dev`
+No necesita Supabase CLI ni Vercel CLI para programar.
+
 ### Reglas
 - Nunca trabajar directo en `main` ni `dev`. Crear rama `feature/` o `fix/` desde `dev`.
 - Las env vars están en `.env.local` (no leer `.env.setup` ni `.env.github`).
 - Migrations en `supabase/migrations/` con dependencia de orden.
 - Tipado de base de datos en `src/lib/database.types.ts`.
-- Leer `SETUP_DEV.md` para instrucciones de setup.
 <!-- END:project-context -->

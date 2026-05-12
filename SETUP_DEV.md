@@ -50,24 +50,6 @@ Usuario creado en Supabase Auth. Si no tenés credenciales, crear un user desde 
 - PR a `dev`. `main` solo tiene el initial commit.
 - Usar tipado de `src/lib/database.types.ts` para tablas de Supabase (generado vía `supabase gen types`).
 
-## Supabase migrations
-
-Las migrations están en `supabase/migrations/`. Para aplicar cambios locales:
-```bash
-supabase login
-supabase link --project-ref aluuuyecwifaakehvcam
-supabase db push
-```
-
-## Deploy
-
-Cada push a `dev` deploya automático en Vercel (producción configurada desde `dev`).
-
-## Scripts útiles
-
-- `bash scripts/migrar-supabase.sh` — migrar a nuevo proyecto Supabase (necesita `.env.setup`)
-- `bash scripts/migrar-github.sh` — migrar repo a otro GitHub (necesita `.env.github`)
-
 ## Notas
 
 - Las migrations tienen dependencia de orden: `schema_base` → `boletas_sii_mock` → `propuesta_link` → `documento_tipo_hint` → `certificado_sii_flag`
