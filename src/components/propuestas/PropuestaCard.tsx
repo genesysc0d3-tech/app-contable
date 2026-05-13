@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Tables } from "@/lib/database.types";
 import { validarRut, formatRut } from "@/lib/rut";
 import { CheckCircle, EyeSlash, Eye, PencilSimple, CurrencyBtc, CaretRight } from "@phosphor-icons/react";
@@ -88,14 +88,17 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
   const totalNum = Number(propuesta.total) || 0;
   const { neto: editNeto, iva: editIva } = recalcIva(totalNum, cat.tieneIva);
 
+  // Track if user manually edited the name to prevent autofill loop
+  const userModifiedName = useRef(false);
+
   useEffect(() => {
     if (!receptorRut.trim() || !validarRut(receptorRut)) return;
     const match = clientes.find((c) => c.rut === formatRut(receptorRut));
-    // Autocomplete name from cliente list when user types a known RUT.
-    // Intentional setState-in-effect: derives from external data (clientes).
+    // Autocomplete name from cliente list when user types a known RUT,
+    // but only if the user hasn't manually edited the name field.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (match && !receptorNombre.trim()) setReceptorNombre(match.nombre);
-  }, [receptorRut, clientes, receptorNombre]);
+    if (match && !userModifiedName.current) setReceptorNombre(match.nombre);
+  }, [receptorRut, clientes]);
 
   const [selectedClienteId, setSelectedClienteId] = useState("");
   const [showNewCliente, setShowNewCliente] = useState(false);
@@ -259,7 +262,7 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
           <div>
             <label className="text-[10px] text-[var(--muted-light)] mb-1 block">Receptor / Pagador</label>
             <div className="flex gap-2">
-              <input type="text" placeholder="Nombre" value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} className={`flex-1 ${inputCls}`} />
+              <input type="text" placeholder="Nombre" value={receptorNombre} onChange={(e) => { userModifiedName.current = true; setReceptorNombre(e.target.value); }} className={`flex-1 ${inputCls}`} />
               <div className="w-32">
                 <input type="text" placeholder="RUT" value={receptorRut} onChange={(e) => setReceptorRut(e.target.value)}
                   onBlur={() => { if (receptorRut.trim() && validarRut(receptorRut)) setReceptorRut(formatRut(receptorRut)); }}

@@ -90,11 +90,11 @@ export class MistralProvider implements AIProvider {
       raw_response_length: text.length,
     };
   }
-}
 
-export function calcularCosto(tokensInput: number, tokensOutput: number): number {
-  return (
-    (tokensInput / 1_000_000) * COST_PER_MILLION_INPUT +
-    (tokensOutput / 1_000_000) * COST_PER_MILLION_OUTPUT
-  );
+  getCost(tokensInput: number, tokensOutput: number): number {
+    return (
+      (tokensInput / 1_000_000) * COST_PER_MILLION_INPUT +
+      (tokensOutput / 1_000_000) * COST_PER_MILLION_OUTPUT
+    );
+  }
 }

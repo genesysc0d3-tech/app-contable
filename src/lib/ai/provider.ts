@@ -1,10 +1,14 @@
 import type { AIProvider } from "./types";
 import { MistralProvider } from "./providers/mistral";
+import { DeepSeekProvider } from "./providers/deepseek";
+import { OpenCodeGoProvider } from "./providers/opencodego";
 
-type ProviderName = "mistral";
+type ProviderName = "mistral" | "deepseek" | "opencodego";
 
 const providers: Record<ProviderName, () => AIProvider> = {
   mistral: () => new MistralProvider(),
+  deepseek: () => new DeepSeekProvider(),
+  opencodego: () => new OpenCodeGoProvider(),
 };
 
 export function getAIProvider(): AIProvider {

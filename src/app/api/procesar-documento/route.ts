@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
-import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { parseExcel } from "@/lib/parsers";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
-
-/**
- * Procesamiento directo en Vercel con after().
- * Usa Promise.all para paralelizar chunks (3 concurrentes).
- * Para cartolas gigantes (2000+ tx) en el futuro, activar workflow n8n:
- *   ID: rZoZmdAAW8csRrjU
- *   Webhook: https://n8n-production-47ecb.up.railway.app/webhook/procesar-documento
- */
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -56,164 +48,125 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Documento ya esta siendo procesado" }, { status: 409 });
   }
 
-  // Synchronously mark as "procesando" BEFORE scheduling the background work.
-  // Without this, the client briefly sees estado="subido" (the initial insert
-  // state) and shows the "Reprocesar" button until procesarDocumento() inside
-  // after() updates the row. The synchronous update closes that gap.
-  {
-    const { createClient: createServiceClient } = await import("@supabase/supabase-js");
-    const svc = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-    await svc
-      .from("documentos_subidos")
-      .update({ estado: "procesando" })
-      .eq("id", documento.id);
-  }
+  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const svc = createServiceClient(svcUrl, svcKey);
 
-  // For grouped images, download all and OCR them
-  if (grouped_images && Array.isArray(grouped_images) && grouped_images.length > 0) {
-    after(async () => {
-      try {
-        const start = Date.now();
-        const images: { base64: string; mimeType: string; fileName: string }[] = [];
-        for (const imgPath of grouped_images) {
-          const { data: fileData } = await supabase.storage
-            .from("documentos")
-            .download(imgPath.path);
-          if (fileData) {
-            const buffer = await fileData.arrayBuffer();
-            const base64 = Buffer.from(buffer).toString("base64");
-            images.push({
-              base64,
-              mimeType: imgPath.mime || "image/jpeg",
-              fileName: imgPath.name || "imagen",
-            });
-          }
+  // Mark as procesando
+  await svc
+    .from("documentos_subidos")
+    .update({ estado: "procesando" })
+    .eq("id", documento.id);
+
+  try {
+    // Grouped images path
+    if (grouped_images && Array.isArray(grouped_images) && grouped_images.length > 0) {
+      const images: { base64: string; mimeType: string; fileName: string }[] = [];
+      for (const imgPath of grouped_images) {
+        const { data: fileData } = await supabase.storage
+          .from("documentos")
+          .download(imgPath.path);
+        if (fileData) {
+          const buffer = await fileData.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString("base64");
+          images.push({
+            base64,
+            mimeType: imgPath.mime || "image/jpeg",
+            fileName: imgPath.name || "imagen",
+          });
         }
-
-        if (images.length === 0) throw new Error("No se pudieron descargar las imágenes");
-
-        const { groupedText, totalTokensInput, totalTokensOutput } = await ocrAndGroupImages(images);
-        if (!groupedText.trim()) throw new Error("OCR no extrajo texto de las imágenes");
-
-        const result = await procesarDocumento(
-          documento.id,
-          usuario.empresa_id,
-          groupedText,
-          { ocrTokensInput: totalTokensInput, ocrTokensOutput: totalTokensOutput }
-        );
-
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        console.log(
-          `[procesar-documento] ${documento.id} OCR+procesado en ${elapsed}s — ${images.length} imgs → ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}`
-        );
-      } catch (err) {
-        console.error(`[procesar-documento] ${documento.id} OCR error:`, err);
-        const { createClient: createServiceClient } = await import("@supabase/supabase-js");
-        const svc = createServiceClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-        await svc.from("documentos_subidos").update({
-          estado: "error",
-          progreso_ia: { estado: "error", error: err instanceof Error ? err.message : String(err) },
-        }).eq("id", documento.id);
       }
-    });
+      if (images.length === 0) throw new Error("No se pudieron descargar las imágenes");
 
-    return NextResponse.json({
-      ok: true,
-      documento_id: documento.id,
-      message: "OCR + procesamiento iniciado.",
-    });
-  }
+      const { groupedText } = await ocrAndGroupImages(images);
+      if (!groupedText.trim()) throw new Error("OCR no extrajo texto de las imágenes");
 
-  // Standard file processing
-  const { data: fileData, error: downloadError } = await supabase.storage
-    .from("documentos")
-    .download(documento.storage_path);
-
-  if (downloadError || !fileData) {
-    return NextResponse.json({ error: "Error descargando archivo" }, { status: 500 });
-  }
-
-  let contenido: string;
-  let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
-
-  if (documento.tipo === "excel") {
-    const buffer = await fileData.arrayBuffer();
-    const parsed = await parseExcel(buffer, { documento_id: documento.id });
-    contenido = parsed.content;
-    preExtracted = parsed.preExtracted;
-  } else if (["csv", "whatsapp"].includes(documento.tipo)) {
-    contenido = await fileData.text();
-  } else if (documento.tipo === "pdf") {
-    contenido = await fileData.text();
-  } else if (documento.tipo === "imagen") {
-    after(async () => {
-      try {
-        const start = Date.now();
-        const buffer = await fileData.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString("base64");
-        const { groupedText, totalTokensInput, totalTokensOutput } = await ocrAndGroupImages([{
-          base64,
-          mimeType: "image/jpeg",
-          fileName: documento.storage_path.split("/").pop() || "imagen",
-        }]);
-
-        if (!groupedText.trim()) throw new Error("OCR no extrajo texto de la imagen");
-
-        const result = await procesarDocumento(
-          documento.id,
-          usuario.empresa_id,
-          groupedText,
-          { ocrTokensInput: totalTokensInput, ocrTokensOutput: totalTokensOutput }
-        );
-
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        console.log(`[procesar-documento] ${documento.id} OCR single en ${elapsed}s — ${result.movimientos_total} movimientos`);
-      } catch (err) {
-        console.error(`[procesar-documento] ${documento.id} OCR error:`, err);
-      }
-    });
-
-    return NextResponse.json({
-      ok: true,
-      documento_id: documento.id,
-      message: "OCR + procesamiento iniciado.",
-    });
-  } else {
-    contenido = await fileData.text();
-  }
-
-  if (!contenido.trim()) {
-    return NextResponse.json({ error: "Documento vacio o sin contenido legible" }, { status: 422 });
-  }
-
-  after(async () => {
-    try {
-      const start = Date.now();
       const result = await procesarDocumento(
         documento.id,
         usuario.empresa_id,
-        contenido,
-        undefined,
-        preExtracted ?? undefined
+        groupedText
       );
-      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      console.log(
-        `[procesar-documento] ${documento.id} completado en ${elapsed}s — ${result.movimientos_total} movimientos${result.error ? ` — error: ${result.error}` : ""}${preExtracted ? ` (bypass)` : ""}`
-      );
-    } catch (err) {
-      console.error(`[procesar-documento] ${documento.id} error fatal:`, err);
-    }
-  });
 
-  return NextResponse.json({
-    ok: true,
-    documento_id: documento.id,
-    message: "Procesamiento iniciado. Sigue el progreso en tiempo real.",
-  });
+      return NextResponse.json({
+        ok: true,
+        documento_id: documento.id,
+        movimientos: result.movimientos_total,
+        error: result.error ?? null,
+      });
+    }
+
+    // Standard file processing
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from("documentos")
+      .download(documento.storage_path);
+
+    if (downloadError || !fileData) {
+      return NextResponse.json({ error: "Error descargando archivo" }, { status: 500 });
+    }
+
+    let contenido: string;
+    let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
+
+    if (documento.tipo === "excel") {
+      const buffer = await fileData.arrayBuffer();
+      const parsed = await parseExcel(buffer, { documento_id: documento.id });
+      contenido = parsed.content;
+      preExtracted = parsed.preExtracted;
+    } else if (["csv", "whatsapp"].includes(documento.tipo)) {
+      contenido = await fileData.text();
+    } else if (documento.tipo === "pdf") {
+      const arrayBuf = await fileData.arrayBuffer();
+      const { PDFParse } = await import("pdf-parse");
+      const pdfParser = new PDFParse(new Uint8Array(arrayBuf));
+      const pdfData = await pdfParser.getText();
+      contenido = pdfData.text;
+    } else if (documento.tipo === "imagen") {
+      const buffer = await fileData.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+      const { groupedText } = await ocrAndGroupImages([{
+        base64,
+        mimeType: "image/jpeg",
+        fileName: documento.storage_path.split("/").pop() || "imagen",
+      }]);
+      if (!groupedText.trim()) throw new Error("OCR no extrajo texto de la imagen");
+      contenido = groupedText;
+    } else {
+      contenido = await fileData.text();
+    }
+
+    if (!contenido.trim()) {
+      // Update document state to error
+      await svc.from("documentos_subidos").update({
+        estado: "error",
+        progreso_ia: { estado: "error", error: "Documento vacio o sin contenido legible" },
+      }).eq("id", documento.id);
+
+      return NextResponse.json({ error: "Documento vacio o sin contenido legible" }, { status: 422 });
+    }
+
+    const result = await procesarDocumento(
+      documento.id,
+      usuario.empresa_id,
+      contenido,
+      undefined,
+      preExtracted ?? undefined
+    );
+
+    return NextResponse.json({
+      ok: true,
+      documento_id: documento.id,
+      movimientos: result.movimientos_total,
+      error: result.error ?? null,
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[procesar-documento] ${documento.id} error:`, errorMsg);
+
+    await svc.from("documentos_subidos").update({
+      estado: "error",
+      progreso_ia: { estado: "error", error: errorMsg },
+    }).eq("id", documento.id);
+
+    return NextResponse.json({ ok: false, error: errorMsg }, { status: 500 });
+  }
 }

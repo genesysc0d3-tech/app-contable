@@ -1112,6 +1112,24 @@ export type Database = {
           },
         ]
       }
+      app_config: {
+        Row: {
+          name: string
+          value: string
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          value: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          value?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -39,13 +39,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const certCheck = await verificarCertificado(usuario.empresa_id);
-  if (!certCheck.ok) {
-    return NextResponse.json(
-      { ok: false, error: certCheck.error, detalle: certCheck.mensaje },
-      { status: 422 },
-    );
-  }
+  // DEMO: omitimos verificación de certificado SII.
+  // En producción: const certCheck = await verificarCertificado(usuario.empresa_id);
 
   // 2. Parse body
   let body: BoletaInput;

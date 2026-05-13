@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import FileUpload from "@/components/upload/FileUpload";
 import type { QueuedFile } from "@/components/upload/FileUpload";
 import DocumentList from "@/components/upload/DocumentList";
-import { getDocumentosRecientes, uploadDocumento } from "@/lib/upload";
+import { getDocumentosRecientes } from "@/lib/upload";
 import type { DocumentoSubido } from "@/lib/upload";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
@@ -85,104 +85,44 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
 
   const handleFilesQueued = useCallback(async (files: QueuedFile[]) => {
     setUploading(true);
-
-    // Separate into groups: grandes (each alone) and grouped by badge number
-    const grandes = files.filter((f) => f.category === "grande");
-    const grouped = new Map<number, QueuedFile[]>();
+    let subidos = 0;
+    let errores = 0;
 
     for (const f of files) {
-      if (f.category === "grande") continue;
-      const existing = grouped.get(f.group) ?? [];
-      existing.push(f);
-      grouped.set(f.group, existing);
-    }
+      try {
+        // Read file as base64
+        const arrayBuf = await f.file.arrayBuffer();
+        const base64 = Buffer.from(arrayBuf).toString("base64");
 
-    // Process grandes individually
-    for (const f of grandes) {
-      const result = await uploadDocumento(f.file, empresaId);
-      if (result.success && result.documento) {
-        setDocumentos((prev) => {
-          const exists = prev.some((d) => d.id === result.documento!.id);
-          return exists ? prev : [result.documento!, ...prev];
-        });
-        fetch("/api/procesar-documento", {
+        const res = await fetch("/api/subir-procesar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documento_id: result.documento.id }),
-        }).catch(() => {});
+          body: JSON.stringify({
+            nombre: f.customName || f.file.name,
+            base64,
+            tipo: f.file.name.endsWith(".pdf") ? "pdf" : "excel",
+          }),
+        });
+
+        const data = await res.json();
+        if (data.ok) {
+          subidos++;
+          fetchDocumentos();
+        } else {
+          errores++;
+          toast(`Error: ${data.error ?? "desconocido"}`, "error");
+        }
+      } catch {
+        errores++;
+        toast(`Error procesando ${f.file.name}`, "error");
       }
     }
 
-    // Process groups
-    for (const [, groupFiles] of grouped) {
-      const allImages = groupFiles.every((f) => f.category === "imagen");
-      const groupName = groupFiles[0]?.customName || "Grupo";
-
-      if (allImages && groupFiles.length > 1) {
-        // Upload all images, then process as grouped OCR
-        const uploadedPaths: { path: string; mime: string; name: string }[] = [];
-        let firstDocId: string | null = null;
-
-        for (const f of groupFiles) {
-          const result = await uploadDocumento(f.file, empresaId);
-          if (result.success && result.documento) {
-            if (!firstDocId) {
-              firstDocId = result.documento.id;
-              // Update the document name to the group name
-              await supabase.from("documentos_subidos")
-                .update({ nombre_archivo: groupName })
-                .eq("id", result.documento.id);
-              setDocumentos((prev) => {
-                const exists = prev.some((d) => d.id === result.documento!.id);
-                const updated = { ...result.documento!, nombre_archivo: groupName };
-                return exists ? prev : [updated, ...prev];
-              });
-            }
-            uploadedPaths.push({
-              path: result.documento.storage_path,
-              mime: f.file.type,
-              name: f.file.name,
-            });
-          }
-        }
-
-        if (firstDocId && uploadedPaths.length > 0) {
-          fetch("/api/procesar-documento", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              documento_id: firstDocId,
-              grouped_images: uploadedPaths,
-            }),
-          }).catch(() => {});
-        }
-      } else {
-        // Non-image group or single file: upload and process each
-        for (const f of groupFiles) {
-          const result = await uploadDocumento(f.file, empresaId);
-          if (result.success && result.documento) {
-            if (f.customName !== f.file.name.replace(/\.[^.]+$/, "")) {
-              await supabase.from("documentos_subidos")
-                .update({ nombre_archivo: f.customName })
-                .eq("id", result.documento.id);
-            }
-            setDocumentos((prev) => {
-              const exists = prev.some((d) => d.id === result.documento!.id);
-              return exists ? prev : [result.documento!, ...prev];
-            });
-            fetch("/api/procesar-documento", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ documento_id: result.documento.id }),
-            }).catch(() => {});
-          }
-        }
-      }
-    }
-
-    toast(`${files.length} archivo${files.length !== 1 ? "s" : ""} subido${files.length !== 1 ? "s" : ""}`);
+    const totalOk = subidos > 0 ? `${subidos} procesado${subidos !== 1 ? "s" : ""}` : "";
+    const totalErr = errores > 0 ? `${errores} con error` : "";
+    toast([totalOk, totalErr].filter(Boolean).join(", "));
     setUploading(false);
-  }, [empresaId, toast]);
+  }, [empresaId, fetchDocumentos, toast]);
 
   return (
     <div className="flex-1 pb-24">

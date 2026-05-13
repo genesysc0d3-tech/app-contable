@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { DocumentoSubido } from "@/lib/upload";
 import type { ProgresoIA, DuplicadoDetalle, TipoDuplicado } from "@/lib/ai/types";
-import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle, EyeSlash, Eye, MagicWand } from "@phosphor-icons/react";
+import { FileText, FileXls, Image, ChatText, File, CaretDown, Warning, ArrowUUpLeft, ArrowCounterClockwise, Play, Info, XCircle, WarningCircle, EyeSlash, Eye, MagicWand, X } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import FieldMapper from "./FieldMapper";
 import HintSelector from "./HintSelector";
@@ -41,8 +41,8 @@ function ProgresoBar({ progreso, estado }: { progreso: ProgresoIA | null; estado
   const lote_actual = progreso?.lote_actual;
   const total_lotes = progreso?.total_lotes;
   const movimientos_encontrados = progreso?.movimientos_encontrados;
-  const hasProgress = !!total_lotes && !!lote_actual;
-  const pct = hasProgress ? ((lote_actual as number) / (total_lotes as number)) * 100 : 0;
+  const hasProgress = total_lotes != null && lote_actual != null && total_lotes > 0;
+  const pct = hasProgress ? (Number(lote_actual) / Number(total_lotes)) * 100 : 0;
 
   // Phase labels
   let label = "Preparando documento...";
@@ -360,6 +360,32 @@ function DuplicadoVisor({ duplicados, documentoId, hasWarning }: {
   );
 }
 
+function CancelProcessingButton({ documentoId, onCancelled }: { documentoId: string; onCancelled: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  async function handleCancel() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/cancelar-documento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documento_id: documentoId }),
+      });
+      if (res.ok) { toast("Procesamiento cancelado"); onCancelled(); }
+      else toast("Error al cancelar", "error");
+    } catch { toast("Error al cancelar", "error"); }
+    setLoading(false);
+  }
+
+  return (
+    <button onClick={handleCancel} disabled={loading}
+      className="btn-press flex items-center gap-1 text-[10px] text-[#E8553E] hover:text-[var(--accent-hover)] transition-colors">
+      <X size={10} weight="bold" /> {loading ? "..." : "Cancelar"}
+    </button>
+  );
+}
+
 function UndoButton({ documentoId, estado, onUndo }: { documentoId: string; estado: string; onUndo: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -486,6 +512,10 @@ export default function DocumentList({ documentos, onDocumentoUpdate }: Document
             )}
 
             <div className="flex items-center gap-3 flex-wrap mt-1">
+              {/* Cancel processing */}
+              {doc.estado === "procesando" && (
+                <CancelProcessingButton documentoId={doc.id} onCancelled={() => onDocumentoUpdate?.()} />
+              )}
               {/* Undo / Reprocess */}
               <UndoButton documentoId={doc.id} estado={doc.estado} onUndo={() => onDocumentoUpdate?.()} />
 

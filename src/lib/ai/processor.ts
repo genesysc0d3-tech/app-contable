@@ -2,7 +2,6 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../database.types";
 import { getAIProvider } from "./provider";
 import { getSystemPrompt, getClassifyOnlySystemPrompt } from "./prompt";
-import { calcularCosto } from "./providers/mistral";
 import type {
   MovimientoExtraido,
   PropuestaExtraida,
@@ -877,7 +876,8 @@ export async function procesarDocumento(
     // Track token usage (include OCR tokens if present)
     const finalTokensInput = totalTokensInput + (ocrTokens?.ocrTokensInput ?? 0);
     const finalTokensOutput = totalTokensOutput + (ocrTokens?.ocrTokensOutput ?? 0);
-    const costo = calcularCosto(finalTokensInput, finalTokensOutput);
+    const provider = getAIProvider();
+    const costo = provider.getCost(finalTokensInput, finalTokensOutput);
     await supabase.from("ia_uso").insert({
       empresa_id: empresaId,
       documento_id: documentoId,

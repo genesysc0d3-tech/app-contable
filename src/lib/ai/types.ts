@@ -64,6 +64,9 @@ export interface AIProvider {
     movimientos: MovimientoExtraido[],
     systemPrompt: string
   ): Promise<ClassifyOnlyResponse>;
+
+  /** Calculate cost in USD for given token usage. */
+  getCost(tokensInput: number, tokensOutput: number): number;
 }
 
 export type TipoDuplicado =

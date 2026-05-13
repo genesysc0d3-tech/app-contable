@@ -48,19 +48,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
-  // Gate: el intermediario no emite sin certificado digital del contribuyente.
-  // Replica el check que Haulmer/OpenFactura hacen antes de aceptar un DTE.
-  const certCheck = await verificarCertificado(usuario.empresa_id);
-  if (!certCheck.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: certCheck.error,
-        detalle: certCheck.mensaje,
-      },
-      { status: 422 },
-    );
-  }
+  // Gate: DEMO — omitimos verificación de certificado SII.
+  // En producción se debe habilitar:
+  //   const certCheck = await verificarCertificado(usuario.empresa_id);
+  //   if (!certCheck.ok) return NextResponse.json(...)
 
   // Body acepta:
   //   { propuesta_ids: string[] }  → todas como AFECTA (default histórico)

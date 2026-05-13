@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import EmisorForm from "./EmisorForm";
 import CertificadoToggle from "./CertificadoToggle";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
+import AiKeyConfig from "./AiKeyConfig";
 
 export default async function EmpresaPage() {
   const usuario = (await getUsuario())!;
@@ -50,6 +51,8 @@ export default async function EmpresaPage() {
         </div>
         <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
       </section>
+
+      <AiKeyConfig />
     </main>
   );
 }
