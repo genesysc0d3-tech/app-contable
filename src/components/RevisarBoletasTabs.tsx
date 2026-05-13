@@ -1,21 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { CheckSquare, Receipt, PaperPlaneTilt } from "@phosphor-icons/react";
+import { CheckSquare, Receipt, PaperPlaneTilt, Buildings } from "@phosphor-icons/react";
 
 interface RevisarBoletasTabsProps {
   revisarContent: React.ReactNode;
   emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
+  empresaContent: React.ReactNode;
   revisarHint: string;
 }
 
-type Tab = "revisar" | "emitir" | "boletas";
+type Tab = "revisar" | "emitir" | "boletas" | "empresa";
 
 export default function RevisarBoletasTabs({
   revisarContent,
   emitirContent,
   boletasContent,
+  empresaContent,
   revisarHint,
 }: RevisarBoletasTabsProps) {
   const [tab, setTab] = useState<Tab>("revisar");
@@ -24,6 +26,7 @@ export default function RevisarBoletasTabs({
     { id: "revisar", label: "Revisar", hint: revisarHint, Icon: CheckSquare },
     { id: "emitir", label: "Emitir", hint: "Crear boleta nueva", Icon: PaperPlaneTilt },
     { id: "boletas", label: "Boletas", hint: "Emitidas al SII", Icon: Receipt },
+    { id: "empresa", label: "Empresa", hint: "Configuración", Icon: Buildings },
   ];
   const active = tabs.find((t) => t.id === tab)!;
 
@@ -69,6 +72,7 @@ export default function RevisarBoletasTabs({
         <div className={`escritorio-col ${tab === "revisar" ? "block" : "hidden"}`}>{revisarContent}</div>
         <div className={tab === "emitir" ? "block" : "hidden"}>{emitirContent}</div>
         <div className={tab === "boletas" ? "block" : "hidden"}>{boletasContent}</div>
+        <div className={tab === "empresa" ? "block" : "hidden"}>{empresaContent}</div>
       </div>
     </section>
   );

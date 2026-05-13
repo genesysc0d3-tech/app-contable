@@ -3,13 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import type { Tables } from "@/lib/database.types";
 import { validarRut, formatRut } from "@/lib/rut";
-import { CheckCircle, EyeSlash, Eye, PencilSimple, CurrencyBtc, CaretRight } from "@phosphor-icons/react";
+import { CheckCircle, XCircle, PencilSimple, CurrencyBtc, CaretRight } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
 import {
   aprobarPropuesta,
-  ocultarPropuesta,
-  restaurarPropuesta,
+  rechazarPropuesta,
   editarPropuesta,
   crearClienteDesdeRevisar,
   devolverAOmitidos,
@@ -128,21 +127,11 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
     setLoading(false);
   }
 
-  async function handleOcultar() {
+  async function handleRechazar() {
     setLoading(true);
-    await ocultarPropuesta(propuesta.id);
+    await rechazarPropuesta(propuesta.id);
     invalidateResumen();
-    toast("Ocultado");
-    setDismissed(true);
-    setTimeout(() => onAction?.(), 250);
-    setLoading(false);
-  }
-
-  async function handleRestaurar() {
-    setLoading(true);
-    await restaurarPropuesta(propuesta.id);
-    invalidateResumen();
-    toast("Restaurado");
+    toast("Rechazado");
     setDismissed(true);
     setTimeout(() => onAction?.(), 250);
     setLoading(false);
@@ -325,20 +314,13 @@ export default function PropuestaCard({ propuesta, clientes, empresaId, onAction
               <CheckCircle size={16} weight="bold" /> Aprobar
             </button>
             <button onClick={() => setEditing(true)} disabled={loading}
-              className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#E8553E] bg-transparent hover:bg-[var(--accent-light)] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#E8553E] transition-all duration-150">
+              className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#F59E0B]/10 hover:bg-[#F59E0B]/20 disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#F59E0B] transition-all duration-150">
               <PencilSimple size={16} /> Editar
             </button>
-            {propuesta.estado === "oculto" ? (
-              <button onClick={handleRestaurar} disabled={loading}
-                className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[var(--muted)] transition-all duration-150">
-                <Eye size={16} /> Restaurar
-              </button>
-            ) : (
-              <button onClick={handleOcultar} disabled={loading}
-                className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[var(--muted)] transition-all duration-150">
-                <EyeSlash size={16} /> Ocultar
-              </button>
-            )}
+            <button onClick={handleRechazar} disabled={loading}
+              className="btn-press flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#E8553E]/10 hover:bg-[#E8553E]/20 disabled:opacity-50 px-3 py-2.5 text-xs font-medium text-[#E8553E] transition-all duration-150">
+              <XCircle size={16} weight="bold" /> Rechazar
+            </button>
           </div>
 
           {/* Omitidos anidados */}

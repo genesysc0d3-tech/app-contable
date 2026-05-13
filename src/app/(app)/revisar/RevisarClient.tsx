@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import CompletionBurst from "@/components/CompletionBurst";
-import { aprobarTodas, aprobarPropuesta, ocultarPropuesta, restaurarPropuesta } from "./actions";
+import { aprobarTodas, aprobarPropuesta, rechazarPropuesta } from "./actions";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
 import type { Tables } from "@/lib/database.types";
-import { CaretRight, FileText, CheckCircle, Check, PencilSimple, EyeSlash, Eye, Warning, WarningOctagon, WarningCircle } from "@phosphor-icons/react";
+import { CaretRight, FileText, CheckCircle, Check, PencilSimple, XCircle, Warning, WarningOctagon, WarningCircle } from "@phosphor-icons/react";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -57,10 +57,10 @@ function fmtFechaCorta(dateStr: string | null | undefined): string {
   return `${d.getDate()} ${meses[d.getMonth()]}`;
 }
 
-function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
-  propuesta: Propuesta; onExpand: () => void; onEdit: () => void; onAction: () => void; isOculta: boolean;
+function ThinRow({ propuesta, onExpand, onEdit, onAction }: {
+  propuesta: Propuesta; onExpand: () => void; onEdit: () => void; onAction: () => void;
 }) {
-  const [busy, setBusy] = useState<"aprobar" | "ocultar" | null>(null);
+  const [busy, setBusy] = useState<"aprobar" | "rechazar" | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -73,14 +73,12 @@ function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
     router.refresh(); onAction(); setBusy(null);
   }
 
-  async function handleOcultarOrRestaurar(e: React.MouseEvent) {
+  async function handleRechazar(e: React.MouseEvent) {
     e.stopPropagation();
-    setBusy("ocultar");
-    const res = isOculta
-      ? await restaurarPropuesta(propuesta.id)
-      : await ocultarPropuesta(propuesta.id);
+    setBusy("rechazar");
+    const res = await rechazarPropuesta(propuesta.id);
     if (res.error) toast(`Error: ${res.error}`, "error");
-    else toast(isOculta ? "Restaurada" : "Oculta");
+    else toast("Rechazada");
     router.refresh(); onAction(); setBusy(null);
   }
 
@@ -125,18 +123,18 @@ function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
           type="button"
           onClick={handleEditar}
           title="Editar"
-          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[var(--accent-light)] text-[#E8553E] hover:bg-[#FFE4E0] transition-colors"
+          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[#F59E0B]/10 text-[#F59E0B] hover:bg-[#F59E0B]/20 transition-colors"
         >
           <PencilSimple size={12} weight="bold" />
         </button>
         <button
           type="button"
-          onClick={handleOcultarOrRestaurar}
+          onClick={handleRechazar}
           disabled={busy !== null}
-          title={isOculta ? "Restaurar" : "Ocultar"}
-          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--border)] disabled:opacity-50 transition-colors"
+          title="Rechazar"
+          className="btn-press w-6 h-6 flex items-center justify-center rounded bg-[#E8553E]/10 text-[#E8553E] hover:bg-[#E8553E]/20 disabled:opacity-50 transition-colors"
         >
-          {isOculta ? <Eye size={12} weight="bold" /> : <EyeSlash size={12} weight="bold" />}
+          <XCircle size={12} weight="bold" />
         </button>
       </div>
     </div>
@@ -144,7 +142,7 @@ function ThinRow({ propuesta, onExpand, onEdit, onAction, isOculta }: {
 }
 
 function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap, layout, documentoId }: {
-  tipo: "alta" | "media" | "baja" | "omitidos" | "ocultas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap; layout: "mobile" | "desktop"; documentoId: string;
+  tipo: "alta" | "media" | "baja" | "omitidos" | "rechazadas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap; layout: "mobile" | "desktop"; documentoId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
@@ -206,16 +204,6 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   const router = useRouter();
   const { toast } = useToast();
 
-  if (propuestas.length === 0) return null;
-
-  const config = {
-    alta: { Icon: CheckCircle, label: `Alta confianza · ${propuestas.length}`, color: "text-[#22C55E]" },
-    media: { Icon: Warning, label: `Requiere revisión · ${propuestas.length}`, color: "text-[#F59E0B]" },
-    baja: { Icon: WarningOctagon, label: `Falta información · ${propuestas.length}`, color: "text-[#E8553E]" },
-    omitidos: { Icon: WarningCircle, label: `Omitidos huérfanos · ${propuestas.length}`, color: "text-[#F59E0B]" },
-    ocultas: { Icon: EyeSlash, label: `Ocultas · ${propuestas.length}`, color: "text-[var(--muted)]" },
-  }[tipo];
-
   const sorted = useMemo(() => {
     return [...propuestas].sort((a, b) => {
       const diff = (b.confianza ?? 0) - (a.confianza ?? 0);
@@ -225,7 +213,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   }, [propuestas]);
 
   // mounted gate: no compute blocks until client mounted (evita hydration mismatch)
-  const useBlocks = mounted && layout === "desktop" && sorted.length > 10 && tipo !== "ocultas";
+  const useBlocks = mounted && layout === "desktop" && sorted.length > 10 && tipo !== "rechazadas";
 
   // Build stable block assignment. Items keep their block number across
   // approvals. New items go to the next available block. Empty blocks
@@ -366,6 +354,16 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     setTimeout(() => { onAction(); }, 500);
   }
 
+  if (propuestas.length === 0) return null;
+
+  const config = {
+    alta: { Icon: CheckCircle, label: `Alta confianza · ${propuestas.length}`, color: "text-[#22C55E]" },
+    media: { Icon: Warning, label: `Requiere revisión · ${propuestas.length}`, color: "text-[#F59E0B]" },
+    baja: { Icon: WarningOctagon, label: `Falta información · ${propuestas.length}`, color: "text-[#E8553E]" },
+    omitidos: { Icon: WarningCircle, label: `Omitidos huérfanos · ${propuestas.length}`, color: "text-[#F59E0B]" },
+    rechazadas: { Icon: XCircle, label: `Rechazadas · ${propuestas.length}`, color: "text-[#E8553E]" },
+  }[tipo];
+
   return (
     <div className="rounded-xl bg-[var(--surface)] overflow-hidden">
       <div
@@ -433,9 +431,9 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                   Duplicado huérfano: la propuesta original ya fue aprobada o devuelta. Decidí qué hacer con esta copia.
                 </p>
               )}
-              {tipo === "ocultas" && (
+              {tipo === "rechazadas" && (
                 <p className="text-[10px] text-[var(--muted)] bg-[var(--surface)] rounded-lg px-2.5 py-1.5 mb-2">
-                  Propuesta oculta — podés restaurarla aprobándola, editándola o devolviéndola.
+                  Propuesta rechazada — no se considerará para emitir.
                 </p>
               )}
               {expandedCards.has(p.id) ? (
@@ -457,7 +455,6 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
                   onExpand={() => toggleCard(p.id)}
                   onEdit={() => editCard(p.id)}
                   onAction={onAction}
-                  isOculta={tipo === "ocultas"}
                 />
               )}
               </div>
@@ -543,13 +540,13 @@ function DocumentBody({ group, clientes, empresaId, onAction, layout }: {
   const alta = pendientes.filter((p) => classifyConfianza(p) === "alta");
   const media = pendientes.filter((p) => classifyConfianza(p) === "media");
   const baja = pendientes.filter((p) => classifyConfianza(p) === "baja");
-  const ocultas = group.propuestas.filter((p) => p.estado === "oculto");
+  const rechazadas = group.propuestas.filter((p) => p.estado === "rechazado");
   const totalVisible = pendientes.length + orphanedOmitidos.length;
 
   return (
     <div className="pt-2 space-y-2 animate-fade-in relative">
       {showBurst && !burstDone && <CompletionBurst onDone={handleBurstDone} />}
-      {totalVisible === 0 && ocultas.length === 0 ? (
+      {totalVisible === 0 && rechazadas.length === 0 ? (
         <div className="text-center text-[var(--muted-light)] text-xs py-8">Todo revisado en este documento</div>
       ) : (
         <div className={showBurst && !burstDone ? "opacity-15 transition-opacity duration-300" : ""}>
@@ -558,7 +555,7 @@ function DocumentBody({ group, clientes, empresaId, onAction, layout }: {
             <ConfianzaGroup tipo="media" propuestas={media} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
             <ConfianzaGroup tipo="baja" propuestas={baja} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
             <ConfianzaGroup tipo="omitidos" propuestas={orphanedOmitidos} clientes={clientes} empresaId={empresaId} onAction={() => { if (totalVisible <= 1) setShowBurst(true); onAction(); }} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
-            <ConfianzaGroup tipo="ocultas" propuestas={ocultas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
+            <ConfianzaGroup tipo="rechazadas" propuestas={rechazadas} clientes={clientes} empresaId={empresaId} onAction={onAction} omitidosMap={omitidosMap} layout={layout} documentoId={group.documentoId} />
           </div>
         </div>
       )}

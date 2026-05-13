@@ -125,6 +125,21 @@ export async function restaurarPropuesta(propuestaId: string) {
   return { ok: true };
 }
 
+export async function rechazarPropuesta(propuestaId: string) {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error };
+  const { error, count } = await ctx.sb
+    .from("propuestas_ia")
+    .update({ estado: "rechazado" }, { count: "exact" })
+    .eq("empresa_id", ctx.empresaId)
+    .eq("id", propuestaId);
+  if (error) return { error: error.message };
+  if (!count) return { error: "No se pudo rechazar" };
+  revalidatePath("/revisar");
+  revalidatePath("/escritorio");
+  return { ok: true };
+}
+
 export async function editarPropuesta(
   propuestaId: string,
   campos: {
