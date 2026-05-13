@@ -27,6 +27,12 @@ export function normalizeDate(
   if (format === "dd/mm/yyyy" || format === "dd-mm-yyyy" || format === "unknown") {
     const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+    if (m2) {
+      const yy = parseInt(m2[3], 10);
+      const fullYear = yy > 50 ? 1900 + yy : 2000 + yy;
+      return `${fullYear}-${m2[2].padStart(2, "0")}-${m2[1].padStart(2, "0")}`;
+    }
   }
 
   if (format === "yyyy-mm-dd") {

@@ -294,7 +294,7 @@ export async function procesarDocumento(
       // no cargo/abono split, no n_documento). Skip AI entirely, classify
       // all as "boleta" with high confidence.
       const isTemplate = movs.length > 0 &&
-        movs.every((m) => m.tipo_flujo === "entrada" && !m.n_documento && !m.origen);
+        movs.every((m) => m.tipo_flujo === "entrada" && !m.n_documento);
 
       if (isTemplate) {
         // Auto-classify all noClasificados as "boleta"
