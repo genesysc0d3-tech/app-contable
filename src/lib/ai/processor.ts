@@ -270,6 +270,12 @@ export async function procesarDocumento(
     // to its original index in preExtracted.
     const origIndexByMistralIdx: number[] = [];
 
+    // Result containers (used by both bypass and non-bypass paths)
+    const allMovimientos: MovimientoExtraido[] = [];
+    const allPropuestas: EnrichedPropuesta[] = [];
+    // Template propuestas (auto-classified as boleta, no AI needed)
+    const templatePropuestas: EnrichedPropuesta[] = [];
+
     if (bypassMode) {
       const movs = preExtracted! as MovimientoExtraido[];
 
@@ -284,6 +290,38 @@ export async function procesarDocumento(
         });
       }
 
+      // 2. Detect template format: all entries are simple (fecha+desc+monto,
+      // no cargo/abono split, no n_documento). Skip AI entirely, classify
+      // all as "boleta" with high confidence.
+      const isTemplate = movs.length > 0 &&
+        movs.every((m) => m.tipo_flujo === "entrada" && !m.n_documento && !m.origen);
+
+      if (isTemplate) {
+        // Auto-classify all noClasificados as "boleta"
+        for (const nc of ruleResult.noClasificados) {
+          templatePropuestas.push({
+            movimiento_index: nc.movimiento_index,
+            tipo_propuesto: "boleta" as PropuestaExtraida["tipo_propuesto"],
+            receptor_nombre: null,
+            receptor_rut: null,
+            monto_neto: nc.movimiento.monto,
+            iva: 0,
+            total: nc.movimiento.monto,
+            confianza: 0.95,
+            notas: "Plantilla boleta — clasificación automática",
+            spread_compra: null,
+            spread_venta: null,
+            spread_ganancia: null,
+            __fuente: "regla_global",
+            __regla_id: null,
+          });
+        }
+
+        // No Mistral chunks needed
+        console.log(
+          `[template] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${ruleResult.noClasificados.length} como boleta (template)`
+        );
+      } else {
       // 2. Chunk only the leftover movs for Mistral classification
       const forMistral: MovimientoExtraido[] = [];
       for (const nc of ruleResult.noClasificados) {
@@ -297,6 +335,7 @@ export async function procesarDocumento(
 
       for (let i = 0; i < forMistral.length; i += CHUNK_SIZE) {
         movChunks.push({ movs: forMistral.slice(i, i + CHUNK_SIZE) });
+      }
       }
 
       // Update rule usage counters (best-effort, non-blocking)
@@ -382,8 +421,6 @@ export async function procesarDocumento(
     // Combine results. In bypass+rules mode, allMovimientos is the original
     // preExtracted list, and allPropuestas merges rule classifications +
     // Mistral classifications (capped at MISTRAL_MAX_CONFIANZA).
-    const allMovimientos: MovimientoExtraido[] = [];
-    const allPropuestas: EnrichedPropuesta[] = [];
     let totalTokensInput = 0;
     let totalTokensOutput = 0;
     let modelo = "";
@@ -391,6 +428,11 @@ export async function procesarDocumento(
     if (bypassMode) {
       // allMovimientos mirrors preExtracted 1:1
       allMovimientos.push(...(preExtracted as MovimientoExtraido[]));
+
+      // Add template auto-classified propuestas (if any)
+      for (const tp of templatePropuestas) {
+        allPropuestas.push(tp);
+      }
 
       // Start from rule classifications
       for (const [origIdx, rc] of ruleClassifications) {
@@ -536,6 +578,29 @@ export async function procesarDocumento(
     }
 
     // Detect duplicates: check existing movimientos for this empresa
+    // In bypass mode (template format), skip dedup to keep all rows as-is
+    let indicesToKeep: number[] = [];
+    let duplicadosSaltados = 0;
+    let duplicadosDetalle: DuplicadoDetalle[] = [];
+    let movimientosToInsert: Record<string, unknown>[] = [];
+    let falsosDuplicadosWarning = false;
+
+    if (bypassMode) {
+      // Template/bypass: keep all rows, no dedup
+      indicesToKeep = validMovimientos.map((_, i) => i);
+      movimientosToInsert = validMovimientos.map((m) => ({
+        empresa_id: empresaId,
+        documento_id: documentoId,
+        fecha: parseFecha(m.fecha),
+        descripcion: String(m.descripcion ?? ""),
+        monto: toNum(m.monto) ?? 0,
+        tipo_flujo: m.tipo_flujo || "entrada",
+        origen: m.origen || null,
+        n_documento: m.n_documento || null,
+      }));
+      duplicadosSaltados = 0;
+      duplicadosDetalle = [];
+    } else {
     const movimientosParsed = validMovimientos.map((m) => ({
       empresa_id: empresaId,
       documento_id: documentoId,
@@ -784,13 +849,13 @@ export async function procesarDocumento(
     }
 
     // Check for false-duplicate warning (>5 loose-only dups for same desc+monto)
-    const falsosDuplicadosWarning = Array.from(looseOnlyDupCounts.entries())
+    falsosDuplicadosWarning = Array.from(looseOnlyDupCounts.entries())
       .filter(([, count]) => count > 5)
       .length > 0;
 
     // Strip excel_row/saldo: those are in-memory only for dup detection,
     // movimientos_raw schema doesn't have those columns.
-    const movimientosToInsert = indicesToKeep.map((i) => {
+    movimientosToInsert = indicesToKeep.map((i) => {
       const { excel_row: _er, saldo: _s, ...row } = movimientosParsed[i];
       void _er; void _s;
       return row;
@@ -806,6 +871,7 @@ export async function procesarDocumento(
         duplicados_detalle: duplicadosDetalle,
       });
     }
+    } // end else (non-bypass dedup)
 
     // Save movimientos_raw in batches
     const { ids: savedIds, error: movError } = await insertInBatches(
