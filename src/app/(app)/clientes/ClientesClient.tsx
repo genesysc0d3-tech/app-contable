@@ -48,14 +48,15 @@ function ClienteForm({ empresaId, cliente, onClose }: { empresaId: string; clien
   const [rut, setRut] = useState(cliente?.rut ?? "");
   const [email, setEmail] = useState(cliente?.email ?? "");
   const [telefono, setTelefono] = useState(cliente?.telefono ?? "");
+  const [tipoContribuyente, setTipoContribuyente] = useState(cliente?.tipo_contribuyente ?? "afecto");
   const [notas, setNotas] = useState(cliente?.notas ?? "");
   const rutError = rut.trim() && !validarRut(rut) ? "RUT inválido" : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
     const result = cliente
-      ? await editarCliente(cliente.id, { nombre, rut, email, telefono, notas })
-      : await crearCliente({ empresa_id: empresaId, nombre, rut, email, telefono, notas });
+      ? await editarCliente(cliente.id, { nombre, rut, email, telefono, notas, tipo_contribuyente: tipoContribuyente })
+      : await crearCliente({ empresa_id: empresaId, nombre, rut, email, telefono, notas, tipo_contribuyente: tipoContribuyente });
     if ("error" in result && result.error) { setError(result.error); setLoading(false); return; }
     router.refresh(); onClose(); setLoading(false);
   }
@@ -79,6 +80,32 @@ function ClienteForm({ empresaId, cliente, onClose }: { empresaId: string; clien
         </div>
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
         <input type="tel" placeholder="Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputCls} />
+        <div>
+          <label className="text-[11px] text-[var(--muted-light)] mb-1.5 block font-medium">Tipo de contribuyente</label>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setTipoContribuyente("afecto")}
+              className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all duration-150 ${
+                tipoContribuyente === "afecto"
+                  ? "bg-[#E8553E] text-white shadow-[0_2px_8px_rgba(232,85,62,0.3)]"
+                  : "bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)] border border-[var(--border)]"
+              }`}>
+              AFECTO
+            </button>
+            <button type="button" onClick={() => setTipoContribuyente("exento")}
+              className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all duration-150 ${
+                tipoContribuyente === "exento"
+                  ? "bg-[#3B82F6] text-white shadow-[0_2px_8px_rgba(59,130,246,0.3)]"
+                  : "bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)] border border-[var(--border)]"
+              }`}>
+              EXENTO
+            </button>
+          </div>
+          <p className="text-[10px] text-[var(--muted-light)] mt-1.5 leading-tight">
+            <strong>Afecto</strong>: la boleta se emite con IVA 19% (tipo 39).
+            <strong>Exento</strong>: la boleta se emite sin IVA (tipo 41).
+            Esto se aplica automáticamente al emitir sin preguntar cada vez.
+          </p>
+        </div>
         <textarea placeholder="Notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className={`${inputCls} resize-none`} />
         <div className="flex gap-2">
           <button type="submit" disabled={loading || !!rutError}
@@ -143,6 +170,13 @@ export default function ClientesClient({ clientes, empresaId }: ClientesClientPr
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-[var(--foreground)] truncate">{c.nombre}</p>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                        c.tipo_contribuyente === "exento"
+                          ? "bg-[#3B82F6]/10 text-[#3B82F6]"
+                          : "bg-[var(--accent-light)] text-[#E8553E]"
+                      }`}>
+                        {c.tipo_contribuyente === "exento" ? "EXENTO" : "AFECTO"}
+                      </span>
                       <TransferBadge count={c.movimientos_count} />
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-[var(--muted-light)]">

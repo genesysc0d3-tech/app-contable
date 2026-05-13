@@ -11,6 +11,7 @@ export async function crearCliente(formData: {
   email?: string;
   telefono?: string;
   notas?: string;
+  tipo_contribuyente?: string;
 }) {
   if (!formData.nombre.trim()) {
     return { error: "El nombre es obligatorio" };
@@ -30,6 +31,7 @@ export async function crearCliente(formData: {
       email: formData.email?.trim() || null,
       telefono: formData.telefono?.trim() || null,
       notas: formData.notas?.trim() || null,
+      tipo_contribuyente: formData.tipo_contribuyente ?? "afecto",
     })
     .select()
     .single();
@@ -47,6 +49,7 @@ export async function editarCliente(
     email?: string | null;
     telefono?: string | null;
     notas?: string | null;
+    tipo_contribuyente?: string;
   }
 ) {
   if (campos.rut && campos.rut.trim() && !validarRut(campos.rut)) {

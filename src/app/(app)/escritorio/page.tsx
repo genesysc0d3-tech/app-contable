@@ -4,15 +4,10 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../subir/SubirClient";
 import RevisarClient from "../revisar/RevisarClient";
-import { UploadSimple, CheckSquare, Buildings, Lightning, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
+import { UploadSimple, CheckSquare, Lightning, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
 import RevisarBoletasTabs from "@/components/RevisarBoletasTabs";
 import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
 import BoletasList from "@/components/boletas/BoletasList";
-import EmisorForm from "../empresa/EmisorForm";
-import CertificadoToggle from "../empresa/CertificadoToggle";
-import CAFPanel from "../empresa/CAFPanel";
-import AiKeyConfig from "../empresa/AiKeyConfig";
-import type { CAFRow } from "../empresa/CAFPanel";
 
 function todayStr(): string {
   const d = new Date();
@@ -29,23 +24,6 @@ export default async function EscritorioPage({
   const { date: dateParam } = await searchParams;
   // Default: today. Special value "all" removes the filter.
   const selectedDate = dateParam === "all" ? null : (dateParam ?? todayStr());
-
-  const sb = await createClient();
-  const { data: cafs } = await sb
-    .from("boletas_caf_mock")
-    .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
-    .eq("empresa_id", empresaId)
-    .order("fecha_solicitud", { ascending: false });
-
-  const empresa = usuario.empresas;
-  const empresaInicial = {
-    rut: empresa.rut,
-    razon_social: empresa.razon_social,
-    giro: empresa.giro,
-    direccion: empresa.direccion,
-    comuna: empresa.comuna,
-    email_sii: empresa.email_sii,
-  };
 
   return (
     <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg">
@@ -84,9 +62,6 @@ export default async function EscritorioPage({
                 <Suspense fallback={<ShimmerBox h="h-32" />}>
                   <BoletasList empresaId={empresaId} />
                 </Suspense>
-              }
-              empresaContent={
-                <EmpresaPanel empresaInicial={empresaInicial} tieneCertificado={empresa.tiene_certificado_sii} cafs={(cafs ?? []) as CAFRow[]} />
               }
             />
           </section>
@@ -412,33 +387,4 @@ async function RevisarPanel({ empresaId, filterDate }: { empresaId: string; filt
 
 // --- Empresa panel for escritorio ---
 
-function EmpresaPanel({ empresaInicial, tieneCertificado, cafs }: {
-  empresaInicial: {
-    rut: string | null; razon_social: string | null; giro: string | null;
-    direccion: string | null; comuna: string | null; email_sii: string | null;
-  };
-  tieneCertificado: boolean | null;
-  cafs: CAFRow[];
-}) {
-  return (
-    <div className="p-4 space-y-6">
-      <header>
-        <h1 className="text-xl font-bold text-[var(--foreground)]">Empresa</h1>
-        <p className="text-sm text-[var(--muted-light)] mt-1">Datos del emisor, certificado y stock de folios (mock)</p>
-      </header>
-      <section className="p-4 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10">
-        <h2 className="text-sm font-semibold mb-3">Datos del emisor</h2>
-        <EmisorForm inicial={empresaInicial} />
-      </section>
-      <section>
-        <h2 className="text-sm font-semibold mb-2">Certificado digital SII</h2>
-        <CertificadoToggle inicial={tieneCertificado ?? false} />
-      </section>
-      <section>
-        <h2 className="text-sm font-semibold mb-2">Folios CAF</h2>
-        <CAFPanel cafs={cafs} />
-      </section>
-      <AiKeyConfig />
-    </div>
-  );
-}
+

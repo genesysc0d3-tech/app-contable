@@ -4,6 +4,8 @@ import EmisorForm from "./EmisorForm";
 import CertificadoToggle from "./CertificadoToggle";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
 import AiKeyConfig from "./AiKeyConfig";
+import ClientesEmpresa from "./ClientesEmpresa";
+import EmpresaFormatoCartola from "./EmpresaFormatoCartola";
 
 export default async function EmpresaPage() {
   const usuario = (await getUsuario())!;
@@ -50,6 +52,19 @@ export default async function EmpresaPage() {
           <span className="text-xs text-[#888] dark:text-white/60">Gestión automática</span>
         </div>
         <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold mb-3">Clientes</h2>
+        <ClientesEmpresa empresaId={empresa.id} />
+      </section>
+
+      <section>
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold">Formatos de cartola</h2>
+          <span className="text-xs text-[#888] dark:text-white/60">Subí 1 ejemplo y mapeá</span>
+        </div>
+        <EmpresaFormatoCartola empresaId={empresa.id} />
       </section>
 
       <AiKeyConfig />

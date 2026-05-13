@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     .select(`
       id, tipo_propuesto, receptor_nombre, receptor_rut, monto_neto, iva, total, estado,
       cliente_id,
-      clientes(id, nombre, rut),
+      clientes(id, nombre, rut, tipo_contribuyente),
       movimientos_raw(fecha, descripcion, monto)
     `)
     .eq("empresa_id", usuario.empresa_id)
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
     }
 
     const cliente = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as
-      { id: string; nombre: string; rut: string | null } | null;
+      { id: string; nombre: string; rut: string | null; tipo_contribuyente?: string | null } | null;
     const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as
       { fecha: string; descripcion: string; monto: number } | null;
     const receptor_rut = p.receptor_rut ?? cliente?.rut ?? undefined;
@@ -156,7 +156,9 @@ export async function POST(request: Request) {
     }];
 
     // Tipo DTE: 39 (afecta) por default, 41 (exenta) si la UI lo override
-    const tipoDte = (tipoPorId.get(pid) ?? 39) as 39 | 41;
+    // o si el cliente vinculado es exento
+    const tipoPorCliente = cliente?.tipo_contribuyente === "exento" ? 41 : undefined;
+    const tipoDte = (tipoPorId.get(pid) ?? tipoPorCliente ?? 39) as 39 | 41;
 
     const validation = validarBoleta({
       tipo_dte: tipoDte,

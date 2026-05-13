@@ -838,18 +838,21 @@ export async function procesarDocumento(
           const newIndex = originalToNewIndex.get(p.movimiento_index)!;
           const mov = validMovimientos[p.movimiento_index];
           const clienteId = resolveClienteId(clienteCache, p, mov);
+          const tipoContrib = getClienteTipo(clienteCache, clienteId);
+          const esExento = tipoContrib === "exento";
           const confianza = toNum(p.confianza);
           const confianzaLow = confianza != null && confianza < MIN_CONFIANZA;
           const enriched = p as EnrichedPropuesta;
+          const total = toNum(p.total);
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
             tipo_propuesto: normTipo(p.tipo_propuesto),
             receptor_nombre: p.receptor_nombre || null,
             receptor_rut: p.receptor_rut || null,
-            monto_neto: toNum(p.monto_neto),
-            iva: toNum(p.iva),
-            total: toNum(p.total),
+            monto_neto: esExento ? total : toNum(p.monto_neto),
+            iva: esExento ? 0 : toNum(p.iva),
+            total,
             confianza,
             notas: confianzaLow
               ? `[REVISION MANUAL - confianza ${Math.round((confianza ?? 0) * 100)}%] ${p.notas || ""}`.trim()
@@ -936,7 +939,8 @@ function extractRutFromText(text: string): string | null {
   return null;
 }
 
-type ClienteMap = Map<string, string>; // rut -> cliente_id
+type ClienteInfo = { id: string; tipo_contribuyente: string };
+type ClienteMap = Map<string, ClienteInfo>; // rut -> { id, tipo_contribuyente }
 
 async function detectAndCreateClients(
   supabase: ReturnType<typeof getServiceClient>,
@@ -973,13 +977,13 @@ async function detectAndCreateClients(
   // Fetch existing clients for this empresa
   const { data: existingClientes } = await supabase
     .from("clientes")
-    .select("id, rut")
+    .select("id, rut, tipo_contribuyente")
     .eq("empresa_id", empresaId)
     .not("rut", "is", null);
 
   const clienteMap: ClienteMap = new Map();
   for (const c of existingClientes ?? []) {
-    if (c.rut) clienteMap.set(c.rut, c.id);
+    if (c.rut) clienteMap.set(c.rut, { id: c.id, tipo_contribuyente: c.tipo_contribuyente ?? "afecto" });
   }
 
   // Create missing clients
@@ -998,10 +1002,10 @@ async function detectAndCreateClients(
     const { data: created } = await supabase
       .from("clientes")
       .insert(toCreate)
-      .select("id, rut");
+      .select("id, rut, tipo_contribuyente");
 
     for (const c of created ?? []) {
-      if (c.rut) clienteMap.set(c.rut, c.id);
+      if (c.rut) clienteMap.set(c.rut, { id: c.id, tipo_contribuyente: c.tipo_contribuyente ?? "afecto" });
     }
   }
 
@@ -1016,16 +1020,24 @@ function resolveClienteId(
   // Try receptor_rut from propuesta
   if (propuesta.receptor_rut && validarRut(propuesta.receptor_rut)) {
     const formatted = formatRut(propuesta.receptor_rut);
-    const id = clienteMap.get(formatted);
-    if (id) return id;
+    const info = clienteMap.get(formatted);
+    if (info) return info.id;
   }
 
   // Try regex on description
   const rutFromDesc = extractRutFromText(movimiento.descripcion);
   if (rutFromDesc) {
-    const id = clienteMap.get(rutFromDesc);
-    if (id) return id;
+    const info = clienteMap.get(rutFromDesc);
+    if (info) return info.id;
   }
 
   return null;
+}
+
+function getClienteTipo(clienteMap: ClienteMap, clienteId: string | null): string {
+  if (!clienteId) return "afecto";
+  for (const [, info] of clienteMap) {
+    if (info.id === clienteId) return info.tipo_contribuyente;
+  }
+  return "afecto";
 }

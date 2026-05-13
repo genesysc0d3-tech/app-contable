@@ -315,6 +315,7 @@ export type Database = {
           notas: string | null
           rut: string | null
           telefono: string | null
+          tipo_contribuyente: string
         }
         Insert: {
           created_at?: string
@@ -327,6 +328,7 @@ export type Database = {
           notas?: string | null
           rut?: string | null
           telefono?: string | null
+          tipo_contribuyente?: string
         }
         Update: {
           created_at?: string
@@ -339,6 +341,7 @@ export type Database = {
           notas?: string | null
           rut?: string | null
           telefono?: string | null
+          tipo_contribuyente?: string
         }
         Relationships: [
           {
