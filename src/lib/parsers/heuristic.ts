@@ -72,7 +72,7 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
   return null;
 }
 
-function findTransactionBlockStart(rows: Row[]): number {
+export function findTransactionBlockStart(rows: Row[]): number {
   const REQUIRED_CONSECUTIVE = 3;
   let consec = 0;
   let start = -1;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
+import { findTransactionBlockStart } from "@/lib/parsers/heuristic";
 import type { Row } from "@/lib/parsers/types";
 
 const PREVIEW_ROWS = 30;
@@ -30,10 +31,37 @@ export async function POST(request: Request) {
   if (!firstSheet) return NextResponse.json({ error: "Excel vacío" }, { status: 422 });
 
   const allRows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[firstSheet], { header: 1, defval: "" });
-  const preview = allRows.slice(0, PREVIEW_ROWS).map((r) =>
-    r.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
-  );
   const fingerprint = computeFingerprint(allRows);
+
+  // Detect where the transaction block starts (first row with date + number)
+  const txStart = findTransactionBlockStart(allRows);
+
+  // Build preview: try to find a header row just before txStart, then show transaction rows
+  let previewStart = 0;
+  let headerRow: string[] = [];
+  let dataStartRow = 0;
+
+  if (txStart > 0) {
+    // Use the row just before txStart as header (column names)
+    previewStart = Math.max(0, txStart - 1);
+    headerRow = (allRows[previewStart] ?? []).map((c) =>
+      c === null || c === undefined ? "" : String(c)
+    );
+    dataStartRow = txStart;
+  }
+
+  // Show data rows (from dataStartRow, up to PREVIEW_ROWS)
+  const dataRows = allRows.slice(dataStartRow, dataStartRow + PREVIEW_ROWS).map((r) =>
+    r.map((cell) => (cell === null || cell === undefined ? "" : String(cell)))
+  );
+
+  // Combine header + data for the full preview
+  const preview = headerRow.length > 0
+    ? [headerRow, ...dataRows]
+    : allRows.slice(0, PREVIEW_ROWS).map((r) =>
+        r.map((cell) => (cell === null || cell === undefined ? "" : String(cell)))
+      );
+
   const cols = Math.max(0, ...preview.map((r) => r.length));
 
   return NextResponse.json({
@@ -43,5 +71,7 @@ export async function POST(request: Request) {
     totalRows: allRows.length,
     cols,
     rows: preview,
+    txStart: dataStartRow,
+    hasHeader: headerRow.length > 0,
   });
 }

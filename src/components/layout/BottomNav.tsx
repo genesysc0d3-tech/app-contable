@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { UploadSimple, CheckSquare, Buildings } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
-  { href: "/subir", label: "Subir", Icon: UploadSimple },
+  { href: "/subir", label: "Emitir", Icon: UploadSimple },
   { href: "/revisar", label: "Revisar", Icon: CheckSquare, badge: true },
   { href: "/empresa", label: "Empresa", Icon: Buildings },
 ] as const;

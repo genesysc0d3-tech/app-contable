@@ -37,7 +37,7 @@ export default async function EscritorioPage({
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
           {/* Left: Capturar */}
           <aside className="lg:col-span-3">
-            <Panel icon={UploadSimple} label="Capturar" hint="Arrastrá una cartola">
+            <Panel icon={UploadSimple} label="Emitir" hint="Subí cartola o Excel modelo">
               <Suspense fallback={<ShimmerBox h="h-72" />}>
                 <SubirClient empresaId={empresaId} />
               </Suspense>

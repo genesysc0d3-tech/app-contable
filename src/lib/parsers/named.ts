@@ -3,10 +3,8 @@ import type { AdapterConfig, Row } from "./types";
 /**
  * Legacy named-header detector: inspects the first ~50 rows looking for a
  * header row with specific Spanish bank-statement column names (Banco de
- * Chile style). This is the parser that shipped in PR #47.
- *
- * Kept as a lower-priority fallback after the heuristic detector, for files
- * where the structural heuristic fails but the named labels are present.
+ * Chile style). Also detects the simplified "plantilla boletas" format
+ * with Fecha, Glosa, Monto columns.
  */
 export function detectByNames(rows: Row[]): AdapterConfig | null {
   for (let i = 0; i < Math.min(rows.length, 50); i++) {
@@ -15,6 +13,31 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
     const norm = r.map((c) => String(c ?? "").toLowerCase().trim());
 
     const fechaIdx = norm.findIndex((c) => c === "fecha");
+
+    // Simple template format: Fecha + Glosa + Monto (no cargo/abono)
+    const glosaIdx = norm.findIndex((c) => c === "glosa");
+    const montoIdx = norm.findIndex((c) => c === "monto");
+
+    if (fechaIdx >= 0 && glosaIdx >= 0 && montoIdx >= 0) {
+      return {
+        header_row: i,
+        skip_rows_before_data: i + 1,
+        date_format: "dd/mm/yyyy",
+        number_format: "chilean",
+        layout: "single_col",
+        default_tipo_flujo: "entrada",
+        columns: {
+          fecha: fechaIdx,
+          descripcion: glosaIdx,
+          cargo: montoIdx,
+          abono: montoIdx,
+          n_documento: -1,
+          saldo: -1,
+        },
+      };
+    }
+
+    // Bank cartola format: Fecha + Descripción + Cargo + Abono
     const descIdx = norm.findIndex((c) => c.includes("descripci"));
     const cargoIdx = norm.findIndex(
       (c) => c.includes("cargo") || c.includes("cheques") || c.includes("débito") || c.includes("debito")

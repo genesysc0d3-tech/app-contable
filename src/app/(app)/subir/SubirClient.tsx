@@ -9,6 +9,7 @@ import { getDocumentosRecientes } from "@/lib/upload";
 import type { DocumentoSubido } from "@/lib/upload";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
+import { DownloadSimple } from "@phosphor-icons/react";
 
 interface SubirClientProps {
   empresaId: string;
@@ -127,9 +128,17 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
   return (
     <div className="flex-1 pb-24">
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        <div>
-          <h1 className="text-[28px] font-extrabold text-[var(--foreground)]">Subir documentos</h1>
-          <p className="text-sm text-[var(--muted)] mt-1">Cartolas, boletas, screenshots o chats</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[28px] font-extrabold text-[var(--foreground)]">Emitir</h1>
+            <p className="text-sm text-[var(--muted)] mt-1">Subí cartolas o el Excel modelo para emitir</p>
+          </div>
+          <a href="/api/generar-template"
+            className="btn-press flex items-center gap-1.5 rounded-xl bg-white dark:bg-white/5 border border-[var(--border)] hover:bg-[var(--accent-light)] px-3 py-2 text-[11px] font-medium text-[var(--foreground)] transition-all duration-150 shrink-0"
+            download>
+            <DownloadSimple size={14} weight="bold" className="text-[#E8553E]" />
+            Plantilla Excel
+          </a>
         </div>
 
         {uploading ? (

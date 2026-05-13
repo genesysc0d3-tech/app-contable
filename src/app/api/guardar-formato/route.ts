@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  let body: { fingerprint?: string; nombre?: string; roles?: string[]; headerRow?: string[] };
+  let body: { fingerprint?: string; nombre?: string; roles?: string[]; headerRow?: string[]; txStart?: number };
   try {
     body = await request.json();
   } catch {
@@ -28,12 +28,13 @@ export async function POST(request: Request) {
     columnIdx[role] = i;
   }
 
-  // Determine layout and data_row based on header presence
-  const hasHeader = body.headerRow?.some((h) => h.trim()) ?? false;
+  // Determine layout using detected txStart or headers
+  const txStart = body.txStart ?? 0;
+  const hasHeader = (body.headerRow?.some((h) => h.trim()) ?? false) || txStart > 0;
   const config = {
-    header_row: hasHeader ? 0 : -1,
-    skip_rows_before_data: 0,
-    data_row: hasHeader ? 1 : 0,
+    header_row: hasHeader ? Math.max(0, txStart - 1) : -1,
+    skip_rows_before_data: txStart,
+    data_row: hasHeader ? Math.max(0, txStart) : 0,
     date_row: 0,
     date_format: "dd/mm/yyyy",
     layout: "single_col",

@@ -34,6 +34,8 @@ interface PreviewData {
   totalRows: number;
   cols: number;
   rows: string[][];
+  txStart: number;
+  hasHeader: boolean;
 }
 
 export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string }) {
@@ -90,6 +92,7 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
         nombre: preview.sheetName,
         roles,
         headerRow: preview.rows[0],
+        txStart: preview.txStart,
       }),
     })
       .then((r) => r.json())
@@ -156,10 +159,14 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
             <p className="text-xs font-semibold text-[var(--foreground)]">
               {preview.sheetName} — {preview.totalRows} filas
             </p>
-            <span className="text-[9px] text-[var(--muted-light)]">
-              Fingerprint: {preview.fingerprint.slice(0, 12)}...
-            </span>
           </div>
+
+          {preview.txStart > 0 && (
+            <p className="text-[10px] text-[#22C55E] bg-[#ECFDF5] dark:bg-[#22C55E]/10 rounded-lg px-2.5 py-1.5">
+              El sistema detectó automáticamente que los datos empiezan en la fila {preview.txStart + 1}.
+              Las filas de encabezado se saltan solas, no las marqués.
+            </p>
+          )}
 
           <p className="text-[10px] text-[var(--muted-light)] leading-relaxed">
             Decile al sistema qué significa cada columna de tu cartola.
