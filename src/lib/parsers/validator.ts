@@ -1,7 +1,7 @@
 import type { ParsedLine, Row, AdapterConfig, ValidationResult } from "./types";
 import { parseChileanNumber } from "./apply";
 
-const MIN_ROWS = 5;
+const MIN_ROWS = 1;
 const MAX_ROWS = 5000;
 const MAX_SINGLE_MONTO = 100_000_000_000; // 100 billones — anti-saldo
 const MAX_OUTLIER_RATIO = 10; // max monto no debe superar 10x la mediana

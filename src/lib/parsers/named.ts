@@ -24,11 +24,12 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
         skip_rows_before_data: i + 1,
         date_format: "dd/mm/yyyy",
         number_format: "chilean",
-        layout: "single_col",
+        layout: "transactions_log",
         default_tipo_flujo: "entrada",
         columns: {
           fecha: fechaIdx,
           descripcion: glosaIdx,
+          monto: montoIdx,
           cargo: montoIdx,
           abono: montoIdx,
           n_documento: -1,
