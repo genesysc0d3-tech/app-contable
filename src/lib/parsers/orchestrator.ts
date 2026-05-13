@@ -40,7 +40,7 @@ export async function parseExcelWithOrchestrator(
   opts?: { documento_id?: string }
 ): Promise<{ content: string; result: OrchestratorResult }> {
   const start = Date.now();
-  const workbook = XLSX.read(buffer, { type: "array" });
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
 
   // Process the first non-empty sheet with a cartola-like structure. If
   // multiple sheets exist and none match, we fall through to serializing all

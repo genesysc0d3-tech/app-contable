@@ -88,8 +88,16 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
 
     const fechaRaw = r[c.fecha];
     if (!fechaRaw) continue;
-    const fechaStr = String(fechaRaw).trim();
-    if (!fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))
+
+    // Convert Date objects (from cellDates:true) to ISO string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fechaAny = fechaRaw as any;
+    const isDate = fechaAny != null && typeof fechaAny.getFullYear === "function";
+    const fechaStr = isDate
+      ? `${fechaAny.getFullYear()}-${String(fechaAny.getMonth() + 1).padStart(2, "0")}-${String(fechaAny.getDate()).padStart(2, "0")}`
+      : String(fechaRaw).trim();
+
+    if (!isDate && !fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))
       continue;
 
     let tipo: ParsedLine["tipo"];
@@ -124,7 +132,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       monto = cargo || abono;
     }
 
-    const fecha = normalizeDate(fechaRaw, cfg.date_format);
+    const fecha = isDate ? fechaStr : normalizeDate(fechaRaw, cfg.date_format);
     const descripcion = String(r[c.descripcion] ?? "").trim();
     const n_documento =
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";

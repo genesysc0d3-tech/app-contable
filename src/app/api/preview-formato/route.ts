@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (!body.base64) return NextResponse.json({ error: "BASE64_REQUERIDO" }, { status: 422 });
 
   const buffer = Buffer.from(body.base64, "base64");
-  const workbook = XLSX.read(buffer, { type: "array" });
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
 
   const firstSheet = workbook.SheetNames.find((n) => {
     const rows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" });

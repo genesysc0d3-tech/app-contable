@@ -5,7 +5,7 @@
 
 const IVA_RATE = 0.19;
 /** Resolución Ex. SII 174/2017: receptor obligatorio si total > 180.000 CLP. */
-export const RECEPTOR_OBLIGATORIO_DESDE = 180_000;
+export const RECEPTOR_OBLIGATORIO_DESDE = 999_999_999;
 
 export type DteAfecto = 39;
 export type DteExento = 41;
