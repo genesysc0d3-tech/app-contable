@@ -12,6 +12,7 @@ export interface DatosEmisor {
   direccion?: string | null;
   comuna?: string | null;
   email_sii?: string | null;
+  tipo_contribuyente?: string;
 }
 
 export async function setDatosEmisor(
@@ -48,6 +49,7 @@ export async function setDatosEmisor(
   if (datos.direccion !== undefined) update.direccion = datos.direccion?.trim() || null;
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
+  if (datos.tipo_contribuyente !== undefined) update.tipo_contribuyente = datos.tipo_contribuyente;
 
   const { error } = await sb
     .from("empresas")

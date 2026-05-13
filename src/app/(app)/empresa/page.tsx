@@ -4,7 +4,6 @@ import EmisorForm from "./EmisorForm";
 import CertificadoToggle from "./CertificadoToggle";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
 import AiKeyConfig from "./AiKeyConfig";
-import ClientesEmpresa from "./ClientesEmpresa";
 import EmpresaFormatoCartola from "./EmpresaFormatoCartola";
 
 export default async function EmpresaPage() {
@@ -25,6 +24,7 @@ export default async function EmpresaPage() {
     direccion: empresa.direccion,
     comuna: empresa.comuna,
     email_sii: empresa.email_sii,
+    tipo_contribuyente: empresa.tipo_contribuyente ?? "afecto",
   };
 
   return (
@@ -32,7 +32,7 @@ export default async function EmpresaPage() {
       <header>
         <h1 className="text-2xl font-bold">Empresa</h1>
         <p className="text-sm text-[#888] dark:text-white/60 mt-1">
-          Datos del emisor, delegación del certificado SII y stock de folios (mock).
+          Configuración inicial de tu empresa.
         </p>
       </header>
 
@@ -48,23 +48,18 @@ export default async function EmpresaPage() {
 
       <section>
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-sm font-semibold">Folios CAF</h2>
-          <span className="text-xs text-[#888] dark:text-white/60">Gestión automática</span>
-        </div>
-        <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold mb-3">Clientes</h2>
-        <ClientesEmpresa empresaId={empresa.id} />
-      </section>
-
-      <section>
-        <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-sm font-semibold">Formatos de cartola</h2>
           <span className="text-xs text-[#888] dark:text-white/60">Subí 1 ejemplo y mapeá</span>
         </div>
         <EmpresaFormatoCartola empresaId={empresa.id} />
+      </section>
+
+      <section>
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold">Folios CAF</h2>
+          <span className="text-xs text-[#888] dark:text-white/60">Gestión automática</span>
+        </div>
+        <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
       </section>
 
       <AiKeyConfig />

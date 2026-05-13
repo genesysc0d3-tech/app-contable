@@ -531,6 +531,7 @@ export type Database = {
           region: string | null
           rut: string
           tiene_certificado_sii: boolean
+          tipo_contribuyente: string
         }
         Insert: {
           clave_sii?: string | null
@@ -548,6 +549,7 @@ export type Database = {
           region?: string | null
           rut: string
           tiene_certificado_sii?: boolean
+          tipo_contribuyente?: string
         }
         Update: {
           clave_sii?: string | null
@@ -565,6 +567,7 @@ export type Database = {
           region?: string | null
           rut?: string
           tiene_certificado_sii?: boolean
+          tipo_contribuyente?: string
         }
         Relationships: []
       }

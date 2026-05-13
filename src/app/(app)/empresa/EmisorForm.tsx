@@ -18,6 +18,7 @@ export default function EmisorForm({ inicial }: Props) {
   const [direccion, setDireccion] = useState(inicial.direccion ?? "");
   const [comuna, setComuna] = useState(inicial.comuna ?? "");
   const [emailSii, setEmailSii] = useState(inicial.email_sii ?? "");
+  const [tipoContribuyente, setTipoContribuyente] = useState(inicial.tipo_contribuyente ?? "afecto");
 
   const rutOk = !rut || validarRut(rut);
 
@@ -39,6 +40,7 @@ export default function EmisorForm({ inicial }: Props) {
         direccion,
         comuna,
         email_sii: emailSii,
+        tipo_contribuyente: tipoContribuyente,
       });
       if (r.error) toast(r.error, "error");
       else toast("Datos del emisor guardados");
@@ -116,6 +118,33 @@ export default function EmisorForm({ inicial }: Props) {
           placeholder="sii@miempresa.cl"
           className="w-full px-3 py-2 rounded-lg bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 text-sm"
         />
+      </div>
+
+      <div>
+        <label className="text-xs text-[#888] dark:text-white/60 mb-1.5 block">Tipo de contribuyente</label>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setTipoContribuyente("afecto")}
+            className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-all duration-150 ${
+              tipoContribuyente === "afecto"
+                ? "bg-[#E8553E] text-white shadow-[0_2px_8px_rgba(232,85,62,0.3)]"
+                : "bg-white dark:bg-white/5 text-[var(--muted)] hover:text-[var(--foreground)] border border-black/10 dark:border-white/10"
+            }`}>
+            AFECTO
+          </button>
+          <button type="button" onClick={() => setTipoContribuyente("exento")}
+            className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-all duration-150 ${
+              tipoContribuyente === "exento"
+                ? "bg-[#3B82F6] text-white shadow-[0_2px_8px_rgba(59,130,246,0.3)]"
+                : "bg-white dark:bg-white/5 text-[var(--muted)] hover:text-[var(--foreground)] border border-black/10 dark:border-white/10"
+            }`}>
+            EXENTO
+          </button>
+        </div>
+        <p className="text-[10px] text-[var(--muted-light)] mt-1.5 leading-tight">
+          <strong>Afecto</strong>: emite boletas con IVA 19% (tipo 39).
+          <strong>Exento</strong>: emite boletas sin IVA (tipo 41).
+          Esto aplica por defecto para todos los clientes, a menos que configures un tipo distinto en cada cliente.
+        </p>
       </div>
 
       <button
