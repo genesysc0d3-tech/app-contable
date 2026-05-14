@@ -4,37 +4,23 @@ import { useCallback, Children, isValidElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { UploadSimple, CheckSquare, Lightning, Receipt, Building } from "@phosphor-icons/react";
 
-interface TabDef {
-  id: string;
-  label: string;
-  hint?: string;
-  spotlight?: boolean;
-  children: React.ReactNode;
-}
-
 const TAB_ICONS: Record<string, typeof UploadSimple> = {
-  subir: UploadSimple,
-  revisar: CheckSquare,
-  emitir: Lightning,
-  boletas: Receipt,
-  empresa: Building,
+  subir: UploadSimple, revisar: CheckSquare, emitir: Lightning,
+  boletas: Receipt, empresa: Building,
 };
 
 export default function TabsV3({ activeTab, children }: {
-  activeTab: string;
-  children: React.ReactNode;
+  activeTab: string; children: React.ReactNode;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const tabs: TabDef[] = [];
+  const tabs: { id: string; label: string; hint?: string; children: React.ReactNode }[] = [];
   Children.forEach(children, (child) => {
     if (isValidElement(child) && child.type === Tab) {
-      tabs.push(child.props as TabDef);
+      tabs.push(child.props as any);
     }
   });
-
-  const active = tabs.find((t) => t.id === activeTab) ?? tabs[0];
 
   const switchTab = useCallback((id: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -43,29 +29,30 @@ export default function TabsV3({ activeTab, children }: {
   }, [router, searchParams]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-1 px-1 py-1 bg-white/60 dark:bg-white/[0.04] border border-[var(--border)] rounded-t-xl overflow-x-auto no-scrollbar">
+    <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-white dark:bg-black/20">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 px-2 py-2 bg-[var(--surface)] border-b border-[var(--border)] overflow-x-auto no-scrollbar">
         {tabs.map((t) => {
           const isActive = t.id === activeTab;
           const Icon = TAB_ICONS[t.id] || UploadSimple;
           return (
             <button key={t.id} onClick={() => switchTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E8553E]/40 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                 isActive
                   ? "bg-[#E8553E] text-white shadow-sm"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
+                  : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
               }`}>
-              <Icon size={13} weight={isActive ? "fill" : "bold"} />
+              <Icon size={14} weight={isActive ? "fill" : "bold"} />
               <span>{t.label}</span>
-              {t.hint && !isActive && <span className="text-[8px] text-[var(--muted-light)] hidden sm:inline">· {t.hint}</span>}
+              {t.hint && <span className="text-[10px] opacity-60 ml-0.5">· {t.hint}</span>}
             </button>
           );
         })}
       </div>
-
-      <div className="flex-1 min-h-0 bg-white dark:bg-black/20 border-x border-b border-[var(--border)] rounded-b-xl p-3">
+      {/* Content */}
+      <div className="p-4 min-h-[300px]">
         {tabs.map((t) => (
-          <div key={t.id} className={`h-full ${t.id === activeTab ? "block" : "hidden"}`}>
+          <div key={t.id} className={t.id === activeTab ? "block" : "hidden"}>
             {t.children}
           </div>
         ))}
@@ -74,4 +61,4 @@ export default function TabsV3({ activeTab, children }: {
   );
 }
 
-export function Tab(_props: TabDef) { return null; }
+export function Tab(_props: { id: string; label: string; hint?: string; children: React.ReactNode }) { return null; }
