@@ -53,4 +53,4 @@ export default function TabsV3({ activeTab: _defaultTab, children }: {
   );
 }
 
-export function Tab(_props: { id: string; label: string; children: ReactNode }) { return null; }
+export function Tab(_props: { id: string; label: string; hint?: string; children: ReactNode }) { return null; }
