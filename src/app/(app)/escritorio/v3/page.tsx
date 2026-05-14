@@ -29,7 +29,7 @@ export default async function EscritorioV3Page({
         <TopBarV3 empresa={usuario.empresas.razon_social} empresaId={empresaId} selectedDate={selectedDate} />
       </Suspense>
 
-      <main className="flex-1 max-w-[1400px] mx-auto w-full px-3 sm:px-4 pt-3 pb-4 min-h-0 flex flex-col">
+      <main className="flex-1 max-w-[1400px] mx-auto w-full px-3 sm:px-4 pt-3 pb-4 h-0 flex flex-col">
         {/* Stats row */}
         <Suspense fallback={null}>
           <StatsRowV3 empresaId={empresaId} selectedDate={selectedDate} />
@@ -37,7 +37,9 @@ export default async function EscritorioV3Page({
 
         {/* Tab bar + content */}
         <div className="flex-1 min-h-0 mt-2">
-          <TabsV3 activeTab={activeTab}>
+          <div className="h-full">
+            <Suspense fallback={<div className="h-48 animate-shimmer rounded-xl" />}>
+              <TabsV3 activeTab={activeTab}>
             <V3Tab id="subir" label="Emitir" hint="Subir cartolas y documentos">
               <div className="overflow-y-auto h-full">
                 <Suspense fallback={<div className="h-32 animate-shimmer rounded-xl" />}>
@@ -74,6 +76,8 @@ export default async function EscritorioV3Page({
               <EmpresaTabV3 empresaId={empresaId} />
             </V3Tab>
           </TabsV3>
+            </Suspense>
+          </div>
         </div>
       </main>
     </div>
