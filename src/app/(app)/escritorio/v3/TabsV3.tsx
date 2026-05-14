@@ -1,25 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { UploadSimple, CheckSquare, Lightning, Receipt } from "@phosphor-icons/react";
+import { UploadSimple, CheckSquare, Lightning, Receipt, Building } from "@phosphor-icons/react";
 
 const TABS = [
   { id: "subir", label: "Emitir", icon: UploadSimple },
   { id: "revisar", label: "Revisar", icon: CheckSquare },
   { id: "emitir", label: "Emitir", icon: Lightning },
   { id: "boletas", label: "Boletas", icon: Receipt },
+  { id: "empresa", label: "Empresa", icon: Building },
 ];
 
 export default function TabsV3({
-  subirContent,
-  revisarContent,
-  emitirContent,
-  boletasContent,
+  subirContent, revisarContent, emitirContent, boletasContent, empresaContent,
 }: {
   subirContent: React.ReactNode;
   revisarContent: React.ReactNode;
   emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
+  empresaContent: React.ReactNode;
 }) {
   const [tab, setTab] = useState("revisar");
 
@@ -31,7 +30,7 @@ export default function TabsV3({
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
                   ? "bg-[#E8553E] text-white shadow-sm"
                   : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
@@ -43,10 +42,11 @@ export default function TabsV3({
         })}
       </div>
       <div className="p-4 min-h-[300px]">
-        <div className={tab === "subir" ? "block" : "hidden"}>{subirContent}</div>
-        <div className={tab === "revisar" ? "block" : "hidden"}>{revisarContent}</div>
-        <div className={tab === "emitir" ? "block" : "hidden"}>{emitirContent}</div>
-        <div className={tab === "boletas" ? "block" : "hidden"}>{boletasContent}</div>
+        <div className={tab === "subir" ? "block animate-fade-in" : "hidden"}>{subirContent}</div>
+        <div className={tab === "revisar" ? "block animate-fade-in" : "hidden"}>{revisarContent}</div>
+        <div className={tab === "emitir" ? "block animate-fade-in" : "hidden"}>{emitirContent}</div>
+        <div className={tab === "boletas" ? "block animate-fade-in" : "hidden"}>{boletasContent}</div>
+        <div className={tab === "empresa" ? "block animate-fade-in" : "hidden"}>{empresaContent}</div>
       </div>
     </div>
   );
