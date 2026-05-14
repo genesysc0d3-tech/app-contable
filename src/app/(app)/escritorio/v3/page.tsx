@@ -3,7 +3,6 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../../subir/SubirClient";
 import RevisarClient from "../../revisar/RevisarClient";
-import { UploadSimple, CheckSquare, Lightning, Receipt, Building, Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
 import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
 import BoletasList from "@/components/boletas/BoletasList";
 import TabsV3, { Tab as V3Tab } from "./TabsV3";
@@ -38,8 +37,8 @@ export default async function EscritorioV3Page({
 
         {/* Tab bar + content */}
         <div className="flex-1 min-h-0 mt-2">
-          <TabsV3 activeTab={activeTab} selectedDate={selectedDate}>
-            <V3Tab id="subir" label="Emitir" icon={UploadSimple} hint="Subir cartolas y documentos">
+          <TabsV3 activeTab={activeTab}>
+            <V3Tab id="subir" label="Emitir" hint="Subir cartolas y documentos">
               <div className="overflow-y-auto h-full">
                 <Suspense fallback={<div className="h-32 animate-shimmer rounded-xl" />}>
                   <SubirClient empresaId={empresaId} />
@@ -47,7 +46,7 @@ export default async function EscritorioV3Page({
               </div>
             </V3Tab>
 
-            <V3Tab id="revisar" label="Revisar" icon={CheckSquare} hint={selectedDate ? formatDateShort(selectedDate) : "Todas"} spotlight>
+            <V3Tab id="revisar" label="Revisar" hint={selectedDate ? formatDateShort(selectedDate) : "Todas"} spotlight>
               <div className="overflow-y-auto h-full">
                 <Suspense fallback={<div className="h-48 animate-shimmer rounded-xl" />} key={selectedDate ?? "all"}>
                   <RevisarPanelV3 empresaId={empresaId} filterDate={selectedDate} />
@@ -55,7 +54,7 @@ export default async function EscritorioV3Page({
               </div>
             </V3Tab>
 
-            <V3Tab id="emitir" label="Emitir" icon={Lightning} hint="Boletas electrónicas">
+            <V3Tab id="emitir" label="Emitir" hint="Boletas electrónicas">
               <div className="overflow-y-auto h-full space-y-3">
                 <Suspense fallback={<div className="h-32 animate-shimmer rounded-xl" />}>
                   <EmitirBoletaForm />
@@ -63,7 +62,7 @@ export default async function EscritorioV3Page({
               </div>
             </V3Tab>
 
-            <V3Tab id="boletas" label="Boletas" icon={Receipt} hint="Emitidas">
+            <V3Tab id="boletas" label="Boletas" hint="Emitidas">
               <div className="overflow-y-auto h-full">
                 <Suspense fallback={<div className="h-32 animate-shimmer rounded-xl" />}>
                   <BoletasListV3 empresaId={empresaId} />
@@ -71,7 +70,7 @@ export default async function EscritorioV3Page({
               </div>
             </V3Tab>
 
-            <V3Tab id="empresa" label="Empresa" icon={Building} hint="Configuración">
+            <V3Tab id="empresa" label="Empresa" hint="Configuración">
               <EmpresaTabV3 empresaId={empresaId} />
             </V3Tab>
           </TabsV3>
