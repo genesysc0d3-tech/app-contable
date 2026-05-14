@@ -4,11 +4,11 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import SubirClient from "../../subir/SubirClient";
 import RevisarClient from "../../revisar/RevisarClient";
-import { Calendar as CalendarIcon, X } from "@phosphor-icons/react/dist/ssr";
 import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
 import BoletasList from "@/components/boletas/BoletasList";
 import TabsV3 from "./TabsV3";
 import DrawerToggle from "./DrawerToggle";
+import CalendarYear from "./CalendarYear";
 
 export default async function EscritorioV3Page({
   searchParams,
@@ -39,9 +39,7 @@ export default async function EscritorioV3Page({
           <StatsRowFull empresaId={empresaId} />
         </Suspense>
 
-        <Suspense fallback={<CalendarSkeleton />}>
-          <CalendarStripV3 empresaId={empresaId} selectedDate={selectedDate} />
-        </Suspense>
+        <CalendarYear empresaId={empresaId} />
 
         <TabsV3
           subirContent={<SubirClient empresaId={empresaId} />}
@@ -110,61 +108,6 @@ function Divider() {
 
 function StatsSkeleton() {
   return <div className="h-[42px] bg-white/30 dark:bg-white/[0.03] rounded-xl border border-[var(--border)] animate-pulse" />;
-}
-
-/* Calendar strip */
-
-async function CalendarStripV3({ empresaId, selectedDate }: { empresaId: string; selectedDate: string | null }) {
-  const supabase = await createClient();
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const startMonth = new Date(year, month, 1).toISOString();
-  const endMonth = new Date(year, month + 1, 1).toISOString();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const [{ data: propuestas }, { data: documentos }] = await Promise.all([
-    supabase.from("propuestas_ia").select("created_at, estado").eq("empresa_id", empresaId).gte("created_at", startMonth).lt("created_at", endMonth),
-    supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at", startMonth).lt("created_at", endMonth),
-  ]);
-
-  const byDay = new Map<number, { p: number; a: number; d: number }>();
-  for (let d = 1; d <= daysInMonth; d++) byDay.set(d, { p: 0, a: 0, d: 0 });
-  for (const p of propuestas ?? []) { const day = new Date(p.created_at).getDate(); const info = byDay.get(day)!; if (p.estado === "pendiente") info.p++; else if (["aprobado", "editado"].includes(p.estado)) info.a++; }
-  for (const d of documentos ?? []) { byDay.get(new Date(d.created_at).getDate())!.d++; }
-
-  const today = now.getDate();
-  const selDay = selectedDate ? (() => { const [y, m, d] = selectedDate.split("-").map(Number); return y === year && m === month + 1 ? d : null; })() : null;
-  const wds = ["D", "L", "M", "M", "J", "V", "S"];
-
-  return (
-    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-white/30 dark:bg-white/[0.02] rounded-xl px-3 py-1.5 border border-[var(--border)]">
-      <CalendarIcon size={12} weight="bold" className="text-[var(--muted)] shrink-0 mr-1" />
-      {selDay && (
-        <Link href="/escritorio/v3" scroll={false}
-          className="flex items-center gap-0.5 text-[9px] text-[var(--muted)] hover:text-[#E8553E] bg-[var(--surface)] hover:bg-[#E8553E]/10 rounded px-1.5 py-0.5 shrink-0 transition-colors">
-          <X size={8} weight="bold" /> Todo
-        </Link>
-      )}
-      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-        const info = byDay.get(day)!;
-        const dayStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        const isSel = day === selDay;
-        const isToday = day === today;
-        return (
-          <Link key={day} href={`/escritorio/v3?date=${dayStr}`} scroll={false}
-            className={`shrink-0 w-7 py-1 rounded-md flex flex-col items-center transition-all ${isSel ? "bg-[#E8553E] text-white" : isToday ? "ring-1 ring-inset ring-[#E8553E]/40" : "hover:bg-[var(--surface)]"}`}>
-            <span className="text-[6px] uppercase leading-none text-[var(--muted-light)]">{wds[new Date(year, month, day).getDay()]}</span>
-            <span className="text-[10px] font-medium tabular-nums leading-none">{day}</span>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-function CalendarSkeleton() {
-  return <div className="h-[34px] bg-white/30 dark:bg-white/[0.02] rounded-xl border border-[var(--border)] animate-pulse" />;
 }
 
 /* Revisar */
