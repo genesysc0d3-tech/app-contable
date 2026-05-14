@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, isValidElement, type ReactNode, type ReactElement } from "react";
+import { useState } from "react";
 import { UploadSimple, CheckSquare, Lightning, Receipt } from "@phosphor-icons/react";
 
 const TABS = [
@@ -10,22 +10,18 @@ const TABS = [
   { id: "boletas", label: "Boletas", icon: Receipt },
 ];
 
-interface TabProps { id: string; label: string; children: ReactNode; }
-
-function isTabElement(child: ReactNode): child is ReactElement<TabProps> {
-  return isValidElement(child) && (child.type as any)?.displayName === "V3Tab";
-}
-
-export default function TabsV3({ children }: { children: ReactNode }) {
+export default function TabsV3({
+  subirContent,
+  revisarContent,
+  emitirContent,
+  boletasContent,
+}: {
+  subirContent: React.ReactNode;
+  revisarContent: React.ReactNode;
+  emitirContent: React.ReactNode;
+  boletasContent: React.ReactNode;
+}) {
   const [tab, setTab] = useState("revisar");
-
-  const contentMap: Record<string, ReactNode> = {};
-  const arr = Array.isArray(children) ? children : [children];
-  for (const child of arr) {
-    if (isTabElement(child)) {
-      contentMap[child.props.id] = child.props.children;
-    }
-  }
 
   return (
     <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-white dark:bg-black/20">
@@ -47,13 +43,11 @@ export default function TabsV3({ children }: { children: ReactNode }) {
         })}
       </div>
       <div className="p-4 min-h-[300px]">
-        {Object.entries(contentMap).map(([id, content]) => (
-          <div key={id} className={id === tab ? "block" : "hidden"}>{content}</div>
-        ))}
+        <div className={tab === "subir" ? "block" : "hidden"}>{subirContent}</div>
+        <div className={tab === "revisar" ? "block" : "hidden"}>{revisarContent}</div>
+        <div className={tab === "emitir" ? "block" : "hidden"}>{emitirContent}</div>
+        <div className={tab === "boletas" ? "block" : "hidden"}>{boletasContent}</div>
       </div>
     </div>
   );
 }
-
-export function Tab(_props: TabProps) { return null; }
-Tab.displayName = "V3Tab";
