@@ -115,7 +115,7 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: P
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-[#0a0a0a] border border-[var(--border)] shadow-2xl p-4 sm:p-5 space-y-3">
+      <div className="relative w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-[#0a0a0a] border border-[var(--border)] shadow-2xl p-4 sm:p-5 space-y-3">
 
         {/* ── Upload step ── */}
         {step === "upload" && (
@@ -158,8 +158,8 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: P
 
             {/* Excel grid */}
             <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-white dark:bg-black/20">
-              <div className="overflow-x-auto pb-0.5">
-                <table className="w-full text-[10px] border-collapse">
+              <div className="overflow-hidden">
+                <table className="w-full text-[10px] border-collapse table-fixed">
                   <thead>
                     <tr>
                       {preview.rows[0]?.map((h: string, i: number) => {
@@ -175,7 +175,7 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: P
                             style={z ? { backgroundColor: z.color } : {}}>
                             <div className="flex items-center gap-1.5">
                               <span className="text-[8px] opacity-50 font-mono w-3">{COL_LETTERS[i] || i}</span>
-                              <span className="truncate max-w-[130px]">{h || `Columna ${i + 1}`}</span>
+                              <span className="truncate">{h || `Columna ${i + 1}`}</span>
                               {z && role && <X size={8} weight="bold" className="ml-1 opacity-60 hover:opacity-100 shrink-0" onClick={(e) => { e.stopPropagation(); unassign(role); }} />}
                             </div>
                           </th>
@@ -189,7 +189,7 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: P
                         {row.map((cell, ci) => {
                           const role = zoneOf(ci);
                           return (
-                            <td key={ci} className="px-2 py-1 truncate max-w-[140px] border-r border-[var(--border)] text-[9px]"
+                            <td key={ci} className="px-2 py-1 truncate border-r border-[var(--border)] text-[9px]"
                               style={role ? { borderLeft: `2.5px solid ${ZONES.find((x) => x.role === role)?.color}` } : {}}>
                               {cell || <span className="opacity-20">&mdash;</span>}
                             </td>
