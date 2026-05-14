@@ -41,7 +41,7 @@ export default function TabsV3({
           );
         })}
       </div>
-      <div className="p-4 min-h-[300px]">
+      <div className="p-3 min-h-[300px]">
         <div className={tab === "subir" ? "block animate-fade-in" : "hidden"}>{subirContent}</div>
         <div className={tab === "revisar" ? "block animate-fade-in" : "hidden"}>{revisarContent}</div>
         <div className={tab === "emitir" ? "block animate-fade-in" : "hidden"}>{emitirContent}</div>

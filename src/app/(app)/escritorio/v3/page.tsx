@@ -9,6 +9,7 @@ import BoletasList from "@/components/boletas/BoletasList";
 import TabsV3 from "./TabsV3";
 import DrawerToggle from "./DrawerToggle";
 import CalendarYear from "./CalendarYear";
+import { TabCard } from "./TabHelpers";
 
 export default async function EscritorioV3Page({
   searchParams,
@@ -42,16 +43,24 @@ export default async function EscritorioV3Page({
         <CalendarYear empresaId={empresaId} />
 
         <TabsV3
-          subirContent={<SubirClient empresaId={empresaId} />}
-          revisarContent={
-            <Suspense fallback={<div className="h-48 animate-shimmer rounded-xl" />}>
-              <RevisarPanelV3 empresaId={empresaId} filterDate={selectedDate} />
-            </Suspense>
+          subirContent={
+            <TabCard><SubirClient empresaId={empresaId} /></TabCard>
           }
-          emitirContent={<EmitirBoletaForm />}
-          boletasContent={<BoletasListV3 empresaId={empresaId} />}
+          revisarContent={
+            <TabCard>
+              <Suspense fallback={<div className="h-48 animate-shimmer rounded-xl" />}>
+                <RevisarPanelV3 empresaId={empresaId} filterDate={selectedDate} />
+              </Suspense>
+            </TabCard>
+          }
+          emitirContent={
+            <TabCard><EmitirBoletaForm /></TabCard>
+          }
+          boletasContent={
+            <TabCard><BoletasListV3 empresaId={empresaId} /></TabCard>
+          }
           empresaContent={
-            <EmpresaContent empresaId={empresaId} />
+            <TabCard><EmpresaContent empresaId={empresaId} /></TabCard>
           }
         />
       </main>
