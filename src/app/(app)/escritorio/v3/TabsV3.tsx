@@ -1,27 +1,29 @@
 "use client";
 
-import { useState, isValidElement, type ReactNode } from "react";
-import { UploadSimple, CheckSquare, Lightning, Receipt, Building } from "@phosphor-icons/react";
+import { useState, isValidElement, type ReactNode, type ReactElement } from "react";
+import { UploadSimple, CheckSquare, Lightning, Receipt } from "@phosphor-icons/react";
 
 const TABS = [
   { id: "subir", label: "Emitir", icon: UploadSimple },
   { id: "revisar", label: "Revisar", icon: CheckSquare },
   { id: "emitir", label: "Emitir", icon: Lightning },
   { id: "boletas", label: "Boletas", icon: Receipt },
-  { id: "empresa", label: "Empresa", icon: Building },
 ];
 
-export default function TabsV3({ activeTab: _defaultTab, children }: {
-  activeTab: string; children: ReactNode;
-}) {
-  const [tab, setTab] = useState(_defaultTab);
+interface TabProps { id: string; label: string; children: ReactNode; }
+
+function isTabElement(child: ReactNode): child is ReactElement<TabProps> {
+  return isValidElement(child) && (child.type as any)?.displayName === "V3Tab";
+}
+
+export default function TabsV3({ children }: { children: ReactNode }) {
+  const [tab, setTab] = useState("revisar");
 
   const contentMap: Record<string, ReactNode> = {};
   const arr = Array.isArray(children) ? children : [children];
   for (const child of arr) {
-    if (isValidElement(child) && child.type === Tab) {
-      const props = child.props as { id: string; children: ReactNode };
-      contentMap[props.id] = props.children;
+    if (isTabElement(child)) {
+      contentMap[child.props.id] = child.props.children;
     }
   }
 
@@ -44,7 +46,7 @@ export default function TabsV3({ activeTab: _defaultTab, children }: {
           );
         })}
       </div>
-      <div className="p-4 min-h-[200px]">
+      <div className="p-4 min-h-[300px]">
         {Object.entries(contentMap).map(([id, content]) => (
           <div key={id} className={id === tab ? "block" : "hidden"}>{content}</div>
         ))}
@@ -53,4 +55,5 @@ export default function TabsV3({ activeTab: _defaultTab, children }: {
   );
 }
 
-export function Tab(_props: { id: string; label: string; hint?: string; children: ReactNode }) { return null; }
+export function Tab(_props: TabProps) { return null; }
+Tab.displayName = "V3Tab";
