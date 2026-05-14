@@ -2,13 +2,13 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
-import SubirClient from "../../subir/SubirClient";
 import RevisarClient from "../../revisar/RevisarClient";
 import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
 import BoletasList from "@/components/boletas/BoletasList";
 import TabsV3 from "./TabsV3";
 import DrawerToggle from "./DrawerToggle";
 import CalendarYear from "./CalendarYear";
+import EmitirTab from "./EmitirTab";
 import { TabCard } from "./TabHelpers";
 
 export default async function EscritorioV3Page({
@@ -44,7 +44,7 @@ export default async function EscritorioV3Page({
 
         <TabsV3
           subirContent={
-            <TabCard><SubirClient empresaId={empresaId} /></TabCard>
+            <EmitirTab empresaId={empresaId} />
           }
           revisarContent={
             <TabCard>
