@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import DashboardShell, { KpiCards, BarChart } from "./DashboardShell";
-import { Files } from "@phosphor-icons/react/dist/ssr";
+import { Files, UploadSimple, ArrowDown } from "@phosphor-icons/react/dist/ssr";
 
 export default async function V3Page() {
   const usuario = (await getUsuario())!;
