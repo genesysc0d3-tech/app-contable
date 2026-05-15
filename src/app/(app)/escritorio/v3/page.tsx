@@ -152,7 +152,7 @@ async function ChartData({ empresaId }: { empresaId: string }) {
   return <BarChart data={data} months={months} activeMonth={new Date().getMonth()} />;
 }
 
-/* ─── KANBAN-STYLE CARDS ─── */
+/* ─── DOCUMENT LIST ─── */
 
 async function DocList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -161,71 +161,66 @@ async function DocList({ empresaId }: { empresaId: string }) {
     .select("id, nombre_archivo, tipo, estado, movimientos_detectados, created_at")
     .eq("empresa_id", empresaId)
     .order("created_at", { ascending: false })
-    .limit(6);
+    .limit(5);
 
-  const statusMeta: Record<string, { label: string; dot: string }> = {
-    procesado:   { label: "Completado", dot: "#22c55e" },
-    procesando:  { label: "Procesando", dot: "#3b82f6" },
-    error:       { label: "Con error",  dot: "#ef4444" },
-    subido:      { label: "Pendiente",  dot: "#f59e0b" },
+  const st: Record<string, { label: string; color: string }> = {
+    procesado:  { label: "Listo",     color: "#22c55e" },
+    procesando: { label: "En curso",  color: "#3b82f6" },
+    error:      { label: "Error",     color: "#ef4444" },
+    subido:     { label: "Nuevo",     color: "#f59e0b" },
+  };
+
+  const tp: Record<string, string> = {
+    pdf: "#ef4444", excel: "#22c55e", csv: "#3b82f6",
   };
 
   return (
-    <div style={{ marginTop: 20, maxWidth: 720 }}>
+    <div style={{ marginTop: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0" }}>Documentos</h3>
         <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
       </div>
       <style>{`
-        .kcard {
-          transition: all .2s ease;
+        .dc {
+          transition: all .18s ease, border-color .18s ease;
           cursor: pointer;
           border-radius: 10px;
         }
-        .kcard:hover {
-          border-color: #383b44 !important;
-          background: #191b21 !important;
-        }
-        .kcard:active { transform: scale(.99); }
-        @keyframes kfade {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .kcard { animation: kfade .3s ease-out both; }
-        .kcard:nth-child(1) { animation-delay: .03s; }
-        .kcard:nth-child(2) { animation-delay: .07s; }
-        .kcard:nth-child(3) { animation-delay: .11s; }
-        .kcard:nth-child(4) { animation-delay: .15s; }
-        .kcard:nth-child(5) { animation-delay: .19s; }
-        .kcard:nth-child(6) { animation-delay: .23s; }
+        .dc:hover { border-color: #383b44 !important; }
+        @keyframes df { from { opacity: 0; } to { opacity: 1; } }
+        .dc { animation: df .35s ease both; }
+        .dc:nth-child(1) { animation-delay: .04s; }
+        .dc:nth-child(2) { animation-delay: .08s; }
+        .dc:nth-child(3) { animation-delay: .12s; }
+        .dc:nth-child(4) { animation-delay: .16s; }
+        .dc:nth-child(5) { animation-delay: .20s; }
       `}</style>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {(docs ?? []).length === 0 ? (
-          <div style={{ textAlign: "center", padding: "32px 0", color: "#636878", fontSize: 13 }}>Sin documentos aún</div>
-        ) : (docs ?? []).map((d, i) => {
-          const s = statusMeta[d.estado] ?? { label: d.estado, dot: "#636878" };
-          return (
-            <div key={d.id} className="kcard" style={{
-              background: "#16181d",
-              border: "1px solid #252830",
-              borderLeft: `3px solid ${s.dot}`,
-              padding: "10px 14px",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}>
-              <div style={{ width: 28, height: 28, borderRadius: 6, background: s.dot + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, color: s.dot }}>●</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
-                <div style={{ fontSize: 11, color: "#636878", marginTop: 1 }}>
-                  {d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados} mov` : ""} · {new Date(d.created_at).toLocaleDateString("es-CL")}
-                </div>
+      {(docs ?? []).length === 0 ? (
+        <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "32px 0" }}>Sin documentos aún</p>
+      ) : (docs ?? []).map((d, i) => {
+        const s = st[d.estado] ?? { label: d.estado, color: "#636878" };
+        return (
+          <div key={d.id} className="dc" style={{
+            background: "#16181d",
+            border: "1px solid #252830",
+            padding: "12px 16px",
+            marginBottom: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, fontSize: 11, color: "#636878" }}>
+                <span style={{ color: tp[d.tipo] ?? "#636878", fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
+                {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} mov</span></>}
               </div>
-              <span style={{ fontSize: 11, fontWeight: 500, color: s.dot, whiteSpace: "nowrap" }}>{s.label}</span>
             </div>
-          );
-        })}
-      </div>
+            <span style={{ fontSize: 11, fontWeight: 500, color: s.color, whiteSpace: "nowrap" }}>{s.label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
