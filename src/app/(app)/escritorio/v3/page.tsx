@@ -206,45 +206,49 @@ async function DocList({ empresaId }: { empresaId: string }) {
           -webkit-backface-visibility: hidden;
           backface-visibility: hidden;
           border-radius: 1rem;
-          border: 1px solid coral;
           box-shadow: 0 8px 14px 0 rgba(0,0,0,0.2);
           padding: 16px;
           overflow: hidden;
         }
         .flip-doc[data-status="procesado"] .flip-front {
-          background: linear-gradient(120deg, bisque 60%, rgb(255, 231, 222) 88%, rgb(255, 211, 195) 40%, rgba(255, 127, 80, 0.603) 48%);
-          color: coral;
+          background: linear-gradient(135deg, #0a1a0a 0%, #0d2818 40%, #111d11 100%);
+          border: 1px solid #22c55e40;
+          color: #4ade80;
         }
         .flip-doc[data-status="procesado"] .flip-back {
-          background: linear-gradient(120deg, rgb(255, 174, 145) 30%, coral 88%, bisque 40%, rgb(255, 185, 160) 78%);
-          color: white;
+          background: linear-gradient(135deg, #0a1a0a 0%, #0d2818 40%, #111d11 100%);
+          border: 1px solid #22c55e60;
+          color: #e8eaf0;
         }
         .flip-doc[data-status="procesando"] .flip-front {
-          background: linear-gradient(120deg, #dbeafe 60%, #bfdbfe 88%, #93c5fd 40%, rgba(59,130,246,0.5) 48%);
-          color: #2563eb;
+          background: linear-gradient(135deg, #0a0f1a 0%, #0c1f3a 40%, #0f1420 100%);
+          border: 1px solid #3b82f640;
+          color: #60a5fa;
         }
         .flip-doc[data-status="procesando"] .flip-back {
-          background: linear-gradient(120deg, #93c5fd 30%, #3b82f6 88%, #dbeafe 40%, #60a5fa 78%);
-          color: white;
-          border-color: #3b82f6;
+          background: linear-gradient(135deg, #0a0f1a 0%, #0c1f3a 40%, #0f1420 100%);
+          border: 1px solid #3b82f660;
+          color: #e8eaf0;
         }
         .flip-doc[data-status="error"] .flip-front {
-          background: linear-gradient(120deg, #fecaca 60%, #fca5a5 88%, #f87171 40%, rgba(239,68,68,0.5) 48%);
-          color: #dc2626;
+          background: linear-gradient(135deg, #1a0a0a 0%, #2a0d0d 40%, #1a0f0f 100%);
+          border: 1px solid #ef444440;
+          color: #f87171;
         }
         .flip-doc[data-status="error"] .flip-back {
-          background: linear-gradient(120deg, #f87171 30%, #ef4444 88%, #fecaca 40%, #fca5a5 78%);
-          color: white;
-          border-color: #ef4444;
+          background: linear-gradient(135deg, #1a0a0a 0%, #2a0d0d 40%, #1a0f0f 100%);
+          border: 1px solid #ef444460;
+          color: #e8eaf0;
         }
         .flip-doc[data-status="subido"] .flip-front {
-          background: linear-gradient(120deg, #fef3c7 60%, #fde68a 88%, #fcd34d 40%, rgba(245,158,11,0.5) 48%);
-          color: #d97706;
+          background: linear-gradient(135deg, #1a1808 0%, #2a2408 40%, #1a1808 100%);
+          border: 1px solid #f59e0b40;
+          color: #fbbf24;
         }
         .flip-doc[data-status="subido"] .flip-back {
-          background: linear-gradient(120deg, #fcd34d 30%, #f59e0b 88%, #fef3c7 40%, #fbbf24 78%);
-          color: white;
-          border-color: #f59e0b;
+          background: linear-gradient(135deg, #1a1808 0%, #2a2408 40%, #1a1808 100%);
+          border: 1px solid #f59e0b60;
+          color: #e8eaf0;
         }
         .flip-back {
           transform: rotateY(180deg);
@@ -265,18 +269,21 @@ async function DocList({ empresaId }: { empresaId: string }) {
           <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "48px 0", gridColumn: "1 / -1" }}>Sin documentos aún</p>
         ) : (docs ?? []).map((d, i) => {
           const s = st[d.estado] ?? { label: d.estado, color: "#636878", accent: "rgba(99,104,120,0.12)" };
+          const typeIcon = d.tipo === "pdf" ? "▦" : d.tipo === "excel" ? "⊞" : "☰";
           return (
             <div key={d.id} className="flip-doc" data-status={d.estado}>
               <div className="flip-doc-inner">
                 <div className="flip-front">
-                  <p className="title" style={{ fontSize: "1.2em", fontWeight: 900, margin: "0 0 4px" }}>{d.estado === "procesado" ? "✓ Listo" : d.estado === "procesando" ? "⟳ En curso" : d.estado === "error" ? "⚠ Error" : "○ Nuevo"}</p>
-                  <p style={{ fontSize: 11, margin: "4px 0", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{d.nombre_archivo}</p>
-                  <p style={{ fontSize: 10, margin: "2px 0", opacity: 0.6 }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados}` : ""}</p>
+                  <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8, opacity: 0.6 }}>{typeIcon}</div>
+                  <p style={{ fontSize: "1.1em", fontWeight: 700, margin: "0 0 2px" }}>{s.label}</p>
+                  <p style={{ fontSize: 10, margin: "4px 0", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{d.nombre_archivo}</p>
+                  <p style={{ fontSize: 9, margin: "2px 0", opacity: 0.5 }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados} mov` : ""}</p>
                 </div>
                 <div className="flip-back">
-                  <p className="title" style={{ fontSize: "1.1em", fontWeight: 900, margin: "0 0 6px" }}>{d.estado === "procesado" ? "Completado" : d.estado === "procesando" ? "Procesando" : d.estado === "error" ? "Falló" : "Pendiente"}</p>
-                  <p style={{ fontSize: 11, margin: "2px 0", opacity: 0.9 }}>{d.movimientos_detectados ? `${d.movimientos_detectados} movimientos` : "Sin datos"}</p>
-                  <p style={{ fontSize: 10, margin: "2px 0", opacity: 0.7 }}>{new Date(d.created_at).toLocaleDateString("es-CL")}</p>
+                  <p style={{ fontSize: "1em", fontWeight: 700, margin: "0 0 6px", color: s.color }}>{s.label}</p>
+                  <p style={{ fontSize: 11, margin: "2px 0", opacity: 0.8 }}>{d.movimientos_detectados ? `${d.movimientos_detectados} movimientos` : "Sin datos"}</p>
+                  <p style={{ fontSize: 10, margin: "2px 0", opacity: 0.5 }}>{new Date(d.created_at).toLocaleDateString("es-CL")}</p>
+                  <div style={{ marginTop: 10, fontSize: 9, opacity: 0.4 }}>Ver detalle →</div>
                 </div>
               </div>
             </div>
