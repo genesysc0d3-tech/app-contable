@@ -9,6 +9,7 @@ import TabsV3 from "./TabsV3";
 import DrawerToggle from "./DrawerToggle";
 import CalendarYear from "./CalendarYear";
 import EmitirTab from "./EmitirTab";
+import { GoldIcon, PlainIcon } from "./NavIcons";
 import { TabCard } from "./TabHelpers";
 
 export default async function EscritorioV3Page({
@@ -24,13 +25,14 @@ export default async function EscritorioV3Page({
   return (
     <div className="escritorio-root min-h-screen bg-[var(--background)] mesh-bg flex flex-col">
       <header className="sticky top-0 z-30 glass border-b border-[var(--glass-border)]">
-        <div className="max-w-[1400px] mx-auto px-4 h-11 flex items-center gap-3">
-          <span className="relative flex h-2 w-2 shrink-0">
-            <span className="absolute inset-0 rounded-full bg-[#E8553E] opacity-60 animate-ping" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#E8553E]" />
+        <div className="max-w-[1400px] mx-auto px-4 h-12 flex items-center gap-3">
+          <GoldIcon />
+          <span className="text-xs font-medium truncate text-white/80">{usuario.empresas.razon_social}</span>
+          <span className="flex items-center gap-1 ml-auto">
+            <PlainIcon title="Señal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 20h2"/><path d="M6 20h2"/><path d="M10 20h2"/><path d="M14 20h2"/><path d="M18 20h2"/><path d="M22 20h2"/><path d="M4 16l2-2"/><path d="M8 12l2-2"/><path d="M12 8l2-2"/><path d="M16 4l2-2"/></svg></PlainIcon>
+            <PlainIcon title="Capas"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="12 2 22 8.5 12 15 2 8.5"/><polyline points="2 15 12 21.5 22 15"/><polyline points="2 10 12 16.5 22 10"/></svg></PlainIcon>
+            <PlainIcon title="Billetera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></PlainIcon>
           </span>
-          <span className="text-xs font-medium truncate">{usuario.empresas.razon_social}</span>
-          <span className="ml-auto" />
           <DrawerToggle empresaId={empresaId} />
         </div>
       </header>
