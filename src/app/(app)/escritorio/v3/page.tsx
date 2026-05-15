@@ -178,32 +178,60 @@ async function DocList({ empresaId }: { empresaId: string }) {
       </div>
       <style>{`
         .sq-card {
-          border-radius: 16px;
+          border-radius: 18px;
           position: relative;
           cursor: pointer;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.08);
-          background: #16181d;
-          border: 1px solid #252830;
           overflow: hidden;
-          transition: transform .3s cubic-bezier(0.22,1,0.36,1), box-shadow .3s ease, border-color .3s ease;
+          transition: transform .35s cubic-bezier(0.22,1,0.36,1), box-shadow .35s ease;
           aspect-ratio: 1;
           display: flex;
           flex-direction: column;
-          min-height: 140px;
+          min-height: 150px;
+          border: 1px solid rgba(255,255,255,0.06);
         }
         .sq-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 16px 48px rgba(0,0,0,0.1);
-          border-color: #333742;
+          transform: scale(1.04);
+          box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.15);
+          border-color: rgba(255,255,255,0.12);
         }
+        .sq-card::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          opacity: 0;
+          transition: opacity .35s ease;
+          border-radius: 18px;
+          pointer-events: none;
+        }
+        .sq-card:hover::before {
+          opacity: 1;
+        }
+        .sq-card[data-status="procesado"] { background: linear-gradient(135deg, #0d2818 0%, #16181d 60%); }
+        .sq-card[data-status="procesado"]:hover { background: linear-gradient(135deg, #0d2818 0%, #1a1f22 60%); }
+        .sq-card[data-status="procesando"] { background: linear-gradient(135deg, #0c1f3a 0%, #16181d 60%); }
+        .sq-card[data-status="procesando"]:hover { background: linear-gradient(135deg, #0c1f3a 0%, #1a1f22 60%); }
+        .sq-card[data-status="error"] { background: linear-gradient(135deg, #2a0d0d 0%, #16181d 60%); }
+        .sq-card[data-status="error"]:hover { background: linear-gradient(135deg, #2a0d0d 0%, #1a1f22 60%); }
+        .sq-card[data-status="subido"] { background: linear-gradient(135deg, #2a2408 0%, #16181d 60%); }
+        .sq-card[data-status="subido"]:hover { background: linear-gradient(135deg, #2a2408 0%, #1a1f22 60%); }
         .sq-main {
           flex: 1;
-          padding: 16px 14px 10px;
+          padding: 18px 16px 10px;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
           position: relative;
           z-index: 2;
+        }
+        .sq-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 15px;
+          margin-bottom: 12px;
         }
         .sq-footer {
           height: 0;
@@ -215,41 +243,57 @@ async function DocList({ empresaId }: { empresaId: string }) {
           gap: 5px;
           font-size: 10px;
           font-weight: 500;
+          position: relative;
+          z-index: 2;
         }
         .sq-card:hover .sq-footer {
-          height: 30px;
+          height: 32px;
         }
         @keyframes sqIn {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(16px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .sq-card { animation: sqIn .4s ease-out both; }
-        .sq-card:nth-child(1) { animation-delay: .03s; }
-        .sq-card:nth-child(2) { animation-delay: .07s; }
-        .sq-card:nth-child(3) { animation-delay: .11s; }
-        .sq-card:nth-child(4) { animation-delay: .15s; }
-        .sq-card:nth-child(5) { animation-delay: .19s; }
+        .sq-card { animation: sqIn .45s ease-out both; }
+        .sq-card:nth-child(1) { animation-delay: .02s; }
+        .sq-card:nth-child(2) { animation-delay: .06s; }
+        .sq-card:nth-child(3) { animation-delay: .10s; }
+        .sq-card:nth-child(4) { animation-delay: .14s; }
+        .sq-card:nth-child(5) { animation-delay: .18s; }
       `}</style>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
         {(docs ?? []).length === 0 ? (
           <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "48px 0", gridColumn: "1 / -1" }}>Sin documentos aún</p>
         ) : (docs ?? []).map((d, i) => {
           const s = st[d.estado] ?? { label: d.estado, color: "#636878", accent: "rgba(99,104,120,0.12)" };
+          const grad = d.estado === "procesado" ? "linear-gradient(135deg, #0d2818 0%, #16181d 60%)"
+            : d.estado === "procesando" ? "linear-gradient(135deg, #0c1f3a 0%, #16181d 60%)"
+            : d.estado === "error" ? "linear-gradient(135deg, #2a0d0d 0%, #16181d 60%)"
+            : "linear-gradient(135deg, #2a2408 0%, #16181d 60%)";
+          const bgHover = d.estado === "procesado" ? "linear-gradient(135deg, #0d2818 0%, #1a1f22 60%)"
+            : d.estado === "procesando" ? "linear-gradient(135deg, #0c1f3a 0%, #1a1f22 60%)"
+            : d.estado === "error" ? "linear-gradient(135deg, #2a0d0d 0%, #1a1f22 60%)"
+            : "linear-gradient(135deg, #2a2408 0%, #1a1f22 60%)";
+          const icon = d.estado === "procesado" ? "✓"
+            : d.estado === "procesando" ? "⟳"
+            : d.estado === "error" ? "⚠"
+            : "○";
           return (
-            <div key={d.id} className="sq-card">
+            <div key={d.id} className="sq-card" data-status={d.estado}>
               <div className="sq-main">
                 <div>
-                  <div style={{ width: 4, height: 24, borderRadius: 2, background: s.color, marginBottom: 10, boxShadow: `0 0 8px ${s.color}60` }} />
+                  <div className="sq-icon" style={{ background: `${s.color}20`, color: s.color, boxShadow: `inset 0 0 0 1px ${s.color}30` }}>
+                    {icon}
+                  </div>
                   <div style={{ fontSize: 12, fontWeight: 500, color: "#e8eaf0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{d.nombre_archivo}</div>
                   <div style={{ fontSize: 10, color: "#636878", marginTop: 6 }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados}` : ""}</div>
                 </div>
                 <span style={{
-                  fontSize: 10, fontWeight: 500, color: s.color,
-                  background: s.accent, padding: "3px 10px", borderRadius: 20,
-                  alignSelf: "flex-start",
+                  fontSize: 10, fontWeight: 600, color: s.color,
+                  background: `${s.color}18`, padding: "3px 10px", borderRadius: 20,
+                  alignSelf: "flex-start", backdropFilter: "blur(4px)",
                 }}>{s.label}</span>
               </div>
-              <div className="sq-footer" style={{ background: s.accent, color: s.color }}>
+              <div className="sq-footer" style={{ background: `${s.color}15`, color: s.color }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
                 {d.movimientos_detectados ? `${d.movimientos_detectados} clasificados` : "Procesado"}
               </div>
