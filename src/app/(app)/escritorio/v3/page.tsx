@@ -78,6 +78,8 @@ function todayStr() {
 
 function Sidebar({ empresaId }: { empresaId: string }) {
   return (
+    <>
+    <style>{`.nav-item-dash:hover{background:#1e2028!important;color:#9499a8!important}`}</style>
     <div style={{ width: 72, background: "#16181d", borderRight: "1px solid #2a2d36", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0 12px", gap: 6, flexShrink: 0 }}>
       <div style={{ width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#b4f027"/><rect x="8" y="8" width="6" height="16" rx="2" fill="#0f1014"/><rect x="18" y="12" width="6" height="12" rx="2" fill="#0f1014"/></svg>
@@ -94,14 +96,19 @@ function Sidebar({ empresaId }: { empresaId: string }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
 function NavItem({ icon: Icon, active }: { icon: typeof ChartBar; active?: boolean }) {
   return (
-    <div style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, cursor: "pointer", background: active ? "#b4f027" : "transparent", color: active ? "#000" : "#636878", transition: "all .15s" }}
-      onMouseEnter={e => { if (!active) { e.currentTarget.style.background = "#1e2028"; e.currentTarget.style.color = "#9499a8"; }}}
-      onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#636878"; }}}>
+    <div className="nav-item-dash" style={{
+      width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
+      borderRadius: 10, cursor: "pointer",
+      background: active ? "#b4f027" : "transparent",
+      color: active ? "#000" : "#636878",
+      transition: "all .15s",
+    }}>
       <Icon size={20} weight={active ? "fill" : "bold"} />
     </div>
   );
