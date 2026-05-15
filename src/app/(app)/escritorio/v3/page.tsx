@@ -152,7 +152,7 @@ async function ChartData({ empresaId }: { empresaId: string }) {
   return <BarChart data={data} months={months} activeMonth={new Date().getMonth()} />;
 }
 
-/* ─── DOCUMENT CARDS ─── */
+/* ─── TASK-STYLE DOCUMENT CARDS ─── */
 
 async function DocList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -163,73 +163,66 @@ async function DocList({ empresaId }: { empresaId: string }) {
     .order("created_at", { ascending: false })
     .limit(6);
 
-  const statusStyles: Record<string, { bg: string; color: string; label: string; dot: string }> = {
-    procesado: { bg: "rgba(34,197,94,0.12)", color: "#22c55e", label: "Listo", dot: "#22c55e" },
-    procesando: { bg: "rgba(91,156,246,0.12)", color: "#5b9cf6", label: "Procesando", dot: "#5b9cf6" },
-    error: { bg: "rgba(239,68,68,0.12)", color: "#ef4444", label: "Error", dot: "#ef4444" },
-    subido: { bg: "rgba(245,158,11,0.12)", color: "#f59e0b", label: "Subido", dot: "#f59e0b" },
+  const typeMeta: Record<string, { icon: string; color: string; bg: string }> = {
+    pdf:    { icon: "📄", color: "#f87171", bg: "rgba(239,68,68,0.08)" },
+    excel:  { icon: "📊", color: "#4ade80", bg: "rgba(74,222,128,0.08)" },
+    csv:    { icon: "📋", color: "#60a5fa", bg: "rgba(91,156,246,0.08)" },
+    image:  { icon: "🖼️", color: "#c084fc", bg: "rgba(167,139,250,0.08)" },
   };
 
-  const gradients: Record<string, string> = {
-    pdf: "linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.05) 100%)",
-    excel: "linear-gradient(135deg, rgba(74,222,128,0.2) 0%, rgba(74,222,128,0.05) 100%)",
-    csv: "linear-gradient(135deg, rgba(91,156,246,0.2) 0%, rgba(91,156,246,0.05) 100%)",
+  const statusMeta: Record<string, { label: string; color: string; dot: string }> = {
+    procesado:   { label: "Completado", color: "#4ade80", dot: "#22c55e" },
+    procesando:  { label: "Procesando", color: "#60a5fa", dot: "#3b82f6" },
+    error:       { label: "Con error",  color: "#f87171", dot: "#ef4444" },
+    subido:      { label: "Pendiente",  color: "#fbbf24", dot: "#f59e0b" },
   };
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div style={{ marginTop: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0" }}>Documentos recientes</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0" }}>Documentos</h3>
         <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
       </div>
       <style>{`
-        .doc-card { transition: all .25s cubic-bezier(0.22,1,0.36,1); cursor: pointer; }
-        .doc-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(180,240,39,0.15); }
-        .doc-card:active { transform: translateY(-1px); }
-        @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        .doc-card { animation: cardIn .35s ease-out both; }
-        .doc-card:nth-child(1) { animation-delay: 0ms; }
-        .doc-card:nth-child(2) { animation-delay: 60ms; }
-        .doc-card:nth-child(3) { animation-delay: 120ms; }
-        .doc-card:nth-child(4) { animation-delay: 180ms; }
-        .doc-card:nth-child(5) { animation-delay: 240ms; }
-        .doc-card:nth-child(6) { animation-delay: 300ms; }
+        .tcard { transition: all .2s cubic-bezier(0.22,1,0.36,1); cursor: pointer; border-radius: 12px; }
+        .tcard:hover { background: #1a1c23 !important; border-color: #3a3d48 !important; }
+        .tcard:active { transform: scale(0.99); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .tcard { animation: slideUp .4s ease-out both; }
+        .tcard:nth-child(1) { animation-delay: .00s; }
+        .tcard:nth-child(2) { animation-delay: .06s; }
+        .tcard:nth-child(3) { animation-delay: .12s; }
+        .tcard:nth-child(4) { animation-delay: .18s; }
+        .tcard:nth-child(5) { animation-delay: .24s; }
+        .tcard:nth-child(6) { animation-delay: .30s; }
       `}</style>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {(docs ?? []).length === 0 ? (
-          <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "40px 0", gridColumn: "1 / -1" }}>Sin documentos aún. Subí tu primer archivo.</p>
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#636878", fontSize: 13 }}>Sin documentos aún — subí tu primer archivo.</div>
         ) : (docs ?? []).map((d, i) => {
-          const st = statusStyles[d.estado] ?? { bg: "rgba(99,104,120,0.12)", color: "#636878", label: d.estado, dot: "#636878" };
-          const grad = gradients[d.tipo] ?? "linear-gradient(135deg, rgba(99,104,120,0.15) 0%, rgba(99,104,120,0.05) 100%)";
+          const t = typeMeta[d.tipo] ?? { icon: "📁", color: "#9499a8", bg: "rgba(99,104,120,0.08)" };
+          const s = statusMeta[d.estado] ?? { label: d.estado, color: "#9499a8", dot: "#636878" };
           return (
-            <div key={d.id} className="doc-card" style={{
-              background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "14px 16px",
-              position: "relative", overflow: "hidden",
+            <div key={d.id} className="tcard" style={{
+              background: "#16181d", border: "1px solid #252830", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+              borderLeft: `3px solid ${s.dot}`,
             }}>
-              {/* Accent line */}
-              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: st.dot, borderRadius: "14px 0 0 14px" }} />
-              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                {/* Icon */}
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: grad, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Files size={18} color={d.tipo === "pdf" ? "#ef4444" : "#4ade80"} />
+              <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{t.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0" }}>{d.nombre_archivo}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, fontSize: 11, color: "#636878" }}>
+                  <span style={{ color: t.color, fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
+                  {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} mov</span></>}
+                  <span>·</span>
+                  <span>{new Date(d.created_at).toLocaleDateString("es-CL")}</span>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, color: "#636878" }}>
-                    <span style={{ color: d.tipo === "pdf" ? "#ef4444" : "#b4f027", fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
-                    {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} movimientos</span></>}
-                    <span>·</span>
-                    <span>{new Date(d.created_at).toLocaleDateString("es-CL")}</span>
-                  </div>
-                </div>
-                {/* Status */}
-                <span style={{
-                  display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 6,
-                  fontSize: 11, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: "nowrap", flexShrink: 0,
-                }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: st.dot }} />
-                  {st.label}
-                </span>
+              </div>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20,
+                fontSize: 11, fontWeight: 600, background: s.dot + "15", color: s.color, whiteSpace: "nowrap",
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot }} />
+                {s.label}
               </div>
             </div>
           );
