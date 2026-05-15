@@ -152,7 +152,7 @@ async function ChartData({ empresaId }: { empresaId: string }) {
   return <BarChart data={data} months={months} activeMonth={new Date().getMonth()} />;
 }
 
-/* ─── TASK-STYLE DOCUMENT CARDS ─── */
+/* ─── KANBAN-STYLE CARDS ─── */
 
 async function DocList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -163,67 +163,65 @@ async function DocList({ empresaId }: { empresaId: string }) {
     .order("created_at", { ascending: false })
     .limit(6);
 
-  const typeMeta: Record<string, { icon: string; color: string; bg: string }> = {
-    pdf:    { icon: "📄", color: "#f87171", bg: "rgba(239,68,68,0.08)" },
-    excel:  { icon: "📊", color: "#4ade80", bg: "rgba(74,222,128,0.08)" },
-    csv:    { icon: "📋", color: "#60a5fa", bg: "rgba(91,156,246,0.08)" },
-    image:  { icon: "🖼️", color: "#c084fc", bg: "rgba(167,139,250,0.08)" },
-  };
-
-  const statusMeta: Record<string, { label: string; color: string; dot: string }> = {
-    procesado:   { label: "Completado", color: "#4ade80", dot: "#22c55e" },
-    procesando:  { label: "Procesando", color: "#60a5fa", dot: "#3b82f6" },
-    error:       { label: "Con error",  color: "#f87171", dot: "#ef4444" },
-    subido:      { label: "Pendiente",  color: "#fbbf24", dot: "#f59e0b" },
+  const statusMeta: Record<string, { label: string; dot: string }> = {
+    procesado:   { label: "Completado", dot: "#22c55e" },
+    procesando:  { label: "Procesando", dot: "#3b82f6" },
+    error:       { label: "Con error",  dot: "#ef4444" },
+    subido:      { label: "Pendiente",  dot: "#f59e0b" },
   };
 
   return (
-    <div style={{ marginTop: 20 }}>
+    <div style={{ marginTop: 20, maxWidth: 720 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0" }}>Documentos</h3>
         <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
       </div>
       <style>{`
-        .tcard { transition: all .2s cubic-bezier(0.22,1,0.36,1); cursor: pointer; border-radius: 12px; }
-        .tcard:hover { background: #1a1c23 !important; border-color: #3a3d48 !important; }
-        .tcard:active { transform: scale(0.99); }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        .tcard { animation: slideUp .4s ease-out both; }
-        .tcard:nth-child(1) { animation-delay: .00s; }
-        .tcard:nth-child(2) { animation-delay: .06s; }
-        .tcard:nth-child(3) { animation-delay: .12s; }
-        .tcard:nth-child(4) { animation-delay: .18s; }
-        .tcard:nth-child(5) { animation-delay: .24s; }
-        .tcard:nth-child(6) { animation-delay: .30s; }
+        .kcard {
+          transition: all .2s ease;
+          cursor: pointer;
+          border-radius: 10px;
+        }
+        .kcard:hover {
+          border-color: #383b44 !important;
+          background: #191b21 !important;
+        }
+        .kcard:active { transform: scale(.99); }
+        @keyframes kfade {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .kcard { animation: kfade .3s ease-out both; }
+        .kcard:nth-child(1) { animation-delay: .03s; }
+        .kcard:nth-child(2) { animation-delay: .07s; }
+        .kcard:nth-child(3) { animation-delay: .11s; }
+        .kcard:nth-child(4) { animation-delay: .15s; }
+        .kcard:nth-child(5) { animation-delay: .19s; }
+        .kcard:nth-child(6) { animation-delay: .23s; }
       `}</style>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {(docs ?? []).length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "#636878", fontSize: 13 }}>Sin documentos aún — subí tu primer archivo.</div>
+          <div style={{ textAlign: "center", padding: "32px 0", color: "#636878", fontSize: 13 }}>Sin documentos aún</div>
         ) : (docs ?? []).map((d, i) => {
-          const t = typeMeta[d.tipo] ?? { icon: "📁", color: "#9499a8", bg: "rgba(99,104,120,0.08)" };
-          const s = statusMeta[d.estado] ?? { label: d.estado, color: "#9499a8", dot: "#636878" };
+          const s = statusMeta[d.estado] ?? { label: d.estado, dot: "#636878" };
           return (
-            <div key={d.id} className="tcard" style={{
-              background: "#16181d", border: "1px solid #252830", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+            <div key={d.id} className="kcard" style={{
+              background: "#16181d",
+              border: "1px solid #252830",
               borderLeft: `3px solid ${s.dot}`,
+              padding: "10px 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
             }}>
-              <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{t.icon}</span>
+              <div style={{ width: 28, height: 28, borderRadius: 6, background: s.dot + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, color: s.dot }}>●</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0" }}>{d.nombre_archivo}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, fontSize: 11, color: "#636878" }}>
-                  <span style={{ color: t.color, fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
-                  {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} mov</span></>}
-                  <span>·</span>
-                  <span>{new Date(d.created_at).toLocaleDateString("es-CL")}</span>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
+                <div style={{ fontSize: 11, color: "#636878", marginTop: 1 }}>
+                  {d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados} mov` : ""} · {new Date(d.created_at).toLocaleDateString("es-CL")}
                 </div>
               </div>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20,
-                fontSize: 11, fontWeight: 600, background: s.dot + "15", color: s.color, whiteSpace: "nowrap",
-              }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot }} />
-                {s.label}
-              </div>
+              <span style={{ fontSize: 11, fontWeight: 500, color: s.dot, whiteSpace: "nowrap" }}>{s.label}</span>
             </div>
           );
         })}
