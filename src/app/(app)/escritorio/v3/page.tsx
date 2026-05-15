@@ -61,9 +61,8 @@ export default async function EscritorioV3Page({
           boletasContent={
             <TabCard><BoletasListV3 empresaId={empresaId} /></TabCard>
           }
-          empresaContent={
-            <TabCard><EmpresaContent empresaId={empresaId} /></TabCard>
-          }
+        }
+
         />
       </main>
     </div>
