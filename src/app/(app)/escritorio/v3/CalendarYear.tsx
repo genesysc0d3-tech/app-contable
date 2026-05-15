@@ -61,7 +61,7 @@ export default function CalendarYear({ empresaId }: { empresaId: string }) {
   const firstDay = new Date(year, m, 1).getDay();
 
   return (
-    <div className="bg-white/50 dark:bg-white/[0.03] rounded-xl border border-[var(--border)] py-2 px-3 space-y-1.5">
+    <div style={{ background: "#1c1c1e", borderRadius: 16, border: "1px solid #38383a", padding: "8px 12px" }} className="space-y-1.5">
       {/* Top row: year + months */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
         {/* Year */}

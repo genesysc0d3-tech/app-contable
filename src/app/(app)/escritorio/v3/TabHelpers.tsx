@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 
 export function TabCard({ title, action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div className="bg-white dark:bg-white/[0.04] rounded-xl border border-[var(--border)] p-4 space-y-3">
+    <div style={{ background: "#1c1c1e", borderRadius: 16, border: "1px solid #38383a", padding: 16 }}>
       {title && (
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-[var(--foreground)]">{title}</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 style={{ fontSize: 12, fontWeight: 600, color: "#fff" }}>{title}</h3>
           {action}
         </div>
       )}
