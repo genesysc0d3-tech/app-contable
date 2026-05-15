@@ -3,16 +3,10 @@ import Link from "next/link";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import RevisarClient from "../../revisar/RevisarClient";
-import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
-import BoletasList from "@/components/boletas/BoletasList";
-import TabsV3 from "./TabsV3";
-import DrawerToggle from "./DrawerToggle";
+import { Buildings, Gear, Users, ChartBar, Files, CalendarDots, Receipt, MagnifyingGlass, Bell } from "@phosphor-icons/react/dist/ssr";
 import CalendarYear from "./CalendarYear";
-import EmitirTab from "./EmitirTab";
-import { GoldIcon, PlainIcon } from "./NavIcons";
-import { TabCard } from "./TabHelpers";
 
-export default async function EscritorioV3Page({
+export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: Promise<{ date?: string }>;
@@ -23,132 +17,281 @@ export default async function EscritorioV3Page({
   const selectedDate = dateParam === "all" ? null : (dateParam ?? todayStr());
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "#141416" }}>
-      <header className="sticky top-0 z-30" style={{ background: "#111113", borderBottom: "1px solid #38383a" }}>
-        <div className="max-w-[1400px] mx-auto px-4 h-12 flex items-center gap-3">
-          <GoldIcon />
-          <span className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.8)" }}>{usuario.empresas.razon_social}</span>
-          <span className="flex items-center gap-1 ml-auto">
-            <PlainIcon title="Señal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 20h2"/><path d="M6 20h2"/><path d="M10 20h2"/><path d="M14 20h2"/><path d="M18 20h2"/><path d="M22 20h2"/><path d="M4 16l2-2"/><path d="M8 12l2-2"/><path d="M12 8l2-2"/><path d="M16 4l2-2"/></svg></PlainIcon>
-            <PlainIcon title="Capas"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="12 2 22 8.5 12 15 2 8.5"/><polyline points="2 15 12 21.5 22 15"/><polyline points="2 10 12 16.5 22 10"/></svg></PlainIcon>
-            <PlainIcon title="Billetera"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></PlainIcon>
-          </span>
-          <DrawerToggle empresaId={empresaId} />
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#0f1014", color: "#e8eaf0", fontFamily: "'DM Sans', sans-serif" }}>
+      {/* ═══ SIDEBAR 72px ═══ */}
+      <Sidebar empresaId={empresaId} />
+
+      {/* ═══ MAIN ═══ */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        {/* Topbar */}
+        <div style={{ display: "flex", alignItems: "center", padding: "14px 24px", borderBottom: "1px solid #2a2d36", gap: 12, flexShrink: 0 }}>
+          <div>
+            <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.3px", color: "#e8eaf0", margin: 0 }}>Facturación Electrónica</h1>
+            <p style={{ fontSize: 12, color: "#636878", margin: "1px 0 0" }}>Resumen de emisiones y documentos</p>
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e2028", border: "1px solid #2a2d36", borderRadius: 9, padding: "6px 12px" }}>
+              <MagnifyingGlass size={14} color="#636878" />
+              <input placeholder="Buscar..." style={{ background: "none", border: "none", outline: "none", color: "#e8eaf0", fontSize: 13, width: 140 }} />
+            </div>
+            <IconButton icon={Bell} notif />
+            <UserPill name={usuario.empresas.razon_social} />
+          </div>
         </div>
-      </header>
 
-      <main className="max-w-[1400px] mx-auto w-full px-4 py-3 flex flex-col gap-3">
-        <Suspense fallback={<StatsSkeleton />}>
-          <StatsRowFull empresaId={empresaId} />
-        </Suspense>
+        {/* Content area */}
+        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+          {/* Center column */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+            <Suspense fallback={<div style={{ height: 120, background: "#16181d", borderRadius: 14 }} />}>
+              <KpiRow empresaId={empresaId} />
+            </Suspense>
 
-        <CalendarYear empresaId={empresaId} />
+            <CalendarYear empresaId={empresaId} />
 
-        <TabsV3
-          subirContent={
-            <EmitirTab empresaId={empresaId} />
-          }
-          revisarContent={
-            <TabCard>
-              <Suspense fallback={<div className="h-48 animate-shimmer rounded-xl" />}>
-                <RevisarPanelV3 empresaId={empresaId} filterDate={selectedDate} />
-              </Suspense>
-            </TabCard>
-          }
-          emitirContent={
-            <TabCard><EmitirBoletaForm /></TabCard>
-          }
-          boletasContent={
-            <TabCard><BoletasListV3 empresaId={empresaId} /></TabCard>
-          }
-        />
-      </main>
+            <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14, marginTop: 16 }} />}>
+              <ChartSection empresaId={empresaId} />
+            </Suspense>
+
+            <Suspense fallback={<div style={{ height: 150, background: "#16181d", borderRadius: 14, marginTop: 16 }} />}>
+              <RecentTable empresaId={empresaId} filterDate={selectedDate} />
+            </Suspense>
+          </div>
+
+          {/* Right panel */}
+          <div style={{ width: 290, borderLeft: "1px solid #2a2d36", overflowY: "auto", padding: "20px 16px", flexShrink: 0 }}>
+            <RightPanel empresaId={empresaId} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function todayStr(): string {
+function todayStr() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-/* Stats */
+/* ─── SIDEBAR ─── */
 
-async function StatsRowFull({ empresaId }: { empresaId: string }) {
+function Sidebar({ empresaId }: { empresaId: string }) {
+  return (
+    <div style={{ width: 72, background: "#16181d", borderRight: "1px solid #2a2d36", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0 12px", gap: 6, flexShrink: 0 }}>
+      <div style={{ width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#b4f027"/><rect x="8" y="8" width="6" height="16" rx="2" fill="#0f1014"/><rect x="18" y="12" width="6" height="12" rx="2" fill="#0f1014"/></svg>
+      </div>
+      <NavItem icon={ChartBar} active />
+      <NavItem icon={Files} />
+      <NavItem icon={CalendarDots} />
+      <NavItem icon={Receipt} />
+      <NavItem icon={Users} />
+      <NavItem icon={Gear} />
+      <div style={{ marginTop: "auto" }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #6b7280, #374151)", border: "2px solid #333742", position: "relative", cursor: "pointer" }}>
+          <div style={{ position: "absolute", bottom: 1, right: 1, width: 9, height: 9, borderRadius: "50%", background: "#22c55e", border: "2px solid #16181d" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NavItem({ icon: Icon, active }: { icon: typeof ChartBar; active?: boolean }) {
+  return (
+    <div style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, cursor: "pointer", background: active ? "#b4f027" : "transparent", color: active ? "#000" : "#636878", transition: "all .15s" }}
+      onMouseEnter={e => { if (!active) { e.currentTarget.style.background = "#1e2028"; e.currentTarget.style.color = "#9499a8"; }}}
+      onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#636878"; }}}>
+      <Icon size={20} weight={active ? "fill" : "bold"} />
+    </div>
+  );
+}
+
+/* ─── TOPBAR HELPERS ─── */
+
+function IconButton({ icon: Icon, notif }: { icon: typeof Bell; notif?: boolean }) {
+  return (
+    <div style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 9, background: "#1e2028", border: "1px solid #2a2d36", cursor: "pointer", color: "#9499a8", position: "relative" }}>
+      <Icon size={17} />
+      {notif && <div style={{ position: "absolute", top: 6, right: 6, width: 7, height: 7, borderRadius: "50%", background: "#b4f027", border: "1.5px solid #1e2028" }} />}
+    </div>
+  );
+}
+
+function UserPill({ name }: { name: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1e2028", border: "1px solid #2a2d36", borderRadius: 9, padding: "5px 10px 5px 5px", cursor: "pointer" }}>
+      <div style={{ width: 26, height: 26, borderRadius: 6, background: "linear-gradient(135deg, #4f46e5, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff" }}>A</div>
+      <span style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0" }}>{name.slice(0, 12)}</span>
+    </div>
+  );
+}
+
+/* ─── KPI CARDS ─── */
+
+async function KpiRow({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
   const now = new Date();
   const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-  const [pendientes, emitidosMes, aprobadosMes, folios] = await Promise.all([
+  const [pendientes, emitidosHoy, emitidosMes, aprobadosMes] = await Promise.all([
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "pendiente"),
+    supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", startDay),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", startMonth),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["aprobado", "editado"]).gte("created_at", startMonth),
-    supabase.from("boletas_caf_mock").select("folio_actual, folio_hasta, tipo_dte").eq("empresa_id", empresaId).eq("estado", "activo"),
   ]);
 
-  const foliosRest = (folios.data ?? []).reduce((s, f) => s + (f.folio_hasta - f.folio_actual + 1), 0);
+  const pend = pendientes.count ?? 0;
+  const emitHoy = emitidosHoy.count ?? 0;
+  const emitMes = emitidosMes.count ?? 0;
+  const aprob = aprobadosMes.count ?? 0;
 
   return (
-    <div className="flex items-center gap-5 overflow-x-auto no-scrollbar text-xs"
-      style={{ background: "#1c1c1e", borderRadius: 16, border: "1px solid #38383a", padding: "12px 18px" }}>
-      <Stat value={pendientes.count ?? 0} label="pendientes" color="#fff" />
-      <Divider />
-      <Stat value={aprobadosMes.count ?? 0} label="aprobados" color="#c8f135" />
-      <Divider />
-      <Stat value={emitidosMes.count ?? 0} label="emitidos" color="#38bdf8" />
-      <Divider />
-      <Stat value={foliosRest} label="folios" color="#9c6fe4" />
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 18 }}>
+      <KpiCard icon={ChartBar} value={`${emitHoy}`} label="Emitidas hoy" sub="Tasa de emisión" color="#b4f027" iconBg="rgba(180,240,39,0.12)" />
+      <KpiCard icon={Files} value={`${pend}`} label="Pendientes" sub="Por revisar" color="#5b9cf6" iconBg="rgba(91,156,246,0.12)" />
+      <KpiCard icon={Receipt} value={`${emitMes}`} label="Emitidas mes" sub="Total del período" color="#a78bfa" iconBg="rgba(167,139,250,0.12)" />
+      <KpiCard icon={ChartBar} value={`${aprob}`} label="Aprobadas" sub="Tasa de éxito" color="#22c55e" iconBg="rgba(34,197,94,0.12)" />
     </div>
   );
 }
 
-function Stat({ value, label, color }: { value: number; label: string; color: string }) {
+function KpiCard({ icon: Icon, value, label, sub, color, iconBg }: {
+  icon: typeof ChartBar; value: string; label: string; sub: string; color: string; iconBg: string;
+}) {
   return (
-    <div className="flex items-baseline gap-1.5 shrink-0">
-      <span className="text-lg font-light tabular-nums" style={{ color }}>{value}</span>
-      <span className="text-[var(--muted-light)]">{label}</span>
+    <div style={{ background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "16px 18px 14px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: iconBg }}>
+          <Icon size={18} color={color} weight="fill" />
+        </div>
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-1px", lineHeight: 1, marginTop: 6, color: "#e8eaf0" }}>{value}</div>
+      <div style={{ fontSize: 12, color: "#636878", marginTop: 2 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, fontSize: 11, color: "#636878" }}>
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
+        {sub}
+      </div>
     </div>
   );
 }
 
-function Divider() {
-  return <span className="w-px h-5 bg-[var(--border)] shrink-0" />;
-}
+/* ─── CHART ─── */
 
-function StatsSkeleton() {
-  return <div className="h-[42px] bg-white/30 dark:bg-white/[0.03] rounded-xl border border-[var(--border)] animate-pulse" />;
-}
-
-/* Revisar */
-
-async function RevisarPanelV3({ empresaId, filterDate }: { empresaId: string; filterDate: string | null }) {
+async function ChartSection({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
-  const [{ data: propuestas }, { data: clientes }] = await Promise.all([
-    supabase.from("propuestas_ia").select("*, movimientos_raw(*, documentos_subidos(id, nombre_archivo, created_at))").eq("empresa_id", empresaId).order("created_at", { ascending: false }),
-    supabase.from("clientes").select("id, nombre, rut").eq("empresa_id", empresaId).order("nombre", { ascending: true }),
+  const year = new Date().getFullYear();
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const start = new Date(year, i, 1).toISOString();
+    const end = new Date(year, i + 1, 1).toISOString();
+    return { start, end, label: ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][i] };
+  });
+
+  const counts = await Promise.all(months.map(async (m) => {
+    const { count } = await supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", m.start).lt("created_at", m.end);
+    return count ?? 0;
+  }));
+
+  const max = Math.max(...counts, 1);
+  const currentMonth = new Date().getMonth();
+
+  return (
+    <div style={{ background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "18px 20px", marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "#e8eaf0", margin: 0 }}>Emisiones mensuales</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, color: "#636878" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "#b4f027" }} /> Este año</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "end", gap: 6, height: 120 }}>
+        {counts.map((c, i) => {
+          const pct = c / max;
+          const h = Math.max(pct * 100, 4);
+          const isCurrent = i === currentMonth;
+          return (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 9, color: "#636878" }}>{c}</span>
+              <div style={{ width: "100%", height: h, borderRadius: "6px 6px 2px 2px", background: isCurrent ? "#b4f027" : "#2a2d36", minHeight: 4, transition: "height .3s" }} />
+              <span style={{ fontSize: 9, color: i === currentMonth ? "#b4f027" : "#636878", fontWeight: i === currentMonth ? 600 : 400 }}>{months[i].label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── RECENT TABLE ─── */
+
+async function RecentTable({ empresaId, filterDate }: { empresaId: string; filterDate: string | null }) {
+  const supabase = await createClient();
+  const [{ data: propuestas }] = await Promise.all([
+    supabase.from("propuestas_ia").select("*, movimientos_raw(descripcion, fecha, monto)").eq("empresa_id", empresaId).order("created_at", { ascending: false }).limit(8),
   ]);
   const all = propuestas ?? [];
   const filtered = filterDate ? all.filter((p) => p.created_at?.startsWith(filterDate)) : all;
-  return <RevisarClient propuestas={filtered} clientes={clientes ?? []} empresaId={empresaId} layout="desktop" />;
-}
 
-async function BoletasListV3({ empresaId }: { empresaId: string }) {
-  return <BoletasList empresaId={empresaId} />;
-}
-
-/* Empresa tab content */
-
-async function EmpresaContent({ empresaId }: { empresaId: string }) {
   return (
-    <div className="space-y-4 text-sm">
-      <p className="font-medium text-[var(--foreground)]">Configuración de empresa</p>
-      <div className="flex flex-wrap gap-2">
-        <Link href="/empresa" className="inline-flex items-center gap-1.5 rounded-xl bg-[#E8553E] text-white px-4 py-2 text-xs font-semibold hover:bg-[var(--accent-hover)] transition-colors">
-          Ir a Empresa
-        </Link>
-        <Link href="/clientes" className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] px-4 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--border)] transition-colors">
-          Gestionar clientes
-        </Link>
+    <div style={{ background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "16px 18px", marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "#e8eaf0", margin: 0 }}>Movimientos recientes</h3>
+        <Link href="/revisar" style={{ fontSize: 12, color: "#5b9cf6", textDecoration: "none", fontWeight: 500 }}>Ver todo</Link>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        {filtered.length === 0 && <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: 20 }}>Sin movimientos</p>}
+        {filtered.slice(0, 6).map((p) => (
+          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #2a2d36" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.estado === "pendiente" ? "#f59e0b" : p.estado === "aprobado" ? "#22c55e" : "#636878" }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion || "Sin descripción"}</div>
+              <div style={{ fontSize: 11, color: "#636878", marginTop: 1 }}>{(p.movimientos_raw as any)?.fecha?.slice(0, 10)}</div>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#e8eaf0", whiteSpace: "nowrap" }}>
+              {(p.movimientos_raw as any)?.monto ? `$${Number((p.movimientos_raw as any).monto).toLocaleString("es-CL")}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── RIGHT PANEL ─── */
+
+function RightPanel(_props: { empresaId: string }) {
+  return (
+    <div>
+      <h3 style={{ fontSize: 14, fontWeight: 600, color: "#e8eaf0", margin: "0 0 16px" }}>Actividad reciente</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {[
+          { label: "Boleta emitida", sub: "Folio #0042 — $150.000", time: "hace 5 min", color: "#b4f027" },
+          { label: "Propuesta aprobada", sub: "Transferencia recibida", time: "hace 18 min", color: "#22c55e" },
+          { label: "Cartola subida", sub: "santander.xlsx — 238 mov.", time: "hace 1 h", color: "#5b9cf6" },
+          { label: "Documento procesado", sub: "IA clasificó 238 mov.", time: "hace 2 h", color: "#a78bfa" },
+          { label: "Folios restantes", sub: "42 disponibles (tipo 39)", time: "hace 3 h", color: "#f59e0b" },
+        ].map((item, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, paddingBottom: 12, borderBottom: i < 4 ? "1px solid #2a2d36" : "none" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.color, marginTop: 4, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0" }}>{item.label}</div>
+              <div style={{ fontSize: 11, color: "#636878", marginTop: 1 }}>{item.sub}</div>
+              <div style={{ fontSize: 10, color: "#9499a8", marginTop: 2 }}>{item.time}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 24, background: "#1e2028", borderRadius: 12, border: "1px solid #2a2d36", padding: 16 }}>
+        <h4 style={{ fontSize: 12, fontWeight: 600, color: "#e8eaf0", margin: "0 0 8px" }}>Resumen del mes</h4>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#636878", marginBottom: 4 }}>
+          <span>Total emitido</span>
+          <span style={{ color: "#b4f027", fontWeight: 600 }}>$2.450.000</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#636878" }}>
+          <span>Docs procesados</span>
+          <span style={{ color: "#e8eaf0" }}>238</span>
+        </div>
       </div>
     </div>
   );
