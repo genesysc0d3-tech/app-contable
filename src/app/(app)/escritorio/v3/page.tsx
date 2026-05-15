@@ -152,7 +152,7 @@ async function ChartData({ empresaId }: { empresaId: string }) {
   return <BarChart data={data} months={months} activeMonth={new Date().getMonth()} />;
 }
 
-/* ─── DOCUMENT CARDS (Framer-inspired) ─── */
+/* ─── FRAMER-STYLE DOUBLE-LAYER CARDS ─── */
 
 async function DocList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -163,83 +163,93 @@ async function DocList({ empresaId }: { empresaId: string }) {
     .order("created_at", { ascending: false })
     .limit(5);
 
-  const st: Record<string, { label: string; color: string }> = {
-    procesado:  { label: "Listo",     color: "#22c55e" },
-    procesando: { label: "En curso",  color: "#3b82f6" },
-    error:      { label: "Error",     color: "#ef4444" },
-    subido:     { label: "Nuevo",     color: "#aaff3b" },
+  const st: Record<string, { label: string; color: string; accent: string }> = {
+    procesado:  { label: "Completado", color: "#22c55e", accent: "rgba(34,197,94,0.12)" },
+    procesando: { label: "Procesando", color: "#3b82f6", accent: "rgba(59,130,246,0.12)" },
+    error:      { label: "Con error",  color: "#ef4444", accent: "rgba(239,68,68,0.12)" },
+    subido:     { label: "Nuevo",      color: "#aaff3b", accent: "rgba(170,255,59,0.12)" },
   };
 
   return (
-    <div style={{ marginTop: 24 }}>
+    <div style={{ marginTop: 28 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0", letterSpacing: "-0.3px" }}>Documentos</h3>
         <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
       </div>
       <style>{`
-        .fcard {
-          border-radius: 16px;
-          transition: all .3s cubic-bezier(0.22,1,0.36,1);
-          cursor: pointer;
+        .dl-wrap {
+          border-radius: 20px;
           position: relative;
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.08);
+          background: #16181d;
+          border: 1px solid #252830;
           overflow: hidden;
+          transition: transform .3s cubic-bezier(0.22,1,0.36,1), box-shadow .3s ease;
         }
-        .fcard:hover { transform: translateY(-2px); }
-        .fcard::after {
-          content: '';
-          position: absolute;
-          bottom: 0; left: 0; right: 0;
-          height: 3px;
-          opacity: 0;
-          transition: opacity .3s ease;
+        .dl-wrap:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 16px 48px rgba(0,0,0,0.1);
+          border-color: #333742;
         }
-        .fcard:hover::after { opacity: 1; }
-        @keyframes fi { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .fcard { animation: fi .35s ease-out both; }
-        .fcard:nth-child(1) { animation-delay: .04s; }
-        .fcard:nth-child(2) { animation-delay: .08s; }
-        .fcard:nth-child(3) { animation-delay: .12s; }
-        .fcard:nth-child(4) { animation-delay: .16s; }
-        .fcard:nth-child(5) { animation-delay: .20s; }
+        .dl-main {
+          padding: 16px 20px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          position: relative;
+          z-index: 2;
+        }
+        .dl-footer {
+          height: 0;
+          overflow: hidden;
+          transition: height .35s cubic-bezier(0.22,1,0.36,1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+        .dl-wrap:hover .dl-footer {
+          height: 36px;
+        }
+        @keyframes dlIn {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .dl-wrap { animation: dlIn .4s ease-out both; }
+        .dl-wrap:nth-child(1) { animation-delay: .03s; }
+        .dl-wrap:nth-child(2) { animation-delay: .07s; }
+        .dl-wrap:nth-child(3) { animation-delay: .11s; }
+        .dl-wrap:nth-child(4) { animation-delay: .15s; }
+        .dl-wrap:nth-child(5) { animation-delay: .19s; }
       `}</style>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {(docs ?? []).length === 0 ? (
-          <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "40px 0" }}>Sin documentos aún</p>
+          <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "48px 0" }}>Sin documentos aún</p>
         ) : (docs ?? []).map((d, i) => {
-          const s = st[d.estado] ?? { label: d.estado, color: "#636878" };
+          const s = st[d.estado] ?? { label: d.estado, color: "#636878", accent: "rgba(99,104,120,0.12)" };
           return (
-            <div key={d.id} className="fcard"
-              style={{
-                background: "#16181d",
-                border: "1px solid #252830",
-                padding: "14px 18px",
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06)",
-              }}>
-              {/* Status bar */}
-              <div style={{
-                width: 4, height: 32, borderRadius: 2, background: s.color, flexShrink: 0,
-                boxShadow: `0 0 12px ${s.color}40`,
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, fontSize: 11, color: "#636878" }}>
-                  <span style={{ fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
-                  {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} movimientos</span></>}
+            <div key={d.id} className="dl-wrap">
+              <div className="dl-main">
+                <div style={{ width: 6, height: 36, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", lineHeight: 1.3 }}>{d.nombre_archivo}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, color: "#636878" }}>
+                    <span>{d.tipo.toUpperCase()}</span>
+                    {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} movimientos</span></>}
+                  </div>
                 </div>
+                <span style={{
+                  fontSize: 12, fontWeight: 500, color: s.color,
+                  background: s.accent, padding: "4px 14px", borderRadius: 20,
+                  whiteSpace: "nowrap",
+                }}>{s.label}</span>
               </div>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "5px 12px", borderRadius: 20,
-                fontSize: 11, fontWeight: 500,
-                background: `${s.color}14`,
-                color: s.color,
-                whiteSpace: "nowrap",
-              }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
-                {s.label}
+              <div className="dl-footer" style={{ background: s.accent, color: s.color }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                {d.movimientos_detectados ? `${d.movimientos_detectados} movimientos clasificados` : "Documento procesado"}
               </div>
             </div>
           );
