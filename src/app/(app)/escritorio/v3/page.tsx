@@ -152,7 +152,7 @@ async function ChartData({ empresaId }: { empresaId: string }) {
   return <BarChart data={data} months={months} activeMonth={new Date().getMonth()} />;
 }
 
-/* ─── DOCUMENT LIST ─── */
+/* ─── DOCUMENT CARDS (Framer-inspired) ─── */
 
 async function DocList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -167,60 +167,84 @@ async function DocList({ empresaId }: { empresaId: string }) {
     procesado:  { label: "Listo",     color: "#22c55e" },
     procesando: { label: "En curso",  color: "#3b82f6" },
     error:      { label: "Error",     color: "#ef4444" },
-    subido:     { label: "Nuevo",     color: "#f59e0b" },
-  };
-
-  const tp: Record<string, string> = {
-    pdf: "#ef4444", excel: "#22c55e", csv: "#3b82f6",
+    subido:     { label: "Nuevo",     color: "#aaff3b" },
   };
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0" }}>Documentos</h3>
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0", letterSpacing: "-0.3px" }}>Documentos</h3>
         <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
       </div>
       <style>{`
-        .dc {
-          transition: all .18s ease, border-color .18s ease;
+        .fcard {
+          border-radius: 16px;
+          transition: all .3s cubic-bezier(0.22,1,0.36,1);
           cursor: pointer;
-          border-radius: 10px;
+          position: relative;
+          overflow: hidden;
         }
-        .dc:hover { border-color: #383b44 !important; }
-        @keyframes df { from { opacity: 0; } to { opacity: 1; } }
-        .dc { animation: df .35s ease both; }
-        .dc:nth-child(1) { animation-delay: .04s; }
-        .dc:nth-child(2) { animation-delay: .08s; }
-        .dc:nth-child(3) { animation-delay: .12s; }
-        .dc:nth-child(4) { animation-delay: .16s; }
-        .dc:nth-child(5) { animation-delay: .20s; }
+        .fcard:hover { transform: translateY(-2px); }
+        .fcard::after {
+          content: '';
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          height: 3px;
+          opacity: 0;
+          transition: opacity .3s ease;
+        }
+        .fcard:hover::after { opacity: 1; }
+        @keyframes fi { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fcard { animation: fi .35s ease-out both; }
+        .fcard:nth-child(1) { animation-delay: .04s; }
+        .fcard:nth-child(2) { animation-delay: .08s; }
+        .fcard:nth-child(3) { animation-delay: .12s; }
+        .fcard:nth-child(4) { animation-delay: .16s; }
+        .fcard:nth-child(5) { animation-delay: .20s; }
       `}</style>
-      {(docs ?? []).length === 0 ? (
-        <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "32px 0" }}>Sin documentos aún</p>
-      ) : (docs ?? []).map((d, i) => {
-        const s = st[d.estado] ?? { label: d.estado, color: "#636878" };
-        return (
-          <div key={d.id} className="dc" style={{
-            background: "#16181d",
-            border: "1px solid #252830",
-            padding: "12px 16px",
-            marginBottom: 6,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, fontSize: 11, color: "#636878" }}>
-                <span style={{ color: tp[d.tipo] ?? "#636878", fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
-                {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} mov</span></>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {(docs ?? []).length === 0 ? (
+          <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "40px 0" }}>Sin documentos aún</p>
+        ) : (docs ?? []).map((d, i) => {
+          const s = st[d.estado] ?? { label: d.estado, color: "#636878" };
+          return (
+            <div key={d.id} className="fcard"
+              style={{
+                background: "#16181d",
+                border: "1px solid #252830",
+                padding: "14px 18px",
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06)",
+              }}>
+              {/* Status bar */}
+              <div style={{
+                width: 4, height: 32, borderRadius: 2, background: s.color, flexShrink: 0,
+                boxShadow: `0 0 12px ${s.color}40`,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nombre_archivo}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, fontSize: 11, color: "#636878" }}>
+                  <span style={{ fontWeight: 600 }}>{d.tipo.toUpperCase()}</span>
+                  {d.movimientos_detectados && <><span>·</span><span>{d.movimientos_detectados} movimientos</span></>}
+                </div>
+              </div>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "5px 12px", borderRadius: 20,
+                fontSize: 11, fontWeight: 500,
+                background: `${s.color}14`,
+                color: s.color,
+                whiteSpace: "nowrap",
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+                {s.label}
               </div>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 500, color: s.color, whiteSpace: "nowrap" }}>{s.label}</span>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
