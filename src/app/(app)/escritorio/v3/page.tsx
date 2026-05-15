@@ -179,9 +179,10 @@ async function DocList({ empresaId }: { empresaId: string }) {
       <style>{`
         .flip-doc {
           background-color: transparent;
-          perspective: 1000px;
+          width: 100%;
           aspect-ratio: 1;
           min-height: 150px;
+          perspective: 1000px;
           font-family: 'DM Sans', sans-serif;
         }
         .flip-doc-inner {
@@ -200,12 +201,50 @@ async function DocList({ empresaId }: { empresaId: string }) {
           inset: 0;
           display: flex;
           flex-direction: column;
+          justify-content: center;
+          align-items: center;
           -webkit-backface-visibility: hidden;
           backface-visibility: hidden;
-          border-radius: 18px;
-          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 1rem;
+          border: 1px solid coral;
+          box-shadow: 0 8px 14px 0 rgba(0,0,0,0.2);
+          padding: 16px;
           overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.08);
+        }
+        .flip-doc[data-status="procesado"] .flip-front {
+          background: linear-gradient(120deg, bisque 60%, rgb(255, 231, 222) 88%, rgb(255, 211, 195) 40%, rgba(255, 127, 80, 0.603) 48%);
+          color: coral;
+        }
+        .flip-doc[data-status="procesado"] .flip-back {
+          background: linear-gradient(120deg, rgb(255, 174, 145) 30%, coral 88%, bisque 40%, rgb(255, 185, 160) 78%);
+          color: white;
+        }
+        .flip-doc[data-status="procesando"] .flip-front {
+          background: linear-gradient(120deg, #dbeafe 60%, #bfdbfe 88%, #93c5fd 40%, rgba(59,130,246,0.5) 48%);
+          color: #2563eb;
+        }
+        .flip-doc[data-status="procesando"] .flip-back {
+          background: linear-gradient(120deg, #93c5fd 30%, #3b82f6 88%, #dbeafe 40%, #60a5fa 78%);
+          color: white;
+          border-color: #3b82f6;
+        }
+        .flip-doc[data-status="error"] .flip-front {
+          background: linear-gradient(120deg, #fecaca 60%, #fca5a5 88%, #f87171 40%, rgba(239,68,68,0.5) 48%);
+          color: #dc2626;
+        }
+        .flip-doc[data-status="error"] .flip-back {
+          background: linear-gradient(120deg, #f87171 30%, #ef4444 88%, #fecaca 40%, #fca5a5 78%);
+          color: white;
+          border-color: #ef4444;
+        }
+        .flip-doc[data-status="subido"] .flip-front {
+          background: linear-gradient(120deg, #fef3c7 60%, #fde68a 88%, #fcd34d 40%, rgba(245,158,11,0.5) 48%);
+          color: #d97706;
+        }
+        .flip-doc[data-status="subido"] .flip-back {
+          background: linear-gradient(120deg, #fcd34d 30%, #f59e0b 88%, #fef3c7 40%, #fbbf24 78%);
+          color: white;
+          border-color: #f59e0b;
         }
         .flip-back {
           transform: rotateY(180deg);
@@ -220,54 +259,24 @@ async function DocList({ empresaId }: { empresaId: string }) {
         .flip-doc:nth-child(3) { animation-delay: .10s; }
         .flip-doc:nth-child(4) { animation-delay: .14s; }
         .flip-doc:nth-child(5) { animation-delay: .18s; }
-
-        .flip-doc[data-status="procesado"] .flip-front { background: linear-gradient(135deg, #0d2818 0%, #16181d 60%); }
-        .flip-doc[data-status="procesado"] .flip-back { background: linear-gradient(135deg, #0d2818 0%, #1a2a1a 60%); }
-        .flip-doc[data-status="procesando"] .flip-front { background: linear-gradient(135deg, #0c1f3a 0%, #16181d 60%); }
-        .flip-doc[data-status="procesando"] .flip-back { background: linear-gradient(135deg, #0c1f3a 0%, #102030 60%); }
-        .flip-doc[data-status="error"] .flip-front { background: linear-gradient(135deg, #2a0d0d 0%, #16181d 60%); }
-        .flip-doc[data-status="error"] .flip-back { background: linear-gradient(135deg, #2a0d0d 0%, #1a0a0a 60%); }
-        .flip-doc[data-status="subido"] .flip-front { background: linear-gradient(135deg, #2a2408 0%, #16181d 60%); }
-        .flip-doc[data-status="subido"] .flip-back { background: linear-gradient(135deg, #2a2408 0%, #1a1a0a 60%); }
       `}</style>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
         {(docs ?? []).length === 0 ? (
           <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "48px 0", gridColumn: "1 / -1" }}>Sin documentos aún</p>
         ) : (docs ?? []).map((d, i) => {
           const s = st[d.estado] ?? { label: d.estado, color: "#636878", accent: "rgba(99,104,120,0.12)" };
-          const icon = d.estado === "procesado" ? "✓"
-            : d.estado === "procesando" ? "⟳"
-            : d.estado === "error" ? "⚠"
-            : "○";
           return (
             <div key={d.id} className="flip-doc" data-status={d.estado}>
               <div className="flip-doc-inner">
                 <div className="flip-front">
-                  <div style={{ flex: 1, padding: "18px 16px 10px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                    <div style={{ textAlign: "left" }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background: `${s.color}20`, color: s.color, boxShadow: `inset 0 0 0 1px ${s.color}30`, marginBottom: 12 }}>
-                        {icon}
-                      </div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: "#e8eaf0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", textAlign: "left" }}>{d.nombre_archivo}</div>
-                      <div style={{ fontSize: 10, color: "#636878", marginTop: 6, textAlign: "left" }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados}` : ""}</div>
-                    </div>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: s.color, background: `${s.color}18`, padding: "3px 10px", borderRadius: 20, alignSelf: "flex-start", backdropFilter: "blur(4px)" }}>{s.label}</span>
-                  </div>
+                  <p className="title" style={{ fontSize: "1.2em", fontWeight: 900, margin: "0 0 4px" }}>{d.estado === "procesado" ? "✓ Listo" : d.estado === "procesando" ? "⟳ En curso" : d.estado === "error" ? "⚠ Error" : "○ Nuevo"}</p>
+                  <p style={{ fontSize: 11, margin: "4px 0", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{d.nombre_archivo}</p>
+                  <p style={{ fontSize: 10, margin: "2px 0", opacity: 0.6 }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados}` : ""}</p>
                 </div>
                 <div className="flip-back">
-                  <div style={{ flex: 1, padding: 18, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: s.color }}>Detalles</span>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
-                      {d.movimientos_detectados ? `${d.movimientos_detectados} movimientos` : "Sin datos"}
-                    </div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
-                      {new Date(d.created_at).toLocaleDateString("es-CL")}
-                    </div>
-                    <div style={{ marginTop: "auto", display: "flex", gap: 6 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={s.color} strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-                      <span style={{ fontSize: 10, color: s.color }}>Ver detalle</span>
-                    </div>
-                  </div>
+                  <p className="title" style={{ fontSize: "1.1em", fontWeight: 900, margin: "0 0 6px" }}>{d.estado === "procesado" ? "Completado" : d.estado === "procesando" ? "Procesando" : d.estado === "error" ? "Falló" : "Pendiente"}</p>
+                  <p style={{ fontSize: 11, margin: "2px 0", opacity: 0.9 }}>{d.movimientos_detectados ? `${d.movimientos_detectados} movimientos` : "Sin datos"}</p>
+                  <p style={{ fontSize: 10, margin: "2px 0", opacity: 0.7 }}>{new Date(d.created_at).toLocaleDateString("es-CL")}</p>
                 </div>
               </div>
             </div>
