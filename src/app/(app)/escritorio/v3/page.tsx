@@ -177,125 +177,98 @@ async function DocList({ empresaId }: { empresaId: string }) {
         <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
       </div>
       <style>{`
-        .sq-card {
-          border-radius: 18px;
-          position: relative;
-          cursor: pointer;
-          overflow: hidden;
-          transition: transform .35s cubic-bezier(0.22,1,0.36,1), box-shadow .35s ease;
+        .flip-doc {
+          background-color: transparent;
+          perspective: 1000px;
           aspect-ratio: 1;
-          display: flex;
-          flex-direction: column;
           min-height: 150px;
-          border: 1px solid rgba(255,255,255,0.06);
+          font-family: 'DM Sans', sans-serif;
         }
-        .sq-card:hover {
-          transform: scale(1.04);
-          box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.15);
-          border-color: rgba(255,255,255,0.12);
+        .flip-doc-inner {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          transition: transform .6s cubic-bezier(0.22,1,0.36,1);
+          transform-style: preserve-3d;
         }
-        .sq-card::before {
-          content: '';
+        .flip-doc:hover .flip-doc-inner {
+          transform: rotateY(180deg);
+        }
+        .flip-front, .flip-back {
           position: absolute;
           inset: 0;
-          opacity: 0;
-          transition: opacity .35s ease;
-          border-radius: 18px;
-          pointer-events: none;
-        }
-        .sq-card:hover::before {
-          opacity: 1;
-        }
-        .sq-card[data-status="procesado"] { background: linear-gradient(135deg, #0d2818 0%, #16181d 60%); }
-        .sq-card[data-status="procesado"]:hover { background: linear-gradient(135deg, #0d2818 0%, #1a1f22 60%); }
-        .sq-card[data-status="procesando"] { background: linear-gradient(135deg, #0c1f3a 0%, #16181d 60%); }
-        .sq-card[data-status="procesando"]:hover { background: linear-gradient(135deg, #0c1f3a 0%, #1a1f22 60%); }
-        .sq-card[data-status="error"] { background: linear-gradient(135deg, #2a0d0d 0%, #16181d 60%); }
-        .sq-card[data-status="error"]:hover { background: linear-gradient(135deg, #2a0d0d 0%, #1a1f22 60%); }
-        .sq-card[data-status="subido"] { background: linear-gradient(135deg, #2a2408 0%, #16181d 60%); }
-        .sq-card[data-status="subido"]:hover { background: linear-gradient(135deg, #2a2408 0%, #1a1f22 60%); }
-        .sq-main {
-          flex: 1;
-          padding: 18px 16px 10px;
           display: flex;
           flex-direction: column;
-          justify-content: space-between;
-          position: relative;
-          z-index: 2;
-        }
-        .sq-icon {
-          width: 32px;
-          height: 32px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 15px;
-          margin-bottom: 12px;
-        }
-        .sq-footer {
-          height: 0;
+          -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.06);
           overflow: hidden;
-          transition: height .35s cubic-bezier(0.22,1,0.36,1);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
-          font-size: 10px;
-          font-weight: 500;
-          position: relative;
-          z-index: 2;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.08);
         }
-        .sq-card:hover .sq-footer {
-          height: 32px;
+        .flip-back {
+          transform: rotateY(180deg);
         }
         @keyframes sqIn {
           from { opacity: 0; transform: translateY(16px) scale(0.95); }
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .sq-card { animation: sqIn .45s ease-out both; }
-        .sq-card:nth-child(1) { animation-delay: .02s; }
-        .sq-card:nth-child(2) { animation-delay: .06s; }
-        .sq-card:nth-child(3) { animation-delay: .10s; }
-        .sq-card:nth-child(4) { animation-delay: .14s; }
-        .sq-card:nth-child(5) { animation-delay: .18s; }
+        .flip-doc { animation: sqIn .45s ease-out both; }
+        .flip-doc:nth-child(1) { animation-delay: .02s; }
+        .flip-doc:nth-child(2) { animation-delay: .06s; }
+        .flip-doc:nth-child(3) { animation-delay: .10s; }
+        .flip-doc:nth-child(4) { animation-delay: .14s; }
+        .flip-doc:nth-child(5) { animation-delay: .18s; }
+
+        .flip-doc[data-status="procesado"] .flip-front { background: linear-gradient(135deg, #0d2818 0%, #16181d 60%); }
+        .flip-doc[data-status="procesado"] .flip-back { background: linear-gradient(135deg, #0d2818 0%, #1a2a1a 60%); }
+        .flip-doc[data-status="procesando"] .flip-front { background: linear-gradient(135deg, #0c1f3a 0%, #16181d 60%); }
+        .flip-doc[data-status="procesando"] .flip-back { background: linear-gradient(135deg, #0c1f3a 0%, #102030 60%); }
+        .flip-doc[data-status="error"] .flip-front { background: linear-gradient(135deg, #2a0d0d 0%, #16181d 60%); }
+        .flip-doc[data-status="error"] .flip-back { background: linear-gradient(135deg, #2a0d0d 0%, #1a0a0a 60%); }
+        .flip-doc[data-status="subido"] .flip-front { background: linear-gradient(135deg, #2a2408 0%, #16181d 60%); }
+        .flip-doc[data-status="subido"] .flip-back { background: linear-gradient(135deg, #2a2408 0%, #1a1a0a 60%); }
       `}</style>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
         {(docs ?? []).length === 0 ? (
           <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "48px 0", gridColumn: "1 / -1" }}>Sin documentos aún</p>
         ) : (docs ?? []).map((d, i) => {
           const s = st[d.estado] ?? { label: d.estado, color: "#636878", accent: "rgba(99,104,120,0.12)" };
-          const grad = d.estado === "procesado" ? "linear-gradient(135deg, #0d2818 0%, #16181d 60%)"
-            : d.estado === "procesando" ? "linear-gradient(135deg, #0c1f3a 0%, #16181d 60%)"
-            : d.estado === "error" ? "linear-gradient(135deg, #2a0d0d 0%, #16181d 60%)"
-            : "linear-gradient(135deg, #2a2408 0%, #16181d 60%)";
-          const bgHover = d.estado === "procesado" ? "linear-gradient(135deg, #0d2818 0%, #1a1f22 60%)"
-            : d.estado === "procesando" ? "linear-gradient(135deg, #0c1f3a 0%, #1a1f22 60%)"
-            : d.estado === "error" ? "linear-gradient(135deg, #2a0d0d 0%, #1a1f22 60%)"
-            : "linear-gradient(135deg, #2a2408 0%, #1a1f22 60%)";
           const icon = d.estado === "procesado" ? "✓"
             : d.estado === "procesando" ? "⟳"
             : d.estado === "error" ? "⚠"
             : "○";
           return (
-            <div key={d.id} className="sq-card" data-status={d.estado}>
-              <div className="sq-main">
-                <div>
-                  <div className="sq-icon" style={{ background: `${s.color}20`, color: s.color, boxShadow: `inset 0 0 0 1px ${s.color}30` }}>
-                    {icon}
+            <div key={d.id} className="flip-doc" data-status={d.estado}>
+              <div className="flip-doc-inner">
+                <div className="flip-front">
+                  <div style={{ flex: 1, padding: "18px 16px 10px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                    <div style={{ textAlign: "left" }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background: `${s.color}20`, color: s.color, boxShadow: `inset 0 0 0 1px ${s.color}30`, marginBottom: 12 }}>
+                        {icon}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: "#e8eaf0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", textAlign: "left" }}>{d.nombre_archivo}</div>
+                      <div style={{ fontSize: 10, color: "#636878", marginTop: 6, textAlign: "left" }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados}` : ""}</div>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: s.color, background: `${s.color}18`, padding: "3px 10px", borderRadius: 20, alignSelf: "flex-start", backdropFilter: "blur(4px)" }}>{s.label}</span>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: "#e8eaf0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{d.nombre_archivo}</div>
-                  <div style={{ fontSize: 10, color: "#636878", marginTop: 6 }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados}` : ""}</div>
                 </div>
-                <span style={{
-                  fontSize: 10, fontWeight: 600, color: s.color,
-                  background: `${s.color}18`, padding: "3px 10px", borderRadius: 20,
-                  alignSelf: "flex-start", backdropFilter: "blur(4px)",
-                }}>{s.label}</span>
-              </div>
-              <div className="sq-footer" style={{ background: `${s.color}15`, color: s.color }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-                {d.movimientos_detectados ? `${d.movimientos_detectados} clasificados` : "Procesado"}
+                <div className="flip-back">
+                  <div style={{ flex: 1, padding: 18, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: s.color }}>Detalles</span>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
+                      {d.movimientos_detectados ? `${d.movimientos_detectados} movimientos` : "Sin datos"}
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
+                      {new Date(d.created_at).toLocaleDateString("es-CL")}
+                    </div>
+                    <div style={{ marginTop: "auto", display: "flex", gap: 6 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={s.color} strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                      <span style={{ fontSize: 10, color: s.color }}>Ver detalle</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           );
