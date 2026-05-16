@@ -96,12 +96,16 @@ export async function POST(request: Request) {
     }
 
     // Standard file processing
+    if (documento.storage_path === "memoria") {
+      return NextResponse.json({ error: "Archivo original no disponible en almacenamiento — subilo nuevamente desde el escritorio" }, { status: 422 });
+    }
+
     const { data: fileData, error: downloadError } = await supabase.storage
       .from("documentos")
       .download(documento.storage_path);
 
     if (downloadError || !fileData) {
-      return NextResponse.json({ error: "Error descargando archivo" }, { status: 500 });
+      return NextResponse.json({ error: "Error descargando archivo desde almacenamiento" }, { status: 500 });
     }
 
     let contenido: string;
