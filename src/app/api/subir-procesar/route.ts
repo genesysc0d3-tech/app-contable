@@ -48,6 +48,19 @@ export async function POST(request: Request) {
   const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const svc = createServiceClient(svcUrl, svcKey);
 
+  // Guardar archivo en Storage para FieldMapper y otros usos
+  const storagePath = `${usuario.empresa_id}/${doc.id}/${body.nombre}`;
+  const { error: storageError } = await svc.storage
+    .from("documentos")
+    .upload(storagePath, buffer, {
+      contentType: tipo === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      upsert: true,
+    });
+
+  if (!storageError) {
+    await svc.from("documentos_subidos").update({ storage_path: storagePath }).eq("id", doc.id);
+  }
+
   // Marcar como procesando y devolver respuesta inmediatamente
   await svc.from("documentos_subidos").update({ estado: "procesando" }).eq("id", doc.id);
 
