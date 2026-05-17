@@ -156,7 +156,10 @@ export default function EmisorForm({ inicial }: Props) {
                 type="text"
                 value={rut}
                 onChange={(e) => setRut(e.target.value)}
-                onBlur={() => rut && setRut(formatRut(rut))}
+                onBlur={(e) => {
+                  if (rut) setRut(formatRut(rut));
+                  if (rutOk) { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }
+                }}
                 placeholder="12.345.678-9"
                 className="ef-input"
                 style={{
@@ -164,7 +167,6 @@ export default function EmisorForm({ inicial }: Props) {
                   border: rutOk ? "1px solid rgba(255,255,255,0.09)" : "1px solid rgba(239,68,68,0.80)",
                 }}
                 onFocus={(e) => { if (rutOk) e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { if (rutOk) e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
               />
             </Field>
 
@@ -230,8 +232,6 @@ export default function EmisorForm({ inicial }: Props) {
                 style={inputBase}
                 onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
                 onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
-                onFocus={(e) => { if (rutOk) e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { if (rutOk) e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
               />
             </Field>
 
