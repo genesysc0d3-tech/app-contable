@@ -2,76 +2,36 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  X, MagicWand, CheckCircle, Warning, Lock, CaretDown, Gear, Table, ArrowDown, CaretRight,
-} from "@phosphor-icons/react";
+import { X, MagicWand, CheckCircle, Warning, Lock, CaretDown, Gear, Table, ArrowDown, CaretRight } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import type { AdapterConfig } from "@/lib/parsers/types";
 
-type Role =
-  | "ignorar"
-  | "fecha"
-  | "descripcion"
-  | "n_documento"
-  | "cargo"
-  | "abono"
-  | "monto"
-  | "tipo_flujo"
-  | "saldo";
-
+type Role = "ignorar" | "fecha" | "descripcion" | "n_documento" | "cargo" | "abono" | "monto" | "tipo_flujo" | "saldo";
 type Layout = "two_cols" | "single_col" | "transactions_log";
 type DateFmt = "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "unknown";
 
 interface Preview {
-  sheetName: string;
-  fingerprint: string;
-  totalRows: number;
-  cols: number;
-  rows: string[][];
-  suggested: AdapterConfig | null;
-  suggestedSource: "named" | "heuristic" | null;
+  sheetName: string; fingerprint: string; totalRows: number; cols: number;
+  rows: string[][]; suggested: AdapterConfig | null; suggestedSource: "named" | "heuristic" | null;
 }
 
-interface FieldMapperProps {
-  documentoId: string;
-  onClose: () => void;
-  onSaved?: () => void;
-}
+interface FieldMapperProps { documentoId: string; onClose: () => void; onSaved?: () => void; }
 
-// Role → metadata. Chilean bank cartola terms (Cargo/Abono) + en cristiano tooltip.
 const ROLES: Record<Role, { label: string; hint: string; dot: string; chip: string }> = {
-  ignorar:      { label: "Ignorar",        dot: "bg-[var(--muted-light)]", chip: "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]",
-                  hint: "Esta columna no se usa. Típico: sucursal, oficina, moneda, o datos sin valor contable." },
-  fecha:        { label: "Fecha",          dot: "bg-[#3B82F6]",            chip: "bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30",
-                  hint: "El día del movimiento. Si hay dos columnas (Fecha operación y Fecha valor), usá la que dice cuándo se registró." },
-  descripcion:  { label: "Glosa",          dot: "bg-[#14B8A6]",            chip: "bg-[#14B8A6]/10 text-[#14B8A6] border-[#14B8A6]/30",
-                  hint: "El texto del movimiento: a quién se pagó, quién pagó, concepto. También se llama Descripción o Detalle." },
-  n_documento:  { label: "N° operación",   dot: "bg-[#6366F1]",            chip: "bg-[#6366F1]/10 text-[#6366F1] border-[#6366F1]/30",
-                  hint: "Número único que identifica el movimiento. Los bancos le dicen N° documento, N° operación, Referencia o Folio." },
-  cargo:        { label: "Cargo",          dot: "bg-[#E8553E]",            chip: "bg-[#E8553E]/10 text-[#E8553E] border-[#E8553E]/30",
-                  hint: "Plata que SALIÓ de la cuenta: pagos, transferencias enviadas, giros. En la cartola aparece como débito o cargo." },
-  abono:        { label: "Abono",          dot: "bg-[#22C55E]",            chip: "bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/30",
-                  hint: "Plata que ENTRÓ a la cuenta: depósitos, transferencias recibidas, cobros. En la cartola aparece como crédito o abono." },
-  monto:        { label: "Monto",          dot: "bg-[#F59E0B]",            chip: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30",
-                  hint: "La cantidad de plata del movimiento. Usá esta opción si hay UNA sola columna de monto (sin separar cargo y abono)." },
-  tipo_flujo:   { label: "Tipo (D/C)",     dot: "bg-[#8B5CF6]",            chip: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30",
-                  hint: "Columna que dice si cada fila es un Cargo o un Abono. Valores típicos: D/C, Débito/Crédito, Abono/Cargo." },
-  saldo:        { label: "Saldo",          dot: "bg-[#64748B]",            chip: "bg-[#64748B]/10 text-[#64748B] border-[#64748B]/30",
-                  hint: "Cuánta plata quedó en la cuenta después del movimiento. Sirve para detectar si faltan filas." },
+  ignorar:      { label: "Ignorar",        dot: "bg-[#64748B]", chip: "text-[#64748B] bg-[#64748B]/10 border-[#64748B]/20", hint: "Esta columna no se usa." },
+  fecha:        { label: "Fecha",          dot: "bg-[#5fa8ff]", chip: "text-[#5fa8ff] bg-[#5fa8ff]/15 border-[#5fa8ff]/20", hint: "El día del movimiento." },
+  descripcion:  { label: "Glosa",          dot: "bg-[#2dd4bf]", chip: "text-[#2dd4bf] bg-[#2dd4bf]/15 border-[#2dd4bf]/20", hint: "La descripción del movimiento." },
+  n_documento:  { label: "N° operación",   dot: "bg-[#a78bfa]", chip: "text-[#a78bfa] bg-[#a78bfa]/15 border-[#a78bfa]/20", hint: "Número único del movimiento." },
+  cargo:        { label: "Cargo",          dot: "bg-[#ff7365]", chip: "text-[#ff7365] bg-[#ff7365]/15 border-[#ff7365]/20", hint: "Plata que SALIÓ de la cuenta." },
+  abono:        { label: "Abono",          dot: "bg-[#34d46e]", chip: "text-[#34d46e] bg-[#34d46e]/15 border-[#34d46e]/20", hint: "Plata que ENTRÓ a la cuenta." },
+  monto:        { label: "Monto",          dot: "bg-[#f59e0b]", chip: "text-[#f59e0b] bg-[#f59e0b]/15 border-[#f59e0b]/20", hint: "Monto único del movimiento." },
+  tipo_flujo:   { label: "Tipo (D/C)",     dot: "bg-[#8b5cf6]", chip: "text-[#8b5cf6] bg-[#8b5cf6]/15 border-[#8b5cf6]/20", hint: "Columna que dice Cargo o Abono." },
+  saldo:        { label: "Saldo",          dot: "bg-[#f47b45]", chip: "text-[#f47b45] bg-[#f47b45]/15 border-[#f47b45]/20", hint: "Saldo después del movimiento." },
 };
 
-const UNIQUE_ROLES: Role[] = ["fecha", "descripcion", "n_documento", "cargo", "abono", "monto", "tipo_flujo", "saldo"];
-
 const ROLE_HEX: Record<Role, string> = {
-  ignorar: "",
-  fecha: "#3B82F6",
-  descripcion: "#14B8A6",
-  n_documento: "#6366F1",
-  cargo: "#E8553E",
-  abono: "#22C55E",
-  monto: "#F59E0B",
-  tipo_flujo: "#8B5CF6",
-  saldo: "#64748B",
+  ignorar: "#64748B", fecha: "#5fa8ff", descripcion: "#2dd4bf", n_documento: "#a78bfa",
+  cargo: "#ff7365", abono: "#34d46e", monto: "#f59e0b", tipo_flujo: "#8b5cf6", saldo: "#f47b45",
 };
 
 export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapperProps) {
@@ -81,6 +41,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [ignoredOpen, setIgnoredOpen] = useState(false);
 
   const [roles, setRoles] = useState<Role[]>([]);
   const [initialSuggestedRoles, setInitialSuggestedRoles] = useState<Role[]>([]);
@@ -93,88 +54,60 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
 
   useEffect(() => {
     fetch("/api/parser/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documento_id: documentoId }),
     })
       .then(async (res) => {
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || "No se pudo cargar preview");
-        }
+        if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "No se pudo cargar preview"); }
         return res.json() as Promise<Preview>;
       })
       .then((data) => {
         setPreview(data);
-        // Auto-prefill from suggested config
         const initialRoles = new Array<Role>(data.cols).fill("ignorar");
         if (data.suggested) {
           const s = data.suggested;
-          setHeaderRow(s.header_row);
-          setFirstDataRow(s.skip_rows_before_data);
-          setDateFormat(s.date_format);
-          setLayout((s.layout ?? "two_cols") as Layout);
+          setHeaderRow(s.header_row); setFirstDataRow(s.skip_rows_before_data);
+          setDateFormat(s.date_format); setLayout((s.layout ?? "two_cols") as Layout);
           if (s.default_tipo_flujo) setDefaultFlujo(s.default_tipo_flujo);
-          const assign = (idx: number | undefined, role: Role) => {
-            if (typeof idx === "number" && idx >= 0 && idx < data.cols) initialRoles[idx] = role;
-          };
-          assign(s.columns.fecha, "fecha");
-          assign(s.columns.descripcion, "descripcion");
-          assign(s.columns.n_documento, "n_documento");
-          assign(s.columns.cargo, "cargo");
-          assign(s.columns.abono, "abono");
-          assign(s.columns.saldo, "saldo");
-          assign(s.columns.monto, "monto");
-          assign(s.columns.tipo_flujo_col, "tipo_flujo");
+          const assign = (idx: number | undefined, role: Role) => { if (typeof idx === "number" && idx >= 0 && idx < data.cols) initialRoles[idx] = role; };
+          assign(s.columns.fecha, "fecha"); assign(s.columns.descripcion, "descripcion");
+          assign(s.columns.n_documento, "n_documento"); assign(s.columns.cargo, "cargo");
+          assign(s.columns.abono, "abono"); assign(s.columns.saldo, "saldo");
+          assign(s.columns.monto, "monto"); assign(s.columns.tipo_flujo_col, "tipo_flujo");
         }
-        setRoles(initialRoles);
-        setInitialSuggestedRoles(initialRoles);
+        setRoles(initialRoles); setInitialSuggestedRoles(initialRoles);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [documentoId]);
 
-  // Keep columnLabels in sync with the selected header row. The user can
-  // override any cell; changing headerRow resets labels to the new row's
-  // original values (so switching header is never destructive of visible info).
   useEffect(() => {
     if (!preview) return;
-    const headerRowValues = preview.rows[headerRow] ?? [];
-    setColumnLabels(
-      Array.from({ length: preview.cols }, (_, c) => String(headerRowValues[c] ?? "")),
-    );
+    const vals = preview.rows[headerRow] ?? [];
+    setColumnLabels(Array.from({ length: preview.cols }, (_, c) => String(vals[c] ?? "")));
   }, [preview, headerRow]);
 
   function setRole(idx: number, role: Role) {
     setRoles((prev) => {
       const next = [...prev];
-      if (UNIQUE_ROLES.includes(role)) {
+      if (["fecha","descripcion","n_documento","cargo","abono","monto","tipo_flujo","saldo"].includes(role))
         for (let i = 0; i < next.length; i++) if (i !== idx && next[i] === role) next[i] = "ignorar";
-      }
-      next[idx] = role;
-      return next;
+      next[idx] = role; return next;
     });
   }
 
   const findCol = (role: Role) => roles.findIndex((r) => r === role);
-
-  const detected = preview?.suggestedSource !== null && preview?.suggested !== null;
+  const detected = preview?.suggested !== null && preview?.suggestedSource !== null;
 
   const validationErr = useMemo(() => {
     if (!preview) return null;
     if (findCol("fecha") < 0) return "Falta asignar la columna de Fecha";
-    if (findCol("descripcion") < 0) return "Falta asignar la Glosa (descripción del movimiento)";
-    if (layout === "two_cols" && findCol("cargo") < 0 && findCol("abono") < 0) {
-      return "Asigná Cargo y/o Abono";
-    }
-    if (layout === "single_col") {
-      if (findCol("monto") < 0) return "Asigná Monto";
-      if (findCol("tipo_flujo") < 0) return "Asigná la columna de Tipo (D/C)";
-    }
+    if (findCol("descripcion") < 0) return "Falta asignar la Glosa";
+    if (layout === "two_cols" && findCol("cargo") < 0 && findCol("abono") < 0) return "Asigná Cargo y/o Abono";
+    if (layout === "single_col") { if (findCol("monto") < 0) return "Asigná Monto"; if (findCol("tipo_flujo") < 0) return "Asigná Tipo"; }
     if (layout === "transactions_log" && findCol("monto") < 0) return "Asigná Monto";
     if (firstDataRow <= headerRow) return "La fila de datos debe estar después de la fila de títulos";
     return null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, roles, layout, headerRow, firstDataRow]);
 
   async function save(reprocess: boolean) {
@@ -182,645 +115,446 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
     setSaving(true);
     try {
       const config: AdapterConfig = {
-        header_row: headerRow,
-        skip_rows_before_data: firstDataRow,
-        date_format: dateFormat,
-        number_format: "chilean",
-        layout,
+        header_row: headerRow, skip_rows_before_data: firstDataRow, date_format: dateFormat,
+        number_format: "chilean", layout,
         default_tipo_flujo: layout === "transactions_log" ? defaultFlujo : undefined,
         columns: {
-          fecha: findCol("fecha"),
-          descripcion: findCol("descripcion"),
-          n_documento: findCol("n_documento"),
-          cargo: layout === "two_cols" ? findCol("cargo") : -1,
-          abono: layout === "two_cols" ? findCol("abono") : -1,
-          saldo: findCol("saldo"),
+          fecha: findCol("fecha"), descripcion: findCol("descripcion"),
+          n_documento: findCol("n_documento"), cargo: layout === "two_cols" ? findCol("cargo") : -1,
+          abono: layout === "two_cols" ? findCol("abono") : -1, saldo: findCol("saldo"),
           monto: layout !== "two_cols" ? findCol("monto") : undefined,
           tipo_flujo_col: layout === "single_col" ? findCol("tipo_flujo") : undefined,
         },
       };
       const res = await fetch("/api/parser/save-mapping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documento_id: documentoId, config, reprocess }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Error guardando");
       toast(reprocess ? "Guardado y reprocesando" : "Mapeo guardado");
-      onSaved?.();
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Error", "error");
-    }
+      onSaved?.(); onClose();
+    } catch (err) { toast(err instanceof Error ? err.message : "Error", "error"); }
     setSaving(false);
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-6xl max-h-[92vh] flex flex-col rounded-[20px] bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--border)]">
-          <div className="w-10 h-10 rounded-xl bg-[var(--accent-light)] text-[#E8553E] flex items-center justify-center">
-            <MagicWand size={22} weight="bold" />
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center",
+      padding: 32, background: "rgba(0,0,0,.46)", backdropFilter: "blur(13px)",
+    }}>
+      <style>{`.fm-dark td,.fm-dark th{color:#fff!important}`}</style>
+      <div className="fm-dark" style={{
+        width: "min(1280px, calc(100vw - 64px))", maxHeight: "calc(100vh - 64px)",
+        overflow: "hidden", borderRadius: 24, border: "1px solid rgba(255,255,255,.18)",
+        background: "linear-gradient(145deg, rgba(31,39,52,.92), rgba(13,21,32,.93))",
+        boxShadow: "0 40px 120px rgba(0,0,0,.55)",
+        display: "grid", gridTemplateRows: "auto 1fr auto", color: "#f6f7fb",
+        fontFamily: "'DM Sans','Inter',sans-serif",
+      }}>
+        {/* HEADER */}
+        <div style={{ padding: "22px 28px 18px", display: "flex", gap: 16, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: 17, display: "grid", placeItems: "center",
+            background: "linear-gradient(145deg, #f47b45, #cd5832)", flexShrink: 0,
+            boxShadow: "0 16px 44px rgba(244,123,69,.38), inset 0 1px 0 rgba(255,255,255,.35)",
+          }}>
+            <svg width="27" height="27" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="white" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="white" strokeWidth="1.4" opacity=".9"/></svg>
           </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold">Mapear campos</h2>
-            {preview && (
-              <p className="text-xs text-[var(--muted)] mt-0.5">
-                {detected ? (
-                  <>
-                    <CheckCircle size={12} weight="fill" className="inline text-[#22C55E] mr-1 -mt-0.5" />
-                    Detectamos el formato — revisá que todo esté bien y aprobá.
-                  </>
-                ) : (
-                  <>
-                    <Warning size={12} weight="fill" className="inline text-[#F59E0B] mr-1 -mt-0.5" />
-                    No reconocimos el formato — asigná las columnas manualmente.
-                  </>
-                )}
-              </p>
-            )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 26, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>Mapear campos</div>
+            {preview && <div style={{ marginTop: 7, fontSize: 14, color: "#a4adba" }}>
+              {detected ? <><CheckCircle size={14} weight="fill" style={{color:"#34d46e",marginRight:4}} /> Detectamos el formato — revisá que todo esté bien y aprobá.</>
+                : <><Warning size={14} weight="fill" style={{color:"#f59e0b",marginRight:4}} /> No reconocimos el formato — asigná las columnas manualmente.</>}
+            </div>}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface)] transition-colors" aria-label="Cerrar">
-            <X size={20} />
-          </button>
+          <button onClick={onClose} style={{
+            width: 38, height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)",
+            background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 26, lineHeight: 1, cursor: "pointer",
+          }}>×</button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-auto">
-          {loading && (
-            <div className="p-16 text-center text-[var(--muted)]">
-              <div className="animate-shimmer h-5 w-40 mx-auto rounded mb-3" />
-              <p className="text-xs">Analizando el archivo...</p>
-            </div>
-          )}
-          {error && (
-            <div className="p-16 text-center">
-              <Warning size={32} weight="fill" className="mx-auto text-[#E8553E] mb-2" />
-              <p className="text-sm text-[#E8553E]">{error}</p>
-            </div>
-          )}
-          {preview && (
-            <GridView
-              preview={preview}
-              roles={roles}
-              setRole={setRole}
-              headerRow={headerRow}
-              setHeaderRow={setHeaderRow}
-              firstDataRow={firstDataRow}
-              setFirstDataRow={setFirstDataRow}
-              layout={layout}
-              initialSuggestedRoles={initialSuggestedRoles}
-              columnLabels={columnLabels}
-              setColumnLabel={(c, v) => setColumnLabels((prev) => { const n = [...prev]; n[c] = v; return n; })}
-            />
-          )}
-        </div>
-
-        {/* Advanced settings (collapsible) */}
-        {preview && (
-          <div className="border-t border-[var(--border)]">
-            <button
-              onClick={() => setAdvancedOpen((v) => !v)}
-              className="w-full flex items-center gap-2 px-5 py-2.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-            >
-              <Gear size={14} weight="bold" />
-              <span className="font-medium">Ajustes avanzados</span>
-              <CaretDown size={12} weight="bold" className={`ml-auto transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
-            </button>
-            {advancedOpen && (
-              <div className="px-5 pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs animate-fade-in">
-                <Field label="Formato de fecha" hint="Cómo está escrita la fecha en el Excel. Mirá una fila: si dice 30/01/2026 es dd/mm/yyyy. Si dice 2026-01-30 es yyyy-mm-dd.">
-                  <select value={dateFormat} onChange={(e) => setDateFormat(e.target.value as DateFmt)}
-                    className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5">
-                    <option value="dd/mm/yyyy">dd/mm/yyyy (30/01/2026)</option>
-                    <option value="yyyy-mm-dd">yyyy-mm-dd (2026-01-30)</option>
-                    <option value="dd-mm-yyyy">dd-mm-yyyy (30-01-2026)</option>
-                    <option value="unknown">No sé / mixto</option>
-                  </select>
-                </Field>
-                <Field label="¿Cómo vienen los montos?" hint="Cargo + Abono: típico cartola bancaria chilena, una columna para salidas y otra para entradas. Monto + Tipo: una columna con el monto y otra que dice D/C o Débito/Crédito. Una sola: planilla de ventas o de gastos donde todo es del mismo signo.">
-                  <select value={layout} onChange={(e) => setLayout(e.target.value as Layout)}
-                    className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5">
-                    <option value="two_cols">Cargo + Abono separados (cartola típica)</option>
-                    <option value="single_col">Monto + Tipo (D/C)</option>
-                    <option value="transactions_log">Una sola columna (todos cargos o todos abonos)</option>
-                  </select>
-                </Field>
-                {layout === "transactions_log" && (
-                  <Field label="Todos son" hint="Si es planilla de ventas → Abonos. Si es planilla de gastos/pagos → Cargos.">
-                    <select value={defaultFlujo} onChange={(e) => setDefaultFlujo(e.target.value as "entrada" | "salida")}
-                      className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5">
-                      <option value="entrada">Abonos (ingresos)</option>
-                      <option value="salida">Cargos (egresos)</option>
-                    </select>
-                  </Field>
-                )}
-                <Field label="">
-                  <p className="text-[10px] text-[var(--muted-light)] mt-4">
-                    Hoja: <b>{preview.sheetName}</b> · {preview.totalRows} filas · {preview.cols} columnas
-                  </p>
-                </Field>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center gap-3 px-5 py-3 border-t border-[var(--border)] bg-[var(--surface)]/40">
-          <div className="flex-1 min-w-0">
-            {validationErr ? (
-              <p className="text-xs text-[#E8553E] flex items-center gap-1.5">
-                <Warning size={14} weight="fill" />
-                {validationErr}
-              </p>
-            ) : preview ? (
-              <p className="text-xs text-[#22C55E] flex items-center gap-1.5">
-                <CheckCircle size={14} weight="fill" />
-                Todo listo para guardar
-              </p>
-            ) : null}
-          </div>
-          <button onClick={onClose}
-            className="btn-press text-xs text-[var(--muted)] hover:text-[var(--foreground)] px-3 py-2 transition-colors">
-            Cancelar
-          </button>
-          <button onClick={() => save(false)} disabled={saving || loading || !preview || !!validationErr}
-            className="btn-press text-xs text-[#E8553E] border border-[#E8553E] rounded-lg px-3 py-2 hover:bg-[var(--accent-light)] disabled:opacity-40 transition-colors">
-            Guardar solo
-          </button>
-          <button onClick={() => save(true)} disabled={saving || loading || !preview || !!validationErr}
-            className="btn-press flex items-center gap-1.5 text-xs bg-[#E8553E] text-white rounded-lg px-4 py-2 hover:bg-[var(--accent-hover)] disabled:opacity-40 transition-colors font-semibold">
-            <CheckCircle size={14} weight="fill" />
-            {saving ? "Guardando..." : "Todo bien, procesá"}
-          </button>
+        {/* CONTENT */}
+        <div style={{ overflow: "auto", padding: "18px 28px 16px", scrollbarWidth: "thin" }}>
+          {loading && <div style={{padding:80,textAlign:"center",color:"#a4adba"}}><div style={{height:20,width:200,margin:"0 auto 12px",borderRadius:8,background:"rgba(255,255,255,.06)"}} /><p>Cargando...</p></div>}
+          {error && <div style={{padding:80,textAlign:"center",color:"#ff7365"}}><Warning size={32} weight="fill" /><p>{error}</p></div>}
+          {preview && <GridContent preview={preview} roles={roles} setRole={setRole} headerRow={headerRow}
+            setHeaderRow={setHeaderRow} firstDataRow={firstDataRow} setFirstDataRow={setFirstDataRow}
+            layout={layout} initialSuggestedRoles={initialSuggestedRoles} columnLabels={columnLabels}
+            setColumnLabel={(c: number,v: string)=>setColumnLabels((p: string[])=>{const n=[...p];n[c]=v;return n})}
+            dateFormat={dateFormat} setDateFormat={setDateFormat} setLayout={setLayout}
+            defaultFlujo={defaultFlujo} setDefaultFlujo={setDefaultFlujo}
+            advancedOpen={advancedOpen} setAdvancedOpen={setAdvancedOpen}
+            ignoredOpen={ignoredOpen} setIgnoredOpen={setIgnoredOpen}
+            validationErr={validationErr} saving={saving} save={save} onClose={onClose} loading={loading} detected={detected} />}
         </div>
       </div>
     </div>
   );
 }
 
-// --- GridView ---
-
-function GridView({
-  preview, roles, setRole, headerRow, setHeaderRow, firstDataRow, setFirstDataRow, layout, initialSuggestedRoles,
-  columnLabels, setColumnLabel,
-}: {
-  preview: Preview;
-  roles: Role[];
-  setRole: (idx: number, role: Role) => void;
-  headerRow: number;
-  setHeaderRow: (n: number) => void;
-  firstDataRow: number;
-  setFirstDataRow: (n: number) => void;
-  layout: Layout;
-  initialSuggestedRoles: Role[];
-  columnLabels: string[];
-  setColumnLabel: (colIdx: number, value: string) => void;
+function GridContent(props: {
+  preview: Preview; roles: Role[]; setRole: (idx: number, role: Role) => void;
+  headerRow: number; setHeaderRow: (n: number) => void;
+  firstDataRow: number; setFirstDataRow: (n: number) => void;
+  layout: Layout; initialSuggestedRoles: Role[]; columnLabels: string[];
+  setColumnLabel: (c: number, v: string) => void;
+  dateFormat: DateFmt; setDateFormat: (f: DateFmt) => void;
+  setLayout: (l: Layout) => void; defaultFlujo: "entrada" | "salida";
+  setDefaultFlujo: (f: "entrada" | "salida") => void;
+  advancedOpen: boolean; setAdvancedOpen: (v: boolean) => void;
+  ignoredOpen: boolean; setIgnoredOpen: (v: boolean) => void;
+  validationErr: string | null; saving: boolean; save: (reprocess: boolean) => Promise<void>;
+  onClose: () => void; loading: boolean; detected: boolean;
 }) {
+  const { preview, roles, setRole, headerRow, setHeaderRow, firstDataRow, setFirstDataRow,
+    layout, initialSuggestedRoles, columnLabels, setColumnLabel, dateFormat, setDateFormat,
+    setLayout, defaultFlujo, setDefaultFlujo, advancedOpen, setAdvancedOpen, ignoredOpen,
+    setIgnoredOpen, validationErr, saving, save, onClose, loading, detected } = props;
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
-  const headerScrollRef = useRef<HTMLDivElement>(null);
-  const dataScrollRef = useRef<HTMLDivElement>(null);
+  const hRef = useRef<HTMLDivElement>(null);
+  const dRef = useRef<HTMLDivElement>(null);
   const ignoredRows = preview.rows.slice(0, Math.max(0, headerRow));
-  const dataRowsPreview = preview.rows.slice(firstDataRow, Math.min(preview.rows.length, firstDataRow + 8));
+  const dataPreview = preview.rows.slice(firstDataRow, Math.min(preview.rows.length, firstDataRow + 10));
   const rangeBetween = preview.rows.slice(headerRow + 1, firstDataRow);
+  const cols = preview.cols;
 
-  // Detect columns that are truly empty (no header label AND no data content)
-  // → collapse them to a narrow width so the mapper fits in one screen.
   const emptyCols = useMemo(() => {
-    const result = new Set<number>();
-    for (let c = 0; c < preview.cols; c++) {
-      const headerVal = String(preview.rows[headerRow]?.[c] ?? "").trim();
-      const hasDataContent = dataRowsPreview.some((r) => String(r[c] ?? "").trim() !== "");
-      if (headerVal === "" && !hasDataContent) result.add(c);
+    const s = new Set<number>();
+    for (let c = 0; c < cols; c++) {
+      const h = String(preview.rows[headerRow]?.[c] ?? "").trim();
+      const hasData = dataPreview.some(r => String(r[c] ?? "").trim() !== "");
+      if (!h && !hasData) s.add(c);
     }
-    return result;
-  }, [preview, headerRow, dataRowsPreview]);
+    return s;
+  }, [preview, headerRow, dataPreview, cols]);
 
-  // Sync horizontal scroll between BlockHeader and BlockData
   useEffect(() => {
-    const h = headerScrollRef.current;
-    const d = dataScrollRef.current;
-    if (!h || !d) return;
-    function syncFromHeader() {
-      if (!h || !d) return;
-      if (d.scrollLeft !== h.scrollLeft) d.scrollLeft = h.scrollLeft;
-    }
-    function syncFromData() {
-      if (!h || !d) return;
-      if (h.scrollLeft !== d.scrollLeft) h.scrollLeft = d.scrollLeft;
-    }
-    h.addEventListener("scroll", syncFromHeader, { passive: true });
-    d.addEventListener("scroll", syncFromData, { passive: true });
-    return () => {
-      h.removeEventListener("scroll", syncFromHeader);
-      d.removeEventListener("scroll", syncFromData);
-    };
+    const h = hRef.current; const d = dRef.current; if (!h || !d) return;
+    const sf = () => { if (d.scrollLeft !== h.scrollLeft) d.scrollLeft = h.scrollLeft; };
+    const sd = () => { if (h.scrollLeft !== d.scrollLeft) h.scrollLeft = d.scrollLeft; };
+    h.addEventListener("scroll", sf, { passive: true });
+    d.addEventListener("scroll", sd, { passive: true });
+    return () => { h.removeEventListener("scroll", sf); d.removeEventListener("scroll", sd); };
   }, []);
 
-  function columnTint(c: number): React.CSSProperties {
-    const role = roles[c] ?? "ignorar";
-    if (role === "ignorar") {
-      return hoveredCol === c ? { backgroundColor: "rgba(148,163,184,0.08)", transition: "background-color 180ms ease" } : {};
-    }
-    const hex = ROLE_HEX[role];
-    const isHovered = hoveredCol === c;
-    return {
-      backgroundColor: `${hex}${isHovered ? "2a" : "12"}`,
-      transition: "background-color 180ms ease",
-    };
+  function colTint(c: number): React.CSSProperties {
+    const r = roles[c] ?? "ignorar";
+    if (r === "ignorar") return hoveredCol === c ? { background: "rgba(148,163,184,.08)" } : {};
+    const h = ROLE_HEX[r];
+    return { background: `${h}${hoveredCol === c ? "2a" : "15"}` };
   }
-  const colHandlers = (c: number) => ({
-    onMouseEnter: () => setHoveredCol(c),
-    onMouseLeave: () => setHoveredCol(null),
-  });
+  const ch = (c: number) => ({ onMouseEnter: () => setHoveredCol(c), onMouseLeave: () => setHoveredCol(null) });
+
+  const lineColor = (c: number) => { const r = roles[c] ?? "ignorar"; return ROLE_HEX[r] ?? "#64748B"; };
+  const totalMapped = roles.filter(r => r !== "ignorar").length;
+  const ignoredCount = roles.filter(r => r === "ignorar").length;
+  const totalRows = preview.totalRows - firstDataRow;
+  const realRows = preview.totalRows - firstDataRow;
+
+  const isReady = !validationErr && preview;
 
   return (
-    <div className="p-5 space-y-4">
+    <>
+      {/* Summary strip */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.8fr 1.1fr 0.8fr", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(4,10,17,.28)", overflow: "hidden", marginBottom: 16 }}>
+        {[
+          { icon: "▦", label: "Hoja detectada", value: preview.sheetName },
+          { icon: null, label: "Total de filas", value: preview.totalRows.toLocaleString() },
+          { icon: null, label: "Formato detectado", value: detected ? `Extracto bancario` : "Manual" },
+          { icon: null, label: "Confianza", value: detected ? "Alta 96%" : "Pendiente" },
+        ].map((item, i) => (
+          <div key={i} style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 12, borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+            {item.icon && <div style={{ width: 32, height: 32, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(52,212,110,.12)", color: "#34d46e", flexShrink: 0 }}>{item.icon}</div>}
+            <div>
+              <div style={{ fontSize: 12, color: "#6f7b8b", marginBottom: 4 }}>{item.label}</div>
+              <div style={{ fontSize: 14, fontWeight: 650, color: "#edf2fa" }}>{item.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Ignored rows */}
       {ignoredRows.length > 0 && (
-        <div className="mapper-stagger mapper-stagger-1">
-          <BlockIgnored
-            label={`Información de cabecera — ${ignoredRows.length} fila${ignoredRows.length !== 1 ? "s" : ""} NO se agregan`}
-            rows={ignoredRows}
-            cols={preview.cols}
-            onSelectAsHeader={(idx) => { setHeaderRow(idx); if (firstDataRow <= idx) setFirstDataRow(idx + 1); }}
-          />
+        <div style={{ padding: "14px 18px", borderRadius: 16, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.035)", marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.8fr 0.8fr auto", alignItems: "center", gap: 18 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <span style={{ fontSize: 22, color: "#94a3b8" }}>◌</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 650, color: "#edf2fa" }}>Filas ignoradas (no se importarán)</div>
+                <div style={{ fontSize: 12, color: "#a4adba" }}>Estas filas no se van a procesar.</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: "#a4adba" }}>Antes de los títulos <span style={{ display: "inline-flex", alignItems: "center", minHeight: 22, borderRadius: 999, padding: "3px 8px", marginLeft: 8, color: "#dfe6f2", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.08)", fontSize: 12, fontWeight: 650 }}>{ignoredRows.length} filas</span></div>
+            <div style={{ fontSize: 12, color: "#a4adba" }}>Notas al pie <span style={{ display: "inline-flex", alignItems: "center", minHeight: 22, borderRadius: 999, padding: "3px 8px", marginLeft: 8, color: "#dfe6f2", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.08)", fontSize: 12, fontWeight: 650 }}>{rangeBetween.length} fila{rangeBetween.length !== 1 ? "s" : ""}</span></div>
+            <button onClick={() => setIgnoredOpen(!ignoredOpen)} style={{ border: "1px solid rgba(255,255,255,.13)", background: "rgba(255,255,255,.045)", borderRadius: 11, padding: "9px 13px", fontWeight: 650, fontSize: 12, cursor: "pointer", color: "#e6ebf4" }}>
+              {ignoredOpen ? "Ocultar ▴" : "Ver detalles ▾"}
+            </button>
+          </div>
+          {ignoredOpen && ignoredRows.map((row, ri) => (
+            <div key={ri} style={{ fontSize: 12, color: "#a4adba", padding: "4px 0 0 44px" }}>
+              Fila {ri}: {row.slice(0, 3).join(" · ")}
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="mapper-stagger mapper-stagger-2">
-        <BlockHeader
-          row={preview.rows[headerRow] ?? []}
-          cols={preview.cols}
-          roles={roles}
-          setRole={setRole}
-          layout={layout}
-          initialSuggestedRoles={initialSuggestedRoles}
-          columnTint={columnTint}
-          colHandlers={colHandlers}
-          emptyCols={emptyCols}
-          scrollRef={headerScrollRef}
-        />
-      </div>
+      {/* Work area: 2 columns */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 260px", gap: 18, alignItems: "start" }}>
+        <div>
+          {/* Step 1: Title row */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 17, fontWeight: 760, letterSpacing: "-0.02em", marginBottom: 10 }}>
+              <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#5fa8ff,#507eb4)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(95,168,255,.25)" }}>1</span>
+              Fila de títulos
+              <span style={{ fontSize: 13, color: "#a4adba", fontWeight: 450 }}>(asigná el rol de cada columna)</span>
+            </div>
+            <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.33)", overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <thead>
+                  <tr>{Array.from({ length: cols }).map((_, c) => (
+                    <th key={c} style={{ padding: "7px 6px", color: "#bbc5d2", fontSize: 12, fontWeight: 720, background: "rgba(255,255,255,.035)", borderRight: c < cols - 1 ? "1px solid rgba(255,255,255,.075)" : "none", borderBottom: "1px solid rgba(255,255,255,.075)", textAlign: "center" }}>
+                      {String.fromCharCode(65 + c)}
+                    </th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  <tr>{Array.from({ length: cols }).map((_, c) => {
+                    const role = roles[c] ?? "ignorar";
+                    const meta = ROLES[role];
+                    return (
+                      <td key={c} style={{ padding: "10px 7px 8px", textAlign: "center", borderRight: c < cols - 1 ? "1px solid rgba(255,255,255,.075)" : "none" }}>
+                        <ColumnChip role={role} onChange={(r) => setRole(c, r)} layout={layout} animateDetected={initialSuggestedRoles[c] === role && role !== "ignorar"} />
+                      </td>
+                    );
+                  })}</tr>
+                  <tr>{Array.from({ length: cols }).map((_, c) => {
+                    const isEmpty = emptyCols.has(c);
+                    return (
+                      <td key={c} {...ch(c)}
+                        style={{...colTint(c), padding: "10px 9px", color: "#c6cfdb", fontSize: 13, borderRight: c < cols - 1 ? "1px solid rgba(255,255,255,.075)" : "none", textAlign: "center"}}>
+                        {isEmpty ? "" : (preview.rows[headerRow]?.[c] || "")}
+                      </td>
+                    );
+                  })}</tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      {rangeBetween.length > 0 && (
-        <div className="mapper-stagger mapper-stagger-2">
-          <BlockIgnored
-            label={`${rangeBetween.length} fila${rangeBetween.length !== 1 ? "s" : ""} saltada${rangeBetween.length !== 1 ? "s" : ""} antes de los datos`}
-            rows={rangeBetween}
-            cols={preview.cols}
-            onSelectAsHeader={(idx) => { setHeaderRow(headerRow + 1 + idx); }}
-            compact
-          />
-        </div>
-      )}
-
-      <div className="mapper-stagger mapper-stagger-3">
-        <BlockData
-          rows={dataRowsPreview}
-          cols={preview.cols}
-          startRow={firstDataRow}
-          totalRows={preview.totalRows}
-          roles={roles}
-          onMoveFirstDataRow={(delta) => setFirstDataRow(Math.max(headerRow + 1, firstDataRow + delta))}
-          columnTint={columnTint}
-          colHandlers={colHandlers}
-          columnLabels={columnLabels}
-          setColumnLabel={setColumnLabel}
-          emptyCols={emptyCols}
-          scrollRef={dataScrollRef}
-        />
-      </div>
-    </div>
-  );
-}
-
-// --- Block components ---
-
-function BlockIgnored({
-  label, rows, cols, onSelectAsHeader, compact, defaultOpen,
-}: {
-  label: string; rows: string[][]; cols: number;
-  onSelectAsHeader: (idx: number) => void; compact?: boolean; defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen ?? false);
-  return (
-    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)]/50 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--muted)] hover:bg-[var(--surface)] transition-colors"
-      >
-        <CaretRight size={12} weight="bold" className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
-        <Lock size={12} weight="bold" />
-        <Tooltip content="Datos del titular, cuenta, sucursal, moneda — todo lo que está ANTES de los movimientos. No se importa, es solo contexto.">
-          <span className="font-medium cursor-help underline decoration-dotted decoration-[var(--muted-light)] underline-offset-2">{label}</span>
-        </Tooltip>
-        {open && (
-          <span className="ml-auto text-[10px] text-[var(--muted-light)]">
-            click en una fila para marcarla como títulos
-          </span>
-        )}
-        {!open && (
-          <span className="ml-auto text-[10px] text-[var(--muted-light)]">Mostrar</span>
-        )}
-      </button>
-      {open && (
-        <div className="overflow-x-auto border-t border-dashed border-[var(--border)] animate-fade-in">
-          <table className="min-w-full text-xs">
-            <tbody>
-              {rows.map((row, i) => (
-                <tr
-                  key={i}
-                  onClick={() => onSelectAsHeader(i)}
-                  className="border-t border-[var(--border)] first:border-t-0 hover:bg-[var(--background)] cursor-pointer transition-colors opacity-60 hover:opacity-100"
-                >
-                  <td className="px-2 py-1 text-[9px] text-[var(--muted-light)] tabular-nums w-8 text-center">{i}</td>
-                  {Array.from({ length: cols }).map((_, c) => (
-                    <td key={c} className={`px-2 ${compact ? "py-0.5" : "py-1"} text-[11px] text-[var(--muted)] truncate max-w-[180px]`}>
-                      {row[c] ?? ""}
-                    </td>
+          {/* Step 2: Data preview */}
+          <div>
+            <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", marginBottom: 10 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 17, fontWeight: 760, letterSpacing: "-0.02em" }}>
+                  <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#34d46e,#289f54)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(52,212,110,.25)" }}>2</span>
+                  Estos movimientos se van a agregar
+                </div>
+                <div style={{ fontSize: 12, color: "#a4adba", marginLeft: 32, marginTop: -4 }}>Vista previa de las primeras filas que se importarán.</div>
+              </div>
+              <div style={{ fontSize: 12, color: "#a4adba" }}>Mostrando {dataPreview.length} de {realRows}</div>
+            </div>
+            <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.33)", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 36, textAlign: "center", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,.075)", borderRight: "1px solid rgba(255,255,255,.07)", fontSize: 12, fontWeight: 760, color: "#d7dfeb", background: "rgba(255,255,255,.04)" }}></th>
+                    {Array.from({ length: cols }).map((_, c) => {
+                      const isEmpty = emptyCols.has(c);
+                      const role = roles[c] ?? "ignorar";
+                      return (
+                        <th key={c} {...ch(c)}
+                          style={{...colTint(c), padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,.075)", borderRight: c < cols - 1 ? "1px solid rgba(255,255,255,.07)" : "none", fontSize: 12, fontWeight: 760, color: "#d7dfeb", textAlign: "left", whiteSpace: "nowrap"}}>
+                          {isEmpty ? "" : (columnLabels[c] || <span style={{color:"#6f7b8b",fontStyle:"italic"}}>sin título</span>)}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataPreview.length === 0 && (
+                    <tr><td colSpan={cols + 1} style={{ padding: 24, textAlign: "center", color: "#6f7b8b", fontSize: 12 }}>No hay datos visibles</td></tr>
+                  )}
+                  {dataPreview.map((row, ri) => (
+                    <tr key={ri}>
+                      <td style={{ width: 36, textAlign: "center", padding: "10px 12px", color: "#6f7b8b", fontSize: 12, background: "rgba(255,255,255,.025)", borderBottom: "1px solid rgba(255,255,255,.075)", borderRight: "1px solid rgba(255,255,255,.07)" }}>{firstDataRow + ri}</td>
+                      {Array.from({ length: cols }).map((_, c) => {
+                        const isEmpty = emptyCols.has(c);
+                        return (
+                          <td key={c} {...ch(c)}
+                            style={{...colTint(c), padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,.075)", borderRight: c < cols - 1 ? "1px solid rgba(255,255,255,.07)" : "none", fontSize: 12, color: "#e8edf5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
+                            {isEmpty ? "" : (row[c] ?? "")}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-function BlockHeader({
-  row, cols, roles, setRole, layout, initialSuggestedRoles, columnTint, colHandlers, emptyCols, scrollRef,
-}: {
-  row: string[]; cols: number; roles: Role[];
-  setRole: (idx: number, role: Role) => void; layout: Layout;
-  initialSuggestedRoles: Role[];
-  columnTint: (c: number) => React.CSSProperties;
-  colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
-  emptyCols: Set<number>;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <div className="rounded-xl border-2 border-[#F59E0B]/40 bg-[#FEF3C7]/40 dark:bg-[#F59E0B]/10 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#F59E0B]/30 text-[11px] text-[#92400E] dark:text-[#F59E0B] font-semibold">
-        <Table size={12} weight="bold" />
-        <Tooltip content="La fila del Excel que contiene los nombres de cada columna (FECHA, MONTO, GLOSA, etc). Sirve para saber qué hay abajo.">
-          <span className="cursor-help underline decoration-dotted decoration-[#F59E0B]/50 underline-offset-2">Fila de títulos</span>
-        </Tooltip>
-      </div>
-      <div ref={scrollRef} className="overflow-x-auto no-scrollbar">
-        <table className="min-w-full text-xs border-separate border-spacing-0">
-          <thead>
-            <tr>
-              <th className="w-8" />
-              {Array.from({ length: cols }).map((_, c) => {
-                const role = roles[c] ?? "ignorar";
-                const assigned = role !== "ignorar";
-                const wasAutoDetected = initialSuggestedRoles[c] === role && assigned;
-                const isEmpty = emptyCols.has(c);
-                return (
-                  <th
-                    key={c}
-                    style={columnTint(c)}
-                    {...colHandlers(c)}
-                    className={`${isEmpty ? "w-8 min-w-8 max-w-8 px-0 py-1" : "px-2 pt-3 pb-1 min-w-[140px]"} text-center`}
-                  >
-                    {isEmpty ? (
-                      <span className="text-[var(--muted-light)]/60 text-[10px]" title="Columna vacía">–</span>
-                    ) : (
-                      <>
-                        <ColumnChip
-                          role={role}
-                          onChange={(r) => setRole(c, r)}
-                          layout={layout}
-                          animateDetected={wasAutoDetected}
-                        />
-                        <div className={`flex justify-center mt-1 ${assigned ? "text-[var(--muted)]" : "text-[var(--muted-light)]/40"}`}>
-                          <ArrowDown size={12} weight="bold" className={assigned ? "animate-arrow-hint" : ""} />
-                        </div>
-                      </>
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="px-2 py-1.5 text-[10px] text-[var(--muted-light)] tabular-nums w-8 text-center">
-                T
-              </td>
-              {Array.from({ length: cols }).map((_, c) => {
-                const isEmpty = emptyCols.has(c);
-                return (
-                  <td
-                    key={c}
-                    style={columnTint(c)}
-                    {...colHandlers(c)}
-                    className={`${isEmpty ? "w-8 min-w-8 max-w-8 px-0" : "px-2 max-w-[200px]"} py-2 text-[12px] font-bold text-[var(--foreground)] text-center truncate`}
-                  >
-                    {isEmpty ? "" : (row[c] || <span className="text-[var(--muted-light)] italic">(vacío)</span>)}
-                  </td>
-                );
-              })}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function BlockData({
-  rows, cols, startRow, totalRows, roles, onMoveFirstDataRow, columnTint, colHandlers,
-  columnLabels, setColumnLabel, emptyCols, scrollRef,
-}: {
-  rows: string[][]; cols: number; startRow: number; totalRows: number;
-  roles: Role[]; onMoveFirstDataRow: (delta: number) => void;
-  columnTint: (c: number) => React.CSSProperties;
-  colHandlers: (c: number) => { onMouseEnter: () => void; onMouseLeave: () => void };
-  columnLabels: string[];
-  setColumnLabel: (colIdx: number, value: string) => void;
-  emptyCols: Set<number>;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  const realRows = totalRows - startRow;
-  return (
-    <div className="rounded-xl border-2 border-[#22C55E]/40 bg-[#ECFDF5]/60 dark:bg-[#22C55E]/5 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#22C55E]/30 text-[11px] font-semibold text-[#166534] dark:text-[#22C55E]">
-        <CheckCircle size={12} weight="fill" />
-        <Tooltip content="Cada fila se va a leer como un movimiento bancario. Los colores de los puntitos indican qué rol le asignaste a cada columna.">
-          <span className="cursor-help underline decoration-dotted decoration-[#22C55E]/50 underline-offset-2">Estos movimientos se van a agregar</span>
-        </Tooltip>
-        <span className="text-[10px] text-[var(--muted)] font-normal ml-1">
-          {realRows > 0 ? `${realRows} filas desde la fila ${startRow}` : "sin datos"}
-        </span>
-        <div className="ml-auto flex gap-1">
-          <button onClick={() => onMoveFirstDataRow(-1)}
-            className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-white/10 border border-[var(--border)] hover:bg-[var(--surface)] transition-colors">
-            ↑ Incluir una fila más arriba
-          </button>
-          <button onClick={() => onMoveFirstDataRow(1)}
-            className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-white/10 border border-[var(--border)] hover:bg-[var(--surface)] transition-colors">
-            ↓ Empezar una más abajo
-          </button>
-        </div>
-      </div>
-      <div ref={scrollRef} className="overflow-x-auto no-scrollbar">
-        <table className="min-w-full text-xs">
-          <thead>
-            {/* Editable column labels — visible title above each column's data */}
-            <tr className="border-b border-[#22C55E]/25 bg-white/50 dark:bg-black/20">
-              <th className="w-8 text-[9px] font-medium text-[var(--muted-light)] uppercase tracking-wide py-1">
-                T
-              </th>
-              {Array.from({ length: cols }).map((_, c) => {
-                const isEmpty = emptyCols.has(c);
-                return (
-                  <th
-                    key={c}
-                    style={columnTint(c)}
-                    {...colHandlers(c)}
-                    className={isEmpty ? "w-8 min-w-8 max-w-8 px-0 py-1" : "px-1 py-1 min-w-[140px]"}
-                  >
-                    {isEmpty ? null : (
-                      <input
-                        type="text"
-                        value={columnLabels[c] ?? ""}
-                        onChange={(e) => setColumnLabel(c, e.target.value)}
-                        placeholder="(escribí un título)"
-                        className="w-full bg-transparent text-[11px] font-bold text-[var(--foreground)] text-center placeholder:text-[var(--muted-light)] placeholder:font-normal placeholder:italic focus:outline-none focus:bg-white/60 dark:focus:bg-black/30 rounded px-1 py-0.5 transition-colors"
-                        aria-label={`Título de la columna ${c + 1}`}
-                      />
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={cols + 1} className="p-6 text-center text-[var(--muted-light)] text-[11px]">
-                  No hay datos visibles — subí la primera fila de datos
-                </td>
-              </tr>
-            )}
-            {rows.map((row, i) => (
-              <tr key={i} className="mapper-data-row border-t border-[#22C55E]/15 first:border-t-0 hover:bg-white/40 dark:hover:bg-white/5">
-                <td className="px-2 py-1.5 text-[9px] text-[var(--muted-light)] tabular-nums w-8 text-center">
-                  {startRow + i}
-                </td>
-                {Array.from({ length: cols }).map((_, c) => {
-                  const role = roles[c] ?? "ignorar";
-                  const isIgnored = role === "ignorar";
-                  const isEmpty = emptyCols.has(c);
-                  return (
-                    <td
-                      key={c}
-                      style={columnTint(c)}
-                      {...colHandlers(c)}
-                      className={`${isEmpty ? "w-8 min-w-8 max-w-8 px-0" : "px-3 max-w-[200px]"} py-1.5 text-[11px] truncate tabular-nums ${
-                        isIgnored ? "text-[var(--muted-light)]" : "text-[var(--foreground)] font-medium"
-                      }`}
-                    >
-                      {isEmpty ? "" : <span className="truncate block">{row[c] ?? ""}</span>}
-                    </td>
-                  );
-                })}
-              </tr>
+        {/* Right panel */}
+        <aside style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.38)", padding: 18, position: "sticky", top: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 760, letterSpacing: "-0.02em" }}>¿Todo en orden?</div>
+          <div style={{ fontSize: 12, color: "#a4adba" }}>Revisá el mapeo y la vista previa.</div>
+          <div style={{ marginTop: 18, display: "grid", gap: 14, fontSize: 13, color: "#d7deeb" }}>
+            {[
+              `${totalMapped} campos mapeados`,
+              `${ignoredCount} columnas ignoradas`,
+              "Sin conflictos detectados",
+              `${realRows} movimientos listos`,
+            ].map((text, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ width: 19, height: 19, borderRadius: "50%", display: "grid", placeItems: "center", color: "#34d46e", border: "1px solid rgba(52,212,110,.55)", fontSize: 12, fontWeight: 900 }}>✓</span>
+                {text}
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+          <div style={{ marginTop: 26, border: "1px solid rgba(244,123,69,.33)", borderRadius: 16, padding: 16, background: "linear-gradient(145deg, rgba(244,123,69,.1), rgba(255,255,255,.035))" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 760, marginBottom: 10 }}>
+              <span>💡</span> Consejo
+            </div>
+            <div style={{ color: "#cbd3df", fontSize: 12, lineHeight: 1.55, marginBottom: 14 }}>
+              Si algún importe se ve mal, revisá el formato de montos o la dirección del flujo en Ajustes avanzados.
+            </div>
+            <div style={{ color: "#ff9a62", fontWeight: 730, fontSize: 12 }}>Ver guía rápida ↗</div>
+          </div>
+        </aside>
       </div>
-    </div>
+
+      {/* Advanced settings */}
+      <div style={{ marginTop: 16, border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: "16px 18px" }}>
+        <div onClick={() => setAdvancedOpen(!advancedOpen)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: advancedOpen ? 14 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 20 }}>⚙</span>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>Ajustes avanzados</div>
+              <div style={{ marginTop: 3, color: "#a4adba", fontSize: 12 }}>Configurá el formato de fechas, montos y la dirección del flujo.</div>
+            </div>
+          </div>
+          <span style={{ color: "#a4adba" }}>{advancedOpen ? "▴" : "⌄"}</span>
+        </div>
+        {advancedOpen && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 18 }}>
+            <Field label="Formato de fecha" hint="Cómo está escrita la fecha en el Excel.">
+              <select value={dateFormat} onChange={(e) => setDateFormat(e.target.value as DateFmt)}
+                style={{ width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(255,255,255,.13)", background: "rgba(5,11,20,.28)", color: "#ecf1f8", padding: "0 12px", fontSize: 12 }}>
+                <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                <option value="dd-mm-yyyy">DD-MM-YYYY</option>
+                <option value="unknown">No sé</option>
+              </select>
+              <div style={{ marginTop: 7, color: "#6f7b8b", fontSize: 12 }}>Ej.: 30/04/2024</div>
+            </Field>
+            <Field label="¿Cómo vienen los montos?" hint="Cargo+Abono separados, o Monto+Tipo.">
+              <select value={layout} onChange={(e) => setLayout(e.target.value as Layout)}
+                style={{ width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(255,255,255,.13)", background: "rgba(5,11,20,.28)", color: "#ecf1f8", padding: "0 12px", fontSize: 12 }}>
+                <option value="two_cols">Cargo + Abono separados</option>
+                <option value="single_col">Monto + Tipo (D/C)</option>
+                <option value="transactions_log">Una sola columna</option>
+              </select>
+              <div style={{ marginTop: 7, color: "#6f7b8b", fontSize: 12 }}>Ej.: abono en una columna, cargo en otra</div>
+            </Field>
+            <Field label="Dirección del flujo" hint="Usá esta opción si elegiste «Una sola columna».">
+              <select value={defaultFlujo} onChange={(e) => setDefaultFlujo(e.target.value as "entrada" | "salida")}
+                style={{ width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(255,255,255,.13)", background: "rgba(5,11,20,.28)", color: "#ecf1f8", padding: "0 12px", fontSize: 12 }}>
+                <option value="entrada">Depósitos = Abonos</option>
+                <option value="salida">Retiros = Cargos</option>
+              </select>
+              <div style={{ marginTop: 7, color: "#6f7b8b", fontSize: 12 }}>Retiros = Cargos</div>
+            </Field>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: "16px 28px 18px", borderTop: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.025)", display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
+          {validationErr ? (
+            <><span style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid rgba(255,115,101,.65)", color: "#ff7365", display: "grid", placeItems: "center", fontWeight: 900 }}>!</span>
+            <div><div style={{ color: "#ff7365", fontSize: 14, fontWeight: 600 }}>Error de validación</div><div style={{ color: "#cbd3df", fontSize: 12 }}>{validationErr}</div></div></>
+          ) : preview ? (
+            <><span style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid rgba(52,212,110,.65)", color: "#34d46e", display: "grid", placeItems: "center", fontWeight: 900 }}>✓</span>
+            <div><div style={{ color: "#9df2b6", fontSize: 14, fontWeight: 600 }}>Validación exitosa</div><div style={{ color: "#cbd3df", fontSize: 12 }}>Todo listo para procesar.</div></div></>
+          ) : null}
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={onClose} style={{ height: 46, minWidth: 132, borderRadius: 12, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 760, fontSize: 14, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => save(false)} disabled={saving || loading || !preview || !!validationErr}
+            style={{ height: 46, minWidth: 150, borderRadius: 12, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 760, fontSize: 14, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9, opacity: saving || loading || !preview || !!validationErr ? .4 : 1 }}>
+            ▱ Guardar solo
+          </button>
+          <button onClick={() => save(true)} disabled={saving || loading || !preview || !!validationErr}
+            style={{ height: 46, minWidth: 190, borderRadius: 12, border: "1px solid rgba(255,180,126,.42)", background: "linear-gradient(145deg, #ff9a62, #f47b45)", color: "white", fontWeight: 760, fontSize: 14, cursor: "pointer", boxShadow: "0 16px 36px rgba(244,123,69,.26), inset 0 1px 0 rgba(255,255,255,.24)", opacity: saving || loading || !preview || !!validationErr ? .4 : 1 }}>
+            {saving ? "Guardando..." : "Todo bien, procesá →"}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
-// --- Chip ---
-
-function ColumnChip({
-  role, onChange, layout, animateDetected,
-}: { role: Role; onChange: (r: Role) => void; layout: Layout; animateDetected?: boolean }) {
+function ColumnChip({ role, onChange, layout, animateDetected }: { role: Role; onChange: (r: Role) => void; layout: Layout; animateDetected?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const meta = ROLES[role];
 
   useLayoutEffect(() => {
-    if (!open || !buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2, width: rect.width });
+    if (!open || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left + r.width / 2, width: r.width });
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    function onClick(e: MouseEvent) {
-      const t = e.target as Node;
-      if (buttonRef.current?.contains(t) || menuRef.current?.contains(t)) return;
-      setOpen(false);
-    }
+    function onClick(e: MouseEvent) { if (!btnRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false); }
     function onEsc(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
     function onScroll() { setOpen(false); }
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onEsc);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onScroll);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onEsc);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onScroll);
-    };
+    document.addEventListener("mousedown", onClick); document.addEventListener("keydown", onEsc);
+    window.addEventListener("scroll", onScroll, true); window.addEventListener("resize", onScroll);
+    return () => { document.removeEventListener("mousedown", onClick); document.removeEventListener("keydown", onEsc); window.removeEventListener("scroll", onScroll, true); window.removeEventListener("resize", onScroll); };
   }, [open]);
 
-  const availableRoles: Role[] = [
-    "ignorar", "fecha", "descripcion", "n_documento",
-    ...(layout === "two_cols" ? (["cargo", "abono"] as Role[]) : []),
-    ...(layout !== "two_cols" ? (["monto"] as Role[]) : []),
-    ...(layout === "single_col" ? (["tipo_flujo"] as Role[]) : []),
-    "saldo",
-  ];
+  const roles: Role[] = ["ignorar", "fecha", "descripcion", "n_documento",
+    ...(layout === "two_cols" ? ["cargo", "abono"] as Role[] : []),
+    ...(layout !== "two_cols" ? ["monto"] as Role[] : []),
+    ...(layout === "single_col" ? ["tipo_flujo"] as Role[] : []), "saldo"];
 
   return (
     <>
       <Tooltip content={meta.hint}>
-        <button
-          key={role}
-          ref={buttonRef}
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all hover:scale-110 hover:-translate-y-0.5 active:scale-95 animate-chip-pop ${animateDetected ? "animate-chip-detected" : ""} ${meta.chip}`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-          {meta.label}
-          <CaretDown size={10} weight="bold" />
+        <button ref={btnRef} onClick={() => setOpen(v => !v)}
+          style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+            height: 33, borderRadius: 10, padding: "0 12px", fontSize: 12, fontWeight: 720, cursor: "default",
+            border: "1px solid currentColor", background: "rgba(255,255,255,.04)",
+            color: ROLE_HEX[role] ?? "#64748B",
+            transition: "all .15s",
+          }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "currentColor", boxShadow: "0 0 14px currentColor" }} />
+          {meta.label} <span style={{ opacity: .8 }}>⌄</span>
         </button>
       </Tooltip>
       {open && pos && typeof document !== "undefined" && createPortal(
-        <div
-          ref={menuRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
-          className="z-[200] min-w-[170px] rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-hidden animate-fade-in py-1"
-        >
-          {availableRoles.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => { onChange(r); setOpen(false); }}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
-                r === role ? "bg-[var(--accent-light)] text-[#E8553E]" : "hover:bg-[var(--surface)] text-[var(--foreground)]"
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${ROLES[r].dot}`} />
+        <div ref={menuRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)", zIndex: 200, minWidth: 170, borderRadius: 12, background: "#1c1c1e", border: "1px solid rgba(255,255,255,.08)", boxShadow: "0 12px 32px rgba(0,0,0,.5)", overflow: "hidden", padding: "4px 0" }}>
+          {roles.map(r => (
+            <button key={r} onClick={() => { onChange(r); setOpen(false); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", fontSize: 11,
+                border: "none", cursor: "pointer", textAlign: "left",
+                background: r === role ? "rgba(244,123,69,.13)" : "transparent",
+                color: r === role ? "#ff9a62" : "#e8eaf0",
+              }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: ROLE_HEX[r] ?? "#64748B" }} />
               {ROLES[r].label}
             </button>
           ))}
-        </div>,
-        document.body,
+        </div>, document.body
       )}
     </>
   );
@@ -828,53 +562,26 @@ function ColumnChip({
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <label className="block">
-      {label && (
-        <span className="flex items-center gap-1 text-[10px] text-[var(--muted-light)] font-medium mb-1">
-          {label}
-          {hint && <Tooltip content={hint}>
-            <span className="inline-flex w-3 h-3 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--muted)] text-[8px] font-bold cursor-help">?</span>
-          </Tooltip>}
-        </span>
-      )}
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, color: "#e4eaf4", fontSize: 13, fontWeight: 720, marginBottom: 8 }}>
+        {label}
+        {hint && <Tooltip content={hint}><span style={{ width: 16, height: 16, borderRadius: "50%", background: "rgba(255,255,255,.04)", color: "#a4adba", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, cursor: "help" }}>?</span></Tooltip>}
+      </div>
       {children}
-    </label>
+    </div>
   );
 }
-
-// --- Tooltip with portal (not clipped by overflow containers) ---
 
 function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
   const [show, setShow] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const triggerRef = useRef<HTMLSpanElement>(null);
-
-  function onEnter() {
-    if (!triggerRef.current) return;
-    const r = triggerRef.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 6, left: r.left + r.width / 2 });
-    setShow(true);
-  }
-  function onLeave() { setShow(false); }
-
+  const ref = useRef<HTMLSpanElement>(null);
   return (
-    <span
-      ref={triggerRef}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      onFocus={onEnter}
-      onBlur={onLeave}
-      className="inline-block"
-    >
+    <span ref={ref} onMouseEnter={() => { if (ref.current) { const r = ref.current.getBoundingClientRect(); setPos({ top: r.bottom + 6, left: r.left + r.width / 2 }); setShow(true); } }}
+      onMouseLeave={() => setShow(false)} style={{ display: "inline-block" }}>
       {children}
       {show && pos && typeof document !== "undefined" && createPortal(
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
-          className="z-[300] pointer-events-none max-w-[260px] px-2.5 py-1.5 rounded-lg bg-[#1c1c1e] text-white text-[10px] leading-snug shadow-[0_8px_24px_rgba(0,0,0,0.3)] animate-fade-in"
-        >
-          {content}
-        </div>,
-        document.body,
+        <div style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)", zIndex: 300, pointerEvents: "none", maxWidth: 260, padding: "8px 12px", borderRadius: 8, background: "#1c1c1e", color: "#fff", fontSize: 10, lineHeight: 1.4, boxShadow: "0 8px 24px rgba(0,0,0,.3)" }}>{content}</div>, document.body
       )}
     </span>
   );

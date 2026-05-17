@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
@@ -64,7 +65,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
   return (
     <>
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6}}>
-        <span style={{fontSize:9,color:"#636878",fontWeight:500}}>Documentos recientes</span>
+        <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
         {docs.map((doc) => {
           const progreso = doc.progreso_ia as {
             estado?:string; lote_actual?:number; total_lotes?:number;
@@ -84,7 +85,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
           return (
             <div key={doc.id} className="doc-card">
               <div className="dh">
-                <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"#636878",boxShadow:`0 0 5px ${st[doc.estado]??"#636878"}40`}} />
+                <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px ${st[doc.estado]??"var(--text2)"}40`}} />
                 <span className="nm">{doc.nombre_archivo}</span>
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
@@ -98,7 +99,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                 )}
                 {doc.estado === "procesado" && (dupDetalle.length > 0 || dupCount > 0) && (
                   <details className="om-list" style={{marginTop:0}}>
-                    <summary className="om-btn" style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:4,fontSize:9,color:"#f59e0b"}}>
+                    <summary className="om-btn" style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:4,fontSize:9,color:"var(--amber)"}}>
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                       Ver {dupDetalle.length > 0 ? dupDetalle.length : dupCount} omitido{(dupDetalle.length > 0 ? dupDetalle.length : dupCount) !== 1 ? "s" : ""} <span style={{fontSize:7}}>▼</span>
                     </summary>
@@ -106,7 +107,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                       <div key={i} className="om-it">
                         <span className="dt"></span>
                         <span className="nm">{dup.descripcion} · {fmtCLP(dup.monto)}</span>
-                        <span className="ifo" style={{fontSize:8,color:"#4a4d55"}}>Ya registrado</span>
+                        <span className="ifo" style={{fontSize:8,color:"var(--text3)"}}>Ya registrado</span>
                       </div>
                     ))}
                     {dupDetalle.length === 0 && dupCount > 0 && (
@@ -125,7 +126,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                         : movEncontrados ? `Guardando ${movEncontrados} movimientos...`
                         : "Preparando documento..."}
                       {movEncontrados !== undefined && movEncontrados > 0 && (
-                        <span style={{color:"#e8eaf0",fontWeight:500}}> · {movEncontrados} encontrados</span>
+                        <span style={{color:"var(--text)",fontWeight:500}}> · {movEncontrados} encontrados</span>
                       )}
                     </div>
                   </div>
@@ -153,12 +154,13 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
           );
         })}
       </div>
-      {mappingDocId && (
+      {mappingDocId && typeof document !== "undefined" && createPortal(
         <FieldMapper
           documentoId={mappingDocId}
           onClose={() => setMappingDocId(null)}
           onSaved={() => { setMappingDocId(null); fetchDocs(); }}
-        />
+        />,
+        document.body
       )}
     </>
   );

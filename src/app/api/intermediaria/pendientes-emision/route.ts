@@ -53,7 +53,7 @@ export async function GET() {
       created_at,
       cliente_id,
       clientes(id, nombre, rut),
-      movimientos_raw(fecha, descripcion, monto, documentos_subidos(tipo_operacion_hint))
+      movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at))
     `)
     .eq("empresa_id", usuario.empresa_id)
     .in("estado", ["aprobado", "editado"])
@@ -110,10 +110,11 @@ export async function GET() {
       } | null;
       const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as {
         fecha: string; descripcion: string; monto: number;
-        documentos_subidos?: { tipo_operacion_hint: string | null } | { tipo_operacion_hint: string | null }[] | null;
+        documentos_subidos?: { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null } | { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null }[] | null;
       } | null;
       const docNested = mov?.documentos_subidos;
-      const docHintRaw = (Array.isArray(docNested) ? docNested[0]?.tipo_operacion_hint : docNested?.tipo_operacion_hint) ?? null;
+      const docArr = Array.isArray(docNested) ? docNested[0] : docNested;
+      const docHintRaw = docArr?.tipo_operacion_hint ?? null;
       const docHint = docHintRaw as DocumentoHint;
       const total = Number(p.total ?? mov?.monto ?? 0);
       const fecha = (mov?.fecha ?? p.created_at).slice(0, 10);
@@ -159,11 +160,13 @@ export async function GET() {
         monto_total: total,
         listo_emitir,
         motivo_no_listo,
-        // Sugerencia del clasificador SII
-        tipo_sugerido: clasif.tipo_dte, // 39 | 41 | null
-        sugerencia: clasif.sugerencia, // "afecta" | "exenta" | "no_boletar"
+        tipo_sugerido: clasif.tipo_dte,
+        sugerencia: clasif.sugerencia,
         confianza_clasif: Math.round(clasif.confianza * 100) / 100,
         razones: clasif.razones,
+        documento_id: docArr?.id ?? null,
+        documento_nombre: docArr?.nombre_archivo ?? null,
+        documento_created_at: docArr?.created_at ?? null,
       };
     });
 

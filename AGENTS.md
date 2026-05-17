@@ -32,4 +32,5 @@ No necesita Supabase CLI ni Vercel CLI para programar.
 - Las env vars están en `.env.local` (no leer `.env.setup` ni `.env.github`).
 - Migrations en `supabase/migrations/` con dependencia de orden.
 - Tipado de base de datos en `src/lib/database.types.ts`.
+- Script de limpieza en `scripts/limpiar-test.sql`. Conserva `parser_adapters`, `parser_logs`, `clasificacion_reglas`, `boletas_caf_mock`, `clientes`, `usuarios`, `empresas`. Borra `audit_chunks`, `ia_uso`, `creditos_uso`, `periodos_contables`, `propuestas_ia`, `movimientos_raw`, `documentos_subidos`.
 <!-- END:project-context -->

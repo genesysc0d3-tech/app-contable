@@ -1,41 +1,93 @@
 import { Suspense } from "react";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
-import DashboardShell, { KpiCards, BarChart } from "./DashboardShell";
-import { Files, UploadSimple, ArrowDown } from "@phosphor-icons/react/dist/ssr";
+import RevisarClient from "../../revisar/RevisarClient";
+import EmitirBoletaForm from "@/components/boletas/EmitirBoletaForm";
+import BoletasList from "@/components/boletas/BoletasList";
+import DashboardShell from "./DashboardShell";
+import CalendarYear from "./CalendarYear";
+import DocCardModal from "./DocCardModal";
+import { KpiCards, BarChart, RightPanel } from "./DashboardComponents";
 
-export default async function V3Page() {
+export default async function V3Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const usuario = (await getUsuario())!;
   const empresaId = usuario.empresa_id;
+  const { tab } = await searchParams;
+  const activeTab = tab ?? "dashboard";
 
   return (
-    <DashboardShell empresa={usuario.empresas.razon_social} empresaId={empresaId}>
-      <div style={{ padding: "20px 24px" }}>
-        <Suspense fallback={<div style={{ height: 120 }} />}>
-          <KpiData empresaId={empresaId} />
-        </Suspense>
+    <DashboardShell
+      empresa={usuario.empresas.razon_social}
+      empresaId={empresaId}
+      activeTab={activeTab}
+      rightPanel={activeTab === "dashboard" ? (
+        <div style={{ width: 290, borderLeft: "1px solid #2a2d36", background: "#16181d", overflowY: "auto", padding: "20px 16px", flexShrink: 0 }}>
+          <RightPanel />
+        </div>
+      ) : undefined}
+    >
+      {activeTab === "dashboard" && (
+        <div style={{ padding: "20px 24px" }}>
+          <Suspense fallback={<div style={{ height: 120 }} />}>
+            <KpiData empresaId={empresaId} />
+          </Suspense>
+          <Suspense fallback={<div style={{ height: 60, background: "#16181d", borderRadius: 14, marginBottom: 16 }} />}>
+            <ActionRow />
+          </Suspense>
+          <CalendarYear empresaId={empresaId} />
+          <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14, marginTop: 16 }} />}>
+            <ChartData empresaId={empresaId} />
+          </Suspense>
+          <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14, marginTop: 16 }} />}>
+            <DocList empresaId={empresaId} />
+          </Suspense>
+        </div>
+      )}
 
-        <Suspense fallback={<div style={{ height: 60, background: "#16181d", borderRadius: 14, marginBottom: 16 }} />}>
-          <ActionRow empresaId={empresaId} />
-        </Suspense>
+      {activeTab === "emitir" && (
+        <div style={{ padding: "20px 24px" }}>
+          <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14 }} />}>
+            <SubirView empresaId={empresaId} />
+          </Suspense>
+        </div>
+      )}
 
-        <Suspense fallback={<div style={{ height: 60, background: "#16181d", borderRadius: 14, marginBottom: 16 }} />}>
-          <MonthTabs empresaId={empresaId} />
-        </Suspense>
+      {activeTab === "revisar" && (
+        <div style={{ padding: "20px 24px" }}>
+          <Suspense fallback={<div style={{ height: 400, background: "#16181d", borderRadius: 14 }} />}>
+            <RevisarView empresaId={empresaId} />
+          </Suspense>
+        </div>
+      )}
 
-        <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14, marginTop: 16 }} />}>
-          <ChartData empresaId={empresaId} />
-        </Suspense>
+      {activeTab === "boletas" && (
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <Suspense fallback={<div style={{ height: 400, background: "#16181d", borderRadius: 14 }} />}>
+            <EmitirBoletaForm />
+          </Suspense>
+          <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14 }} />}>
+            <BoletasList empresaId={empresaId} />
+          </Suspense>
+        </div>
+      )}
 
-        <Suspense fallback={<div style={{ height: 200, background: "#16181d", borderRadius: 14, marginTop: 16 }} />}>
-          <DocList empresaId={empresaId} />
-        </Suspense>
-      </div>
+      {activeTab === "config" && (
+        <div style={{ padding: "20px 24px" }}>
+          <div style={{ background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "24px", textAlign: "center" }}>
+            <p style={{ color: "#636878", fontSize: 14 }}>Configuración disponible en</p>
+            <a href="/empresa" style={{ color: "#5b9cf6", fontSize: 14, fontWeight: 500, textDecoration: "none" }}>Ir a Empresa →</a>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }
 
-/* ─── KPI DATA ─── */
+/* ─── KPI ─── */
 
 async function KpiData({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -53,83 +105,42 @@ async function KpiData({ empresaId }: { empresaId: string }) {
   return <KpiCards pendientes={p.count ?? 0} emitidosHoy={eh.count ?? 0} emitidosMes={em.count ?? 0} aprobados={ap.count ?? 0} />;
 }
 
-/* ─── ACTION BUTTONS + DROPZONE ─── */
+/* ─── ACTION ROW ─── */
 
-async function ActionRow({ empresaId }: { empresaId: string }) {
+function ActionRow() {
   return (
     <div style={{ background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+      <style>{`
+        .abtn {
+          flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+          padding: 12px 16px; border-radius: 10px;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          border: none; transition: all .25s cubic-bezier(0.22,1,0.36,1);
+        }
+        .abtn.primary { background: #b4f027; color: #000; }
+        .abtn.primary:hover { background: #c8f94a; }
+        .abtn.sec { background: #1e2028; color: #e8eaf0; border: 1px solid #333742; }
+        .abtn.sec:hover { background: #252830; }
+      `}</style>
       <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-        <button style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "#b4f027", color: "#000" }}>
-          <UploadSimple size={16} weight="bold" /> Subir documento
-        </button>
-        <button style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid #333742", background: "#1e2028", color: "#e8eaf0" }}>
-          <ArrowDown size={16} /> Descargar plantilla
-        </button>
+        <a href="/subir" className="abtn primary" style={{ textDecoration: "none" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 17 15 12 9 7"/></svg>
+          Subir documento
+        </a>
+        <a href="/api/generar-template" className="abtn sec" style={{ textDecoration: "none" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 17 9 12 15 7"/></svg>
+          Plantilla Excel
+        </a>
       </div>
       <div style={{ background: "#16181d", border: "1.5px dashed #333742", borderRadius: 12, padding: "18px 20px", display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }}>
         <div style={{ width: 44, height: 44, borderRadius: 10, background: "#1e2028", border: "1px solid #333742", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#9499a8" }}>
-          <Files size={20} />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "#e8eaf0" }}>Arrastra tu archivo aquí</h3>
           <p style={{ fontSize: 12, color: "#636878", margin: "2px 0 0" }}>Excel, PDF o CSV — Máximo 20MB</p>
         </div>
-        <button style={{ background: "#b4f027", color: "#000", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Seleccionar</button>
-      </div>
-    </div>
-  );
-}
-
-/* ─── MONTH TABS ─── */
-
-async function MonthTabs({ empresaId }: { empresaId: string }) {
-  const supabase = await createClient();
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-
-  const data = await Promise.all(months.map(async (_, i) => {
-    const start = new Date(year, i, 1).toISOString();
-    const end = new Date(year, i + 1, 1).toISOString();
-    const { count } = await supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", start).lt("created_at", end);
-    return count ?? 0;
-  }));
-
-  return (
-    <div style={{ background: "#16181d", border: "1px solid #2a2d36", borderRadius: 14, padding: "14px 16px", marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#1e2028", border: "1px solid #333742", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 500, color: "#e8eaf0" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          {year}
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {months.map((m, i) => (
-            <span key={m} style={{ padding: "5px 10px", borderRadius: 7, fontSize: 12, fontWeight: 500, color: i === month ? "#000" : "#636878", background: i === month ? "#b4f027" : "transparent", cursor: "pointer" }}>{m}</span>
-          ))}
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "#1e2028", border: "1px solid #333742", borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#9499a8", cursor: "pointer" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          Limpiar filtro
-        </div>
-      </div>
-      {/* Days strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(31, 1fr)", gap: 2 }}>
-        {Array.from({ length: 31 }, (_, i) => {
-          const day = i + 1;
-          const isToday = day === now.getDate();
-          const isWeekend = [0, 6].includes(new Date(year, month, day).getDay());
-          return (
-            <div key={day} style={{
-              aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer",
-              background: isToday ? "#b4f027" : "transparent",
-              color: isToday ? "#000" : isWeekend ? "#3a3d45" : "#636878",
-              transition: "background .15s",
-            }}>{day}</div>
-          );
-        })}
+        <a href="/subir" style={{ background: "#b4f027", color: "#000", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", textDecoration: "none" }}>Seleccionar</a>
       </div>
     </div>
   );
@@ -141,18 +152,59 @@ async function ChartData({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
   const year = new Date().getFullYear();
   const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-
   const data = await Promise.all(months.map(async (_, i) => {
     const s = new Date(year, i, 1).toISOString();
     const e = new Date(year, i + 1, 1).toISOString();
     const { count } = await supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", s).lt("created_at", e);
     return count ?? 0;
   }));
-
   return <BarChart data={data} months={months} activeMonth={new Date().getMonth()} />;
 }
 
-/* ─── FRAMER-STYLE DOUBLE-LAYER CARDS ─── */
+/* ─── SUBIR VIEW ─── */
+
+async function SubirView({ empresaId }: { empresaId: string }) {
+  const supabase = await createClient();
+  const { data: docs } = await supabase
+    .from("documentos_subidos")
+    .select("id, nombre_archivo, tipo, estado, created_at")
+    .eq("empresa_id", empresaId)
+    .order("created_at", { ascending: false }).limit(20);
+
+  return (
+    <div>
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: "#e8eaf0", margin: "0 0 16px" }}>Documentos</h3>
+      <a href="/subir" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#b4f027", color: "#000", padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
+        + Subir nuevo documento
+      </a>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {(docs ?? []).length === 0 ? (
+          <p style={{ color: "#636878", fontSize: 13, padding: 20 }}>Sin documentos</p>
+        ) : (docs ?? []).map((d) => (
+          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#16181d", border: "1px solid #252830", borderRadius: 10, padding: "10px 14px" }}>
+            <span style={{ fontSize: 10, color: d.tipo === "pdf" ? "#ef4444" : "#4ade80", fontWeight: 700 }}>{d.tipo.toUpperCase()}</span>
+            <span style={{ flex: 1, fontSize: 12, color: "#e8eaf0" }}>{d.nombre_archivo}</span>
+            <span style={{ fontSize: 10, color: "#636878" }}>{d.estado}</span>
+            <span style={{ fontSize: 10, color: "#888" }}>{new Date(d.created_at).toLocaleDateString("es-CL")}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── REVISAR VIEW ─── */
+
+async function RevisarView({ empresaId }: { empresaId: string }) {
+  const supabase = await createClient();
+  const [{ data: propuestas }, { data: clientes }] = await Promise.all([
+    supabase.from("propuestas_ia").select("*, movimientos_raw(*, documentos_subidos(id, nombre_archivo, created_at))").eq("empresa_id", empresaId).order("created_at", { ascending: false }),
+    supabase.from("clientes").select("id, nombre, rut").eq("empresa_id", empresaId).order("nombre", { ascending: true }),
+  ]);
+  return <RevisarClient propuestas={propuestas ?? []} clientes={clientes ?? []} empresaId={empresaId} layout="desktop" />;
+}
+
+/* ─── DOC LIST WITH MODAL ─── */
 
 async function DocList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
@@ -163,130 +215,44 @@ async function DocList({ empresaId }: { empresaId: string }) {
     .order("created_at", { ascending: false })
     .limit(5);
 
-  const st: Record<string, { label: string; color: string; accent: string }> = {
-    procesado:  { label: "Completado", color: "#22c55e", accent: "rgba(34,197,94,0.12)" },
-    procesando: { label: "Procesando", color: "#3b82f6", accent: "rgba(59,130,246,0.12)" },
-    error:      { label: "Con error",  color: "#ef4444", accent: "rgba(239,68,68,0.12)" },
-    subido:     { label: "Nuevo",      color: "#aaff3b", accent: "rgba(170,255,59,0.12)" },
+  const st: Record<string, { label: string; color: string }> = {
+    procesado:  { label: "Completado", color: "#22c55e" },
+    procesando: { label: "Procesando", color: "#3b82f6" },
+    error:      { label: "Con error",  color: "#ef4444" },
+    subido:     { label: "Nuevo",      color: "#aaff3b" },
   };
 
   return (
-    <div style={{ marginTop: 28 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#e8eaf0", letterSpacing: "-0.3px" }}>Documentos</h3>
-        <span style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500 }}>Ver todos →</span>
+        <a href="/subir" style={{ fontSize: 12, color: "#5b9cf6", cursor: "pointer", fontWeight: 500, textDecoration: "none" }}>Ver todos →</a>
       </div>
       <style>{`
-        .flip-doc {
-          background-color: transparent;
-          width: 100%;
-          aspect-ratio: 1;
-          min-height: 150px;
-          perspective: 1000px;
-          font-family: 'DM Sans', sans-serif;
+        .h-card { position: relative; flex: 1; min-width: 0; height: 160px;
+          border-radius: 10px; overflow: hidden; cursor: pointer;
+          transition: all .6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        .flip-doc-inner {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          text-align: center;
-          transition: transform .6s cubic-bezier(0.22,1,0.36,1);
-          transform-style: preserve-3d;
-        }
-        .flip-doc:hover .flip-doc-inner {
-          transform: rotateY(180deg);
-        }
-        .flip-front, .flip-back {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          -webkit-backface-visibility: hidden;
-          backface-visibility: hidden;
-          border-radius: 1rem;
-          box-shadow: 0 8px 14px 0 rgba(0,0,0,0.2);
-          padding: 16px;
-          overflow: hidden;
-        }
-        .flip-doc[data-status="procesado"] .flip-front {
-          background: linear-gradient(135deg, #0a1a0a 0%, #0d2818 40%, #111d11 100%);
-          border: 1px solid #22c55e40;
-          color: #4ade80;
-        }
-        .flip-doc[data-status="procesado"] .flip-back {
-          background: linear-gradient(135deg, #0a1a0a 0%, #0d2818 40%, #111d11 100%);
-          border: 1px solid #22c55e60;
-          color: #e8eaf0;
-        }
-        .flip-doc[data-status="procesando"] .flip-front {
-          background: linear-gradient(135deg, #0a0f1a 0%, #0c1f3a 40%, #0f1420 100%);
-          border: 1px solid #3b82f640;
-          color: #60a5fa;
-        }
-        .flip-doc[data-status="procesando"] .flip-back {
-          background: linear-gradient(135deg, #0a0f1a 0%, #0c1f3a 40%, #0f1420 100%);
-          border: 1px solid #3b82f660;
-          color: #e8eaf0;
-        }
-        .flip-doc[data-status="error"] .flip-front {
-          background: linear-gradient(135deg, #1a0a0a 0%, #2a0d0d 40%, #1a0f0f 100%);
-          border: 1px solid #ef444440;
-          color: #f87171;
-        }
-        .flip-doc[data-status="error"] .flip-back {
-          background: linear-gradient(135deg, #1a0a0a 0%, #2a0d0d 40%, #1a0f0f 100%);
-          border: 1px solid #ef444460;
-          color: #e8eaf0;
-        }
-        .flip-doc[data-status="subido"] .flip-front {
-          background: linear-gradient(135deg, #1a1808 0%, #2a2408 40%, #1a1808 100%);
-          border: 1px solid #f59e0b40;
-          color: #fbbf24;
-        }
-        .flip-doc[data-status="subido"] .flip-back {
-          background: linear-gradient(135deg, #1a1808 0%, #2a2408 40%, #1a1808 100%);
-          border: 1px solid #f59e0b60;
-          color: #e8eaf0;
-        }
-        .flip-back {
-          transform: rotateY(180deg);
-        }
-        @keyframes sqIn {
-          from { opacity: 0; transform: translateY(16px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .flip-doc { animation: sqIn .45s ease-out both; }
-        .flip-doc:nth-child(1) { animation-delay: .02s; }
-        .flip-doc:nth-child(2) { animation-delay: .06s; }
-        .flip-doc:nth-child(3) { animation-delay: .10s; }
-        .flip-doc:nth-child(4) { animation-delay: .14s; }
-        .flip-doc:nth-child(5) { animation-delay: .18s; }
+        .h-card[data-status="procesado"] { background: linear-gradient(135deg, #0a1a0a, #0d2818); }
+        .h-card[data-status="procesando"] { background: linear-gradient(135deg, #0a0f1a, #0c1f3a); }
+        .h-card[data-status="error"] { background: linear-gradient(135deg, #1a0a0a, #2a0d0d); }
+        .h-card[data-status="subido"] { background: linear-gradient(135deg, #1a1808, #2a2408); }
+        .h-card:hover { transform: scale(1.03); box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 2; }
+        .h-card .h-front { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all .5s cubic-bezier(0.175, 0.885, 0.32, 1.275); padding: 14px; }
+        .h-card:hover .h-front { opacity: 0; transform: scale(0.85); }
+        .h-card .h-actions-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 14px; transform: scale(0.85); opacity: 0; transition: all .5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .h-card:hover .h-actions-wrap { transform: scale(1); opacity: 1; }
       `}</style>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
+      <div className="h-row" style={{ display: "flex", gap: 10 }}>
         {(docs ?? []).length === 0 ? (
-          <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "48px 0", gridColumn: "1 / -1" }}>Sin documentos aún</p>
+          <p style={{ color: "#636878", fontSize: 13, textAlign: "center", padding: "40px 0", width: "100%" }}>Sin documentos aún</p>
         ) : (docs ?? []).map((d, i) => {
-          const s = st[d.estado] ?? { label: d.estado, color: "#636878", accent: "rgba(99,104,120,0.12)" };
-          const typeIcon = d.tipo === "pdf" ? "▦" : d.tipo === "excel" ? "⊞" : "☰";
+          const s = st[d.estado] ?? { label: d.estado, color: "#636878" };
+          const svgPath = d.tipo === "pdf" ? "M20 2H8c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2h1.5v2H12V9.5zm4.5 3.5c0 .83-.67 1.5-1.5 1.5H13v2h1.5v2H16v-4zm2-6h-4V5.5h4V5z"
+            : d.tipo === "excel" ? "M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-3.5 8.5l-1.5-3 1.5-3h1l-1.5 3 1.5 3h-1zm3.5 0l-1.5-3 1.5-3h1l-1.5 3 1.5 3h-1zm2 0l-1.5-3 1.5-3h1l-1.5 3 1.5 3h-1z"
+            : "M6 2c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6H6zm0 18V4h7v5h5v11H6z";
           return (
-            <div key={d.id} className="flip-doc" data-status={d.estado}>
-              <div className="flip-doc-inner">
-                <div className="flip-front">
-                  <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8, opacity: 0.6 }}>{typeIcon}</div>
-                  <p style={{ fontSize: "1.1em", fontWeight: 700, margin: "0 0 2px" }}>{s.label}</p>
-                  <p style={{ fontSize: 10, margin: "4px 0", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{d.nombre_archivo}</p>
-                  <p style={{ fontSize: 9, margin: "2px 0", opacity: 0.5 }}>{d.tipo.toUpperCase()}{d.movimientos_detectados ? ` · ${d.movimientos_detectados} mov` : ""}</p>
-                </div>
-                <div className="flip-back">
-                  <p style={{ fontSize: "1em", fontWeight: 700, margin: "0 0 6px", color: s.color }}>{s.label}</p>
-                  <p style={{ fontSize: 11, margin: "2px 0", opacity: 0.8 }}>{d.movimientos_detectados ? `${d.movimientos_detectados} movimientos` : "Sin datos"}</p>
-                  <p style={{ fontSize: 10, margin: "2px 0", opacity: 0.5 }}>{new Date(d.created_at).toLocaleDateString("es-CL")}</p>
-                  <div style={{ marginTop: 10, fontSize: 9, opacity: 0.4 }}>Ver detalle →</div>
-                </div>
-              </div>
-            </div>
+            <DocCardModal key={d.id} doc={d} s={s} svgPath={svgPath} />
           );
         })}
       </div>

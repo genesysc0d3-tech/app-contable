@@ -149,7 +149,7 @@ export default function EmitirTabContent() {
           <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
           <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
           <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
-          <span style={{fontSize:8,color:"#636878",margin:"0 4px"}}>|</span>
+          <span style={{fontSize:8,color:"var(--text2)",margin:"0 4px"}}>|</span>
           <button className={`pl ${typeFilter === "todos" ? "act" : "ina"}`} onClick={() => setTypeFilter("todos")}>Todos</button>
           <button className={`pl ${typeFilter === "afecta" ? "act" : "ina"}`} onClick={() => setTypeFilter("afecta")}>Afecta</button>
           <button className={`pl ${typeFilter === "exenta" ? "act" : "ina"}`} onClick={() => setTypeFilter("exenta")}>Exenta</button>
@@ -187,7 +187,7 @@ export default function EmitirTabContent() {
                 <div className="inf">
                   <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
                   <div className="sub">
-                    {item.receptor_rut ?? "Sin RUT"} · {new Date(item.fecha).toLocaleDateString("es-CL",{day:"numeric",month:"short",year:"numeric"})}
+                    {item.receptor_rut ?? "Sin RUT"} · {(function(){const d=new Date(item.fecha);const ms=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];return d.getDate()+" "+ms[d.getMonth()]+" "+d.getFullYear()})()}
                   </div>
                   {item.motivo_no_listo && (
                     <div className="sub rn">

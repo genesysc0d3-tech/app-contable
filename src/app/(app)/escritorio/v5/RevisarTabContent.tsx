@@ -60,25 +60,28 @@ export default function RevisarTabContent({
   const [selDocId, setSelDocId] = useState<string | null>(null);
   const activeDoc = docMap.find(d => d.docId === (selDocId ?? docMap[0]?.docId));
 
-  if (!activeDoc) {
-    return (
-      <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
-        <div style={{textAlign:"center"}}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round"/></svg>
-          <p style={{fontSize:10,color:"#636878",marginTop:8}}>Todo revisado</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Current document's propuestas
-  const currentProps = useMemo(() => activeDoc.props.filter(p => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado"), [activeDoc]);
+  // Always call hooks — never after conditional returns
+  const emptyProps: Propuesta[] = [];
+  const fallbackDoc = { docId: "", nombre: "", total: 0, props: emptyProps } as DocTab & { props: Propuesta[] };
+  const doc = activeDoc ?? fallbackDoc;
+  const currentProps = useMemo(() => doc.props.filter(p => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado"), [doc]);
 
   const alta = useMemo(() => currentProps.filter(p => classifyConfianza(p) === "alta"), [currentProps]);
   const media = useMemo(() => currentProps.filter(p => classifyConfianza(p) === "media"), [currentProps]);
   const baja = useMemo(() => currentProps.filter(p => classifyConfianza(p) === "baja"), [currentProps]);
 
-  const totalPendientes = activeDoc.props.filter(p => p.estado === "pendiente").length;
+  const totalPendientes = doc.props.filter(p => p.estado === "pendiente").length;
+
+  if (!activeDoc) {
+    return (
+      <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
+        <div style={{textAlign:"center"}}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round"/></svg>
+          <p style={{fontSize:10,color:"var(--text2)",marginTop:8}}>Todo revisado</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -117,7 +120,7 @@ export default function RevisarTabContent({
               <circle cx="12" cy="12" r="11" stroke="#E8553E" strokeWidth="2"/>
               <path d="M8 12l3 3 5-5" stroke="#E8553E" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            <p style={{fontSize:10,color:"#636878",marginTop:8}}>Todo revisado</p>
+            <p style={{fontSize:10,color:"var(--text2)",marginTop:8}}>Todo revisado</p>
           </div>
         ) : (
           <>
@@ -186,10 +189,10 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
         <div className={`cg ${tipo}`} style={{borderBottom:"1px solid rgba(255,255,255,.03)"}}>
           {/* Accordion header */}
           <div className="cg-h" onClick={() => setExpanded(!expanded)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",cursor:"pointer"}}>
-            <span className="arr" style={{fontSize:8,color:"#636878",transform:expanded?"rotate(90deg)":"none",transition:"transform .2s",flexShrink:0}}>▶</span>
+            <span className="arr" style={{fontSize:8,color:"var(--text2)",transform:expanded?"rotate(90deg)":"none",transition:"transform .2s",flexShrink:0}}>▶</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill={color}><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span className="lbl" style={{fontSize:10,fontWeight:600,flex:1,color}}>{label}</span>
-            <span className="cnt" style={{fontSize:9,color:"#636878"}}>{propuestas.length}</span>
+            <span className="cnt" style={{fontSize:9,color:"var(--text2)"}}>{propuestas.length}</span>
             {tipo === "alta" && (
               <div className="act" style={{display:"flex",gap:4}} onClick={e => e.stopPropagation()}>
                 <BlockApproveBtn ids={visible.map(p => p.id)} label={`Aprobar bloque ${curBlock + 1}`} />
@@ -209,8 +212,8 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
                       onClick={() => setActiveBlock(i)}
                       style={{
                         width:28,height:20,borderRadius:4,border:"none",cursor:"pointer",fontSize:8,fontWeight:600,
-                        background: i === curBlock ? "#E8553E" : "rgba(255,255,255,.04)",
-                        color: i === curBlock ? "#fff" : "#636878",
+                        background: i === curBlock ? "#E8553E" : "var(--bg-muted)",
+                        color: i === curBlock ? "#fff" : "var(--text2)",
                         boxShadow: i === curBlock ? "0 0 8px rgba(232,85,62,.3)" : "none",
                       }}
                     >{i + 1}</button>
@@ -227,16 +230,16 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
                     <div className="tr" onClick={() => toggleRow(p.id)}
                       style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid rgba(255,255,255,.02)",cursor:"pointer"}}
                     >
-                      <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"#E8553E":"#636878",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
+                      <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"#E8553E":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
                       <div className="info" style={{flex:1,minWidth:0}}>
-                        <div className="tt" style={{fontSize:10,fontWeight:500,color:"#e8eaf0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
-                        <div className="mt" style={{fontSize:8,color:"#636878",marginTop:1,display:"flex",alignItems:"center",gap:4}}>
+                        <div className="tt" style={{fontSize:10,fontWeight:500,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
+                        <div className="mt" style={{fontSize:8,color:"var(--text2)",marginTop:1,display:"flex",alignItems:"center",gap:4}}>
                           {fmt(p.movimientos_raw.monto)} <span style={{color:"#2a2d36"}}>·</span> {fmtShort(p.movimientos_raw.fecha)}
                           {p.receptor_nombre && <><span style={{color:"#2a2d36"}}>·</span> {p.receptor_nombre}</>}
                         </div>
                       </div>
                       <span className={`cf ${(p.confianza ?? 0) >= ALTA ? "hi" : (p.confianza ?? 0) >= MEDIA ? "me" : "ba"}`}
-                        style={{fontSize:9,fontWeight:600,textAlign:"right",minWidth:30,color:(p.confianza??0)>=ALTA?"#22c55e":(p.confianza??0)>=MEDIA?"#f59e0b":"#636878"}}
+                        style={{fontSize:9,fontWeight:600,textAlign:"right",minWidth:30,color:(p.confianza??0)>=ALTA?"#22c55e":(p.confianza??0)>=MEDIA?"#f59e0b":"var(--text2)"}}
                       >{Math.round((p.confianza??0)*100)}%</span>
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
                         <RowActionBtn type="aprove" onClick={async () => {const r=await aprobarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Aprobada");onAction();}} icon="✓" />
@@ -366,32 +369,32 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose }: {
             color: isAfecta ? "#b4f027" : "#5b9cf6",
           }}
         >{isAfecta ? "Boleta · afecta" : "Boleta · exenta"}</span>
-        <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "#636878", fontSize:12,fontWeight:700}}>
+        <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "var(--text2)", fontSize:12,fontWeight:700}}>
           {Math.round((propuesta.confianza ?? 0) * 100)}%
         </span>
       </div>
-      <div className="desc" style={{fontSize:11,fontWeight:500,color:"#e8eaf0",marginBottom:4}}>{propuesta.movimientos_raw.descripcion}</div>
-      <div className="sub" style={{fontSize:9,color:"#636878",marginBottom:6}}>
+      <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>{propuesta.movimientos_raw.descripcion}</div>
+      <div className="sub" style={{fontSize:9,color:"var(--text2)",marginBottom:6}}>
         {fmt(total)} · {fmtShort(propuesta.movimientos_raw.fecha)} · {propuesta.receptor_nombre ?? "Sin receptor"}
       </div>
       <div className="fin" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:6}}>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"#636878"}}>Neto</div>
-          <div className="vl" style={{fontSize:11,fontWeight:600,color:"#e8eaf0"}}>{fmt(neto)}</div>
+          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>Neto</div>
+          <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(neto)}</div>
         </div>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"#636878"}}>IVA</div>
-          <div className="vl" style={{fontSize:11,fontWeight:600,color:"#e8eaf0"}}>{fmt(iva)}</div>
+          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>IVA</div>
+          <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(iva)}</div>
         </div>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"#636878"}}>Total</div>
+          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>Total</div>
           <div className="vl ht" style={{fontSize:11,fontWeight:700,color:"#b4f027"}}>{fmt(total)}</div>
         </div>
       </div>
-      <div className="cliente" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:9,color:"#636878"}}>
+      <div className="cliente" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:9,color:"var(--text2)"}}>
         <span>Cliente:</span>
         <select value={selClienteId} onChange={e => {const v=e.target.value;if(v==="__new__"){setShowNewCliente(true);setSelClienteId("")}else{setShowNewCliente(false);setSelClienteId(v)}}
-          } style={{flex:1,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"#e8eaf0",fontSize:9,padding:"3px 6px"}}>
+          } style={{flex:1,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"var(--text)",fontSize:9,padding:"3px 6px"}}>
           <option value="">Sin cliente asignado</option>
           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>)}
           <option value="__new__" style={{borderTop:"1px solid rgba(255,255,255,.06)"}}>+ Crear cliente nuevo</option>
@@ -400,12 +403,12 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose }: {
       {showNewCliente && (
         <div style={{display:"flex",gap:4,marginBottom:6}}>
           <input placeholder="Nombre" value={newClienteNombre} onChange={e => setNewClienteNombre(e.target.value)}
-            style={{flex:1,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"#e8eaf0",fontSize:9,padding:"3px 6px"}} />
+            style={{flex:1,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"var(--text)",fontSize:9,padding:"3px 6px"}} />
           <input placeholder="RUT" value={newClienteRut} onChange={e => setNewClienteRut(e.target.value)}
-            style={{width:100,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"#e8eaf0",fontSize:9,padding:"3px 6px"}} />
+            style={{width:100,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"var(--text)",fontSize:9,padding:"3px 6px"}} />
         </div>
       )}
-      <div className="notas" style={{fontSize:9,color:"#636878",fontStyle:"italic",marginBottom:6}}>{propuesta.notas ?? ""}</div>
+      <div className="notas" style={{fontSize:9,color:"var(--text2)",fontStyle:"italic",marginBottom:6}}>{propuesta.notas ?? ""}</div>
       <div className="actions" style={{display:"flex",gap:4}}>
         <button onClick={handleAprobar} disabled={busy}
           style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
@@ -413,11 +416,11 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose }: {
           {busy ? "..." : "Aprobar"}
         </button>
         <button onClick={() => onClose()}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
           ✏️ Editar
         </button>
         <button onClick={handleRechazar} disabled={busy}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"#ef4444",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
           ✕ {busy ? "..." : "Rechazar"}
         </button>
       </div>

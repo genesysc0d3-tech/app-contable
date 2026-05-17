@@ -26,9 +26,9 @@ export default async function EmitirPanel({ empresaId }: { empresaId: string }) 
 
       {/* History */}
       <div className="sec">
-        <Link href="/subir" className="hist-btn" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",border:"none",background:"none",cursor:"pointer",fontSize:10,fontWeight:600,color:"#e8eaf0",borderTop:"1px solid rgba(255,255,255,.04)",textDecoration:"none"}}>
-          <span>Historial <span className="cnt" style={{fontSize:9,fontWeight:400,color:"#636878"}}>({docs?.length ?? 0} docs)</span></span>
-          <span className="arr" style={{fontSize:8,color:"#636878"}}>→</span>
+        <Link href="/subir" className="hist-btn" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",border:"none",background:"none",cursor:"pointer",fontSize:10,fontWeight:600,color:"var(--text)",borderTop:"1px solid var(--bg-muted)",textDecoration:"none"}}>
+          <span>Historial <span className="cnt" style={{fontSize:9,fontWeight:400,color:"var(--text2)"}}>({docs?.length ?? 0} docs)</span></span>
+          <span className="arr" style={{fontSize:8,color:"var(--text2)"}}>→</span>
         </Link>
       </div>
     </>

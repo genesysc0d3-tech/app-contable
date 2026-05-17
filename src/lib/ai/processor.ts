@@ -42,8 +42,10 @@ function toNum(val: unknown): number | null {
 /** Normalize tipo_propuesto to valid check constraint values */
 const VALID_TIPOS = new Set([
   "boleta", "factura", "gasto", "registro_crypto", "ignorar",
-  "boleta_honorarios", "factura_afecta", "compraventa_crypto",
+  "boleta_honorarios", "factura_afecta", "factura_exenta", "compraventa_crypto",
   "transferencia_p2p", "operacion_forex", "gasto_egreso", "no_comercial",
+  "impuesto", "cotizacion_previsional", "remuneracion", "arriendo",
+  "dividendo", "comision", "interes", "retencion", "donacion",
 ]);
 function normTipo(val: string | null | undefined): string {
   if (!val) return "no_comercial";
@@ -54,7 +56,17 @@ function normTipo(val: string | null | undefined): string {
   if (s.includes("p2p") || s.includes("transferencia")) return "transferencia_p2p";
   if (s.includes("forex") || s.includes("divisa")) return "operacion_forex";
   if (s.includes("boleta") || s.includes("honorario")) return "boleta_honorarios";
+  if (s.includes("factura") && (s.includes("exent") || s.includes("no afect"))) return "factura_exenta";
   if (s.includes("factura")) return "factura_afecta";
+  if (s.includes("impuesto") || s.includes("f29") || s.includes("ppm") || s.includes("tgr") || s.includes("contribucion")) return "impuesto";
+  if (s.includes("afp") || s.includes("isapre") || s.includes("fonasa") || s.includes("cotizacion")) return "cotizacion_previsional";
+  if (s.includes("sueldo") || s.includes("remuneracion") || s.includes("finiquito")) return "remuneracion";
+  if (s.includes("arriendo") || s.includes("alquiler")) return "arriendo";
+  if (s.includes("dividendo") || s.includes("retiro de utilidad")) return "dividendo";
+  if (s.includes("comision") || s.includes("comisiones")) return "comision";
+  if (s.includes("interes") || s.includes("intereses")) return "interes";
+  if (s.includes("retencion")) return "retencion";
+  if (s.includes("donacion") || s.includes("donativo")) return "donacion";
   if (s.includes("gasto") || s.includes("egreso") || s.includes("pago")) return "gasto_egreso";
   return "no_comercial";
 }

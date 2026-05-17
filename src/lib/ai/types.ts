@@ -13,7 +13,7 @@ export interface MovimientoExtraido {
 
 export interface PropuestaExtraida {
   movimiento_index: number;
-  tipo_propuesto: "boleta" | "factura" | "gasto" | "registro_crypto" | "ignorar" | "boleta_honorarios" | "factura_afecta" | "compraventa_crypto" | "transferencia_p2p" | "operacion_forex" | "gasto_egreso" | "no_comercial";
+  tipo_propuesto: "boleta" | "factura" | "gasto" | "registro_crypto" | "ignorar" | "boleta_honorarios" | "factura_afecta" | "factura_exenta" | "compraventa_crypto" | "transferencia_p2p" | "operacion_forex" | "gasto_egreso" | "no_comercial" | "impuesto" | "cotizacion_previsional" | "remuneracion" | "arriendo" | "dividendo" | "comision" | "interes" | "retencion" | "donacion";
   receptor_nombre: string | null;
   receptor_rut: string | null;
   monto_neto: number;
