@@ -1,5 +1,3 @@
-import { Info } from "@phosphor-icons/react/dist/ssr";
-
 export interface CAFRow {
   id: string;
   tipo_dte: number;
@@ -10,48 +8,98 @@ export interface CAFRow {
   fecha_vence: string;
 }
 
-const TIPOS: { tipo: 39 | 41 | 61; label: string; color: string }[] = [
-  { tipo: 39, label: "Boleta afecta (39)", color: "text-[#E8553E]" },
-  { tipo: 41, label: "Boleta exenta (41)", color: "text-[#3B82F6]" },
-  { tipo: 61, label: "Nota de crédito (61)", color: "text-[#A855F7]" },
-];
-
 export default function CAFPanel({ cafs }: { cafs: CAFRow[] }) {
-  function disponibles(tipo: number) {
-    return cafs
-      .filter((c) => c.tipo_dte === tipo && c.estado === "activo")
-      .reduce((s, c) => s + Math.max(0, c.folio_hasta - c.folio_actual + 1), 0);
-  }
-  function emitidos(tipo: number) {
-    return cafs
-      .filter((c) => c.tipo_dte === tipo)
-      .reduce((s, c) => s + Math.max(0, c.folio_actual - c.folio_desde), 0);
-  }
+  const activos = cafs.filter(c => c.estado === "activo");
+  const totalDisponibles = activos.reduce((s, c) => s + Math.max(0, c.folio_hasta - c.folio_actual + 1), 0);
+  const totalEmitidos = cafs.reduce((s, c) => s + Math.max(0, c.folio_actual - c.folio_desde), 0);
+  const uso = totalDisponibles + totalEmitidos > 0
+    ? Math.round((totalEmitidos / (totalDisponibles + totalEmitidos)) * 100)
+    : 0;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-2 p-3 rounded-lg bg-black/5 dark:bg-white/5 text-xs text-[#888] dark:text-white/60">
-        <Info size={14} weight="fill" className="shrink-0 mt-0.5" />
-        <span className="leading-relaxed">
-          El intermediario (mock) solicita CAFs al SII automáticamente cuando se agotan. No necesitás hacer nada — así funciona Haulmer real.
-        </span>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {TIPOS.map(({ tipo, label, color }) => {
-          const dispo = disponibles(tipo);
-          const emit = emitidos(tipo);
-          return (
-            <div key={tipo} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10">
-              <div className={`text-[10px] font-bold ${color}`}>{label}</div>
-              <div className="mt-2 text-xl font-bold tabular-nums">{dispo}</div>
-              <div className="text-[10px] text-[#888] dark:text-white/60">disponibles</div>
-              {emit > 0 && (
-                <div className="text-[10px] text-[#888] dark:text-white/60 mt-1">· {emit} emitidos</div>
-              )}
+    <div style={{
+      borderRadius: 22,
+      border: "1px solid rgba(255,255,255,0.08)",
+      background: "rgba(255,255,255,0.025)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+    }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 36px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24 }}>
+          <div style={{
+            width: 48, height: 48, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 16,
+            border: "1px solid rgba(245,158,11,0.25)",
+            background: "rgba(245,158,11,0.12)",
+            color: "#FBBF24",
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" width={20} height={20}>
+              <path d="M4 7h16v12H4V7Z" stroke="currentColor" strokeWidth="1.8"/>
+              <path d="M4 7l3-3h10l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div style={{ minWidth: 0, paddingTop: 4, flex: 1 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "#ffffff" }}>
+                Folios CAF
+              </h3>
+              <span style={{
+                display: "inline-block", borderRadius: 9999,
+                border: "1px solid rgba(245,158,11,0.20)",
+                background: "rgba(245,158,11,0.13)",
+                padding: "4px 10px", fontSize: 11, fontWeight: 700,
+                color: "#FBBF24",
+              }}>
+                {activos.length} activos
+              </span>
             </div>
-          );
-        })}
+            <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
+              Administración automática de folios para documentos tributarios.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(255,255,255,0.03)",
+          padding: "14px 16px",
+          marginBottom: 18,
+        }}>
+          <div style={{ width: 20, height: 20, borderRadius: 6, display: "grid", placeItems: "center", background: "rgba(96,165,250,0.12)", color: "#60a5fa", flexShrink: 0, fontSize: 11, fontWeight: 700 }}>
+            i
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.50)" }}>
+            El intermediario (mock) solicita CAFs al SII automáticamente cuando se agotan. No necesitás hacer nada — así funciona Haulmer real.
+          </div>
+        </div>
+
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 0,
+          borderRadius: 14, overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(255,255,255,0.03)",
+        }}>
+          {[
+            { value: activos.length, label: "Folios activos" },
+            { value: totalDisponibles.toLocaleString(), label: "Folios disponibles" },
+            { value: totalEmitidos, label: "DTE emitidos" },
+            { value: `${uso}%`, label: "Uso promedio" },
+          ].map((s, i) => (
+            <div key={i} style={{
+              padding: "16px 14px", textAlign: "center",
+              borderRight: i < 3 ? "1px solid rgba(255,255,255,0.08)" : "none",
+            }}>
+              <div style={{ color: "#f59e0b", fontWeight: 850, fontSize: 18, marginBottom: 4 }}>
+                {s.value}
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 11 }}>
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

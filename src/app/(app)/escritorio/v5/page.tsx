@@ -40,7 +40,7 @@ export default async function V5Page({ searchParams }: {
   const sm = new Date(y,m,1).toISOString();
   const em = new Date(y,m+1,1).toISOString();
 
-  const [rcvData, propsData, clData, calProps, calDocs, docsData, pendCountData, aprobCountData] = await Promise.all([
+  const [rcvData, propsData, clData, calProps, calDocs, docsData, pendCountData, aprobCountData, cafsData] = await Promise.all([
     supabase.from("boletas_emitidas").select("monto_neto,monto_exento,iva,monto_total").eq("empresa_id", empresaId).neq("estado","anulada"),
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).order("created_at",{ascending:false}),
     supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
@@ -50,6 +50,9 @@ export default async function V5Page({ searchParams }: {
       .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(50),
     supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).eq("estado","pendiente"),
     supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).in("estado",["aprobado","editado"]).gte("created_at",sm),
+    supabase.from("boletas_caf_mock")
+      .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
+      .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
   ]);
 
   const rcvTotal = (rcvData.data ?? []).reduce((s,b) => ({
@@ -84,7 +87,9 @@ export default async function V5Page({ searchParams }: {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif}
 :root{--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--muted-light:#888}
-.app{display:grid;grid-template-columns:3fr 7fr;max-width:1400px;margin:0 auto;gap:24px;height:calc(100vh - 104px);padding:0 0;position:relative;background:transparent}
+.ep-glow-card{transition:box-shadow 600ms cubic-bezier(0.22,1,0.36,1)}
+.ep-glow-card:hover{box-shadow:0 0 40px -8px rgba(232,85,62,0.40)!important}
+.app{display:grid;grid-template-columns:3fr 7fr;max-width:1400px;margin:0 auto;gap:24px;height:calc(100vh - 104px);padding:0 0;position:relative;background:transparent;min-height:0}
 .left-glass{background:rgba(255,255,255,.03);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.06);border-radius:20;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)}
 .panel-hd-txt .plantilla{margin-left:auto;display:flex;align-items:center;gap:3px;padding:4px 8px;border-radius:5px;border:1px solid rgba(255,255,255,.06);background:transparent;color:var(--text2);font-size:9px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s}
 .panel-hd-txt .plantilla:hover{background:var(--bg-muted);color:var(--text)}
@@ -100,14 +105,14 @@ body{font-family:'DM Sans',sans-serif}
 .dz-icon svg{width:16px;height:16px;color:#b4f027}
 .dz-txt h4{font-size:12px;font-weight:600}
 .dz-txt p{font-size:10px;color:var(--text2);margin-top:1px}
-.dz-fmts{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:9px;color:#4a4d55;flex-wrap:wrap}
-.dz-fmts .f{display:flex;align-items:center;gap:2px;color:#4a4d55;line-height:1}
-.doc-card{background:rgba(255,255,255,.02);border:1px solid var(--bg-muted);border-radius:10px;overflow:hidden;transition:all .15s}
-.doc-card:hover{border-color:rgba(255,255,255,.08)}
+.dz-fmts{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:9px;color:var(--text3);flex-wrap:wrap}
+.dz-fmts .f{display:flex;align-items:center;gap:2px;color:var(--text3);line-height:1}
+.doc-card{background:var(--bg-muted);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:all .15s}
+.doc-card:hover{border-color:var(--text3)}
 .dh{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer}
-.dh:hover{background:rgba(255,255,255,.015)}
+.dh:hover{background:var(--bg-muted)}
 .dh .dt{width:4px;height:4px;border-radius:50%;flex-shrink:0}
-.dh .nm{flex:1;font-size:11px;color:rgba(255,255,255,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dh .nm{flex:1;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dh .st{font-size:9px;font-weight:600}.dh .st.ls{color:#22c55e}.dh .st.pc{color:#5b9cf6}.dh .st.er{color:#ef4444}.dh .st.pd{color:#f59e0b}
 .dh .mt{font-size:9px;color:var(--text2);flex-shrink:0}
 .db{padding:0 10px 8px;display:flex;flex-direction:column;gap:4px}
@@ -122,10 +127,10 @@ body{font-family:'DM Sans',sans-serif}
 .om-btn:hover{background:rgba(245,158,11,.06)}
 .om-list{display:flex;flex-direction:column;gap:2px;padding:2px 0}
 .om-it{display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:9px;color:var(--text2);border-radius:4px}
-.om-it:hover{background:rgba(255,255,255,.02)}
+.om-it:hover{background:var(--bg-muted)}
 .om-it .dt{width:3px;height:3px;border-radius:50%;background:#f59e0b;flex-shrink:0}
-.om-it .nm{flex:1;color:rgba(255,255,255,.5)}
-.om-it .ifo{color:#4a4d55;font-size:8px}
+.om-it .nm{flex:1;color:var(--text2)}
+.om-it .ifo{color:var(--text3);font-size:8px}
 .warn{padding:6px 8px;border-radius:6px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.08);font-size:9px;color:#f59e0b;display:flex;align-items:flex-start;gap:4px;line-height:1.4}
 .pr{display:flex;flex-direction:column;gap:2px}
 .prh{display:flex;justify-content:space-between;font-size:9px;color:var(--text2)}
@@ -139,8 +144,8 @@ body{font-family:'DM Sans',sans-serif}
 @keyframes pl{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
 .hist-btn{width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 0;border:none;background:none;cursor:pointer;font-size:10px;font-weight:600;color:var(--text);border-top:1px solid var(--bg-muted);transition:all .15s}
 .hist-btn:hover{color:#b4f027}
-.btn-cancel{padding:8px 14px;border:none;border-radius:8px;background:#1a1c24;font-size:10px;font-weight:600;color:rgba(255,255,255,.4);cursor:pointer;transition:all .2s}
-.btn-cancel:hover{background:#1e2028;color:#fff}
+.btn-cancel{padding:8px 14px;border:none;border-radius:8px;background:var(--surface2);font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .2s}
+.btn-cancel:hover{background:var(--surface);color:var(--text)}
 .ac-row{display:flex;gap:6px;justify-content:flex-end}
 .cal{padding:12px 16px;border-bottom:1px solid var(--bg-muted);flex-shrink:0}
 .cal-h{display:flex;align-items:center;gap:6px;margin-bottom:8px}
@@ -153,7 +158,7 @@ body{font-family:'DM Sans',sans-serif}
 .cal-days::-webkit-scrollbar{display:none}
 .cal-day{width:26px;padding:3px 0;display:flex;flex-direction:column;align-items:center;border-radius:4px;cursor:pointer;text-decoration:none;color:var(--text2);transition:all .15s}
 .cal-day:hover{background:var(--bg-muted)}
-.cal-day .wd{font-size:6px;text-transform:uppercase;line-height:1;color:#4a4d55}
+.cal-day .wd{font-size:6px;text-transform:uppercase;line-height:1;color:var(--text3)}
 .cal-day .d{font-size:10px;font-weight:500;line-height:1;margin-top:1px}
 .cal-day.today .d{color:#b4f027;font-weight:700}
 .cal-day.sel{background:#b4f027;color:#000}
@@ -167,7 +172,7 @@ body{font-family:'DM Sans',sans-serif}
 .topbar-r .stat{display:flex;align-items:baseline;gap:4px}
 .topbar-r .stat .num{font-size:16px;font-weight:300}
 .topbar-r .stat .lbl{font-size:10px;color:var(--text2)}
-.topbar-r .sep{color:#2a2d36;font-size:9px}
+.topbar-r .sep{color:var(--text3);font-size:9px}
 .topbar-r .date{font-size:10px;color:var(--text2)}
 .tab-bar{display:flex;gap:3px;padding:10px 16px;border-bottom:1px solid var(--bg-muted);flex-shrink:0}
 .r-tab-content{display:none;flex-direction:column;overflow:hidden}
@@ -197,22 +202,22 @@ body{font-family:'DM Sans',sans-serif}
 .em-pills .sc{font-size:9px;color:var(--text2);display:flex;align-items:center;gap:4px;margin-left:auto;padding:3px 6px;border-radius:4px;cursor:pointer}
 .em-pills .sc:hover{background:var(--bg-muted)}
 .em-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--bg-muted);margin-bottom:4px;transition:all .15s}
-.em-item:hover{border-color:rgba(255,255,255,.08)}
+.em-item:hover{border-color:var(--text3)}
 .em-item.dis{opacity:.6;border-color:rgba(245,158,11,.2);background:rgba(245,158,11,.03);cursor:not-allowed}
-.em-item .cb{width:14px;height:14px;border-radius:3px;border:1.5px solid rgba(255,255,255,.15);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:transparent;transition:all .15s}
+.em-item .cb{width:14px;height:14px;border-radius:3px;border:1.5px solid var(--border);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:transparent;transition:all .15s}
 .em-item .cb.sel{background:#E8553E;border-color:#E8553E}
 .em-item .cb.dis{cursor:not-allowed;opacity:.3}
 .em-item .inf{flex:1;min-width:0}
 .em-item .inf .tt{font-size:10px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .em-item .inf .sub{font-size:9px;color:var(--text2);margin-top:1px}
 .em-item .inf .sub .rn{color:#f59e0b;font-size:8px;display:flex;align-items:center;gap:2px;margin-top:2px}
-.em-item .inf .rz{font-size:8px;color:#888;margin-top:1px}
+.em-item .inf .rz{font-size:8px;color:var(--text3);margin-top:1px}
 .em-item .inf .rz .lb{font-size:8px}
 .em-item .tp{display:flex;gap:2px;flex-shrink:0}
 .em-item .tp button{font-size:8px;padding:2px 6px;border-radius:4px;border:none;cursor:pointer;font-weight:700;transition:all .15s}
 .em-item .tp .af{background:var(--accent-light);color:#E8553E}
 .em-item .tp .ex{background:rgba(59,130,246,.1);color:#5b9cf6}
-.em-item .tp .ina{background:var(--bg-muted);color:#4a4d55}
+.em-item .tp .ina{background:var(--bg-muted);color:var(--text3)}
 .em-item .mo{font-size:11px;font-weight:600;text-align:right;min-width:56px;font-variant-numeric:tabular-nums}
 .em-bar{position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--bg-muted);display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:2}
 .em-bar .l{font-size:10px;color:var(--text2)}
@@ -233,33 +238,14 @@ body{font-family:'DM Sans',sans-serif}
 
       <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", background: "var(--bg)", minHeight: "100vh", padding: "84px 20px 20px" }}>
 
-        {/* FLOATING CONTROLS */}
-        <div className="floating" style={{position:"fixed",top:72,right:16,zIndex:50,display:"flex",alignItems:"center",gap:8}}>
-          <Link href="/empresa" style={{textDecoration:"none"}}>
-            <div className="btn" style={{width:36,height:36,borderRadius:10,background:"var(--surface)",border:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"var(--text2)"}}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3"/></svg>
-            </div>
-          </Link>
-          <div className="btn" style={{width:36,height:36,borderRadius:10,background:"var(--surface)",border:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"var(--text2)"}}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          </div>
-          <div className="btn" style={{width:36,height:36,borderRadius:10,background:"var(--surface)",border:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"var(--text2)",position:"relative"}}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <div style={{position:"absolute",top:6,right:6,width:7,height:7,borderRadius:"50%",background:"#b4f027",border:"1.5px solid var(--surface)"}} />
-          </div>
-          <div className="avatar" style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"}}>
-            {usuario.empresas.razon_social[0]}
-          </div>
-        </div>
-
         {/* MAIN GRID */}
         <div className="app">
 
           {/* ═══ LEFT COLUMN ═══ */}
-          <div className="left-col" style={{display:"flex",flexDirection:"column",gap:16,overflow:"visible",scrollbarWidth:"none"}}>
+          <div className="left-col" style={{display:"flex",flexDirection:"column",gap:16,overflow:"visible",minHeight:0,scrollbarWidth:"none"}}>
 
             {/* RCV CARD */}
-            <GlowWrap><div className="rcv-card" style={{background:"var(--bg-muted)",borderRadius:20,padding:"14px 18px",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",boxShadow:"inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)"}}>
+            <GlowWrap glow style={{borderRadius:20,overflow:"hidden"}}><div className="rcv-card" style={{background:"var(--surface)",borderRadius:20,padding:"14px 18px",border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <div className="rcv-h" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 <span style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>Registro de Ventas</span>
@@ -270,7 +256,7 @@ body{font-family:'DM Sans',sans-serif}
               </div>
               <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
                 {[{l:"Neto",v:fmt(rcvTotal.neto)},{l:"IVA",v:fmt(rcvTotal.iva)},{l:"Exento",v:fmt(rcvTotal.exento)},{l:"Total",v:fmt(rcvTotal.total),tot:true}].map((x,i) => (
-                  <div key={i} className="item" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
+                   <div key={i} className="item" style={{padding:6,borderRadius:6,background:"var(--bg-muted)",textAlign:"center"}}>
                     <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:1}}>{x.l}</div>
                     <div className={`val${x.tot?" tot":""}`} style={{fontSize:12,fontWeight:x.tot?700:600,color:x.tot?"#b4f027":"var(--text)"}}>{x.v}</div>
                   </div>
@@ -279,14 +265,14 @@ body{font-family:'DM Sans',sans-serif}
             </div></GlowWrap>
 
             {/* EMITIR PANEL */}
-            <GlowWrap style={{flex:1,minHeight:0,display:"flex",flexDirection:"column"}}><div className="panel" style={{flex:1,minHeight:0,background:"var(--bg-muted)",borderRadius:20,border:"1px solid rgba(255,255,255,.08)",display:"flex",flexDirection:"column",overflow:"hidden",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",boxShadow:"inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)"}}>
-              <div className="panel-hd" style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
+            <GlowWrap glow style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",borderRadius:20,overflow:"hidden"}}><div className="panel" style={{flex:1,minHeight:0,background:"var(--surface)",borderRadius:20,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+              <div className="panel-hd" style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid var(--border)",flexShrink:0}}>
                 <div className="panel-hd-icon" style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(180,240,39,.08)",color:"#b4f027",flexShrink:0}}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 </div>
                 <div className="panel-hd-txt" style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
                   <div><h2 style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Emitir</h2><p style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Subí cartola o Excel modelo</p></div>
-                  <Link href="/api/generar-template" className="plantilla" style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:3,padding:"4px 8px",borderRadius:5,border:"1px solid rgba(255,255,255,.06)",background:"transparent",color:"var(--text2)",fontSize:9,fontWeight:500,textDecoration:"none"}}>
+                  <Link href="/api/generar-template" className="plantilla" style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:3,padding:"4px 8px",borderRadius:5,border:"1px solid var(--border)",background:"transparent",color:"var(--text2)",fontSize:9,fontWeight:500,textDecoration:"none"}}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
                     Plantilla Excel
                   </Link>
@@ -303,7 +289,7 @@ body{font-family:'DM Sans',sans-serif}
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}
-          <GlowWrap style={{borderRadius:20,display:"flex",flexDirection:"column"}}><div className="right-col" style={{flex:1,display:"flex",flexDirection:"column",background:"var(--bg-muted)",borderRadius:20,border:"1px solid rgba(255,255,255,.08)",overflow:"hidden",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",boxShadow:"inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)"}}>
+          <GlowWrap glow style={{borderRadius:20,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}><div className="right-col" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",background:"var(--surface)",borderRadius:20,border:"1px solid var(--border)",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
 
             {/* CALENDAR */}
             <div className="cal">
@@ -422,6 +408,10 @@ body{font-family:'DM Sans',sans-serif}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
       boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}
+      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "afecto" }}
+      empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
+      empresaCafs={(cafsData.data ?? []) as any}
+      empresaId={empresaId}
     />
   );
 }

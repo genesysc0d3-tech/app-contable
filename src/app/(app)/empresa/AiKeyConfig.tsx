@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeSlash, CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
 export default function AiKeyConfig() {
@@ -43,63 +42,152 @@ export default function AiKeyConfig() {
     setSaving(false);
   }
 
-  if (loading) {
-    return (
-      <section className="p-4 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10">
-        <h2 className="text-sm font-semibold mb-2">API DeepSeek</h2>
-        <p className="text-xs text-[var(--muted-light)]">Cargando...</p>
-      </section>
-    );
-  }
-
   return (
-    <section className="p-4 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold">API DeepSeek</h2>
-        {configured !== null && (
-          configured ? (
-            <span className="flex items-center gap-1 text-[10px] text-[#22C55E] font-medium">
-              <CheckCircle size={12} weight="fill" /> Configurada
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-[10px] text-[#E8553E] font-medium">
-              <WarningCircle size={12} weight="fill" /> Sin configurar
-            </span>
-          )
-        )}
-      </div>
-      <p className="text-[11px] text-[var(--muted-light)] mb-3">
-        La API key se guarda en la base de datos, no en variables de entorno.
-      </p>
-      {!configured && (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={visible ? "text" : "password"}
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full rounded-xl bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-light)] focus:outline-none focus:border-[#E8553E] transition-colors pr-8"
-              />
-              <button
-                type="button"
-                onClick={() => setVisible(!visible)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                {visible ? <EyeSlash size={14} /> : <Eye size={14} />}
-              </button>
+    <div style={{
+      borderRadius: 22,
+      border: "1px solid rgba(255,255,255,0.08)",
+      background: "rgba(255,255,255,0.025)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+    }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 36px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24 }}>
+          <div style={{
+            width: 48, height: 48, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 16,
+            border: "1px solid rgba(232,85,62,0.25)",
+            background: "rgba(232,85,62,0.12)",
+            color: "#FDBA74",
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" width={20} height={20}>
+              <path d="M9 3h6v3h3v3h3v6h-3v3h-3v3H9v-3H6v-3H3V9h3V6h3V3Z" stroke="currentColor" strokeWidth="1.7"/>
+              <path d="M9 9h6v6H9V9Z" stroke="currentColor" strokeWidth="1.7"/>
+            </svg>
+          </div>
+          <div style={{ minWidth: 0, paddingTop: 4, flex: 1 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "#ffffff" }}>
+                IA (DeepSeek)
+              </h3>
+              {!loading && (
+                <span style={{
+                  display: "inline-block", borderRadius: 9999,
+                  border: `1px solid ${configured ? "rgba(232,85,62,0.20)" : "rgba(251,113,133,0.20)"}`,
+                  background: configured ? "rgba(232,85,62,0.14)" : "rgba(251,113,133,0.14)",
+                  color: configured ? "#FDBA74" : "#FDA4AF",
+                }}>
+                  {configured ? "Configurado" : "Sin configurar"}
+                </span>
+              )}
             </div>
-            <button
-              onClick={handleSave}
-              disabled={saving || !key.trim()}
-              className="btn-press rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-50 px-4 py-2 text-xs font-semibold text-white transition-all duration-150 shrink-0"
-            >
-              {saving ? "..." : "Guardar"}
-            </button>
+            <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
+              Clave de API para análisis inteligente de documentos.
+            </p>
           </div>
         </div>
-      )}
-    </section>
+
+        <div style={{
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: configured ? "rgba(52,211,153,0.04)" : "rgba(255,255,255,0.03)",
+          padding: "14px 18px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: "50%",
+              display: "grid", placeItems: "center",
+              color: configured ? "#E8553E" : "#fb7185",
+              border: `1px solid ${configured ? "rgba(232,85,62,0.6)" : "rgba(251,113,133,0.6)"}`,
+              fontSize: 12, fontWeight: 900, flexShrink: 0,
+            }}>
+              {configured ? "✓" : "!"}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 760, color: "#eaf0f8" }}>
+                {configured ? "Clave API configurada correctamente" : "API key no configurada"}
+              </div>
+              {!configured && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <input
+                      type={visible ? "text" : "password"}
+                      value={key}
+                      onChange={(e) => setKey(e.target.value)}
+                      placeholder="sk-..."
+                      style={{
+                        width: "100%", height: 36,
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.13)",
+                        background: "rgba(5,11,20,0.28)",
+                        color: "#ecf1f8",
+                        padding: "0 32px 0 12px",
+                        fontSize: 12,
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVisible(!visible)}
+                      style={{
+                        position: "absolute", right: 8, top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none", border: "none",
+                        color: "rgba(255,255,255,0.4)",
+                        cursor: "pointer",
+                        fontSize: 14,
+                      }}
+                    >
+                      {visible ? "🙈" : "👁"}
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || !key.trim()}
+                    style={{
+                      height: 36, borderRadius: 10,
+                      border: "none",
+                      background: "#E8553E",
+                      color: "#fff",
+                      padding: "0 14px",
+                      fontSize: 12, fontWeight: 600,
+                      cursor: "pointer",
+                      opacity: saving || !key.trim() ? 0.5 : 1,
+                    }}
+                  >
+                    {saving ? "..." : "Guardar"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {configured && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                style={{
+                  height: 36, borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.13)",
+                  background: "rgba(255,255,255,0.045)",
+                  color: "#eff3fa",
+                  padding: "0 14px",
+                  fontWeight: 600, fontSize: 12,
+                  cursor: "pointer",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}
+              >
+                Probar conexión ≋
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!configured && (
+          <div style={{ marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
+            La API key se guarda en la base de datos, no en variables de entorno.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

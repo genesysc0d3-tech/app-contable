@@ -76,8 +76,8 @@ export default function RevisarTabContent({
     return (
       <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
         <div style={{textAlign:"center"}}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round"/></svg>
-          <p style={{fontSize:10,color:"var(--text2)",marginTop:8}}>Todo revisado</p>
+          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo revisado</p>
         </div>
       </div>
     );
@@ -85,42 +85,32 @@ export default function RevisarTabContent({
 
   return (
     <>
-      {/* Document sub-tabs */}
-      {docMap.length > 1 && (
-        <div className="dtabs">
-          {docMap.map(dt => (
-            <div key={dt.docId}
-              className={`dtab ${dt.docId === activeDoc.docId ? "act" : ""}`}
-              onClick={() => setSelDocId(dt.docId)}
-              style={{cursor:"pointer"}}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              {dt.nombre}
-              <span className="cnt">{dt.total}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Aprobar todo */}
-      {alta.length > 0 && (
-        <div className="ap-todo" style={{padding:"0 16px 8px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <AprobarTodoBtn ids={alta.map(p => p.id)} />
-            <span className="hnt">&quot;Aprobar todo&quot; solo aprueba props con confianza &ge; 85%</span>
+      {/* Document sub-tabs + Aprobar todo */}
+      <div className="dtabs">
+        {docMap.length > 1 && docMap.map(dt => (
+          <div key={dt.docId}
+            className={`dtab ${dt.docId === activeDoc.docId ? "act" : ""}`}
+            onClick={() => setSelDocId(dt.docId)}
+            style={{cursor:"pointer"}}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            {dt.nombre}
+            <span className="cnt">{dt.total}</span>
           </div>
+        ))}
+        <div style={{marginLeft:"auto"}}>
+          {alta.length > 0 && <AprobarTodoBtn ids={alta.map(p => p.id)} />}
         </div>
-      )}
+      </div>
 
       {/* Scrollable content */}
       <div className="r-scroll" style={{padding:"0"}}>
         {totalPendientes === 0 ? (
-          <div className="sec" style={{textAlign:"center",padding:"40px 16px"}}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="11" stroke="#E8553E" strokeWidth="2"/>
-              <path d="M8 12l3 3 5-5" stroke="#E8553E" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            <p style={{fontSize:10,color:"var(--text2)",marginTop:8}}>Todo revisado</p>
+          <div className="sec" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px 16px"}}>
+            <div style={{textAlign:"center"}}>
+              <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo revisado</p>
+            </div>
           </div>
         ) : (
           <>
@@ -149,10 +139,11 @@ function AprobarTodoBtn({ ids }: { ids: string[] }) {
   }
   return (
     <button className="btn-at" onClick={handle} disabled={loading} style={{
-      border:"none",borderRadius:6,background:"#E8553E",color:"#fff",padding:"6px 12px",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4,opacity:loading?0.5:1,
+      border:"none",borderRadius:6,background:"#E8553E",color:"#fff",padding:"6px 10px",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4,opacity:loading?0.5:1,
     }}>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
       {loading ? "..." : `Aprobar todo (${ids.length})`}
+      <span style={{width:14,height:14,borderRadius:"50%",background:"rgba(255,255,255,.2)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,lineHeight:1,flexShrink:0,color:"#fff",cursor:"help"}} title="Solo aprueba props con confianza ≥ 85%">?</span>
     </button>
   );
 }

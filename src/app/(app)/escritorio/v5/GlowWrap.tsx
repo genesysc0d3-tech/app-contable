@@ -3,9 +3,9 @@
 import { ReactNode } from "react";
 
 export default function GlowWrap({
-  children, style,
+  children, style, glow,
 }: {
-  children: ReactNode; style?: React.CSSProperties;
+  children: ReactNode; style?: React.CSSProperties; glow?: boolean;
 }) {
-  return <div style={{ position: "relative", ...style }}>{children}</div>;
+  return <div className={glow ? "ep-glow-card" : ""} style={{ position: "relative", ...style }}>{children}</div>;
 }

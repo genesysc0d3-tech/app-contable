@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { Buildings } from "@phosphor-icons/react/dist/ssr";
+import EmpresaPopup from "./EmpresaPopup";
+import type { DatosEmisor } from "../../empresa/actions";
+import type { CAFRow } from "../../empresa/CAFPanel";
 
 const TOP_TABS = [
   { id: "dashboard", label: "Dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
@@ -12,15 +16,21 @@ const TOP_TABS = [
 
 export default function V5Root({
   dashboardContent, subidosContent, revisarContent, emitirContent, boletasContent,
+  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId,
 }: {
   dashboardContent: React.ReactNode;
   subidosContent: React.ReactNode;
   revisarContent: React.ReactNode;
   emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
+  empresaInicial: DatosEmisor;
+  empresaTieneCertificado: boolean;
+  empresaCafs: CAFRow[];
+  empresaId: string;
 }) {
   const [tab, setTab] = useState("dashboard");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [empresaOpen, setEmpresaOpen] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -134,26 +144,31 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           }} />
         </div>
 
-        {/* THEME TOGGLE */}
-        <button onClick={toggleTheme}
-          style={{
-            position: "fixed", top: 22, right: 24, zIndex: 60,
-            width: 38, height: 38, borderRadius: "50%", border: "1px solid var(--header-border)", cursor: "pointer",
-            background: "var(--header-bg)", backdropFilter: "blur(8px)",
-            color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 16, transition: "all .2s",
-          }}>
-          {theme === "dark" ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="5" />
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-            </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-            </svg>
-          )}
-        </button>
+        {/* TOP RIGHT CONTROLS */}
+        <div style={{position:"fixed",top:22,right:24,zIndex:60,display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={() => setEmpresaOpen(true)}
+            style={{width:38,height:38,borderRadius:10,border:"1px solid var(--header-border)",cursor:"pointer",background:"var(--header-bg)",backdropFilter:"blur(8px)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
+            <Buildings size={18} weight="bold" />
+          </button>
+          <button onClick={toggleTheme}
+            style={{
+              width: 38, height: 38, borderRadius: "50%", border: "1px solid var(--header-border)", cursor: "pointer",
+              background: "var(--header-bg)", backdropFilter: "blur(8px)",
+              color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16, transition: "all .2s",
+            }}>
+            {theme === "dark" ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+              </svg>
+            )}
+          </button>
+        </div>
 
         {/* TAB CONTENT */}
         {tab === "dashboard" && <div>{dashboardContent}</div>}
@@ -162,6 +177,16 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
         {tab === "emitir" && <div style={{ padding: "100px 24px 24px" }}>{emitirContent}</div>}
         {tab === "boletas" && <div style={{ padding: "100px 24px 24px" }}>{boletasContent}</div>}
       </div>
+
+      {empresaOpen && (
+        <EmpresaPopup
+          inicial={empresaInicial}
+          tieneCertificado={empresaTieneCertificado}
+          cafs={empresaCafs}
+          empresaId={empresaId}
+          onClose={() => setEmpresaOpen(false)}
+        />
+      )}
     </>
   );
 }
