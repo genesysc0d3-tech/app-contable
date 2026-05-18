@@ -140,12 +140,14 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - Colores morados reemplazados por naranja-rojo `#E8553E`
 - Botón flotante empresa con icono Buildings (Phosphor)
 - Eliminados controles flotantes no funcionales del layout
-- AGENTS.md enriquecido con setup, reglas y memoria persistente
+- AGENTS.md enriquecido con setup, reglas, arquitectura y memoria persistente
+- CLAUDE.md actualizado en sync con AGENTS.md
 
 **Archivos modificados:**
 - `src/app/(app)/empresa/EmisorForm.tsx`, `CertificadoToggle.tsx`, `CAFPanel.tsx`, `AiKeyConfig.tsx`, `EmpresaFormatoCartola.tsx`
 - `src/app/(app)/escritorio/v5/EmpresaPopup.tsx`, `V5Root.tsx`, `GlowWrap.tsx`, `page.tsx`, `RevisarTabContent.tsx`
 - `src/app/(app)/layout.tsx`
+- `AGENTS.md`, `CLAUDE.md`
 
 **Decisiones:**
 - Glow usa `!important` para vencer inline box-shadow
@@ -153,6 +155,8 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - Componentes compartidos se modificaron con inline styles (funcionan en /empresa y en popup)
 - Tema claro: `var(--surface) = #ffffff`, Tema oscuro: `var(--surface) = #16181d`
 - No usar `100dvh` ni `overflow: hidden` en wrapper del dashboard (rompía visibilidad)
+- AGENTS.md es la memoria persistente: se actualiza al final de cada sesión y viaja en git
+- El compañero hace `git pull` → IA carga contexto automáticamente
 
 **Próximos pasos:**
 - Terminar de pulir visual del popup empresa
