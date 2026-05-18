@@ -107,8 +107,8 @@ export default function EmpresaPopup({
         }
 
         .ep-modal {
-          width: min(1320px, calc(100vw - 60px));
-          height: min(900px, calc(100dvh - 60px));
+          width: min(1100px, calc(100vw - 60px));
+          height: min(780px, calc(100dvh - 60px));
           overflow: hidden;
           border-radius: 24px;
           border: 1px solid rgba(255, 255, 255, 0.16);
@@ -272,22 +272,22 @@ export default function EmpresaPopup({
           min-width: 0;
           display: grid;
           grid-template-rows: auto 1fr auto;
-          max-height: min(900px, calc(100dvh - 60px));
+          max-height: min(780px, calc(100dvh - 60px));
         }
 
         .ep-modal-header {
-          min-height: 98px;
-          padding: 22px 28px;
+          min-height: 72px;
+          padding: 18px 24px;
           display: flex;
           align-items: center;
-          gap: 18px;
+          gap: 14px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.105);
         }
 
         .ep-header-icon {
-          width: 52px;
-          height: 52px;
-          border-radius: 14px;
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
           display: grid;
           place-items: center;
           background: linear-gradient(145deg, rgba(232, 85, 62, 0.92), rgba(232, 85, 62, 0.42));
@@ -300,8 +300,8 @@ export default function EmpresaPopup({
         }
 
         .ep-header-icon svg {
-          width: 28px;
-          height: 28px;
+          width: 24px;
+          height: 24px;
         }
 
         .ep-header-text {
@@ -311,23 +311,23 @@ export default function EmpresaPopup({
 
         .ep-modal-header h1 {
           margin: 0;
-          font-size: 27px;
-          line-height: 1.05;
+          font-size: 22px;
+          line-height: 1.1;
           letter-spacing: -0.04em;
           font-weight: 780;
           color: #f4f7fb;
         }
 
         .ep-subtitle {
-          margin: 6px 0 0;
+          margin: 4px 0 0;
           color: #a8b2c1;
-          font-size: 14px;
+          font-size: 12px;
         }
 
         .ep-close-btn {
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.105);
           background: rgba(255, 255, 255, 0.045);
           color: #dce3ed;
@@ -348,7 +348,7 @@ export default function EmpresaPopup({
 
         .ep-content {
           overflow: auto;
-          padding: 32px 40px 36px;
+          padding: 24px 32px 28px;
           scrollbar-width: thin;
           scrollbar-color: rgba(160, 170, 185, 0.32) transparent;
         }
@@ -356,7 +356,7 @@ export default function EmpresaPopup({
         .ep-content-inner {
           display: flex;
           flex-direction: column;
-          gap: 18px;
+          gap: 14px;
         }
 
         .ep-content-inner > div {
@@ -367,8 +367,8 @@ export default function EmpresaPopup({
         }
 
         .ep-main-footer {
-          min-height: 68px;
-          padding: 14px 24px;
+          min-height: 56px;
+          padding: 10px 20px;
           border-top: 1px solid rgba(255, 255, 255, 0.105);
           background: rgba(255, 255, 255, 0.025);
           display: flex;
@@ -382,9 +382,9 @@ export default function EmpresaPopup({
         }
 
         .ep-footer-btn {
-          min-width: 118px;
-          height: 42px;
-          border-radius: 11px;
+          min-width: 100px;
+          height: 36px;
+          border-radius: 10px;
           border: 1px solid rgba(255, 255, 255, 0.10);
           background: rgba(255, 255, 255, 0.055);
           color: #f5f7fb;
@@ -405,7 +405,7 @@ export default function EmpresaPopup({
         }
 
         .ep-footer-btn.primary {
-          min-width: 190px;
+          min-width: 150px;
           border-color: rgba(232, 85, 62, 0.55);
           background: linear-gradient(135deg, #E8553E, #cd5832);
           box-shadow:
@@ -451,20 +451,20 @@ export default function EmpresaPopup({
 
         @media (max-width: 720px) {
           .ep-modal-header {
-            padding: 18px;
+            padding: 14px;
           }
 
           .ep-header-icon {
-            width: 46px;
-            height: 46px;
+            width: 38px;
+            height: 38px;
           }
 
           .ep-modal-header h1 {
-            font-size: 23px;
+            font-size: 18px;
           }
 
           .ep-content {
-            padding: 14px;
+            padding: 12px;
           }
 
           .ep-content-inner > div {

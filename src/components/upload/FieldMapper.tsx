@@ -153,29 +153,26 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
         fontFamily: "'DM Sans','Inter',sans-serif",
       }}>
         {/* HEADER */}
-        <div style={{ padding: "22px 28px 18px", display: "flex", gap: 16, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+        <div style={{ padding: "14px 24px 12px", display: "flex", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
           <div style={{
-            width: 52, height: 52, borderRadius: 17, display: "grid", placeItems: "center",
+            width: 42, height: 42, borderRadius: 14, display: "grid", placeItems: "center",
             background: "linear-gradient(145deg, #f47b45, #cd5832)", flexShrink: 0,
-            boxShadow: "0 16px 44px rgba(244,123,69,.38), inset 0 1px 0 rgba(255,255,255,.35)",
+            boxShadow: "0 12px 32px rgba(244,123,69,.32), inset 0 1px 0 rgba(255,255,255,.35)",
           }}>
-            <svg width="27" height="27" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="white" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="white" strokeWidth="1.4" opacity=".9"/></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="white" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="white" strokeWidth="1.4" opacity=".9"/></svg>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 26, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>Mapear campos</div>
-            {preview && <div style={{ marginTop: 7, fontSize: 14, color: "#a4adba" }}>
-              {detected ? <><CheckCircle size={14} weight="fill" style={{color:"#34d46e",marginRight:4}} /> Detectamos el formato — revisá que todo esté bien y aprobá.</>
-                : <><Warning size={14} weight="fill" style={{color:"#f59e0b",marginRight:4}} /> No reconocimos el formato — asigná las columnas manualmente.</>}
+            <div style={{ fontSize: 22, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>Mapear campos</div>
+            {preview && <div style={{ marginTop: 4, fontSize: 12, color: "#a4adba" }}>
+              {detected ? <><CheckCircle size={12} weight="fill" style={{color:"#34d46e",marginRight:4}} /> Detectamos el formato — revisá que todo esté bien y aprobá.</>
+                : <><Warning size={12} weight="fill" style={{color:"#f59e0b",marginRight:4}} /> No reconocimos el formato — asigná las columnas manualmente.</>}
             </div>}
           </div>
-          <button onClick={onClose} style={{
-            width: 38, height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)",
-            background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 26, lineHeight: 1, cursor: "pointer",
-          }}>×</button>
+          <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 22, lineHeight: 1, cursor: "pointer" }}>×</button>
         </div>
 
         {/* CONTENT */}
-        <div style={{ overflow: "auto", padding: "18px 28px 16px", scrollbarWidth: "thin" }}>
+        <div style={{ overflow: "auto", padding: "12px 24px 12px", scrollbarWidth: "thin" }}>
           {loading && <div style={{padding:80,textAlign:"center",color:"#a4adba"}}><div style={{height:20,width:200,margin:"0 auto 12px",borderRadius:8,background:"rgba(255,255,255,.06)"}} /><p>Cargando...</p></div>}
           {error && <div style={{padding:80,textAlign:"center",color:"#ff7365"}}><Warning size={32} weight="fill" /><p>{error}</p></div>}
           {preview && <GridContent preview={preview} roles={roles} setRole={setRole} headerRow={headerRow}
@@ -257,18 +254,18 @@ function GridContent(props: {
   return (
     <>
       {/* Summary strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.8fr 1.1fr 0.8fr", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(4,10,17,.28)", overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.8fr 1.1fr 0.8fr", border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "rgba(4,10,17,.28)", overflow: "hidden", marginBottom: 12 }}>
         {[
           { icon: "▦", label: "Hoja detectada", value: preview.sheetName },
           { icon: null, label: "Total de filas", value: preview.totalRows.toLocaleString() },
-          { icon: null, label: "Formato detectado", value: detected ? `Extracto bancario` : "Manual" },
+          { icon: null, label: "Formato detectado", value: detected ? "Extracto bancario" : "Manual" },
           { icon: null, label: "Confianza", value: detected ? "Alta 96%" : "Pendiente" },
         ].map((item, i) => (
-          <div key={i} style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 12, borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
-            {item.icon && <div style={{ width: 32, height: 32, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(52,212,110,.12)", color: "#34d46e", flexShrink: 0 }}>{item.icon}</div>}
+          <div key={i} style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+            {item.icon && <div style={{ width: 28, height: 28, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(52,212,110,.12)", color: "#34d46e", flexShrink: 0 }}>{item.icon}</div>}
             <div>
-              <div style={{ fontSize: 12, color: "#6f7b8b", marginBottom: 4 }}>{item.label}</div>
-              <div style={{ fontSize: 14, fontWeight: 650, color: "#edf2fa" }}>{item.value}</div>
+              <div style={{ fontSize: 10, color: "#6f7b8b", marginBottom: 2 }}>{item.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 650, color: "#edf2fa" }}>{item.value}</div>
             </div>
           </div>
         ))}

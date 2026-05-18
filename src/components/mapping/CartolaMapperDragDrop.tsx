@@ -147,26 +147,26 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
         fontFamily: "'DM Sans','Inter',sans-serif",
       }}>
         {/* ── HEADER ── */}
-        <div style={{ padding: "22px 28px 18px", display: "flex", gap: 16, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-          <div style={{ width: 52, height: 52, borderRadius: 17, display: "grid", placeItems: "center", flexShrink: 0,
+        <div style={{ padding: "14px 24px 12px", display: "flex", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          <div style={{ width: 42, height: 42, borderRadius: 14, display: "grid", placeItems: "center", flexShrink: 0,
             background: "linear-gradient(145deg, #E8553E, #c43a2e)",
-            boxShadow: "0 16px 44px rgba(232,85,62,.38), inset 0 1px 0 rgba(255,255,255,.35)",
+            boxShadow: "0 12px 32px rgba(232,85,62,.32), inset 0 1px 0 rgba(255,255,255,.35)",
           }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 7h16v12H4V7Z" stroke="white" strokeWidth="1.8"/><path d="M4 7l3-3h10l3 3" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 7h16v12H4V7Z" stroke="white" strokeWidth="1.8"/><path d="M4 7l3-3h10l3 3" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 26, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>
+            <div style={{ fontSize: 22, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>
               {step === "upload" ? "Subir cartola" : step === "done" ? "Formato guardado" : "Mapear campos"}
             </div>
-            <div style={{ marginTop: 5, fontSize: 14, color: "#a4adba" }}>
+            <div style={{ marginTop: 3, fontSize: 12, color: "#a4adba" }}>
               {step === "upload" ? "Seleccioná un archivo Excel para analizar." : step === "done" ? "Ya podés cerrar." : "Arrastrá los encabezados a los campos de abajo."}
             </div>
           </div>
-          <button onClick={onClose} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" }}>×</button>
+          <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 22, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" }}>×</button>
         </div>
 
         {/* ── CONTENT ── */}
-        <div style={{ overflow: "auto", padding: "18px 28px 16px", scrollbarWidth: "thin" }}>
+        <div style={{ overflow: "auto", padding: "12px 24px 12px", scrollbarWidth: "thin" }}>
 
           {/* UPLOAD STEP */}
           {step === "upload" && (
@@ -204,26 +204,26 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
           {step === "mapping" && preview && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {/* Summary strip */}
-              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 0.8fr 1fr", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(4,10,17,.28)", overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 0.8fr 1fr", border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "rgba(4,10,17,.28)", overflow: "hidden" }}>
                 {[
                   { label: "Hoja detectada", value: preview.sheetName },
                   { label: "Total filas", value: preview.totalRows.toLocaleString() },
                   { label: "Columnas", value: preview.cols.toString() },
                   { label: "Mapeadas", value: `${assigned} / 7` },
                 ].map((s, i) => (
-                  <div key={i} style={{ padding: "14px 16px", borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
-                    <div style={{ fontSize: 11, color: "#6f7b8b", marginBottom: 4 }}>{s.label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 650, color: "#edf2fa" }}>{s.value}</div>
+                  <div key={i} style={{ padding: "10px 12px", borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+                    <div style={{ fontSize: 10, color: "#6f7b8b", marginBottom: 2 }}>{s.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 650, color: "#edf2fa" }}>{s.value}</div>
                   </div>
                 ))}
               </div>
 
               {/* Step 1: Title row */}
-              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 18 }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 12 }}>
-                  <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#5fa8ff,#507eb4)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(95,168,255,.25)" }}>1</span>
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 8 }}>
+                  <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#5fa8ff,#507eb4)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(95,168,255,.2)" }}>1</span>
                   Fila de títulos
-                  <span style={{ fontSize: 12, color: "#a4adba", fontWeight: 450 }}>(asigná el rol de cada columna)</span>
+                  <span style={{ fontSize: 11, color: "#a4adba", fontWeight: 450 }}>(asigná el rol de cada columna)</span>
                 </div>
                 <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.035)" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
@@ -276,11 +276,11 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
               </div>
 
               {/* Step 2: Data preview */}
-              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 18 }}>
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", marginBottom: 10 }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                      <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#34d46e,#289f54)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(52,212,110,.25)" }}>2</span>
+                      <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#34d46e,#289f54)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(52,212,110,.2)" }}>2</span>
                       Estos movimientos se van a agregar
                     </div>
                     <div style={{ fontSize: 12, color: "#a4adba", marginLeft: 32, marginTop: 2 }}>Vista previa de las primeras filas.</div>
@@ -337,13 +337,13 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
               </div>
 
               {/* Drop zones */}
-              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: 18 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 12 }}>
-                  <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#f59e0b,#d97706)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(245,158,11,.25)" }}>3</span>
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#f59e0b,#d97706)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(245,158,11,.2)" }}>3</span>
                   Soltá aquí
-                  <span style={{ fontSize: 12, color: "#a4adba", fontWeight: 450, marginLeft: 4 }}>arrastrá una columna o seleccioná y tocá</span>
+                  <span style={{ fontSize: 11, color: "#a4adba", fontWeight: 450, marginLeft: 2 }}>arrastrá una columna o seleccioná y tocá</span>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {ZONES.map((zone) => {
                     const colIdx = zoneMap[zone.role] ?? -1;
                     const isOver = dragOverZone === zone.role;
@@ -356,8 +356,8 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
                         onDrop={(e) => onDrop(e, zone.role)}
                         onClick={() => tapZone(zone.role)}
                         style={{
-                          display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
-                          height: 36, borderRadius: 10, padding: "0 12px", fontSize: 12, fontWeight: 650,
+                          display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                          height: 30, borderRadius: 8, padding: "0 10px", fontSize: 11, fontWeight: 600,
                           border: isAssigned
                             ? `1px solid ${zone.color}`
                             : isOver
@@ -370,24 +370,19 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
                               : "rgba(255,255,255,.035)",
                           color: isAssigned ? zone.color : isOver ? "#fff" : "rgba(255,255,255,.6)",
                           transition: "all .15s",
-                          position: "relative",
                         }}
                         onMouseEnter={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(232,85,62,.08)"; e.currentTarget.style.color = "#fff"; }}}
                         onMouseLeave={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(255,255,255,.035)"; e.currentTarget.style.color = "rgba(255,255,255,.6)"; }}}
                         title={zone.desc}
                       >
-                        <span style={{
-                          width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                          background: isAssigned ? zone.color : "#64748B",
-                          boxShadow: isAssigned ? `0 0 12px ${zone.color}` : "none",
-                        }} />
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: isAssigned ? zone.color : "#64748B", boxShadow: isAssigned ? "0 0 10px " + zone.color : "none" }} />
                         <span style={{ whiteSpace: "nowrap" }}>{colName || zone.labelShort}</span>
                         {zone.required && !isAssigned && (
-                          <span style={{ fontSize: 9, color: "#ff7365", background: "rgba(255,115,101,.1)", borderRadius: 4, padding: "1px 5px", marginLeft: 2 }}>Req.</span>
+                          <span style={{ fontSize: 8, color: "#ff7365", background: "rgba(255,115,101,.1)", borderRadius: 3, padding: "1px 4px", marginLeft: 1 }}>Req.</span>
                         )}
                         {isAssigned && (
                           <span onClick={(e) => { e.stopPropagation(); unassign(zone.role); }}
-                            style={{ marginLeft: 4, opacity: 0.6, cursor: "pointer", fontSize: 12, color: "#ff7365" }}>✕</span>
+                            style={{ marginLeft: 2, opacity: 0.6, cursor: "pointer", fontSize: 11, color: "#ff7365" }}>✕</span>
                         )}
                       </div>
                     );
@@ -400,20 +395,20 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
 
         {/* ── FOOTER ── */}
         {step === "mapping" && (
-          <div style={{ padding: "14px 28px 16px", borderTop: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.025)", display: "flex", alignItems: "center", gap: 18 }}>
-            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ padding: "10px 24px 12px", borderTop: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.025)", display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
               {validationMsg ? (
-                <><span style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(255,115,101,.65)", color: "#ff7365", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 14, flexShrink: 0 }}>!</span>
-                <div><div style={{ color: "#ff7365", fontSize: 14, fontWeight: 600 }}>Error</div><div style={{ color: "#cbd3df", fontSize: 12 }}>{validationMsg}</div></div></>
+                <><span style={{ width: 24, height: 24, borderRadius: "50%", border: "1px solid rgba(255,115,101,.65)", color: "#ff7365", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 12, flexShrink: 0 }}>!</span>
+                <div><div style={{ color: "#ff7365", fontSize: 12, fontWeight: 600 }}>Falta completar</div><div style={{ color: "#cbd3df", fontSize: 11 }}>{validationMsg}</div></div></>
               ) : (
-                <><span style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(52,212,110,.65)", color: "#34d46e", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 14, flexShrink: 0 }}>✓</span>
-                <div><div style={{ color: "#9df2b6", fontSize: 14, fontWeight: 600 }}>Validación exitosa</div><div style={{ color: "#cbd3df", fontSize: 12 }}>Todo listo para guardar.</div></div></>
+                <><span style={{ width: 24, height: 24, borderRadius: "50%", border: "1px solid rgba(52,212,110,.65)", color: "#34d46e", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 12, flexShrink: 0 }}>✓</span>
+                <div><div style={{ color: "#9df2b6", fontSize: 12, fontWeight: 600 }}>Validación exitosa</div><div style={{ color: "#cbd3df", fontSize: 11 }}>Todo listo para guardar.</div></div></>
               )}
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={onClose} style={{ height: 42, minWidth: 118, borderRadius: 11, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={onClose} style={{ height: 36, minWidth: 100, borderRadius: 10, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 650, fontSize: 12, cursor: "pointer" }}>Cancelar</button>
               <button onClick={handleSave} disabled={saving || !!validationMsg || !preview}
-                style={{ height: 42, minWidth: 180, borderRadius: 11, border: "1px solid rgba(255,255,255,.12)", background: "linear-gradient(145deg, #E8553E, #c43a2e)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 12px 28px rgba(232,85,62,.26), inset 0 1px 0 rgba(255,255,255,.24)", opacity: saving || validationMsg ? .4 : 1 }}>
+                style={{ height: 36, minWidth: 160, borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "linear-gradient(145deg, #E8553E, #c43a2e)", color: "#fff", fontWeight: 650, fontSize: 13, cursor: "pointer", boxShadow: "0 10px 24px rgba(232,85,62,.22), inset 0 1px 0 rgba(255,255,255,.24)", opacity: saving || validationMsg ? .4 : 1 }}>
                 {saving ? "Guardando..." : "Guardar formato"}
               </button>
             </div>
