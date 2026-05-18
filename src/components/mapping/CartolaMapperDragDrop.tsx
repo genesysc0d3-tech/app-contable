@@ -1,23 +1,23 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { UploadSimple, CheckCircle, X, ArrowLeft } from "@phosphor-icons/react";
+import { UploadSimple, CheckCircle, X, ArrowLeft, CaretDown, Info, Warning } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
 type Role = "ignorar" | "fecha" | "descripcion" | "monto" | "cargo" | "abono" | "n_documento" | "saldo";
 
 interface ZoneDef {
-  role: Role; label: string; desc: string; required: boolean; color: string;
+  role: Role; label: string; labelShort: string; desc: string; required: boolean; color: string;
 }
 
 const ZONES: ZoneDef[] = [
-  { role: "fecha", label: "Fecha", desc: "Columna con la fecha del movimiento", required: true, color: "#3B82F6" },
-  { role: "descripcion", label: "Descripción / Glosa", desc: "El texto que describe cada transacción", required: true, color: "#14B8A6" },
-  { role: "monto", label: "Monto único", desc: "Una sola columna con cargo o abono", required: false, color: "#E8553E" },
-  { role: "cargo", label: "Cargo / Débito", desc: "Columna separada solo para egresos", required: false, color: "#F59E0B" },
-  { role: "abono", label: "Abono / Crédito", desc: "Columna separada solo para ingresos", required: false, color: "#22C55E" },
-  { role: "n_documento", label: "N° Documento", desc: "Número de operación o folio", required: false, color: "#6366F1" },
-  { role: "saldo", label: "Saldo / Balance", desc: "Saldo acumulado después del movimiento", required: false, color: "#8B5CF6" },
+  { role: "fecha", label: "Fecha", labelShort: "Fecha", desc: "Columna con la fecha del movimiento.", required: true, color: "#5fa8ff" },
+  { role: "descripcion", label: "Descripción / Glosa", labelShort: "Glosa", desc: "Texto que describe cada transacción.", required: true, color: "#2dd4bf" },
+  { role: "cargo", label: "Cargo / Débito", labelShort: "Cargo", desc: "Columna separada para egresos.", required: false, color: "#ff7365" },
+  { role: "abono", label: "Abono / Crédito", labelShort: "Abono", desc: "Columna separada para ingresos.", required: false, color: "#34d46e" },
+  { role: "monto", label: "Monto único", labelShort: "Monto", desc: "Una sola columna con cargo o abono.", required: false, color: "#f59e0b" },
+  { role: "n_documento", label: "N° Documento", labelShort: "Nro", desc: "Número de operación, folio o referencia.", required: false, color: "#a78bfa" },
+  { role: "saldo", label: "Saldo / Balance", labelShort: "Saldo", desc: "Saldo acumulado después del movimiento.", required: false, color: "#f47b45" },
 ];
 
 const COL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -31,14 +31,15 @@ interface Props {
   empresaId: string;
   onClose: () => void;
   onSaved?: () => void;
+  previewData?: PreviewData;
 }
 
-export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: Props) {
+export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, previewData }: Props) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<"upload" | "mapping" | "done">("upload");
+  const [step, setStep] = useState<"upload" | "mapping" | "done">(previewData ? "mapping" : "upload");
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [preview, setPreview] = useState<PreviewData | null>(previewData ?? null);
   const [saving, setSaving] = useState(false);
   const [zoneMap, setZoneMap] = useState<Record<string, number>>({});
   const [dragOverZone, setDragOverZone] = useState<string | null>(null);
@@ -54,7 +55,11 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: P
       const buf = await file.arrayBuffer();
       const bytes = new Uint8Array(buf); let bin = "";
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      const res = await fetch("/api/preview-formato", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64: btoa(bin), nombre: file.name }) });
+      const res = await fetch("/api/preview-formato", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64: btoa(bin), nombre: file.name }),
+      });
       const d = await res.json();
       if (!d.ok) { toast(d.error ?? "Error", "error"); return; }
       setPreview(d); setZoneMap({}); setStep("mapping");
@@ -106,146 +111,313 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved }: P
     if (!preview) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/guardar-formato", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fingerprint: preview.fingerprint, nombre: preview.sheetName, roles: rolesArr(preview), headerRow: preview.rows[0], txStart: preview.txStart }) });
+      const res = await fetch("/api/guardar-formato", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fingerprint: preview.fingerprint,
+          nombre: preview.sheetName,
+          roles: rolesArr(preview),
+          headerRow: preview.rows[0],
+          txStart: preview.txStart,
+        }),
+      });
       const d = await res.json();
       if (d.ok) { toast("Formato guardado"); onSaved?.(); setStep("done"); } else { toast(d.error ?? "Error", "error"); }
     } catch { toast("Error al guardar", "error"); } finally { setSaving(false); }
   }
 
+  const assigned = Object.keys(zoneMap).filter(k => zoneMap[k] !== undefined).length;
+  const validationMsg = !zoneMap.fecha ? "Fecha es obligatoria" : !zoneMap.descripcion ? "Descripción / Glosa es obligatoria" : null;
+  const mappedCols = preview?.cols ?? 0;
+  const dataRows = preview ? preview.rows.slice(1, 6) : [];
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="relative w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-[#0a0a0a] border border-[var(--border)] shadow-2xl p-4 sm:p-5 space-y-3">
-
-        {/* ── Upload step ── */}
-        {step === "upload" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-[var(--foreground)]">Mapear cartola</h2>
-              <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--foreground)] p-1"><X size={16} /></button>
-            </div>
-            <p className="text-[11px] text-[var(--muted-light)]">Subí un Excel de tu banco. Arrastrá los encabezados de columna a las cajas de abajo para indicarle al sistema qué significa cada columna.</p>
-            <div onClick={() => inputRef.current?.click()}
-              className="flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-[#E8553E]/40 hover:border-[#E8553E] hover:bg-[var(--accent-light)]/10 cursor-pointer px-4 py-5 transition-all">
-              <UploadSimple size={18} className="text-[#E8553E]" />
-              <span className="text-sm font-medium text-[var(--foreground)]">{loading ? "Leyendo..." : "Subir Excel de cartola"}</span>
-            </div>
-            <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      display: "grid", placeItems: "center", padding: 32,
+      background: "rgba(0,0,0,.46)", backdropFilter: "blur(13px)",
+    }}>
+      <div style={{
+        width: "min(1280px, calc(100vw - 64px))", maxHeight: "calc(100vh - 64px)",
+        overflow: "hidden", borderRadius: 24, border: "1px solid rgba(255,255,255,.18)",
+        background: "linear-gradient(145deg, rgba(22,24,29,.96), rgba(15,16,20,.98))",
+        boxShadow: "0 40px 120px rgba(0,0,0,.55)",
+        display: "grid", gridTemplateRows: "auto 1fr auto", color: "#f6f7fb",
+        fontFamily: "'DM Sans','Inter',sans-serif",
+      }}>
+        {/* ── HEADER ── */}
+        <div style={{ padding: "22px 28px 18px", display: "flex", gap: 16, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+          <div style={{ width: 52, height: 52, borderRadius: 17, display: "grid", placeItems: "center", flexShrink: 0,
+            background: "linear-gradient(145deg, #E8553E, #c43a2e)",
+            boxShadow: "0 16px 44px rgba(232,85,62,.38), inset 0 1px 0 rgba(255,255,255,.35)",
+          }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 7h16v12H4V7Z" stroke="white" strokeWidth="1.8"/><path d="M4 7l3-3h10l3 3" stroke="white" strokeWidth="1.8" strokeLinecap="round"/></svg>
           </div>
-        )}
-
-        {/* ── Done step ── */}
-        {step === "done" && (
-          <div className="text-center py-6 space-y-2">
-            <CheckCircle size={32} weight="fill" className="text-[#22C55E] mx-auto" />
-            <p className="text-sm font-semibold">Formato guardado</p>
-            <p className="text-[11px] text-[var(--muted-light)]">Próximas cartolas del mismo banco se leerán solas.</p>
-            <button onClick={onClose} className="mt-2 rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] px-5 py-2 text-xs font-semibold text-white">Cerrar</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 26, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>
+              {step === "upload" ? "Subir cartola" : step === "done" ? "Formato guardado" : "Mapear campos"}
+            </div>
+            <div style={{ marginTop: 5, fontSize: 14, color: "#a4adba" }}>
+              {step === "upload" ? "Seleccioná un archivo Excel para analizar." : step === "done" ? "Ya podés cerrar." : "Arrastrá los encabezados a los campos de abajo."}
+            </div>
           </div>
-        )}
+          <button onClick={onClose} style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" }}>×</button>
+        </div>
 
-        {/* ── Mapping step ── */}
-        {step === "mapping" && preview && (
-          <>
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setStep("upload")} className="flex items-center gap-1 text-[10px] text-[var(--muted)] hover:text-[var(--foreground)]"><ArrowLeft size={11} /> Volver</button>
-                <span className="text-[9px] text-[var(--muted-light)]">{preview.sheetName} &middot; {preview.totalRows} filas</span>
+        {/* ── CONTENT ── */}
+        <div style={{ overflow: "auto", padding: "18px 28px 16px", scrollbarWidth: "thin" }}>
+
+          {/* UPLOAD STEP */}
+          {step === "upload" && (
+            <div style={{ padding: 80, textAlign: "center", color: "#a4adba" }}>
+              <UploadSimple size={40} weight="bold" style={{ margin: "0 auto 16px", display: "block", color: "#E8553E" }} />
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#f6f7fb", marginBottom: 8 }}>Subí un Excel de cartola</div>
+              <div style={{ fontSize: 13, marginBottom: 24 }}>Excel (.xlsx, .xls) — arrastrá los encabezados a las cajas.</div>
+              <div onClick={() => inputRef.current?.click()}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer",
+                  borderRadius: 12, border: "2px dashed rgba(232,85,62,.35)",
+                  background: "rgba(255,255,255,.035)", padding: "18px 32px",
+                  transition: "all .15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(232,85,62,.65)"; e.currentTarget.style.background = "rgba(232,85,62,.08)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(232,85,62,.35)"; e.currentTarget.style.background = "rgba(255,255,255,.035)"; }}
+              >
+                <UploadSimple size={22} color="#E8553E" />
+                <span style={{ fontSize: 14, fontWeight: 650, color: "#d7deeb" }}>{loading ? "Leyendo..." : "Seleccionar archivo"}</span>
               </div>
-              <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--foreground)] p-1"><X size={16} /></button>
+              <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
             </div>
+          )}
 
-            {/* Excel grid */}
-            <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-white dark:bg-black/20">
-              <div className="overflow-hidden">
-                <table className="w-full text-[10px] border-collapse table-fixed">
-                  <thead>
-                    <tr>
-                      {preview.rows[0]?.map((h: string, i: number) => {
+          {/* DONE STEP */}
+          {step === "done" && (
+            <div style={{ padding: 80, textAlign: "center" }}>
+              <CheckCircle size={40} weight="fill" style={{ color: "#34d46e", margin: "0 auto 16px", display: "block" }} />
+              <div style={{ fontSize: 20, fontWeight: 760, letterSpacing: "-0.02em", marginBottom: 8 }}>Formato guardado</div>
+              <div style={{ fontSize: 14, color: "#a4adba" }}>Próximas cartolas del mismo banco se leerán solas.</div>
+            </div>
+          )}
+
+          {/* MAPPING STEP */}
+          {step === "mapping" && preview && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Summary strip */}
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr 0.8fr 1fr", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(4,10,17,.28)", overflow: "hidden" }}>
+                {[
+                  { label: "Hoja detectada", value: preview.sheetName },
+                  { label: "Total filas", value: preview.totalRows.toLocaleString() },
+                  { label: "Columnas", value: preview.cols.toString() },
+                  { label: "Mapeadas", value: `${assigned} / 7` },
+                ].map((s, i) => (
+                  <div key={i} style={{ padding: "14px 16px", borderRight: i < 3 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+                    <div style={{ fontSize: 11, color: "#6f7b8b", marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 650, color: "#edf2fa" }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Step 1: Title row */}
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 18 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 12 }}>
+                  <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#5fa8ff,#507eb4)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(95,168,255,.25)" }}>1</span>
+                  Fila de títulos
+                  <span style={{ fontSize: 12, color: "#a4adba", fontWeight: 450 }}>(asigná el rol de cada columna)</span>
+                </div>
+                <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.035)" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
+                    <thead>
+                      {/* Column letters */}
+                      <tr>{Array.from({ length: preview.cols }).map((_, i) => (
+                        <th key={i} style={{ padding: "6px 8px", color: "#bbc5d2", fontSize: 11, fontWeight: 720, background: "rgba(255,255,255,.035)", borderRight: i < preview.cols - 1 ? "1px solid rgba(255,255,255,.075)" : "none", borderBottom: "1px solid rgba(255,255,255,.075)", textAlign: "center" }}>
+                          {COL_LETTERS[i] || i + 1}
+                        </th>
+                      ))}</tr>
+                      {/* Header cells */}
+                      <tr>{Array.from({ length: preview.cols }).map((_, i) => {
                         const role = zoneOf(i);
-                        const z = role ? ZONES.find((x) => x.role === role) : undefined;
+                        const z = role ? ZONES.find(x => x.role === role) : undefined;
                         const isSel = selectedCol === i;
                         const isDrag = draggingCol === i;
+                        const colTint = z ? `${z.color}15` : "transparent";
                         return (
-                          <th key={i} draggable onDragStart={(e) => onDragStart(e, i)}
+                          <th key={i}
+                            draggable onDragStart={(e) => onDragStart(e, i)}
                             onDragEnd={() => { setDraggingCol(null); setDragOverZone(null); }}
                             onClick={() => tapColumn(i)}
-                            className={`px-2 py-1.5 text-left font-medium border-r border-b border-[var(--border)] cursor-grab active:cursor-grabbing select-none transition-all whitespace-nowrap ${isDrag ? "opacity-40" : ""} ${isSel ? "ring-2 ring-[#E8553E] ring-inset z-10" : ""} ${z ? "text-white" : "text-[var(--muted)] bg-[var(--surface)]"}`}
-                            style={z ? { backgroundColor: z.color } : {}}>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[8px] opacity-50 font-mono w-3">{COL_LETTERS[i] || i}</span>
-                              <span className="truncate">{h || `Columna ${i + 1}`}</span>
-                              {z && role && <X size={8} weight="bold" className="ml-1 opacity-60 hover:opacity-100 shrink-0" onClick={(e) => { e.stopPropagation(); unassign(role); }} />}
+                            style={{
+                              padding: "10px 8px", textAlign: "center", fontWeight: 680,
+                              borderRight: i < preview.cols - 1 ? "1px solid rgba(255,255,255,.075)" : "none",
+                              borderBottom: "1px solid rgba(255,255,255,.075)",
+                              cursor: "grab", userSelect: "none",
+                              background: colTint,
+                              color: role ? "#edf2fa" : "#bbc5d2",
+                              opacity: isDrag ? 0.4 : 1,
+                              outline: isSel ? "2px solid #E8553E" : "none",
+                              outlineOffset: -2,
+                              transition: "background .15s",
+                            }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
+                              {z && role && (
+                                <span onClick={(e) => { e.stopPropagation(); unassign(role); }}
+                                  style={{ cursor: "pointer", color: "#ff7365", fontSize: 10, opacity: 0.7 }}>✕</span>
+                              )}
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", fontSize: 13 }}>
+                                {(preview.rows[0]?.[i]) || `Col ${i + 1}`}
+                              </span>
                             </div>
                           </th>
                         );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.rows.slice(1, 5).map((row, ri) => (
-                      <tr key={ri} className="border-t border-[var(--border)]">
-                        {row.map((cell, ci) => {
-                          const role = zoneOf(ci);
+                      })}</tr>
+                    </thead>
+                  </table>
+                </div>
+              </div>
+
+              {/* Step 2: Data preview */}
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 18 }}>
+                <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                      <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#34d46e,#289f54)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(52,212,110,.25)" }}>2</span>
+                      Estos movimientos se van a agregar
+                    </div>
+                    <div style={{ fontSize: 12, color: "#a4adba", marginLeft: 32, marginTop: 2 }}>Vista previa de las primeras filas.</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#a4adba" }}>{dataRows.length} de {Math.max(preview.totalRows - preview.txStart, 0)}</div>
+                </div>
+                <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(6,13,22,.33)" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 36, textAlign: "center", padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,.075)", borderRight: "1px solid rgba(255,255,255,.07)", fontSize: 11, fontWeight: 680, color: "#bbc5d2", background: "rgba(255,255,255,.035)" }}></th>
+                        {Array.from({ length: preview.cols }).map((_, i) => {
+                          const role = zoneOf(i);
+                          const z = role ? ZONES.find(x => x.role === role) : undefined;
                           return (
-                            <td key={ci} className="px-2 py-1 truncate border-r border-[var(--border)] text-[9px]"
-                              style={role ? { borderLeft: `2.5px solid ${ZONES.find((x) => x.role === role)?.color}` } : {}}>
-                              {cell || <span className="opacity-20">&mdash;</span>}
-                            </td>
+                            <th key={i}
+                              style={{
+                                padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,.075)",
+                                borderRight: i < preview.cols - 1 ? "1px solid rgba(255,255,255,.07)" : "none",
+                                fontSize: 12, fontWeight: 680, color: "#d7dfeb", textAlign: "left", whiteSpace: "nowrap",
+                                background: z ? `${z.color}15` : "transparent",
+                              }}>
+                              {(preview.rows[0]?.[i]) || <span style={{ color: "#6f7b8b", fontStyle: "italic" }}>sin título</span>}
+                            </th>
                           );
                         })}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {dataRows.map((row, ri) => (
+                        <tr key={ri} style={{ borderTop: "1px solid rgba(255,255,255,.065)" }}>
+                          <td style={{ textAlign: "center", padding: "8px 10px", color: "#6f7b8b", fontSize: 11, background: "rgba(255,255,255,.025)", borderRight: "1px solid rgba(255,255,255,.07)" }}>{preview.txStart + ri}</td>
+                          {Array.from({ length: preview.cols }).map((_, i) => {
+                            const role = zoneOf(i);
+                            const z = role ? ZONES.find(x => x.role === role) : undefined;
+                            return (
+                              <td key={i}
+                                style={{
+                                  padding: "8px 10px", color: "#e8edf5", fontSize: 12,
+                                  borderRight: i < preview.cols - 1 ? "1px solid rgba(255,255,255,.07)" : "none",
+                                  background: z ? `${z.color}15` : "transparent",
+                                  boxShadow: z ? `inset 3px 0 0 ${z.color}` : undefined,
+                                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                }}>
+                                {row[i] ?? <span style={{ color: "#6f7b8b" }}>—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="px-2 py-1.5 border-t border-[var(--border)] text-[8px] text-[var(--muted-light)] bg-[var(--surface)]/50 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-[var(--muted-light)]" />
-                Arrastrá un encabezado (A, B, C...) a una caja — o tocá un encabezado y luego tocá la caja
+
+              {/* Drop zones */}
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 12 }}>
+                  <span style={{ width: 23, height: 23, display: "inline-grid", placeItems: "center", borderRadius: 8, background: "linear-gradient(145deg,#f59e0b,#d97706)", color: "#fff", fontSize: 12, boxShadow: "0 6px 18px rgba(245,158,11,.25)" }}>3</span>
+                  Soltá aquí
+                  <span style={{ fontSize: 12, color: "#a4adba", fontWeight: 450, marginLeft: 4 }}>arrastrá una columna o seleccioná y tocá</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {ZONES.map((zone) => {
+                    const colIdx = zoneMap[zone.role] ?? -1;
+                    const isOver = dragOverZone === zone.role;
+                    const colName = colIdx >= 0 ? (preview!.rows[0]?.[colIdx] || `#${colIdx + 1}`) : null;
+                    const isAssigned = colIdx >= 0;
+                    return (
+                      <div key={zone.role}
+                        onDragOver={(e) => onDragOver(e, zone.role)}
+                        onDragLeave={() => setDragOverZone(null)}
+                        onDrop={(e) => onDrop(e, zone.role)}
+                        onClick={() => tapZone(zone.role)}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
+                          height: 36, borderRadius: 10, padding: "0 12px", fontSize: 12, fontWeight: 650,
+                          border: isAssigned
+                            ? `1px solid ${zone.color}`
+                            : isOver
+                              ? "1px solid #E8553E"
+                              : "1px dashed rgba(255,255,255,.12)",
+                          background: isAssigned
+                            ? `${zone.color}15`
+                            : isOver
+                              ? "rgba(232,85,62,.1)"
+                              : "rgba(255,255,255,.035)",
+                          color: isAssigned ? zone.color : isOver ? "#fff" : "rgba(255,255,255,.6)",
+                          transition: "all .15s",
+                          position: "relative",
+                        }}
+                        onMouseEnter={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(232,85,62,.08)"; e.currentTarget.style.color = "#fff"; }}}
+                        onMouseLeave={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(255,255,255,.035)"; e.currentTarget.style.color = "rgba(255,255,255,.6)"; }}}
+                        title={zone.desc}
+                      >
+                        <span style={{
+                          width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                          background: isAssigned ? zone.color : "#64748B",
+                          boxShadow: isAssigned ? `0 0 12px ${zone.color}` : "none",
+                        }} />
+                        <span style={{ whiteSpace: "nowrap" }}>{colName || zone.labelShort}</span>
+                        {zone.required && !isAssigned && (
+                          <span style={{ fontSize: 9, color: "#ff7365", background: "rgba(255,115,101,.1)", borderRadius: 4, padding: "1px 5px", marginLeft: 2 }}>Req.</span>
+                        )}
+                        {isAssigned && (
+                          <span onClick={(e) => { e.stopPropagation(); unassign(zone.role); }}
+                            style={{ marginLeft: 4, opacity: 0.6, cursor: "pointer", fontSize: 12, color: "#ff7365" }}>✕</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Drop zones — compact row */}
-            <div className="space-y-1">
-              <p className="text-[9px] font-semibold text-[var(--muted)] uppercase tracking-wider">Soltá aquí</p>
-              <div className="flex flex-wrap gap-1.5">
-                {ZONES.map((zone) => {
-                  const colIdx = zoneMap[zone.role] ?? -1;
-                  const isOver = dragOverZone === zone.role;
-                  const colName = colIdx >= 0 ? preview.rows[0]?.[colIdx] || `#${colIdx + 1}` : null;
-                  return (
-                    <div key={zone.role}
-                      onDragOver={(e) => onDragOver(e, zone.role)}
-                      onDragLeave={() => setDragOverZone(null)}
-                      onDrop={(e) => onDrop(e, zone.role)}
-                      onClick={() => tapZone(zone.role)}
-                      className={`
-                        relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg border-2 text-[10px]
-                        transition-all duration-150 select-none cursor-pointer
-                        ${colIdx >= 0
-                          ? "border-solid text-white shadow-sm font-medium"
-                          : isOver
-                            ? "border-[#E8553E] bg-[#E8553E]/5 scale-[1.02] shadow-sm"
-                            : "border-dashed border-[var(--border)] bg-[var(--surface)]/20 hover:border-[var(--muted)]"
-                        }
-                      `}
-                      style={colIdx >= 0 ? { backgroundColor: zone.color, borderColor: zone.color } : {}}>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${colIdx >= 0 ? "bg-white/80" : "bg-[var(--border)]"}`} />
-                      <span className="whitespace-nowrap">{colName || zone.label}</span>
-                      {colIdx >= 0 && <X size={9} weight="bold" className="opacity-60 hover:opacity-100" onClick={(e) => { e.stopPropagation(); unassign(zone.role); }} />}
-                    </div>
-                  );
-                })}
-              </div>
+        {/* ── FOOTER ── */}
+        {step === "mapping" && (
+          <div style={{ padding: "14px 28px 16px", borderTop: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.025)", display: "flex", alignItems: "center", gap: 18 }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
+              {validationMsg ? (
+                <><span style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(255,115,101,.65)", color: "#ff7365", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 14, flexShrink: 0 }}>!</span>
+                <div><div style={{ color: "#ff7365", fontSize: 14, fontWeight: 600 }}>Error</div><div style={{ color: "#cbd3df", fontSize: 12 }}>{validationMsg}</div></div></>
+              ) : (
+                <><span style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(52,212,110,.65)", color: "#34d46e", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 14, flexShrink: 0 }}>✓</span>
+                <div><div style={{ color: "#9df2b6", fontSize: 14, fontWeight: 600 }}>Validación exitosa</div><div style={{ color: "#cbd3df", fontSize: 12 }}>Todo listo para guardar.</div></div></>
+              )}
             </div>
-
-            {/* Save */}
-            <button onClick={handleSave} disabled={saving || !zoneMap.fecha || !zoneMap.descripcion}
-              className="w-full rounded-xl bg-[#E8553E] hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-xs font-semibold text-white transition-all btn-press">
-              {saving ? "Guardando..." : !zoneMap.fecha || !zoneMap.descripcion ? "Fecha y Descripción son obligatorias" : "Guardar formato"}
-            </button>
-          </>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={onClose} style={{ height: 42, minWidth: 118, borderRadius: 11, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={handleSave} disabled={saving || !!validationMsg || !preview}
+                style={{ height: 42, minWidth: 180, borderRadius: 11, border: "1px solid rgba(255,255,255,.12)", background: "linear-gradient(145deg, #E8553E, #c43a2e)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 12px 28px rgba(232,85,62,.26), inset 0 1px 0 rgba(255,255,255,.24)", opacity: saving || validationMsg ? .4 : 1 }}>
+                {saving ? "Guardando..." : "Guardar formato"}
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
