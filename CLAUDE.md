@@ -1,26 +1,33 @@
 # App Contable
 
+App contable SaaS para Chile. IA procesa cartolas bancarias, clasifica movimientos y propone documentos tributarios.
+
 ## Stack
-- Next.js con TypeScript y Tailwind CSS
-- Supabase para base de datos y autenticación
-- n8n en Railway para automatizaciones
-- GitHub con ramas main, dev, y feature/* para colaborar
+- Next.js 16 + React 19 + TypeScript + Tailwind v4
+- Supabase (DB + Auth + Storage)
+- Mistral AI + DeepSeek
+- Deploy: Vercel
 
-## n8n
-- URL: https://n8n-production-47ecb.up.railway.app
-- MCP nativo conectado (n8n-mcp)
-- MCP documentación conectado (n8n-mcp-docs)
+## URLs
+- App: https://app-contable-five.vercel.app
+- GitHub: genesysc0d3-tech/app-contable (rama dev)
+- Supabase: aluuuyecwifaakehvcam
 
-## Reglas importantes
-- Antes de modificar workflows en n8n, exportar respaldo a /n8n-workflows/respaldos/ con la fecha
-- Cada feature nueva va en rama separada de Git
-- No tocar la rama main directamente
+## Setup
+1. `git clone` + `npm install`
+2. Pedir `.env.local` al compa (keys de Supabase, Mistral, DeepSeek)
+3. `npm run dev`
 
-## Supabase
-- Conectado via MCP
-- Variables en .env.local
+## Reglas
+- No trabajar directo en main ni dev. Usar feature/* o fix/* desde dev
+- Solo modificar archivos en /v5 o componentes compartidos
+- Migraciones en supabase/migrations/
+- Script limpieza: scripts/limpiar-test.sql
 
-## Contexto
-- App contable para Chile
-- Integración con SII pendiente
-- Dos desarrolladores trabajando en el repo
+## Contexto actual
+- Versión activa: v5 (src/app/(app)/escritorio/v5/)
+- Popup empresa con wizard 5 pasos
+- Dashboard con glow hover red accent
+- Tema claro/oscuro via CSS variables
+
+Ver AGENTS.md para memoria detallada del proyecto.
