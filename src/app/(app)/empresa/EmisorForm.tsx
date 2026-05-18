@@ -234,66 +234,6 @@ export default function EmisorForm({ inicial }: Props) {
                 onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
               />
             </Field>
-
-            <Field label="Razón social" required>
-              <input
-                type="text"
-                value={razonSocial}
-                onChange={(e) => setRazonSocial(e.target.value)}
-                placeholder="Mi Empresa SpA"
-                style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
-              />
-            </Field>
-
-            <Field label="Giro" style={{ gridColumn: "span 2" }}>
-              <input
-                type="text"
-                value={giro}
-                onChange={(e) => setGiro(e.target.value)}
-                placeholder="Servicios de software"
-                style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
-              />
-            </Field>
-
-            <Field label="Dirección">
-              <input
-                type="text"
-                value={direccion}
-                onChange={(e) => setDireccion(e.target.value)}
-                placeholder="Av. Apoquindo 123"
-                style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
-              />
-            </Field>
-
-            <Field label="Comuna">
-              <input
-                type="text"
-                value={comuna}
-                onChange={(e) => setComuna(e.target.value)}
-                placeholder="Las Condes"
-                style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
-              />
-            </Field>
-
-            <Field label="Email para el SII" style={{ gridColumn: "span 2" }}>
-              <input
-                type="email"
-                value={emailSii}
-                onChange={(e) => setEmailSii(e.target.value)}
-                placeholder="sii@miempresa.cl"
-                style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
-              />
-            </Field>
           </div>
         </div>
       </div>
@@ -323,16 +263,24 @@ export default function EmisorForm({ inicial }: Props) {
 
           <span style={{
             borderRadius: 9999,
-            border: `1px solid ${tipoContribuyente === "afecto" ? "rgba(52,211,153,0.20)" : "rgba(101,184,255,0.20)"}`,
-            background: tipoContribuyente === "afecto" ? "rgba(52,211,153,0.15)" : "rgba(101,184,255,0.15)",
+            border: `1px solid ${
+              tipoContribuyente === "afecto" ? "rgba(52,211,153,0.20)"
+                : tipoContribuyente === "exento" ? "rgba(101,184,255,0.20)"
+                : "rgba(167,139,250,0.20)"
+            }`,
+            background: `${
+              tipoContribuyente === "afecto" ? "rgba(52,211,153,0.15)"
+                : tipoContribuyente === "exento" ? "rgba(101,184,255,0.15)"
+                : "rgba(167,139,250,0.15)"
+            }`,
             padding: "4px 10px", fontSize: 10, fontWeight: 700,
-            color: tipoContribuyente === "afecto" ? "#86EFAC" : "#BFDBFE",
+            color: tipoContribuyente === "afecto" ? "#86EFAC" : tipoContribuyente === "exento" ? "#BFDBFE" : "#C4B5FD",
           }}>
-            {tipoContribuyente === "afecto" ? "AFECTO" : "EXENTO"}
+            {tipoContribuyente === "afecto" ? "AFECTO" : tipoContribuyente === "exento" ? "EXENTO" : "AUTO"}
           </span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           <button
             type="button"
             onClick={() => setTipoContribuyente("afecto")}
@@ -344,7 +292,7 @@ export default function EmisorForm({ inicial }: Props) {
               background: tipoContribuyente === "afecto"
                 ? "rgba(52,211,153,0.18)"
                 : "rgba(255,255,255,0.035)",
-              padding: "12px 16px",
+              padding: "12px 12px",
               fontSize: 12, fontWeight: 700,
               color: tipoContribuyente === "afecto" ? "#86EFAC" : "rgba(255,255,255,0.55)",
               boxShadow: tipoContribuyente === "afecto"
@@ -357,6 +305,33 @@ export default function EmisorForm({ inicial }: Props) {
             AFECTO
             <span style={{ display: "block", marginTop: 4, fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
               Boleta con IVA 19%
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTipoContribuyente("auto")}
+            style={{
+              borderRadius: 12,
+              border: tipoContribuyente === "auto"
+                ? "1px solid rgba(167,139,250,0.35)"
+                : "1px solid rgba(255,255,255,0.10)",
+              background: tipoContribuyente === "auto"
+                ? "rgba(167,139,250,0.18)"
+                : "rgba(255,255,255,0.035)",
+              padding: "12px 12px",
+              fontSize: 12, fontWeight: 700,
+              color: tipoContribuyente === "auto" ? "#C4B5FD" : "rgba(255,255,255,0.55)",
+              boxShadow: tipoContribuyente === "auto"
+                ? "0 14px 34px rgba(167,139,250,0.12)"
+                : "none",
+              cursor: "pointer",
+              transition: "all 160ms ease",
+            }}
+          >
+            AUTO
+            <span style={{ display: "block", marginTop: 4, fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
+              Programa decide
             </span>
           </button>
 
@@ -400,7 +375,9 @@ export default function EmisorForm({ inicial }: Props) {
           <strong style={{ color: "rgba(255,255,255,0.75)" }}>Afecto:</strong>{" "}
           emite boletas con IVA 19% tipo 39.{" "}
           <strong style={{ color: "rgba(255,255,255,0.75)" }}>Exento:</strong>{" "}
-          emite boletas sin IVA tipo 41. Esto aplica por defecto para todos los clientes,
+          emite boletas sin IVA tipo 41.{" "}
+          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Auto:</strong>{" "}
+          el clasificador decide por cada movimiento. Esto aplica por defecto para todos los clientes,
           salvo que configures un tipo distinto en cada cliente.
         </div>
       </div>
