@@ -275,12 +275,66 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
                 </div>
               </div>
 
-              {/* Step 2: Data preview */}
+              {/* Step 2: Soltá aquí (drop zones) */}
+              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#f59e0b,#d97706)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(245,158,11,.2)" }}>2</span>
+                  Soltá aquí
+                  <span style={{ fontSize: 11, color: "#a4adba", fontWeight: 450, marginLeft: 2 }}>arrastrá una columna o seleccioná y tocá</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {ZONES.map((zone) => {
+                    const colIdx = zoneMap[zone.role] ?? -1;
+                    const isOver = dragOverZone === zone.role;
+                    const colName = colIdx >= 0 ? (preview!.rows[0]?.[colIdx] || `#${colIdx + 1}`) : null;
+                    const isAssigned = colIdx >= 0;
+                    return (
+                      <div key={zone.role}
+                        onDragOver={(e) => onDragOver(e, zone.role)}
+                        onDragLeave={() => setDragOverZone(null)}
+                        onDrop={(e) => onDrop(e, zone.role)}
+                        onClick={() => tapZone(zone.role)}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                          height: 30, borderRadius: 8, padding: "0 10px", fontSize: 11, fontWeight: 600,
+                          border: isAssigned
+                            ? `1px solid ${zone.color}`
+                            : isOver
+                              ? "1px solid #E8553E"
+                              : "1px dashed rgba(255,255,255,.12)",
+                          background: isAssigned
+                            ? `${zone.color}15`
+                            : isOver
+                              ? "rgba(232,85,62,.1)"
+                              : "rgba(255,255,255,.035)",
+                          color: isAssigned ? zone.color : isOver ? "#fff" : "rgba(255,255,255,.6)",
+                          transition: "all .15s",
+                        }}
+                        onMouseEnter={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(232,85,62,.08)"; e.currentTarget.style.color = "#fff"; }}}
+                        onMouseLeave={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(255,255,255,.035)"; e.currentTarget.style.color = "rgba(255,255,255,.6)"; }}}
+                        title={zone.desc}
+                      >
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: isAssigned ? zone.color : "#64748B", boxShadow: isAssigned ? "0 0 10px " + zone.color : "none" }} />
+                        <span style={{ whiteSpace: "nowrap" }}>{colName || zone.labelShort}</span>
+                        {zone.required && !isAssigned && (
+                          <span style={{ fontSize: 8, color: "#ff7365", background: "rgba(255,115,101,.1)", borderRadius: 3, padding: "1px 4px", marginLeft: 1 }}>Req.</span>
+                        )}
+                        {isAssigned && (
+                          <span onClick={(e) => { e.stopPropagation(); unassign(zone.role); }}
+                            style={{ marginLeft: 2, opacity: 0.6, cursor: "pointer", fontSize: 11, color: "#ff7365" }}>✕</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 3: Data preview */}
               <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "rgba(6,13,22,.33)", overflow: "hidden", padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", marginBottom: 10 }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 9, fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                      <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#34d46e,#289f54)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(52,212,110,.2)" }}>2</span>
+                      <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#34d46e,#289f54)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(52,212,110,.2)" }}>3</span>
                       Estos movimientos se van a agregar
                     </div>
                     <div style={{ fontSize: 12, color: "#a4adba", marginLeft: 32, marginTop: 2 }}>Vista previa de las primeras filas.</div>
@@ -333,60 +387,6 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
                       ))}
                     </tbody>
                   </table>
-                </div>
-              </div>
-
-              {/* Drop zones */}
-              <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
-                  <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#f59e0b,#d97706)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(245,158,11,.2)" }}>3</span>
-                  Soltá aquí
-                  <span style={{ fontSize: 11, color: "#a4adba", fontWeight: 450, marginLeft: 2 }}>arrastrá una columna o seleccioná y tocá</span>
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {ZONES.map((zone) => {
-                    const colIdx = zoneMap[zone.role] ?? -1;
-                    const isOver = dragOverZone === zone.role;
-                    const colName = colIdx >= 0 ? (preview!.rows[0]?.[colIdx] || `#${colIdx + 1}`) : null;
-                    const isAssigned = colIdx >= 0;
-                    return (
-                      <div key={zone.role}
-                        onDragOver={(e) => onDragOver(e, zone.role)}
-                        onDragLeave={() => setDragOverZone(null)}
-                        onDrop={(e) => onDrop(e, zone.role)}
-                        onClick={() => tapZone(zone.role)}
-                        style={{
-                          display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-                          height: 30, borderRadius: 8, padding: "0 10px", fontSize: 11, fontWeight: 600,
-                          border: isAssigned
-                            ? `1px solid ${zone.color}`
-                            : isOver
-                              ? "1px solid #E8553E"
-                              : "1px dashed rgba(255,255,255,.12)",
-                          background: isAssigned
-                            ? `${zone.color}15`
-                            : isOver
-                              ? "rgba(232,85,62,.1)"
-                              : "rgba(255,255,255,.035)",
-                          color: isAssigned ? zone.color : isOver ? "#fff" : "rgba(255,255,255,.6)",
-                          transition: "all .15s",
-                        }}
-                        onMouseEnter={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(232,85,62,.08)"; e.currentTarget.style.color = "#fff"; }}}
-                        onMouseLeave={e => { if (!isAssigned) { e.currentTarget.style.background = "rgba(255,255,255,.035)"; e.currentTarget.style.color = "rgba(255,255,255,.6)"; }}}
-                        title={zone.desc}
-                      >
-                        <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: isAssigned ? zone.color : "#64748B", boxShadow: isAssigned ? "0 0 10px " + zone.color : "none" }} />
-                        <span style={{ whiteSpace: "nowrap" }}>{colName || zone.labelShort}</span>
-                        {zone.required && !isAssigned && (
-                          <span style={{ fontSize: 8, color: "#ff7365", background: "rgba(255,115,101,.1)", borderRadius: 3, padding: "1px 4px", marginLeft: 1 }}>Req.</span>
-                        )}
-                        {isAssigned && (
-                          <span onClick={(e) => { e.stopPropagation(); unassign(zone.role); }}
-                            style={{ marginLeft: 2, opacity: 0.6, cursor: "pointer", fontSize: 11, color: "#ff7365" }}>✕</span>
-                        )}
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </div>
