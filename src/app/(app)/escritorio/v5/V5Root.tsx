@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Buildings } from "@phosphor-icons/react/dist/ssr";
 import EmpresaPopup from "./EmpresaPopup";
 import type { DatosEmisor } from "../../empresa/actions";
@@ -31,6 +32,7 @@ export default function V5Root({
   const [tab, setTab] = useState("dashboard");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
+  const router = useRouter();
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -184,7 +186,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           tieneCertificado={empresaTieneCertificado}
           cafs={empresaCafs}
           empresaId={empresaId}
-          onClose={() => setEmpresaOpen(false)}
+          onClose={() => { setEmpresaOpen(false); router.refresh(); }}
         />
       )}
     </>
