@@ -20,7 +20,7 @@ export default function EmisorForm({ inicial }: Props) {
   const [comuna, setComuna] = useState(inicial.comuna ?? "");
   const [emailSii, setEmailSii] = useState(inicial.email_sii ?? "");
   const [tipoContribuyente, setTipoContribuyente] = useState(
-    inicial.tipo_contribuyente ?? "afecto"
+    inicial.tipo_contribuyente ?? "auto"
   );
 
   const rutOk = !rut || validarRut(rut);

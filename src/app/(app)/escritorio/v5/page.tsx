@@ -217,6 +217,7 @@ body{font-family:'DM Sans',sans-serif}
 .em-item .tp button{font-size:8px;padding:2px 6px;border-radius:4px;border:none;cursor:pointer;font-weight:700;transition:all .15s}
 .em-item .tp .af{background:var(--accent-light);color:#E8553E}
 .em-item .tp .ex{background:rgba(59,130,246,.1);color:#5b9cf6}
+.em-item .tp .au{background:rgba(167,139,250,.15);color:#a78bfa}
 .em-item .tp .ina{background:var(--bg-muted);color:var(--text3)}
 .em-item .mo{font-size:11px;font-weight:600;text-align:right;min-width:56px;font-variant-numeric:tabular-nums}
 .em-bar{position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--bg-muted);display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:2}
@@ -271,7 +272,7 @@ body{font-family:'DM Sans',sans-serif}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 </div>
                 <div className="panel-hd-txt" style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
-                  <div><h2 style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Emitir</h2><p style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Subí cartola o Excel modelo</p></div>
+                  <div><h2 style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Subir documento</h2><p style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Subí cartola o Excel modelo</p></div>
                   <Link href="/api/generar-template" className="plantilla" style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:3,padding:"4px 8px",borderRadius:5,border:"1px solid var(--border)",background:"transparent",color:"var(--text2)",fontSize:9,fontWeight:500,textDecoration:"none"}}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
                     Plantilla Excel
@@ -408,7 +409,7 @@ body{font-family:'DM Sans',sans-serif}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
       boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}
-      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "afecto" }}
+      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
       empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
       empresaCafs={(cafsData.data ?? []) as any}
       empresaId={empresaId}
