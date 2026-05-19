@@ -49,7 +49,7 @@ export async function setDatosEmisor(
   if (datos.direccion !== undefined) update.direccion = datos.direccion?.trim() || null;
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
-  // tipo_contribuyente no se guarda en DB (columna no disponible en producción).
+  if (datos.tipo_contribuyente !== undefined) update.tipo_contribuyente = datos.tipo_contribuyente;
 
   const { error } = await sb
     .from("empresas")

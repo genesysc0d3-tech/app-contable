@@ -24,6 +24,7 @@ export default async function EmpresaPage() {
     direccion: empresa.direccion,
     comuna: empresa.comuna,
     email_sii: empresa.email_sii,
+    tipo_contribuyente: empresa.tipo_contribuyente ?? "auto",
   };
 
   return (

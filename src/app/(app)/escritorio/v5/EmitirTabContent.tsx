@@ -93,6 +93,14 @@ export default function EmitirTabContent() {
     if (!selected.has(id)) setSelected(prev => new Set(prev).add(id));
   }
 
+  function removeOverride(id: string) {
+    setDteOverrides(prev => {
+      const n = { ...prev };
+      delete n[id];
+      return n;
+    });
+  }
+
   const selectedItems = useMemo(() =>
     data?.items.filter(i => selected.has(i.id)) ?? [],
     [data, selected]
@@ -174,6 +182,7 @@ export default function EmitirTabContent() {
           itemsList.map(item => {
             const isDisabled = !item.listo_emitir;
             const isSelected = selected.has(item.id);
+            const isAuto = dteOverrides[item.id] === undefined;
             const tipo = activeTipo(item);
             const isAfecta = tipo === 39;
             const isExenta = tipo === 41;
@@ -197,8 +206,14 @@ export default function EmitirTabContent() {
                   )}
                 </div>
                 <div className="tp">
-                  <button className={isAfecta ? "af" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 39)}>AFE</button>
-                  <button className={isExenta ? "ex" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 41)}>EXE</button>
+                  <button className={isAuto ? "au" : "ina"} onClick={() => !isDisabled && removeOverride(item.id)} title="Programa decide">AUTO</button>
+                  <button className={!isAuto && isAfecta ? "af" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 39)}>AFE</button>
+                  <button className={!isAuto && isExenta ? "ex" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 41)}>EXE</button>
+                  {isAuto && (
+                    <span style={{fontSize:8,color:"var(--text2)",marginLeft:2}}>
+                      {isAfecta ? "→ AFE" : "→ EXE"}
+                    </span>
+                  )}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
               </div>

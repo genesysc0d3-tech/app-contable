@@ -409,7 +409,7 @@ body{font-family:'DM Sans',sans-serif}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
       boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}
-      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii }}
+      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
       empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
       empresaCafs={(cafsData.data ?? []) as any}
       empresaId={empresaId}

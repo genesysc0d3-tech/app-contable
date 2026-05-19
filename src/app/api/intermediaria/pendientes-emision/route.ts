@@ -30,13 +30,13 @@ export async function GET() {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas(giro, razon_social)")
+    .select("empresa_id, empresas(giro, razon_social, tipo_contribuyente)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
     return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
   }
-  const empresaCtx = (usuario.empresas as unknown as { giro: string | null; razon_social: string } | null) ?? { giro: null, razon_social: "" };
+  const empresaCtx = (usuario.empresas as unknown as { giro: string | null; razon_social: string; tipo_contribuyente: string | null } | null) ?? { giro: null, razon_social: "", tipo_contribuyente: null };
 
   // 1) Propuestas aprobadas tipo boleta (con cliente + movimiento)
   const { data: propuestas, error: pErr } = await supabase
