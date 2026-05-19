@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
+import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 import type { Tables } from "@/lib/database.types";
 
 type Propuesta = Tables<"propuestas_ia"> & {
@@ -35,9 +36,10 @@ function fmtShort(d: string | null | undefined): string {
 interface DocTab { docId: string; nombre: string; total: number; }
 
 export default function RevisarTabContent({
-  propuestas, clientes, empresaId,
+  propuestas, clientes, empresaId, empresaGiro, empresaRazonSocial, empresaTipoContribuyente,
 }: {
   propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string;
+  empresaGiro?: string | null; empresaRazonSocial?: string; empresaTipoContribuyente?: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -114,9 +116,9 @@ export default function RevisarTabContent({
           </div>
         ) : (
           <>
-            <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} />
-            <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} />
-            <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} />
+            <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
+            <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
+            <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
           </>
         )}
       </div>
@@ -149,8 +151,9 @@ function AprobarTodoBtn({ ids }: { ids: string[] }) {
 }
 
 /* ─── Confianza Group Section ─── */
-function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction }: {
+function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction, empresaTipoContribuyente, empresaGiro }: {
   tipo: string; label: string; propuestas: Propuesta[]; color: string; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
+  empresaTipoContribuyente?: string | null; empresaGiro?: string | null;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [activeBlock, setActiveBlock] = useState(0);
@@ -241,7 +244,7 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
 
                     {/* Expanded detail */}
                     {isExpanded && (
-                      <ExpandedDetail propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction} onClose={() => toggleRow(p.id)} />
+                      <ExpandedDetail propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction} onClose={() => toggleRow(p.id)} empresaTipoContribuyente={empresaTipoContribuyente} />
                     )}
                   </div>
                 );
@@ -310,8 +313,9 @@ function ApproveAllBtn({ ids }: { ids: string[] }) {
 }
 
 /* ─── Expanded Detail ─── */
-function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose }: {
+function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, empresaTipoContribuyente }: {
   propuesta: Propuesta; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; onClose: () => void;
+  empresaTipoContribuyente?: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -321,6 +325,9 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose }: {
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [busy, setBusy] = useState(false);
   const isAfecta = propuesta.tipo_propuesto === "boleta" || propuesta.tipo_propuesto === "factura";
+  const empresaSugiereExenta = empresaTipoContribuyente === "exento";
+  const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
+  const desacuerdo = (isAfecta && empresaSugiereExenta) || (!isAfecta && empresaSugiereAfecta);
 
   const neto = propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
   const iva = propuesta.iva ?? Math.round(neto * 0.19);
@@ -363,6 +370,12 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose }: {
         <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "var(--text2)", fontSize:12,fontWeight:700}}>
           {Math.round((propuesta.confianza ?? 0) * 100)}%
         </span>
+        {empresaSugiereAfecta && !isAfecta && (
+          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(232,85,62,.1)",color:"#E8553E",marginLeft:4}}>Default empresa: AFE</span>
+        )}
+        {empresaSugiereExenta && isAfecta && (
+          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(91,156,246,.1)",color:"#5b9cf6",marginLeft:4}}>Default empresa: EXE</span>
+        )}
       </div>
       <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>{propuesta.movimientos_raw.descripcion}</div>
       <div className="sub" style={{fontSize:9,color:"var(--text2)",marginBottom:6}}>

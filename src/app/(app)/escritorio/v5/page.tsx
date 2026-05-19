@@ -341,6 +341,9 @@ body{font-family:'DM Sans',sans-serif}
                   propuestas={propsData.data ?? []}
                   clientes={clData.data ?? []}
                   empresaId={empresaId}
+                  empresaGiro={usuario.empresas.giro}
+                  empresaRazonSocial={usuario.empresas.razon_social}
+                  empresaTipoContribuyente={usuario.empresas.tipo_contribuyente}
                 />
               }
               emitirContent={<EmitirTabContent />}
