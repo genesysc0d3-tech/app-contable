@@ -25,11 +25,20 @@ export default function EmpresaPopup({
   const [step, setStep] = useState(0);
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const handleClose = useCallback(() => {
+    // Auto-save EmisorForm before closing
+    if (step === 0) {
+      const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
+      form?.requestSubmit();
+    }
+    onClose();
+  }, [step, onClose]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     },
-    [onClose]
+    [handleClose]
   );
 
   useEffect(() => {
@@ -38,8 +47,13 @@ export default function EmpresaPopup({
   }, [handleKeyDown]);
 
   const goToStep = useCallback((i: number) => {
+    // Auto-save EmisorForm before leaving step 0
+    if (step === 0) {
+      const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
+      form?.requestSubmit();
+    }
     setStep(i);
-  }, []);
+  }, [step]);
 
   return (
     <>
@@ -503,7 +517,7 @@ export default function EmpresaPopup({
         </main>
       </div>
 
-      <div className="ep-overlay" onClick={onClose}>
+      <div className="ep-overlay" onClick={handleClose}>
         <section
           ref={ref}
           className="ep-modal"
@@ -599,7 +613,7 @@ export default function EmpresaPopup({
                 <p className="ep-subtitle">Configuración inicial de tu empresa.</p>
               </div>
 
-              <button className="ep-close-btn" onClick={onClose} aria-label="Cerrar">
+              <button className="ep-close-btn" onClick={handleClose} aria-label="Cerrar">
                 ×
               </button>
             </header>
@@ -630,7 +644,7 @@ export default function EmpresaPopup({
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="ep-footer-btn" onClick={onClose}>
+                <button className="ep-footer-btn" onClick={handleClose}>
                   Cancelar
                 </button>
 
@@ -639,7 +653,7 @@ export default function EmpresaPopup({
                     Siguiente ›
                   </button>
                 ) : (
-                  <button className="ep-footer-btn primary" onClick={onClose}>
+                  <button className="ep-footer-btn primary" onClick={handleClose}>
                     Cerrar
                   </button>
                 )}

@@ -79,7 +79,7 @@ export default function EmisorForm({ inicial }: Props) {
         .ef-input::placeholder { color: rgba(255,255,255,0.20); }
         @keyframes ef-spin { to { transform: rotate(360deg); } }
       `}</style>
-      <form
+      <form id="empresa-emisor-form"
       onSubmit={handleSubmit}
       style={{ display: "flex", flexDirection: "column", gap: 16 }}
     >
