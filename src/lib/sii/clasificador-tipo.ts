@@ -6,6 +6,7 @@
  *   1. Glosa textual (keywords + patterns regex)
  *   2. Giro de la empresa
  *   3. Patrón de la transacción (frecuencia, monto, recurrencia)
+ *   4. tipo_contribuyente de la empresa (biés: afecto → +0.3, exento → +0.3)
  *
  * Si los 3 coinciden → confianza alta. Si discrepan → defaultiar a AFECTA
  * con confianza baja, marcar para revisión humana.
@@ -41,6 +42,7 @@ export interface PropuestaContext {
 export interface EmpresaContext {
   giro?: string | null;
   razon_social?: string;
+  tipo_contribuyente?: string | null;
 }
 
 export interface PatronContext {
@@ -263,6 +265,15 @@ export function clasificarBoleta(
   for (const r of [glosa, giro, pat, hintAngle]) {
     if (r.veredicto !== "neutral") votos[r.veredicto] += r.peso;
   }
+
+  // Empresa default: peso alto para que la configuración de la empresa domine.
+  // Con 0.9, solo múltiples keywords en contra pueden superarlo.
+  if (empresa.tipo_contribuyente === "afecto") {
+    votos.afecta += 0.9;
+  } else if (empresa.tipo_contribuyente === "exento") {
+    votos.exenta += 0.9;
+  }
+  // Si es "auto", no hay biés. El clasificador decide libremente.
 
   // Priorizo el hint del usuario en las razones (lo ven primero)
   const allAngles = [hintAngle, glosa, giro, pat];

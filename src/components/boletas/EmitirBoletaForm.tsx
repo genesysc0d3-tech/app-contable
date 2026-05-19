@@ -147,12 +147,20 @@ export default function EmitirBoletaForm() {
 
   function tipoFinal(it: PendienteItem): 39 | 41 {
     const ov = tipoOverride.get(it.id);
-    if (ov) return ov;
-    return it.tipo_sugerido === 41 ? 41 : 39;
+    if (ov !== undefined) return ov;
+    return it.tipo_sugerido ?? 39;
   }
 
-  function setTipoFor(id: string, tipo: 39 | 41) {
-    setTipoOverride((prev) => { const n = new Map(prev); n.set(id, tipo); return n; });
+  function setTipoFor(id: string, tipo: 39 | 41 | "auto") {
+    setTipoOverride((prev) => {
+      const n = new Map(prev);
+      if (tipo === "auto") {
+        n.delete(id);
+      } else {
+        n.set(id, tipo);
+      }
+      return n;
+    });
   }
 
   async function emitirSeleccionadas() {
@@ -375,11 +383,18 @@ export default function EmitirBoletaForm() {
                     💡 {it.razones[0]}
                   </p>
                 )}
+                {!disabled && it.confianza_clasif < 0.7 && (
+                  <p className="text-[9px] text-[#F59E0B] mt-0.5 flex items-center gap-1">
+                    <Warning size={8} weight="fill" />
+                    {" "}Clasificado como {tipoFinal(it) === 39 ? "AFE" : "EXE"} automáticamente · Revisá antes de emitir
+                  </p>
+                )}
               </div>
               {/* Toggle Afecta / Exenta — solo si emitible */}
               {!disabled && (
                 <TipoToggle
                   current={tipoFinal(it)}
+                  override={tipoOverride.get(it.id)}
                   sugerido={it.tipo_sugerido === 41 ? 41 : 39}
                   onChange={(t) => setTipoFor(it.id, t)}
                 />
@@ -430,19 +445,32 @@ export default function EmitirBoletaForm() {
   );
 }
 
-function TipoToggle({ current, sugerido, onChange }: {
+function TipoToggle({ current, override, sugerido, onChange }: {
   current: 39 | 41;
+  override: 39 | 41 | undefined;
   sugerido: 39 | 41;
-  onChange: (tipo: 39 | 41) => void;
+  onChange: (tipo: 39 | 41 | "auto") => void;
 }) {
-  const overridden = current !== sugerido;
+  const isAuto = override === undefined;
+  const overridden = !isAuto && current !== sugerido;
   return (
     <div
       className="flex items-center gap-0.5 shrink-0"
       onClick={(e) => e.stopPropagation()}
     >
+      <button
+        type="button"
+        onClick={() => onChange("auto")}
+        title="Programa decide — usa el tipo sugerido por el clasificador"
+        className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-all ${
+          isAuto ? "bg-[#A78BFA]/20 text-[#A78BFA]" : "bg-[var(--surface)] text-[var(--muted-light)] hover:text-[var(--foreground)]"
+        }`}
+      >
+        AUTO
+        {isAuto && <span className="text-[7px] ml-0.5">({sugerido === 41 ? "EXE" : "AFE"})</span>}
+      </button>
       {([39, 41] as const).map((t) => {
-        const isActive = current === t;
+        const isActive = !isAuto && current === t;
         const isSugerido = sugerido === t;
         return (
           <button
