@@ -612,13 +612,11 @@ export default function EmpresaPopup({
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} /> },
                   { key: "ia", content: <AiKeyConfig /> },
-                ]
-                  .filter((_, i) => i === step)
-                  .map((s) => (
-                    <div key={s.key} ref={el => { sectionRefs.current[step] = el; }}>
-                      {s.content}
-                    </div>
-                  ))}
+                ].map((s, i) => (
+                  <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
+                    {s.content}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -642,7 +640,7 @@ export default function EmpresaPopup({
                   </button>
                 ) : (
                   <button className="ep-footer-btn primary" onClick={onClose}>
-                    ✓ Guardar cambios
+                    Cerrar
                   </button>
                 )}
               </div>
