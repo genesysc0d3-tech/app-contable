@@ -49,9 +49,7 @@ export async function setDatosEmisor(
   if (datos.direccion !== undefined) update.direccion = datos.direccion?.trim() || null;
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
-  if (datos.tipo_contribuyente !== undefined && datos.tipo_contribuyente !== "auto") update.tipo_contribuyente = datos.tipo_contribuyente;
-  // 'auto' no se guarda en DB porque la constraint solo permite 'afecto'/'exento'.
-  // El frontend trata null/afecto/exento correctamente desde el código.
+  // tipo_contribuyente no se guarda en DB (columna no disponible en producción).
 
   const { error } = await sb
     .from("empresas")
