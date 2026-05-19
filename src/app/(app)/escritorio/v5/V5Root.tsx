@@ -148,7 +148,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 
         {/* TOP RIGHT CONTROLS */}
         <div style={{position:"fixed",top:22,right:24,zIndex:60,display:"flex",alignItems:"center",gap:8}}>
-          <button onClick={() => setEmpresaOpen(true)}
+          <button onClick={() => { setEmpresaOpen(true); router.refresh(); }}
             style={{width:38,height:38,borderRadius:10,border:"1px solid var(--header-border)",cursor:"pointer",background:"var(--header-bg)",backdropFilter:"blur(8px)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
             <Buildings size={18} weight="bold" />
           </button>
@@ -186,7 +186,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           tieneCertificado={empresaTieneCertificado}
           cafs={empresaCafs}
           empresaId={empresaId}
-          onClose={() => { setEmpresaOpen(false); router.refresh(); }}
+          onClose={() => setEmpresaOpen(false)}
         />
       )}
     </>

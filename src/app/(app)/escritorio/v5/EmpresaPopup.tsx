@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import EmisorForm from "../../empresa/EmisorForm";
 import CertificadoToggle from "../../empresa/CertificadoToggle";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
@@ -23,7 +24,10 @@ export default function EmpresaPopup({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
+  const router = useRouter();
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => { router.refresh(); }, []); // Refresh server data on mount
 
   const handleClose = useCallback(() => {
     // Auto-save EmisorForm before closing

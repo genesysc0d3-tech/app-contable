@@ -60,6 +60,7 @@ export async function setDatosEmisor(
 
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
+  revalidatePath("/escritorio/v5");
   return { ok: true };
 }
 
