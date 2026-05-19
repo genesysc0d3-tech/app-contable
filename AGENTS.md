@@ -68,7 +68,7 @@ npm run dev
 - Las env vars están en `.env.local`. No leer `.env.setup` ni `.env.github`.
 - Migraciones SQL en `supabase/migrations/` (respetar orden por fecha).
 - Tipado de base de datos en `src/lib/database.types.ts`.
-- Script de limpieza de datos de test: `scripts/limpiar-test.sql`.
+- Script de limpieza de datos de test: `scripts/limpiar-test.sql`. Conserva `parser_adapters`, `parser_logs`, `clasificacion_reglas`, `boletas_caf_mock`, `clientes`, `usuarios`, `empresas`, `propuestas_ia`, `movimientos_raw`, `documentos_subidos`. Borra solo `audit_chunks`, `ia_uso`, `creditos_uso`, `periodos_contables`.
 
 ---
 
