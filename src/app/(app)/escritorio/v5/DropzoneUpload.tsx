@@ -86,7 +86,7 @@ export default function DropzoneUpload() {
     }
     setUploading(false);
     setQueue([]);
-    if (ok > 0) { toast(`${ok} subido${ok > 1 ? "s" : ""}`); router.refresh(); }
+    if (ok > 0) { sessionStorage.removeItem("flow-stage"); toast(`${ok} subido${ok > 1 ? "s" : ""}`); router.refresh(); }
   }
 
   return (

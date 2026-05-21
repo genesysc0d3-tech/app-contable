@@ -13,14 +13,27 @@ export default function TabsV5({
   boletasContent: React.ReactNode;
 }) {
   const [tab, setTab] = useState("revisar");
+  const [prepararKey, setPrepararKey] = useState(0);
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("tab");
-    if (p && ["subidos","revisar","emitir","boletas"].includes(p)) setTab(p);
+    if (p && ["subidos","revisar","emitir","boletas"].includes(p)) {
+      setTab(p);
+      if (p === "emitir") setPrepararKey(k => k + 1);
+    }
+    function handler(e: CustomEvent) {
+      const t = (e.detail as { tab?: string })?.tab;
+      if (t && ["subidos","revisar","emitir","boletas"].includes(t)) {
+        if (t === "emitir") setPrepararKey(k => k + 1);
+        setTab(t);
+      }
+    }
+    window.addEventListener("go-to-tab" as any, handler as any);
+    return () => window.removeEventListener("go-to-tab" as any, handler as any);
   }, []);
 
   const tabs = [
-    { id: "subidos", label: "Subidos", sub: null,
+    { id: "subidos", label: "SUBIR", sub: null,
       icon: "M12 5v14m-7-7l7-7 7 7" },
     { id: "revisar", label: "PREPARAR", sub: null,
       icon: "M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2m4-1v4H9V3m4 0h-2M9 14l2 2 4-4" },
@@ -68,7 +81,7 @@ export default function TabsV5({
 
       {/* TAB CONTENT — renderiza solo el tab activo para que useEffect se dispare fresco */}
       {tab === "subidos" && <div className="r-tab-content act" style={{flex:1}}>{subidosContent}</div>}
-      {tab === "revisar" && <div className="r-tab-content act" style={{flex:1}}>{revisarContent}</div>}
+      {tab === "revisar" && <div key={prepararKey} className="r-tab-content act" style={{flex:1}}>{revisarContent}</div>}
       {tab === "emitir" && <div className="r-tab-content act" style={{flex:1}}>{emitirContent}</div>}
       {tab === "boletas" && <div className="r-tab-content act" style={{flex:1}}>{boletasContent}</div>}
     </>

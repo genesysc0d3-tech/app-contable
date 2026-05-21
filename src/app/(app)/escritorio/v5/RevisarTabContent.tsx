@@ -74,10 +74,12 @@ export default function RevisarTabContent({
 
   const totalPendientes = doc.props.filter(p => p.estado === "pendiente").length;
 
-  const [continuo] = useState(() => typeof window !== "undefined" && sessionStorage.getItem("preparar-continuo") === "true");
+  const [flowStage] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("flow-stage") ?? "";
+  });
 
-  if (continuo) sessionStorage.removeItem("preparar-continuo");
-  if (!activeDoc || continuo) {
+  if (!activeDoc || flowStage === "completado") {
     return (
       <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
         <div style={{textAlign:"center"}}>
@@ -115,7 +117,7 @@ export default function RevisarTabContent({
             <div style={{textAlign:"center"}}>
               <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo preparado para emitir</p>
-              <button onClick={() => { sessionStorage.setItem("preparar-continuo", "true"); window.location.href = "/escritorio/v5?tab=emitir"; }}
+              <button onClick={() => { sessionStorage.setItem("flow-stage", "emitir"); window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir" } })); }}
                 style={{marginTop:12,fontSize:11,padding:"8px 20px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff"}}>
                 CONTINUAR
               </button>

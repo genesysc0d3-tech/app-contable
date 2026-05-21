@@ -7,6 +7,7 @@ import GlowWrap from "./GlowWrap";
 import TabsV5 from "./TabsV5";
 import RevisarTabContent from "./RevisarTabContent";
 import EmitirPanel from "./EmitirPanel";
+import DropzoneUpload from "./DropzoneUpload";
 import EmitirTabContent from "./EmitirTabContent";
 import SubidosView from "./sections/SubidosView";
 import SubidosFullView from "./sections/SubidosFullView";
@@ -62,7 +63,8 @@ export default async function V5Page({ searchParams }: {
   }), { docs: 0, neto: 0, exento: 0, iva: 0, total: 0 });
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
-  const mes = now.toISOString().slice(0, 7);
+  const mes = String(now.getMonth() + 1).padStart(2, "0") + "-" + now.getFullYear();
+  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
 
   // Calendar
   const daysInMonth = new Date(y,m+1,0).getDate();
@@ -250,44 +252,32 @@ body{font-family:'DM Sans',sans-serif}
             <GlowWrap glow style={{borderRadius:20,overflow:"hidden"}}><div className="rcv-card" style={{background:"var(--surface)",borderRadius:20,padding:"14px 18px",border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <div className="rcv-h" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <span style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>Registro de Ventas</span>
-                <span className="mes" style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>{mes}</span>
+                <span style={{fontSize:12,fontWeight:700,color:"var(--text)",letterSpacing:"-0.02em"}}>REGISTRO DE VENTAS</span>
+                <span className="mes" style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{mes}</span>
               </div>
-              <div className="rcv-sub" style={{fontSize:10,color:"var(--text2)",marginBottom:6}}>
-                <strong style={{fontWeight:600,color:"var(--text)"}}>{rcvTotal.docs}</strong> boletas emitidas este mes
+              {esRcvExento ? (
+              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:4}}>
+                <div className="item" style={{padding:"10px 8px",borderRadius:10,background:"var(--bg-muted)",textAlign:"center"}}>
+                  <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>Boletas emitidas</div>
+                  <div style={{fontSize:18,fontWeight:700,color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{rcvTotal.docs}</div>
+                </div>
+                <div className="item" style={{padding:"10px 8px",borderRadius:10,background:"var(--bg-muted)",textAlign:"center"}}>
+                  <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>Total exento</div>
+                  <div style={{fontSize:18,fontWeight:700,color:"#BFDBFE",fontVariantNumeric:"tabular-nums"}}>{fmt(rcvTotal.total)}</div>
+                </div>
               </div>
-              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
-                {[{l:"Neto",v:fmt(rcvTotal.neto)},{l:"IVA",v:fmt(rcvTotal.iva)},{l:"Exento",v:fmt(rcvTotal.exento)},{l:"Total",v:fmt(rcvTotal.total),tot:true}].map((x,i) => (
-                   <div key={i} className="item" style={{padding:6,borderRadius:6,background:"var(--bg-muted)",textAlign:"center"}}>
-                    <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:1}}>{x.l}</div>
-                    <div className={`val${x.tot?" tot":""}`} style={{fontSize:12,fontWeight:x.tot?700:600,color:x.tot?"#b4f027":"var(--text)"}}>{x.v}</div>
+              ) : (
+              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:5,marginTop:4}}>
+                {[{l:"Boletas emitidas", v:String(rcvTotal.docs), c:"var(--text)"},{l:"Neto", v:fmt(rcvTotal.neto), c:"var(--text)"},{l:"IVA", v:fmt(rcvTotal.iva), c:"var(--text)"},{l:"Total", v:fmt(rcvTotal.total), c:"#b4f027", tot:true}].map((x,i) => (
+                  <div key={i} className="item" style={{padding:6,borderRadius:6,background:"var(--bg-muted)",textAlign:"center"}}>
+                    <div className="lbl" style={{fontSize:7,color:"var(--text2)",marginBottom:2,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>{x.l}</div>
+                    <div style={{fontSize:13,fontWeight:x.tot?700:600,color:x.c,fontVariantNumeric:"tabular-nums"}}>{x.v}</div>
                   </div>
                 ))}
               </div>
+              )}
             </div></GlowWrap>
 
-            {/* EMITIR PANEL */}
-            <GlowWrap glow style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",borderRadius:20,overflow:"hidden"}}><div className="panel" style={{flex:1,minHeight:0,background:"var(--surface)",borderRadius:20,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <div className="panel-hd" style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid var(--border)",flexShrink:0}}>
-                <div className="panel-hd-icon" style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(180,240,39,.08)",color:"#b4f027",flexShrink:0}}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                </div>
-                <div className="panel-hd-txt" style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
-                  <div><h2 style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Subir documento</h2><p style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Subí cartola o Excel modelo</p></div>
-                  <Link href="/api/generar-template" className="plantilla" style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:3,padding:"4px 8px",borderRadius:5,border:"1px solid var(--border)",background:"transparent",color:"var(--text2)",fontSize:9,fontWeight:500,textDecoration:"none"}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
-                    Plantilla Excel
-                  </Link>
-                </div>
-              </div>
-              <div className="e-scroll">
-                <Suspense fallback={
-                  <div className="sec" style={{height:100,borderRadius:8,background:"rgba(255,255,255,.02)",margin:10}}/>
-                }>
-                  <EmitirPanel empresaId={empresaId} />
-                </Suspense>
-              </div>
-            </div></GlowWrap>
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}
@@ -327,8 +317,18 @@ body{font-family:'DM Sans',sans-serif}
               nombreEmpresa={usuario.empresas.razon_social}
               fecha={new Date().toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})}
               subidosContent={
-                <div className="r-scroll">
-                  <div className="sec" style={{paddingTop:6}}>
+                <div className="r-scroll" style={{display:"flex",flexDirection:"column",gap:4}}>
+                  <div className="sec" style={{padding:"8px 12px 0"}}>
+                    <DropzoneUpload />
+                    <div className="dz-fmts" style={{marginTop:5}}>
+                      <span className="f"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> XLS</span>
+                      <span className="f"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> PDF</span>
+                      <span className="f"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> IMG</span>
+                      <span className="f"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> CSV</span>
+                      <span className="f"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> WP</span>
+                    </div>
+                  </div>
+                  <div className="sec" style={{paddingTop:2}}>
                     <SubidosView
                       documentos={(docsData.data ?? []) as any}
                       selDate={selDate ?? todayStr()}
