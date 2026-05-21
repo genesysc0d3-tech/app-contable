@@ -1,0 +1,430 @@
+SOLICITUD DE SEGURIDAD Y CONTROL - EMISIÓN DE BOLETAS
+====================================================
+
+Fecha: 2026-05-21
+Proyecto: app-contable (Next.js 16, Supabase, React 19)
+Commit base: e15c5c8
+Archivo de auditoría original: informe_bugstest.txt
+
+======================================================================
+PARTE 1 - SOLICITUD DEL USUARIO (QUÉ SE PIDIÓ)
+======================================================================
+
+Se solicita revisar e implementar los siguientes puntos prioritarios
+para dejar el flujo de emisión técnicamente sólido antes del hito de
+conexión con API real de emisión de boletas.
+
+Importante: La validación/bloqueo por monto sobre $180.000 fue
+deshabilitada intencionalmente. La decisión funcional es permitir que
+el usuario tenga libertad de emisión y luego mostrar un disclaimer o
+advertencia clara en la interfaz. No considerar ese punto como bloqueo
+técnico crítico.
+
+Orden de prioridad solicitado:
+  1. Idempotency-key
+  2. Manejo seguro de folios
+  3. Estado pendiente_confirmacion
+  4. Timeout frontend/backend
+  5. Audit log / emission_attempts
+  6. Emitido_por
+  7. Polling/consulta SII
+  8. beforeunload guard
+  9. Mock SII más realista
+
+
+======================================================================
+PARTE 2 - HALLAZGOS POR PUNTO
+======================================================================
+
+1. IDEMPOTENCY-KEY
+-------------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- Botón "Emitir" se deshabilita en frontend (estado emitiendo=true)
+- Backend verifica yaEmitidas por propuesta_id contra boletas_emitidas
+- Índice único parcial en DB: idx_boletas_propuesta_unica_vigente
+- consume_next_folio usa SELECT ... FOR UPDATE (atómico)
+
+Qué falta:
+- No hay idempotency-key por request (solo por propuesta_id)
+- No se puede reintentar un batch de forma segura tras timeout
+- Si el frontend reintenta tras timeout, se crea un NUEVO batch
+- Si consume_next_folio ya ejecutó y luego falla el INSERT, el folio
+  se pierde y el reintento consume OTRO folio
+- catch {} en yaEmitidas traga errores silenciosamente
+
+Archivos involucrados:
+- src/app/api/intermediaria/emitir-lote/route.ts
+- src/app/api/intermediaria/emitir-boleta/route.ts
+- src/app/(app)/escritorio/v5/EmitirTabContent.tsx
+- Nueva migración SQL: tabla emision_idempotency
+
+Solución propuesta:
+- Frontend genera crypto.randomUUID() como X-Idempotency-Key
+- Backend almacena response por key; si se repite, devuelve el mismo
+- TTL 24hs con limpieza automática
+- Cubre doble click, timeout, refresh, reintento
+
+
+2. MANEJO SEGURO DE FOLIOS
+---------------------------
+Estado actual: CON RIESGO
+
+Qué existe hoy:
+- consume_next_folio es atómico con FOR UPDATE
+- Folio se retorna ANTES del INSERT en boletas_emitidas
+
+Qué falta:
+- Si consume_next_folio se ejecuta y luego el INSERT falla, el folio
+  queda consumido y NO se puede recuperar
+- Si SII rechaza después de consumir folio, el folio se pierde
+- En producción con CAFs reales, folios perdidos = dinero perdido
+- No existe función release_folio
+
+Archivos involucrados:
+- supabase/migrations/20260415_boletas_sii_mock.sql (consume_next_folio)
+- src/app/api/intermediaria/emitir-lote/route.ts
+- src/app/api/intermediaria/emitir-boleta/route.ts
+
+Solución propuesta (Opción A + B combinadas):
+- Reordenar flujo: validar todo → enviar al SII → si SII acepta →
+  consumir folio → INSERT
+- Agregar release_folio() para safety net si INSERT falla pese a todo
+- Si el SII rechaza, NO se consume folio
+
+
+3. ESTADO PENDIENTE_CONFIRMACION
+---------------------------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- boletas_emitidas.estado CHECK constraint solo permite:
+  aceptado, aceptado_reparos, rechazado, anulada
+
+Qué falta:
+- No hay estado para emisiones donde no se sabe el resultado
+- Si hay timeout entre SII y la app, no hay cómo marcar el caso
+- Pendientes-emision trata todo como binario (emitido o no)
+- Usuario no puede identificar boletas "en duda"
+
+Archivos involucrados:
+- Nueva migración SQL (ALTER CHECK constraint)
+- src/app/api/intermediaria/emitir-lote/route.ts
+- src/app/api/intermediaria/emitir-boleta/route.ts
+- src/app/api/intermediaria/pendientes-emision/route.ts
+- src/app/(app)/escritorio/v5/EmitirTabContent.tsx (UI badge)
+- src/lib/database.types.ts (tipos)
+
+Solución propuesta:
+- Agregar 'pendiente_confirmacion' al CHECK de estado
+- Usarlo cuando timeout/f inserción falla después de consumir folio
+- Excluir items en este estado de "pendientes para emitir"
+- Mostrar badge naranja + botón "Consultar estado" en UI
+
+
+4. TIMEOUT FRONTEND Y BACKEND
+------------------------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- Frontend fetch no tiene timeout explícito
+- Backend no tiene timeout individual por item
+- El usuario puede quedar en "Emitiendo..." indefinidamente si la
+  request se cuelga
+
+Qué falta:
+- Timeout en fetch del frontend (AbortController con 30s)
+- Timeout controlado por item en backend
+- Mensaje claro al usuario si el proceso queda inconcluso
+- Si hay timeout, marcar estado como pendiente_confirmacion
+
+Archivos involucrados:
+- src/app/(app)/escritorio/v5/EmitirTabContent.tsx
+- src/app/api/intermediaria/emitir-lote/route.ts
+
+Solución propuesta:
+- AbortController con timeout de 30s en frontend
+- Promise.race con timeout de 10s por item en backend
+- Si timeout después de consumir folio → pendiente_confirmacion
+
+
+5. AUDIT LOG / EMISSION_ATTEMPTS
+----------------------------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- Solo console.error para errores catastróficos
+- No hay registro de intentos fallidos (solo existen en respuesta HTTP)
+- No se puede auditar qué pasó en una emisión fallida 3 días después
+
+Qué falta:
+- Tabla de auditoría para cada intento de emisión
+- Registro de fecha/hora, usuario, empresa, propuesta, payload,
+  respuesta, error, estado final, batch_id
+- Trazabilidad completa para reclamos o debugging
+
+Archivos involucrados:
+- Nueva migración SQL: tabla emission_attempts
+- src/app/api/intermediaria/emitir-lote/route.ts
+- src/app/api/intermediaria/emitir-boleta/route.ts
+
+Solución propuesta:
+- Crear tabla emission_attempts con todos los campos mencionados
+- Insertar un row por cada item procesado (éxito o fallo)
+- batch_id UUID agrupa intentos del mismo lote
+
+
+6. EMITIDO_POR
+---------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- boletas_emitidas no tiene columna user_id
+- No se puede saber qué usuario emitió cada boleta
+
+Qué falta:
+- Columna emitido_por en boletas_emitidas
+- Asociar cada emisión al usuario autenticado
+
+Archivos involucrados:
+- Migración SQL: ALTER TABLE boletas_emitidas ADD COLUMN
+- src/app/api/intermediaria/emitir-lote/route.ts
+- src/app/api/intermediaria/emitir-boleta/route.ts
+- src/lib/database.types.ts
+
+Solución propuesta:
+- ALTER TABLE ADD COLUMN emitido_por UUID REFERENCES auth.users(id)
+- user.id ya está disponible en el handler (auth.getUser())
+
+
+7. POLLING / CONSULTA SII
+---------------------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- Mock SII responde instantáneamente (siempre ACEPTADO)
+- No hay endpoint de consulta de estado por track_id
+- SII real opera de forma asíncrona (recibir → polling → resultado)
+
+Qué falta:
+- Endpoint GET /api/intermediaria/consultar-estado?track_id=XXX
+- Mecanismo de polling automático o manual
+- Actualización de estado cuando se confirme aceptación/rechazo
+- Botón "Consultar estado" en UI para boletas en duda
+
+Archivos involucrados:
+- Nuevo endpoint: src/app/api/intermediaria/consultar-estado/route.ts
+- src/app/(app)/escritorio/v5/EmitirTabContent.tsx (botón)
+- src/components/boletas/BoletasList.tsx (botón consultar)
+
+Solución propuesta:
+- Endpoint que llama a consultarEstadoDTE() y actualiza boletas_emitidas
+- Frontend: botón "Consultar estado" en items pendiente_confirmacion
+- Auto-polling cada 30s para items en estado pendiente_confirmacion
+
+
+8. BEFOREUNLOAD GUARD
+----------------------
+Estado actual: NO IMPLEMENTADO
+
+Qué existe hoy:
+- Usuario puede cerrar pestaña durante emisión sin advertencia
+- El servidor completa el procesamiento pero el usuario nunca ve
+  el resultado
+
+Qué falta:
+- beforeunload event listener cuando emitiendo=true
+- Prevención de navegación interna (routeChangeStart)
+- Mensaje claro: "Hay una emisión en curso"
+
+Archivos involucrados:
+- src/app/(app)/escritorio/v5/EmitirTabContent.tsx
+
+Solución propuesta:
+- useEffect con beforeunload event
+- e.preventDefault() + e.returnValue cuando emitiendo=true
+- router.events?.on("routeChangeStart", ...) para SPA navigation
+
+
+9. MOCK SII MÁS REALISTA
+--------------------------
+Estado actual: LIMITADO
+
+Qué existe hoy:
+- Mock siempre retorna ACEPTADO si los 6 tags XML existen
+- No hay simulación de rechazos, latencia, caídas
+- ConsultarEstado siempre retorna ACEPTADO
+
+Qué falta:
+- Modo simulación: rechazar, aceptado_con_reparos, timeout, caido
+- Controlable via env vars (SII_MOCK_MODO, SII_MOCK_LATENCIA)
+- Poder testear idempotency, pendiente_confirmacion, reintentos
+
+Archivos involucrados:
+- src/lib/sii-mock/recepcion.ts
+- src/lib/intermediario/client.ts
+- .env.local
+
+Solución propuesta:
+- Agregar parámetro options { modo, latencia_ms }
+- Modos: siempre_aceptado, rechazar, reparos, caido, timeout
+- Control via env vars o query params
+
+
+======================================================================
+PARTE 3 - CAMBIOS DE BASE DE DATOS REQUERIDOS (TOTAL: 5 MIGRACIONES)
+======================================================================
+
+1. 20260521_idempotency.sql
+   - Tabla: emision_idempotency
+   - Columnas: idempotency_key TEXT PK, empresa_id UUID, request_hash TEXT,
+     response_json JSONB, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ
+
+2. 20260521_emission_attempts.sql
+   - Tabla: emission_attempts
+   - Columnas: id UUID PK, empresa_id UUID, user_id UUID, propuesta_id UUID,
+     batch_id UUID, idempotency_key TEXT, request_body JSONB,
+     response_body JSONB, error_code TEXT, error_message TEXT,
+     folio_consumido INT, folio_recuperado BOOLEAN, estado_final TEXT,
+     created_at TIMESTAMPTZ
+
+3. 20260521_emitido_por.sql
+   - ALTER TABLE boletas_emitidas ADD COLUMN emitido_por UUID
+   - FK REFERENCES auth.users(id)
+
+4. 20260521_pendiente_confirmacion.sql
+   - ALTER TABLE boletas_emitidas DROP CONSTRAINT estado_check
+   - ADD CONSTRAINT estado_check CHECK (estado IN (
+     'pendiente_confirmacion','aceptado','aceptado_reparos',
+     'rechazado','anulada'))
+
+5. 20260521_release_folio.sql
+   - CREATE OR REPLACE FUNCTION release_folio(p_caf_id UUID, p_empresa_id UUID)
+   - RETURNS BOOLEAN
+   - Decrementa folio_actual en 1 y restaura estado a 'activo'
+
+
+======================================================================
+PARTE 4 - CAMBIOS DE FRONTEND REQUERIDOS
+======================================================================
+
+src/app/(app)/escritorio/v5/EmitirTabContent.tsx:
+  - Generar idempotency-key (crypto.randomUUID()) por request
+  - Enviar header X-Idempotency-Key en fetch a emitir-lote
+  - AbortController con timeout de 30s
+  - beforeunload guard cuando emitiendo=true
+  - Badge "Pendiente de confirmación" para items en ese estado
+  - Botón "Consultar estado" para items pendiente_confirmacion
+
+src/components/boletas/BoletasList.tsx:
+  - Botón "Consultar estado" para boletas con estado pendiente_confirmacion
+
+
+======================================================================
+PARTE 5 - CAMBIOS DE BACKEND REQUERIDOS
+======================================================================
+
+src/app/api/intermediaria/emitir-lote/route.ts:
+  - Leer header X-Idempotency-Key al inicio
+  - Buscar key en emision_idempotency; si existe, devolver response previo
+  - Si no existe, procesar normal y guardar response ANTES de retornar
+  - Reordenar flujo: SII → folio → INSERT (en vez de folio → SII → INSERT)
+  - Timeout individual por item (Promise.race con 10s)
+  - Si falla INSERT después de folio: llamar release_folio
+  - Si hay timeout/error irrecuperable después de folio: pendiente_confirmacion
+  - Insertar row en emission_attempts por cada item
+  - Agregar emitido_por: user.id al INSERT de boletas_emitidas
+
+src/app/api/intermediaria/emitir-boleta/route.ts:
+  - Mismos cambios que emitir-lote (idempotency, reorden folio, audit log,
+    emitido_por, pendiente_confirmacion, release_folio)
+
+src/app/api/intermediaria/pendientes-emision/route.ts:
+  - Excluir items con estado 'pendiente_confirmacion' de la lista de
+    pendientes (no se pueden re-emitir hasta confirmar)
+
+src/app/api/intermediaria/consultar-estado/route.ts (NUEVO):
+  - GET /api/intermediaria/consultar-estado?track_id=XXX
+  - Llamar a consultarEstadoDTE(track_id)
+  - Actualizar boletas_emitidas.estado si cambió
+  - Retornar estado actualizado
+
+src/lib/sii-mock/recepcion.ts:
+  - Agregar parámetro options { modo, latencia_ms }
+  - Modos: siempre_aceptado, rechazar, reparos, caido, timeout, 
+    acepta_pero_falla_insert
+  - Simular latencia controlable
+
+src/lib/intermediario/client.ts:
+  - Pasar opciones de entorno a recibirDTE
+  - Soporte para SII_MOCK_MODO y SII_MOCK_LATENCIA
+
+
+======================================================================
+PARTE 6 - RIESGOS QUE QUEDARÍAN PENDIENTES
+======================================================================
+
+Riesgo alto:
+1. Sin RLS en INSERT/UPDATE de boletas_emitidas (solo SELECT tiene RLS)
+   -> Mitigación: usar service-role client controlado, pero si alguien
+      obtiene la service_role key, puede insertar boletas directamente
+2. Sin rate limiting en endpoints de emisión
+   -> Mitigación: implementar antes de producción real
+
+Riesgo medio:
+3. Sin verificación de certificado SII (deshabilitada en modo demo)
+   -> Agregar verificación cuando se conecte SII real
+4. Sin tests automatizados de emisión
+   -> Mock SII mejorado permite test manual, pero no automático
+
+Riesgo bajo:
+5. Sin notificaciones (email/webhook) post-emisión
+   -> Post-MVP
+6. Sin bloqueo por monto > $180k sin receptor
+   -> Decisión funcional: mostrar disclaimer en UI
+
+
+======================================================================
+PARTE 7 - ORDEN DE IMPLEMENTACIÓN RECOMENDADO
+======================================================================
+
+Orden  | Punto                     | Depende de | Esfuerzo | Impacto
+-------|---------------------------|------------|----------|----------
+1      | Idempotency-key           | Ninguno    | 2h       | Crítico
+2      | Manejo seguro de folios   | #1         | 3h       | Crítico
+3      | Audit log                | #1         | 2h       | Alto
+4      | Estado pendiente_confirm | #2, #3     | 3h       | Alto
+5      | Timeout frontend/backend | #1, #4     | 1.5h     | Alto
+6      | Emitido_por              | Ninguno    | 0.5h     | Medio
+7      | Polling/consulta SII     | #4         | 2h       | Medio
+8      | beforeunload guard       | Ninguno    | 0.5h     | Bajo
+9      | Mock SII realista        | #5         | 2h       | Bajo*
+
+* Solo testing, no afecta producción
+
+Total estimado: ~16 horas en 5 migraciones SQL + 8 archivos modificados.
+
+
+======================================================================
+PARTE 8 - RESUMEN EJECUTIVO
+======================================================================
+
+Para pruebas internas (mock SII actual):
+  Riesgo BAJO. Los folios son ficticios, el mock siempre acepta,
+  y el índice único de DB evita duplicados graves. El flujo es
+  funcional para desarrollo y testing.
+
+Para producción real (SII verdadero):
+  Los puntos 1 (idempotency-key) y 2 (folios seguros) son
+  IMPOSTERGABLES antes de conectar con API real. Sin ellos:
+  - Cada reintento tras error puede duplicar boletas o quemar folios
+  - Los folios perdidos son dinero perdido (los CAFs se compran al SII)
+  - No hay trazabilidad de quién emitió ni de intentos fallidos
+
+  Los puntos 3 (pendiente_confirmacion), 4 (timeout), 5 (audit log)
+  y 6 (emitido_por) son ALTAMENTE RECOMENDADOS antes de producción
+  para garantizar operación segura y auditable.
+
+  Los puntos 7 (polling), 8 (beforeunload) y 9 (mock realista) son
+  MEJORAS que pueden implementarse progresivamente.
