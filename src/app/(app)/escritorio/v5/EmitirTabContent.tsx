@@ -116,6 +116,10 @@ export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuye
       const json = await res.json();
       if (json.ok) {
         toast(`${json.exitos ?? 0} boletas emitidas por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")}`);
+        if (json.fallos > 0) {
+          const errores = (json.resultados ?? []).filter((r: any) => !r.ok).slice(0, 3).map((r: any) => r.error_message).filter(Boolean).join(" · ");
+          if (errores) toast(errores, "error");
+        }
         setSelected(new Set());
         setDteOverrides({});
         fetchData();

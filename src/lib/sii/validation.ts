@@ -145,21 +145,7 @@ export function validarBoleta(input: BoletaInput): {
     exento = totalProvisto;
   }
 
-  // --- Validación receptor según monto (Res. Ex. 174/2017) ---
-  if (totalProvisto > RECEPTOR_OBLIGATORIO_DESDE) {
-    if (!input.receptor_rut) {
-      errors.push({
-        code: "RECEPTOR_RUT_OBLIGATORIO",
-        message: `Para totales sobre $${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")} se requiere RUT del receptor`,
-      });
-    }
-    if (!input.receptor_razon_social || !input.receptor_razon_social.trim()) {
-      errors.push({
-        code: "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA",
-        message: `Para totales sobre $${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")} se requiere razón social del receptor`,
-      });
-    }
-  }
+  // Validación receptor omitida — el usuario tiene libertad de emisión
 
   // --- RUT receptor válido (si se provee) ---
   if (input.receptor_rut && !validarRut(input.receptor_rut)) {

@@ -15,12 +15,8 @@ export default function TabsV5({
   const [tab, setTab] = useState("revisar");
 
   useEffect(() => {
-    function handler(e: CustomEvent) {
-      const t = (e.detail as { tab?: string })?.tab;
-      if (t && ["subidos","revisar","emitir","boletas"].includes(t)) setTab(t);
-    }
-    window.addEventListener("go-to-tab" as any, handler as any);
-    return () => window.removeEventListener("go-to-tab" as any, handler as any);
+    const p = new URLSearchParams(window.location.search).get("tab");
+    if (p && ["subidos","revisar","emitir","boletas"].includes(p)) setTab(p);
   }, []);
 
   const tabs = [

@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar, editarMovimientoPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
+import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar, editarMovimientoPropuesta } from "../../revisar/actions";
 import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 import type { Tables } from "@/lib/database.types";
 
@@ -74,7 +74,10 @@ export default function RevisarTabContent({
 
   const totalPendientes = doc.props.filter(p => p.estado === "pendiente").length;
 
-  if (!activeDoc) {
+  const [continuo] = useState(() => typeof window !== "undefined" && sessionStorage.getItem("preparar-continuo") === "true");
+
+  if (continuo) sessionStorage.removeItem("preparar-continuo");
+  if (!activeDoc || continuo) {
     return (
       <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
         <div style={{textAlign:"center"}}>
@@ -111,7 +114,11 @@ export default function RevisarTabContent({
           <div className="sec" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px 16px"}}>
             <div style={{textAlign:"center"}}>
               <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <p style={{fontSize:12,color:"var(--text3)",marginTop:10,fontWeight:400}}>Subí un archivo para empezar</p>
+              <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo preparado para emitir</p>
+              <button onClick={() => { sessionStorage.setItem("preparar-continuo", "true"); window.location.href = "/escritorio/v5?tab=emitir"; }}
+                style={{marginTop:12,fontSize:11,padding:"8px 20px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff"}}>
+                CONTINUAR
+              </button>
             </div>
           </div>
         ) : (
