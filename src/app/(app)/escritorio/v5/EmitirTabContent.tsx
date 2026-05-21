@@ -36,7 +36,7 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
-export default function EmitirTabContent() {
+export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuyente?: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const [data, setData] = useState<PendientesResponse | null>(null);
@@ -46,6 +46,8 @@ export default function EmitirTabContent() {
   const [statusFilter, setStatusFilter] = useState<"listas" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
+  const isExentoEmpresa = tipoContribuyente === "exento";
+  const lockedTipo = isExentoEmpresa ? 39 : tipoContribuyente === "afecto" ? 41 : 0; // 0 = no lock when auto
 
   async function fetchData() {
     try {
@@ -89,16 +91,9 @@ export default function EmitirTabContent() {
   }
 
   function toggleTipo(id: string, tipo: number) {
+    if (tipo === lockedTipo) return;
     setDteOverrides(prev => ({ ...prev, [id]: tipo }));
     if (!selected.has(id)) setSelected(prev => new Set(prev).add(id));
-  }
-
-  function removeOverride(id: string) {
-    setDteOverrides(prev => {
-      const n = { ...prev };
-      delete n[id];
-      return n;
-    });
   }
 
   const selectedItems = useMemo(() =>
@@ -136,37 +131,34 @@ export default function EmitirTabContent() {
     return dteOverrides[item.id] ?? item.tipo_sugerido ?? 39;
   }
 
+  function renderTipoBtn(tipo: number, isActive: boolean, itemId: string, itemDisabled: boolean) {
+    const isLocked = tipo === lockedTipo && lockedTipo !== 0;
+    const label = tipo === 39 ? "AFE" : "EXE";
+
+    return (
+      <div style={{position:"relative"}}>
+        <button
+          className={isActive ? (tipo === 39 ? "af" : "ex") : "ina"}
+          onClick={() => !itemDisabled && !isLocked && toggleTipo(itemId, tipo)}
+          style={{
+            opacity: isLocked ? 0.4 : 1,
+            filter: isLocked ? "grayscale(0.6)" : "none",
+            cursor: isLocked ? "not-allowed" : "pointer",
+            transition:"all .2s",
+          }}
+        >{label}</button>
+      </div>
+    );
+  }
+
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
         {/* Header */}
         <div className="em-header">
-          <span className="big">{listasCount}</span>
-          <span className="lbl">listas para emitir</span>
-          {bloqueadasCount > 0 && (
-            <span className="blk">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              {" "}{bloqueadasCount} bloqueadas
-            </span>
-          )}
+          <span className="big">{totalCount}</span>
+          <span className="lbl">aprobadas para emisión</span>
           <button className="rf" onClick={fetchData}>↻</button>
-        </div>
-
-        {/* Pills */}
-        <div className="em-pills">
-          <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
-          <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
-          <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
-          <span style={{fontSize:8,color:"var(--text2)",margin:"0 4px"}}>|</span>
-          <button className={`pl ${typeFilter === "todos" ? "act" : "ina"}`} onClick={() => setTypeFilter("todos")}>Todos</button>
-          <button className={`pl ${typeFilter === "afecta" ? "act" : "ina"}`} onClick={() => setTypeFilter("afecta")}>Afecta</button>
-          <button className={`pl ${typeFilter === "exenta" ? "act" : "ina"}`} onClick={() => setTypeFilter("exenta")}>Exenta</button>
-          {selectableItems.length > 0 && (
-            <label className="sc">
-              <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{accentColor:"#E8553E"}} />
-              {" "}Seleccionar todas ({selectableItems.length})
-            </label>
-          )}
         </div>
 
         {/* Items */}
@@ -179,10 +171,19 @@ export default function EmitirTabContent() {
             <p>No hay propuestas listas para emitir en esta vista</p>
           </div>
         ) : (
-          itemsList.map(item => {
+          <>
+          {selectableItems.length > 0 && (
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 10px"}}>
+              <div className={`cb ${allSelected ? "sel" : ""}`}
+                onClick={toggleAll}
+                style={{cursor:"pointer",width:14,height:14,borderRadius:3,border:"1.5px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",transition:"all .15s",flexShrink:0}}
+              >{allSelected ? "✓" : ""}</div>
+              <span style={{fontSize:9,color:"var(--text2)"}}>Seleccionar todas ({selectableItems.length})</span>
+            </div>
+          )}
+          {itemsList.map(item => {
             const isDisabled = !item.listo_emitir;
             const isSelected = selected.has(item.id);
-            const isAuto = dteOverrides[item.id] === undefined;
             const tipo = activeTipo(item);
             const isAfecta = tipo === 39;
             const isExenta = tipo === 41;
@@ -211,20 +212,15 @@ export default function EmitirTabContent() {
                     </div>
                   )}
                 </div>
-                <div className="tp">
-                  <button className={isAuto ? "au" : "ina"} onClick={() => !isDisabled && removeOverride(item.id)} title="Programa decide">AUTO</button>
-                  <button className={!isAuto && isAfecta ? "af" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 39)}>AFE</button>
-                  <button className={!isAuto && isExenta ? "ex" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 41)}>EXE</button>
-                  {isAuto && (
-                    <span style={{fontSize:8,color:"var(--text2)",marginLeft:2}}>
-                      {isAfecta ? "→ AFE" : "→ EXE"}
-                    </span>
-                  )}
+                <div className="tp" style={{position:"relative",display:"flex",gap:2}}>
+                  {renderTipoBtn(39, isAfecta, item.id, isDisabled)}
+                  {renderTipoBtn(41, isExenta, item.id, isDisabled)}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
               </div>
             );
-          })
+          })}
+          </>
         )}
       </div>
 

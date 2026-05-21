@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 
 /**
@@ -138,18 +137,8 @@ export async function GET() {
         docHint,
       );
 
-      const requiereReceptor = total > RECEPTOR_OBLIGATORIO_DESDE;
-      const tieneReceptor = !!receptor_rut && !!receptor_nombre;
-      const esEmitible = clasif.sugerencia !== "no_boletar";
-      const listo_emitir = esEmitible && total > 0 && (!requiereReceptor || tieneReceptor);
-
-      const motivo_no_listo = !listo_emitir
-        ? !esEmitible
-          ? `No se boletea: ${clasif.razones[0] ?? "movimiento no comercial"}`
-          : total <= 0
-            ? "Monto inválido"
-            : "Falta RUT y razón social del receptor (monto > $180.000)"
-        : null;
+      const listo_emitir = true;
+      const motivo_no_listo = null;
 
       return {
         id: p.id,

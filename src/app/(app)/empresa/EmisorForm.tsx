@@ -20,7 +20,7 @@ export default function EmisorForm({ inicial }: Props) {
   const [comuna, setComuna] = useState(inicial.comuna ?? "");
   const [emailSii, setEmailSii] = useState(inicial.email_sii ?? "");
   const [tipoContribuyente, setTipoContribuyente] = useState(
-    inicial.tipo_contribuyente ?? "auto"
+    inicial.tipo_contribuyente ?? "afecto"
   );
 
   const rutOk = !rut || validarRut(rut);
@@ -66,11 +66,6 @@ export default function EmisorForm({ inicial }: Props) {
     outline: "none",
     transition: "all 160ms ease",
     boxSizing: "border-box" as const,
-  };
-
-  const inputFocus = {
-    borderColor: "rgba(167,139,250,0.45)",
-    background: "rgba(255,255,255,0.055)",
   };
 
   return (
@@ -264,23 +259,21 @@ export default function EmisorForm({ inicial }: Props) {
           <span style={{
             borderRadius: 9999,
             border: `1px solid ${
-              tipoContribuyente === "afecto" ? "rgba(52,211,153,0.20)"
-                : tipoContribuyente === "exento" ? "rgba(101,184,255,0.20)"
-                : "rgba(167,139,250,0.20)"
+              tipoContribuyente === "exento" ? "rgba(101,184,255,0.20)"
+                : "rgba(52,211,153,0.20)"
             }`,
             background: `${
-              tipoContribuyente === "afecto" ? "rgba(52,211,153,0.15)"
-                : tipoContribuyente === "exento" ? "rgba(101,184,255,0.15)"
-                : "rgba(167,139,250,0.15)"
+              tipoContribuyente === "exento" ? "rgba(101,184,255,0.15)"
+                : "rgba(52,211,153,0.15)"
             }`,
             padding: "4px 10px", fontSize: 10, fontWeight: 700,
-            color: tipoContribuyente === "afecto" ? "#86EFAC" : tipoContribuyente === "exento" ? "#BFDBFE" : "#C4B5FD",
+            color: tipoContribuyente === "exento" ? "#BFDBFE" : "#86EFAC",
           }}>
-            {tipoContribuyente === "afecto" ? "AFECTO" : tipoContribuyente === "exento" ? "EXENTO" : "AUTO"}
+            {tipoContribuyente === "exento" ? "EXENTO" : "AFECTO"}
           </span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <button
             type="button"
             onClick={() => setTipoContribuyente("afecto")}
@@ -307,34 +300,6 @@ export default function EmisorForm({ inicial }: Props) {
               Boleta con IVA 19%
             </span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setTipoContribuyente("auto")}
-            style={{
-              borderRadius: 12,
-              border: tipoContribuyente === "auto"
-                ? "1px solid rgba(167,139,250,0.35)"
-                : "1px solid rgba(255,255,255,0.10)",
-              background: tipoContribuyente === "auto"
-                ? "rgba(167,139,250,0.18)"
-                : "rgba(255,255,255,0.035)",
-              padding: "12px 12px",
-              fontSize: 12, fontWeight: 700,
-              color: tipoContribuyente === "auto" ? "#C4B5FD" : "rgba(255,255,255,0.55)",
-              boxShadow: tipoContribuyente === "auto"
-                ? "0 14px 34px rgba(167,139,250,0.12)"
-                : "none",
-              cursor: "pointer",
-              transition: "all 160ms ease",
-            }}
-          >
-            AUTO
-            <span style={{ display: "block", marginTop: 4, fontSize: 10, fontWeight: 500, opacity: 0.7 }}>
-              Programa decide
-            </span>
-          </button>
-
           <button
             type="button"
             onClick={() => setTipoContribuyente("exento")}
@@ -366,19 +331,25 @@ export default function EmisorForm({ inicial }: Props) {
         <div style={{
           marginTop: 12,
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.10)",
-          background: "rgba(0,0,0,0.15)",
-          padding: "8px 12px",
+          border: `1px solid ${
+            tipoContribuyente === "exento" ? "rgba(101,184,255,0.20)"
+              : "rgba(52,211,153,0.20)"
+          }`,
+          background: `${
+            tipoContribuyente === "exento" ? "rgba(101,184,255,0.06)"
+              : "rgba(52,211,153,0.06)"
+          }`,
+          padding: "10px 14px",
           fontSize: 11, lineHeight: 1.5,
-          color: "rgba(255,255,255,0.55)",
+          color: "rgba(255,255,255,0.60)",
         }}>
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Afecto:</strong>{" "}
-          emite boletas con IVA 19% tipo 39.{" "}
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Exento:</strong>{" "}
-          emite boletas sin IVA tipo 41.{" "}
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Auto:</strong>{" "}
-          el clasificador decide por cada movimiento. Esto aplica por defecto para todos los clientes,
-          salvo que configures un tipo distinto en cada cliente.
+          {tipoContribuyente === "afecto" ? (
+            <><strong style={{ color: "#86EFAC" }}>Afecto:</strong>{" "}Emite boletas con IVA (19%). Tipo DTE 39. Esta configuración se aplicará a todos los documentos tributarios que se emitirán.</>
+          ) : tipoContribuyente === "exento" ? (
+            <><strong style={{ color: "#BFDBFE" }}>Exento:</strong>{" "}Emite boletas sin IVA. Tipo DTE 41. Esta configuración se aplicará a todos los documentos tributarios que se emitirán.</>
+          ) : (
+            <><strong style={{ color: "#86EFAC" }}>Afecto:</strong>{" "}Emite boletas con IVA (19%). Tipo DTE 39. Esta configuración se aplicará a todos los documentos tributarios que se emitirán.</>
+          )}
         </div>
       </div>
 

@@ -1,11 +1,3 @@
-/**
- * Generador de PDF visual de una boleta emitida (mock).
- * Replica el layout típico que imprime un software facturador chileno:
- * encabezado del emisor, cuadro folio+tipo, receptor (si aplica), detalle,
- * totales, y un cuadro de TED. En producción real el TED se renderiza como
- * PDF417; acá se imprime el XML del timbre como texto (es mock).
- */
-
 export interface BoletaPDFData {
   folio: number;
   tipo_dte: number;
@@ -34,7 +26,12 @@ function fmt(n: number): string {
   return n.toLocaleString("es-CL");
 }
 
-export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
+export async function generarBoletaPDF(b: BoletaPDFData, action?: "download"): Promise<void>;
+export async function generarBoletaPDF(b: BoletaPDFData, action: "view"): Promise<string>;
+export async function generarBoletaPDF(
+  b: BoletaPDFData,
+  action: "download" | "view" = "download"
+): Promise<void | string> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const isExenta = b.tipo_dte === 41;
@@ -165,6 +162,9 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
     y,
   );
 
+  if (action === "view") {
+    return URL.createObjectURL(doc.output("blob"));
+  }
   const filename = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
   doc.save(filename);
 }

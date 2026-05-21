@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar } from "../../revisar/actions";
+import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar, editarMovimientoPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 import type { Tables } from "@/lib/database.types";
@@ -33,7 +33,7 @@ function fmtShort(d: string | null | undefined): string {
   return `${dt.getDate()} ${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
-interface DocTab { docId: string; nombre: string; total: number; }
+interface DocTab { docId: string; nombre: string; total: number; createdAt: string; }
 
 export default function RevisarTabContent({
   propuestas, clientes, empresaId, empresaGiro, empresaRazonSocial, empresaTipoContribuyente,
@@ -51,12 +51,12 @@ export default function RevisarTabContent({
       const doc = p.movimientos_raw?.documentos_subidos;
       if (!doc) continue;
       let ent = m.get(doc.id);
-      if (!ent) ent = { docId: doc.id, nombre: doc.nombre_archivo, total: 0, props: [] };
+      if (!ent) ent = { docId: doc.id, nombre: doc.nombre_archivo, total: 0, createdAt: doc.created_at ?? "", props: [] };
       ent.props.push(p);
       ent.total++;
       m.set(doc.id, ent);
     }
-    return Array.from(m.values()).sort((a,b) => b.props.length - a.props.length);
+    return Array.from(m.values()).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
   }, [propuestas]);
 
   const [selDocId, setSelDocId] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export default function RevisarTabContent({
 
   // Always call hooks — never after conditional returns
   const emptyProps: Propuesta[] = [];
-  const fallbackDoc = { docId: "", nombre: "", total: 0, props: emptyProps } as DocTab & { props: Propuesta[] };
+  const fallbackDoc = { docId: "", nombre: "", total: 0, createdAt: "", props: emptyProps } as DocTab & { props: Propuesta[] };
   const doc = activeDoc ?? fallbackDoc;
   const currentProps = useMemo(() => doc.props.filter(p => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado"), [doc]);
 
@@ -78,8 +78,8 @@ export default function RevisarTabContent({
     return (
       <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
         <div style={{textAlign:"center"}}>
-          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo revisado</p>
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1.2" style={{display:"block",margin:"0 auto"}}><path d="M12 5v14m-7-7l7-7 7 7"/><path d="M4 7h16v12H4V7Z"/></svg>
+          <p style={{fontSize:12,color:"var(--text3)",marginTop:10,fontWeight:400}}>Subí un archivo para empezar</p>
         </div>
       </div>
     );
@@ -111,7 +111,7 @@ export default function RevisarTabContent({
           <div className="sec" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px 16px"}}>
             <div style={{textAlign:"center"}}>
               <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo revisado</p>
+              <p style={{fontSize:12,color:"var(--text3)",marginTop:10,fontWeight:400}}>Subí un archivo para empezar</p>
             </div>
           </div>
         ) : (
@@ -226,10 +226,13 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
                     >
                       <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"#E8553E":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
                       <div className="info" style={{flex:1,minWidth:0}}>
-                        <div className="tt" style={{fontSize:10,fontWeight:500,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
-                        <div className="mt" style={{fontSize:8,color:"var(--text2)",marginTop:1,display:"flex",alignItems:"center",gap:4}}>
-                          {fmt(p.movimientos_raw.monto)} <span style={{color:"#2a2d36"}}>·</span> {fmtShort(p.movimientos_raw.fecha)}
-                          {p.receptor_nombre && <><span style={{color:"#2a2d36"}}>·</span> {p.receptor_nombre}</>}
+                        <div style={{fontSize:11,color:"var(--text2)",fontWeight:400,marginBottom:1}}>GLOSA DTE:</div>
+                        <div className="tt" style={{fontSize:11,fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
+                        <div className="mt" style={{fontSize:11,color:"var(--text2)",marginTop:2,display:"flex",alignItems:"center",gap:5}}>
+                          <span>{fmtShort(p.movimientos_raw.fecha)}</span>
+                          <span style={{color:"var(--text3)"}}>·</span>
+                          <span style={{fontWeight:500}}>{fmt(p.movimientos_raw.monto)}</span>
+                          {p.receptor_nombre && <><span style={{color:"var(--text3)"}}>·</span> {p.receptor_nombre}</>}
                         </div>
                       </div>
                       <span className={`cf ${(p.confianza ?? 0) >= ALTA ? "hi" : (p.confianza ?? 0) >= MEDIA ? "me" : "ba"}`}
@@ -324,10 +327,10 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
   const [newClienteRut, setNewClienteRut] = useState("");
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editDesc, setEditDesc] = useState(propuesta.movimientos_raw?.descripcion ?? "");
+  const [editMonto, setEditMonto] = useState(String(propuesta.movimientos_raw?.monto ?? ""));
   const isAfecta = propuesta.tipo_propuesto === "boleta" || propuesta.tipo_propuesto === "factura";
-  const empresaSugiereExenta = empresaTipoContribuyente === "exento";
-  const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
-  const desacuerdo = (isAfecta && empresaSugiereExenta) || (!isAfecta && empresaSugiereAfecta);
 
   const neto = propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
   const iva = propuesta.iva ?? Math.round(neto * 0.19);
@@ -370,16 +373,25 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
         <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "var(--text2)", fontSize:12,fontWeight:700}}>
           {Math.round((propuesta.confianza ?? 0) * 100)}%
         </span>
-        {empresaSugiereAfecta && !isAfecta && (
-          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(232,85,62,.1)",color:"#E8553E",marginLeft:4}}>Default empresa: AFE</span>
-        )}
-        {empresaSugiereExenta && isAfecta && (
-          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(91,156,246,.1)",color:"#5b9cf6",marginLeft:4}}>Default empresa: EXE</span>
-        )}
       </div>
-      <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>{propuesta.movimientos_raw.descripcion}</div>
-      <div className="sub" style={{fontSize:9,color:"var(--text2)",marginBottom:6}}>
-        {fmt(total)} · {fmtShort(propuesta.movimientos_raw.fecha)} · {propuesta.receptor_nombre ?? "Sin receptor"}
+      <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>
+        {editMode ? (
+          <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
+            style={{width:"100%",background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.12)",borderRadius:6,color:"var(--text)",fontSize:11,padding:"5px 8px"}} />
+        ) : propuesta.movimientos_raw.descripcion}
+      </div>
+      <div className="sub" style={{fontSize:11,color:"var(--text2)",marginBottom:6}}>
+        {editMode ? (
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{color:"var(--text2)",fontSize:11}}>{fmtShort(propuesta.movimientos_raw.fecha)}</span>
+            <span style={{color:"var(--text3)"}}>·</span>
+            <span style={{color:"var(--text2)",fontSize:11}}>Monto CLP:</span>
+            <input value={editMonto} onChange={e => setEditMonto(e.target.value.replace(/\D/g,""))}
+              style={{width:140,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.12)",borderRadius:6,color:"var(--text)",fontSize:11,padding:"3px 8px",textAlign:"right",fontVariantNumeric:"tabular-nums"}} />
+          </div>
+        ) : (
+          <>{fmtShort(propuesta.movimientos_raw.fecha)} · {fmt(total)} · {propuesta.receptor_nombre ?? "Sin receptor"}</>
+        )}
       </div>
       <div className="fin" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:6}}>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
@@ -414,19 +426,46 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
       )}
       <div className="notas" style={{fontSize:9,color:"var(--text2)",fontStyle:"italic",marginBottom:6}}>{propuesta.notas ?? ""}</div>
       <div className="actions" style={{display:"flex",gap:4}}>
-        <button onClick={handleAprobar} disabled={busy}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          {busy ? "..." : "Aprobar"}
-        </button>
-        <button onClick={() => onClose()}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-          ✏️ Editar
-        </button>
-        <button onClick={handleRechazar} disabled={busy}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
-          ✕ {busy ? "..." : "Rechazar"}
-        </button>
+        {editMode ? (
+          <>
+            <button onClick={async () => {
+              setBusy(true);
+              const editMontoNum = parseInt(editMonto.replace(/\D/g,""), 10) || 0;
+              const r = await editarMovimientoPropuesta(
+                propuesta.id,
+                propuesta.movimiento_id,
+                { descripcion: editDesc, monto: editMontoNum }
+              );
+              if (r.error) toast(r.error, "error");
+              else { toast("Editada"); setEditMode(false); }
+              setBusy(false);
+            }} disabled={busy}
+              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#22c55e",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {busy ? "..." : "Guardar cambios"}
+            </button>
+            <button onClick={() => { setEditMode(false); setEditDesc(propuesta.movimientos_raw?.descripcion ?? ""); setEditMonto(String(propuesta.movimientos_raw?.monto ?? "")); }}
+              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(255,255,255,.06)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={handleAprobar} disabled={busy}
+              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {busy ? "..." : "Aprobar"}
+            </button>
+            <button onClick={() => setEditMode(true)}
+              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+              ✏️ Editar
+            </button>
+            <button onClick={handleRechazar} disabled={busy}
+              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+              ✕ {busy ? "..." : "Rechazar"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

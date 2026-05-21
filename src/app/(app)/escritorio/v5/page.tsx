@@ -15,6 +15,7 @@ import EmitirFullView from "./sections/EmitirFullView";
 import BoletasFullView from "./sections/BoletasFullView";
 import BoletasList from "@/components/boletas/BoletasList";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import VerBoletaButton from "@/components/boletas/VerBoletaButton";
 
 function todayStr() {
   const d = new Date();
@@ -35,7 +36,7 @@ export default async function V5Page({ searchParams }: {
   let y = now.getFullYear(), m = now.getMonth();
   if (monthParam) {
     const [py, pm] = monthParam.split("-").map(Number);
-    if (py && pm && pm >= 0 && pm <= 11) { y = py; m = pm; }
+    if (py != null && pm != null && pm >= 0 && pm <= 11) { y = py; m = pm; }
   }
   const sm = new Date(y,m,1).toISOString();
   const em = new Date(y,m+1,1).toISOString();
@@ -346,7 +347,7 @@ body{font-family:'DM Sans',sans-serif}
                   empresaTipoContribuyente={usuario.empresas.tipo_contribuyente}
                 />
               }
-              emitirContent={<EmitirTabContent />}
+              emitirContent={<EmitirTabContent tipoContribuyente={usuario.empresas.tipo_contribuyente} />}
               boletasContent={
                 <div className="r-scroll">
                   <div className="sec">
@@ -390,6 +391,7 @@ body{font-family:'DM Sans',sans-serif}
                             <span className="mo" style={{fontSize:11,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums",flexShrink:0}}>
                               {fmt(b.monto_total)}
                             </span>
+                            <VerBoletaButton id={b.id} />
                             <DescargarBoletaButton id={b.id} />
                           </div>
                         );
