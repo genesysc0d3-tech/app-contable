@@ -33,6 +33,7 @@ export default function V5Root({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const [emitir2Open, setEmitir2Open] = useState(false);
+  const [emitirMode, setEmitirMode] = useState<"dte" | "massdte">("massdte");
   const navRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -142,20 +143,26 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
             </button>
           ))}
 
-          {/* Emitir 2 */}
+          {/* Emitir 2 — icono y texto dinámicos según último modo usado */}
           <button onClick={() => setEmitir2Open(o => !o)}
             style={{
               padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 56,
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              background: "transparent",
-              color: "var(--text2)",
+              background: emitir2Open ? "rgba(232,85,62,.1)" : "transparent",
+              color: emitir2Open ? "#E8553E" : "var(--text2)",
               transition: "all .2s",
             }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
+            {emitirMode === "dte" ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+            )}
             <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>
-              Emitir 2 <span style={{fontSize:7,marginLeft:1}}>{emitir2Open ? "▾" : "▸"}</span>
+              {emitirMode === "dte" ? "EMITIR DTE" : "EMITIR MASSDTE"} <span style={{fontSize:7,marginLeft:1}}>{emitir2Open ? "▾" : "▸"}</span>
             </span>
           </button>
 
@@ -168,7 +175,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
             transform: emitir2Open ? "translateX(0)" : "translateX(-8px)",
             transition: "max-width .25s cubic-bezier(.22,1,.36,1), opacity .2s ease, transform .25s cubic-bezier(.22,1,.36,1)",
           }}>
-            <button onClick={() => { setTab("emitir"); setEmitir2Open(false); setTimeout(() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir", mode: "dte" } })), 50); }}
+            <button onClick={() => { setEmitirMode("dte"); setTab("emitir"); setEmitir2Open(false); setTimeout(() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir", mode: "dte" } })), 50); }}
               style={{
                 padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -180,7 +187,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
               </svg>
               <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR DTE</span>
             </button>
-            <button onClick={() => { setTab("subir"); setEmitir2Open(false); }}
+            <button onClick={() => { setEmitirMode("massdte"); setTab("subir"); setEmitir2Open(false); }}
               style={{
                 padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",

@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import { validarRut } from "@/lib/sii/validation";
+import { generarBoletaPDF, type BoletaPDFData } from "@/lib/pdf/boleta-pdf";
 
 interface EmitItem {
   id: string; descripcion: string; fecha: string;
@@ -53,6 +55,18 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
   const [dteGlosa, setDteGlosa] = useState("");
   const [dteEmitting, setDteEmitting] = useState(false);
   const [dteEmitida, setDteEmitida] = useState(false);
+  const [dteBoletaId, setDteBoletaId] = useState<string | null>(null);
+  const [rutError, setRutError] = useState(false);
+
+  // Validar RUT en tiempo real
+  function validarRutInput(rut: string) {
+    setDteRut(rut);
+    if (rut.trim() && rut.length >= 7) {
+      setRutError(!validarRut(rut));
+    } else {
+      setRutError(false);
+    }
+  }
 
   // Listen for go-to-tab with mode
   useEffect(() => {
@@ -161,6 +175,7 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
   async function handleDteEmitir() {
     const montoNum = parseInt(dteMonto.replace(/\D/g, ""), 10) || 0;
     if (montoNum <= 0) { toast("Ingresa un monto válido", "error"); return; }
+    if (dteReceptorOn && dteRut.trim() && !validarRut(dteRut)) { toast("El RUT no existe o es inválido", "error"); return; }
     setDteEmitting(true);
     try {
       const res = await fetch("/api/intermediaria/emitir-boleta", {
@@ -177,14 +192,41 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
       const data = await res.json();
       if (data.ok) {
         setDteEmitida(true);
+        setDteBoletaId(data.boleta_id ?? null);
         toast(`Boleta #${data.folio} emitida`);
       } else {
-        toast(data.error ?? "Error al emitir", "error");
+        if (data.errores?.some((e: any) => e.code === "RUT_INVALIDO")) {
+          toast("El RUT no existe o es inválido", "error");
+        } else if (data.errores?.length) {
+          toast(data.errores[0].message, "error");
+        } else {
+          toast(data.error ?? "Error al emitir", "error");
+        }
       }
     } catch {
       toast("Error de red", "error");
     }
     setDteEmitting(false);
+  }
+
+  async function handleVerBoleta() {
+    if (!dteBoletaId) return;
+    try {
+      const res = await fetch(`/api/intermediaria/boleta/${dteBoletaId}`, { cache: "no-store" });
+      const j = await res.json();
+      if (!res.ok || !j.ok) { toast(j.error ?? "Error al cargar", "error"); return; }
+      const b = j.boleta;
+      const data: BoletaPDFData = {
+        folio: b.folio, tipo_dte: b.tipo_dte, fecha_emision: b.fecha_emision,
+        emisor: { rut: b.emisor_rut, razon_social: b.emisor_razon_social, giro: b.emisor_giro, direccion: b.emisor_direccion, comuna: b.emisor_comuna },
+        receptor: b.receptor_rut || b.receptor_razon_social ? { rut: b.receptor_rut, razon_social: b.receptor_razon_social, direccion: b.receptor_direccion, comuna: b.receptor_comuna } : undefined,
+        detalles: (Array.isArray(b.detalles) ? b.detalles : []).map((d: any) => ({ nombre: d.nombre ?? "Item", cantidad: d.cantidad, precio: d.precio_unitario, monto: d.monto ?? 0 })),
+        totales: { neto: b.monto_neto, exento: b.monto_exento, iva: b.iva, total: b.monto_total },
+        ted: b.ted, track_id: b.track_id, estado: b.estado,
+      };
+      const blobUrl = await generarBoletaPDF(data, "view");
+      window.open(blobUrl, "_blank");
+    } catch { toast("Error al generar PDF", "error"); }
   }
 
   if (loading) {
@@ -354,9 +396,13 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
               </button>
               {dteReceptorOn && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                  <input value={dteRut} onChange={e => setDteRut(e.target.value)}
+                  <input value={dteRut} onChange={e => validarRutInput(e.target.value)}
                     placeholder="RUT (ej: 12.345.678-9)"
-                    style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", fontSize: 10, outline: "none" }} />
+                    style={{
+                      padding: "8px 10px", borderRadius: 6, border: `1px solid ${rutError ? "#ef4444" : "var(--border)"}`,
+                      background: rutError ? "rgba(239,68,68,.04)" : "var(--bg-muted)",
+                      color: "var(--text)", fontSize: 10, outline: "none",
+                    }} />
                   <input value={dteNombre} onChange={e => setDteNombre(e.target.value)}
                     placeholder="Nombre o razón social"
                     style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", fontSize: 10, outline: "none" }} />
@@ -434,7 +480,7 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
           </button>
 
           {dteEmitida && (
-            <button onClick={goToVisualizar}
+            <button onClick={handleVerBoleta}
               style={{
                 width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid var(--border)",
                 background: "transparent", color: "var(--text2)", cursor: "pointer",
