@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Buildings } from "@phosphor-icons/react/dist/ssr";
 import EmpresaPopup from "./EmpresaPopup";
@@ -16,7 +16,7 @@ const TOP_TABS = [
 
 export default function V5Root({
   dashboardContent, subirContent, revisarContent, emitirContent, visualizarContent,
-  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId,
+  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId, hasBoletas,
 }: {
   dashboardContent: React.ReactNode;
   subirContent: React.ReactNode;
@@ -27,19 +27,33 @@ export default function V5Root({
   empresaTieneCertificado: boolean;
   empresaCafs: CAFRow[];
   empresaId: string;
+  hasBoletas?: boolean;
 }) {
   const [tab, setTab] = useState("subir");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
+  const [emitir2Open, setEmitir2Open] = useState(false);
+  const navRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
     function handler(e: CustomEvent) {
       const t = (e.detail as { tab?: string })?.tab;
-      if (t) setTab(t);
+      if (t) { setTab(t); setEmitir2Open(false); }
     }
     window.addEventListener("go-to-tab" as any, handler as any);
     return () => window.removeEventListener("go-to-tab" as any, handler as any);
+  }, []);
+
+  // Cerrar Emitir 2 al hacer click fuera
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setEmitir2Open(false);
+      }
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
   const toggleTheme = useCallback((e: React.MouseEvent) => {
@@ -86,8 +100,8 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 `}</style>
 
       <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
-        {/* TOP TABS — only flow tabs visible */}
-        <div style={{
+        {/* NAV — barra superior */}
+        <div ref={navRef} style={{
           position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 50,
           display: "flex", alignItems: "center", gap: 3,
           background: "var(--header-bg)", backdropFilter: "blur(16px)",
@@ -97,8 +111,8 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           boxShadow: "0 4px 24px var(--shadow)",
           transition: "background .4s,border .4s,box-shadow .4s",
         }}>
-          {/* Panel button — abre dashboard */}
-          <button onClick={() => setTab("dashboard")}
+          {/* Panel */}
+          <button onClick={() => { setTab("dashboard"); setEmitir2Open(false); }}
             style={{
               padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 50,
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -112,23 +126,90 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
             <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>Panel</span>
           </button>
 
-          {TOP_TABS.map((t) => {
-            const active = t.id === tab;
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                style={{
-                  padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
-                  minWidth: 70,
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  background: active ? "rgba(232,85,62,.1)" : "transparent",
-                  color: active ? "#E8553E" : "var(--text2)",
-                  transition: "all .2s",
-                }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
-                <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>{t.label}</span>
-              </button>
-            );
-          })}
+          {/* Tabs ocultos — siguen funcionales para el flujo masivo via EMITIR MASSDTE */}
+          {TOP_TABS.map((t) => (
+            <button key={t.id} onClick={() => { setTab(t.id); setEmitir2Open(false); }}
+              style={{
+                padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                minWidth: 70, display: "none",
+                flexDirection: "column", alignItems: "center", justifyContent: "center",
+                background: tab === t.id ? "rgba(232,85,62,.1)" : "transparent",
+                color: tab === t.id ? "#E8553E" : "var(--text2)",
+                transition: "all .2s",
+              }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
+              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>{t.label}</span>
+            </button>
+          ))}
+
+          {/* Emitir 2 */}
+          <button onClick={() => setEmitir2Open(o => !o)}
+            style={{
+              padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 56,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              background: "transparent",
+              color: "var(--text2)",
+              transition: "all .2s",
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>
+              Emitir 2 <span style={{fontSize:7,marginLeft:1}}>{emitir2Open ? "▾" : "▸"}</span>
+            </span>
+          </button>
+
+          {/* Options animadas: EMITIR DTE + EMITIR MASSDTE */}
+          <div style={{
+            overflow: "hidden",
+            display: "flex", alignItems: "center", gap: 3,
+            maxWidth: emitir2Open ? 240 : 0,
+            opacity: emitir2Open ? 1 : 0,
+            transform: emitir2Open ? "translateX(0)" : "translateX(-8px)",
+            transition: "max-width .25s cubic-bezier(.22,1,.36,1), opacity .2s ease, transform .25s cubic-bezier(.22,1,.36,1)",
+          }}>
+            <button onClick={() => { setTab("emitir"); setEmitir2Open(false); setTimeout(() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir", mode: "dte" } })), 50); }}
+              style={{
+                padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                background: "transparent", color: "var(--text2)", whiteSpace: "nowrap",
+                transition: "all .2s",
+              }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+              </svg>
+              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR DTE</span>
+            </button>
+            <button onClick={() => { setTab("subir"); setEmitir2Open(false); }}
+              style={{
+                padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                background: tab === "subir" ? "rgba(232,85,62,.1)" : "transparent",
+                color: tab === "subir" ? "#E8553E" : "var(--text2)", whiteSpace: "nowrap",
+                transition: "all .2s",
+              }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR MASSDTE</span>
+            </button>
+          </div>
+
+          {/* Visualizar — solo visible si hay boletas emitidas */}
+          <button onClick={() => setTab("visualizar")}
+            style={{
+              padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 70,
+              display: hasBoletas ? "flex" : "none",
+              flexDirection: "column", alignItems: "center", justifyContent: "center",
+              background: tab === "visualizar" ? "rgba(232,85,62,.1)" : "transparent",
+              color: tab === "visualizar" ? "#E8553E" : "var(--text2)",
+              transition: "all .2s",
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>Visualizar DTE</span>
+          </button>
         </div>
 
         {/* TOP RIGHT CONTROLS */}

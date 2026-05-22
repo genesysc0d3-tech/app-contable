@@ -117,14 +117,20 @@ async function procesarEnBackground(
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[bg] ${documentoId} error fatal:`, errorMsg);
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const svc = createServiceClient(url, key);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (svc as any).from("documentos_subidos").update({
-      estado: "error",
-      progreso_ia: { estado: "error", error: errorMsg },
-    }).eq("id", documentoId);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+    console.error(`[bg] ${documentoId} error fatal:`, errorMsg, errorStack ?? "");
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+      if (url && key) {
+        const svc = createServiceClient(url, key);
+        await svc.from("documentos_subidos").update({
+          estado: "error",
+          progreso_ia: { estado: "error", error: errorMsg },
+        }).eq("id", documentoId);
+      }
+    } catch (e) {
+      console.error(`[bg] ${documentoId} fallo al marcar error:`, e);
+    }
   }
 }

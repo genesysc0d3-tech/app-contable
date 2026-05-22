@@ -249,7 +249,7 @@ export default async function V5Page({ searchParams }: {
       }
       emitirContent={
         <div style={{maxWidth:640,margin:"0 auto",display:"flex",flexDirection:"column",gap:20}}>
-          <EmitirFullView empresaId={empresaId} />
+          <EmitirFullView empresaId={empresaId} tipoContribuyente={usuario.empresas.tipo_contribuyente ?? "afecto"} />
         </div>
       }
       visualizarContent={
@@ -261,6 +261,7 @@ export default async function V5Page({ searchParams }: {
       empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
       empresaCafs={(cafsData.data ?? []) as any}
       empresaId={empresaId}
+      hasBoletas={(boletasAllData.data ?? []).length > 0}
     />
   );
 }
