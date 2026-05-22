@@ -44,9 +44,10 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
 
   // DTE form state
   const esExento = tipoContribuyente === "exento";
+  const initialDteTipo = esExento ? 41 : 39;
   const [mode, setMode] = useState<"massdte" | "dte">("massdte");
   const [dteMonto, setDteMonto] = useState("");
-  const [dteTipo, setDteTipo] = useState<39 | 41>(esExento ? 41 : 39);
+  const [dteTipo, setDteTipo] = useState<39 | 41>(initialDteTipo);
   const [dteReceptorOn, setDteReceptorOn] = useState(false);
   const [dteRut, setDteRut] = useState("");
   const [dteNombre, setDteNombre] = useState("");
@@ -57,6 +58,20 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
   const [dteEmitida, setDteEmitida] = useState(false);
   const [dteBoletaId, setDteBoletaId] = useState<string | null>(null);
   const [rutError, setRutError] = useState(false);
+
+  function resetDteForm() {
+    setDteMonto("");
+    setDteTipo(initialDteTipo);
+    setDteReceptorOn(false);
+    setDteRut("");
+    setDteNombre("");
+    setDteEmail("");
+    setDteDetalleOn(false);
+    setDteGlosa("");
+    setDteEmitida(false);
+    setDteBoletaId(null);
+    setRutError(false);
+  }
 
   // Validar RUT en tiempo real
   function validarRutInput(rut: string) {
@@ -475,7 +490,10 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
                 <span>Emitiendo<span className="dots-anim" /></span>
               </>
             ) : (
-              <>EMITIR BOLETA</>
+              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                EMITIR BOLETA</>
             )}
           </button>
 
@@ -492,6 +510,23 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
                 <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
               </svg>
               Visualizar / Descargar
+            </button>
+          )}
+
+          {dteEmitida && (
+            <button onClick={resetDteForm}
+              style={{
+                width: "100%", padding: "10px 0", borderRadius: 8, border: "none",
+                background: "rgba(232,85,62,.08)", color: "#E8553E", cursor: "pointer",
+                fontSize: 11, fontWeight: 600,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                transition: "all .15s",
+              }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 4v6h6M23 20v-6h-6"/>
+                <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+              </svg>
+              Volver a emitir
             </button>
           )}
         </div>

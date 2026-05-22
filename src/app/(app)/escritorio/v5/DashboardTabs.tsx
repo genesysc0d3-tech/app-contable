@@ -74,6 +74,22 @@ export default function DashboardTabs({
             );
           })}
         </div>
+
+        {/* Botón EMITIR BOLETA fuera del Panel */}
+        <button onClick={() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir", mode: "dte" } }))}
+          style={{
+            display: "flex", alignItems: "center", gap: 8, width: "100%",
+            padding: "10px 14px", borderRadius: 10,
+            border: "none", cursor: "pointer",
+            background: "rgba(232,85,62,.1)", color: "#E8553E",
+            fontWeight: 600, fontSize: 11,
+            transition: "all .15s",
+          }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>EMITIR BOLETA</span>
+        </button>
       </div>
 
       {/* RIGHT COLUMN */}

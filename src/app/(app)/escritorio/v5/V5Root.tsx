@@ -154,7 +154,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
             }}>
             {emitirMode === "dte" ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                <path d="M12 5v14M5 12h14"/>
               </svg>
             ) : (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -162,7 +162,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
               </svg>
             )}
             <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>
-              {emitirMode === "dte" ? "EMITIR DTE" : "EMITIR MASSDTE"} <span style={{fontSize:7,marginLeft:1}}>{emitir2Open ? "▾" : "▸"}</span>
+              {emitirMode === "dte" ? "EMITIR BOLETA" : "EMITIR MASSDTE"} <span style={{fontSize:7,marginLeft:1}}>{emitir2Open ? "▾" : "▸"}</span>
             </span>
           </button>
 
@@ -183,9 +183,9 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
                 transition: "all .2s",
               }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                <path d="M12 5v14M5 12h14"/>
               </svg>
-              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR DTE</span>
+              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR BOLETA</span>
             </button>
             <button onClick={() => { setEmitirMode("massdte"); setTab("subir"); setEmitir2Open(false); }}
               style={{
@@ -202,11 +202,11 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
             </button>
           </div>
 
-          {/* Visualizar — solo visible si hay boletas emitidas */}
+          {/* Visualizar — oculto */}
           <button onClick={() => setTab("visualizar")}
             style={{
               padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 70,
-              display: hasBoletas ? "flex" : "none",
+              display: "none",
               flexDirection: "column", alignItems: "center", justifyContent: "center",
               background: tab === "visualizar" ? "rgba(232,85,62,.1)" : "transparent",
               color: tab === "visualizar" ? "#E8553E" : "var(--text2)",
