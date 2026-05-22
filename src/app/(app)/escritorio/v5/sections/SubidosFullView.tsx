@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 interface DocRaw {
   id: string; nombre_archivo: string; tipo: string; estado: string;
@@ -23,6 +24,7 @@ function dayLabel(s: string) {
 export default function SubidosFullView({ documentos }: { documentos: DocRaw[] }) {
   const [refreshing, setRefreshing] = useState(false);
   const [docs, setDocs] = useState(documentos);
+  const router = useRouter();
 
   useEffect(() => { setDocs(documentos); }, [documentos]);
 
@@ -48,8 +50,9 @@ export default function SubidosFullView({ documentos }: { documentos: DocRaw[] }
   }, [docs]);
 
   const goToRevisar = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "revisar" } }));
-  }, []);
+    router.refresh();
+    setTimeout(() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "revisar" } })), 100);
+  }, [router]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, DocRaw[]>();
