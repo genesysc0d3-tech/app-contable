@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 
 const DASH_TABS = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z",
+  },
   {
     id: "actividad",
     label: "Actividad",
@@ -18,15 +23,17 @@ const DASH_TABS = [
 export default function DashboardTabs({
   rcvCard,
   calendar,
+  dashboardOverview,
   actividadContent,
   boletasEmitidasContent,
 }: {
   rcvCard: React.ReactNode;
   calendar: React.ReactNode;
+  dashboardOverview: React.ReactNode;
   actividadContent: React.ReactNode;
   boletasEmitidasContent: React.ReactNode;
 }) {
-  const [tab, setTab] = useState("actividad");
+  const [tab, setTab] = useState("dashboard");
 
   return (
     <div className="app" style={{
@@ -43,6 +50,9 @@ export default function DashboardTabs({
           border: "1px solid var(--border)", padding: "8px",
           boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",
         }}>
+          <div style={{ fontSize: 9, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", padding: "4px 14px 8px" }}>
+            Panel
+          </div>
           {DASH_TABS.map((t) => {
             const active = t.id === tab;
             return (
@@ -74,13 +84,10 @@ export default function DashboardTabs({
         border: "1px solid var(--border)",
         boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",
       }}>
-        {/* Calendar (always visible) */}
-        {calendar}
-
-        {/* Tab content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: 16, scrollbarWidth: "none" }}>
-          {tab === "actividad" && actividadContent}
-          {tab === "boletas" && boletasEmitidasContent}
+        <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
+          {tab === "dashboard" && dashboardOverview}
+          {tab === "actividad" && <div style={{ padding: 16 }}>{actividadContent}</div>}
+          {tab === "boletas" && <div style={{ padding: 16 }}>{boletasEmitidasContent}</div>}
         </div>
       </div>
     </div>

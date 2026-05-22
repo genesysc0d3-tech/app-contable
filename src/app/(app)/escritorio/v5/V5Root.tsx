@@ -8,7 +8,6 @@ import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
 const TOP_TABS = [
-  { id: "dashboard", label: "Dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
   { id: "subir", label: "Subir", icon: "M12 5v14m-7-7l7-7 7 7" },
   { id: "revisar", label: "Revisar", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   { id: "emitir", label: "Emitir", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
@@ -29,7 +28,7 @@ export default function V5Root({
   empresaCafs: CAFRow[];
   empresaId: string;
 }) {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("subir");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const router = useRouter();
@@ -87,7 +86,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 `}</style>
 
       <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
-        {/* TOP TABS — estilo TabsV5 */}
+        {/* TOP TABS — only flow tabs visible */}
         <div style={{
           position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 50,
           display: "flex", alignItems: "center", gap: 3,
@@ -98,6 +97,21 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           boxShadow: "0 4px 24px var(--shadow)",
           transition: "background .4s,border .4s,box-shadow .4s",
         }}>
+          {/* Panel button — abre dashboard */}
+          <button onClick={() => setTab("dashboard")}
+            style={{
+              padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 50,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              background: tab === "dashboard" ? "rgba(232,85,62,.1)" : "transparent",
+              color: tab === "dashboard" ? "#E8553E" : "var(--text2)",
+              transition: "all .2s",
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            </svg>
+            <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>Panel</span>
+          </button>
+
           {TOP_TABS.map((t) => {
             const active = t.id === tab;
             return (
@@ -119,7 +133,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 
         {/* TOP RIGHT CONTROLS */}
         <div style={{position:"fixed",top:22,right:24,zIndex:60,display:"flex",alignItems:"center",gap:8}}>
-          <button onClick={() => { setEmpresaOpen(true); router.refresh(); }}
+          <button onClick={() => { setEmpresaOpen(true); }}
             style={{width:38,height:38,borderRadius:10,border:"1px solid var(--header-border)",cursor:"pointer",background:"var(--header-bg)",backdropFilter:"blur(8px)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
             <Buildings size={18} weight="bold" />
           </button>

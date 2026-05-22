@@ -138,9 +138,21 @@ export default async function V5Page({ searchParams }: {
     </div></GlowWrap>
   );
 
-  // Calendar JSX
+  // Dashboard metrics
+  const allBoletas = (boletasAllData.data ?? []) as { monto_total: number; fecha_emision: string; estado: string }[];
+  const mesBoletas = allBoletas.filter(b => {
+    const d = new Date(b.fecha_emision);
+    return d.getFullYear() === y && d.getMonth() === m && b.estado !== "anulada";
+  });
+  const mesTotal = mesBoletas.reduce((s, b) => s + b.monto_total, 0);
+  const mesCount = mesBoletas.length;
+
+  const totalDocs = rcvTotal.docs;
+  const totalGlobal = rcvTotal.total;
+
+  // Calendar component (reusable)
   const calendar = (
-    <div className="cal" style={{padding:"12px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
+    <div className="cal" style={{padding:"12px 16px",borderBottom:"1px solid var(--bg-muted)"}}>
       <div className="cal-h" style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
         <Link href={`/escritorio/v5?month=${y}-${m-1}${dateParam ? `&date=${dateParam}` : ""}`} className="nv" style={{fontSize:9,color:"var(--text2)",cursor:"pointer",padding:"2px 4px",borderRadius:3,textDecoration:"none"}} scroll={false}>‹</Link>
         <span className="m" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{monthNames[m]} {y}</span>
@@ -162,10 +174,60 @@ export default async function V5Page({ searchParams }: {
     </div>
   );
 
+  // Dashboard overview — metrics cards + calendar
+  const dashboardOverview = (
+    <div>
+      {calendar}
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Resumen mensual</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{
+            padding: "12px 14px", borderRadius: 10,
+            background: "rgba(180,240,39,.04)", border: "1px solid rgba(180,240,39,.1)",
+          }}>
+            <div style={{ fontSize: 9, color: "var(--text2)", fontWeight: 500, marginBottom: 4 }}>Boletas del mes</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#b4f027", fontVariantNumeric: "tabular-nums" }}>
+              {mesCount}
+            </div>
+          </div>
+          <div style={{
+            padding: "12px 14px", borderRadius: 10,
+            background: "rgba(232,85,62,.04)", border: "1px solid rgba(232,85,62,.1)",
+          }}>
+            <div style={{ fontSize: 9, color: "var(--text2)", fontWeight: 500, marginBottom: 4 }}>Total del mes</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#E8553E", fontVariantNumeric: "tabular-nums" }}>
+              {fmt(mesTotal)}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+          <div style={{ padding: "8px", borderRadius: 8, background: "var(--bg-muted)", textAlign: "center" }}>
+            <div style={{ fontSize: 8, color: "var(--text2)", marginBottom: 2, textTransform: "uppercase" }}>Emitidas</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{totalDocs}</div>
+          </div>
+          <div style={{ padding: "8px", borderRadius: 8, background: "var(--bg-muted)", textAlign: "center" }}>
+            <div style={{ fontSize: 8, color: "var(--text2)", marginBottom: 2, textTransform: "uppercase" }}>Neto</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{fmt(rcvTotal.neto)}</div>
+          </div>
+          <div style={{ padding: "8px", borderRadius: 8, background: "var(--bg-muted)", textAlign: "center" }}>
+            <div style={{ fontSize: 8, color: "var(--text2)", marginBottom: 2, textTransform: "uppercase" }}>IVA</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{fmt(rcvTotal.iva)}</div>
+          </div>
+        </div>
+        {activityEvents.length > 0 && (
+          <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-muted)", fontSize: 10, color: "var(--text2)" }}>
+            {activityEvents.length} evento{activityEvents.length !== 1 ? "s" : ""} registrado{activityEvents.length !== 1 ? "s" : ""} este período
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   const dashboardContent = (
     <DashboardTabs
       rcvCard={rcvCard}
       calendar={calendar}
+      dashboardOverview={dashboardOverview}
       actividadContent={<ActividadView events={activityEvents} />}
       boletasEmitidasContent={<BoletasMensualesView boletas={(boletasAllData.data ?? []) as any} />}
     />
