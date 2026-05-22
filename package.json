@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cb4w": "node scripts/reset-db.js"
   },
   "dependencies": {
     "@mistralai/mistralai": "^2.1.2",

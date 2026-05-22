@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Buildings } from "@phosphor-icons/react/dist/ssr";
 import EmpresaPopup from "./EmpresaPopup";
@@ -9,21 +9,21 @@ import type { CAFRow } from "../../empresa/CAFPanel";
 
 const TOP_TABS = [
   { id: "dashboard", label: "Dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
-  { id: "subidos", label: "Subidos", icon: "M12 5v14m-7-7l7-7 7 7" },
+  { id: "subir", label: "Subir", icon: "M12 5v14m-7-7l7-7 7 7" },
   { id: "revisar", label: "Revisar", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   { id: "emitir", label: "Emitir", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  { id: "boletas", label: "Boletas", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+  { id: "visualizar", label: "Visualizar DTE", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
 ];
 
 export default function V5Root({
-  dashboardContent, subidosContent, revisarContent, emitirContent, boletasContent,
+  dashboardContent, subirContent, revisarContent, emitirContent, visualizarContent,
   empresaInicial, empresaTieneCertificado, empresaCafs, empresaId,
 }: {
   dashboardContent: React.ReactNode;
-  subidosContent: React.ReactNode;
+  subirContent: React.ReactNode;
   revisarContent: React.ReactNode;
   emitirContent: React.ReactNode;
-  boletasContent: React.ReactNode;
+  visualizarContent: React.ReactNode;
   empresaInicial: DatosEmisor;
   empresaTieneCertificado: boolean;
   empresaCafs: CAFRow[];
@@ -33,43 +33,15 @@ export default function V5Root({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const router = useRouter();
-  const barRef = useRef<HTMLDivElement>(null);
-  const indicatorRef = useRef<HTMLDivElement>(null);
-  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const mountedRef = useRef(false);
 
-  const moveIndicator = useCallback(() => {
-    const idx = TOP_TABS.findIndex(t => t.id === tab);
-    const btn = btnRefs.current[idx];
-    const bar = barRef.current;
-    const indicator = indicatorRef.current;
-    if (!btn || !bar || !indicator) return;
-    const barRect = bar.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    indicator.style.left = (btnRect.left - barRect.left) + "px";
-    indicator.style.width = btnRect.width + "px";
-  }, [tab]);
-
-  // Position indicator on mount and tab change
-  useEffect(() => { moveIndicator(); }, [moveIndicator]);
-
-  // Enable transition only after first paint to avoid FOUC animation
   useEffect(() => {
-    const indicator = indicatorRef.current;
-    if (!indicator) return;
-    mountedRef.current = true;
-    // Small RAF delay ensures the indicator has been positioned at (0,0)
-    requestAnimationFrame(() => {
-      indicator.style.transition = "left .35s cubic-bezier(.22,1,.36,1), width .35s cubic-bezier(.22,1,.36,1)";
-      moveIndicator();
-    });
-  }, [moveIndicator]);
-
-  // Resize handler
-  useEffect(() => {
-    window.addEventListener("resize", moveIndicator);
-    return () => window.removeEventListener("resize", moveIndicator);
-  }, [moveIndicator]);
+    function handler(e: CustomEvent) {
+      const t = (e.detail as { tab?: string })?.tab;
+      if (t) setTab(t);
+    }
+    window.addEventListener("go-to-tab" as any, handler as any);
+    return () => window.removeEventListener("go-to-tab" as any, handler as any);
+  }, []);
 
   const toggleTheme = useCallback((e: React.MouseEvent) => {
     const btn = e.currentTarget;
@@ -90,7 +62,7 @@ export default function V5Root({
     } else {
       apply();
     }
-  }, [theme, moveIndicator]);
+  }, [theme]);
 
   return (
     <>
@@ -102,48 +74,47 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 ::view-transition-new(root){z-index:9999;clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%));animation:circle-expand .5s cubic-bezier(.22,1,.36,1) forwards}
 @keyframes circle-expand{from{clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%))}to{clip-path:circle(150% at var(--click-x,50%) var(--click-y,50%))}}
 ::view-transition-old(root){z-index:1}
+.dz{padding:14px;border-radius:10px;border:1.5px dashed rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s}
+.dz:hover{border-color:rgba(180,240,39,.3);background:rgba(180,240,39,.02)}
+.dz-icon{width:32px;height:32px;border-radius:8px;background:rgba(180,240,39,.06);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.dz-icon svg{width:16px;height:16px;color:#b4f027}
+.dz-txt h4{font-size:12px;font-weight:600}
+.dz-txt p{font-size:10px;color:var(--text2);margin-top:1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
+.dots-anim::after{content:'';animation:dots 1.4s steps(4) infinite;display:inline-block;width:1.1em;text-align:left}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}100%{content:''}}
 `}</style>
 
       <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
-        {/* GLASS HEADER WITH SLIDING PILL */}
-        <div ref={barRef} style={{
+        {/* TOP TABS — estilo TabsV5 */}
+        <div style={{
           position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 50,
           display: "flex", alignItems: "center", gap: 3,
           background: "var(--header-bg)", backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
-          borderRadius: 16, padding: "5px 6px",
+          borderRadius: 16, padding: "4px 6px",
           border: "1px solid var(--header-border)",
           boxShadow: "0 4px 24px var(--shadow)",
           transition: "background .4s,border .4s,box-shadow .4s",
         }}>
-          {TOP_TABS.map((t, i) => {
+          {TOP_TABS.map((t) => {
             const active = t.id === tab;
             return (
-              <button key={t.id} ref={el => { btnRefs.current[i] = el; }}
-                onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => setTab(t.id)}
                 style={{
-                  position: "relative", zIndex: 2,
-                  padding: "8px 16px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 11, fontWeight: active ? 600 : 500,
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: "transparent",
-                  color: active ? "#fff" : "var(--text2)",
-                  transition: "color .25s",
+                  padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                  minWidth: 70,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  background: active ? "rgba(232,85,62,.1)" : "transparent",
+                  color: active ? "#E8553E" : "var(--text2)",
+                  transition: "all .2s",
                 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d={t.icon} />
-                </svg>
-                {t.label}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
+                <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>{t.label}</span>
               </button>
             );
           })}
-          {/* SLIDING PILL INDICATOR — transition added by JS after mount */}
-          <div ref={indicatorRef} style={{
-            position: "absolute", top: 5, zIndex: 1,
-            height: "calc(100% - 10px)", borderRadius: 10,
-            background: "var(--accent)",
-            boxShadow: "0 2px 12px rgba(232,85,62,.35)",
-          }} />
         </div>
 
         {/* TOP RIGHT CONTROLS */}
@@ -173,11 +144,12 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
         </div>
 
         {/* TAB CONTENT */}
-        {tab === "dashboard" && <div>{dashboardContent}</div>}
-        {tab === "subidos" && <div style={{ padding: "100px 24px 24px" }}>{subidosContent}</div>}
+        {tab === "dashboard" && <div style={{ padding: "84px 20px 20px" }}>{dashboardContent}</div>}
+        {tab === "subir" && <div style={{ padding: "100px 24px 24px" }}>{subirContent}</div>}
         {tab === "revisar" && <div style={{ padding: "100px 24px 24px" }}>{revisarContent}</div>}
         {tab === "emitir" && <div style={{ padding: "100px 24px 24px" }}>{emitirContent}</div>}
-        {tab === "boletas" && <div style={{ padding: "100px 24px 24px" }}>{boletasContent}</div>}
+        {tab === "visualizar" && <div style={{ padding: "100px 24px 24px" }}>{visualizarContent}</div>}
+
       </div>
 
       {empresaOpen && (

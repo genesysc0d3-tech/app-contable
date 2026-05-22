@@ -130,37 +130,26 @@ src/app/(app)/empresa/          ← Componentes de empresa compartidos
 
 _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 
-### Última sesión (2026-05-17)
+### Última sesión (2026-05-22)
 
 **Qué se hizo:**
-- Popup empresa rediseñado con wizard de 5 pasos (Emisor, Certificado, Formatos, CAF, IA)
-- Componentes de empresa (EmisorForm, CertificadoToggle, etc.) convertidos a inline styles oscuros
-- Dashboard cards con glow hover (box-shadow red accent)
-- Tema claro/oscuro: fondos sólidos vía `var(--surface)` en vez de glass translúcido
-- Colores morados reemplazados por naranja-rojo `#E8553E`
-- Botón flotante empresa con icono Buildings (Phosphor)
-- Eliminados controles flotantes no funcionales del layout
-- AGENTS.md enriquecido con setup, reglas, arquitectura y memoria persistente
-- CLAUDE.md actualizado en sync con AGENTS.md
+- Reset completo de BD (CB4W): `scripts/reset-completo.sql` + `scripts/reset-db.js` + script `npm run cb4w`
+- Reemplazado estilo de pestañas superiores (V5Root.tsx) con el formato de TabsV5 (icono sobre texto, fondo activo `rgba(232,85,62,.1)`, sin sliding pill)
 
 **Archivos modificados:**
-- `src/app/(app)/empresa/EmisorForm.tsx`, `CertificadoToggle.tsx`, `CAFPanel.tsx`, `AiKeyConfig.tsx`, `EmpresaFormatoCartola.tsx`
-- `src/app/(app)/escritorio/v5/EmpresaPopup.tsx`, `V5Root.tsx`, `GlowWrap.tsx`, `page.tsx`, `RevisarTabContent.tsx`
-- `src/app/(app)/layout.tsx`
-- `AGENTS.md`, `CLAUDE.md`
+- `scripts/reset-completo.sql` (nuevo) — SQL de reset total
+- `scripts/reset-db.js` (nuevo) — script node para ejecutar reset vía Supabase
+- `package.json` — agregado script `cb4w`
+- `src/app/(app)/escritorio/v5/V5Root.tsx` — pestañas superiores ahora con estilo TabsV5 (icono sobre texto, fondo activo)
+- `src/app/(app)/escritorio/v5/page.tsx` — eliminado TabsV5 del dashboard; las pestañas superiores controlan el flujo
 
 **Decisiones:**
-- Glow usa `!important` para vencer inline box-shadow
-- Popup empresa tiene `height: min(900px, ...)` fija con scroll interno
-- Componentes compartidos se modificaron con inline styles (funcionan en /empresa y en popup)
-- Tema claro: `var(--surface) = #ffffff`, Tema oscuro: `var(--surface) = #16181d`
-- No usar `100dvh` ni `overflow: hidden` en wrapper del dashboard (rompía visibilidad)
-- AGENTS.md es la memoria persistente: se actualiza al final de cada sesión y viaja en git
-- El compañero hace `git pull` → IA carga contexto automáticamente
+- CB4W = comando para limpiar base de trabajo y empezar desde 0
+- Las pestañas inferiores (TabsV5) ahora tienen el mismo formato visual que las superiores
 
 **Próximos pasos:**
-- Terminar de pulir visual del popup empresa
-- Revisar modo claro en todas las secciones
+- Continuar desarrollo del flujo de emisión
+- Ajustar visual de las secciones
 <!-- MEMORY:END -->
 
 ---
