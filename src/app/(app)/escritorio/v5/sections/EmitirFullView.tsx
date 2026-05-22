@@ -59,6 +59,15 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
   const [dteBoletaId, setDteBoletaId] = useState<string | null>(null);
   const [rutError, setRutError] = useState(false);
 
+  // Check sessionStorage for pre-selected mode (set by EMITIR BOLETA button)
+  useEffect(() => {
+    const saved = sessionStorage.getItem("emitir-mode");
+    if (saved === "dte" || saved === "massdte") {
+      setMode(saved);
+      sessionStorage.removeItem("emitir-mode");
+    }
+  }, []);
+
   function resetDteForm() {
     setDteMonto("");
     setDteTipo(initialDteTipo);
@@ -254,7 +263,7 @@ export default function EmitirFullView({ empresaId, tipoContribuyente }: { empre
 
   const todasEmitidas = items.length > 0 && emitidas.size === items.length;
 
-  if (items.length === 0 || todasEmitidas) {
+  if (mode === "massdte" && (items.length === 0 || todasEmitidas)) {
     return (
       <div style={{ textAlign: "center", padding: "80px 20px" }}>
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2" style={{ display: "block", margin: "0 auto 14px" }}>

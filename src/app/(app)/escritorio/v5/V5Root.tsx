@@ -175,7 +175,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
             transform: emitir2Open ? "translateX(0)" : "translateX(-8px)",
             transition: "max-width .25s cubic-bezier(.22,1,.36,1), opacity .2s ease, transform .25s cubic-bezier(.22,1,.36,1)",
           }}>
-            <button onClick={() => { setEmitirMode("dte"); setTab("emitir"); setEmitir2Open(false); setTimeout(() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir", mode: "dte" } })), 50); }}
+            <button onClick={() => { setEmitirMode("dte"); sessionStorage.setItem("emitir-mode", "dte"); setTab("emitir"); setEmitir2Open(false); }}
               style={{
                 padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",

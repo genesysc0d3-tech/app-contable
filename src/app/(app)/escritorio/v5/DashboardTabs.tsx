@@ -76,7 +76,7 @@ export default function DashboardTabs({
         </div>
 
         {/* Botón EMITIR BOLETA fuera del Panel */}
-        <button onClick={() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir", mode: "dte" } }))}
+        <button onClick={() => { sessionStorage.setItem("emitir-mode", "dte"); window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir" } })); }}
           style={{
             display: "flex", alignItems: "center", gap: 8, width: "100%",
             padding: "10px 14px", borderRadius: 10,
