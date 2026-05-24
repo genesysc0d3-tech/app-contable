@@ -14,6 +14,8 @@ export default function RightColumnView({
   rcvContent?: ReactNode;
 }) {
   const [view, setView] = useState<"dashboard" | "actividad" | "rcv">("dashboard");
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const cardRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -23,7 +25,10 @@ export default function RightColumnView({
   useEffect(() => {
     function handler(e: CustomEvent) {
       const v = (e.detail as string) ?? "";
-      if (v === "actividad" || v === "rcv" || v === "dashboard") setView(v);
+      if (v === "actividad" || v === "rcv" || v === "dashboard") {
+        if (v === viewRef.current) return;
+        setView(v);
+      }
     }
     window.addEventListener("switch-view", handler as EventListener);
     return () => window.removeEventListener("switch-view", handler as EventListener);
@@ -69,11 +74,27 @@ export default function RightColumnView({
     };
   }, []);
 
+  function slideStyle(v: "dashboard" | "actividad" | "rcv"): React.CSSProperties {
+    const active = view === v;
+    return {
+      position: "absolute", inset: 0,
+      opacity: active ? 1 : 0,
+      pointerEvents: active ? "auto" : "none",
+      zIndex: active ? 1 : 0,
+      display: "flex", flexDirection: "column",
+      transition: "opacity .28s cubic-bezier(.22,1,.36,1)",
+    };
+  }
+
   return (
     <>
     <GlowWrap glow style={{ height: "100%", borderRadius: 20, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
       <div ref={cardRef} className="right-col" style={{ flex: 1, minHeight: 0, height: "100%", display: "flex", flexDirection: "column", background: "var(--surface)", borderRadius: 20, border: "1px solid var(--border)", overflow: "hidden", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", opacity: fullscreen && expanded ? 0 : 1, transition: "opacity .24s ease" }}>
-        {view === "dashboard" ? defaultContent : view === "actividad" ? <ActividadView items={actividadItems} /> : rcvContent}
+        <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+          <div style={slideStyle("dashboard")}>{defaultContent}</div>
+          <div style={slideStyle("actividad")}><ActividadView items={actividadItems} /></div>
+          <div style={slideStyle("rcv")}>{rcvContent}</div>
+        </div>
       </div>
     </GlowWrap>
     {fullscreen && originStyle && (
