@@ -19,14 +19,17 @@ export default function TabsV5({
 
   const moveIndicator = useCallback(() => {
     const idx = tabs.findIndex(t => t.id === tab);
-    const btn = btnRefs.current[idx];
-    const bar = barRef.current;
-    const indicator = indicatorRef.current;
-    if (!btn || !bar || !indicator) return;
-    const barRect = bar.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    indicator.style.left = (btnRect.left - barRect.left) + "px";
-    indicator.style.width = btnRect.width + "px";
+      const btn = btnRefs.current[idx];
+      const bar = barRef.current;
+      const indicator = indicatorRef.current;
+      if (!btn || !bar || !indicator) return;
+      const btnRect = btn.getBoundingClientRect();
+      const next = btn.nextElementSibling as HTMLElement | null;
+      const nextArrow = next?.dataset?.tabArrow === "true" ? next : null;
+      indicator.style.left = btn.offsetLeft + "px";
+      indicator.style.width = nextArrow
+        ? (nextArrow.offsetLeft + nextArrow.offsetWidth - btn.offsetLeft) + "px"
+        : btnRect.width + "px";
   }, [tab]);
 
   useEffect(() => {
@@ -63,9 +66,10 @@ export default function TabsV5({
       <div ref={barRef} className="tab-bar" style={{position:"relative",display:"flex",alignItems:"center",gap:2,padding:"8px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
         {tabs.map((t, i) => {
           const active = t.id === tab;
+          const arrowActive = i > 0 && tabs[i - 1].id === tab;
           return (
             <React.Fragment key={t.id}>
-            {i > 0 && <span style={{width:26,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:13,color:tabs[i-1].id === tab ? "#fff" : "var(--text3)",flexShrink:0,background:tabs[i-1].id === tab ? "#E8553E" : "var(--bg-muted)",lineHeight:1,fontWeight:700,boxShadow:tabs[i-1].id === tab ? "0 0 12px rgba(232,85,62,.4)" : "none"}}>›</span>}
+            {i > 0 && <span data-tab-arrow="true" style={{position:"relative",zIndex:2,width:26,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:13,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:700,boxShadow:"none"}}>›</span>}
             <button ref={el => { btnRefs.current[i] = el; }} onClick={() => setTab(t.id)}
               style={{
                 position:"relative",zIndex:2,padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",

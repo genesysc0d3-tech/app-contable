@@ -141,38 +141,38 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center",
-      padding: 32, background: "rgba(0,0,0,.46)", backdropFilter: "blur(13px)",
+      padding: 24, background: "rgba(0,0,0,.58)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
     }}>
       <style>{`.fm-dark td,.fm-dark th{color:#fff!important}`}</style>
       <div className="fm-dark" style={{
-        width: "min(1280px, calc(100vw - 64px))", maxHeight: "calc(100vh - 64px)",
-        overflow: "hidden", borderRadius: 24, border: "1px solid rgba(255,255,255,.18)",
-        background: "linear-gradient(145deg, rgba(31,39,52,.92), rgba(13,21,32,.93))",
-        boxShadow: "0 40px 120px rgba(0,0,0,.55)",
+        width: "min(1280px, 96vw)", maxHeight: "88vh",
+        overflow: "hidden", borderRadius: 20, border: "1px solid var(--border)",
+        background: "var(--surface)",
+        boxShadow: "0 30px 90px rgba(0,0,0,.45), inset 0 1px 0 var(--border)",
         display: "grid", gridTemplateRows: "auto 1fr auto", color: "#f6f7fb",
         fontFamily: "'DM Sans','Inter',sans-serif",
       }}>
         {/* HEADER */}
-        <div style={{ padding: "14px 24px 12px", display: "flex", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+        <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <div style={{
-            width: 42, height: 42, borderRadius: 14, display: "grid", placeItems: "center",
-            background: "linear-gradient(145deg, #f47b45, #cd5832)", flexShrink: 0,
-            boxShadow: "0 12px 32px rgba(244,123,69,.32), inset 0 1px 0 rgba(255,255,255,.35)",
+            width: 32, height: 32, borderRadius: 8, display: "grid", placeItems: "center",
+            background: "rgba(232,85,62,.12)", color: "#E8553E", flexShrink: 0,
+            boxShadow: "0 0 18px rgba(232,85,62,.06)",
           }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="white" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="white" strokeWidth="1.4" opacity=".9"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="currentColor" strokeWidth="1.4" opacity=".9"/></svg>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 22, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.1 }}>Mapear campos</div>
-            {preview && <div style={{ marginTop: 4, fontSize: 12, color: "#a4adba" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1, color: "var(--text)" }}>Mapear campos</div>
+            {preview && <div style={{ marginTop: 4, fontSize: 11, color: "var(--text2)" }}>
               {detected ? <><CheckCircle size={12} weight="fill" style={{color:"#34d46e",marginRight:4}} /> Detectamos el formato — revisá que todo esté bien y aprobá.</>
                 : <><Warning size={12} weight="fill" style={{color:"#f59e0b",marginRight:4}} /> No reconocimos el formato — asigná las columnas manualmente.</>}
             </div>}
           </div>
-          <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 22, lineHeight: 1, cursor: "pointer" }}>×</button>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
 
         {/* CONTENT */}
-        <div style={{ overflow: "auto", padding: "12px 24px 12px", scrollbarWidth: "thin" }}>
+        <div style={{ overflow: "auto", padding: "16px 20px", scrollbarWidth: "thin" }}>
           {loading && <div style={{padding:80,textAlign:"center",color:"#a4adba"}}><div style={{height:20,width:200,margin:"0 auto 12px",borderRadius:8,background:"rgba(255,255,255,.06)"}} /><p>Cargando...</p></div>}
           {error && <div style={{padding:80,textAlign:"center",color:"#ff7365"}}><Warning size={32} weight="fill" /><p>{error}</p></div>}
           {preview && <GridContent preview={preview} roles={roles} setRole={setRole} headerRow={headerRow}

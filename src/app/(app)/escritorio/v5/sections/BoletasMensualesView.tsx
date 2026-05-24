@@ -17,10 +17,11 @@ const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> =
   61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.1)" },
 };
 
-export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[] }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+export default function BoletasMensualesView({ boletas, month, year, onPrevMonth, onNextMonth }: {
+  boletas: BoletaRow[];
+  month: number; year: number;
+  onPrevMonth: () => void; onNextMonth: () => void;
+}) {
   const [search, setSearch] = useState("");
 
   const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -56,27 +57,8 @@ export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[]
     return { emitidas, anuladas, total };
   }, [displayed]);
 
-  function prevMonth() { if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); }
-  function nextMonth() { if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); }
-
   return (
     <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Month navigation */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={prevMonth}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", padding: "4px 8px", fontSize: 13 }}>
-            ‹
-          </button>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", minWidth: 120, textAlign: "center" }}>
-            {monthNames[month]} {year}
-          </span>
-          <button onClick={nextMonth}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", padding: "4px 8px", fontSize: 13 }}>
-            ›
-          </button>
-        </div>
-      </div>
 
       {/* Search */}
       <div style={{ position: "relative" }}>
