@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 export default function TabsV5({
   pendCount, aprobCount, nombreEmpresa, fecha,
@@ -13,9 +13,41 @@ export default function TabsV5({
   boletasContent: React.ReactNode;
 }) {
   const [tab, setTab] = useState("revisar");
+  const barRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLDivElement>(null);
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const moveIndicator = useCallback(() => {
+    const idx = tabs.findIndex(t => t.id === tab);
+    const btn = btnRefs.current[idx];
+    const bar = barRef.current;
+    const indicator = indicatorRef.current;
+    if (!btn || !bar || !indicator) return;
+    const barRect = bar.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    indicator.style.left = (btnRect.left - barRect.left) + "px";
+    indicator.style.width = btnRect.width + "px";
+  }, [tab]);
+
+  useEffect(() => {
+    const handler = (e: Event) => setTab((e as CustomEvent).detail);
+    window.addEventListener("switch-tab", handler);
+    return () => window.removeEventListener("switch-tab", handler);
+  }, []);
+
+  useEffect(() => { moveIndicator(); }, [moveIndicator]);
+
+  useEffect(() => {
+    const indicator = indicatorRef.current;
+    if (!indicator) return;
+    requestAnimationFrame(() => {
+      indicator.style.transition = "left .35s cubic-bezier(.22,1,.36,1), width .35s cubic-bezier(.22,1,.36,1)";
+      moveIndicator();
+    });
+  }, [moveIndicator]);
 
   const tabs = [
-    { id: "subidos", label: "Subidos",
+    { id: "subidos", label: "Agregados",
       icon: "M12 5v14m-7-7l7-7 7 7" },
     { id: "revisar", label: "Revisar",
       icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
@@ -26,54 +58,62 @@ export default function TabsV5({
   ];
 
   return (
-    <>
-      {/* TAB BAR */}
-      <div className="tab-bar">
-        {tabs.map((t) => {
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      {/* TAB BAR + STATS */}
+      <div ref={barRef} className="tab-bar" style={{position:"relative",display:"flex",alignItems:"center",gap:2,padding:"8px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
+        {tabs.map((t, i) => {
           const active = t.id === tab;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`tb ${active ? "act" : ""}`}
+            <React.Fragment key={t.id}>
+            {i > 0 && <span style={{width:26,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:13,color:tabs[i-1].id === tab ? "#fff" : "var(--text3)",flexShrink:0,background:tabs[i-1].id === tab ? "#E8553E" : "var(--bg-muted)",lineHeight:1,fontWeight:700,boxShadow:tabs[i-1].id === tab ? "0 0 12px rgba(232,85,62,.4)" : "none"}}>›</span>}
+            <button ref={el => { btnRefs.current[i] = el; }} onClick={() => setTab(t.id)}
               style={{
-                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer",
-                fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 5,
-                background: active ? "rgba(232,85,62,.1)" : "transparent",
-                color: active ? "#E8553E" : "var(--text2)",
+                position:"relative",zIndex:2,padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 12, fontWeight: active ? 600 : 500, display: "flex", alignItems: "center", gap: 5,
+                background: "transparent",
+                color: active ? "#fff" : "var(--text2)",
+                transition:"color .25s",
               }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
               {t.label}
             </button>
+            </React.Fragment>
           );
         })}
-      </div>
-
-      {/* TOPBAR */}
-      <div className="topbar">
-        <div className="topbar-l">
-          <span className="dot"></span>
-          <h1>{nombreEmpresa}</h1>
-        </div>
-        <div className="topbar-r">
-          <span className="stat"><span className="num">{pendCount}</span><span className="lbl">esperando</span></span>
-          <span className="sep">·</span>
-          <span className="stat"><span className="num" style={{color:"#b4f027"}}>{aprobCount}</span><span className="lbl">aprobados</span></span>
-          <span className="date">{fecha}</span>
+        {/* SLIDING PILL INDICATOR */}
+        <div ref={indicatorRef} style={{
+          position:"absolute",top:"50%",left:0,zIndex:1,
+          height:26,borderRadius:6,marginTop:-13,
+          background:"var(--accent)",
+          boxShadow:"0 2px 12px rgba(232,85,62,.35)",
+        }} />
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
+            <span style={{fontSize:13,fontWeight:300}}>{pendCount}</span>
+            <span style={{fontSize:9}}>esperando</span>
+          </span>
+          <span style={{fontSize:9,color:"var(--text3)"}}>·</span>
+          <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
+            <span style={{fontSize:13,fontWeight:300,color:"#b4f027"}}>{aprobCount}</span>
+            <span style={{fontSize:9}}>aprobados</span>
+          </span>
+          <span style={{fontSize:9,color:"var(--text2)",marginLeft:4}}>{fecha}</span>
         </div>
       </div>
 
       {/* TAB CONTENT */}
-      <div className={`r-tab-content ${tab === "subidos" ? "act" : ""}`} style={{flex:1}}>
+      <div key="subidos" className={`r-tab-content ${tab === "subidos" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
         {subidosContent}
       </div>
-      <div className={`r-tab-content ${tab === "revisar" ? "act" : ""}`} style={{flex:1}}>
+      <div key="revisar" className={`r-tab-content ${tab === "revisar" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
         {revisarContent}
       </div>
-      <div className={`r-tab-content ${tab === "emitir" ? "act" : ""}`} style={{flex:1}}>
+      <div key="emitir" className={`r-tab-content ${tab === "emitir" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
         {emitirContent}
       </div>
-      <div className={`r-tab-content ${tab === "boletas" ? "act" : ""}`} style={{flex:1}}>
+      <div key="boletas" className={`r-tab-content ${tab === "boletas" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
         {boletasContent}
       </div>
-    </>
+    </div>
   );
 }

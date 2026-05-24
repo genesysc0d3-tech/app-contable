@@ -1,0 +1,173 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import VerBoletaButton from "@/components/boletas/VerBoletaButton";
+import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+
+interface BoletaRow {
+  id: string; folio: number | null; tipo_dte: number; fecha_emision: string;
+  receptor_razon_social: string | null; monto_total: number; estado: string;
+}
+
+function fmt(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
+
+const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
+  39: { label: "AFE", color: "#E8553E", bg: "rgba(232,85,62,.1)" },
+  41: { label: "EXE", color: "#3B82F6", bg: "rgba(59,130,246,.1)" },
+  61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.1)" },
+};
+
+export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[] }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [search, setSearch] = useState("");
+
+  const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+  // Global search across ALL boletas
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return null;
+    return boletas.filter(b => {
+      const folio = String(b.folio ?? "");
+      const receptor = (b.receptor_razon_social ?? "").toLowerCase();
+      const monto = fmt(b.monto_total).toLowerCase();
+      return folio.includes(q) || receptor.includes(q) || monto.includes(q) || q.includes(folio);
+    }).sort((a, b) => (b.folio ?? 0) - (a.folio ?? 0));
+  }, [boletas, search]);
+
+  // Month filter (only when no search)
+  const monthFiltered = useMemo(() => {
+    return boletas.filter(b => {
+      const d = new Date(b.fecha_emision);
+      return d.getFullYear() === year && d.getMonth() === month;
+    }).sort((a, b) => (b.folio ?? 0) - (a.folio ?? 0));
+  }, [boletas, year, month]);
+
+  const displayed = searchResults ?? monthFiltered;
+
+  const stats = useMemo(() => {
+    let total = 0, emitidas = 0, anuladas = 0;
+    for (const b of displayed) {
+      if (b.estado === "anulada") anuladas++;
+      else { emitidas++; total += b.monto_total; }
+    }
+    return { emitidas, anuladas, total };
+  }, [displayed]);
+
+  function prevMonth() { if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); }
+  function nextMonth() { if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); }
+
+  return (
+    <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Month navigation */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={prevMonth}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", padding: "4px 8px", fontSize: 13 }}>
+            ‹
+          </button>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", minWidth: 120, textAlign: "center" }}>
+            {monthNames[month]} {year}
+          </span>
+          <button onClick={nextMonth}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", padding: "4px 8px", fontSize: 13 }}>
+            ›
+          </button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position: "relative" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+          style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por folio, receptor o monto..."
+          style={{
+            width: "100%", padding: "8px 10px 8px 30px", borderRadius: 6,
+            border: "1px solid var(--border)", background: "var(--bg-muted)",
+            color: "var(--text)", fontSize: 10, outline: "none",
+          }} />
+        {search && (
+          <button onClick={() => setSearch("")}
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text3)", fontSize: 12 }}>
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Stats */}
+      {!search && (
+        <div style={{ display: "flex", gap: 16, fontSize: 10 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
+            {stats.emitidas} emitida{stats.emitidas !== 1 ? "s" : ""}
+          </span>
+          {stats.anuladas > 0 && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#ef4444" }} />
+              {stats.anuladas} anulada{stats.anuladas !== 1 ? "s" : ""}
+            </span>
+          )}
+          <span style={{ marginLeft: "auto", fontWeight: 600, color: "var(--text)" }}>
+            Total {fmt(stats.total)}
+          </span>
+        </div>
+      )}
+
+      {search && searchResults && (
+        <div style={{ fontSize: 10, color: "var(--text2)" }}>
+          {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""} para "{search}"
+        </div>
+      )}
+
+      {/* Table */}
+      {displayed.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 20px", fontSize: 11, color: "var(--text2)" }}>
+          {search ? "No se encontraron boletas con ese criterio" : `No hay boletas emitidas en ${monthNames[month].toLowerCase()} ${year}`}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {displayed.map(b => {
+            const anulada = b.estado === "anulada";
+            const badge = TIPO_BADGE[b.tipo_dte] ?? { label: `DTE ${b.tipo_dte}`, color: "var(--text2)", bg: "var(--bg-muted)" };
+            return (
+              <div key={b.id} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "8px 10px", borderRadius: 6,
+                background: anulada ? "rgba(239,68,68,.02)" : "rgba(255,255,255,.02)",
+                border: "1px solid var(--border)", opacity: anulada ? .5 : 1,
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text2)", minWidth: 30, fontVariantNumeric: "tabular-nums" }}>
+                  #{b.folio}
+                </span>
+                <span style={{
+                  fontSize: 7, padding: "1px 5px", borderRadius: 3, fontWeight: 700,
+                  background: badge.bg, color: badge.color, flexShrink: 0,
+                }}>
+                  {badge.label}
+                </span>
+                <span style={{ flex: 1, fontSize: 10, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {b.receptor_razon_social ?? "Sin receptor"}
+                </span>
+                <span style={{ fontSize: 9, color: "var(--text2)", flexShrink: 0 }}>
+                  {b.fecha_emision?.slice(5) ?? ""}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", minWidth: 60, textAlign: "right" }}>
+                  {fmt(b.monto_total)}
+                </span>
+                <div style={{ display: "flex", gap: 1 }}>
+                  <VerBoletaButton id={b.id} />
+                  <DescargarBoletaButton id={b.id} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

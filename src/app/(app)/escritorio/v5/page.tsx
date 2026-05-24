@@ -1,20 +1,22 @@
-import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import V5Root from "./V5Root";
 import GlowWrap from "./GlowWrap";
 import TabsV5 from "./TabsV5";
 import RevisarTabContent from "./RevisarTabContent";
-import EmitirPanel from "./EmitirPanel";
 import EmitirTabContent from "./EmitirTabContent";
-import SubidosView from "./sections/SubidosView";
 import SubidosFullView from "./sections/SubidosFullView";
 import RevisarFullView from "./sections/RevisarFullView";
 import EmitirFullView from "./sections/EmitirFullView";
 import BoletasFullView from "./sections/BoletasFullView";
-import BoletasList from "@/components/boletas/BoletasList";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import RightColumnView from "./RightColumnView";
+import type { ActividadItem } from "./ActividadView";
+import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, ActivityButton, RCVButton, RCVContentWrapper } from "./LeftQuickActions";
+import DocCardList from "./DocCardList";
+import BoletasMensualesView from "./sections/BoletasMensualesView";
 
 function todayStr() {
   const d = new Date();
@@ -25,9 +27,11 @@ export default async function V5Page({ searchParams }: {
   searchParams: Promise<{ date?: string; month?: string }>;
 }) {
   const usuario = (await getUsuario())!;
+  if (!usuario.empresas) notFound();
   const empresaId = usuario.empresa_id;
   const { date: dateParam, month: monthParam } = await searchParams;
   const selDate = dateParam === "all" ? null : (dateParam ?? todayStr());
+  const isAllMode = dateParam === "all";
 
   const supabase = await createClient();
 
@@ -60,8 +64,10 @@ export default async function V5Page({ searchParams }: {
     iva: s.iva+(b.iva??0), total: s.total+(b.monto_total??0),
   }), { docs: 0, neto: 0, exento: 0, iva: 0, total: 0 });
 
+  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
+
   const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
-  const mes = now.toISOString().slice(0, 7);
+  const mes = String(now.getMonth() + 1).padStart(2, "0") + "-" + now.getFullYear();
 
   // Calendar
   const daysInMonth = new Date(y,m+1,0).getDate();
@@ -81,6 +87,39 @@ export default async function V5Page({ searchParams }: {
     .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
     .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(20);
 
+  // All boletas for RCV view
+  const { data: boletasAllData } = await supabase.from("boletas_emitidas")
+    .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
+    .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false});
+
+  // Activity feed
+  const actividadItems: ActividadItem[] = [];
+  for (const doc of (docsData.data ?? []).slice(0, 10)) {
+    actividadItems.push({
+      id: "doc-" + doc.id, tipo: "subida",
+      descripcion: doc.nombre_archivo,
+      detalle: (doc.movimientos_detectados ?? 0) + " movimientos · " + doc.estado,
+      fecha: doc.created_at,
+    });
+  }
+  for (const bol of (boletas ?? []).slice(0, 10)) {
+    actividadItems.push({
+      id: "bol-" + bol.id, tipo: "emision",
+      descripcion: "Boleta #" + bol.folio + " · " + (bol.tipo_dte === 39 ? "AFECTA" : "EXENTA"),
+      detalle: bol.receptor_razon_social ?? "Sin receptor",
+      fecha: bol.fecha_emision,
+      monto: bol.monto_total,
+    });
+  }
+  actividadItems.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+  // RCV content for right column
+  const rcvContent = (
+    <RCVContentWrapper>
+    <BoletasMensualesView boletas={(boletasAllData ?? []) as any} />
+    </RCVContentWrapper>
+  );
+
   const dashboardContent = (
     <>
       <style>{`
@@ -89,7 +128,7 @@ body{font-family:'DM Sans',sans-serif}
 :root{--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--muted-light:#888}
 .ep-glow-card{transition:box-shadow 600ms cubic-bezier(0.22,1,0.36,1)}
 .ep-glow-card:hover{box-shadow:0 0 40px -8px rgba(232,85,62,0.40)!important}
-.app{display:grid;grid-template-columns:3fr 7fr;max-width:1400px;margin:0 auto;gap:24px;height:calc(100vh - 104px);padding:0 0;position:relative;background:transparent;min-height:0}
+.app{display:grid;grid-template-columns:2.55fr 7.45fr;max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
 .left-glass{background:rgba(255,255,255,.03);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.06);border-radius:20;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)}
 .panel-hd-txt .plantilla{margin-left:auto;display:flex;align-items:center;gap:3px;padding:4px 8px;border-radius:5px;border:1px solid rgba(255,255,255,.06);background:transparent;color:var(--text2);font-size:9px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s}
 .panel-hd-txt .plantilla:hover{background:var(--bg-muted);color:var(--text)}
@@ -175,9 +214,9 @@ body{font-family:'DM Sans',sans-serif}
 .topbar-r .sep{color:var(--text3);font-size:9px}
 .topbar-r .date{font-size:10px;color:var(--text2)}
 .tab-bar{display:flex;gap:3px;padding:10px 16px;border-bottom:1px solid var(--bg-muted);flex-shrink:0}
-.r-tab-content{display:none;flex-direction:column;overflow:hidden}
+.r-tab-content{display:none;flex-direction:column;overflow:hidden;min-height:0}
 .r-tab-content.act{display:flex}
-.r-scroll{overflow-y:auto;flex:1;scrollbar-width:none}
+.r-scroll{overflow-y:auto;flex:1;min-height:0;scrollbar-width:none}
 .r-scroll::-webkit-scrollbar{display:none}
 .dtabs{display:flex;gap:4px;padding:8px 16px;border-bottom:1px solid var(--bg-muted);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
 .dtabs::-webkit-scrollbar{display:none}
@@ -237,87 +276,102 @@ body{font-family:'DM Sans',sans-serif}
 .em-empty .wrn{margin-top:8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.08);font-size:9px;color:#f59e0b;text-align:left;line-height:1.4}
 `}</style>
 
-      <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", background: "var(--bg)", minHeight: "100vh", padding: "84px 20px 20px" }}>
+      <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", minHeight: "100vh", padding: "20px 20px 20px" }}>
+
+        {/* CALENDAR + ACTIONS ROW */}
+        <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center"}}>
+          <span style={{fontSize:18,fontWeight:700,color:"var(--text)",whiteSpace:"nowrap",flexShrink:0}}>{usuario.empresas.razon_social}</span>
+          <div style={{flex:1,display:"flex",justifyContent:"flex-start"}}>
+          <div style={{background:"var(--surface)",borderRadius:12,border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",minWidth:0,height:38,display:"flex",alignItems:"center",width:"fit-content"}}>
+            <div style={{padding:"0 6px",display:"flex",alignItems:"center",gap:2}}>
+            <Link href={`/escritorio/v5?month=${y}-${m-1}${dateParam ? `&date=${dateParam}` : ""}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
+            <span style={{fontSize:10,fontWeight:600,color:"var(--text)",whiteSpace:"nowrap",flexShrink:0,width:100,textAlign:"center"}}>{monthNames[m]} {y}</span>
+            <Link href={`/escritorio/v5?month=${y}-${m+1}${dateParam ? `&date=${dateParam}` : ""}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
+            <Link href={isAllMode ? `/escritorio/v5?month=${y}-${m}` : `/escritorio/v5?date=all&month=${y}-${m}`} style={{fontSize:9,fontWeight:600,color:"#b4f027",cursor:"pointer",padding:"2px 6px",borderRadius:4,textDecoration:"none",border: isAllMode ? "1.5px dashed #b4f027" : "1.5px solid transparent",background:"transparent",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap",flexShrink:0,height:22,width:100,justifyContent:"center"}} scroll={false}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {isAllMode ? "Historial del día" : "Historial del mes"}
+            </Link>
+            <div style={{display:"flex",gap:1,overflow:"hidden",width:650,flexShrink:0,paddingRight:6}}>
+            {Array.from({length:daysInMonth},(_,i) => i+1).map(day => {
+              const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+              const isSel = day === selDay;
+              const isToday = day === today && isThisMonth;
+              return (
+                <Link key={day} href={`/escritorio/v5?date=${ds}&month=${y}-${m}`}
+                  style={{
+                    width:20,padding:"1px 0",display:"flex",flexDirection:"column",alignItems:"center",borderRadius:3,textDecoration:"none",flexShrink:0,
+                    background: isAllMode ? "#b4f027" : (isSel ? "#b4f027" : "transparent"),
+                  }}
+                  scroll={false}>
+                  <span style={{fontSize:5,textTransform:"uppercase",lineHeight:1,color: isAllMode ? "rgba(0,0,0,.5)" : (isSel ? "rgba(0,0,0,.5)" : "var(--text3)")}}>{wd[new Date(y,m,day).getDay()]}</span>
+                  <span style={{fontSize:8,fontWeight: isToday ? 700 : 500,lineHeight:1,marginTop:1,color: isAllMode && isToday ? "#E8553E" : (isAllMode ? "#000" : (isToday && !isSel ? "#b4f027" : isSel ? "#000" : "var(--text2)"))}}>{day}</span>
+                </Link>
+              );
+            })}
+            </div>
+            </div>
+          </div>
+          </div>
+          <HeaderActionsRow />
+        </div>
 
         {/* MAIN GRID */}
         <div className="app">
 
           {/* ═══ LEFT COLUMN ═══ */}
-          <div className="left-col" style={{display:"flex",flexDirection:"column",gap:16,overflow:"visible",minHeight:0,scrollbarWidth:"none"}}>
+          <div className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
 
             {/* RCV CARD */}
-            <GlowWrap glow style={{borderRadius:20,overflow:"hidden"}}><div className="rcv-card" style={{background:"var(--surface)",borderRadius:20,padding:"14px 18px",border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <div className="rcv-h" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+            <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div className="rcv-card" style={{background:"var(--surface)",borderRadius:16,padding:"10px 14px",border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",overflow:"hidden"}}>
+              <div className="rcv-h" style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <span style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>Registro de Ventas</span>
-                <span className="mes" style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>{mes}</span>
+                <span style={{fontSize:12,fontWeight:700,color:"var(--text)",letterSpacing:"-0.02em"}}>DATOS DE VENTAS</span>
+                <span className="mes" style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{mes}</span>
               </div>
-              <div className="rcv-sub" style={{fontSize:10,color:"var(--text2)",marginBottom:6}}>
-                <strong style={{fontWeight:600,color:"var(--text)"}}>{rcvTotal.docs}</strong> boletas emitidas este mes
+              {esRcvExento ? (
+              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:3}}>
+                <div className="item" style={{padding:"8px 7px",borderRadius:8,background:"var(--bg-muted)",textAlign:"center"}}>
+                  <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>Boletas emitidas</div>
+                  <div style={{fontSize:18,fontWeight:700,color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{rcvTotal.docs}</div>
+                </div>
+                <div className="item" style={{padding:"8px 7px",borderRadius:8,background:"var(--bg-muted)",textAlign:"center"}}>
+                  <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>Total exento</div>
+                  <div style={{fontSize:18,fontWeight:700,color:"#BFDBFE",fontVariantNumeric:"tabular-nums"}}>{fmt(rcvTotal.total)}</div>
+                </div>
               </div>
-              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
-                {[{l:"Neto",v:fmt(rcvTotal.neto)},{l:"IVA",v:fmt(rcvTotal.iva)},{l:"Exento",v:fmt(rcvTotal.exento)},{l:"Total",v:fmt(rcvTotal.total),tot:true}].map((x,i) => (
-                   <div key={i} className="item" style={{padding:6,borderRadius:6,background:"var(--bg-muted)",textAlign:"center"}}>
-                    <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:1}}>{x.l}</div>
-                    <div className={`val${x.tot?" tot":""}`} style={{fontSize:12,fontWeight:x.tot?700:600,color:x.tot?"#b4f027":"var(--text)"}}>{x.v}</div>
+              ) : (
+              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginTop:3}}>
+                {[{l:"Boletas emitidas", v:String(rcvTotal.docs), c:"var(--text)"},{l:"Neto", v:fmt(rcvTotal.neto), c:"var(--text)"},{l:"IVA", v:fmt(rcvTotal.iva), c:"var(--text)"},{l:"Total", v:fmt(rcvTotal.total), c:"#b4f027", tot:true}].map((x,i) => (
+                   <div key={i} className="item" style={{padding:"5px 4px",borderRadius:6,background:"var(--bg-muted)",textAlign:"center"}}>
+                    <div className="lbl" style={{fontSize:7,color:"var(--text2)",marginBottom:2,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>{x.l}</div>
+                    <div style={{fontSize:13,fontWeight:x.tot?700:600,color:x.c,fontVariantNumeric:"tabular-nums"}}>{x.v}</div>
                   </div>
                 ))}
               </div>
+              )}
             </div></GlowWrap>
 
             {/* EMITIR PANEL */}
-            <GlowWrap glow style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",borderRadius:20,overflow:"hidden"}}><div className="panel" style={{flex:1,minHeight:0,background:"var(--surface)",borderRadius:20,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <div className="panel-hd" style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:"1px solid var(--border)",flexShrink:0}}>
-                <div className="panel-hd-icon" style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(180,240,39,.08)",color:"#b4f027",flexShrink:0}}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                </div>
-                <div className="panel-hd-txt" style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
-                  <div><h2 style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>Subir documento</h2><p style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Subí cartola o Excel modelo</p></div>
-                  <Link href="/api/generar-template" className="plantilla" style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:3,padding:"4px 8px",borderRadius:5,border:"1px solid var(--border)",background:"transparent",color:"var(--text2)",fontSize:9,fontWeight:500,textDecoration:"none"}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
-                    Plantilla Excel
-                  </Link>
-                </div>
-              </div>
-              <div className="e-scroll">
-                <Suspense fallback={
-                  <div className="sec" style={{height:100,borderRadius:8,background:"rgba(255,255,255,.02)",margin:10}}/>
-                }>
-                  <EmitirPanel empresaId={empresaId} />
-                </Suspense>
-              </div>
+             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+              <EmisionDirectaAction empresaTipo={usuario.empresas.tipo_contribuyente} />
             </div></GlowWrap>
+             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+              <MassDTEAction empresaId={empresaId} />
+            </div></GlowWrap>
+
+            {/* ACTION BUTTONS */}
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <ActivityButton />
+            <RCVButton />
+            </div>
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}
-          <GlowWrap glow style={{borderRadius:20,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}><div className="right-col" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",background:"var(--surface)",borderRadius:20,border:"1px solid var(--border)",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-
-            {/* CALENDAR */}
-            <div className="cal">
-              <div className="cal-h">
-                <Link href={`/escritorio/v5?month=${y}-${m-1}${dateParam ? `&date=${dateParam}` : ""}`} className="nv" scroll={false}>‹</Link>
-                <span className="m">{monthNames[m]} {y}</span>
-                <Link href={`/escritorio/v5?month=${y}-${m+1}${dateParam ? `&date=${dateParam}` : ""}`} className="nv" scroll={false}>›</Link>
-                {selDay && (
-                  <Link href={`/escritorio/v5?month=${y}-${m}`} className="cl" scroll={false}>✕ Limpiar</Link>
-                )}
-              </div>
-              <div className="cal-days">
-                {Array.from({length:daysInMonth},(_,i) => i+1).map(day => {
-                  const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-                  const isSel = day === selDay;
-                  const isToday = day === today && isThisMonth;
-                  return (
-                    <Link key={day} href={`/escritorio/v5?date=${ds}&month=${y}-${m}`}
-                      className={`cal-day ${isToday ? "today" : ""} ${isSel ? "sel" : ""}`}
-                      scroll={false}>
-                      <span className="wd">{wd[new Date(y,m,day).getDay()]}</span>
-                      <span className="d">{day}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
+          <RightColumnView
+            actividadItems={actividadItems}
+            rcvContent={rcvContent}
+            defaultContent={
+              <>
 
             {/* TABS */}
             <TabsV5
@@ -327,13 +381,11 @@ body{font-family:'DM Sans',sans-serif}
               fecha={new Date().toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})}
               subidosContent={
                 <div className="r-scroll">
-                  <div className="sec" style={{paddingTop:6}}>
-                    <SubidosView
-                      documentos={(docsData.data ?? []) as any}
-                      selDate={selDate ?? todayStr()}
-                      viewMode="day"
-                    />
-                  </div>
+                  {(docsData.data ?? []).length > 0 && (
+                    <div className="sec" style={{paddingTop:6}}>
+                      <DocCardList docs={(docsData.data ?? []) as any} empresaId={empresaId} />
+                    </div>
+                  )}
                 </div>
               }
               revisarContent={
@@ -376,8 +428,7 @@ body{font-family:'DM Sans',sans-serif}
                                 <span className={`bd ${b.tipo_dte === 39 ? "af" : b.tipo_dte === 41 ? "ex" : "an"}`}
                                   style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,
                                     background: b.tipo_dte === 39 ? "var(--accent-light)" : b.tipo_dte === 41 ? "rgba(59,130,246,.1)" : "var(--bg-muted)",
-                                    color: b.tipo_dte === 39 ? "#E8553E" : b.tipo_dte === 41 ? "#5b9cf6" : "var(--text2)",
-                                  }}
+                                    color: b.tipo_dte === 39 ? "#E8553E" : b.tipo_dte === 41 ? "#5b9cf6" : "var(--text2)"}}
                                 >{b.tipo_dte === 39 ? "AFECTA" : b.tipo_dte === 41 ? "EXENTA" : `DTE ${b.tipo_dte}`}</span>
                                 {esAnulada && (
                                   <span className="bd an" style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"var(--bg-muted)",color:"var(--text2)"}}>ANULADA</span>
@@ -399,7 +450,9 @@ body{font-family:'DM Sans',sans-serif}
                 </div>
               }
             />
-          </div></GlowWrap>
+              </>
+            }
+          />
         </div>
       </div>
     </>

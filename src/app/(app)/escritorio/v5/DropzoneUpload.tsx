@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { classifyFile, BADGE_COLORS } from "@/lib/file-classifier";
 import type { FileCategory } from "@/lib/file-classifier";
@@ -19,13 +18,12 @@ const BADGE: Record<number, string> = {
 
 let idCounter = 0;
 
-export default function DropzoneUpload() {
+export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const router = useRouter();
   const { toast } = useToast();
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
@@ -86,7 +84,7 @@ export default function DropzoneUpload() {
     }
     setUploading(false);
     setQueue([]);
-    if (ok > 0) { toast(`${ok} subido${ok > 1 ? "s" : ""}`); router.refresh(); }
+    if (ok > 0) { toast(`${ok} subido${ok > 1 ? "s" : ""}`); onUploaded?.(); }
   }
 
   return (
@@ -108,9 +106,9 @@ export default function DropzoneUpload() {
       {queue.length > 0 && (
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontSize: 9, color: "var(--text2)", fontWeight: 500 }}>
-            Archivos pendientes
-            <span data-tip="Grupos de color (1-5) para agrupar capturas. Hacé clic en el badge."
-              style={{ marginLeft: 4, width: 13, height: 13, borderRadius: "50%", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>?</span>
+              Archivos pendientes
+              <span title="Grupos de color (1-5) para agrupar capturas. Hacé clic en el badge."
+                style={{ marginLeft: 4, width: 13, height: 13, borderRadius: "50%", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "help" }}>?</span>
           </div>
           {queue.map(q => {
             const badgeClass = BADGE[q.group] ?? BADGE[1];
