@@ -3,15 +3,19 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import GlowWrap from "./GlowWrap";
 import ActividadView, { type ActividadItem } from "./ActividadView";
+import SearchHistoryView from "./SearchHistoryView";
+import type { SearchItem } from "@/lib/tree-structure";
 
 export default function RightColumnView({
   defaultContent,
   actividadItems,
   rcvContent,
+  searchHistoryItems,
 }: {
   defaultContent: ReactNode;
   actividadItems?: ActividadItem[];
   rcvContent?: ReactNode;
+  searchHistoryItems?: SearchItem[];
 }) {
   const [view, setView] = useState<"dashboard" | "actividad" | "rcv">("dashboard");
   const viewRef = useRef(view);
@@ -97,25 +101,34 @@ export default function RightColumnView({
         </div>
       </div>
     </GlowWrap>
-    {fullscreen && originStyle && (
+    {fullscreen && originStyle && expanded && (
       <div
-        aria-hidden="true"
         style={{
           position: "fixed",
           zIndex: 70,
-          top: expanded ? 70 : originStyle.top,
-          left: expanded ? 20 : originStyle.left,
-          width: expanded ? "calc(100vw - 40px)" : originStyle.width,
-          height: expanded ? "calc(100vh - 90px)" : originStyle.height,
-          borderRadius: expanded ? 20 : originStyle.borderRadius,
+          top: 70,
+          left: 20,
+          width: "calc(100vw - 40px)",
+          height: "calc(100vh - 90px)",
+          borderRadius: 20,
           background: "var(--surface)",
           border: "1px solid var(--border)",
           boxShadow: "inset 0 1px 0 var(--border),0 24px 80px rgba(0,0,0,.42),0 0 44px -10px rgba(232,85,62,.34)",
-          opacity: expanded ? 1 : 0,
           overflow: "hidden",
-          transition: "top .32s cubic-bezier(.22,1,.36,1),left .32s cubic-bezier(.22,1,.36,1),width .32s cubic-bezier(.22,1,.36,1),height .32s cubic-bezier(.22,1,.36,1),border-radius .32s cubic-bezier(.22,1,.36,1),opacity .24s ease",
+          display: "flex",
+          flexDirection: "column",
+          opacity: expanded ? 1 : 0,
+          transition: "opacity .24s ease",
         }}
-      />
+      >
+        {searchHistoryItems ? (
+          <SearchHistoryView items={searchHistoryItems} />
+        ) : (
+          <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--text2)", fontSize: 12 }}>
+            Sin datos de actividad
+          </div>
+        )}
+      </div>
     )}
     </>
   );

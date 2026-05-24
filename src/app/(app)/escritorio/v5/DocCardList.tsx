@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import FieldMapper from "@/components/upload/FieldMapper";
+import VisualizarArchivo from "./VisualizarArchivo";
 
 const st: Record<string, string> = {procesado:"#22c55e",procesando:"#5b9cf6",error:"#ef4444",subido:"#f59e0b"};
 const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",error:"Error",subido:"Pendiente"};
@@ -22,6 +23,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
   const router = useRouter();
   const [docs, setDocs] = useState(initialDocs);
   const [mappingDocId, setMappingDocId] = useState<string | null>(null);
+  const [viewDocId, setViewDocId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => { setDocs(initialDocs); }, [initialDocs]);
@@ -148,6 +150,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                     <button className="cl" onClick={() => callApi("/api/cancelar-documento", doc.id)}>✕ Cancelar</button>
                   )}
                   <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>
+                  <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>
                 </div>
               </div>
             </div>
@@ -159,6 +162,13 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
           documentoId={mappingDocId}
           onClose={() => setMappingDocId(null)}
           onSaved={() => { setMappingDocId(null); fetchDocs(); }}
+        />,
+        document.body
+      )}
+      {viewDocId && typeof document !== "undefined" && createPortal(
+        <VisualizarArchivo
+          documentoId={viewDocId}
+          onClose={() => setViewDocId(null)}
         />,
         document.body
       )}

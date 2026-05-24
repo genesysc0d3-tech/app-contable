@@ -14,6 +14,7 @@ import BoletasFullView from "./sections/BoletasFullView";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 import RightColumnView from "./RightColumnView";
 import type { ActividadItem } from "./ActividadView";
+import type { SearchItem } from "@/lib/tree-structure";
 import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, ActivityButton, RCVButton } from "./LeftQuickActions";
 import DocCardList from "./DocCardList";
 import RcvViewWrapper from "./RcvViewWrapper";
@@ -112,6 +113,33 @@ export default async function V5Page({ searchParams }: {
     });
   }
   actividadItems.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+  // Search & history items
+  const searchHistoryItems: SearchItem[] = [];
+  for (const doc of (docsData.data ?? []).slice(0, 30)) {
+    searchHistoryItems.push({
+      id: "doc-" + doc.id, label: doc.nombre_archivo,
+      subtitle: (doc.movimientos_detectados ?? 0) + " movimientos · " + doc.estado,
+      type: "documento", fecha: doc.created_at, data: doc as any,
+    });
+  }
+  for (const bol of (boletas ?? []).slice(0, 30)) {
+    searchHistoryItems.push({
+      id: "bol-" + bol.id,
+      label: "Boleta #" + bol.folio + " · " + (bol.receptor_razon_social ?? "—"),
+      subtitle: (bol.tipo_dte === 39 ? "AFECTA" : "EXENTA") + " · $" + Math.round(bol.monto_total).toLocaleString("es-CL"),
+      type: "boleta", fecha: bol.fecha_emision, monto: bol.monto_total, data: bol as any,
+    });
+  }
+  for (const prop of (propsData.data ?? []).slice(0, 30)) {
+    searchHistoryItems.push({
+      id: "prop-" + prop.id,
+      label: "Propuesta · " + (prop.movimientos_raw?.descripcion ?? "—"),
+      subtitle: "Confianza " + Math.round((prop.confianza ?? 0) * 100) + "%",
+      type: "propuesta", fecha: prop.created_at, data: prop as any,
+    });
+  }
+  searchHistoryItems.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
   // RCV content for right column
   const rcvContent = (
@@ -371,6 +399,7 @@ body{font-family:'DM Sans',sans-serif}
           <RightColumnView
             actividadItems={actividadItems}
             rcvContent={rcvContent}
+            searchHistoryItems={searchHistoryItems}
             defaultContent={
               <>
 
