@@ -372,6 +372,50 @@ export default function EmpresaPopup({
           scrollbar-color: rgba(160, 170, 185, 0.32) transparent;
         }
 
+        .ep-main-panel.step-emisor {
+          max-height: min(820px, 92vh);
+        }
+
+        .ep-modal:has(.ep-main-panel.step-emisor) {
+          height: min(820px, 92vh);
+        }
+
+        .ep-main-panel.step-emisor .ep-modal-header {
+          min-height: 60px;
+          padding: 12px 18px;
+          gap: 10px;
+        }
+
+        .ep-main-panel.step-emisor .ep-header-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+        }
+
+        .ep-main-panel.step-emisor .ep-header-icon svg {
+          width: 19px;
+          height: 19px;
+        }
+
+        .ep-main-panel.step-emisor .ep-modal-header h1 {
+          font-size: 18px;
+        }
+
+        .ep-main-panel.step-emisor .ep-subtitle {
+          margin-top: 2px;
+          font-size: 11px;
+        }
+
+        .ep-main-panel.step-emisor .ep-content {
+          overflow: auto;
+          padding: 12px 18px;
+        }
+
+        .ep-main-panel.step-emisor .ep-main-footer {
+          min-height: 46px;
+          padding: 7px 16px;
+        }
+
         .ep-content-inner {
           display: flex;
           flex-direction: column;
@@ -595,7 +639,7 @@ export default function EmpresaPopup({
             </div>
           </aside>
 
-          <main className="ep-main-panel">
+          <main className={`ep-main-panel${step === 0 ? " step-emisor" : ""}`}>
             <header className="ep-modal-header">
               <div className="ep-header-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -626,7 +670,7 @@ export default function EmpresaPopup({
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <EmisorForm inicial={inicial} /> },
+                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" /> },
                   { key: "certificado", content: <CertificadoToggle inicial={tieneCertificado} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} /> },

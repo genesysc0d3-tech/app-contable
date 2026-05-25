@@ -5,11 +5,18 @@ import VerBoletaButton from "@/components/boletas/VerBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 
 interface BoletaRow {
-  id: string; folio: number | null; tipo_dte: number; fecha_emision: string;
+  id: string; folio: number | null; tipo_dte: number; fecha_emision: string; created_at?: string | null;
   receptor_razon_social: string | null; monto_total: number; estado: string;
 }
 
 function fmt(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
+
+function fmtDate(s?: string | null) {
+  if (!s) return "-";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "");
+}
 
 const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
   39: { label: "AFE", color: "#E8553E", bg: "rgba(232,85,62,.1)" },
@@ -41,8 +48,11 @@ export default function BoletasMensualesView({ boletas, month, year, onPrevMonth
   // Month filter (only when no search)
   const monthFiltered = useMemo(() => {
     return boletas.filter(b => {
-      const d = new Date(b.fecha_emision);
-      return d.getFullYear() === year && d.getMonth() === month;
+      const emision = new Date(b.fecha_emision);
+      const edicion = new Date(b.created_at ?? b.fecha_emision);
+      const matchesEmision = emision.getFullYear() === year && emision.getMonth() === month;
+      const matchesEdicion = edicion.getFullYear() === year && edicion.getMonth() === month;
+      return matchesEmision || matchesEdicion;
     }).sort((a, b) => (b.folio ?? 0) - (a.folio ?? 0));
   }, [boletas, year, month]);
 
@@ -109,16 +119,19 @@ export default function BoletasMensualesView({ boletas, month, year, onPrevMonth
       {/* Table */}
       {displayed.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 20px", fontSize: 11, color: "var(--text2)" }}>
-          {search ? "No se encontraron boletas con ese criterio" : `No hay boletas emitidas en ${monthNames[month].toLowerCase()} ${year}`}
+          {search ? "No se encontraron boletas con ese criterio" : `No hay boletas con emisión, edición o subida en ${monthNames[month].toLowerCase()} ${year}`}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "58px 48px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center", padding: "7px 10px", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <span>Folio</span><span>Tipo</span><span>Receptor</span><span>Estado</span><span>Emisión SII</span><span>Edición/Subida</span><span style={{ textAlign: "right" }}>Monto</span><span />
+          </div>
           {displayed.map(b => {
             const anulada = b.estado === "anulada";
             const badge = TIPO_BADGE[b.tipo_dte] ?? { label: `DTE ${b.tipo_dte}`, color: "var(--text2)", bg: "var(--bg-muted)" };
             return (
               <div key={b.id} style={{
-                display: "flex", alignItems: "center", gap: 8,
+                display: "grid", gridTemplateColumns: "58px 48px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center",
                 padding: "8px 10px", borderRadius: 6,
                 background: anulada ? "rgba(239,68,68,.02)" : "rgba(255,255,255,.02)",
                 border: "1px solid var(--border)", opacity: anulada ? .5 : 1,
@@ -132,13 +145,19 @@ export default function BoletasMensualesView({ boletas, month, year, onPrevMonth
                 }}>
                   {badge.label}
                 </span>
-                <span style={{ flex: 1, fontSize: 10, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 10, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {b.receptor_razon_social ?? "Sin receptor"}
                 </span>
-                <span style={{ fontSize: 9, color: "var(--text2)", flexShrink: 0 }}>
-                  {b.fecha_emision?.slice(5) ?? ""}
+                <span style={{ width: "fit-content", padding: "3px 7px", borderRadius: 999, background: anulada ? "rgba(239,68,68,.1)" : "rgba(34,197,94,.1)", color: anulada ? "#ef4444" : "#22c55e", fontSize: 9, fontWeight: 850 }}>
+                  {anulada ? "Anulada" : "Emitida"}
                 </span>
-                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", minWidth: 60, textAlign: "right" }}>
+                <span style={{ fontSize: 10, color: "var(--text)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                  {fmtDate(b.fecha_emision)}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--text2)", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>
+                  {fmtDate(b.created_at)}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
                   {fmt(b.monto_total)}
                 </span>
                 <div style={{ display: "flex", gap: 1 }}>

@@ -18,21 +18,41 @@ import type { SearchItem } from "@/lib/tree-structure";
 import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, ActivityButton, RCVButton } from "./LeftQuickActions";
 import DocCardList from "./DocCardList";
 import RcvViewWrapper from "./RcvViewWrapper";
+import RCVSummaryCard from "./RCVSummaryCard";
 
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
+function addDaysStr(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(year, month - 1, day + days);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function weekRangeStr(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  const start = new Date(d);
+  start.setDate(d.getDate() - d.getDay());
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  const fmt = (value: Date) => `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,"0")}-${String(value.getDate()).padStart(2,"0")}`;
+  return { start: fmt(start), end: fmt(end) };
+}
+
 export default async function V5Page({ searchParams }: {
-  searchParams: Promise<{ date?: string; month?: string }>;
+  searchParams: Promise<{ date?: string; month?: string; view?: string }>;
 }) {
   const usuario = (await getUsuario())!;
   if (!usuario.empresas) notFound();
   const empresaId = usuario.empresa_id;
-  const { date: dateParam, month: monthParam } = await searchParams;
-  const selDate = dateParam === "all" ? null : (dateParam ?? todayStr());
-  const isAllMode = dateParam === "all";
+  const { date: dateParam, month: monthParam, view } = await searchParams;
+  const selDate = dateParam && dateParam !== "all" ? dateParam : todayStr();
+  const nextSelDate = addDaysStr(selDate, 1);
+  const weekRange = weekRangeStr(selDate);
+  const workMode = view === "month" || dateParam === "all" ? "month" : view === "week" ? "week" : "day";
 
   const supabase = await createClient();
 
@@ -42,19 +62,29 @@ export default async function V5Page({ searchParams }: {
     const [py, pm] = monthParam.split("-").map(Number);
     if (py && pm && pm >= 0 && pm <= 11) { y = py; m = pm; }
   }
+  if (workMode === "day") {
+    const [sy, sm] = selDate.split("-").map(Number);
+    if (sy && sm) { y = sy; m = sm - 1; }
+  }
   const sm = new Date(y,m,1).toISOString();
   const em = new Date(y,m+1,1).toISOString();
+  const isMonthMode = workMode === "month";
+  const isWeekMode = workMode === "week";
+  const workStart = isMonthMode ? sm : isWeekMode ? weekRange.start : selDate;
+  const workEnd = isMonthMode ? em : isWeekMode ? weekRange.end : nextSelDate;
+  const rcvSummaryStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const rcvSummaryEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
   const [rcvData, propsData, clData, calProps, calDocs, docsData, pendCountData, aprobCountData, cafsData] = await Promise.all([
-    supabase.from("boletas_emitidas").select("monto_neto,monto_exento,iva,monto_total").eq("empresa_id", empresaId).neq("estado","anulada"),
-    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).order("created_at",{ascending:false}),
+    supabase.from("boletas_emitidas").select("monto_neto,monto_exento,iva,monto_total").eq("empresa_id", empresaId).neq("estado","anulada").gte("fecha_emision",rcvSummaryStart).lt("fecha_emision",rcvSummaryEnd),
+    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).gte("created_at",workStart).lt("created_at",workEnd).order("created_at",{ascending:false}),
     supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at",sm).lt("created_at",em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at",sm).lt("created_at",em),
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia")
-      .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(50),
-    supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).eq("estado","pendiente"),
-    supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).in("estado",["aprobado","editado"]).gte("created_at",sm),
+      .eq("empresa_id", empresaId).gte("created_at",workStart).lt("created_at",workEnd).order("created_at",{ascending:false}).limit(50),
+    supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).eq("estado","pendiente").gte("created_at",workStart).lt("created_at",workEnd),
+    supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).in("estado",["aprobado","editado"]).gte("created_at",workStart).lt("created_at",workEnd),
     supabase.from("boletas_caf_mock")
       .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
       .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
@@ -66,6 +96,7 @@ export default async function V5Page({ searchParams }: {
   }), { docs: 0, neto: 0, exento: 0, iva: 0, total: 0 });
 
   const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
+  const empresaLogoUrl = usuario.empresas.logo_storage_path ? `/api/empresa/logo/${empresaId}` : null;
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
   const mes = String(now.getMonth() + 1).padStart(2, "0") + "-" + now.getFullYear();
@@ -82,16 +113,31 @@ export default async function V5Page({ searchParams }: {
   const wd = ["D","L","M","M","J","V","S"];
 
   const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const selectedDateLabel = (() => {
+    if (isMonthMode) return monthNames[m].toLowerCase() + " " + y;
+    if (isWeekMode) return `semana ${weekRange.start.slice(8, 10)}-${addDaysStr(weekRange.end, -1).slice(8, 10)} ${monthNames[m].toLowerCase()}`;
+    const [year, month, day] = selDate.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  })();
 
   // Boletas latest 20
   const { data: boletas } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
-    .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(20);
+    .eq("empresa_id", empresaId).gte("fecha_emision",workStart).lt("fecha_emision",workEnd).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(20);
 
   // All boletas for RCV view
   const { data: boletasAllData } = await supabase.from("boletas_emitidas")
-    .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
+    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
     .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false});
+
+  const [searchDocsData, searchBoletasData, searchPropsData] = await Promise.all([
+    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia")
+      .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
+      .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
+    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))")
+      .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
+  ]);
 
   // Activity feed
   const actividadItems: ActividadItem[] = [];
@@ -116,14 +162,14 @@ export default async function V5Page({ searchParams }: {
 
   // Search & history items
   const searchHistoryItems: SearchItem[] = [];
-  for (const doc of (docsData.data ?? []).slice(0, 30)) {
+  for (const doc of (searchDocsData.data ?? []).slice(0, 100)) {
     searchHistoryItems.push({
       id: "doc-" + doc.id, label: doc.nombre_archivo,
       subtitle: (doc.movimientos_detectados ?? 0) + " movimientos · " + doc.estado,
       type: "documento", fecha: doc.created_at, data: doc as any,
     });
   }
-  for (const bol of (boletas ?? []).slice(0, 30)) {
+  for (const bol of (searchBoletasData.data ?? []).slice(0, 100)) {
     searchHistoryItems.push({
       id: "bol-" + bol.id,
       label: "Boleta #" + bol.folio + " · " + (bol.receptor_razon_social ?? "—"),
@@ -131,7 +177,7 @@ export default async function V5Page({ searchParams }: {
       type: "boleta", fecha: bol.fecha_emision, monto: bol.monto_total, data: bol as any,
     });
   }
-  for (const prop of (propsData.data ?? []).slice(0, 30)) {
+  for (const prop of (searchPropsData.data ?? []).slice(0, 100)) {
     searchHistoryItems.push({
       id: "prop-" + prop.id,
       label: "Propuesta · " + (prop.movimientos_raw?.descripcion ?? "—"),
@@ -145,6 +191,27 @@ export default async function V5Page({ searchParams }: {
   const rcvContent = (
     <RcvViewWrapper boletas={(boletasAllData ?? []) as any} />
   );
+
+  const compactEmpty = (kind: "subidos" | "boletas") => {
+    const isSubidos = kind === "subidos";
+    return (
+      <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+        <style>{`@keyframes emptySonar{0%{transform:scale(.72);opacity:.45}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emptyDraw{0%{stroke-dashoffset:54;opacity:.28}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.48}}`}</style>
+        <div>
+          <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
+            <div style={{position:"absolute",inset:8,borderRadius:"50%",border:isSubidos?"1px solid rgba(232,85,62,.26)":"1px solid rgba(59,130,246,.25)",animation:"emptySonar 2.8s ease-out infinite"}} />
+            {isSubidos ? (
+              <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#E8553E"}}><path d="M30 72h36a8 8 0 0 0 8-8V34L56 16H30a8 8 0 0 0-8 8v40a8 8 0 0 0 8 8Z" stroke="currentColor" strokeWidth="4"/><path d="M55 16v17h18" stroke="currentColor" strokeWidth="4"/><path d="M35 49h26M35 59h18" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{animation:"emptyDraw 2.8s ease-in-out infinite"}}/></svg>
+            ) : (
+              <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#3B82F6"}}><path d="M29 15h30l12 12v54H29a6 6 0 0 1-6-6V21a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="4"/><path d="M59 16v13h13" stroke="currentColor" strokeWidth="4"/><path d="M35 45h26M35 56h20M35 67h27" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{animation:"emptyDraw 2.8s ease-in-out infinite"}}/></svg>
+            )}
+          </div>
+          <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>{isSubidos ? "Nada por aquí" : "Aún no hay boletas"}</div>
+          <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:270}}>{isSubidos ? "Esta mesa no tiene documentos agregados todavía." : "Las boletas emitidas en esta mesa aparecerán aquí."}</div>
+        </div>
+      </div>
+    );
+  };
 
   const dashboardContent = (
     <>
@@ -309,31 +376,45 @@ body{font-family:'DM Sans',sans-serif}
 
         {/* CALENDAR + ACTIONS ROW */}
         <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center"}}>
-          <span style={{fontSize:18,fontWeight:700,color:"var(--text)",whiteSpace:"nowrap",flexShrink:0}}>{usuario.empresas.razon_social}</span>
+          <span style={{display:"flex",alignItems:"center",gap:9,minWidth:0,whiteSpace:"nowrap",flexShrink:0}}>
+            {empresaLogoUrl && (
+              <span style={{width:34,height:34,borderRadius:11,border:"1px solid var(--border)",background:"var(--bg-muted)",display:"grid",placeItems:"center",overflow:"hidden",flexShrink:0}}>
+                <img src={empresaLogoUrl} alt={`Logo de ${usuario.empresas.razon_social}`} style={{maxWidth:27,maxHeight:27,objectFit:"contain",display:"block"}} />
+              </span>
+            )}
+            <span style={{fontSize:18,fontWeight:700,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis"}}>{usuario.empresas.razon_social}</span>
+          </span>
           <div className="v5-calendar-wrap" style={{flex:1,display:"flex",justifyContent:"flex-start",minWidth:0}}>
           <div style={{background:"var(--surface)",borderRadius:12,border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",minWidth:0,height:38,display:"flex",alignItems:"center",width:"fit-content"}}>
             <div style={{padding:"0 6px",display:"flex",alignItems:"center",gap:2}}>
-            <Link href={`/escritorio/v5?month=${y}-${m-1}${dateParam ? `&date=${dateParam}` : ""}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
+            <Link href={`/escritorio/v5?month=${y}-${m-1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
             <span style={{fontSize:10,fontWeight:600,color:"var(--text)",whiteSpace:"nowrap",flexShrink:0,width:100,textAlign:"center"}}>{monthNames[m]} {y}</span>
-            <Link href={`/escritorio/v5?month=${y}-${m+1}${dateParam ? `&date=${dateParam}` : ""}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
-            <Link href={isAllMode ? `/escritorio/v5?month=${y}-${m}` : `/escritorio/v5?date=all&month=${y}-${m}`} style={{fontSize:9,fontWeight:600,color:"#b4f027",cursor:"pointer",padding:"2px 6px",borderRadius:4,textDecoration:"none",border: isAllMode ? "1.5px dashed #b4f027" : "1.5px solid transparent",background:"transparent",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap",flexShrink:0,height:22,width:100,justifyContent:"center"}} scroll={false}>
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              {isAllMode ? "Historial del día" : "Historial del mes"}
+            <Link href={`/escritorio/v5?month=${y}-${m+1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
+            <Link href={`/escritorio/v5?date=${selDate}&month=${y}-${m}&view=${workMode === "day" ? "week" : workMode === "week" ? "month" : "day"}`} style={{fontSize:9,fontWeight:700,color:"#b4f027",cursor:"pointer",padding:"2px 4px",margin:"0 4px",borderRadius:4,textDecoration:"none",border:workMode !== "day" ? "1px dashed #b4f027" : "1px solid transparent",background:"transparent",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",flexShrink:0,height:28,width:98,justifyContent:"center",lineHeight:1.05}} scroll={false}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",lineHeight:1.05,textAlign:"left",fontSize:9,fontWeight:700}}>
+                <span>Mesa de trabajo</span>
+                <span>{isMonthMode ? "del mes" : isWeekMode ? "de la semana" : "del día"}</span>
+              </span>
             </Link>
             <div style={{display:"flex",gap:1,overflow:"hidden",width:650,flexShrink:0,paddingRight:6}}>
             {Array.from({length:daysInMonth},(_,i) => i+1).map(day => {
               const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
               const isSel = day === selDay;
               const isToday = day === today && isThisMonth;
+              const isInWeek = ds >= weekRange.start && ds < weekRange.end;
+              const isActiveDay = workMode === "day" && isSel;
+              const isActiveWeekDay = workMode === "week" && isInWeek;
+              const isActiveMonthDay = workMode === "month";
               return (
-                <Link key={day} href={`/escritorio/v5?date=${ds}&month=${y}-${m}`}
+                <Link key={day} href={`/escritorio/v5?date=${ds}&month=${y}-${m}&view=${workMode}`}
                   style={{
                     width:20,padding:"1px 0",display:"flex",flexDirection:"column",alignItems:"center",borderRadius:3,textDecoration:"none",flexShrink:0,
-                    background: isAllMode ? "#b4f027" : (isSel ? "#b4f027" : "transparent"),
+                    background: isActiveMonthDay || isActiveWeekDay || isActiveDay ? "#b4f027" : "transparent",
                   }}
                   scroll={false}>
-                  <span style={{fontSize:5,textTransform:"uppercase",lineHeight:1,color: isAllMode ? "rgba(0,0,0,.5)" : (isSel ? "rgba(0,0,0,.5)" : "var(--text3)")}}>{wd[new Date(y,m,day).getDay()]}</span>
-                  <span style={{fontSize:8,fontWeight: isToday ? 700 : 500,lineHeight:1,marginTop:1,color: isAllMode && isToday ? "#E8553E" : (isAllMode ? "#000" : (isToday && !isSel ? "#b4f027" : isSel ? "#000" : "var(--text2)"))}}>{day}</span>
+                  <span style={{fontSize:5,textTransform:"uppercase",lineHeight:1,color: isActiveMonthDay || isActiveWeekDay || isActiveDay ? "rgba(0,0,0,.5)" : "var(--text3)"}}>{wd[new Date(y,m,day).getDay()]}</span>
+                  <span style={{fontSize:8,fontWeight: isToday || isSel ? 700 : 500,lineHeight:1,marginTop:1,color: isToday ? "#E8553E" : (isActiveMonthDay || isActiveWeekDay || isActiveDay ? "#000" : "var(--text2)")}}>{day}</span>
                 </Link>
               );
             })}
@@ -351,34 +432,7 @@ body{font-family:'DM Sans',sans-serif}
           <div className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
 
             {/* RCV CARD */}
-            <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div className="rcv-card" style={{background:"var(--surface)",borderRadius:16,padding:"10px 14px",border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",overflow:"hidden"}}>
-              <div className="rcv-h" style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <span style={{fontSize:12,fontWeight:700,color:"var(--text)",letterSpacing:"-0.02em"}}>DATOS DE VENTAS</span>
-                <span className="mes" style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>{mes}</span>
-              </div>
-              {esRcvExento ? (
-              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:3}}>
-                <div className="item" style={{padding:"8px 7px",borderRadius:8,background:"var(--bg-muted)",textAlign:"center"}}>
-                  <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>Boletas emitidas</div>
-                  <div style={{fontSize:18,fontWeight:700,color:"var(--text)",fontVariantNumeric:"tabular-nums"}}>{rcvTotal.docs}</div>
-                </div>
-                <div className="item" style={{padding:"8px 7px",borderRadius:8,background:"var(--bg-muted)",textAlign:"center"}}>
-                  <div className="lbl" style={{fontSize:8,color:"var(--text2)",marginBottom:3,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>Total exento</div>
-                  <div style={{fontSize:18,fontWeight:700,color:"#BFDBFE",fontVariantNumeric:"tabular-nums"}}>{fmt(rcvTotal.total)}</div>
-                </div>
-              </div>
-              ) : (
-              <div className="rcv-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginTop:3}}>
-                {[{l:"Boletas emitidas", v:String(rcvTotal.docs), c:"var(--text)"},{l:"Neto", v:fmt(rcvTotal.neto), c:"var(--text)"},{l:"IVA", v:fmt(rcvTotal.iva), c:"var(--text)"},{l:"Total", v:fmt(rcvTotal.total), c:"#b4f027", tot:true}].map((x,i) => (
-                   <div key={i} className="item" style={{padding:"5px 4px",borderRadius:6,background:"var(--bg-muted)",textAlign:"center"}}>
-                    <div className="lbl" style={{fontSize:7,color:"var(--text2)",marginBottom:2,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.04em"}}>{x.l}</div>
-                    <div style={{fontSize:13,fontWeight:x.tot?700:600,color:x.c,fontVariantNumeric:"tabular-nums"}}>{x.v}</div>
-                  </div>
-                ))}
-              </div>
-              )}
-            </div></GlowWrap>
+            <RCVSummaryCard mes={mes} esRcvExento={esRcvExento} docs={rcvTotal.docs} neto={fmt(rcvTotal.neto)} iva={fmt(rcvTotal.iva)} total={fmt(rcvTotal.total)} />
 
             {/* EMITIR PANEL */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
@@ -391,7 +445,7 @@ body{font-family:'DM Sans',sans-serif}
             {/* ACTION BUTTONS */}
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
             <ActivityButton />
-            <RCVButton />
+            <div style={{display:"none"}}><RCVButton /></div>
             </div>
           </div>
 
@@ -400,6 +454,8 @@ body{font-family:'DM Sans',sans-serif}
             actividadItems={actividadItems}
             rcvContent={rcvContent}
             searchHistoryItems={searchHistoryItems}
+            empresaNombre={usuario.empresas.razon_social}
+            empresaLogoUrl={empresaLogoUrl}
             defaultContent={
               <>
 
@@ -408,15 +464,17 @@ body{font-family:'DM Sans',sans-serif}
               pendCount={pendCountData.count ?? 0}
               aprobCount={aprobCountData.count ?? 0}
               nombreEmpresa={usuario.empresas.razon_social}
-              fecha={new Date().toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})}
+              fecha={selectedDateLabel}
               subidosContent={
-                <div className="r-scroll">
-                  {(docsData.data ?? []).length > 0 && (
+                (docsData.data ?? []).length > 0 ? (
+                  <div className="r-scroll">
                     <div className="sec" style={{paddingTop:6}}>
                       <DocCardList docs={(docsData.data ?? []) as any} empresaId={empresaId} />
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  compactEmpty("subidos")
+                )
               }
               revisarContent={
                 <RevisarTabContent
@@ -430,6 +488,9 @@ body{font-family:'DM Sans',sans-serif}
               }
               emitirContent={<EmitirTabContent />}
               boletasContent={
+                (boletas ?? []).length === 0 ? (
+                  compactEmpty("boletas")
+                ) : (
                 <div className="r-scroll">
                   <div className="sec">
                     <div className="bl-header" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 0 8px"}}>
@@ -439,12 +500,7 @@ body{font-family:'DM Sans',sans-serif}
                         Ver reporte RCV
                       </Link>
                     </div>
-                    {(boletas ?? []).length === 0 ? (
-                      <div style={{textAlign:"center",padding:"24px 16px"}}>
-                        <p style={{fontSize:10,color:"var(--text2)"}}>No hay boletas emitidas aún</p>
-                      </div>
-                    ) : (
-                      boletas!.map(b => {
+                      {boletas!.map(b => {
                         const esAnulada = b.estado === "anulada";
                         return (
                           <div key={b.id} className={`bl-item ${esAnulada ? "an" : ""}`}
@@ -474,10 +530,10 @@ body{font-family:'DM Sans',sans-serif}
                             <DescargarBoletaButton id={b.id} />
                           </div>
                         );
-                      })
-                    )}
-                  </div>
+                      })}
+                    </div>
                 </div>
+                )
               }
             />
               </>
@@ -495,7 +551,7 @@ body{font-family:'DM Sans',sans-serif}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
       boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}
-      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
+      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto", logo_storage_path: usuario.empresas.logo_storage_path, logo_mime_type: usuario.empresas.logo_mime_type }}
       empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
       empresaCafs={(cafsData.data ?? []) as any}
       empresaId={empresaId}

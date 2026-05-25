@@ -62,7 +62,20 @@ export default function EmitirFullView({ empresaId }: { empresaId: string }) {
   }, [items]);
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, fontSize: 11, color: "var(--text2)" }}>Cargando...</div>;
-  if (items.length === 0) return <div style={{ textAlign: "center", padding: 60, fontSize: 11, color: "var(--text2)" }}>No hay items para emitir</div>;
+  if (items.length === 0) return (
+    <div style={{ minHeight: 320, display: "grid", placeItems: "center", padding: 28, textAlign: "center", color: "var(--text2)" }}>
+      <style>{`@keyframes emitirBolt{0%,100%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 0 rgba(180,240,39,0))}45%{transform:translateY(-7px) scale(1.04);filter:drop-shadow(0 0 20px rgba(180,240,39,.34))}}@keyframes emitirSpark{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-6px)}}`}</style>
+      <div>
+        <div style={{ position: "relative", width: 106, height: 106, margin: "0 auto 14px", animation: "emitirBolt 2.7s ease-in-out infinite" }}>
+          <span style={{ position: "absolute", left: 22, top: 23, width: 5, height: 5, borderRadius: "50%", background: "#b4f027", animation: "emitirSpark 2.1s ease-in-out infinite" }} />
+          <span style={{ position: "absolute", right: 22, bottom: 25, width: 4, height: 4, borderRadius: "50%", background: "#b4f027", animation: "emitirSpark 2.1s ease-in-out .45s infinite" }} />
+          <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#b4f027" }}><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" fill="rgba(180,240,39,.16)" stroke="currentColor" strokeWidth="4.5" strokeLinejoin="round"/><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" stroke="rgba(255,255,255,.7)" strokeWidth="2" strokeLinejoin="round" strokeDasharray="52" style={{animation:"emitirSpark 2.2s ease-in-out infinite"}}/></svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>Nada listo para emitir</div>
+        <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 280 }}>Cuando una propuesta quede lista, aparecerá aquí para emitirla sin salir de la mesa.</div>
+      </div>
+    </div>
+  );
 
   const listos = items.filter(i => i.listo_emitir);
   const bloqueados = items.filter(i => !i.listo_emitir);

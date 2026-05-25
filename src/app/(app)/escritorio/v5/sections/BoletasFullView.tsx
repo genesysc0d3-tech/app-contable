@@ -34,7 +34,18 @@ export default function BoletasFullView({ boletas }: { boletas: BoletaRow[] }) {
   const montoTotal = boletas.reduce((s, b) => s + (b.estado !== "anulada" ? b.monto_total : 0), 0);
 
   if (boletas.length === 0) {
-    return <div style={{ textAlign: "center", padding: 60, fontSize: 11, color: "var(--text2)" }}>No hay boletas emitidas</div>;
+    return (
+      <div style={{ minHeight: 320, display: "grid", placeItems: "center", padding: 28, textAlign: "center", color: "var(--text2)" }}>
+        <style>{`@keyframes boletaDrift{0%,100%{transform:translateY(0) rotate(.5deg)}50%{transform:translateY(-7px) rotate(-.8deg)}}@keyframes boletaLine{0%{stroke-dashoffset:48;opacity:.25}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.35}}`}</style>
+        <div>
+          <div style={{ position: "relative", width: 102, height: 104, margin: "0 auto 14px", animation: "boletaDrift 3.1s ease-in-out infinite" }}>
+            <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#3B82F6" }}><path d="M29 15h30l12 12v54H29a6 6 0 0 1-6-6V21a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="4"/><path d="M59 16v13h13" stroke="currentColor" strokeWidth="4"/><path d="M35 45h26M35 56h20M35 67h27" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="48" style={{ animation: "boletaLine 2.8s ease-in-out infinite" }}/></svg>
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>Aún no hay boletas</div>
+          <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 270 }}>Las boletas emitidas desde esta mesa quedarán registradas aquí.</div>
+        </div>
+      </div>
+    );
   }
 
   return (

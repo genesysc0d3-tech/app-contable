@@ -93,6 +93,12 @@ function getMonthKey(fecha: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function getWorkspaceSubtitle(datePreset: DatePreset, selectedDate: string | null) {
+  if (selectedDate || datePreset === "day" || datePreset === "today") return "del día";
+  if (datePreset === "7d" || datePreset === "30d") return "del período";
+  return "del mes";
+}
+
 function getEditDate(item: SearchItem) {
   const d = item.data ?? {};
   return String(d.updated_at ?? d.created_at ?? item.fecha ?? "");
@@ -200,7 +206,7 @@ function useDebouncedValue(value: string, delay = 150) {
   return debounced;
 }
 
-export default function SearchHistoryView({ items: allItems }: { items: SearchItem[] }) {
+export default function SearchHistoryView({ items: allItems, empresaNombre, empresaLogoUrl }: { items: SearchItem[]; empresaNombre?: string; empresaLogoUrl?: string | null }) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query);
   const [filter, setFilter] = useState<FilterType>("todo");
@@ -326,12 +332,22 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
     setSelectedDate(null);
   }
 
+  const workspaceSubtitle = getWorkspaceSubtitle(datePreset, selectedDate);
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--surface)", color: "var(--text)", fontFeatureSettings: '"kern" 1, "liga" 1' }}>
       <header style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10, background: "linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 82%, var(--bg-muted)))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontSize: 17, lineHeight: 1.1, fontWeight: 860, letterSpacing: "-.035em", whiteSpace: "nowrap" }}>Buscar e historial</h1>
+            {empresaLogoUrl && (
+              <div style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-muted)", display: "grid", placeItems: "center", overflow: "hidden", flexShrink: 0 }}>
+                <img src={empresaLogoUrl} alt={empresaNombre ? `Logo de ${empresaNombre}` : "Logo de la empresa"} style={{ maxWidth: 30, maxHeight: 30, objectFit: "contain", display: "block" }} />
+              </div>
+            )}
+            <h1 style={{ margin: 0, display: "flex", flexDirection: "column", lineHeight: 1.02, whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: 17, fontWeight: 860, letterSpacing: "-.035em" }}>{empresaNombre ?? "Mesa de trabajo"}</span>
+              <span style={{ marginTop: 2, fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)" }}>{workspaceSubtitle}</span>
+            </h1>
             <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>

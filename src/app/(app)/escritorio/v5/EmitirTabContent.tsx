@@ -36,6 +36,22 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
+function EmitirEmpty({ loading = false }: { loading?: boolean }) {
+  return (
+    <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+      <style>{`@keyframes emitirSonar{0%{transform:scale(.72);opacity:.46}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emitirTrace{0%{stroke-dashoffset:52;opacity:.12}35%{opacity:1}100%{stroke-dashoffset:0;opacity:.32}}@keyframes emitirSparkle{0%,100%{opacity:.18}35%{opacity:1}}`}</style>
+      <div>
+        <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
+          <div style={{position:"absolute",inset:8,borderRadius:"50%",border:"1px solid rgba(180,240,39,.26)",animation:"emitirSonar 2.8s ease-out infinite"}} />
+          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#b4f027"}}><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" fill="rgba(180,240,39,.16)" stroke="currentColor" strokeWidth="4.5" strokeLinejoin="round"/><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" stroke="rgba(255,255,255,.7)" strokeWidth="2" strokeLinejoin="round" strokeDasharray="52" style={{animation:"emitirTrace 2.35s ease-in-out infinite"}}/><circle cx="70" cy="27" r="2.4" fill="currentColor" style={{animation:"emitirSparkle 2.4s ease-in-out .2s infinite"}}/><circle cx="27" cy="67" r="1.8" fill="currentColor" style={{animation:"emitirSparkle 2.4s ease-in-out .8s infinite"}}/></svg>
+        </div>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
+        <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión..." : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function EmitirTabContent() {
   const router = useRouter();
   const { toast } = useToast();
@@ -108,6 +124,14 @@ export default function EmitirTabContent() {
   const selectedTotal = selectedItems.reduce((s, i) => s + i.monto_total, 0);
   const selectedCount = selectedItems.length;
 
+  if (loading) {
+    return <EmitirEmpty loading />;
+  }
+
+  if (!loading && totalCount === 0) {
+    return <EmitirEmpty />;
+  }
+
   async function handleEmitir() {
     if (selectedItems.length === 0) return;
     setEmitiendo(true);
@@ -170,14 +194,8 @@ export default function EmitirTabContent() {
         </div>
 
         {/* Items */}
-        {loading ? (
-          <div className="em-empty"><p>Cargando...</p></div>
-        ) : itemsList.length === 0 ? (
-          <div className="em-empty">
-            <div className="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/></svg></div>
-            <h4>Nada pendiente</h4>
-            <p>No hay propuestas listas para emitir en esta vista</p>
-          </div>
+        {itemsList.length === 0 ? (
+          <EmitirEmpty />
         ) : (
           itemsList.map(item => {
             const isDisabled = !item.listo_emitir;

@@ -60,6 +60,14 @@ export default function TabsV5({
       icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
   ];
 
+  const activeContent = tab === "subidos"
+    ? subidosContent
+    : tab === "revisar"
+      ? revisarContent
+      : tab === "emitir"
+        ? emitirContent
+        : boletasContent;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
       {/* TAB BAR + STATS */}
@@ -106,17 +114,8 @@ export default function TabsV5({
       </div>
 
       {/* TAB CONTENT */}
-      <div key="subidos" className={`r-tab-content ${tab === "subidos" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
-        {subidosContent}
-      </div>
-      <div key="revisar" className={`r-tab-content ${tab === "revisar" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
-        {revisarContent}
-      </div>
-      <div key="emitir" className={`r-tab-content ${tab === "emitir" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
-        {emitirContent}
-      </div>
-      <div key="boletas" className={`r-tab-content ${tab === "boletas" ? "act" : ""}`} style={{flex:1, minHeight: 0}}>
-        {boletasContent}
+      <div key={`${tab}-${fecha}`} className="r-tab-content act" style={{flex:1, minHeight: 0}}>
+        {activeContent}
       </div>
     </div>
   );

@@ -33,6 +33,22 @@ function fmtShort(d: string | null | undefined): string {
   return `${dt.getDate()} ${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
+function RevisarEmpty() {
+  return (
+    <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+      <style>{`@keyframes revisarSonar{0%{transform:scale(.72);opacity:.46}70%,100%{transform:scale(1.22);opacity:0}}@keyframes revisarTrace{0%{stroke-dashoffset:42;opacity:.32}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.5}}`}</style>
+      <div style={{transform:"translateY(7px)"}}>
+        <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
+          <div style={{position:"absolute",inset:8,borderRadius:"50%",border:"1px solid rgba(34,197,94,.26)",animation:"revisarSonar 2.8s ease-out infinite"}} />
+          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#22c55e"}}><path d="M48 78c16.568 0 30-13.432 30-30S64.568 18 48 18 18 31.432 18 48s13.432 30 30 30Z" stroke="currentColor" strokeWidth="4"/><path d="m35 48 9 9 19-21" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="42" style={{animation:"revisarTrace 2.8s ease-in-out infinite"}}/></svg>
+        </div>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>Todo despejado</div>
+        <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:270}}>No hay propuestas pendientes para revisar en esta mesa.</div>
+      </div>
+    </div>
+  );
+}
+
 interface DocTab { docId: string; nombre: string; total: number; }
 
 export default function RevisarTabContent({
@@ -75,14 +91,11 @@ export default function RevisarTabContent({
   const totalPendientes = doc.props.filter(p => p.estado === "pendiente").length;
 
   if (!activeDoc) {
-    return (
-      <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
-        <div style={{textAlign:"center"}}>
-          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo revisado</p>
-        </div>
-      </div>
-    );
+    return <RevisarEmpty />;
+  }
+
+  if (totalPendientes === 0) {
+    return <RevisarEmpty />;
   }
 
   return (
@@ -107,20 +120,9 @@ export default function RevisarTabContent({
 
       {/* Scrollable content */}
       <div className="r-scroll" style={{padding:"0"}}>
-        {totalPendientes === 0 ? (
-          <div className="sec" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px 16px"}}>
-            <div style={{textAlign:"center"}}>
-              <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo revisado</p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
-            <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
-            <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
-          </>
-        )}
+        <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
+        <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
+        <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
       </div>
     </>
   );

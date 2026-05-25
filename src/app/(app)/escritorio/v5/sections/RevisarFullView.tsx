@@ -72,7 +72,19 @@ export default function RevisarFullView({
     if (r.error) toast(r.error, "error"); else { toast("Rechazada"); router.refresh(); }
   }
 
-  if (totalPendientes === 0) return <div style={{ textAlign: "center", padding: 60, fontSize: 11, color: "var(--text2)" }}>Todo revisado</div>;
+  if (totalPendientes === 0) return (
+    <div style={{ minHeight: 320, display: "grid", placeItems: "center", padding: 28, textAlign: "center", color: "var(--text2)" }}>
+      <style>{`@keyframes revisarCheck{0%,100%{transform:scale(1);filter:drop-shadow(0 0 0 rgba(34,197,94,0))}50%{transform:scale(1.08);filter:drop-shadow(0 0 18px rgba(34,197,94,.36))}}@keyframes revisarRing{0%{transform:scale(.78);opacity:.52}100%{transform:scale(1.25);opacity:0}}`}</style>
+      <div>
+        <div style={{ position: "relative", width: 104, height: 104, margin: "0 auto 14px" }}>
+          <div style={{ position: "absolute", inset: 11, borderRadius: "50%", border: "1px solid rgba(34,197,94,.24)", animation: "revisarRing 2.6s ease-out infinite" }} />
+          <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#22c55e", animation: "revisarCheck 2.8s ease-in-out infinite" }}><path d="M48 78c16.568 0 30-13.432 30-30S64.568 18 48 18 18 31.432 18 48s13.432 30 30 30Z" stroke="currentColor" strokeWidth="4"/><path d="m35 48 9 9 19-21" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>Todo despejado</div>
+        <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 270 }}>No hay propuestas pendientes para revisar en esta mesa.</div>
+      </div>
+    </div>
+  );
 
   return (
     <div>

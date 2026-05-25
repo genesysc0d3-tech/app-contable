@@ -25,6 +25,8 @@ export default async function EmpresaPage() {
     comuna: empresa.comuna,
     email_sii: empresa.email_sii,
     tipo_contribuyente: empresa.tipo_contribuyente ?? "auto",
+    logo_storage_path: empresa.logo_storage_path,
+    logo_mime_type: empresa.logo_mime_type,
   };
 
   return (

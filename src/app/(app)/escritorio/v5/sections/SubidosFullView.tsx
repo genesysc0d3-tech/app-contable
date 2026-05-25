@@ -33,7 +33,19 @@ export default function SubidosFullView({ documentos }: { documentos: DocRaw[] }
   }, [documentos]);
 
   if (documentos.length === 0) {
-    return <div style={{ textAlign: "center", padding: 60, fontSize: 11, color: "var(--text2)" }}>No hay documentos subidos</div>;
+    return (
+      <div style={{ minHeight: 320, display: "grid", placeItems: "center", padding: 28, textAlign: "center", color: "var(--text2)" }}>
+        <style>{`@keyframes subidosFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}@keyframes subidosPulse{0%,100%{opacity:.28;transform:scale(.92)}50%{opacity:.7;transform:scale(1.05)}}`}</style>
+        <div>
+          <div style={{ position: "relative", width: 98, height: 98, margin: "0 auto 14px", animation: "subidosFloat 3.2s ease-in-out infinite" }}>
+            <div style={{ position: "absolute", left: 18, right: 18, bottom: 17, height: 14, borderRadius: "50%", background: "rgba(232,85,62,.22)", filter: "blur(10px)", animation: "subidosPulse 3.2s ease-in-out infinite" }} />
+            <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#E8553E" }}><path d="M30 72h36a8 8 0 0 0 8-8V34L56 16H30a8 8 0 0 0-8 8v40a8 8 0 0 0 8 8Z" stroke="currentColor" strokeWidth="4"/><path d="M55 16v17h18" stroke="currentColor" strokeWidth="4"/><path d="M35 49h26M35 59h18" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/></svg>
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>Nada por aquí</div>
+          <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 260 }}>Cuando agregues documentos, aparecerán ordenados por fecha en esta mesa.</div>
+        </div>
+      </div>
+    );
   }
 
   return (

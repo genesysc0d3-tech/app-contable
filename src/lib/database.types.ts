@@ -523,6 +523,8 @@ export type Database = {
           email_sii: string | null
           giro: string | null
           id: string
+          logo_mime_type: string | null
+          logo_storage_path: string | null
           plan: string | null
           plan_activo: boolean
           plan_vence_at: string | null
@@ -541,6 +543,8 @@ export type Database = {
           email_sii?: string | null
           giro?: string | null
           id?: string
+          logo_mime_type?: string | null
+          logo_storage_path?: string | null
           plan?: string | null
           plan_activo?: boolean
           plan_vence_at?: string | null
@@ -559,6 +563,8 @@ export type Database = {
           email_sii?: string | null
           giro?: string | null
           id?: string
+          logo_mime_type?: string | null
+          logo_storage_path?: string | null
           plan?: string | null
           plan_activo?: boolean
           plan_vence_at?: string | null

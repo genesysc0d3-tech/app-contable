@@ -11,11 +11,15 @@ export default function RightColumnView({
   actividadItems,
   rcvContent,
   searchHistoryItems,
+  empresaNombre,
+  empresaLogoUrl,
 }: {
   defaultContent: ReactNode;
   actividadItems?: ActividadItem[];
   rcvContent?: ReactNode;
   searchHistoryItems?: SearchItem[];
+  empresaNombre?: string;
+  empresaLogoUrl?: string | null;
 }) {
   const [view, setView] = useState<"dashboard" | "actividad" | "rcv">("dashboard");
   const viewRef = useRef(view);
@@ -122,7 +126,7 @@ export default function RightColumnView({
         }}
       >
         {searchHistoryItems ? (
-          <SearchHistoryView items={searchHistoryItems} />
+          <SearchHistoryView items={searchHistoryItems} empresaNombre={empresaNombre} empresaLogoUrl={empresaLogoUrl} />
         ) : (
           <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--text2)", fontSize: 12 }}>
             Sin datos de actividad
