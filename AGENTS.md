@@ -130,37 +130,43 @@ src/app/(app)/empresa/          ← Componentes de empresa compartidos
 
 _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 
-### Última sesión (2026-05-17)
+### Última sesión (2026-05-24)
 
 **Qué se hizo:**
-- Popup empresa rediseñado con wizard de 5 pasos (Emisor, Certificado, Formatos, CAF, IA)
-- Componentes de empresa (EmisorForm, CertificadoToggle, etc.) convertidos a inline styles oscuros
-- Dashboard cards con glow hover (box-shadow red accent)
-- Tema claro/oscuro: fondos sólidos vía `var(--surface)` en vez de glass translúcido
-- Colores morados reemplazados por naranja-rojo `#E8553E`
-- Botón flotante empresa con icono Buildings (Phosphor)
-- Eliminados controles flotantes no funcionales del layout
-- AGENTS.md enriquecido con setup, reglas, arquitectura y memoria persistente
-- CLAUDE.md actualizado en sync con AGENTS.md
+- Ramas creadas y descartadas: `feature/v5-dte-unico-actividad-rcv`.
+- Emisión Directa: formulario manual DTE único con endpoint `/api/intermediaria/emitir-boleta`.
+  - Popup/pasos: tipo documento, receptor, detalle+monto, sidebar resumen.
+  - Candado desbloqueable: tipo DTE bloqueado por empresa, desbloqueable para excepciones.
+  - Advertencia si tipo DTE difiere del tipo de empresa.
+- MassDTE: desplegable con carga masiva (`DropzoneUpload`), reemplaza visualmente `Subir documento`.
+- Registro de Actividad: footer izquierdo, al clicar muestra actividad en card derecha vía `RightColumnView`.
+- RCV nuevo estilo colega/nube en card superior izquierda.
+- `ActividadView.tsx`, `RightColumnView.tsx`: contenidos de card derecha.
+- **Animación Genie real del popup Emisión Directa** (sin dependencias):
+  - Canvas scanlines por fila con easing cúbico (`eioC`/`eIn2`/`eOut2`) y glow radial.
+  - Captura DOM → canvas vía SVG `<foreignObject>`: clona offscreen, inyecta CSS vars, serializa, carga como Image, dibuja en canvas.
+  - Popup offscreen pre-renderizado; captura en `requestIdleCallback` al montar; botón deshabilitado hasta tener snapshot.
+  - Apertura: canvas anima desde botón al centro, oculta canvas y muestra panel real con fade overlay.
+  - Cierre: oculta panel real, muestra canvas y anima minimizando al botón.
+  - `prefers-reduced-motion`: salta canvas, muestra overlay directo.
 
 **Archivos modificados:**
-- `src/app/(app)/empresa/EmisorForm.tsx`, `CertificadoToggle.tsx`, `CAFPanel.tsx`, `AiKeyConfig.tsx`, `EmpresaFormatoCartola.tsx`
-- `src/app/(app)/escritorio/v5/EmpresaPopup.tsx`, `V5Root.tsx`, `GlowWrap.tsx`, `page.tsx`, `RevisarTabContent.tsx`
-- `src/app/(app)/layout.tsx`
-- `AGENTS.md`, `CLAUDE.md`
+- `src/app/(app)/escritorio/v5/LeftQuickActions.tsx`: reescrita completamente con Genie canvas.
+- `src/app/(app)/escritorio/v5/EmitirDirectaView.tsx`: formulario manual DTE único.
+- `src/app/(app)/escritorio/v5/MassDTEPanel.tsx`: desplegable MassDTE.
+- `src/app/(app)/escritorio/v5/page.tsx`: layout v5 con RCV, LeftQuickActions, RightColumnView.
+- `src/app/(app)/escritorio/v5/ActividadView.tsx`, `RightColumnView.tsx`: feed actividad, alternador derecha.
 
 **Decisiones:**
-- Glow usa `!important` para vencer inline box-shadow
-- Popup empresa tiene `height: min(900px, ...)` fija con scroll interno
-- Componentes compartidos se modificaron con inline styles (funcionan en /empresa y en popup)
-- Tema claro: `var(--surface) = #ffffff`, Tema oscuro: `var(--surface) = #16181d`
-- No usar `100dvh` ni `overflow: hidden` en wrapper del dashboard (rompía visibilidad)
-- AGENTS.md es la memoria persistente: se actualiza al final de cada sesión y viaja en git
-- El compañero hace `git pull` → IA carga contexto automáticamente
+- Animación Genie sin instalar `html-to-image` ni `motion/react`: SVG foreignObject + canvas puro.
+- No traer `origin/dev` completo (el compañero borró/reordenó); portar manualmente piezas.
+- No tocar auth (`dal.ts`, `supabase/proxy.ts`) ni relajar validaciones tributarias.
+- `Emisión Directa` usa exclusivamente `/api/intermediaria/emitir-boleta` (no pendientes ni emitir-lote).
+- Botón deshabilitado hasta tener snapshot ready (~200ms idle).
 
 **Próximos pasos:**
-- Terminar de pulir visual del popup empresa
-- Revisar modo claro en todas las secciones
+- Revisar visualmente popup empresa.
+- Probar Genie en vivo con sesión real en `localhost:3002`.
 <!-- MEMORY:END -->
 
 ---

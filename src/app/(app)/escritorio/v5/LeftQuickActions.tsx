@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import EmitirDirectaView from "./EmitirDirectaView";
 import DropzoneUpload from "./DropzoneUpload";
 import GlowWrap from "./GlowWrap";
@@ -318,20 +318,61 @@ export function ActivityButton() {
 
 export function HeaderActionsRow() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     return () => document.documentElement.classList.remove("v5-dashboard-fullscreen");
   }, []);
+
+  useEffect(() => {
+    function handleFullscreen(e: CustomEvent<{ open?: boolean }>) {
+      const open = Boolean(e.detail?.open);
+      setDashboardOpen(open);
+      if (!open) setSearchQuery("");
+    }
+
+    function handleFocusSearch() {
+      searchRef.current?.focus();
+    }
+
+    function handleSync(e: CustomEvent<{ query?: string }>) {
+      setSearchQuery(e.detail?.query ?? "");
+    }
+
+    window.addEventListener("toggle-dashboard-fullscreen", handleFullscreen as EventListener);
+    window.addEventListener("focus-search-history", handleFocusSearch);
+    window.addEventListener("search-history-query-sync", handleSync as EventListener);
+    return () => {
+      window.removeEventListener("toggle-dashboard-fullscreen", handleFullscreen as EventListener);
+      window.removeEventListener("focus-search-history", handleFocusSearch);
+      window.removeEventListener("search-history-query-sync", handleSync as EventListener);
+    };
+  }, []);
+
+  function updateSearchQuery(value: string) {
+    setSearchQuery(value);
+    window.dispatchEvent(new CustomEvent("search-history-query-change", { detail: { query: value } }));
+  }
 
   function toggleDashboardFullscreen() {
     const next = !dashboardOpen;
     setDashboardOpen(next);
     document.documentElement.classList.toggle("v5-dashboard-fullscreen", next);
     window.dispatchEvent(new CustomEvent("toggle-dashboard-fullscreen", { detail: { open: next } }));
+    if (!next) updateSearchQuery("");
   }
 
   return (
-    <div style={{display:"flex",flexDirection:"row",gap:8}}>
+    <div style={{display:"flex",flexDirection:"row",gap:8,alignItems:"center"}}>
+      {dashboardOpen && (
+        <div style={{position:"fixed",left:"50%",top:20,transform:"translateX(-50%)",zIndex:65,width:560,maxWidth:"48vw",minWidth:420,height:38}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",color:"var(--text3)",pointerEvents:"none"}}><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input ref={searchRef} value={searchQuery} onChange={(e) => updateSearchQuery(e.target.value)} placeholder="Buscar historial..." style={{width:"100%",height:38,padding:"0 58px 0 36px",borderRadius:12,border:"1px solid rgba(232,85,62,.22)",background:"var(--surface)",color:"var(--text)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",outline:"none",fontSize:12,fontWeight:650}} />
+          <span style={{position:"absolute",right: searchQuery ? 36 : 12,top:"50%",transform:"translateY(-50%)",fontSize:9,fontWeight:850,color:"var(--text3)"}}>⌘K</span>
+          {searchQuery && <button onClick={() => updateSearchQuery("")} aria-label="Limpiar búsqueda" style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",width:23,height:23,borderRadius:8,border:"1px solid var(--border)",background:"var(--bg-muted)",color:"var(--text2)",display:"grid",placeItems:"center",cursor:"pointer",padding:0}}>×</button>}
+        </div>
+      )}
       <button onClick={toggleDashboardFullscreen} aria-pressed={dashboardOpen} aria-label={dashboardOpen ? "Volver al dashboard" : "Expandir dashboard"}
         style={{width:dashboardOpen?176:38,height:38,borderRadius:12,border:dashboardOpen?"1px solid rgba(232,85,62,.28)":"1px solid var(--border)",cursor:"pointer",background:dashboardOpen?"rgba(232,85,62,.12)":"var(--surface)",color:dashboardOpen?"#E8553E":"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",gap:dashboardOpen?8:0,padding:dashboardOpen?"0 14px":0,boxShadow:dashboardOpen?"0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border)":"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",transition:"width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,box-shadow .2s",fontSize:16,overflow:"hidden",whiteSpace:"nowrap"}}>
         {dashboardOpen ? (

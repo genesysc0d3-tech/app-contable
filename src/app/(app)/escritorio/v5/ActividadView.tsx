@@ -11,13 +11,9 @@ export interface ActividadItem {
 
 function timeAgo(dateStr: string): string {
   const d = new Date(dateStr);
-  const now = new Date();
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "ahora";
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
-  if (diff < 172800) return "ayer";
-  return d.toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+  if (Number.isNaN(d.getTime())) return "sin fecha";
+  const months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
+  return `${d.getDate()} ${months[d.getMonth()]}`;
 }
 
 export default function ActividadView({ items = [] }: { items?: ActividadItem[] }) {
