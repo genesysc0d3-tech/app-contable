@@ -364,6 +364,12 @@ export function HeaderActionsRow() {
   }
 
   return (
+    <>
+    <style>{`
+      .ha-btn{position:relative;width:38px;height:38px;border-radius:12px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--text2);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow);transition:all .2s;font-size:16px}
+      .ha-btn:hover{border-color:rgba(232,85,62,.35);background:rgba(232,85,62,.08);box-shadow:0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
+      .ha-btn:hover svg{filter:drop-shadow(0 0 8px rgba(232,85,62,.5));color:#E8553E;transition:filter .25s,color .25s}
+    `}</style>
     <div style={{display:"flex",flexDirection:"row",gap:8,alignItems:"center"}}>
       {dashboardOpen && (
         <div style={{position:"fixed",left:"50%",top:20,transform:"translateX(-50%)",zIndex:65,width:560,maxWidth:"48vw",minWidth:420,height:38}}>
@@ -374,7 +380,8 @@ export function HeaderActionsRow() {
         </div>
       )}
       <button onClick={toggleDashboardFullscreen} aria-pressed={dashboardOpen} aria-label={dashboardOpen ? "Volver al dashboard" : "Expandir dashboard"}
-        style={{width:dashboardOpen?176:38,height:38,borderRadius:12,border:dashboardOpen?"1px solid rgba(232,85,62,.28)":"1px solid var(--border)",cursor:"pointer",background:dashboardOpen?"rgba(232,85,62,.12)":"var(--surface)",color:dashboardOpen?"#E8553E":"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",gap:dashboardOpen?8:0,padding:dashboardOpen?"0 14px":0,boxShadow:dashboardOpen?"0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border)":"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",transition:"width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,box-shadow .2s",fontSize:16,overflow:"hidden",whiteSpace:"nowrap"}}>
+        className={dashboardOpen ? "" : "ha-btn"}
+        style={dashboardOpen ? {width:176,height:38,borderRadius:12,border:"1px solid rgba(232,85,62,.28)",cursor:"pointer",background:"rgba(232,85,62,.12)",color:"#E8553E",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"0 14px",boxShadow:"0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border)",transition:"width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,box-shadow .2s",fontSize:16,overflow:"hidden",whiteSpace:"nowrap"} : undefined}>
         {dashboardOpen ? (
           <>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
@@ -387,14 +394,15 @@ export function HeaderActionsRow() {
           </span>
         )}
       </button>
-      <button onClick={() => window.dispatchEvent(new CustomEvent("toggle-empresa"))}
-        style={{width:38,height:38,borderRadius:12,border:"1px solid var(--border)",cursor:"pointer",background:"var(--surface)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",transition:"all .2s",fontSize:16}}>
+      <button onClick={() => window.dispatchEvent(new CustomEvent("toggle-empresa"))} className="ha-btn">
+        
         <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor"><path d="M240,204H228V96a20,20,0,0,0-20-20H172V32a20,20,0,0,0-28.45-18.12l-104,48.54A20.06,20.06,0,0,0,28,80.55V204H16a12,12,0,0,0,0,24H240a12,12,0,0,0,0-24ZM204,100V204H172V100ZM52,83.09,148,38.3V204H52ZM132,112v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm-40,0v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm0,52v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Zm40,0v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Z"/></svg>
       </button>
-      <button onClick={() => { const next = document.documentElement.dataset.theme === "light" ? "dark" : "light"; document.documentElement.dataset.theme = next; }}
-        style={{width:38,height:38,borderRadius:12,border:"1px solid var(--border)",cursor:"pointer",background:"var(--surface)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",transition:"all .2s",fontSize:16}}>
+      <button onClick={() => { const next = document.documentElement.dataset.theme === "light" ? "dark" : "light"; document.documentElement.dataset.theme = next; }} className="ha-btn">
+        
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
       </button>
     </div>
+    </>
   );
 }
