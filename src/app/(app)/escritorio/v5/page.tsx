@@ -19,6 +19,7 @@ import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, ActivityButton, 
 import DocCardList from "./DocCardList";
 import RcvViewWrapper from "./RcvViewWrapper";
 import RCVSummaryCard from "./RCVSummaryCard";
+import EmpresaBrand from "./EmpresaBrand";
 
 function todayStr() {
   const d = new Date();
@@ -96,7 +97,7 @@ export default async function V5Page({ searchParams }: {
   }), { docs: 0, neto: 0, exento: 0, iva: 0, total: 0 });
 
   const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
-  const empresaLogoUrl = usuario.empresas.logo_storage_path ? `/api/empresa/logo/${empresaId}` : null;
+  const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
   const mes = String(now.getMonth() + 1).padStart(2, "0") + "-" + now.getFullYear();
@@ -375,16 +376,11 @@ body{font-family:'DM Sans',sans-serif}
       <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", minHeight: "100vh", padding: "20px 20px 20px" }}>
 
         {/* CALENDAR + ACTIONS ROW */}
-        <div style={{display:"flex",gap:12,marginBottom:12,alignItems:"center"}}>
-          <span style={{display:"flex",alignItems:"center",gap:9,minWidth:0,whiteSpace:"nowrap",flexShrink:0}}>
-            {empresaLogoUrl && (
-              <span style={{width:34,height:34,borderRadius:11,border:"1px solid var(--border)",background:"var(--bg-muted)",display:"grid",placeItems:"center",overflow:"hidden",flexShrink:0}}>
-                <img src={empresaLogoUrl} alt={`Logo de ${usuario.empresas.razon_social}`} style={{maxWidth:27,maxHeight:27,objectFit:"contain",display:"block"}} />
-              </span>
-            )}
-            <span style={{fontSize:18,fontWeight:700,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis"}}>{usuario.empresas.razon_social}</span>
-          </span>
-          <div className="v5-calendar-wrap" style={{flex:1,display:"flex",justifyContent:"flex-start",minWidth:0}}>
+        <div style={{position:"relative",height:38,marginBottom:12}}>
+          <div style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:2}}>
+            <EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} size={38} maxWidth={180} />
+          </div>
+          <div className="v5-calendar-wrap" style={{position:"absolute",left:"50%",top:0,transform:"translateX(-50%)",height:38,display:"flex",justifyContent:"center",minWidth:0,overflow:"hidden",zIndex:1}}>
           <div style={{background:"var(--surface)",borderRadius:12,border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",minWidth:0,height:38,display:"flex",alignItems:"center",width:"fit-content"}}>
             <div style={{padding:"0 6px",display:"flex",alignItems:"center",gap:2}}>
             <Link href={`/escritorio/v5?month=${y}-${m-1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
@@ -422,7 +418,7 @@ body{font-family:'DM Sans',sans-serif}
             </div>
           </div>
           </div>
-          <HeaderActionsRow />
+          <div style={{position:"absolute",right:0,top:0,height:38,width:132,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2}}><HeaderActionsRow /></div>
         </div>
 
         {/* MAIN GRID */}
@@ -551,7 +547,7 @@ body{font-family:'DM Sans',sans-serif}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
       boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}
-      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto", logo_storage_path: usuario.empresas.logo_storage_path, logo_mime_type: usuario.empresas.logo_mime_type }}
+      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
       empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
       empresaCafs={(cafsData.data ?? []) as any}
       empresaId={empresaId}

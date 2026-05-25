@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { setDatosEmisor, setEmpresaLogo, type DatosEmisor } from "./actions";
+import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
 import { formatRut, validarRut, cleanRut } from "@/lib/sii/validation";
 import { useToast } from "@/components/Toast";
 
@@ -14,8 +14,8 @@ interface Props {
 export default function EmisorForm({ inicial, variant = "page" }: Props) {
   const { toast } = useToast();
   const router = useRouter();
-  const [pending, start] = useTransition();
-  const [logoPending, startLogo] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [logoPending, setLogoPending] = useState(false);
   const compact = variant === "popup";
 
   const [rut, setRut] = useState(inicial.rut ? formatRut(inicial.rut) : "");
@@ -24,16 +24,19 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
   const [direccion, setDireccion] = useState(inicial.direccion ?? "");
   const [comuna, setComuna] = useState(inicial.comuna ?? "");
   const [emailSii, setEmailSii] = useState(inicial.email_sii ?? "");
-  const [hasLogo, setHasLogo] = useState(Boolean(inicial.logo_storage_path));
+  const [hasLogo, setHasLogo] = useState(true);
   const [logoVersion, setLogoVersion] = useState(0);
+  const [logoStatus, setLogoStatus] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [tipoContribuyente, setTipoContribuyente] = useState(
     inicial.tipo_contribuyente ?? "auto"
   );
 
   const rutOk = !rut || validarRut(rut);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (logoPending) return;
 
     if (rut && !validarRut(rut)) {
       toast("RUT inválido", "error");
@@ -45,7 +48,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
       return;
     }
 
-    start(async () => {
+    setPending(true);
+    try {
       const r = await setDatosEmisor({
         rut: rut ? cleanRut(rut) : null,
         razon_social: razonSocial,
@@ -55,27 +59,49 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
         email_sii: emailSii,
         tipo_contribuyente: tipoContribuyente,
       });
-
-      if (r.error) toast(r.error, "error");
-      else toast("Datos del emisor guardados");
-    });
+      if (r.error) { toast(r.error, "error"); return; }
+      toast("Datos del emisor guardados");
+    } catch { toast("Error al guardar", "error"); }
+    finally { setPending(false); }
   }
 
-  function handleLogoChange(file: File | null) {
-    if (!file) return;
+  async function handleLogoChange(file: File | null) {
+    if (!file || logoPending) return;
     const formData = new FormData();
     formData.set("logo", file);
-    startLogo(async () => {
-      const r = await setEmpresaLogo(formData);
-      if (r.error) {
-        toast(r.error, "error");
+    setLogoStatus(null);
+    setLogoPending(true);
+    try {
+      const res = await fetch("/api/empresa/upload-logo", { method: "POST", body: formData, credentials: "same-origin" });
+      if (!res.ok) {
+        let message = `Error ${res.status}`;
+        try {
+          const r = await res.json();
+          message = r.error || message;
+        } catch {}
+        setLogoStatus(message);
+        toast(message, "error");
         return;
       }
       setHasLogo(true);
       setLogoVersion((v) => v + 1);
-      router.refresh();
+      setLogoStatus("Logo guardado");
       toast("Logo de empresa guardado");
-    });
+      router.refresh();
+    } catch {
+      setLogoStatus("Error de conexión");
+      toast("Error de conexión", "error");
+    }
+    finally { setLogoPending(false); }
+  }
+
+  async function handleRemoveLogo() {
+    const r = await removeEmpresaLogo();
+    if (r.error) { toast(r.error, "error"); return; }
+    setHasLogo(false);
+    setLogoVersion((v) => v + 1);
+    toast("Logo eliminado");
+    router.refresh();
   }
 
   const inputBase = {
@@ -101,6 +127,12 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
     <>
       <style>{`
         .ef-input::placeholder { color: rgba(255,255,255,0.20); }
+        .ef-logo-card .ef-logo-fade,
+        .ef-logo-card .ef-logo-actions { opacity: 0; }
+        .ef-logo-card:hover .ef-logo-fade,
+        .ef-logo-card:focus-within .ef-logo-fade { opacity: 1; }
+        .ef-logo-card:hover .ef-logo-actions,
+        .ef-logo-card:focus-within .ef-logo-actions { opacity: 1; transform: translate(-50%, 0) scale(1); }
         @keyframes ef-spin { to { transform: rotate(360deg); } }
       `}</style>
       <form id="empresa-emisor-form"
@@ -168,43 +200,43 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
               </p>
             </div>
 
-            <label style={{
-              marginLeft: "auto",
-              width: compact ? 118 : 150,
-              minHeight: compact ? 54 : 66,
-              borderRadius: compact ? 12 : 16,
-              border: "1px dashed rgba(232,85,62,0.30)",
-              background: "rgba(232,85,62,0.055)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: compact ? 6 : 8,
-              cursor: logoPending ? "wait" : "pointer",
-              color: "#FDBA74",
-              flexShrink: 0,
-              overflow: "hidden",
-              textAlign: "center",
-            }}>
-              <input
-                type="file"
-                accept="image/png,image/svg+xml,image/webp,image/gif,image/jpeg"
-                disabled={logoPending}
-                onChange={(e) => handleLogoChange(e.target.files?.[0] ?? null)}
+            <div style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}>
+              <input ref={logoInputRef} type="file" accept="image/png,image/svg+xml,image/webp,image/gif,image/jpeg" disabled={logoPending}
+                onChange={(e) => { const f = e.target.files?.[0] ?? null; handleLogoChange(f); e.target.value = ""; }}
                 style={{ display: "none" }}
               />
               {hasLogo ? (
-                <img
-                  src={`/api/empresa/logo/current?v=${logoVersion}`}
-                  alt="Logo de la empresa"
-                  style={{ maxWidth: "100%", maxHeight: compact ? 38 : 48, objectFit: "contain", display: "block" }}
-                />
+                <div className="ef-logo-card" style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, overflow: "hidden", position: "relative" }}>
+                  <img
+                    src={`/api/empresa/logo/current?v=${logoVersion}`}
+                    alt="Logo"
+                    onError={() => setHasLogo(false)}
+                    style={{ maxWidth: "100%", maxHeight: compact ? 38 : 48, objectFit: "contain", display: "block", transition: "filter 160ms ease, transform 160ms ease" }}
+                  />
+                  <div className="ef-logo-fade" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,10,12,.08), rgba(10,10,12,.46))", backdropFilter: "blur(1px)", transition: "opacity 160ms ease", pointerEvents: "none" }} />
+                  <div className="ef-logo-actions" style={{ position: "absolute", left: "50%", bottom: 7, display: "flex", gap: 5, transform: "translate(-50%, 4px) scale(.98)", transition: "opacity 160ms ease, transform 160ms ease" }}>
+                    <button type="button" onClick={() => logoInputRef.current?.click()} disabled={logoPending} aria-label="Cambiar logo" style={{ width: compact ? 25 : 29, height: compact ? 25 : 29, borderRadius: 999, border: "1px solid rgba(255,255,255,.22)", background: "rgba(15,15,18,.72)", color: "#fff", display: "grid", placeItems: "center", cursor: logoPending ? "wait" : "pointer", backdropFilter: "blur(8px)", boxShadow: "0 8px 18px rgba(0,0,0,.24)" }}>
+                      {logoPending ? <span style={{ fontSize: 10, fontWeight: 800 }}>...</span> : <svg viewBox="0 0 24 24" fill="none" width={compact ? 13 : 14} height={compact ? 13 : 14} aria-hidden="true"><path d="m4 16.5-.5 4 4-.5L18.9 8.6a2.1 2.1 0 0 0 0-3L18.4 5a2.1 2.1 0 0 0-3 0L4 16.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="m13.8 6.6 3.6 3.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+                    </button>
+                    <button type="button" onClick={handleRemoveLogo} disabled={logoPending} aria-label="Eliminar logo" style={{ width: compact ? 25 : 29, height: compact ? 25 : 29, borderRadius: 999, border: "1px solid rgba(255,255,255,.18)", background: "rgba(190,34,28,.78)", color: "#fff", display: "grid", placeItems: "center", cursor: logoPending ? "wait" : "pointer", backdropFilter: "blur(8px)", boxShadow: "0 8px 18px rgba(0,0,0,.24)" }}>
+                      <svg viewBox="0 0 24 24" fill="none" width={compact ? 13 : 14} height={compact ? 13 : 14} aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M9 7l.7-2h4.6L15 7M7 7l.8 13h8.4L17 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: compact ? 9 : 10, fontWeight: 750, lineHeight: 1.15 }}>
-                  <span>{logoPending ? "Subiendo..." : "Subir logo"}</span>
-                  <span style={{ color: "rgba(255,255,255,.42)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>PNG/SVG transparente</span>
-                </span>
+                <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "#FDBA74", overflow: "hidden", textAlign: "center" }}>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: compact ? 9 : 10, fontWeight: 750, lineHeight: 1.15 }}>
+                    <span>{logoPending ? "Subiendo..." : "Subir logo"}</span>
+                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "#fca5a5" : "rgba(255,255,255,.42)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>{logoStatus ?? "PNG/SVG transparente"}</span>
+                  </span>
+                </div>
               )}
-            </label>
+              {hasLogo && logoStatus && (
+                <div style={{ marginTop: 5, maxWidth: compact ? 118 : 150, color: logoStatus === "Logo guardado" ? "#86EFAC" : "#fca5a5", fontSize: compact ? 8 : 9, fontWeight: 700, lineHeight: 1.2, textAlign: "center" }}>
+                  {logoStatus}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* FIELDS GRID */}

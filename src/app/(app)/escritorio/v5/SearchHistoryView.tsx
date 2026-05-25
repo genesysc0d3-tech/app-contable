@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type { SearchItem } from "@/lib/tree-structure";
 import VisualizarArchivo from "./VisualizarArchivo";
+import EmpresaBrand from "./EmpresaBrand";
 
 type FilterType = "todo" | SearchItem["type"];
 type DateMode = "emision" | "edicion";
@@ -339,15 +340,10 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
       <header style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10, background: "linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 82%, var(--bg-muted)))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-            {empresaLogoUrl && (
-              <div style={{ width: 38, height: 38, borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-muted)", display: "grid", placeItems: "center", overflow: "hidden", flexShrink: 0 }}>
-                <img src={empresaLogoUrl} alt={empresaNombre ? `Logo de ${empresaNombre}` : "Logo de la empresa"} style={{ maxWidth: 30, maxHeight: 30, objectFit: "contain", display: "block" }} />
-              </div>
-            )}
-            <h1 style={{ margin: 0, display: "flex", flexDirection: "column", lineHeight: 1.02, whiteSpace: "nowrap" }}>
-              <span style={{ fontSize: 17, fontWeight: 860, letterSpacing: "-.035em" }}>{empresaNombre ?? "Mesa de trabajo"}</span>
-              <span style={{ marginTop: 2, fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)" }}>{workspaceSubtitle}</span>
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <EmpresaBrand nombre={empresaNombre ?? "Mesa de trabajo"} logoUrl={empresaLogoUrl ?? ""} size={38} textSize={17} />
+              <span style={{ fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)", whiteSpace: "nowrap" }}>{workspaceSubtitle}</span>
+            </div>
             <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
