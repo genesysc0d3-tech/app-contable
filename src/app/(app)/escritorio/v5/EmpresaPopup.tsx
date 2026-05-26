@@ -14,12 +14,16 @@ export default function EmpresaPopup({
   tieneCertificado,
   cafs,
   empresaId,
+  helpStepsEnabled,
+  onHelpStepsChange,
   onClose,
 }: {
   inicial: DatosEmisor;
   tieneCertificado: boolean;
   cafs: CAFRow[];
   empresaId: string;
+  helpStepsEnabled?: boolean;
+  onHelpStepsChange?: (enabled: boolean) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -285,6 +289,58 @@ export default function EmpresaPopup({
           cursor: pointer;
           text-decoration: underline;
           text-underline-offset: 3px;
+        }
+
+        .ep-help-toggle {
+          width: 100%;
+          padding: 8px 9px;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          font-size: 10px;
+          font-weight: 760;
+          transition: border-color .16s ease, background .16s ease, color .16s ease;
+        }
+
+        .ep-help-toggle:hover {
+          border-color: rgba(232, 85, 62, 0.38);
+          background: rgba(232, 85, 62, 0.06);
+          color: #E8553E;
+        }
+
+        .ep-help-switch {
+          width: 30px;
+          height: 16px;
+          padding: 2px;
+          border-radius: 999px;
+          background: var(--bg-muted);
+          border: 1px solid var(--border);
+          flex-shrink: 0;
+        }
+
+        .ep-help-switch-dot {
+          display: block;
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: var(--text3);
+          transition: transform .18s ease, background .18s ease;
+        }
+
+        .ep-help-toggle.active .ep-help-switch {
+          background: rgba(232, 85, 62, 0.14);
+          border-color: rgba(232, 85, 62, 0.34);
+        }
+
+        .ep-help-toggle.active .ep-help-switch-dot {
+          transform: translateX(14px);
+          background: #E8553E;
         }
 
         .ep-main-panel {
@@ -633,9 +689,19 @@ export default function EmpresaPopup({
               <div className="ep-help-icon">?</div>
               <div className="ep-help-title">¿Necesitas ayuda?</div>
               <div className="ep-help-text">
-                Te guiamos en cada paso para dejar la empresa lista.
+                Mostramos números sobre el dashboard para seguir el flujo.
               </div>
-              <div className="ep-help-link">Ver documentación ↗</div>
+              <button
+                type="button"
+                className={`ep-help-toggle${helpStepsEnabled ? " active" : ""}`}
+                aria-pressed={Boolean(helpStepsEnabled)}
+                onClick={() => onHelpStepsChange?.(!helpStepsEnabled)}
+              >
+                <span>{helpStepsEnabled ? "Quitar pasos" : "Mostrar pasos"}</span>
+                <span className="ep-help-switch" aria-hidden="true">
+                  <span className="ep-help-switch-dot" />
+                </span>
+              </button>
             </div>
           </aside>
 

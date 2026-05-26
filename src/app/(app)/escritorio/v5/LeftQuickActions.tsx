@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import EmitirDirectaView from "./EmitirDirectaView";
 import DropzoneUpload from "./DropzoneUpload";
 import GlowWrap from "./GlowWrap";
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export function EmisionDirectaAction({ empresaTipo }: { empresaTipo?: string | null }) {
   const [open, setOpen] = useState(false);
@@ -107,11 +113,14 @@ export function EmisionDirectaAction({ empresaTipo }: { empresaTipo?: string | n
 }
 
 export function MassDTEAction({ empresaId }: { empresaId: string }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   function handleUploaded() {
     setOpen(false);
-    window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" }));
+    router.push(`/escritorio/v5?date=${todayStr()}&view=day`);
+    router.refresh();
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" })), 80);
   }
 
   return (

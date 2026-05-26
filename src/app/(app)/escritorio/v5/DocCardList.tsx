@@ -69,6 +69,7 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6}}>
         <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
         {docs.map((doc) => {
+          const isBoletaUnica = doc.tipo === "boleta_unica";
           const progreso = doc.progreso_ia as {
             estado?:string; lote_actual?:number; total_lotes?:number;
             movimientos_encontrados?:number; error?:string;
@@ -85,14 +86,16 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
           const pct = hasProgress ? Math.round((loteActual / totalLotes) * 100) : 0;
 
           return (
-            <div key={doc.id} className="doc-card">
-              <div className="dh">
+            <div key={doc.id} className="doc-card" style={isBoletaUnica ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
+              <div className="dh" style={isBoletaUnica ? { padding: "6px 8px", gap: 5 } : undefined}>
+                {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"#E8553E",fontSize:7,fontWeight:900,flexShrink:0}}>B1</span>}
                 <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px ${st[doc.estado]??"var(--text2)"}40`}} />
                 <span className="nm">{doc.nombre_archivo}</span>
+                {isBoletaUnica && <span style={{fontSize:6,padding:"1px 4px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
               </div>
-              <div className="db">
+              <div className="db" style={isBoletaUnica ? { padding: "0 8px 6px", gap: 2 } : undefined}>
                 {doc.estado === "procesado" && hasWarning && (
                   <div className="warn">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -140,17 +143,18 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                   </div>
                 )}
                 <div className="da">
-                  {(doc.estado === "procesado" || doc.estado === "subido") && (
+                  {!isBoletaUnica && (doc.estado === "procesado" || doc.estado === "subido") && (
                     <button className="ht" onClick={() => callApi("/api/procesar-documento", doc.id)}>↻ Reprocesar</button>
                   )}
-                  {(doc.estado === "procesado" || doc.estado === "error") && (
+                  {!isBoletaUnica && (doc.estado === "procesado" || doc.estado === "error") && (
                     <button className="ud" onClick={() => callApi("/api/deshacer-documento", doc.id)}>↩ Deshacer</button>
                   )}
                   {doc.estado === "procesando" && (
                     <button className="cl" onClick={() => callApi("/api/cancelar-documento", doc.id)}>✕ Cancelar</button>
                   )}
-                  <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>
-                  <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>
+                  {!isBoletaUnica && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>}
+                  {!isBoletaUnica && <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>}
+                  {isBoletaUnica && <span style={{fontSize:9,color:"var(--text2)",fontWeight:600}}>Registro creado desde Emision Directa</span>}
                 </div>
               </div>
             </div>

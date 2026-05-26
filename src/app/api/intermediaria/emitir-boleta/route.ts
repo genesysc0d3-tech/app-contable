@@ -162,6 +162,25 @@ export async function POST(request: Request) {
     );
   }
 
+  const receptorLabel = body.receptor_razon_social?.trim() || "consumidor final";
+  const { error: docInsertErr } = await sb.from("documentos_subidos").insert({
+    empresa_id: usuario.empresa_id,
+    nombre_archivo: `Boleta unica #${boleta.folio} - ${receptorLabel}`,
+    tipo: "boleta_unica",
+    storage_path: `boleta-unica://${boleta.id}`,
+    estado: "procesado",
+    movimientos_detectados: 1,
+    progreso_ia: {
+      origen: "emision_directa",
+      boleta_id: boleta.id,
+      folio: boleta.folio,
+      tipo_dte: body.tipo_dte,
+      monto_total: boleta.monto_total,
+      receptor: receptorLabel,
+      etiqueta: "Boleta unica",
+    },
+  });
+
   return NextResponse.json({
     ok: true,
     boleta_id: boleta.id,
@@ -171,6 +190,7 @@ export async function POST(request: Request) {
     monto_total: boleta.monto_total,
     track_id: boleta.track_id,
     estado: boleta.estado,
+    registro_agregados: docInsertErr ? "warning" : "ok",
     mensaje: `Boleta tipo ${body.tipo_dte} folio ${boleta.folio} emitida (mock)`,
   });
 }

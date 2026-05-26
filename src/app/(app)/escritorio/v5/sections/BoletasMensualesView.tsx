@@ -19,8 +19,8 @@ function fmtDate(s?: string | null) {
 }
 
 const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
-  39: { label: "AFE", color: "#E8553E", bg: "rgba(232,85,62,.1)" },
-  41: { label: "EXE", color: "#3B82F6", bg: "rgba(59,130,246,.1)" },
+  39: { label: "AFECTA", color: "#E8553E", bg: "rgba(232,85,62,.1)" },
+  41: { label: "EXENTA", color: "#3B82F6", bg: "rgba(59,130,246,.1)" },
   61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.1)" },
 };
 
@@ -123,7 +123,7 @@ export default function BoletasMensualesView({ boletas, month, year, onPrevMonth
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "58px 48px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center", padding: "7px 10px", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "58px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center", padding: "7px 10px", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
             <span>Folio</span><span>Tipo</span><span>Receptor</span><span>Estado</span><span>Emisión SII</span><span>Edición/Subida</span><span style={{ textAlign: "right" }}>Monto</span><span />
           </div>
           {displayed.map(b => {
@@ -131,7 +131,7 @@ export default function BoletasMensualesView({ boletas, month, year, onPrevMonth
             const badge = TIPO_BADGE[b.tipo_dte] ?? { label: `DTE ${b.tipo_dte}`, color: "var(--text2)", bg: "var(--bg-muted)" };
             return (
               <div key={b.id} style={{
-                display: "grid", gridTemplateColumns: "58px 48px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center",
+                display: "grid", gridTemplateColumns: "58px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center",
                 padding: "8px 10px", borderRadius: 6,
                 background: anulada ? "rgba(239,68,68,.02)" : "rgba(255,255,255,.02)",
                 border: "1px solid var(--border)", opacity: anulada ? .5 : 1,

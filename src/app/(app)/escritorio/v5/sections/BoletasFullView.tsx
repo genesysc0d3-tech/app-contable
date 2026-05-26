@@ -86,7 +86,7 @@ export default function BoletasFullView({ boletas }: { boletas: BoletaRow[] }) {
                         background: b.tipo_dte === 39 ? "rgba(232,85,62,.1)" : "rgba(91,156,246,.1)",
                         color: b.tipo_dte === 39 ? "#E8553E" : "var(--blue)",
                       }}>
-                        {b.tipo_dte === 39 ? "AFE" : "EXE"}
+                        {b.tipo_dte === 39 ? "AFECTA" : "EXENTA"}
                       </span>
                       {anulada && <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 4, fontWeight: 600, background: "var(--border)", color: "var(--text2)" }}>ANULADA</span>}
                     </div>

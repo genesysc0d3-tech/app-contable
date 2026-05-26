@@ -126,6 +126,28 @@ export default async function V5Page({ searchParams }: {
     .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
     .eq("empresa_id", empresaId).gte("fecha_emision",workStart).lt("fecha_emision",workEnd).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(20);
 
+  const docsBase = (docsData.data ?? []) as any[];
+  const boletasComoAgregados = (boletas ?? [])
+    .filter((boleta) => !docsBase.some((doc) => (doc.progreso_ia as any)?.boleta_id === boleta.id))
+    .map((boleta) => ({
+      id: `boleta-unica-${boleta.id}`,
+      nombre_archivo: `Boleta unica #${boleta.folio} - ${boleta.receptor_razon_social ?? "consumidor final"}`,
+      tipo: "boleta_unica",
+      estado: "procesado",
+      movimientos_detectados: 1,
+      created_at: `${boleta.fecha_emision}T12:00:00.000Z`,
+      progreso_ia: {
+        origen: "emision_directa",
+        boleta_id: boleta.id,
+        folio: boleta.folio,
+        tipo_dte: boleta.tipo_dte,
+        monto_total: boleta.monto_total,
+        receptor: boleta.receptor_razon_social ?? "consumidor final",
+        sintetico_desde_boleta: true,
+      },
+    }));
+  const docsAgregados = [...boletasComoAgregados, ...docsBase].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
   // All boletas for RCV view
   const { data: boletasAllData } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
@@ -462,10 +484,10 @@ body{font-family:'DM Sans',sans-serif}
               nombreEmpresa={usuario.empresas.razon_social}
               fecha={selectedDateLabel}
               subidosContent={
-                (docsData.data ?? []).length > 0 ? (
+                docsAgregados.length > 0 ? (
                   <div className="r-scroll">
                     <div className="sec" style={{paddingTop:6}}>
-                      <DocCardList docs={(docsData.data ?? []) as any} empresaId={empresaId} />
+                      <DocCardList docs={docsAgregados as any} empresaId={empresaId} />
                     </div>
                   </div>
                 ) : (
@@ -543,7 +565,7 @@ body{font-family:'DM Sans',sans-serif}
   return (
     <V5Root
       dashboardContent={dashboardContent}
-      subidosContent={<SubidosFullView documentos={(docsData.data ?? []) as any} />}
+      subidosContent={<SubidosFullView documentos={docsAgregados as any} />}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
       boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}

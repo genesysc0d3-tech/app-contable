@@ -9,7 +9,7 @@ interface DocRaw {
 
 const stColors: Record<string, string> = { procesado: "#22c55e", procesando: "#5b9cf6", error: "#ef4444", subido: "#f59e0b" };
 const stLabels: Record<string, string> = { procesado: "Listo", procesando: "Procesando", error: "Error", subido: "Pendiente" };
-const tipoIcons: Record<string, string> = { excel: "XLS", pdf: "PDF", csv: "CSV", imagen: "IMG", whatsapp: "WP" };
+const tipoIcons: Record<string, string> = { excel: "XLS", pdf: "PDF", csv: "CSV", imagen: "IMG", whatsapp: "WP", boleta_unica: "DTE" };
 
 function dayLabel(s: string) {
   const d = new Date(s + "T12:00:00");
@@ -63,12 +63,17 @@ export default function SubidosFullView({ documentos }: { documentos: DocRaw[] }
               {dayLabel(date)}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {docs.map(doc => (
+              {docs.map(doc => {
+                const isBoletaUnica = doc.tipo === "boleta_unica";
+                return (
                 <div key={doc.id} style={{
-                  padding: "8px 10px", borderRadius: 8, background: "var(--surface)",
-                  border: "1px solid var(--border)", transition: "all .15s", cursor: "pointer",
+                  padding: isBoletaUnica ? "6px 8px" : "8px 10px", borderRadius: 8, background: isBoletaUnica ? "rgba(232,85,62,.045)" : "var(--surface)",
+                  border: isBoletaUnica ? "1px dashed rgba(232,85,62,.55)" : "1px solid var(--border)", transition: "all .15s", cursor: "pointer",
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: isBoletaUnica ? 5 : 7, marginBottom: isBoletaUnica ? 3 : 4 }}>
+                    {isBoletaUnica && (
+                      <span style={{ width: 18, height: 18, borderRadius: 5, border: "1px dashed rgba(232,85,62,.75)", display: "grid", placeItems: "center", color: "#E8553E", fontSize: 7, fontWeight: 900, flexShrink: 0 }}>B1</span>
+                    )}
                     <span style={{ width: 4, height: 4, borderRadius: "50%", background: stColors[doc.estado] ?? "var(--text2)", flexShrink: 0 }} />
                     <span style={{ fontSize: 10, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, color: "var(--text)" }}>
                       {doc.nombre_archivo}
@@ -78,15 +83,17 @@ export default function SubidosFullView({ documentos }: { documentos: DocRaw[] }
                     </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 8, color: "var(--text2)" }}>
-                    <span style={{ padding: "1px 4px", borderRadius: 3, background: "var(--bg-muted)" }}>
+                    <span style={{ padding: "1px 4px", borderRadius: 3, background: isBoletaUnica ? "rgba(232,85,62,.12)" : "var(--bg-muted)", color: isBoletaUnica ? "#E8553E" : undefined, fontWeight: isBoletaUnica ? 800 : undefined }}>
                       {tipoIcons[doc.tipo] ?? doc.tipo}
                     </span>
+                    {isBoletaUnica && <span style={{ color: "#E8553E", fontWeight: 800 }}>Boleta unica</span>}
                     {doc.movimientos_detectados != null && (
                       <span>{doc.movimientos_detectados} mov</span>
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}

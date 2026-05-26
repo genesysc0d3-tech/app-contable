@@ -77,7 +77,7 @@ export default function TabsV5({
           const arrowActive = i > 0 && tabs[i - 1].id === tab;
           return (
             <React.Fragment key={t.id}>
-            {i > 0 && <span data-tab-arrow="true" style={{position:"relative",zIndex:2,width:26,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:13,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:700,boxShadow:"none"}}>›</span>}
+            {i > 0 && <span data-tab-arrow="true" aria-hidden="true" style={{position:"relative",zIndex:2,width:30,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:900,letterSpacing:"-0.18em",boxShadow:"none"}}>››</span>}
             <button ref={el => { btnRefs.current[i] = el; }} onClick={() => setTab(t.id)}
               style={{
                 position:"relative",zIndex:2,padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",
