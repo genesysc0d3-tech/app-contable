@@ -11,14 +11,21 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function EmisionDirectaAction({ empresaTipo }: { empresaTipo?: string | null }) {
+export function EmisionDirectaAction({ empresaTipo, empresaId }: { empresaTipo?: string | null; empresaId?: string }) {
   const [open, setOpen] = useState(false);
+
+  function closeWithSavedPulse(saved = false) {
+    setOpen(false);
+    if (saved) {
+      window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Borrador guardado" } }));
+    }
+  }
 
   return (
     <>
       <style>{`
         .ed-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
-        .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
+        .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
         @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
         .sp{position:relative;z-index:0;width:100%;overflow:hidden}
         .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:9;--accent-s:79%;--accent-l:58%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 79%) 68% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 79%) 58% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 34%) + 18%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(232,85,62,.13), rgba(232,85,62,.04));color:#E8553E;cursor:pointer;text-align:left;white-space:nowrap;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
@@ -102,9 +109,9 @@ export function EmisionDirectaAction({ empresaTipo }: { empresaTipo?: string | n
       </div>
 
       {open && (
-        <div className="ed-overlay" onClick={() => setOpen(false)}>
-          <div className="ed-panel" onClick={(e) => e.stopPropagation()}>
-            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} onClose={() => setOpen(false)} />
+        <div className="ed-overlay">
+          <div className="ed-panel">
+            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} onClose={closeWithSavedPulse} />
           </div>
         </div>
       )}
@@ -116,8 +123,13 @@ export function MassDTEAction({ empresaId }: { empresaId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  function handleUploaded() {
+  function closeWithSavedPulse(label = "Archivo subido a Agregados") {
     setOpen(false);
+    window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label } }));
+  }
+
+  function handleUploaded() {
+    closeWithSavedPulse("Archivo subido a Agregados");
     router.push(`/escritorio/v5?date=${todayStr()}&view=day`);
     router.refresh();
     window.setTimeout(() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" })), 80);
@@ -237,8 +249,8 @@ export function MassDTEAction({ empresaId }: { empresaId: string }) {
       </div>
 
       {open && (
-        <div className="md-overlay" onClick={() => setOpen(false)}>
-          <div className="md-panel" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh" }}>
+        <div className="md-overlay">
+          <div className="md-panel" style={{ maxHeight: "90vh" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
               <button aria-label="Cerrar" onClick={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 16 }}>×</button>
               <div style={{ flex: 1, minWidth: 0 }}>

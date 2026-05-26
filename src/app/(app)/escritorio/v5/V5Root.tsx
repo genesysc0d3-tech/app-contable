@@ -32,6 +32,7 @@ export default function V5Root({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const [helpStepsEnabled, setHelpStepsEnabled] = useState(true);
+  const [savedPulse, setSavedPulse] = useState<{ id: number; label: string } | null>(null);
   const router = useRouter();
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
@@ -78,6 +79,20 @@ export default function V5Root({
   }, []);
 
   useEffect(() => {
+    function handleSaved(e: Event) {
+      const label = (e as CustomEvent<{ label?: string }>).detail?.label ?? "Información guardada";
+      const id = Date.now();
+      setSavedPulse({ id, label });
+      window.setTimeout(() => {
+        setSavedPulse((current) => current?.id === id ? null : current);
+      }, 1500);
+    }
+
+    window.addEventListener("v5-popup-saved", handleSaved);
+    return () => window.removeEventListener("v5-popup-saved", handleSaved);
+  }, []);
+
+  useEffect(() => {
     const saved = window.localStorage.getItem("v5-help-steps");
     if (saved === "off") setHelpStepsEnabled(false);
   }, []);
@@ -119,6 +134,8 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 ::view-transition-new(root){z-index:9999;clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%));animation:circle-expand .5s cubic-bezier(.22,1,.36,1) forwards}
 @keyframes circle-expand{from{clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%))}to{clip-path:circle(150% at var(--click-x,50%) var(--click-y,50%))}}
 ::view-transition-old(root){z-index:1}
+@keyframes saved-pop{0%{opacity:0;transform:translate(-50%,14px) scale(.92);filter:blur(3px)}18%{opacity:1;transform:translate(-50%,0) scale(1.02);filter:blur(0)}72%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-10px) scale(.98)}}
+@keyframes saved-ring{0%{transform:scale(.45);opacity:.9}100%{transform:scale(1.9);opacity:0}}
 `}</style>
 
         <div className="root-noise" style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
@@ -132,6 +149,8 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 
       {helpStepsEnabled && <DashboardHelpHarness onDisable={() => updateHelpSteps(false)} />}
 
+      {savedPulse && <SavedPulse key={savedPulse.id} label={savedPulse.label} />}
+
       {empresaOpen && (
         <EmpresaPopup
           inicial={empresaInicial}
@@ -144,6 +163,20 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
         />
       )}
     </>
+  );
+}
+
+function SavedPulse({ label }: { label: string }) {
+  return (
+    <div style={{ position: "fixed", left: "50%", bottom: 34, zIndex: 95, transform: "translateX(-50%)", animation: "saved-pop 1.45s cubic-bezier(.22,1,.36,1) both", pointerEvents: "none" }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 9, padding: "10px 14px 10px 10px", borderRadius: 999, background: "rgba(22,24,29,.86)", border: "1px solid rgba(34,197,94,.28)", color: "rgba(255,255,255,.92)", boxShadow: "0 18px 50px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", fontSize: 11, fontWeight: 850 }}>
+        <span style={{ position: "relative", width: 24, height: 24, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(34,197,94,.16)", color: "#22c55e", flexShrink: 0 }}>
+          <span style={{ position: "absolute", inset: 0, borderRadius: 999, border: "1px solid rgba(34,197,94,.45)", animation: "saved-ring .9s ease-out both" }} />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: "relative" }}><path d="M20 6 9 17l-5-5" /></svg>
+        </span>
+        <span>{label}</span>
+      </div>
+    </div>
   );
 }
 

@@ -454,7 +454,7 @@ body{font-family:'DM Sans',sans-serif}
 
             {/* EMITIR PANEL */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <EmisionDirectaAction empresaTipo={usuario.empresas.tipo_contribuyente} />
+              <EmisionDirectaAction empresaTipo={usuario.empresas.tipo_contribuyente} empresaId={empresaId} />
             </div></GlowWrap>
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <MassDTEAction empresaId={empresaId} />

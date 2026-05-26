@@ -70,6 +70,46 @@ export default function TabsV5({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <style>{`
+        @keyframes tabArrowWaveFade {
+          0%, 100% { opacity: .26; }
+          35% { opacity: 1; }
+          68% { opacity: .46; }
+        }
+        .tab-flow-arrow { overflow: hidden; }
+        .tab-flow-arrow.active {
+          color: #fff !important;
+          background: rgba(232,85,62,.14) !important;
+          box-shadow: inset 0 0 0 1px rgba(232,85,62,.20), 0 0 16px rgba(232,85,62,.20) !important;
+        }
+        .tab-flow-static {
+          position: relative;
+          z-index: 1;
+          opacity: 1;
+          letter-spacing: -0.20em;
+        }
+        .tab-flow-active {
+          position: relative;
+          z-index: 1;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          letter-spacing: -0.24em;
+          color: #fff;
+        }
+        .tab-flow-active span {
+          display: inline-block;
+          opacity: .26;
+          animation: tabArrowWaveFade 2.35s ease-in-out infinite both;
+          text-shadow: 0 0 9px rgba(255,255,255,.24), 0 0 13px rgba(232,85,62,.18);
+        }
+        .tab-flow-active span:nth-child(2) { animation-delay: .32s; }
+        .tab-flow-arrow.active .tab-flow-static { display: none; }
+        .tab-flow-arrow.active .tab-flow-active { display: inline-flex; }
+        .tab-flow-arrow.active .tab-flow-static {
+          text-shadow: 0 0 10px rgba(255,255,255,.28), 0 0 14px rgba(232,85,62,.22);
+        }
+      `}</style>
       {/* TAB BAR + STATS */}
       <div ref={barRef} className="tab-bar" style={{position:"relative",display:"flex",alignItems:"center",gap:2,padding:"8px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
         {tabs.map((t, i) => {
@@ -77,7 +117,7 @@ export default function TabsV5({
           const arrowActive = i > 0 && tabs[i - 1].id === tab;
           return (
             <React.Fragment key={t.id}>
-            {i > 0 && <span data-tab-arrow="true" aria-hidden="true" style={{position:"relative",zIndex:2,width:30,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:900,letterSpacing:"-0.18em",boxShadow:"none"}}>››</span>}
+            {i > 0 && <span data-tab-arrow="true" aria-hidden="true" className={`tab-flow-arrow${arrowActive ? " active" : ""}`} style={{position:"relative",zIndex:2,width:30,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:900,boxShadow:"none"}}><span className="tab-flow-static">››</span><span className="tab-flow-active"><span>›</span><span>›</span></span></span>}
             <button ref={el => { btnRefs.current[i] = el; }} onClick={() => setTab(t.id)}
               style={{
                 position:"relative",zIndex:2,padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",

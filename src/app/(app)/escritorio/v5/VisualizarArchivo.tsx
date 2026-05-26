@@ -78,7 +78,6 @@ export default function VisualizarArchivo({
         position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center",
         padding: 24, background: "rgba(0,0,0,.58)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
       }}
-      onClick={onClose}
     >
       <style>{`
         .vx-table { border-collapse: collapse; font-size: 11px; font-family: 'DM Sans','Inter',monospace; width: 100%; background: var(--surface); }
@@ -88,7 +87,6 @@ export default function VisualizarArchivo({
         .vx-table tr:hover { background: rgba(232,85,62,.04); }
       `}</style>
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(1280px, 96vw)", maxHeight: "88vh",
           overflow: "hidden", borderRadius: 20,

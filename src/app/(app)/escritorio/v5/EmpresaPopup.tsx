@@ -39,6 +39,7 @@ export default function EmpresaPopup({
       const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
       form?.requestSubmit();
     }
+    window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Empresa guardada" } }));
     onClose();
   }, [step, onClose]);
 
@@ -622,11 +623,10 @@ export default function EmpresaPopup({
         </main>
       </div>
 
-      <div className="ep-overlay" onClick={handleClose}>
+      <div className="ep-overlay">
         <section
           ref={ref}
           className="ep-modal"
-          onClick={(e) => e.stopPropagation()}
           aria-label="Configuración de empresa"
         >
           <aside className="ep-wizard" aria-label="Pasos de configuración">
