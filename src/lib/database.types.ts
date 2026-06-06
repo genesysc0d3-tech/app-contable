@@ -112,6 +112,8 @@ export type Database = {
           caf_id: string | null
           created_at: string
           detalles: Json
+          emision_proveedor: string
+          emision_sandbox: boolean
           emisor_comuna: string | null
           emisor_direccion: string | null
           emisor_giro: string | null
@@ -128,6 +130,7 @@ export type Database = {
           monto_total: number
           motivo_referencia: string | null
           propuesta_id: string | null
+          proveedor_respuesta: Json | null
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_razon_social: string | null
@@ -143,6 +146,8 @@ export type Database = {
           caf_id?: string | null
           created_at?: string
           detalles?: Json
+          emision_proveedor?: string
+          emision_sandbox?: boolean
           emisor_comuna?: string | null
           emisor_direccion?: string | null
           emisor_giro?: string | null
@@ -159,6 +164,7 @@ export type Database = {
           monto_total: number
           motivo_referencia?: string | null
           propuesta_id?: string | null
+          proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_razon_social?: string | null
@@ -174,6 +180,8 @@ export type Database = {
           caf_id?: string | null
           created_at?: string
           detalles?: Json
+          emision_proveedor?: string
+          emision_sandbox?: boolean
           emisor_comuna?: string | null
           emisor_direccion?: string | null
           emisor_giro?: string | null
@@ -190,6 +198,7 @@ export type Database = {
           monto_total?: number
           motivo_referencia?: string | null
           propuesta_id?: string | null
+          proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_razon_social?: string | null
@@ -521,6 +530,8 @@ export type Database = {
           created_at: string
           direccion: string | null
           email_sii: string | null
+          emision_baseapi_sandbox: boolean
+          emision_proveedor: string
           giro: string | null
           id: string
           logo_mime_type: string | null
@@ -541,6 +552,8 @@ export type Database = {
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
+          emision_baseapi_sandbox?: boolean
+          emision_proveedor?: string
           giro?: string | null
           id?: string
           logo_mime_type?: string | null
@@ -561,6 +574,8 @@ export type Database = {
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
+          emision_baseapi_sandbox?: boolean
+          emision_proveedor?: string
           giro?: string | null
           id?: string
           logo_mime_type?: string | null

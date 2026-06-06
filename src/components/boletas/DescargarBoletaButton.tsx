@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DownloadSimple } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import { generarBoletaPDF, type BoletaPDFData } from "@/lib/pdf/boleta-pdf";
+import { downloadBaseApiPdf, getBaseApiPdf } from "@/lib/pdf/baseapi-pdf";
 
 interface BoletaRaw {
   folio: number;
@@ -26,6 +27,9 @@ interface BoletaRaw {
   ted: string;
   track_id: string;
   estado: string;
+  emision_proveedor?: "mock" | "baseapi" | "libredte" | "sii_local";
+  emision_sandbox?: boolean;
+  proveedor_respuesta?: unknown;
 }
 
 export default function DescargarBoletaButton({ id }: { id: string }) {
@@ -45,6 +49,35 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
         return;
       }
       const b = j.boleta as BoletaRaw;
+      if (b.emision_proveedor === "sii_local") {
+        const pdfRes = await fetch(`/api/intermediaria/boleta/${id}/pdf`, { cache: "no-store" });
+        if (!pdfRes.ok) {
+          const error = await pdfRes.json().catch(() => ({ error: "PDF_NO_DISPONIBLE" }));
+          toast(error.error ?? "PDF SII no disponible en la app", "error");
+          return;
+        }
+        const blob = await pdfRes.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `boleta-sii-${b.tipo_dte}-${b.folio}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+
+      if (b.emision_proveedor === "baseapi") {
+        const pdf = getBaseApiPdf(b.proveedor_respuesta);
+        if (!pdf) {
+          toast("Esta emisión BaseAPI no tiene PDF guardado. Emite otra prueba para descargar el PDF del proveedor.", "error");
+          return;
+        }
+        downloadBaseApiPdf(pdf, `baseapi-${b.tipo_dte}-${b.folio}.pdf`);
+        return;
+      }
+
       const data: BoletaPDFData = {
         folio: b.folio,
         tipo_dte: b.tipo_dte,
@@ -79,6 +112,8 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
         ted: b.ted,
         track_id: b.track_id,
         estado: b.estado,
+        emision_proveedor: b.emision_proveedor === "mock" ? "mock" : undefined,
+        emision_sandbox: b.emision_sandbox,
       };
       await generarBoletaPDF(data);
     } catch (err) {

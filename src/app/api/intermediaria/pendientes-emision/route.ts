@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 
@@ -64,21 +63,16 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: "QUERY_FAILED", detalle: pErr.message }, { status: 500 });
   }
 
-  // 2) IDs ya emitidas (vigentes, no anuladas) — service client porque la tabla
-  //    aún no está en database.types
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  // 2) IDs ya emitidas (vigentes, no anuladas) respetando RLS del usuario.
   let yaEmitidas = new Set<string>();
   try {
-    const { data: emitidas } = await sb
+    const { data: emitidas } = await supabase
       .from("boletas_emitidas")
       .select("propuesta_id")
       .eq("empresa_id", usuario.empresa_id)
       .neq("estado", "anulada")
       .not("propuesta_id", "is", null);
-    yaEmitidas = new Set((emitidas ?? []).map((e: { propuesta_id: string }) => e.propuesta_id));
+    yaEmitidas = new Set((emitidas ?? []).map((e) => e.propuesta_id).filter((id): id is string => typeof id === "string"));
   } catch {
     /* tabla aún no existe — todas son pendientes */
   }

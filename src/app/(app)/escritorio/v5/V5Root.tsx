@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import EmpresaPopup from "./EmpresaPopup";
 import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
+import type { EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 
 const TOP_TABS = [
   { id: "dashboard", label: "Dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
@@ -16,7 +17,7 @@ const TOP_TABS = [
 
 export default function V5Root({
   dashboardContent, subidosContent, revisarContent, emitirContent, boletasContent,
-  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId,
+  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId, empresaEmisionConfig, libredteConfigured,
 }: {
   dashboardContent: React.ReactNode;
   subidosContent: React.ReactNode;
@@ -27,6 +28,8 @@ export default function V5Root({
   empresaTieneCertificado: boolean;
   empresaCafs: CAFRow[];
   empresaId: string;
+  empresaEmisionConfig: EmissionProviderState;
+  libredteConfigured: boolean;
 }) {
   const [tab, setTab] = useState("dashboard");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -157,6 +160,8 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           tieneCertificado={empresaTieneCertificado}
           cafs={empresaCafs}
           empresaId={empresaId}
+          emisionConfig={empresaEmisionConfig}
+          libredteConfigured={libredteConfigured}
           helpStepsEnabled={helpStepsEnabled}
           onHelpStepsChange={updateHelpSteps}
           onClose={() => setEmpresaOpen(false)}

@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
 import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
-import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/lib/intermediario/client";
+import { enviarDTE, asegurarFoliosDisponibles, obtenerConfigEmision } from "@/lib/intermediario/client";
+import { chileDateString } from "@/lib/chile-date";
 
 /**
  * Capa intermediaria (emula Haulmer / OpenFactura).
@@ -64,9 +65,41 @@ export async function POST(request: Request) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   const sb = createServiceClient(url, key);
+  const emisionConfig = await obtenerConfigEmision(usuario.empresa_id).catch(() => null);
+  if (!emisionConfig) {
+    return NextResponse.json(
+      { ok: false, error: "EMISION_CONFIG_ERROR", detalle: "No se pudo leer el proveedor de emisión de la empresa" },
+      { status: 500 },
+    );
+  }
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[emitir-boleta] proveedor efectivo", {
+      empresaId: usuario.empresa_id,
+      proveedor: emisionConfig.proveedor,
+    });
+  }
 
-  // 5. Consumir folio del CAF (atómico). El intermediario auto-solicita al
-  // SII si no hay folios activos — como haría Haulmer/OpenFactura real.
+  if (emisionConfig.proveedor === "sii_local") {
+    return NextResponse.json(
+      { ok: false, error: "SII_LOCAL_REQUIERE_EXTENSION", detalle: "La emisión SII local debe continuar en la ventana segura de e-Boleta." },
+      { status: 409 },
+    );
+  }
+
+  if (emisionConfig.proveedor === "libredte") {
+    return NextResponse.json(
+      { ok: false, error: "LIBREDTE_PENDIENTE", detalle: "LibreDTE está seleccionado, pero su integración backend aún no está conectada." },
+      { status: 422 },
+    );
+  }
+
+  // 5. Mock consume CAF local.
+  const fecha_emision = chileDateString();
+  let trackId: string | null = null;
+  let estadoSii: "aceptado" | "aceptado_reparos" | "rechazado" | null = null;
+  const fechaEmisionReal = fecha_emision;
+  const proveedorRespuesta: Record<string, unknown> | null = null;
+
   await asegurarFoliosDisponibles(usuario.empresa_id, body.tipo_dte);
   const { data: folioRes, error: folioErr } = await sb.rpc("consume_next_folio", {
     p_empresa_id: usuario.empresa_id,
@@ -78,14 +111,15 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
-  const { folio, caf_id } = folioRes[0] as { folio: number; caf_id: string };
+  const folioData = folioRes[0] as { folio: number; caf_id: string };
+  const folio = folioData.folio;
+  const caf_id = folioData.caf_id;
 
-  // 6. Generar XML DTE + TED con datos canonicalizados
-  const fecha_emision = new Date().toISOString().slice(0, 10);
+  // 6. Generar XML DTE + TED local para respaldo/compatibilidad interna.
   const dteArgs = {
     tipo_dte: body.tipo_dte,
     folio,
-    fecha_emision,
+    fecha_emision: fechaEmisionReal,
     emisor: {
       rut: empresa.rut,
       razon_social: empresa.razon_social,
@@ -107,22 +141,29 @@ export async function POST(request: Request) {
   const xml_dte = generarDTE(dteArgs);
   const ted = generarTED(dteArgs);
 
-  // 7. Enviar el DTE al SII vía el cliente intermediario. In-process en mock;
-  // será fetch a Haulmer/OpenFactura cuando se integre con proveedor real.
-  const envio = await enviarDTE(xml_dte);
-  if (!envio.ok || !envio.track_id || !envio.estado_persistencia) {
+  if (emisionConfig.proveedor === "mock") {
+    const envio = await enviarDTE(xml_dte);
+    if (!envio.ok || !envio.track_id || !envio.estado_persistencia) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "SII_RECHAZO",
+          codigo_rechazo: envio.codigo_rechazo,
+          detalle: envio.detalle ?? envio.mensaje,
+        },
+        { status: 422 },
+      );
+    }
+    trackId = envio.track_id;
+    estadoSii = envio.estado_persistencia;
+  }
+
+  if (!trackId || !estadoSii) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "SII_RECHAZO",
-        codigo_rechazo: envio.codigo_rechazo,
-        detalle: envio.detalle ?? envio.mensaje,
-      },
-      { status: 422 },
+      { ok: false, error: "EMISION_SIN_CONFIRMACION", detalle: "El proveedor no devolvió track_id o estado" },
+      { status: 502 },
     );
   }
-  const trackId = envio.track_id;
-  const estadoSii = envio.estado_persistencia;
 
   // 8. Persistir boleta
   const { data: boleta, error: insertErr } = await sb
@@ -132,7 +173,7 @@ export async function POST(request: Request) {
       tipo_dte: body.tipo_dte,
       folio,
       caf_id,
-      fecha_emision,
+      fecha_emision: fechaEmisionReal,
       emisor_rut: empresa.rut,
       emisor_razon_social: empresa.razon_social,
       emisor_giro: empresa.giro,
@@ -151,6 +192,9 @@ export async function POST(request: Request) {
       ted,
       track_id: trackId,
       estado: estadoSii,
+      emision_proveedor: emisionConfig.proveedor,
+      emision_sandbox: false,
+      proveedor_respuesta: proveedorRespuesta,
     })
     .select("id, folio, monto_total, estado, track_id, fecha_emision")
     .single();
@@ -170,8 +214,11 @@ export async function POST(request: Request) {
     storage_path: `boleta-unica://${boleta.id}`,
     estado: "procesado",
     movimientos_detectados: 1,
+    created_at: `${fechaEmisionReal}T12:00:00.000Z`,
     progreso_ia: {
       origen: "emision_directa",
+      proveedor: emisionConfig.proveedor,
+      sandbox: false,
       boleta_id: boleta.id,
       folio: boleta.folio,
       tipo_dte: body.tipo_dte,
@@ -191,6 +238,10 @@ export async function POST(request: Request) {
     track_id: boleta.track_id,
     estado: boleta.estado,
     registro_agregados: docInsertErr ? "warning" : "ok",
-    mensaje: `Boleta tipo ${body.tipo_dte} folio ${boleta.folio} emitida (mock)`,
+    proveedor: emisionConfig.proveedor,
+    sandbox: false,
+    mensaje: `Boleta tipo ${body.tipo_dte} folio ${boleta.folio} emitida (${emisionConfig.proveedor})`,
   });
 }
+
+export const dynamic = "force-dynamic";

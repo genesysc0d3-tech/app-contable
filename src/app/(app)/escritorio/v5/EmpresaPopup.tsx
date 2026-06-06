@@ -6,6 +6,7 @@ import EmisorForm from "../../empresa/EmisorForm";
 import CertificadoToggle from "../../empresa/CertificadoToggle";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import AiKeyConfig from "../../empresa/AiKeyConfig";
+import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
 
@@ -14,6 +15,8 @@ export default function EmpresaPopup({
   tieneCertificado,
   cafs,
   empresaId,
+  emisionConfig,
+  libredteConfigured,
   helpStepsEnabled,
   onHelpStepsChange,
   onClose,
@@ -22,6 +25,8 @@ export default function EmpresaPopup({
   tieneCertificado: boolean;
   cafs: CAFRow[];
   empresaId: string;
+  emisionConfig: EmissionProviderState;
+  libredteConfigured: boolean;
   helpStepsEnabled?: boolean;
   onHelpStepsChange?: (enabled: boolean) => void;
   onClose: () => void;
@@ -657,6 +662,12 @@ export default function EmpresaPopup({
               },
               {
                 n: 5,
+                icon: "M4 7h16M7 4v16M17 4v16M4 17h16",
+                title: "Emisión",
+                sub: "Mock, LibreDTE o SII local",
+              },
+              {
+                n: 6,
                 icon: "M14.5 4.5 19.5 9.5M3 21l5.2-1.2L20 8a3.5 3.5 0 0 0-5-5L3.2 14.8 3 21Z",
                 title: "IA (DeepSeek)",
                 sub: "Clave de API",
@@ -740,6 +751,7 @@ export default function EmpresaPopup({
                   { key: "certificado", content: <CertificadoToggle inicial={tieneCertificado} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} /> },
+                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} libredteConfigured={libredteConfigured} /> },
                   { key: "ia", content: <AiKeyConfig /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
@@ -763,7 +775,7 @@ export default function EmpresaPopup({
                   Cancelar
                 </button>
 
-                {step < 4 ? (
+                {step < 5 ? (
                   <button className="ep-footer-btn primary" onClick={() => goToStep(step + 1)}>
                     Siguiente ›
                   </button>

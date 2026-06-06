@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sii:explore": "node scripts/sii-explorer.mjs"
   },
   "dependencies": {
     "@mistralai/mistralai": "^2.1.2",

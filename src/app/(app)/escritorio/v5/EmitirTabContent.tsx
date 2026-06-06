@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 
@@ -63,16 +63,19 @@ export default function EmitirTabContent() {
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch("/api/intermediaria/pendientes-emision");
       const json = await res.json();
       if (json.ok) setData(json);
     } catch { toast("Error al cargar pendientes", "error"); }
     setLoading(false);
-  }
+  }, [toast]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchData(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
 
   const itemsList = useMemo(() => {
     if (!data) return [];
@@ -144,11 +147,15 @@ export default function EmitirTabContent() {
       });
       const json = await res.json();
       if (json.ok) {
-        toast(`${json.exitos ?? 0} boletas emitidas por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")}`);
-        setSelected(new Set());
-        setDteOverrides({});
-        fetchData();
-        router.refresh();
+        const provider = json.proveedor === "libredte" ? "LibreDTE" : json.proveedor === "sii_local" ? "SII local" : "mock";
+        const exitos = json.exitos ?? 0;
+        toast(`${exitos} boletas emitidas por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")} (${provider})`, exitos > 0 ? undefined : "error");
+        if (exitos > 0) {
+          setSelected(new Set());
+          setDteOverrides({});
+          fetchData();
+          router.refresh();
+        }
       } else {
         toast(json.error ?? "Error al emitir", "error");
       }

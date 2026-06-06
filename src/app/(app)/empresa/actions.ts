@@ -15,6 +15,13 @@ export interface DatosEmisor {
   tipo_contribuyente?: string;
 }
 
+export type EmisionProveedor = "mock" | "libredte" | "sii_local";
+
+export interface EmisionConfigInput {
+  proveedor: EmisionProveedor;
+  baseapiSandbox: boolean;
+}
+
 const LOGO_MIME_TYPES = new Set([
   "image/png",
   "image/svg+xml",
@@ -177,5 +184,51 @@ export async function setCertificadoSii(
 
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
+  revalidatePath("/escritorio/v5");
+  return { ok: true };
+}
+
+export async function setEmisionConfig(
+  config: EmisionConfigInput,
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+
+  if (config.proveedor !== "mock" && config.proveedor !== "libredte" && config.proveedor !== "sii_local") {
+    return { error: "Proveedor de emisión inválido" };
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "Backend mal configurado" };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb: any = createServiceClient(url, key);
+
+  const { error } = await sb
+    .from("empresas")
+    .update({
+      emision_proveedor: config.proveedor,
+      emision_baseapi_sandbox: config.baseapiSandbox,
+    })
+    .eq("id", usuario.empresa_id);
+  if (error) {
+    const message = String(error.message || "");
+    if (/emision_proveedor|emision_baseapi_sandbox|column|check constraint|violates check/i.test(message)) {
+      return { error: "La base de datos aún no tiene aplicada la migración de proveedores de emisión. Mantén Mock local por ahora y aplica las migraciones de junio." };
+    }
+    return { error: message };
+  }
+
+  revalidatePath("/empresa");
+  revalidatePath("/escritorio");
+  revalidatePath("/escritorio/v5");
   return { ok: true };
 }

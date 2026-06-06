@@ -5,6 +5,14 @@ import CertificadoToggle from "./CertificadoToggle";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
 import AiKeyConfig from "./AiKeyConfig";
 import EmpresaFormatoCartola from "./EmpresaFormatoCartola";
+import EmissionProviderConfig from "./EmissionProviderConfig";
+import type { EmisionProveedor } from "./actions";
+
+function mapProveedor(raw: string | null | undefined): EmisionProveedor {
+  if (raw === "sii_local") return "sii_local";
+  if (raw === "libredte" || raw === "baseapi") return "libredte";
+  return "mock";
+}
 
 export default async function EmpresaPage() {
   const usuario = (await getUsuario())!;
@@ -61,6 +69,11 @@ export default async function EmpresaPage() {
         </div>
         <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
       </section>
+
+      <EmissionProviderConfig
+        inicial={{ proveedor: mapProveedor(empresa.emision_proveedor), baseapiSandbox: false }}
+        libredteConfigured={Boolean(process.env.LIBREDTE_HASH || process.env.LIBREDTE_API_KEY)}
+      />
 
       <AiKeyConfig />
     </main>

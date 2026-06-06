@@ -9,12 +9,15 @@ type TipoDte = 39 | 41;
 interface EmitirResponse {
   ok: boolean;
   error?: string;
+  detalle?: string;
   errores?: { code: string; message: string }[];
   folio?: number;
   boleta_id?: string;
   monto_total?: number;
   track_id?: string;
   estado?: string;
+  proveedor?: "mock" | "libredte" | "sii_local";
+  sandbox?: boolean;
 }
 
 interface BoletaDraft {
@@ -49,12 +52,97 @@ interface DuplicateCandidate {
   motivos: string[];
 }
 
+type ExtensionInstallStatus = "checking" | "ready" | "missing";
+
+interface ExtensionPageMessage {
+  source?: string;
+  type?: string;
+  protocol_version?: number;
+  extension_version?: string;
+  capabilities?: string[];
+  nonce?: string;
+  job_id?: string | null;
+  status?: string;
+  message?: string;
+  recoverable?: boolean;
+  result?: {
+    folio?: number | null;
+    folio_confidence?: "none" | "medium" | "high";
+    folio_evidence?: { source?: string; matched_text?: string } | null;
+    tipo_dte?: number | null;
+    fecha_emision?: string | null;
+    estado?: string;
+    monto_total?: number | null;
+    artifact_links?: { kind: string; href: string; text?: string }[];
+    persisted?: { ok?: boolean; boleta_id?: string; already_exists?: boolean; error?: string; detalle?: string };
+  };
+}
+
+interface LocalWorkerState {
+  jobId: string | null;
+  status: string;
+  message: string;
+}
+
 function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
 function parseAmount(value: string): number {
   return Number(value.replace(/[^0-9]/g, ""));
+}
+
+function makeClientId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function chileTodayString(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santiago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function pingLocalSiiExtension(onResult: (message: ExtensionPageMessage | null) => void): () => void {
+  const nonce = makeClientId();
+  let settled = false;
+
+  function cleanup() {
+    settled = true;
+    window.removeEventListener("message", onMessage);
+    window.clearTimeout(timeoutId);
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    if (settled) return;
+    cleanup();
+    onResult(null);
+  }, 900);
+
+  function onMessage(event: MessageEvent<ExtensionPageMessage>) {
+    if (event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (data?.source !== "app-contable-extension") return;
+    if (data.type !== "APP_CONTABLE_EXTENSION_PONG") return;
+    if (data.nonce !== nonce) return;
+    cleanup();
+    onResult(data);
+  }
+
+  window.addEventListener("message", onMessage);
+  window.postMessage({
+    source: "app-contable",
+    type: "APP_CONTABLE_EXTENSION_PING",
+    protocol_version: 1,
+    nonce,
+  }, window.location.origin);
+
+  return cleanup;
 }
 
 const DRAFT_COLORS = [
@@ -109,7 +197,9 @@ function draftHasContent(draft: BoletaDraft) {
   );
 }
 
-export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: { empresaTipo?: string; empresaId?: string; onClose?: (saved?: boolean) => void }) {
+type EmisionProveedorUi = "mock" | "libredte" | "sii_local";
+
+export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   const tipoInicial: TipoDte = empresaTipo === "exento" ? 41 : 39;
@@ -124,6 +214,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
   const [hydrated, setHydrated] = useState(false);
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [extensionStatus, setExtensionStatus] = useState<ExtensionInstallStatus>("checking");
+  const [localWorker, setLocalWorker] = useState<LocalWorkerState | null>(null);
+  const [localWorkerLoading, setLocalWorkerLoading] = useState(false);
+  const [manualSiiFolio, setManualSiiFolio] = useState("");
 
   const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? drafts[0] ?? newDraft(tipoInicial);
   const tipoDte = activeDraft.tipoDte;
@@ -141,7 +235,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
   const tipoLocked = hasEmpresaLock && !tipoDesbloqueado;
   const tipoEmpresa: TipoDte | null = isExento ? 41 : isAfecto ? 39 : null;
   const tipoDiferenteEmpresa = !!tipoEmpresa && tipoDte !== tipoEmpresa;
+  const usesSiiLocal = emisionProveedor === "sii_local";
   const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !emitiendo;
+  const canOpenLocalWorker = canSubmit && !localWorkerLoading;
+  const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : !canSubmit;
+  const primaryLabel = usesSiiLocal
+    ? localWorkerLoading ? "Abriendo..." : "Emitir en SII"
+    : emitiendo ? "Emitiendo..." : emisionProveedor === "libredte" ? "Enviar a LibreDTE" : "Emitir DTE";
 
   useEffect(() => {
     try {
@@ -207,6 +307,54 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
     return () => window.clearTimeout(timer);
   }, [tipoDte, total, receptorRut, receptorRazonSocial, detalleNombre]);
 
+  useEffect(() => {
+    return pingLocalSiiExtension((message) => {
+      if (!message) {
+        setExtensionStatus("missing");
+        return;
+      }
+      setExtensionStatus("ready");
+    });
+  }, []);
+
+  useEffect(() => {
+    function onExtensionMessage(event: MessageEvent<ExtensionPageMessage>) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (data?.source !== "app-contable-extension") return;
+
+      if (data.type === "APP_CONTABLE_SII_JOB_RESULT") {
+        const folio = data.result?.folio ? ` Folio #${data.result.folio}.` : "";
+        const persisted = data.result?.persisted;
+        const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && persisted?.ok === true);
+        const persistenceError = persisted?.ok === false ? ` No se guardo en la app: ${persisted.detalle ?? persisted.error ?? "error desconocido"}.` : "";
+        setLocalWorker({
+          jobId: data.job_id ?? null,
+          status: emitted ? "emitted" : "result_needs_review",
+          message: emitted
+            ? `${data.message ?? "Boleta emitida y guardada en la app."}${folio}`
+            : `${data.message ?? "Resultado SII recibido, pero falta guardar respaldo. No se marca como emitida."}${folio}${persistenceError}`,
+        });
+        setLocalWorkerLoading(false);
+        toast(emitted ? `Boleta emitida y guardada.${folio}` : "Boleta SII no quedo guardada en la app", emitted ? "success" : "error");
+        router.refresh();
+        return;
+      }
+
+      if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
+
+      setLocalWorker({
+        jobId: data.job_id ?? null,
+        status: data.status ?? "error",
+        message: data.message ?? "Estado recibido desde motor local SII",
+      });
+      setLocalWorkerLoading(false);
+    }
+
+    window.addEventListener("message", onExtensionMessage);
+    return () => window.removeEventListener("message", onExtensionMessage);
+  }, [router, toast]);
+
   function updateActiveDraft(patch: Partial<BoletaDraft>) {
     setDrafts((current) => current.map((draft) => draft.id === activeDraft.id ? { ...draft, ...patch, updatedAt: Date.now() } : draft));
   }
@@ -214,18 +362,6 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
   function setTipo(tipo: TipoDte) {
     if (tipoLocked) return;
     updateActiveDraft({ tipoDte: tipo });
-  }
-
-  function clearForm() {
-    updateActiveDraft({
-      receptorRut: "",
-      receptorRazonSocial: "",
-      receptorDireccion: "",
-      receptorComuna: "",
-      detalleNombre: "Servicio prestado",
-      monto: "",
-    });
-    setErrors([]);
   }
 
   function addDraft() {
@@ -292,14 +428,15 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
       const json = (await res.json()) as EmitirResponse;
 
       if (!res.ok || !json.ok) {
-        const validationErrors = json.errores?.map((e) => e.message) ?? [json.error ?? "Error al emitir DTE"];
+        const validationErrors = json.errores?.map((e) => e.message) ?? [json.detalle ?? json.error ?? "Error al emitir DTE"];
         setErrors(validationErrors);
         toast(validationErrors[0] ?? "Error al emitir DTE", "error");
         return;
       }
 
       setLastResult(json);
-      toast(`DTE emitido: folio #${json.folio ?? "--"} por ${fmt(json.monto_total ?? total)}`);
+      const providerLabel = json.proveedor === "libredte" ? "LibreDTE" : "mock";
+      toast(`DTE emitido: folio #${json.folio ?? "--"} por ${fmt(json.monto_total ?? total)} (${providerLabel})`);
       setDrafts((current) => {
         if (current.length <= 1) {
           const draft = newDraftForOpenSlot(tipoInicial, [], nextDraftSeq);
@@ -318,6 +455,163 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
     } finally {
       setEmitiendo(false);
     }
+  }
+
+  function sendLocalSiiJob() {
+    const jobId = makeClientId();
+    setLocalWorkerLoading(true);
+    setLocalWorker({ jobId, status: "opening_sii", message: "Abriendo ventana segura SII..." });
+
+    window.postMessage({
+      source: "app-contable",
+      type: "APP_CONTABLE_SII_BOLETA_JOB",
+      protocol_version: 1,
+      job: {
+        job_id: jobId,
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        empresa_id: empresaId ?? "default",
+        tipo_dte: tipoDte,
+        fecha_emision: chileTodayString(),
+        receptor: {
+          rut: receptorRut.trim() || undefined,
+          razon_social: receptorRazonSocial.trim() || undefined,
+          direccion: receptorDireccion.trim() || undefined,
+          comuna: receptorComuna.trim() || undefined,
+        },
+        detalles: [{ nombre: detalleNombre.trim(), cantidad: 1, monto_total: total }],
+        totales: {
+          monto_total: total,
+          monto_neto: tipoDte === 39 ? Math.round(total / 1.19) : 0,
+          iva: tipoDte === 39 ? total - Math.round(total / 1.19) : 0,
+          monto_exento: tipoDte === 41 ? total : 0,
+        },
+        learn_only: false,
+        auto_emit: true,
+        allow_final_emit: true,
+        payment_method: "Efectivo",
+        confirmation_required: false,
+      },
+    }, window.location.origin);
+  }
+
+  async function persistVisibleSiiFolio() {
+    const folio = Number(manualSiiFolio.replace(/[^0-9]/g, ""));
+    if (!Number.isSafeInteger(folio) || folio <= 0) {
+      toast("Ingresa el folio visible en SII", "error");
+      return;
+    }
+
+    setLocalWorkerLoading(true);
+    try {
+      const res = await fetch("/api/sii-local/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: localWorker?.jobId ?? `manual:${folio}`,
+          result: {
+            folio,
+            folio_confidence: "high",
+            folio_evidence: {
+              source: "manual_visible_receipt",
+              matched_text: `Folio visible confirmado por usuario: ${folio}`,
+            },
+            tipo_dte: tipoDte,
+            fecha_emision: chileTodayString(),
+            estado: "emitida_capturada_manual",
+            monto_total: total,
+            receptor: {
+              rut: receptorRut.trim() || null,
+              razon_social: receptorRazonSocial.trim() || null,
+              direccion: receptorDireccion.trim() || null,
+              comuna: receptorComuna.trim() || null,
+            },
+            detalles: [{ nombre: detalleNombre.trim(), cantidad: 1, monto_total: total }],
+            totales: {
+              monto_total: total,
+              monto_neto: tipoDte === 39 ? Math.round(total / 1.19) : 0,
+              iva: tipoDte === 39 ? total - Math.round(total / 1.19) : 0,
+              monto_exento: tipoDte === 41 ? total : 0,
+            },
+            artifact_links: [],
+            page: { title: "e-Boleta", url: "manual-visible-receipt" },
+          },
+        }),
+      });
+      const json = (await res.json()) as { ok?: boolean; boleta_id?: string; error?: string; detalle?: string; already_exists?: boolean };
+      if (!res.ok || !json.ok) {
+        toast(json.detalle ?? json.error ?? "No se pudo guardar el folio SII", "error");
+        setLocalWorker({ jobId: localWorker?.jobId ?? null, status: "save_failed", message: json.detalle ?? json.error ?? "No se pudo guardar el folio SII" });
+        return;
+      }
+      setLocalWorker({
+        jobId: localWorker?.jobId ?? null,
+        status: json.already_exists ? "already_exists" : "emitted",
+        message: json.already_exists ? `Boleta #${folio} ya estaba guardada.` : `Boleta #${folio} guardada en la app.`,
+      });
+      setManualSiiFolio("");
+      toast(json.already_exists ? `Boleta #${folio} ya estaba guardada` : `Boleta #${folio} guardada en la app`, "success");
+      router.refresh();
+    } catch {
+      toast("Error de red al guardar folio SII", "error");
+    } finally {
+      setLocalWorkerLoading(false);
+    }
+  }
+
+  async function persistLatestSiiPdf() {
+    setLocalWorkerLoading(true);
+    try {
+      const res = await fetch("/api/sii-local/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recover_latest: true }),
+      });
+      const json = (await res.json()) as { ok?: boolean; folio?: number; boleta_id?: string; error?: string; detalle?: string; already_exists?: boolean };
+      if (!res.ok || !json.ok) {
+        toast(json.detalle ?? json.error ?? "No se pudo guardar el PDF SII detectado", "error");
+        return;
+      }
+      setLocalWorker({
+        jobId: localWorker?.jobId ?? null,
+        status: json.already_exists ? "already_exists" : "emitted",
+        message: json.already_exists ? `Boleta #${json.folio ?? "--"} ya estaba guardada.` : `Boleta #${json.folio ?? "--"} y PDF SII guardados en la app.`,
+      });
+      toast(json.already_exists ? `Boleta #${json.folio ?? "--"} ya estaba guardada` : `Boleta #${json.folio ?? "--"} guardada con PDF SII`, "success");
+      router.refresh();
+    } catch {
+      toast("Error de red al guardar PDF SII", "error");
+    } finally {
+      setLocalWorkerLoading(false);
+    }
+  }
+
+  function openLocalSiiWorker() {
+    if (!canSubmit || localWorkerLoading) return;
+    if (extensionStatus === "ready") {
+      sendLocalSiiJob();
+      return;
+    }
+
+    setLocalWorkerLoading(true);
+    setExtensionStatus("checking");
+    pingLocalSiiExtension((message) => {
+      if (!message) {
+        setExtensionStatus("missing");
+        setLocalWorkerLoading(false);
+        toast("No pude encontrar la extensión local SII", "error");
+        return;
+      }
+      setExtensionStatus("ready");
+      sendLocalSiiJob();
+    });
+  }
+
+  function handlePrimaryEmit() {
+    if (usesSiiLocal) {
+      openLocalSiiWorker();
+      return;
+    }
+    void handleEmitir();
   }
 
   return (
@@ -467,6 +761,53 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
               </div>
             </div>
 
+            {usesSiiLocal && (
+              <div style={{ padding: 11, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  <span className="ed-label">SII local</span>
+                  <div style={{ fontSize: 9, color: "var(--text2)", marginTop: 3 }}>Se abre e-Boleta en una ventana segura. No usa backend para emitir.</div>
+                </div>
+                {localWorker && (
+                  <div style={{ padding: 8, borderRadius: 9, background: "rgba(232,85,62,.08)", border: "1px solid rgba(232,85,62,.16)", color: "var(--text2)", fontSize: 9, lineHeight: 1.4 }}>
+                    <strong style={{ color: "#E8553E" }}>{localWorker.status}</strong><br />{localWorker.message}
+                  </div>
+                )}
+                {extensionStatus === "missing" && (
+                  <div style={{ fontSize: 9, color: "#ef4444", lineHeight: 1.35 }}>No encuentro la extensión local. Recárgala en Chrome y vuelve a intentar.</div>
+                )}
+                {total > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => { void persistLatestSiiPdf(); }}
+                      disabled={localWorkerLoading}
+                      style={{ height: 32, borderRadius: 9, border: "none", background: "#E8553E", color: "#fff", padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: localWorkerLoading ? "not-allowed" : "pointer", opacity: localWorkerLoading ? .55 : 1 }}
+                    >
+                      Guardar último PDF SII
+                    </button>
+                    <div style={{ fontSize: 8, color: "var(--text3)", lineHeight: 1.3 }}>Usa esto si SII ya emitió y aparece el comprobante/PDF, pero la app no lo guardó.</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6 }}>
+                      <input
+                        value={manualSiiFolio}
+                        onChange={(event) => setManualSiiFolio(event.target.value)}
+                        inputMode="numeric"
+                        placeholder="Folio visible"
+                        style={{ minWidth: 0, height: 32, borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", padding: "0 9px", fontSize: 10 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { void persistVisibleSiiFolio(); }}
+                        disabled={localWorkerLoading}
+                        style={{ height: 32, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: localWorkerLoading ? "not-allowed" : "pointer", opacity: localWorkerLoading ? .55 : 1 }}
+                      >
+                        Guardar folio
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {tipoDiferenteEmpresa && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 10, lineHeight: 1.45 }}>
                 Estás emitiendo un DTE distinto al tipo configurado para la empresa. Úsalo solo si la operación corresponde tributariamente.
@@ -517,8 +858,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, onClose }: {
               <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
                 {canSubmit ? "Listo para emitir." : "Ingresa detalle y monto."}
               </div>
-              <button onClick={handleEmitir} disabled={!canSubmit} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: !canSubmit ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: !canSubmit ? 0.45 : 1, boxShadow: canSubmit ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
-                {emitiendo ? "Emitiendo..." : "Emitir DTE"}
+              <button onClick={handlePrimaryEmit} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
+                {primaryLabel}
               </button>
             </div>
           </aside>

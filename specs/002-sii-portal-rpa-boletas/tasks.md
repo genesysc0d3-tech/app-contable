@@ -1,0 +1,43 @@
+# Tasks
+
+- [x] Definir recomendacion estrategica: extension Chrome local antes que Electron o cloud RPA.
+- [x] Documentar modos: RPA local asistido, RPA local automatico beta y LibreDTE fallback.
+- [x] Registrar restricciones de seguridad: credenciales SII no salen del navegador/equipo del cliente.
+- [x] Definir limite de confianza entre app, extension local, Portal SII y Supabase.
+- [x] Documentar contrato inicial app-extension: handshake, job, estados, resultado, errores e idempotencia.
+- [x] Definir ventana dedicada SII como worker local visible con bloqueo post-login.
+- [x] Documentar verificacion e historial: folio capturado, PDF, confirmacion posterior y estados en app.
+- [x] Crear extension Manifest V3 minima no publicada.
+- [x] Implementar handshake app web -> extension.
+- [x] Agregar deteccion de extension instalada en la app.
+- [x] Crear payload de emision local desde boleta directa.
+- [x] Crear ventana popup dedicada para `sii_portal_local_worker`.
+- [x] Implementar overlay base `HUMAN_REQUIRED` y bloqueo `LOCKED_AUTOMATION`.
+- [x] Implementar escaneo interno solo lectura para pagina SII activa.
+- [x] Simplificar UI a una sola accion visible: `Continuar en SII`.
+- [x] Separar lineas de emision activas: `mock`, `libredte` y `sii_local`.
+- [x] Quitar BaseAPI de la UI activa y mapear legado `baseapi` a `libredte`.
+- [x] Mapear calculadora e-Boleta, cargar monto y disparar emision automatica desde la extension.
+- [x] Completar overlays `PAUSED` y `DONE` con acciones de reintento/cierre.
+- [x] Activar modo aprendizaje seguro `learn_only` para observar el flujo SII real sin presionar `EMITIR`.
+- [x] Crear explorador local Playwright `npm run sii:explore` para mapear e-Boleta post-login sin claves y bloqueando acciones peligrosas.
+- [x] Identificar URL inicial de emision e-Boleta: `https://eboleta.sii.cl/emitir/`.
+- [x] Endurecer captura de folio para no marcar emitida sin evidencia fuerte.
+- [x] Evitar falso envio cuando el modal final `Emitir e-Boleta` no se abre.
+- [x] Permitir clicks internos del worker durante `LOCKED_AUTOMATION` sin desbloquear clicks humanos.
+- [x] Persistir resultados `sii_local` con folio confirmado en `boletas_emitidas`.
+- [x] Agregar captura manual segura de folio sin reemitir.
+- [x] Registrar diagnósticos de captura débil sin marcar boleta como emitida.
+- [x] Detectar folio final con patron `BOLETA AFECTA/EXENTA ELECTRONICA NUMERO`.
+- [x] Agregar fallback UI `Folio visible` para recuperar boletas ya emitidas sin reemitir.
+- [x] Extraer PDF desde botones SII `DESCARGAR`/`COMPARTIR`, subirlo a Storage y servirlo en Boletas.
+- [x] Agregar recuperacion `Guardar PDF SII detectado` desde el ultimo log local.
+- [x] Mostrar recuperacion `Guardar ultimo PDF SII` aunque el estado local del worker se haya perdido.
+- [ ] Mapear manualmente flujo SII para boleta 39.
+- [ ] Mapear manualmente flujo SII para boleta 41.
+- [ ] Automatizar navegacion hasta formulario sin emitir.
+- [ ] Rellenar formulario completo, emitir automaticamente y capturar resultado.
+- [ ] Capturar folio/PDF/XML/HTML en una emision controlada.
+- [ ] Implementar verificacion posterior en consulta/historial SII.
+- [x] Persistir resultado en `boletas_emitidas` con proveedor `sii_local`.
+- [ ] Agregar LibreDTE como proveedor fallback real.

@@ -1,9 +1,9 @@
 /**
- * Generador de PDF visual de una boleta emitida (mock).
+ * Generador de PDF visual de una boleta emitida.
  * Replica el layout típico que imprime un software facturador chileno:
  * encabezado del emisor, cuadro folio+tipo, receptor (si aplica), detalle,
- * totales, y un cuadro de TED. En producción real el TED se renderiza como
- * PDF417; acá se imprime el XML del timbre como texto (es mock).
+ * totales, y datos de trazabilidad. Para documentos mock imprime el TED local;
+ * para documentos BaseAPI evita mostrar timbres simulados como si fueran reales.
  */
 
 export interface BoletaPDFData {
@@ -28,6 +28,8 @@ export interface BoletaPDFData {
   ted: string;
   track_id: string;
   estado: string;
+  emision_proveedor?: "mock" | "baseapi";
+  emision_sandbox?: boolean;
 }
 
 function fmt(n: number): string {
@@ -39,6 +41,7 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const isExenta = b.tipo_dte === 41;
   const isNC = b.tipo_dte === 61;
+  const isBaseApi = b.emision_proveedor === "baseapi";
 
   const titulo = isNC ? "NOTA DE CRÉDITO ELECTRÓNICA" : isExenta ? "BOLETA EXENTA ELECTRÓNICA" : "BOLETA ELECTRÓNICA";
   const margin = 14;
@@ -75,7 +78,7 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   doc.text(`N° ${b.folio}`, cuadroX + cuadroW / 2, cuadroY + 17, { align: "center" });
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.text("S.I.I. — SANTIAGO (MOCK)", cuadroX + cuadroW / 2, cuadroY + 22, { align: "center" });
+  doc.text(isBaseApi ? "S.I.I. — SANTIAGO" : "S.I.I. — SANTIAGO (MOCK)", cuadroX + cuadroW / 2, cuadroY + 22, { align: "center" });
   doc.setTextColor(0, 0, 0);
 
   y = Math.max(y, cuadroY + cuadroH + 4);
@@ -143,14 +146,27 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.text("Timbre Electrónico SII (mock)", margin, y);
+  doc.text(isBaseApi ? "Emisión vía BaseAPI" : "Timbre Electrónico SII (mock)", margin, y);
   y += 3;
-  doc.setFont("courier", "normal");
-  doc.setFontSize(6);
-  const tedLines = b.ted.replace(/\n+/g, "\n").split("\n").slice(0, 18);
-  for (const ln of tedLines) {
-    doc.text(ln.slice(0, 160), margin, y);
-    y += 2.4;
+  if (isBaseApi) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(
+      b.emision_sandbox
+        ? "Documento emitido usando BaseAPI en modo sandbox."
+        : "Documento emitido usando BaseAPI. Verifique el folio y estado en el SII.",
+      margin,
+      y,
+    );
+    y += 4;
+  } else {
+    doc.setFont("courier", "normal");
+    doc.setFontSize(6);
+    const tedLines = b.ted.replace(/\n+/g, "\n").split("\n").slice(0, 18);
+    for (const ln of tedLines) {
+      doc.text(ln.slice(0, 160), margin, y);
+      y += 2.4;
+    }
   }
   y += 2;
   doc.setFont("helvetica", "italic");
@@ -159,8 +175,11 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   y += 3;
   doc.setFontSize(6);
   doc.setTextColor(120, 120, 120);
-  doc.text(
-    "Verifique documento en www.sii.cl — DOCUMENTO DE PRUEBA, no tiene validez tributaria real.",
+  doc.text(isBaseApi
+    ? (b.emision_sandbox
+      ? "Documento sandbox de BaseAPI. No usar como respaldo tributario real."
+      : "Verifique documento en www.sii.cl.")
+    : "Verifique documento en www.sii.cl — DOCUMENTO DE PRUEBA, no tiene validez tributaria real.",
     margin,
     y,
   );

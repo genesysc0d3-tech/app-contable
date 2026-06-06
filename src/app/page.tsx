@@ -32,5 +32,5 @@ export default async function Home() {
     redirect("/planes");
   }
 
-  redirect("/subir");
+  redirect("/escritorio/v5");
 }

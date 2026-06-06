@@ -20,10 +20,10 @@ import DocCardList from "./DocCardList";
 import RcvViewWrapper from "./RcvViewWrapper";
 import RCVSummaryCard from "./RCVSummaryCard";
 import EmpresaBrand from "./EmpresaBrand";
+import { chileDateString } from "@/lib/chile-date";
 
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return chileDateString();
 }
 
 function addDaysStr(date: string, days: number) {
@@ -121,10 +121,19 @@ export default async function V5Page({ searchParams }: {
     return new Date(year, month - 1, day).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
   })();
 
-  // Boletas latest 20
-  const { data: boletas } = await supabase.from("boletas_emitidas")
-    .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
-    .eq("empresa_id", empresaId).gte("fecha_emision",workStart).lt("fecha_emision",workEnd).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(20);
+  const workStartDay = workStart.slice(0, 10);
+  const workEndDay = workEnd.slice(0, 10);
+  const inWorkRange = (fecha?: string | null) => {
+    const day = fecha?.slice(0, 10);
+    return !!day && day >= workStartDay && day < workEndDay;
+  };
+
+  // Boletas latest 20. Proveedores reales pueden devolver fechas distintas;
+  // por eso la vista considera fecha tributaria y fecha de creación.
+  const { data: boletasRaw } = await supabase.from("boletas_emitidas")
+    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
+    .eq("empresa_id", empresaId).order("created_at",{ascending:false}).order("folio",{ascending:false}).limit(100);
+  const boletas = (boletasRaw ?? []).filter((boleta) => inWorkRange(boleta.fecha_emision) || inWorkRange(boleta.created_at)).slice(0, 20);
 
   const docsBase = (docsData.data ?? []) as any[];
   const boletasComoAgregados = (boletas ?? [])
@@ -454,7 +463,7 @@ body{font-family:'DM Sans',sans-serif}
 
             {/* EMITIR PANEL */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <EmisionDirectaAction empresaTipo={usuario.empresas.tipo_contribuyente} empresaId={empresaId} />
+              <EmisionDirectaAction empresaTipo={usuario.empresas.tipo_contribuyente} empresaId={empresaId} emisionProveedor={usuario.empresas.emision_proveedor === "sii_local" ? "sii_local" : usuario.empresas.emision_proveedor === "libredte" || usuario.empresas.emision_proveedor === "baseapi" ? "libredte" : "mock"} />
             </div></GlowWrap>
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <MassDTEAction empresaId={empresaId} />
@@ -573,6 +582,8 @@ body{font-family:'DM Sans',sans-serif}
       empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
       empresaCafs={(cafsData.data ?? []) as any}
       empresaId={empresaId}
+      empresaEmisionConfig={{ proveedor: usuario.empresas.emision_proveedor === "sii_local" ? "sii_local" : usuario.empresas.emision_proveedor === "libredte" || usuario.empresas.emision_proveedor === "baseapi" ? "libredte" : "mock", baseapiSandbox: false }}
+      libredteConfigured={Boolean(process.env.LIBREDTE_HASH || process.env.LIBREDTE_API_KEY)}
     />
   );
 }

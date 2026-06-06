@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import EmitirDirectaView from "./EmitirDirectaView";
 import DropzoneUpload from "./DropzoneUpload";
 import GlowWrap from "./GlowWrap";
+import { chileDateString } from "@/lib/chile-date";
 
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return chileDateString();
 }
 
-export function EmisionDirectaAction({ empresaTipo, empresaId }: { empresaTipo?: string | null; empresaId?: string }) {
+type EmisionProveedorUi = "mock" | "libredte" | "sii_local";
+
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock" }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi }) {
   const [open, setOpen] = useState(false);
 
   function closeWithSavedPulse(saved = false) {
@@ -111,7 +113,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId }: { empresaTipo?:
       {open && (
         <div className="ed-overlay">
           <div className="ed-panel">
-            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} onClose={closeWithSavedPulse} />
+            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} onClose={closeWithSavedPulse} />
           </div>
         </div>
       )}
@@ -119,7 +121,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId }: { empresaTipo?:
   );
 }
 
-export function MassDTEAction({ empresaId }: { empresaId: string }) {
+export function MassDTEAction({}: { empresaId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 

@@ -1,0 +1,428 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+
+interface SiiLocalResultPayload {
+  job_id?: string | null;
+  recover_latest?: boolean;
+  result?: {
+    folio?: number | null;
+    folio_confidence?: string | null;
+    folio_evidence?: unknown;
+    tipo_dte?: number | null;
+    fecha_emision?: string | null;
+    estado?: string | null;
+    monto_total?: number | null;
+    receptor?: {
+      rut?: string | null;
+      razon_social?: string | null;
+      direccion?: string | null;
+      comuna?: string | null;
+    } | null;
+    detalles?: Array<{ nombre?: string; cantidad?: number; monto_total?: number; monto?: number }>;
+    totales?: {
+      monto_total?: number | null;
+      monto_neto?: number | null;
+      iva?: number | null;
+      monto_exento?: number | null;
+    } | null;
+    artifact_links?: Array<{ kind?: string; href?: string; text?: string }>;
+    pdf?: {
+      source?: string | null;
+      base64?: string | null;
+      content_type?: string | null;
+      filename?: string | null;
+      size?: number | null;
+      source_url?: string | null;
+    } | null;
+    page?: { url?: string; title?: string; excerpt?: string };
+    job?: { job_id?: string; empresa_id?: string };
+  } | null;
+}
+
+interface SiiLocalPdfInfo {
+  href: string;
+  folio: number | null;
+}
+
+const globalStore = globalThis as typeof globalThis & {
+  __appContableSiiResults?: Array<{ received_at: string; user_id: string | null; job_id: string | null; folio: number | null; status: string; error: string | null; result: unknown }>;
+};
+
+function resultLogs() {
+  if (!globalStore.__appContableSiiResults) globalStore.__appContableSiiResults = [];
+  return globalStore.__appContableSiiResults;
+}
+
+function resultForLog(result: unknown) {
+  if (!result || typeof result !== "object") return result;
+  const copy = { ...(result as Record<string, unknown>) };
+  if (copy.pdf && typeof copy.pdf === "object") {
+    const pdf = copy.pdf as Record<string, unknown>;
+    copy.pdf = {
+      ...pdf,
+      base64: pdf.base64 ? `[redacted:${String(pdf.base64).length}]` : null,
+    };
+  }
+  return copy;
+}
+
+function rememberResult(entry: { user_id: string | null; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
+  const logs = resultLogs();
+  logs.push({ received_at: new Date().toISOString(), error: null, ...entry, result: resultForLog(entry.result) });
+  if (logs.length > 20) logs.splice(0, logs.length - 20);
+}
+
+function positiveInt(value: unknown) {
+  const numberValue = Number(value);
+  return Number.isSafeInteger(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function cleanText(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : null;
+}
+
+function chileDate(value: unknown) {
+  const text = cleanText(value);
+  return text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function extractSiiPdfInfo(result: SiiLocalResultPayload["result"]): SiiLocalPdfInfo | null {
+  const links = Array.isArray(result?.artifact_links) ? result.artifact_links : [];
+  for (const link of links) {
+    const href = cleanText(link.href);
+    if (!href) continue;
+
+    let decoded = href;
+    try {
+      decoded = decodeURIComponent(href);
+    } catch {
+      decoded = href;
+    }
+    const pdfMatch = decoded.match(/https:\/\/[^\s"']+\.pdf(?:\?[^\s"']*)?/i);
+    const pdfUrl = pdfMatch?.[0] ?? (/\.pdf(?:\?|$)/i.test(href) ? href : null);
+    if (!pdfUrl) continue;
+
+    const folioMatch = pdfUrl.match(/folio(\d+)_/i);
+    return { href: pdfUrl, folio: folioMatch ? positiveInt(folioMatch[1]) : null };
+  }
+  return null;
+}
+
+function sanitizeUrlForMetadata(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedSiiPdfUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    return url.hostname === "eboleta.s3.amazonaws.com" || /(^|\.)sii\.cl$/.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function storagePathFor(args: { empresaId: string; tipoDte: number; folio: number }) {
+  return `${args.empresaId}/boletas-sii-local/${args.tipoDte}-${args.folio}.pdf`;
+}
+
+function validatePdfBuffer(buffer: Buffer) {
+  if (!buffer.length) return "PDF_EMPTY";
+  if (buffer.length > 8 * 1024 * 1024) return "PDF_TOO_LARGE";
+  if (buffer[0] !== 0x25 || buffer[1] !== 0x50 || buffer[2] !== 0x44 || buffer[3] !== 0x46) return "PDF_INVALID";
+  return null;
+}
+
+async function uploadPdfBuffer(
+  sb: { storage: { from: (bucket: string) => { upload: (path: string, body: Buffer, options: { contentType: string; upsert: boolean }) => Promise<{ error: { message: string } | null }> } } },
+  args: { empresaId: string; tipoDte: number; folio: number; buffer: Buffer },
+) {
+  const invalid = validatePdfBuffer(args.buffer);
+  if (invalid) return { storagePath: null, error: invalid };
+
+  const storagePath = storagePathFor(args);
+  const { error } = await sb.storage.from("documentos").upload(storagePath, args.buffer, {
+    contentType: "application/pdf",
+    upsert: true,
+  });
+  if (error) return { storagePath: null, error: error.message };
+  return { storagePath, error: null };
+}
+
+async function uploadExtensionPdf(
+  sb: { storage: { from: (bucket: string) => { upload: (path: string, body: Buffer, options: { contentType: string; upsert: boolean }) => Promise<{ error: { message: string } | null }> } } },
+  args: { empresaId: string; tipoDte: number; folio: number; pdf: NonNullable<NonNullable<SiiLocalResultPayload["result"]>["pdf"]> },
+) {
+  const base64 = cleanText(args.pdf.base64);
+  if (!base64) return { storagePath: null, error: "PDF_BASE64_MISSING", filename: null, sourceUrl: null };
+  if (args.pdf.content_type !== "application/pdf") return { storagePath: null, error: "PDF_CONTENT_TYPE_INVALID", filename: null, sourceUrl: null };
+  const buffer = Buffer.from(base64, "base64");
+  const upload = await uploadPdfBuffer(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, buffer });
+  return {
+    ...upload,
+    filename: cleanText(args.pdf.filename) ?? `boleta-sii-${args.tipoDte}-${args.folio}.pdf`,
+    sourceUrl: sanitizeUrlForMetadata(cleanText(args.pdf.source_url)),
+  };
+}
+
+async function uploadSiiPdf(
+  sb: { storage: { from: (bucket: string) => { upload: (path: string, body: Buffer, options: { contentType: string; upsert: boolean }) => Promise<{ error: { message: string } | null }> } } },
+  args: { empresaId: string; tipoDte: number; folio: number; pdfUrl: string },
+) {
+  if (!isAllowedSiiPdfUrl(args.pdfUrl)) return { storagePath: null, error: "PDF_URL_NOT_ALLOWED", filename: null, sourceUrl: null };
+  const response = await fetch(args.pdfUrl, { cache: "no-store" });
+  if (!response.ok) return { storagePath: null, error: `PDF_FETCH_${response.status}`, filename: null, sourceUrl: null };
+
+  const contentType = response.headers.get("content-type") || "application/pdf";
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!contentType.toLowerCase().includes("pdf")) return { storagePath: null, error: "PDF_INVALID_CONTENT_TYPE", filename: null, sourceUrl: null };
+
+  const upload = await uploadPdfBuffer(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, buffer });
+  return { ...upload, filename: `boleta-sii-${args.tipoDte}-${args.folio}.pdf`, sourceUrl: sanitizeUrlForMetadata(args.pdfUrl) };
+}
+
+async function uploadResultPdf(
+  sb: { storage: { from: (bucket: string) => { upload: (path: string, body: Buffer, options: { contentType: string; upsert: boolean }) => Promise<{ error: { message: string } | null }> } } },
+  args: { empresaId: string; tipoDte: number; folio: number; result: SiiLocalResultPayload["result"]; pdfInfo: SiiLocalPdfInfo | null },
+) {
+  if (args.result?.pdf?.base64) {
+    return uploadExtensionPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, pdf: args.result.pdf });
+  }
+  if (args.pdfInfo?.href) {
+    return uploadSiiPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, pdfUrl: args.pdfInfo.href });
+  }
+  return { storagePath: null, error: "PDF_REQUIRED", filename: null, sourceUrl: null };
+}
+
+function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResultPayload["result"] extends infer R ? R extends { totales?: infer T } ? T : never : never) {
+  const montoNeto = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { monto_neto?: unknown }).monto_neto : null);
+  const iva = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { iva?: unknown }).iva : null);
+  const montoExento = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { monto_exento?: unknown }).monto_exento : null);
+
+  if (tipoDte === 41) {
+    return { monto_neto: 0, iva: 0, monto_exento: montoExento ?? total };
+  }
+
+  const neto = montoNeto ?? Math.round(total / 1.19);
+  return { monto_neto: neto, iva: iva ?? total - neto, monto_exento: 0 };
+}
+
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+
+  let payload: SiiLocalResultPayload;
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
+  }
+
+  let result = payload.result;
+  let effectiveJobId = payload.job_id ?? null;
+  if (payload.recover_latest) {
+    const recovered = [...resultLogs()].reverse().find((entry) => {
+      if (entry.user_id !== user.id) return false;
+      if (payload.job_id && entry.job_id !== payload.job_id) return false;
+      return entry.result && typeof entry.result === "object";
+    });
+    if (!recovered) return NextResponse.json({ ok: false, error: "SIN_RESULTADO_SII_RECUPERABLE" }, { status: 404 });
+    result = recovered.result as SiiLocalResultPayload["result"];
+    effectiveJobId = recovered.job_id;
+  }
+  const pdfInfo = extractSiiPdfInfo(result);
+  const folio = positiveInt(result?.folio) ?? pdfInfo?.folio ?? null;
+  const tipoDte = result?.tipo_dte === 39 || result?.tipo_dte === 41 ? result.tipo_dte : null;
+  const montoTotal = positiveInt(result?.monto_total ?? result?.totales?.monto_total);
+  const fechaEmision = chileDate(result?.fecha_emision);
+
+  const hasStrongEvidence = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
+  if (!folio || !tipoDte || !montoTotal || !fechaEmision || !hasStrongEvidence) {
+    rememberResult({
+      user_id: user.id,
+      job_id: effectiveJobId,
+      folio,
+      status: "rejected",
+      error: "RESULTADO_SII_INSUFICIENTE",
+      result: result ?? null,
+    });
+    return NextResponse.json({ ok: false, error: "RESULTADO_SII_INSUFICIENTE" }, { status: 422 });
+  }
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id, empresas(rut, razon_social, giro, direccion, comuna)")
+    .eq("id", user.id)
+    .single();
+
+  if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  const empresa = usuario.empresas as unknown as { rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null } | null;
+  if (!empresa?.rut || !empresa?.razon_social) return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
+  const sb = createServiceClient(url, key);
+
+  const { data: existing } = await sb
+    .from("boletas_emitidas")
+    .select("id, folio, estado, proveedor_respuesta")
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("tipo_dte", tipoDte)
+    .eq("folio", folio)
+    .maybeSingle();
+
+  if (existing) {
+    const pdfUpload = await uploadResultPdf(sb, { empresaId: usuario.empresa_id, tipoDte, folio, result, pdfInfo });
+    if (pdfUpload.storagePath) {
+      const previousResponse = existing.proveedor_respuesta && typeof existing.proveedor_respuesta === "object"
+        ? existing.proveedor_respuesta as Record<string, unknown>
+        : {};
+      const { error: updateErr } = await sb
+        .from("boletas_emitidas")
+        .update({
+          proveedor_respuesta: {
+            ...previousResponse,
+            pdf: {
+              storage_path: pdfUpload.storagePath,
+              filename: pdfUpload.filename ?? `boleta-sii-${tipoDte}-${folio}.pdf`,
+              content_type: "application/pdf",
+              source_url: pdfUpload.sourceUrl,
+            },
+            pdf_upload_error: null,
+          },
+        })
+        .eq("id", existing.id);
+      if (updateErr) {
+        rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
+        return NextResponse.json({ ok: false, error: "PDF_METADATA_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
+      }
+    } else {
+      rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
+      return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: pdfUpload.error, already_exists: true, boleta_id: existing.id }, { status: 502 });
+    }
+    rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
+    return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
+  }
+
+  const totals = totalsFor(tipoDte, montoTotal, result?.totales ?? null);
+  const receptor = result?.receptor ?? null;
+  const detalles = Array.isArray(result?.detalles) && result.detalles.length > 0
+    ? result.detalles.map((detalle, index) => ({
+        nro_lin: index + 1,
+        nombre: cleanText(detalle.nombre) ?? "Servicio prestado",
+        qty: positiveInt(detalle.cantidad) ?? 1,
+        monto: positiveInt(detalle.monto_total ?? detalle.monto) ?? montoTotal,
+      }))
+    : [{ nro_lin: 1, nombre: "Servicio prestado", qty: 1, monto: montoTotal }];
+
+  const trackId = `sii-local:${effectiveJobId ?? result?.job?.job_id ?? "manual"}:${tipoDte}:${folio}`;
+  const pdfUpload = await uploadResultPdf(sb, { empresaId: usuario.empresa_id, tipoDte, folio, result, pdfInfo });
+  if (!pdfUpload.storagePath) {
+    rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
+    return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: pdfUpload.error }, { status: 502 });
+  }
+
+  const proveedorRespuesta = {
+    origen: "sii_local_extension",
+    job_id: effectiveJobId,
+    folio_confidence: result?.folio_confidence === "high" ? "high" : pdfInfo?.folio ? "high" : result?.folio_confidence,
+    folio_evidence: result?.folio_evidence ?? (pdfInfo?.folio ? { source: "sii_pdf_url", matched_text: `folio${pdfInfo.folio}` } : null),
+    pdf: pdfUpload.storagePath ? {
+      storage_path: pdfUpload.storagePath,
+      filename: pdfUpload.filename ?? `boleta-sii-${tipoDte}-${folio}.pdf`,
+      content_type: "application/pdf",
+      source_url: pdfUpload.sourceUrl,
+    } : null,
+    pdf_upload_error: pdfUpload.error,
+    artifact_links: (result?.artifact_links ?? []).map((link) => ({
+      kind: link.kind,
+      text: link.text,
+      href: sanitizeUrlForMetadata(cleanText(link.href)),
+    })),
+    page: result?.page ? { url: result.page.url, title: result.page.title } : null,
+  };
+
+  const { data: boleta, error: insertErr } = await sb
+    .from("boletas_emitidas")
+    .insert({
+      empresa_id: usuario.empresa_id,
+      tipo_dte: tipoDte,
+      folio,
+      fecha_emision: fechaEmision,
+      emisor_rut: empresa.rut,
+      emisor_razon_social: empresa.razon_social,
+      emisor_giro: empresa.giro,
+      emisor_direccion: empresa.direccion,
+      emisor_comuna: empresa.comuna,
+      receptor_rut: cleanText(receptor?.rut),
+      receptor_razon_social: cleanText(receptor?.razon_social),
+      receptor_direccion: cleanText(receptor?.direccion),
+      receptor_comuna: cleanText(receptor?.comuna),
+      monto_neto: totals.monto_neto,
+      monto_exento: totals.monto_exento,
+      iva: totals.iva,
+      monto_total: montoTotal,
+      detalles,
+      xml_dte: `sii-local://boleta/${tipoDte}/${folio}`,
+      ted: `sii-local://ted/${tipoDte}/${folio}`,
+      track_id: trackId,
+      estado: "aceptado",
+      emision_proveedor: "sii_local",
+      emision_sandbox: false,
+      proveedor_respuesta: proveedorRespuesta,
+    })
+    .select("id, folio, monto_total, estado, track_id, fecha_emision")
+    .single();
+
+  if (insertErr || !boleta) {
+    rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "insert_failed", error: insertErr?.message ?? "DB_INSERT_FAILED", result });
+    return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
+  }
+
+  const receptorLabel = cleanText(receptor?.razon_social) ?? "consumidor final";
+  await sb.from("documentos_subidos").insert({
+    empresa_id: usuario.empresa_id,
+    nombre_archivo: `Boleta SII #${boleta.folio} - ${receptorLabel}`,
+    tipo: "boleta_sii_local",
+    storage_path: pdfUpload.storagePath,
+    estado: "procesado",
+    movimientos_detectados: 1,
+    created_at: new Date().toISOString(),
+    progreso_ia: {
+      origen: "sii_local_extension",
+      proveedor: "sii_local",
+      boleta_id: boleta.id,
+      folio: boleta.folio,
+      tipo_dte: tipoDte,
+      monto_total: boleta.monto_total,
+      receptor: receptorLabel,
+    },
+  });
+
+  rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "persisted", result });
+
+  return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id });
+}
+
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+
+  return NextResponse.json({
+    ok: true,
+    results: resultLogs().filter((entry) => entry.user_id === user.id),
+  });
+}
+
+export const dynamic = "force-dynamic";
