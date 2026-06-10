@@ -101,13 +101,31 @@
   }
 
   function blockWhenLocked(event) {
-    if (automationClickInProgress) return;
-    if (currentMode !== "LOCKED_AUTOMATION") return;
+    if (automationClickInProgress) return;          // el propio bot está actuando
+    if (currentMode !== "LOCKED_AUTOMATION") return; // solo mientras el bot trabaja
     event.preventDefault();
     event.stopImmediatePropagation();
+    // Si tu click/foco accidental cayó en un campo del SII, le quitamos el foco
+    // para que ningún tecleo posterior entre a la boleta. (No toca al overlay.)
+    const target = event.target;
+    if (target && typeof target.closest === "function" && !target.closest(`#${OVERLAY_ID}`)) {
+      try {
+        const active = document.activeElement;
+        if (active && active !== document.body && typeof active.blur === "function") active.blur();
+      } catch { /* noop */ }
+    }
   }
 
-  ["click", "dblclick", "keydown", "keypress", "keyup", "input", "submit", "paste", "drop"].forEach((eventName) => {
+  // Bloquea TODO input del usuario mientras el bot automatiza: incluye los
+  // eventos de puntero/foco (mousedown/pointerdown dan foco y abren menús ANTES
+  // del click) además de teclado/paste. El bot pasa porque usa
+  // automationClickInProgress y despacha eventos sintéticos directos.
+  [
+    "click", "dblclick", "auxclick", "contextmenu",
+    "mousedown", "mouseup", "pointerdown", "pointerup",
+    "touchstart", "touchend", "wheel", "focusin",
+    "keydown", "keypress", "keyup", "input", "beforeinput", "submit", "paste", "drop",
+  ].forEach((eventName) => {
     window.addEventListener(eventName, blockWhenLocked, true);
   });
 
