@@ -34,6 +34,17 @@ function fmtShort(d: string | null | undefined): string {
   return `${dt.getDate()} ${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
+// Tipo de la propuesta para decisión rápida: visible tanto en la fila
+// colapsada (sigla) como en el detalle expandido (label completo).
+function tipoMeta(tipoPropuesto: string | null) {
+  if (tipoPropuesto === "gasto_egreso") return { sigla: "GASTO", label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "#f59e0b" };
+  if (tipoPropuesto === "no_comercial") return { sigla: "N/C", label: "No comercial · no se boletea", bg: "rgba(255,255,255,.07)", color: "var(--text2)" };
+  const afecta = tipoPropuesto === "boleta" || tipoPropuesto === "factura";
+  return afecta
+    ? { sigla: "AFE", label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "#b4f027" }
+    : { sigla: "EXE", label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "#5b9cf6" };
+}
+
 function RevisarEmpty() {
   return (
     <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
@@ -228,6 +239,9 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
                       style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid rgba(255,255,255,.02)",cursor:"pointer"}}
                     >
                       <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"#E8553E":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
+                      {(() => { const tm = tipoMeta(p.tipo_propuesto); return (
+                        <span title={tm.label} style={{flexShrink:0,minWidth:38,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:tm.bg,color:tm.color}}>{tm.sigla}</span>
+                      ); })()}
                       <div className="info" style={{flex:1,minWidth:0}}>
                         <div className="tt" style={{fontSize:10,fontWeight:500,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
                         <div className="mt" style={{fontSize:8,color:"var(--text2)",marginTop:1,display:"flex",alignItems:"center",gap:4}}>
@@ -333,13 +347,7 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
   const isGasto = propuesta.tipo_propuesto === "gasto_egreso";
   const isNoComercial = propuesta.tipo_propuesto === "no_comercial";
   const noBoletea = isGasto || isNoComercial;
-  const tipoBadge = isGasto
-    ? { label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "#f59e0b" }
-    : isNoComercial
-      ? { label: "No comercial · no se boletea", bg: "rgba(255,255,255,.07)", color: "var(--text2)" }
-      : isAfecta
-        ? { label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "#b4f027" }
-        : { label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "#5b9cf6" };
+  const tipoBadge = tipoMeta(propuesta.tipo_propuesto);
   const empresaSugiereExenta = empresaTipoContribuyente === "exento";
   const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
   const desacuerdo = (isAfecta && empresaSugiereExenta) || (!isAfecta && empresaSugiereAfecta);

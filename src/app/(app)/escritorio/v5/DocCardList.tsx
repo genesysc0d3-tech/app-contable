@@ -25,7 +25,7 @@ interface DocRaw {
 export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
-  tipoMix?: Record<string, { afectas: number; exentas: number }>;
+  tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState(initialDocs);
@@ -101,6 +101,26 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 {isBoletaUnica && <span style={{fontSize:6,padding:"1px 4px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
+                {(() => {
+                  // Composición a primera vista: qué saldrá de esta cartola.
+                  const mix = tipoMix?.[doc.id];
+                  if (isBoletaUnica || doc.estado !== "procesado" || !mix) return null;
+                  const chips: { n: number; sigla: string; color: string }[] = [
+                    { n: mix.afectas, sigla: "AFE", color: "#b4f027" },
+                    { n: mix.exentas, sigla: "EXE", color: "#5b9cf6" },
+                    { n: mix.gastos, sigla: "GASTO", color: "#f59e0b" },
+                  ].filter(c => c.n > 0);
+                  if (chips.length === 0) return null;
+                  return (
+                    <span style={{display:"inline-flex",gap:4,flexShrink:0}}>
+                      {chips.map(c => (
+                        <span key={c.sigla} style={{fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:`${c.color}1a`,color:c.color,whiteSpace:"nowrap"}}>
+                          {c.n} {c.sigla}
+                        </span>
+                      ))}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="db" style={isBoletaUnica ? { padding: "0 8px 6px", gap: 2 } : undefined}>
                 {doc.estado === "procesado" && hasWarning && (
@@ -170,20 +190,24 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 </div>
                 {(() => {
                   // La empresa fijó su tipo, pero esta cartola trae movimientos
-                  // del tipo contrario: se recalca sin bloquear nada.
+                  // del tipo contrario (o mezcla): se recalca sin bloquear nada.
                   if (isBoletaUnica || doc.estado !== "procesado") return null;
                   const mix = tipoMix?.[doc.id];
-                  const conflicto = tipoEmpresa === "exento" && (mix?.afectas ?? 0) > 0
-                    ? { n: mix!.afectas, clasif: "afectos (con IVA)", cfg: "exenta" }
-                    : tipoEmpresa === "afecto" && (mix?.exentas ?? 0) > 0
-                      ? { n: mix!.exentas, clasif: "exentos (sin IVA)", cfg: "afecta" }
+                  if (!mix) return null;
+                  const conflicto = tipoEmpresa === "exento" && mix.afectas > 0
+                    ? { n: mix.afectas, clasif: "afectos (con IVA)", cfg: "exenta" }
+                    : tipoEmpresa === "afecto" && mix.exentas > 0
+                      ? { n: mix.exentas, clasif: "exentos (sin IVA)", cfg: "afecta" }
                       : null;
                   if (!conflicto) return null;
+                  const esMixta = mix.afectas > 0 && mix.exentas > 0;
                   return (
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,padding:"5px 9px",borderRadius:8,background:"rgba(245,158,11,.07)",border:"1px solid rgba(245,158,11,.18)",color:"#f59e0b",fontSize:9,fontWeight:600,lineHeight:1.4}}>
                       <span style={{flexShrink:0}}>△</span>
                       <span style={{minWidth:0}}>
-                        {conflicto.n} movimiento{conflicto.n !== 1 ? "s" : ""} clasificado{conflicto.n !== 1 ? "s" : ""} como {conflicto.clasif}, y tu empresa está configurada {conflicto.cfg}
+                        {esMixta
+                          ? `Cartola mixta: ${mix.afectas} afecto${mix.afectas !== 1 ? "s" : ""} y ${mix.exentas} exento${mix.exentas !== 1 ? "s" : ""} — tu empresa está configurada ${conflicto.cfg}`
+                          : `${conflicto.n} movimiento${conflicto.n !== 1 ? "s" : ""} clasificado${conflicto.n !== 1 ? "s" : ""} como ${conflicto.clasif}, y tu empresa está configurada ${conflicto.cfg}`}
                       </span>
                       <TermHint width={262} align="right">
                         La app los procesa igual y puedes corregir cada uno en Revisar antes de aprobar.

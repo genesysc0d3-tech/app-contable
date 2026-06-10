@@ -204,19 +204,20 @@ export default async function V5Page({ searchParams }: {
     });
   const docsAgregados = [...boletasComoAgregados, ...docsBase].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  // Mix de tipos por documento: si la empresa fijó afecto/exento y una
-  // cartola trae propuestas del tipo contrario, la card lo recalca para
-  // recordar que conviene subir cartolas con los movimientos deseados.
+  // Composición por documento (afectas/exentas/gastos): se muestra en la
+  // card para decidir de un vistazo qué trae la cartola, y si la empresa
+  // fijó afecto/exento se recalca el desacuerdo o la cartola mixta.
   // Solo aviso — la app procesa igual.
-  const docTipoMix: Record<string, { afectas: number; exentas: number }> = {};
+  const docTipoMix: Record<string, { afectas: number; exentas: number; gastos: number }> = {};
   for (const p of propsData.data ?? []) {
     if (p.estado !== "pendiente" && p.estado !== "aprobado" && p.estado !== "editado") continue;
     const docId = p.movimientos_raw?.documentos_subidos?.id;
     if (!docId) continue;
     const t = p.tipo_propuesto;
-    if (t === "gasto_egreso" || t === "no_comercial") continue;
-    const mix = (docTipoMix[docId] ??= { afectas: 0, exentas: 0 });
-    if (t === "boleta" || t === "factura") mix.afectas++; else mix.exentas++;
+    const mix = (docTipoMix[docId] ??= { afectas: 0, exentas: 0, gastos: 0 });
+    if (t === "gasto_egreso" || t === "no_comercial") mix.gastos++;
+    else if (t === "boleta" || t === "factura") mix.afectas++;
+    else mix.exentas++;
   }
 
   // All boletas for RCV view
