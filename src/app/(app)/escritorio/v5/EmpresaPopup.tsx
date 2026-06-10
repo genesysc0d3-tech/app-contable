@@ -643,7 +643,7 @@ export default function EmpresaPopup({
                 n: 2,
                 icon: "M7 3h7l4 4v14H7V3Z",
                 title: "Formatos de cartola",
-                sub: "Subí y mapeá formatos",
+                sub: "Sube y mapea formatos",
               },
               {
                 n: 3,

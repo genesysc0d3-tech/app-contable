@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import { validarRut } from "@/lib/rut";
 
 type TipoDte = 33 | 34 | 39 | 41;
 
@@ -223,6 +224,27 @@ function draftHasContent(draft: BoletaDraft) {
 
 type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
+// Estados internos del worker SII → etiquetas legibles para el panel.
+const WORKER_STATUS_LABELS: Record<string, string> = {
+  opening_sii: "Abriendo SII",
+  waiting_sii_login: "Esperando inicio de sesión",
+  waiting_manual_login: "Inicia sesión manualmente",
+  autologin_attempting: "Iniciando sesión automática",
+  autologin_sent: "Sesión SII enviada",
+  sii_page_ready: "Página SII lista",
+  submitting: "Emitiendo boleta",
+  capturing_result: "Capturando folio",
+  retrying: "Reintentando",
+  emitted: "Boleta emitida",
+  result_needs_review: "Requiere revisión",
+  learning_observing: "Modo aprendizaje",
+  cancelled: "Cancelado",
+  closed: "Ventana cerrada",
+  save_failed: "No se pudo guardar",
+  already_exists: "Ya estaba guardada",
+  error: "Error",
+};
+
 export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -261,7 +283,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const tipoDiferenteEmpresa = !!tipoEmpresa && tipoDte !== tipoEmpresa;
   const usesSiiLocal = emisionProveedor === "sii_local";
   const usesSimpleApi = facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
-  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !emitiendo;
+  // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
+  // un dígito verificador malo termina en rechazo SII.
+  const rutReceptorInvalido = receptorRut.trim().length > 0 && !validarRut(receptorRut);
+  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !emitiendo;
   const canOpenLocalWorker = canSubmit && !localWorkerLoading;
   const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : !canSubmit;
   const primaryLabel = usesSiiLocal
@@ -905,6 +930,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <Field label="Dirección" value={receptorDireccion} onChange={(value) => updateActiveDraft({ receptorDireccion: value })} placeholder="Opcional" />
                 <Field label="Comuna" value={receptorComuna} onChange={(value) => updateActiveDraft({ receptorComuna: value })} placeholder="Opcional" />
               </div>
+              {rutReceptorInvalido && (
+                <p style={{ fontSize: 9, color: "#ef4444", marginTop: 7 }}>
+                  El RUT del receptor no es válido — revisa el dígito verificador o déjalo vacío.
+                </p>
+              )}
             </section>
 
             <section className="ed-card-quiet">
@@ -938,7 +968,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 </div>
                 {localWorker && (
                   <div style={{ padding: 8, borderRadius: 9, background: "rgba(232,85,62,.08)", border: "1px solid rgba(232,85,62,.16)", color: "var(--text2)", fontSize: 9, lineHeight: 1.4 }}>
-                    <strong style={{ color: "#E8553E" }}>{localWorker.status}</strong><br />{localWorker.message}
+                    <strong style={{ color: "#E8553E" }}>{WORKER_STATUS_LABELS[localWorker.status] ?? localWorker.status}</strong><br />{localWorker.message}
                   </div>
                 )}
                 {extensionStatus === "missing" && (
@@ -1039,7 +1069,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
             <div style={{ marginTop: "auto", paddingTop: 2 }}>
               <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
-                {canSubmit ? "Listo para emitir." : "Ingresa detalle y monto."}
+                {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : "Ingresa detalle y monto."}
               </div>
               <button onClick={handlePrimaryEmit} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
                 {primaryLabel}

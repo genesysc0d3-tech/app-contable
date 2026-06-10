@@ -18,6 +18,18 @@ const BADGE: Record<number, string> = {
 
 let idCounter = 0;
 
+// El backend despacha el parser según este tipo: parseExcel, pdf-parse,
+// OCR Mistral para fotos/capturas, o texto plano (csv).
+function tipoForFile(file: File): { tipo: string; mime: string } {
+  const ext = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? "";
+  if (ext === "pdf") return { tipo: "pdf", mime: "application/pdf" };
+  if (ext === "csv") return { tipo: "csv", mime: "text/csv" };
+  if (["png", "jpg", "jpeg", "webp"].includes(ext)) {
+    return { tipo: "imagen", mime: file.type || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg") };
+  }
+  return { tipo: "excel", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+}
+
 export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
@@ -69,18 +81,21 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
         let binary = "";
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
         const base64 = btoa(binary);
+        const { tipo, mime } = tipoForFile(q.file);
         const res = await fetch("/api/subir-procesar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             nombre: q.customName + (q.file.name.match(/\.[^.]+$/) ?? ""),
             base64,
-            tipo: q.file.name.endsWith(".pdf") ? "pdf" : "excel",
+            tipo,
+            mime,
           }),
         });
         const data = await res.json();
-        if (data.ok) ok++; else { fail++; toast(data.error ?? "Error", "error"); }
-      } catch { fail++; toast("Error de red", "error"); }
+        if (data.ok) ok++;
+        else { fail++; toast(`No se pudo subir "${q.customName}". Intenta de nuevo o revisa el archivo.`, "error"); }
+      } catch { fail++; toast(`Error de red subiendo "${q.customName}".`, "error"); }
     }
     setUploading(false);
     setQueue([]);
@@ -98,8 +113,8 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
         </div>
         <div className="dz-txt">
-          <h4>{uploading ? "Subiendo..." : "Arrastrá tu archivo aquí"}</h4>
-          <p>Excel, PDF, CSV · Máx 20MB</p>
+          <h4>{uploading ? "Subiendo..." : "Arrastra tu archivo aquí"}</h4>
+          <p>Excel, PDF, CSV o foto de cartola · Máx 20MB</p>
         </div>
       </div>
 
@@ -107,7 +122,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontSize: 9, color: "var(--text2)", fontWeight: 500 }}>
               Archivos pendientes
-              <span title="Grupos de color (1-5) para agrupar capturas. Hacé clic en el badge."
+              <span title="Grupos de color (1-5) para agrupar capturas. Haz clic en el badge."
                 style={{ marginLeft: 4, width: 13, height: 13, borderRadius: "50%", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "help" }}>?</span>
           </div>
           {queue.map(q => {

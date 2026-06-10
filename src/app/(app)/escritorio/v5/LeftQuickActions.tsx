@@ -261,7 +261,7 @@ export function MassDTEAction({}: { empresaId: string }) {
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>Excel · PDF · CSV</span>
                 </div>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>MassDTE</h2>
-                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Subí cartolas bancarias y documentos para procesamiento masivo.</p>
+                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Sube cartolas bancarias y documentos para procesamiento masivo.</p>
               </div>
             </div>
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto" }}>

@@ -78,7 +78,7 @@ export default async function EmpresaPage() {
       <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-sm font-semibold">Formatos de cartola</h2>
-          <span className="text-xs text-[#888] dark:text-white/60">Subí 1 ejemplo y mapeá</span>
+          <span className="text-xs text-[#888] dark:text-white/60">Sube 1 ejemplo y mapea</span>
         </div>
         <EmpresaFormatoCartola empresaId={empresa.id} />
       </section>

@@ -395,7 +395,7 @@ function GridContent(props: {
         {/* Right panel */}
         <aside style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, background: "rgba(6,13,22,.38)", padding: 18, position: "sticky", top: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 760, letterSpacing: "-0.02em" }}>¿Todo en orden?</div>
-          <div style={{ fontSize: 12, color: "#a4adba" }}>Revisá el mapeo y la vista previa.</div>
+          <div style={{ fontSize: 12, color: "#a4adba" }}>Revisa el mapeo y la vista previa.</div>
           <div style={{ marginTop: 18, display: "grid", gap: 14, fontSize: 13, color: "#d7deeb" }}>
             {[
               `${totalMapped} campos mapeados`,
@@ -454,7 +454,7 @@ function GridContent(props: {
               </select>
               <div style={{ marginTop: 7, color: "#6f7b8b", fontSize: 12 }}>Ej.: abono en una columna, cargo en otra</div>
             </Field>
-            <Field label="Dirección del flujo" hint="Usá esta opción si elegiste «Una sola columna».">
+            <Field label="Dirección del flujo" hint="Usa esta opción si elegiste «Una sola columna».">
               <select value={defaultFlujo} onChange={(e) => setDefaultFlujo(e.target.value as "entrada" | "salida")}
                 style={{ width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(255,255,255,.13)", background: "rgba(5,11,20,.28)", color: "#ecf1f8", padding: "0 12px", fontSize: 12 }}>
                 <option value="entrada">Depósitos = Abonos</option>

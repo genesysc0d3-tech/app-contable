@@ -159,7 +159,7 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
               {step === "upload" ? "Subir cartola" : step === "done" ? "Formato guardado" : "Mapear campos"}
             </div>
             <div style={{ marginTop: 3, fontSize: 12, color: "#a4adba" }}>
-              {step === "upload" ? "Seleccioná un archivo Excel para analizar." : step === "done" ? "Ya podés cerrar." : "Arrastrá los encabezados a los campos de abajo."}
+              {step === "upload" ? "Selecciona un archivo Excel para analizar." : step === "done" ? "Ya puedes cerrar." : "Arrastra los encabezados a los campos de abajo."}
             </div>
           </div>
           <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.045)", color: "#d8dde6", fontSize: 22, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" }}>×</button>
@@ -172,7 +172,7 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
           {step === "upload" && (
             <div style={{ padding: 80, textAlign: "center", color: "#a4adba" }}>
               <UploadSimple size={40} weight="bold" style={{ margin: "0 auto 16px", display: "block", color: "#E8553E" }} />
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#f6f7fb", marginBottom: 8 }}>Subí un Excel de cartola</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#f6f7fb", marginBottom: 8 }}>Sube un Excel de cartola</div>
               <div style={{ fontSize: 13, marginBottom: 24 }}>Excel (.xlsx, .xls) — arrastrá los encabezados a las cajas.</div>
               <div onClick={() => inputRef.current?.click()}
                 style={{
@@ -275,11 +275,11 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
                 </div>
               </div>
 
-              {/* Step 2: Soltá aquí (drop zones) */}
+              {/* Step 2: Suelta aquí (drop zones) */}
               <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, background: "linear-gradient(145deg, rgba(95,168,255,.075), rgba(255,255,255,.035))", padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
                   <span style={{ width: 18, height: 18, display: "inline-grid", placeItems: "center", borderRadius: 6, background: "linear-gradient(145deg,#f59e0b,#d97706)", color: "#fff", fontSize: 10, boxShadow: "0 4px 12px rgba(245,158,11,.2)" }}>2</span>
-                  Soltá aquí
+                  Suelta aquí
                   <span style={{ fontSize: 11, color: "#a4adba", fontWeight: 450, marginLeft: 2 }}>arrastrá una columna o seleccioná y tocá</span>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>

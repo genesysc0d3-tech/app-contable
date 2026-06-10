@@ -275,7 +275,7 @@ export default function EmitirTabContent() {
                   {!isDisabled && item.confianza_clasif < 0.7 && (
                     <div className="sub rn">
                       <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                      {" "}Clasificado como {isAfecta ? "AFE" : "EXE"} automáticamente · Revisá antes de emitir
+                      {" "}Clasificado como {isAfecta ? "AFE" : "EXE"} automáticamente · Revisa antes de emitir
                     </div>
                   )}
                 </div>

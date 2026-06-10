@@ -248,7 +248,7 @@ export default function EmitirBoletaForm() {
               ))}
             </ul>
             <p className="text-[10px] text-[var(--muted-light)] mt-2 leading-snug">
-              Si querés emitirlas, andá a Revisar, tocá ✏ en cada una y cambiá el tipo a <b>Boleta</b>.
+              Si quieres emitirlas, ve a Revisar, toca ✏ en cada una y cambia el tipo a <b>Boleta</b>.
             </p>
           </div>
         )}
@@ -390,7 +390,7 @@ export default function EmitirBoletaForm() {
                 {!disabled && it.confianza_clasif < 0.7 && (
                   <p className="text-[9px] text-[#F59E0B] mt-0.5 flex items-center gap-1">
                     <Warning size={8} weight="fill" />
-                    {" "}Clasificado como {tipoFinal(it) === 39 ? "AFE" : "EXE"} automáticamente · Revisá antes de emitir
+                    {" "}Clasificado como {tipoFinal(it) === 39 ? "AFE" : "EXE"} automáticamente · Revisa antes de emitir
                   </p>
                 )}
               </div>
