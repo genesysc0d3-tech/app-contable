@@ -817,7 +817,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
       <style>{`
-        .ed-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;height:100%}
+        .ed-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:start}
         .ed-card{border:1px solid var(--border);background:var(--bg-muted);border-radius:12px;padding:10px}
         .ed-card-quiet{border:1px solid var(--border);background:transparent;border-radius:12px;padding:10px}
         .ed-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -886,7 +886,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         </button>
       </div>
 
-      <div className="ed-body" style={{ flex: 1, minHeight: 0, padding: "12px 18px", overflow: "hidden" }}>
+      <div className="ed-body" style={{ flex: 1, minHeight: 0, padding: "12px 18px", overflowY: "auto", overflowX: "hidden" }}>
         <div className="ed-shell">
           <main style={{ display: "flex", flexDirection: "column", gap: 9, minHeight: 0 }}>
             <section className="ed-card">
