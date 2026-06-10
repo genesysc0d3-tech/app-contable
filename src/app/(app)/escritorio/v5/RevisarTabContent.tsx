@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
+import TermHint from "@/components/ui/TermHint";
 import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 import type { Tables } from "@/lib/database.types";
 
@@ -327,6 +328,18 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [busy, setBusy] = useState(false);
   const isAfecta = propuesta.tipo_propuesto === "boleta" || propuesta.tipo_propuesto === "factura";
+  // Gastos y movimientos no comerciales se registran pero no generan boleta;
+  // el badge debe decirlo (antes caían al else y mostraban "Boleta · exenta").
+  const isGasto = propuesta.tipo_propuesto === "gasto_egreso";
+  const isNoComercial = propuesta.tipo_propuesto === "no_comercial";
+  const noBoletea = isGasto || isNoComercial;
+  const tipoBadge = isGasto
+    ? { label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "#f59e0b" }
+    : isNoComercial
+      ? { label: "No comercial · no se boletea", bg: "rgba(255,255,255,.07)", color: "var(--text2)" }
+      : isAfecta
+        ? { label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "#b4f027" }
+        : { label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "#5b9cf6" };
   const empresaSugiereExenta = empresaTipoContribuyente === "exento";
   const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
   const desacuerdo = (isAfecta && empresaSugiereExenta) || (!isAfecta && empresaSugiereAfecta);
@@ -365,13 +378,21 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
       <div className="col" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
         <span className={`tag ${isAfecta ? "af" : "ex"}`}
           style={{fontSize:8,padding:"2px 7px",borderRadius:10,fontWeight:600,
-            background: isAfecta ? "rgba(180,240,39,.1)" : "rgba(91,156,246,.1)",
-            color: isAfecta ? "#b4f027" : "#5b9cf6",
+            background: tipoBadge.bg,
+            color: tipoBadge.color,
           }}
-        >{isAfecta ? "Boleta · afecta" : "Boleta · exenta"}</span>
+        >{tipoBadge.label}</span>
+        {noBoletea && (
+          <TermHint width={250}>
+            Este movimiento se registra en tus cuentas, pero no genera boleta ante el SII{isGasto ? " porque es plata que salió (gasto)" : ""}. Si en realidad fue una venta tuya, cámbialo con Editar.
+          </TermHint>
+        )}
         <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "var(--text2)", fontSize:12,fontWeight:700}}>
           {Math.round((propuesta.confianza ?? 0) * 100)}%
         </span>
+        <TermHint width={250}>
+          Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada antes de aprobar.
+        </TermHint>
         {empresaSugiereAfecta && !isAfecta && (
           <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(232,85,62,.1)",color:"#E8553E",marginLeft:4}}>Default empresa: AFE</span>
         )}
@@ -385,15 +406,15 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
       </div>
       <div className="fin" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:6}}>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>Neto</div>
+          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>Neto</div>
           <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(neto)}</div>
         </div>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>IVA</div>
+          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>IVA</div>
           <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(iva)}</div>
         </div>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>Total</div>
+          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>Total</div>
           <div className="vl ht" style={{fontSize:11,fontWeight:700,color:"#b4f027"}}>{fmt(total)}</div>
         </div>
       </div>
@@ -419,7 +440,7 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
         <button onClick={handleAprobar} disabled={busy}
           style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          {busy ? "..." : "Aprobar"}
+          {busy ? "..." : noBoletea ? (isGasto ? "Aprobar como gasto" : "Aprobar registro") : "Aprobar"}
         </button>
         <button onClick={() => onClose()}
           style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>

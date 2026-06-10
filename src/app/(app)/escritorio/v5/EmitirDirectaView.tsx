@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
 
 type TipoDte = 33 | 34 | 39 | 41;
@@ -878,8 +879,15 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             <section className="ed-card">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
                 <div>
-                  <span className="ed-label">1. Tipo de documento</span>
-                <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Boletas por SII local; facturas 33/34 por SimpleAPI cuando esté configurado.</p>
+                  <span className="ed-label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    1. Tipo de documento
+                    <TermHint width={258}>
+                      <strong>Afecta</strong> = la venta incluye IVA (19%), lo normal en el comercio.
+                      <br /><strong>Exenta</strong> = sin IVA: compraventa de cripto y divisas (P2P), y ciertos servicios.
+                      <br />Las boletas se emiten en el portal SII; las facturas, vía SimpleAPI.
+                    </TermHint>
+                  </span>
+                <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Cripto y divisas van como exenta; el comercio con IVA, como afecta.</p>
                 </div>
                 {hasEmpresaLock && (
                   <button
