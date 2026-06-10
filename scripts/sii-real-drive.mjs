@@ -111,7 +111,7 @@ if (EMISOR) {
         job_id: id, expires_at: new Date(Date.now() + 5 * 60000).toISOString(),
         empresa_id: "test", emisor_rut: emisor, tipo_dte: 41,
         fecha_emision: new Date().toISOString().slice(0, 10),
-        receptor: {}, detalles: [{ nombre: "PRUEBA MASSDTE", cantidad: 1, monto_total: 1 }],
+        receptor: {}, glosa: "PRUEBA GLOSA MASSDTE", detalles: [{ nombre: "PRUEBA MASSDTE", cantidad: 1, monto_total: 1 }],
         totales: { monto_total: 1, monto_neto: 0, iva: 0, monto_exento: 1 },
         learn_only: false, auto_emit: true, allow_final_emit: true,
         payment_method: "Efectivo", confirmation_required: false,

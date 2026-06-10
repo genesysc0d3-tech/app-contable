@@ -674,6 +674,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           iva: tipoDte === 39 ? total - Math.round(total / 1.19) : 0,
           monto_exento: tipoDte === 41 ? total : 0,
         },
+        // Glosa que se imprime en la boleta del SII (campo Detalle, máx 80).
+        // En boleta única usamos el detalle que escribió el usuario.
+        glosa: detalleNombre.trim().slice(0, 80),
         learn_only: false,
         auto_emit: true,
         allow_final_emit: true,

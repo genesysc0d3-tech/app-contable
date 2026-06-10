@@ -483,6 +483,20 @@
       .find((el) => isVisibleEnabled(el) && pattern.test(controlText(el))) || null;
   }
 
+  // El campo de glosa ("Detalle") del modal SII no tiene placeholder/label/name;
+  // se identifica por su contenedor v-input, que muestra el contador "... / 80".
+  function findGlosaInput() {
+    const dialog = activeEmitDialog() || document;
+    return Array.from(dialog.querySelectorAll("input[type='text'], textarea"))
+      .find((el) => {
+        if (!isVisibleEnabled(el)) return false;
+        const cont = el.closest(".v-input") || el.parentElement;
+        const txt = normalizeSearchText(cont?.innerText || cont?.textContent || "");
+        return /detalle/.test(txt) && /\/\s*80/.test(txt)
+          && !/vendedor|monto|receptor|sucursal|boleta|pago|rut/.test(txt);
+      }) || null;
+  }
+
   // El contador puede operar varias empresas en e-Boleta (selector superior):
   // antes de emitir se verifica que el RUT emisor visible sea el del job.
   function assertEmisorRut(job) {
@@ -715,29 +729,20 @@
       throw new Error("No pude seleccionar el método de pago en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.");
     }
 
-    // Glosa de la boleta (toggle "Detalle", máx 80 caracteres): identifica el
-    // movimiento de origen. DESACTIVADA por defecto: activar el toggle Detalle
-    // del modal SII deja un campo en un estado que bloquea el EMITIR de forma
-    // intermitente, y la emisión confiable es prioridad. Se reactiva con
-    // job.write_glosa === true cuando se complete el manejo del campo Detalle.
-    const glosa = job?.write_glosa === true ? String(job?.detalles?.[0]?.nombre || "").trim().slice(0, 80) : "";
+    // Glosa de la boleta (campo "Detalle" del SII, máx 80 caracteres): texto
+    // libre opcional que el usuario define en Revisar / boleta única. Viaja en
+    // job.glosa (separado del ítem de detalle). Se activa el toggle "Detalle",
+    // se escribe el campo (identificado por el contador "/ 80") y se verifica.
+    // Best-effort: si no se logra escribir con certeza, se APAGA el toggle para
+    // no dejar el formulario en mal estado — la emisión siempre tiene prioridad.
+    const glosa = String(job?.glosa || "").trim().slice(0, 80);
     if (glosa) {
       renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
       let glosaOk = false;
-      const toggled = await enableDialogToggle("Detalle");
-      if (toggled) {
-        // El campo de glosa aparece tras activar el toggle; esperar a que monte.
-        for (let i = 0; i < 10 && !glosaOk; i += 1) {
+      if (await enableDialogToggle("Detalle")) {
+        for (let i = 0; i < 12 && !glosaOk; i += 1) {
           await new Promise((resolve) => setTimeout(resolve, 250));
-          const dlg = activeEmitDialog() || document;
-          const glosaInput = Array.from(dlg.querySelectorAll("input, textarea")).find((el) => {
-            if (!isVisibleEnabled(el)) return false;
-            const ph = normalizeSearchText(el.getAttribute("placeholder") || "");
-            const lbl = normalizeSearchText(labelFor(el));
-            // Campo "Detalle" (placeholder/label), excluyendo monto/receptor/etc.
-            return (ph === "detalle" || lbl === "detalle" || /glosa/.test(ph + lbl))
-              && !/monto|total|rut|nombre|mail|telefono|direccion|vendedor/.test(ph + lbl);
-          });
+          const glosaInput = findGlosaInput();
           if (glosaInput) {
             setControlValue(glosaInput, glosa);
             await new Promise((resolve) => setTimeout(resolve, 150));
@@ -745,11 +750,7 @@
           }
         }
       }
-      if (!glosaOk) {
-        // No se pudo escribir la glosa con certeza: apagar Detalle para que el
-        // formulario quede válido y la boleta se emita igual (sin glosa).
-        await setDialogToggle("Detalle", false);
-      }
+      if (!glosaOk) await setDialogToggle("Detalle", false);
     }
 
     // Receptor opcional: solo si el job lo trae (legal sin receptor < $180.000).
