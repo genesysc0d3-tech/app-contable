@@ -37,6 +37,15 @@
         "https://www.sii.cl/*",
         "https://*.sii.cl/*"
       ],
+      "js": ["sii-notif-suppress.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.sii.cl/*",
+        "https://*.sii.cl/*"
+      ],
       "js": ["sii-worker.js"],
       "run_at": "document_idle"
     }
