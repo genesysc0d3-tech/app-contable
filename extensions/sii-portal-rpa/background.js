@@ -119,40 +119,44 @@ async function capturePdfBytes(result) {
 }
 
 async function handleCapturedResult(state, result) {
-  let resultWithPdf = result;
-  if (hasStrongFolioEvidence(result)) {
-    try {
-      const pdf = await capturePdfBytes(result);
-      resultWithPdf = pdf ? { ...result, pdf } : result;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const message = `SII entrego folio ${result?.folio}, pero no pude descargar el PDF localmente (${errorMessage}). No se marcara como emitida.`;
-      sendToApp(state, captureDebugMessage(state.jobId, { ...result, pdf_capture_error: errorMessage }, message));
-      pauseWorker(state, message);
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", message, true));
-      return;
-    }
-  }
-
-  if (!hasStrongFolioEvidence(resultWithPdf) || !hasCapturedPdf(resultWithPdf)) {
-    const reason = resultWithPdf?.folio
-      ? hasStrongFolioEvidence(resultWithPdf)
-        ? "PDF SII no descargado"
-        : `folio ${resultWithPdf.folio} con evidencia insuficiente (${resultWithPdf.folio_confidence || "sin confianza"})`
+  // PRINCIPIO DE CONFIANZA: el folio con evidencia fuerte ES la prueba de que
+  // el SII emitió la boleta. Una boleta emitida SIEMPRE debe quedar registrada
+  // en la app — nunca se pierde por un fallo de descarga del PDF. El PDF es un
+  // respaldo adjuntable/reintentable, no un requisito para reconocer la emisión.
+  // (Sin esto, un folio real podría quedar invisible en el sistema: el peor
+  // caso para el contador y para MassDTE a escala.)
+  if (!hasStrongFolioEvidence(result)) {
+    const reason = result?.folio
+      ? `folio ${result.folio} con evidencia insuficiente (${result.folio_confidence || "sin confianza"})`
       : "folio no detectado";
-    sendToApp(state, captureDebugMessage(state.jobId, resultWithPdf, `Resultado SII requiere revision: ${reason}.`));
+    sendToApp(state, captureDebugMessage(state.jobId, result, `Resultado SII requiere revision: ${reason}.`));
     pauseWorker(state, `SII respondio, pero ${reason}. No se marcara como emitida.`);
     sendToApp(state, statusMessage(state.jobId, "result_needs_review", `Resultado SII requiere revision: ${reason}.`, true));
     return;
   }
 
-  sendToApp(state, resultMessage(state.jobId, { ...resultWithPdf, job: state.job }, "Boleta emitida en SII."));
+  // Folio fuerte: intentar el PDF (best-effort) y registrar la boleta igual.
+  let resultWithPdf = result;
+  let pdfError = null;
+  try {
+    const pdf = await capturePdfBytes(result);
+    if (pdf) resultWithPdf = { ...result, pdf };
+  } catch (error) {
+    pdfError = error instanceof Error ? error.message : String(error);
+    resultWithPdf = { ...result, pdf_capture_error: pdfError };
+  }
+
+  const conPdf = hasCapturedPdf(resultWithPdf);
+  const msg = conPdf
+    ? `Boleta emitida en SII. Folio ${result.folio}. PDF de respaldo capturado.`
+    : `Boleta emitida en SII. Folio ${result.folio}. El PDF de respaldo quedó pendiente (se puede adjuntar luego); la boleta ya quedó registrada.`;
+  sendToApp(state, resultMessage(state.jobId, { ...resultWithPdf, job: state.job }, msg));
   state.awaitingResult = false;
   sendToSii(state.workerTabId, {
     type: "APP_CONTABLE_SII_WORKER_OVERLAY",
     job_id: state.jobId,
     mode: "DONE",
-    message: resultWithPdf?.folio ? `Boleta emitida. Folio ${resultWithPdf.folio}. PDF capturado.` : "Resultado SII capturado.",
+    message: conPdf ? `Boleta emitida. Folio ${result.folio}. PDF capturado.` : `Boleta emitida. Folio ${result.folio}. PDF pendiente.`,
   });
 }
 

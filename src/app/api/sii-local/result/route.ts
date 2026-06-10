@@ -295,14 +295,10 @@ export async function POST(request: Request) {
   const montoTotal = positiveInt(result?.monto_total ?? result?.totales?.monto_total);
   const fechaEmision = chileDate(result?.fecha_emision);
 
+  // Evidencia fuerte = el SII entregó folio con confianza alta (o folio en la
+  // URL del PDF). Es el ÚNICO requisito para registrar la boleta: el folio es
+  // la prueba de emisión. El PDF se adjunta aparte (puede quedar pendiente).
   const hasStrongEvidence = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
-  // El usuario confirmó el folio a ojo en la pantalla SII: se persiste sin PDF
-  // (queda pdf_upload_error PDF_PENDING_MANUAL) y el respaldo puede adjuntarse
-  // después por el camino de boleta existente.
-  const evidenceSource = result?.folio_evidence && typeof result.folio_evidence === "object"
-    ? (result.folio_evidence as { source?: unknown }).source
-    : null;
-  const manualEvidence = evidenceSource === "manual_visible_receipt";
   if (!folio || !tipoDte || !montoTotal || !fechaEmision || !hasStrongEvidence) {
     await rememberResult(sb, {
       user_id: user.id,
@@ -358,9 +354,10 @@ export async function POST(request: Request) {
         await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
         return NextResponse.json({ ok: false, error: "PDF_METADATA_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
       }
-    } else if (!manualEvidence) {
-      await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
-      return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: pdfUpload.error, already_exists: true, boleta_id: existing.id }, { status: 502 });
+    } else {
+      // El PDF no se pudo subir ahora: la boleta YA existe y queda registrada;
+      // el PDF se reintenta/adjunta luego. Nunca se pierde la boleta por esto.
+      await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_pendiente", error: pdfUpload.error, result });
     }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
@@ -378,11 +375,11 @@ export async function POST(request: Request) {
     : [{ nro_lin: 1, nombre: "Servicio prestado", qty: 1, monto: montoTotal }];
 
   const trackId = `sii-local:${effectiveJobId ?? result?.job?.job_id ?? "manual"}:${tipoDte}:${folio}`;
+  // PRINCIPIO DE CONFIANZA: con folio de evidencia fuerte (ya validado arriba),
+  // la boleta SE REGISTRA SIEMPRE, tenga PDF o no. El PDF es respaldo adjuntable
+  // después; jamás bloquea el registro de una boleta realmente emitida en el SII.
   const pdfUpload = await uploadResultPdf(sb, { empresaId: usuario.empresa_id, tipoDte, folio, result, pdfInfo });
-  if (!pdfUpload.storagePath && !manualEvidence) {
-    await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
-    return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: pdfUpload.error }, { status: 502 });
-  }
+  const pdfPendiente = !pdfUpload.storagePath;
 
   const proveedorRespuesta = {
     origen: "sii_local_extension",
@@ -395,7 +392,8 @@ export async function POST(request: Request) {
       content_type: "application/pdf",
       source_url: pdfUpload.sourceUrl,
     } : null,
-    pdf_upload_error: pdfUpload.storagePath ? null : manualEvidence ? "PDF_PENDING_MANUAL" : pdfUpload.error,
+    pdf_pendiente: pdfPendiente,
+    pdf_upload_error: pdfUpload.storagePath ? null : (pdfUpload.error || "PDF_PENDIENTE"),
     artifact_links: (result?.artifact_links ?? []).map((link) => ({
       kind: link.kind,
       text: link.text,
@@ -461,9 +459,9 @@ export async function POST(request: Request) {
     },
   });
 
-  await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "persisted", result });
+  await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
 
-  return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id });
+  return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id, pdf_pendiente: pdfPendiente });
 }
 
 export async function GET() {
