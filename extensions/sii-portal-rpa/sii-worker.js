@@ -716,11 +716,11 @@
     }
 
     // Glosa de la boleta (toggle "Detalle", máx 80 caracteres): identifica el
-    // movimiento de origen — clave para la trazabilidad MASSDTE. Es best-effort:
-    // si no se logra escribir de forma confiable, se APAGA el toggle Detalle
-    // para no dejar un campo requerido vacío que bloquee el EMITIR. La emisión
-    // siempre tiene prioridad sobre la glosa.
-    const glosa = String(job?.detalles?.[0]?.nombre || "").trim().slice(0, 80);
+    // movimiento de origen. DESACTIVADA por defecto: activar el toggle Detalle
+    // del modal SII deja un campo en un estado que bloquea el EMITIR de forma
+    // intermitente, y la emisión confiable es prioridad. Se reactiva con
+    // job.write_glosa === true cuando se complete el manejo del campo Detalle.
+    const glosa = job?.write_glosa === true ? String(job?.detalles?.[0]?.nombre || "").trim().slice(0, 80) : "";
     if (glosa) {
       renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
       let glosaOk = false;
