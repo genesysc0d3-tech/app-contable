@@ -43,7 +43,8 @@ function providerLabel(proveedor: string | null | undefined): string {
   return "modo de prueba";
 }
 
-function EmitirEmpty({ loading = false }: { loading?: boolean }) {
+function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; otrosTipos?: Record<string, number> }) {
+  const otros = Object.values(otrosTipos).reduce((s, n) => s + n, 0);
   return (
     <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
       <style>{`@keyframes emitirSonar{0%{transform:scale(.72);opacity:.46}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emitirTrace{0%{stroke-dashoffset:52;opacity:.12}35%{opacity:1}100%{stroke-dashoffset:0;opacity:.32}}@keyframes emitirSparkle{0%,100%{opacity:.18}35%{opacity:1}}`}</style>
@@ -54,6 +55,11 @@ function EmitirEmpty({ loading = false }: { loading?: boolean }) {
         </div>
         <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
         <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión..." : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
+        {!loading && otros > 0 && (
+          <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"#f59e0b",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
+            {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Revisar.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -173,7 +179,7 @@ export default function EmitirTabContent() {
   }
 
   if (!loading && totalCount === 0) {
-    return <EmitirEmpty />;
+    return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} />;
   }
 
   async function handleEmitir() {

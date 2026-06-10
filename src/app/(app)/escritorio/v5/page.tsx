@@ -43,6 +43,7 @@ type DocRow = {
   movimientos_detectados: number | null;
   created_at: string;
   progreso_ia: unknown;
+  tipo_operacion_hint: string | null;
 };
 
 type BoletaRow = {
@@ -125,7 +126,7 @@ export default async function V5Page({ searchParams }: {
     supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at",sm).lt("created_at",em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at",sm).lt("created_at",em),
-    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia")
+    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint")
       .eq("empresa_id", empresaId).gte("created_at",workStart).lt("created_at",workEnd).order("created_at",{ascending:false}).limit(50),
     supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).eq("estado","pendiente").gte("created_at",workStart).lt("created_at",workEnd),
     supabase.from("propuestas_ia").select("id",{count:"exact",head:true}).eq("empresa_id", empresaId).in("estado",["aprobado","editado"]).gte("created_at",workStart).lt("created_at",workEnd),
@@ -209,7 +210,7 @@ export default async function V5Page({ searchParams }: {
     .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false});
 
   const [searchDocsData, searchBoletasData, searchPropsData] = await Promise.all([
-    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia")
+    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint")
       .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
     supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
       .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),

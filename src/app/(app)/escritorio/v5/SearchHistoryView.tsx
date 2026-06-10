@@ -79,25 +79,40 @@ function fmtMoney(n?: number | null) {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
+// Fechas date-only ("2026-06-09", típicas de fecha_emision) se interpretan
+// como UTC midnight por JS: formatearlas en hora local de Chile las corría
+// un día hacia atrás (grupo "9 de junio" mostraba 08-06-26). Date-only se
+// formatea en UTC (día literal); timestamps completos, en hora local.
+function isDateOnly(fecha: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(fecha);
+}
+
 function fmtDate(fecha: string, style: "short" | "long" = "short") {
   const d = new Date(fecha);
   if (Number.isNaN(d.getTime())) return "Sin fecha";
-  return d.toLocaleDateString("es-CL", style === "long" ? { day: "numeric", month: "long", year: "numeric" } : { day: "2-digit", month: "2-digit", year: "2-digit" });
+  const opts: Intl.DateTimeFormatOptions = style === "long"
+    ? { day: "numeric", month: "long", year: "numeric" }
+    : { day: "2-digit", month: "2-digit", year: "2-digit" };
+  if (isDateOnly(fecha)) opts.timeZone = "UTC";
+  return d.toLocaleDateString("es-CL", opts);
 }
 
 function fmtMonth(fecha: string) {
   const d = new Date(fecha);
   if (Number.isNaN(d.getTime())) return "Sin fecha";
-  return d.toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+  const label = d.toLocaleDateString("es-CL", isDateOnly(fecha) ? { month: "long", year: "numeric", timeZone: "UTC" } : { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function getDateKey(fecha: string) {
+  if (isDateOnly(fecha)) return fecha;
   const d = new Date(fecha);
   if (Number.isNaN(d.getTime())) return "sin-fecha";
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function getMonthKey(fecha: string) {
+  if (isDateOnly(fecha)) return fecha.slice(0, 7);
   const d = new Date(fecha);
   if (Number.isNaN(d.getTime())) return "sin-fecha";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -410,7 +425,7 @@ function ExplorerSidebar({ collapsed, onToggleCollapsed, months, filter, selecte
         return (
           <div key={month.key} style={{ marginBottom: 5 }}>
             <button onClick={() => onToggleMonth(month.key)} style={{ width: "100%", display: "grid", gridTemplateColumns: "14px 1fr auto", gap: 6, alignItems: "center", border: "none", background: "transparent", color: isNoDate ? "#f59e0b" : "var(--text2)", cursor: "pointer", padding: "5px 7px", fontSize: 10, fontWeight: 900, textAlign: "left" }}>
-              <span>{collapsed ? "▸" : "▾"}</span><span style={{ textTransform: "capitalize", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{month.label}</span><span style={{ fontSize: 8 }}>{month.count}</span>
+              <span>{collapsed ? "▸" : "▾"}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{month.label}</span><span style={{ fontSize: 8 }}>{month.count}</span>
             </button>
             {!collapsed && <div style={{ marginLeft: 10, borderLeft: "1px solid var(--border)", paddingLeft: 6 }}>
               {month.dates.map(([key, date]) => <div key={key}>
@@ -443,7 +458,7 @@ function FinderTable({ grouped, selectedId, dateMode, query, onSelect }: { group
       <span>Tipo</span><span>Nombre</span><span style={{ textAlign: "right" }}>Monto</span><span>Estado</span><span style={{ color: dateMode === "emision" ? "#E8553E" : "var(--text2)" }}>Emisión SII</span><span style={{ color: dateMode === "edicion" ? "#E8553E" : "var(--text2)" }}>Edición/Subida</span>
     </div>
     {grouped.map(([label, items]) => <section key={label}>
-      <div style={{ position: "sticky", top: 33, zIndex: 4, padding: "7px 14px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 90%, transparent)", backdropFilter: "blur(12px)", color: "var(--text2)", fontSize: 10, fontWeight: 850, textTransform: "capitalize" }}>{label}</div>
+      <div style={{ position: "sticky", top: 33, zIndex: 4, padding: "7px 14px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 90%, transparent)", backdropFilter: "blur(12px)", color: "var(--text2)", fontSize: 10, fontWeight: 850 }}>{label}</div>
       {items.map((item) => <FinderRow key={item.id} item={item} selected={selectedId === item.id} columns={columns} dateMode={dateMode} query={query} onSelect={() => onSelect(item.id)} />)}
     </section>)}
   </div>;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import FieldMapper from "@/components/upload/FieldMapper";
+import HintSelector from "@/components/upload/HintSelector";
 import VisualizarArchivo from "./VisualizarArchivo";
 
 const st: Record<string, string> = {procesado:"#22c55e",procesando:"#5b9cf6",error:"#ef4444",subido:"#f59e0b"};
@@ -17,6 +18,7 @@ function fmtCLP(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`;
 interface DocRaw {
   id: string; nombre_archivo: string; tipo: string; estado: string;
   movimientos_detectados: number | null; created_at: string; progreso_ia: unknown;
+  tipo_operacion_hint?: string | null;
 }
 
 export default function DocCardList({ docs: initialDocs, empresaId }: { docs: DocRaw[]; empresaId: string }) {
@@ -154,6 +156,11 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                   )}
                   {!isBoletaUnica && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>}
                   {!isBoletaUnica && <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>}
+                  {!isBoletaUnica && doc.estado === "procesado" && (
+                    <span style={{marginLeft:"auto"}}>
+                      <HintSelector documentoId={doc.id} current={doc.tipo_operacion_hint ?? null} />
+                    </span>
+                  )}
                   {isBoletaUnica && <span style={{fontSize:9,color:"var(--text2)",fontWeight:600}}>Registro creado desde Emision Directa</span>}
                 </div>
               </div>
