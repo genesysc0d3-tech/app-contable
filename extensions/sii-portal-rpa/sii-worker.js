@@ -6,6 +6,7 @@
   let currentMode = null;
   let currentJobId = null;
   let automationClickInProgress = false;
+  let autoCloseTimer = null;
 
   function ensureOverlay() {
     let overlay = document.getElementById(OVERLAY_ID);
@@ -26,6 +27,7 @@
 
   function renderOverlay(mode, message) {
     currentMode = mode;
+    if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
     const overlay = ensureOverlay();
     const locked = mode === "LOCKED_AUTOMATION";
     const paused = mode === "PAUSED";
@@ -63,6 +65,13 @@
         ${actions}
       </div>
     `;
+
+    if (done) {
+      // Ya emitió y la app guardó el folio: la ventana se cierra sola tras unos
+      // segundos (deja ver el folio un momento). Es automático; el botón
+      // "Cerrar ventana" queda solo por si quieres cerrarla antes.
+      autoCloseTimer = setTimeout(() => sendWorkerAction("close"), 5000);
+    }
   }
 
   function sendWorkerAction(action) {
