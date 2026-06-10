@@ -378,6 +378,44 @@
     return clickVisibleText(option, document);
   }
 
+  // Selección robusta de un v-select de Vuetify: abre el slot que contiene
+  // `slotText` y elige la opción `optionText` del menú desplegable (que Vuetify
+  // monta en el body como .v-menu__content, fuera del modal). Verifica que el
+  // slot refleje el valor elegido. Devuelve true solo si quedó seleccionado.
+  async function selectVuetifyOption(slotText, optionText) {
+    const dialog = activeEmitDialog() || document;
+    const findSlot = () => Array.from(dialog.querySelectorAll(".v-select__slot, .v-input__slot"))
+      .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText)));
+    const slot = findSlot();
+    if (!slot) return false;
+    // Si ya muestra la opción deseada, no hace falta abrir.
+    if (normalizeSearchText(slot.innerText || slot.textContent).includes(normalizeSearchText(optionText))) return true;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await clickElement(slot);
+      // Esperar el menú activo y buscar la opción.
+      for (let i = 0; i < 16; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        const menus = Array.from(document.querySelectorAll(".v-menu__content"))
+          .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+        for (const menu of menus) {
+          const items = Array.from(menu.querySelectorAll(".v-list-item, [role='option'], .v-list__tile"));
+          const exact = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === normalizeSearchText(optionText));
+          const partial = items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(normalizeSearchText(optionText)));
+          const opt = exact || partial;
+          if (opt) {
+            await clickElement(opt);
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            const now = findSlot();
+            if (now && normalizeSearchText(now.innerText || now.textContent).includes(normalizeSearchText(optionText))) return true;
+          }
+        }
+      }
+    }
+    const finalSlot = findSlot();
+    return Boolean(finalSlot && normalizeSearchText(finalSlot.innerText || finalSlot.textContent).includes(normalizeSearchText(optionText)));
+  }
+
   async function clickButtonText(text) {
     const button = buttonByText(text);
     if (!button) throw new Error(`Boton no encontrado: ${text}`);
@@ -399,17 +437,21 @@
     return null;
   }
 
-  // Activa un toggle Vuetify (Receptor / Detalle) dentro del modal de emisión.
+  // Activa un toggle/switch Vuetify (Receptor / Detalle) dentro del modal.
+  // El input real está oculto; hay que clickear el contenedor de controles.
   async function enableDialogToggle(labelText) {
     const dialog = activeEmitDialog() || document;
     const wanted = normalizeSearchText(labelText);
-    const switches = Array.from(dialog.querySelectorAll("input[type='checkbox'], input[role='switch']"));
-    const target = switches.find((el) => normalizeSearchText(labelFor(el)).includes(wanted));
+    const rows = Array.from(dialog.querySelectorAll(".v-input--selection-controls, .v-input--switch, .v-input"));
+    const target = rows.find((row) => normalizeSearchText(row.innerText || row.textContent).includes(wanted));
     if (!target) return false;
-    if (target.checked) return true;
-    await clickElement(target.closest(".v-input__slot") || target.parentElement || target);
+    const input = target.querySelector("input[type='checkbox'], input[role='switch']");
+    if (input && input.checked) return true;
+    const clickable = target.querySelector(".v-input--selection-controls__ripple, .v-input--selection-controls__input, label") || input || target;
+    await clickElement(clickable);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    return true;
+    const after = target.querySelector("input[type='checkbox'], input[role='switch']");
+    return Boolean(after?.checked);
   }
 
   function findDialogControl(pattern) {
@@ -628,16 +670,18 @@
       throw new Error("El modal Emitir e-Boleta no se abrio; no se presiono el EMITIR final.");
     }
 
-    // El select del modal SII muestra "Boleta afecta" por defecto: se abre por
-    // ese valor visible y luego se elige el tipo deseado.
+    // Tipo de boleta: el select muestra el valor por defecto; lo abrimos por
+    // el slot que contiene "Boleta" y elegimos el tipo deseado (afecta/exenta).
     const wantedType = job?.tipo_dte === 41 ? "Boleta exenta" : "Boleta afecta";
-    if (await openSelectByValue("Boleta afecta")) {
-      await chooseMenuOption(wantedType);
-    }
+    await selectVuetifyOption("Boleta", wantedType);
 
+    // Método de pago: el SII NO registra la boleta sin él. Si no se logra
+    // seleccionar, abortamos antes del EMITIR para no clickear un form inválido.
     const paymentMethod = job?.payment_method || "Efectivo";
-    if (await openSelectByValue("Elija método de pago")) {
-      await chooseMenuOption(paymentMethod);
+    const pagoOk = await selectVuetifyOption("metodo de pago", paymentMethod)
+      || await selectVuetifyOption("elija metodo", paymentMethod);
+    if (!pagoOk) {
+      throw new Error("No pude seleccionar el método de pago en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.");
     }
 
     // Glosa de la boleta (toggle "Detalle", máx 80 caracteres): identifica el
@@ -647,6 +691,7 @@
       renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
       const toggled = await enableDialogToggle("Detalle");
       if (toggled) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
         const glosaInput = findDialogControl(/DETALLE/);
         if (glosaInput) setControlValue(glosaInput, glosa);
       }
@@ -657,6 +702,7 @@
       renderOverlay("LOCKED_AUTOMATION", "Completando datos del receptor.");
       const toggled = await enableDialogToggle("Receptor");
       if (toggled) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
         const rutInput = findDialogControl(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/);
         if (rutInput) setControlValue(rutInput, String(job.receptor.rut));
         if (job.receptor.razon_social) {
@@ -677,7 +723,25 @@
     await clickFinalEmitInDialog(dialog);
     await new Promise((resolve) => setTimeout(resolve, 2500));
     await clickFirstAvailable(["ACEPTAR", "CONFIRMAR", "SÍ", "CONTINUAR"]);
-    renderOverlay("LOCKED_AUTOMATION", "Boleta enviada a SII. Esperando folio y respaldo.");
+
+    // Verificar que la emisión realmente quedó: el modal habilita Imprimir/
+    // Descargar/Compartir y aparece el folio. Si no, no se emitió (form inválido).
+    const emitConfirmed = await (async () => {
+      for (let i = 0; i < 16; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const dlg = activeEmitDialog();
+        if (!dlg) return true; // el modal se cerró tras emitir
+        const enabled = Array.from(dlg.querySelectorAll("button")).some((b) =>
+          /IMPRIMIR|DESCARGAR|COMPARTIR/.test(normalizeText(b.innerText || b.textContent)) && !b.disabled);
+        if (enabled) return true;
+        if (/BOLETA ELECTR[OÓ]NICA N[UÚ]MERO|FOLIO/i.test(dlg.innerText || dlg.textContent || "")) return true;
+      }
+      return false;
+    })();
+    if (!emitConfirmed) {
+      throw new Error("Cliqué EMITIR pero el SII no confirmó la boleta (revisa método de pago u otra validación). No se marcará como emitida.");
+    }
+    renderOverlay("LOCKED_AUTOMATION", "Boleta emitida en SII. Capturando folio y respaldo.");
   }
 
   async function captureResultWhenReady(job) {
