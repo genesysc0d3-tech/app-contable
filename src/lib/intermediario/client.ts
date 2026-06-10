@@ -136,44 +136,65 @@ export interface EnvioResultado {
   detalle?: string;
 }
 
-export type ProveedorEmision = "mock" | "libredte" | "sii_local";
+export type ProveedorBoletas = "mock" | "sii_local" | "simpleapi";
+export type ProveedorFacturas = "mock" | "simpleapi";
+export type ProveedorEmision = ProveedorBoletas | ProveedorFacturas;
 
 export interface ConfigEmision {
   proveedor: ProveedorEmision;
+  boletasProveedor: ProveedorBoletas;
+  facturasProveedor: ProveedorFacturas;
+  // Columna legacy: se conserva para migraciones/datos antiguos; BaseAPI ya no es un carril activo.
   baseapiSandbox: boolean;
+}
+
+function normalizeBoletasProvider(raw: string | null | undefined): ProveedorBoletas {
+  if (raw === "sii_local") return "sii_local";
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+function normalizeFacturasProvider(raw: string | null | undefined): ProveedorFacturas {
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+export function providerForTipoDte(config: ConfigEmision, tipoDte: number): ProveedorEmision {
+  if (tipoDte === 33 || tipoDte === 34) return config.facturasProveedor;
+  return config.boletasProveedor;
 }
 
 export async function obtenerConfigEmision(empresaId: string): Promise<ConfigEmision> {
   const sb = serviceClient();
   const { data, error } = await sb
     .from("empresas")
-    .select("emision_proveedor, emision_baseapi_sandbox")
+    .select("emision_proveedor, emision_baseapi_sandbox, boletas_emision_proveedor, facturas_emision_proveedor")
     .eq("id", empresaId)
     .maybeSingle();
 
   if (error) {
     const message = String(error.message || "");
-    if (/emision_proveedor|emision_baseapi_sandbox|column/i.test(message)) {
+    if (/emision_proveedor|emision_baseapi_sandbox|boletas_emision_proveedor|facturas_emision_proveedor|column/i.test(message)) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("[emision-config] columnas de proveedor no disponibles; usando mock", {
           empresaId,
           error: message,
         });
       }
-      return { proveedor: "mock", baseapiSandbox: true };
+      return { proveedor: "mock", boletasProveedor: "mock", facturasProveedor: "mock", baseapiSandbox: true };
     }
     throw new Error(`EMISION_CONFIG_QUERY_FAILED: ${message}`);
   }
   if (!data) throw new Error("EMISION_CONFIG_EMPRESA_NOT_FOUND");
 
   const rawProveedor = data?.emision_proveedor;
-  const proveedor: ProveedorEmision = rawProveedor === "libredte" || rawProveedor === "baseapi"
-    ? "libredte"
-    : rawProveedor === "sii_local"
-      ? "sii_local"
-      : "mock";
+  const legacyProveedor = normalizeBoletasProvider(rawProveedor);
+  const boletasProveedor = normalizeBoletasProvider(data?.boletas_emision_proveedor ?? rawProveedor);
+  const facturasProveedor = normalizeFacturasProvider(data?.facturas_emision_proveedor);
   const config: ConfigEmision = {
-    proveedor,
+    proveedor: boletasProveedor ?? legacyProveedor,
+    boletasProveedor,
+    facturasProveedor,
     baseapiSandbox: data?.emision_baseapi_sandbox !== false,
   };
 
@@ -182,190 +203,13 @@ export async function obtenerConfigEmision(empresaId: string): Promise<ConfigEmi
       empresaId,
       rawProveedor: data?.emision_proveedor ?? null,
       proveedor: config.proveedor,
+      boletasProveedor: config.boletasProveedor,
+      facturasProveedor: config.facturasProveedor,
       baseapiSandbox: config.baseapiSandbox,
     });
   }
 
   return config;
-}
-
-interface BaseApiEmpresa {
-  rut: string;
-  razon_social: string;
-}
-
-interface BaseApiDetalle {
-  nombre: string;
-  monto: number;
-}
-
-export interface BaseApiBoletaInput {
-  empresa: BaseApiEmpresa;
-  tipo_dte: 39 | 41;
-  fecha_emision: string;
-  receptor_rut?: string;
-  receptor_razon_social?: string;
-  detalles: BaseApiDetalle[];
-}
-
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name}_MISSING`);
-  return value;
-}
-
-function optionalEnv(name: string, fallback: string): string {
-  return process.env[name]?.trim() || fallback;
-}
-
-function optionalEnvValue(name: string): string | null {
-  return process.env[name]?.trim() || null;
-}
-
-function joinBaseApiUrl(path: string): string {
-  const base = optionalEnv("BASEAPI_BASE_URL", "https://api.baseapi.cl").replace(/\/$/, "");
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${cleanPath}`;
-}
-
-function itemNombre(nombre: string): string {
-  const clean = nombre.trim() || "Servicio";
-  return clean.slice(0, 25);
-}
-
-function itemPrecio(tipoDte: 39 | 41, monto: number): number {
-  if (tipoDte === 41) return Math.round(monto);
-  return Math.max(1, Math.round(monto / 1.19));
-}
-
-function baseApiCredentials(empresaRut: string, sandbox: boolean) {
-  if (sandbox) {
-    return {
-      rut: optionalEnv("BASEAPI_SANDBOX_RUT", "11.111.111-1"),
-      password: optionalEnv("BASEAPI_SANDBOX_PASSWORD", "sandbox"),
-      rut_empresa: optionalEnv("BASEAPI_SANDBOX_EMPRESA_RUT", empresaRut),
-      clave_certificado: optionalEnv("BASEAPI_SANDBOX_CERT_PASSWORD", "sandbox"),
-    };
-  }
-
-  return {
-    rut: requiredEnv("BASEAPI_RUT"),
-    password: requiredEnv("BASEAPI_PASSWORD"),
-    rut_empresa: optionalEnv("BASEAPI_EMPRESA_RUT", empresaRut),
-    clave_certificado: requiredEnv("BASEAPI_CERT_PASSWORD"),
-  };
-}
-
-function baseApiErrorMessage(data: unknown, status: number): string {
-  if (!data || typeof data !== "object") return `BaseAPI respondio ${status}`;
-  const value = data as { error?: unknown; message?: unknown; errors?: unknown; detalle?: unknown; detail?: unknown };
-  const first = [value.error, value.message, value.detalle, value.detail]
-    .find((item) => typeof item === "string" && item.trim().length > 0);
-  if (typeof first === "string") return first;
-  if (Array.isArray(value.errors) && value.errors.length > 0) return JSON.stringify(value.errors[0]);
-  return `BaseAPI respondio ${status}`;
-}
-
-export interface BaseApiEnvioResultado extends EnvioResultado {
-  folio?: number;
-  fecha_emision?: string;
-  tipo_dte?: number;
-  totales?: { neto?: number; iva?: number; total?: number };
-  proveedor_respuesta?: Record<string, unknown>;
-}
-
-export async function emitirBoletaBaseApi(
-  input: BaseApiBoletaInput,
-  config: ConfigEmision,
-): Promise<BaseApiEnvioResultado> {
-  const apiKey = requiredEnv("BASEAPI_API_KEY");
-  const endpoint = optionalEnvValue("BASEAPI_BOLETA_ENDPOINT");
-  if (!endpoint) {
-    return {
-      ok: false,
-      codigo_rechazo: "BASEAPI_BOLETA_ENDPOINT_MISSING",
-      mensaje: "BaseAPI publica no expone emision de boletas 39/41. Configura BASEAPI_BOLETA_ENDPOINT si BaseAPI habilita un endpoint privado para boletas.",
-      detalle: "La API publica de DTE emite 33/34/56/61; no se debe convertir 39/41 a factura porque cambiaria el documento tributario.",
-    };
-  }
-  const credentials = baseApiCredentials(input.empresa.rut, config.baseapiSandbox);
-  const receptorRut = input.receptor_rut?.trim() || optionalEnv("BASEAPI_CONSUMIDOR_FINAL_RUT", "66666666-6");
-
-  const payload = {
-    ...credentials,
-    receptor: {
-      rut: receptorRut,
-      ...(input.receptor_razon_social?.trim()
-        ? { razon_social: input.receptor_razon_social.trim() }
-        : { razon_social: "Consumidor final" }),
-    },
-    items: input.detalles.slice(0, 10).map((detalle) => ({
-      nombre: itemNombre(detalle.nombre),
-      cantidad: 1,
-      precio: itemPrecio(input.tipo_dte, detalle.monto),
-      unidad: "UN",
-    })),
-    tipo_dte: input.tipo_dte,
-    forma_pago: "CONTADO",
-    fecha_emision: input.fecha_emision,
-    descargar_pdf: true,
-  };
-
-  const res = await fetch(joinBaseApiUrl(endpoint), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await res.json().catch(() => null) as {
-    success?: boolean;
-    data?: {
-      folio?: number;
-      tipo_dte?: number;
-      fecha_emision?: string;
-      track_id?: string;
-      totales?: { neto?: number; iva?: number; total?: number };
-    };
-    error?: string;
-    message?: string;
-  } | null;
-
-  if (!res.ok || !data?.success || !data.data?.folio) {
-    const mensaje = baseApiErrorMessage(data, res.status);
-    if (process.env.NODE_ENV !== "production") {
-      console.info("[baseapi-rechazo]", {
-        status: res.status,
-        endpoint,
-        sandbox: config.baseapiSandbox,
-        tipo_dte: input.tipo_dte,
-        fecha_emision: input.fecha_emision,
-        items: payload.items.length,
-        response: data,
-      });
-    }
-
-    return {
-      ok: false,
-      codigo_rechazo: "BASEAPI_RECHAZO",
-      mensaje,
-      detalle: data ? JSON.stringify(data) : "Respuesta no JSON desde BaseAPI",
-    };
-  }
-
-  return {
-    ok: true,
-    folio: data.data.folio,
-    tipo_dte: data.data.tipo_dte,
-    fecha_emision: data.data.fecha_emision,
-    track_id: data.data.track_id ?? `BASEAPI-${input.tipo_dte}-${data.data.folio}`,
-    estado_persistencia: "aceptado",
-    mensaje: config.baseapiSandbox ? "Emitida en BaseAPI sandbox" : "Emitida en BaseAPI",
-    totales: data.data.totales,
-    proveedor_respuesta: data.data as unknown as Record<string, unknown>,
-  };
 }
 
 /**

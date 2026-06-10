@@ -21,6 +21,47 @@ import RcvViewWrapper from "./RcvViewWrapper";
 import RCVSummaryCard from "./RCVSummaryCard";
 import EmpresaBrand from "./EmpresaBrand";
 import { chileDateString } from "@/lib/chile-date";
+import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
+import type { CAFRow } from "../../empresa/CAFPanel";
+
+function mapBoletasProveedor(raw: string | null | undefined): BoletasEmisionProveedor {
+  if (raw === "sii_local") return "sii_local";
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+function mapFacturasProveedor(raw: string | null | undefined): FacturasEmisionProveedor {
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+type DocRow = {
+  id: string;
+  nombre_archivo: string;
+  tipo: string;
+  estado: string;
+  movimientos_detectados: number | null;
+  created_at: string;
+  progreso_ia: unknown;
+};
+
+type BoletaRow = {
+  id: string;
+  folio: number | null;
+  tipo_dte: number;
+  fecha_emision: string;
+  created_at?: string | null;
+  receptor_rut?: string | null;
+  receptor_razon_social: string | null;
+  monto_total: number;
+  estado: string;
+};
+
+type SearchData = Record<string, unknown>;
+
+function searchData(value: unknown): SearchData {
+  return value && typeof value === "object" ? { ...(value as Record<string, unknown>) } : {};
+}
 
 function todayStr() {
   return chileDateString();
@@ -49,6 +90,8 @@ export default async function V5Page({ searchParams }: {
   const usuario = (await getUsuario())!;
   if (!usuario.empresas) notFound();
   const empresaId = usuario.empresa_id;
+  const boletasProveedor = mapBoletasProveedor(usuario.empresas.boletas_emision_proveedor ?? usuario.empresas.emision_proveedor);
+  const facturasProveedor = mapFacturasProveedor(usuario.empresas.facturas_emision_proveedor);
   const { date: dateParam, month: monthParam, view } = await searchParams;
   const selDate = dateParam && dateParam !== "all" ? dateParam : todayStr();
   const nextSelDate = addDaysStr(selDate, 1);
@@ -135,26 +178,29 @@ export default async function V5Page({ searchParams }: {
     .eq("empresa_id", empresaId).order("created_at",{ascending:false}).order("folio",{ascending:false}).limit(100);
   const boletas = (boletasRaw ?? []).filter((boleta) => inWorkRange(boleta.fecha_emision) || inWorkRange(boleta.created_at)).slice(0, 20);
 
-  const docsBase = (docsData.data ?? []) as any[];
+  const docsBase = (docsData.data ?? []) as DocRow[];
   const boletasComoAgregados = (boletas ?? [])
-    .filter((boleta) => !docsBase.some((doc) => (doc.progreso_ia as any)?.boleta_id === boleta.id))
-    .map((boleta) => ({
-      id: `boleta-unica-${boleta.id}`,
-      nombre_archivo: `Boleta unica #${boleta.folio} - ${boleta.receptor_razon_social ?? "consumidor final"}`,
-      tipo: "boleta_unica",
-      estado: "procesado",
-      movimientos_detectados: 1,
-      created_at: `${boleta.fecha_emision}T12:00:00.000Z`,
-      progreso_ia: {
-        origen: "emision_directa",
-        boleta_id: boleta.id,
-        folio: boleta.folio,
-        tipo_dte: boleta.tipo_dte,
-        monto_total: boleta.monto_total,
-        receptor: boleta.receptor_razon_social ?? "consumidor final",
-        sintetico_desde_boleta: true,
-      },
-    }));
+    .filter((boleta) => !docsBase.some((doc) => (doc.progreso_ia as { boleta_id?: string } | null)?.boleta_id === boleta.id))
+    .map((boleta) => {
+      const fechaRegistro = boleta.created_at ?? `${boleta.fecha_emision}T12:00:00.000Z`;
+      return {
+        id: `boleta-unica-${boleta.id}`,
+        nombre_archivo: `Boleta unica #${boleta.folio} - ${boleta.receptor_razon_social ?? "consumidor final"}`,
+        tipo: "boleta_unica",
+        estado: "procesado",
+        movimientos_detectados: 1,
+        created_at: fechaRegistro,
+        progreso_ia: {
+          origen: "emision_directa",
+          boleta_id: boleta.id,
+          folio: boleta.folio,
+          tipo_dte: boleta.tipo_dte,
+          monto_total: boleta.monto_total,
+          receptor: boleta.receptor_razon_social ?? "consumidor final",
+          sintetico_desde_boleta: true,
+        },
+      };
+    });
   const docsAgregados = [...boletasComoAgregados, ...docsBase].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // All boletas for RCV view
@@ -165,7 +211,7 @@ export default async function V5Page({ searchParams }: {
   const [searchDocsData, searchBoletasData, searchPropsData] = await Promise.all([
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia")
       .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
-    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado")
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
       .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))")
       .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
@@ -182,11 +228,12 @@ export default async function V5Page({ searchParams }: {
     });
   }
   for (const bol of (boletas ?? []).slice(0, 10)) {
+    const fechaRegistro = bol.created_at ?? bol.fecha_emision;
     actividadItems.push({
       id: "bol-" + bol.id, tipo: "emision",
       descripcion: "Boleta #" + bol.folio + " · " + (bol.tipo_dte === 39 ? "AFECTA" : "EXENTA"),
       detalle: bol.receptor_razon_social ?? "Sin receptor",
-      fecha: bol.fecha_emision,
+      fecha: fechaRegistro,
       monto: bol.monto_total,
     });
   }
@@ -198,15 +245,16 @@ export default async function V5Page({ searchParams }: {
     searchHistoryItems.push({
       id: "doc-" + doc.id, label: doc.nombre_archivo,
       subtitle: (doc.movimientos_detectados ?? 0) + " movimientos · " + doc.estado,
-      type: "documento", fecha: doc.created_at, data: doc as any,
+      type: "documento", fecha: doc.created_at, data: searchData(doc),
     });
   }
   for (const bol of (searchBoletasData.data ?? []).slice(0, 100)) {
+    const fechaRegistro = bol.created_at ?? bol.fecha_emision;
     searchHistoryItems.push({
       id: "bol-" + bol.id,
       label: "Boleta #" + bol.folio + " · " + (bol.receptor_razon_social ?? "—"),
       subtitle: (bol.tipo_dte === 39 ? "AFECTA" : "EXENTA") + " · $" + Math.round(bol.monto_total).toLocaleString("es-CL"),
-      type: "boleta", fecha: bol.fecha_emision, monto: bol.monto_total, data: bol as any,
+      type: "boleta", fecha: fechaRegistro, monto: bol.monto_total, data: searchData(bol),
     });
   }
   for (const prop of (searchPropsData.data ?? []).slice(0, 100)) {
@@ -214,14 +262,14 @@ export default async function V5Page({ searchParams }: {
       id: "prop-" + prop.id,
       label: "Propuesta · " + (prop.movimientos_raw?.descripcion ?? "—"),
       subtitle: "Confianza " + Math.round((prop.confianza ?? 0) * 100) + "%",
-      type: "propuesta", fecha: prop.created_at, data: prop as any,
+      type: "propuesta", fecha: prop.created_at, data: searchData(prop),
     });
   }
   searchHistoryItems.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
   // RCV content for right column
   const rcvContent = (
-    <RcvViewWrapper boletas={(boletasAllData ?? []) as any} />
+    <RcvViewWrapper boletas={(boletasAllData ?? []) as BoletaRow[]} />
   );
 
   const compactEmpty = (kind: "subidos" | "boletas") => {
@@ -414,10 +462,10 @@ body{font-family:'DM Sans',sans-serif}
           <div className="v5-calendar-wrap" style={{position:"absolute",left:"50%",top:0,transform:"translateX(-50%)",height:38,display:"flex",justifyContent:"center",minWidth:0,overflow:"hidden",zIndex:1}}>
           <div style={{background:"var(--surface)",borderRadius:12,border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",minWidth:0,height:38,display:"flex",alignItems:"center",width:"fit-content"}}>
             <div style={{padding:"0 6px",display:"flex",alignItems:"center",gap:2}}>
-            <Link href={`/escritorio/v5?month=${y}-${m-1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
+            <Link href={`/massdte?month=${y}-${m-1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
             <span style={{fontSize:10,fontWeight:600,color:"var(--text)",whiteSpace:"nowrap",flexShrink:0,width:100,textAlign:"center"}}>{monthNames[m]} {y}</span>
-            <Link href={`/escritorio/v5?month=${y}-${m+1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
-            <Link href={`/escritorio/v5?date=${selDate}&month=${y}-${m}&view=${workMode === "day" ? "week" : workMode === "week" ? "month" : "day"}`} style={{fontSize:9,fontWeight:700,color:"#b4f027",cursor:"pointer",padding:"2px 4px",margin:"0 4px",borderRadius:4,textDecoration:"none",border:workMode !== "day" ? "1px dashed #b4f027" : "1px solid transparent",background:"transparent",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",flexShrink:0,height:28,width:98,justifyContent:"center",lineHeight:1.05}} scroll={false}>
+            <Link href={`/massdte?month=${y}-${m+1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
+            <Link href={`/massdte?date=${selDate}&month=${y}-${m}&view=${workMode === "day" ? "week" : workMode === "week" ? "month" : "day"}`} style={{fontSize:9,fontWeight:700,color:"#b4f027",cursor:"pointer",padding:"2px 4px",margin:"0 4px",borderRadius:4,textDecoration:"none",border:workMode !== "day" ? "1px dashed #b4f027" : "1px solid transparent",background:"transparent",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",flexShrink:0,height:28,width:98,justifyContent:"center",lineHeight:1.05}} scroll={false}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               <span style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",lineHeight:1.05,textAlign:"left",fontSize:9,fontWeight:700}}>
                 <span>Mesa de trabajo</span>
@@ -434,7 +482,7 @@ body{font-family:'DM Sans',sans-serif}
               const isActiveWeekDay = workMode === "week" && isInWeek;
               const isActiveMonthDay = workMode === "month";
               return (
-                <Link key={day} href={`/escritorio/v5?date=${ds}&month=${y}-${m}&view=${workMode}`}
+                <Link key={day} href={`/massdte?date=${ds}&month=${y}-${m}&view=${workMode}`}
                   style={{
                     width:20,padding:"1px 0",display:"flex",flexDirection:"column",alignItems:"center",borderRadius:3,textDecoration:"none",flexShrink:0,
                     background: isActiveMonthDay || isActiveWeekDay || isActiveDay ? "#b4f027" : "transparent",
@@ -463,7 +511,17 @@ body{font-family:'DM Sans',sans-serif}
 
             {/* EMITIR PANEL */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <EmisionDirectaAction empresaTipo={usuario.empresas.tipo_contribuyente} empresaId={empresaId} emisionProveedor={usuario.empresas.emision_proveedor === "sii_local" ? "sii_local" : usuario.empresas.emision_proveedor === "libredte" || usuario.empresas.emision_proveedor === "baseapi" ? "libredte" : "mock"} />
+              <EmisionDirectaAction
+                empresaTipo={usuario.empresas.tipo_contribuyente}
+                empresaId={empresaId}
+                emisionProveedor={boletasProveedor}
+                facturasProveedor={facturasProveedor}
+                empresaRut={usuario.empresas.rut}
+                empresaRazonSocial={usuario.empresas.razon_social}
+                empresaGiro={usuario.empresas.giro}
+                empresaDireccion={usuario.empresas.direccion}
+                empresaComuna={usuario.empresas.comuna}
+              />
             </div></GlowWrap>
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <MassDTEAction empresaId={empresaId} />
@@ -496,7 +554,7 @@ body{font-family:'DM Sans',sans-serif}
                 docsAgregados.length > 0 ? (
                   <div className="r-scroll">
                     <div className="sec" style={{paddingTop:6}}>
-                      <DocCardList docs={docsAgregados as any} empresaId={empresaId} />
+                      <DocCardList docs={docsAgregados} empresaId={empresaId} />
                     </div>
                   </div>
                 ) : (
@@ -574,16 +632,15 @@ body{font-family:'DM Sans',sans-serif}
   return (
     <V5Root
       dashboardContent={dashboardContent}
-      subidosContent={<SubidosFullView documentos={docsAgregados as any} />}
+      subidosContent={<SubidosFullView documentos={docsAgregados} />}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
-      boletasContent={<BoletasFullView boletas={(boletas ?? []) as any} />}
+      boletasContent={<BoletasFullView boletas={(boletas ?? []) as BoletaRow[]} />}
       empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
-      empresaTieneCertificado={usuario.empresas.tiene_certificado_sii ?? false}
-      empresaCafs={(cafsData.data ?? []) as any}
+      empresaCafs={(cafsData.data ?? []) as CAFRow[]}
       empresaId={empresaId}
-      empresaEmisionConfig={{ proveedor: usuario.empresas.emision_proveedor === "sii_local" ? "sii_local" : usuario.empresas.emision_proveedor === "libredte" || usuario.empresas.emision_proveedor === "baseapi" ? "libredte" : "mock", baseapiSandbox: false }}
-      libredteConfigured={Boolean(process.env.LIBREDTE_HASH || process.env.LIBREDTE_API_KEY)}
+      empresaEmisionConfig={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}
+      devMode={usuario.dev_mode === true}
     />
   );
 }

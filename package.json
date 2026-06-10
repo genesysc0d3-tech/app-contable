@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "sii:explore": "node scripts/sii-explorer.mjs"
+    "sii:explore": "node scripts/sii-explorer.mjs",
+    "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs"
   },
   "dependencies": {
     "@mistralai/mistralai": "^2.1.2",

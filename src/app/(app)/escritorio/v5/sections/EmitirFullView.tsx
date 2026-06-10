@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 
 interface EmitItem {
@@ -9,6 +8,7 @@ interface EmitItem {
   receptor_nombre: string | null; receptor_rut: string | null;
   monto_total: number; listo_emitir: boolean;
   motivo_no_listo: string | null; tipo_sugerido: number | null;
+  motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null;
   documento_id: string | null; documento_nombre: string | null;
   documento_created_at: string | null;
 }
@@ -25,17 +25,17 @@ function dayLabel(s: string) {
   return `${ms[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-function fmtCorta(s: string) {
-  const d = new Date(s); if (isNaN(d.getTime())) return "";
-  const ms = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  return `${d.getDate()} ${ms[d.getMonth()]}`;
+function nextActionLabel(code: EmitItem["motivo_code"]): string | null {
+  if (code === "falta_receptor") return "Completa receptor en Revisar";
+  if (code === "monto_invalido") return "Corrige el monto en Revisar";
+  if (code === "no_boletar") return "Revisa la clasificacion antes de emitir";
+  return null;
 }
 
-export default function EmitirFullView({ empresaId }: { empresaId: string }) {
+export default function EmitirFullView({}: { empresaId: string }) {
   const [items, setItems] = useState<EmitItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const router = useRouter();
 
   useEffect(() => {
     fetch("/api/intermediaria/pendientes-emision")
@@ -43,7 +43,7 @@ export default function EmitirFullView({ empresaId }: { empresaId: string }) {
       .then(d => { if (d.ok) setItems(d.items); })
       .catch(() => toast("Error al cargar", "error"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [toast]);
 
   // Group by document upload date → document → items
   const byDateDoc = useMemo(() => {
@@ -117,7 +117,7 @@ export default function EmitirFullView({ empresaId }: { empresaId: string }) {
                           <span>{item.fecha.slice(5)} · {item.receptor_nombre ?? "Sin receptor"}</span>
                           <span style={{ fontWeight: 600, color: "var(--text)" }}>{fmt(item.monto_total)}</span>
                         </div>
-                        {!ready && item.motivo_no_listo && <div style={{ fontSize: 8, color: "var(--amber)", marginTop: 4 }}>{item.motivo_no_listo}</div>}
+                        {!ready && item.motivo_no_listo && <div style={{ fontSize: 8, color: "var(--amber)", marginTop: 4 }}>{item.motivo_no_listo}{nextActionLabel(item.motivo_code) ? <><br />{nextActionLabel(item.motivo_code)}</> : null}</div>}
                       </div>
                     );
                   })}

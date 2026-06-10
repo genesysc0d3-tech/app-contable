@@ -2,19 +2,20 @@
 
 ## Recomendacion
 
-Construir la emision real de boletas como automatizacion local del Portal SII/MiPyme mediante una extension Chrome/Chromium no publicada. Mantener LibreDTE como fallback de proveedor real y BaseAPI solo como referencia/fallback si algun dia expone boletas 39/41.
+Construir la emision real de boletas como automatizacion local del Portal SII/MiPyme mediante una extension Chrome/Chromium no publicada. Mantener el producto sin dependencias de proveedores AGPL; BaseAPI queda solo como compatibilidad historica para boletas antiguas con PDF guardado.
 
 La app web sigue viviendo en Vercel. La extension corre en el navegador del cliente, abre/controla `sii.cl`, usa la sesion local del contribuyente y devuelve a la app solo el resultado tributario: folio, PDF, estado y metadata. Las credenciales SII no deben pasar por nuestros servidores.
 
 ## Decision De Producto
 
-- Lineas de emision separadas: `mock`, `libredte` y `sii_local`.
-- Proveedor principal futuro para Portal SII: `sii_local`.
+- Lineas de emision activas: `mock`, `sii_local` y `simpleapi` con proxy efimero de generacion DTE.
+- Proveedor principal para boletas 39/41: `sii_local` por defecto, con `simpleapi` como alternativa futura.
+- Proveedor principal para facturas 33/34: `simpleapi` por defecto; el proxy actual cubre generacion DTE y queda pendiente el ciclo tributario completo.
 - Modo inicial: RPA local asistido.
 - Modo posterior: RPA local automatico beta, sin cloud de credenciales.
-- Proveedor fallback: `libredte`.
 - `mock` queda para demo/desarrollo.
-- BaseAPI queda fuera de la experiencia activa. Cualquier dato legado `baseapi` se trata como `libredte` hasta completar migracion/limpieza.
+- `mock` debe mostrarse solo a usuarios con `dev_mode` o cuando ya venga seleccionado por datos legacy.
+- BaseAPI queda fuera de la experiencia activa y solo se conserva para lectura historica de boletas antiguas.
 
 ## Contexto Critico
 
@@ -36,12 +37,15 @@ App Vercel
 
 Extension Chrome local
   - Recibe job firmado desde la app
+  - Expone panel `options.html` como App Contable Motor Local
+  - Separa modulos SII local y SimpleAPI/boveda local
   - Crea una ventana SII dedicada como worker local visible
   - Usuario inicia sesion directamente en SII
   - Automatiza formulario boleta 39/41
   - Emite automaticamente despues de sesion valida
   - Captura folio/PDF/estado
   - Devuelve resultado a la app
+  - Expone estado de boveda SimpleAPI sin entregar secretos al frontend
 ```
 
 ## Modos De Emision
@@ -67,10 +71,41 @@ Extension Chrome local
 - Login, captcha, 2FA o seleccion de contribuyente siguen siendo interacciones humanas si SII las exige.
 - Despues de una sesion valida, el flujo no debe requerir confirmacion manual final.
 
-### LibreDTE Fallback
+### Proveedores Permitidos
 
-- Mantener como proveedor alternativo real para clientes que prefieran una cuenta LibreDTE o si el flujo del Portal SII no es estable.
-- Usar hash LibreDTE server-side o por empresa cuando se implemente.
+- `mock`: modo de prueba, sin validez tributaria y sin informar al SII.
+- `sii_local`: emision real via extension local y Portal SII/e-Boleta del contribuyente.
+- `simpleapi`: carril API para facturas 33/34 y opcionalmente boletas 39/41; usa `SIMPLEAPI_API_KEY` solo server-side y secretos del cliente transmitidos temporalmente desde la extension/boveda local.
+- `baseapi`: valor legado solo para leer boletas antiguas; no aparece en UI ni puede seleccionarse.
+
+### Modo Combinado
+
+- `empresas.boletas_emision_proveedor` decide el carril de boletas 39/41: `mock`, `sii_local` o `simpleapi`.
+- `empresas.facturas_emision_proveedor` decide el carril de facturas 33/34: `mock` o `simpleapi`.
+- `empresas.emision_proveedor` queda como columna legacy durante la migracion y refleja el carril de boletas.
+- El backend debe elegir proveedor efectivo por `tipo_dte`; nunca convertir boletas 39/41 a facturas 33/34 ni viceversa.
+- Mientras Emision Directa/lote no puedan obtener PFX/CAF desde la boveda local, seleccionar `simpleapi` debe fallar con un error explicito de pendiente, no caer a `mock`.
+- La extension debe mantener modulos separados: `sii-local` para Portal SII/e-Boleta y `simpleapi-vault` para estado/secretos SimpleAPI locales.
+- La extension debe tener una UI local de configuracion con dos apartados claros: SII Local activo y SimpleAPI/boveda local.
+- La extension debe tener un popup de accion solo para estado/resumen; la configuracion sensible debe permanecer en `options.html`.
+- La app web puede abrir la UI local con `APP_CONTABLE_OPEN_EXTENSION_OPTIONS`, pero no debe pedir PFX/CAF/password en React.
+- `/empresa` debe mostrar estado del Motor Local, estado por modulo y boton para abrir configuracion de extension cuando el handshake este disponible.
+- La UI local de extension debe guardar PFX, CAF y password del certificado solo dentro de `chrome.storage.local`, cifrados con passphrase local mediante WebCrypto.
+- El estado visible para la app debe seguir siendo solo metadata segura; no debe devolver ciphertext ni secretos a React.
+- La extension puede desbloquear la boveda en memoria por una ventana corta; los secretos descifrados no deben persistirse.
+- La extension puede guardar una boveda SII local opcional para RUT y Clave Tributaria, cifrada en `chrome.storage.local` con PIN local de 4 numeros, separada de la boveda SimpleAPI.
+- El autologin SII debe ser un primer intento redundante: si falla por captcha, 2FA, cambio de clave o seleccion de contribuyente, la extension debe abrir SII para login humano y continuar despues de detectar sesion.
+- La Clave Tributaria nunca debe salir de la extension local ni llegar a App Contable/Vercel; el backend solo recibe folio/PDF/estado cuando la extension termina.
+- La app puede solicitar `APP_CONTABLE_SIMPLEAPI_DTE_GENERAR` solo cuando la boveda este desbloqueada; la extension arma el multipart y llama al proxy efimero.
+- Emision Directa puede emitir facturas 33/34 via `APP_CONTABLE_SIMPLEAPI_DTE_EMITIR`, encadenando generacion, envio, consultas y PDF desde la extension.
+- Aunque el ciclo SimpleAPI resulte aceptado, la app no debe marcar como emitido hasta que `/api/simpleapi/result` valide folio, track ID, XML DTE, PDF oficial y persistencia OK.
+- El folio CAF usado por SimpleAPI debe avanzar y persistirse dentro de la boveda cifrada antes de responder exito a la app, para evitar reutilizacion si reinicia el service worker MV3.
+- `/api/simpleapi/result` debe exigir aceptacion detectable de envio y DTE, XML DTE coherente con tipo/folio/total y PDF real antes de guardar `estado = aceptado`.
+- El backend debe exponer proxies multipart allowlist para `envio/generar`, `envio/enviar`, `consulta/envio`, `consulta/dte` e `impresion/base64/carta/v2/cedible`, todos autenticados, rate-limited y sanitizados.
+- El proxy `POST /api/simpleapi/dte/generar` debe usar `SIMPLEAPI_API_KEY` solo server-side con header `Authorization` y API key directa por defecto, sin prefijo `Bearer` salvo override explicito.
+- El proxy SimpleAPI debe limitar trafico por empresa a 3 solicitudes DTE por segundo y 40 por minuto.
+- El proxy SimpleAPI debe sanitizar respuestas upstream antes de devolverlas a la app para no ecoar PFX, CAF, password, certificado ni API keys.
+- Copy obligatorio SimpleAPI: "Tus certificados y CAF quedan cifrados en este equipo. Durante una emisión SimpleAPI se transmiten temporalmente a App Contable para firmar y enviar el DTE. No los almacenamos en nuestros servidores."
 
 ## Seguridad Y Legal
 
@@ -400,7 +435,7 @@ Implementacion local esperada, con emision real automatica despues de sesion SII
 
 ## Pricing Derivado
 
-Si el Portal SII local funciona, no depender de LibreDTE permite bajar precio para el segmento chico/mediano:
+Si el Portal SII local funciona, no depender de un proveedor AGPL permite bajar precio para el segmento chico/mediano:
 
 - Inicio: `$19.990/mes`, boleta local asistida con limite bajo.
   - Pro: `$34.990/mes`, cartola + IA + boletas automaticas/lotes pequenos.

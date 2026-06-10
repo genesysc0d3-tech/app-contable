@@ -8,7 +8,9 @@ export interface CAFRow {
   fecha_vence: string;
 }
 
-export default function CAFPanel({ cafs }: { cafs: CAFRow[] }) {
+export default function CAFPanel({ cafs, proveedor = "mock" }: { cafs: CAFRow[]; proveedor?: "mock" | "sii_local" | "simpleapi" }) {
+  const isSiiLocal = proveedor === "sii_local";
+  const isSimpleApi = proveedor === "simpleapi";
   const activos = cafs.filter(c => c.estado === "activo");
   const totalDisponibles = activos.reduce((s, c) => s + Math.max(0, c.folio_hasta - c.folio_actual + 1), 0);
   const totalEmitidos = cafs.reduce((s, c) => s + Math.max(0, c.folio_actual - c.folio_desde), 0);
@@ -50,15 +52,65 @@ export default function CAFPanel({ cafs }: { cafs: CAFRow[] }) {
                 padding: "4px 10px", fontSize: 11, fontWeight: 700,
                 color: "#FBBF24",
               }}>
-                {activos.length} activos
+                {isSiiLocal ? "Automático por SII" : isSimpleApi ? "Bóveda local" : `${activos.length} activos`}
               </span>
             </div>
             <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
-              Administración automática de folios para documentos tributarios.
+              {isSiiLocal
+                ? "En SII local, e-Boleta/MiPyme asigna el folio real al finalizar la emisión."
+                : isSimpleApi
+                  ? "SimpleAPI usará CAF y certificado cifrados en este equipo cuando el proxy esté listo."
+                  : "Folios de prueba para simular emisión sin informar al SII."}
             </p>
           </div>
         </div>
 
+        {isSiiLocal ? (
+          <div style={{
+            display: "flex", alignItems: "flex-start", gap: 12,
+            borderRadius: 14,
+            border: "1px solid rgba(34,197,94,0.18)",
+            background: "rgba(34,197,94,0.08)",
+            padding: "16px 18px",
+          }}>
+            <div style={{ width: 24, height: 24, borderRadius: 8, display: "grid", placeItems: "center", background: "rgba(34,197,94,0.14)", color: "#22c55e", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#eaf0f8" }}>
+                No tienes que solicitar CAF aquí.
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.56)" }}>
+                Cuando emites desde el portal SII, el SII entrega el número de folio y el PDF oficial. App Contable sólo guarda ese folio y respaldo al terminar.
+              </div>
+            </div>
+          </div>
+        ) : isSimpleApi ? (
+          <div style={{
+            display: "flex", alignItems: "flex-start", gap: 12,
+            borderRadius: 14,
+            border: "1px solid rgba(96,165,250,0.20)",
+            background: "rgba(96,165,250,0.08)",
+            padding: "16px 18px",
+          }}>
+            <div style={{ width: 24, height: 24, borderRadius: 8, display: "grid", placeItems: "center", background: "rgba(96,165,250,0.14)", color: "#60a5fa", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v18" /><path d="M5 8h14" /><path d="M5 16h14" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#eaf0f8" }}>
+                CAF gestionado desde la extensión.
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.56)" }}>
+                Tus certificados y CAF quedan cifrados en este equipo. Durante una emisión SimpleAPI se transmiten temporalmente a App Contable para firmar y enviar el DTE. No los almacenamos en nuestros servidores.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
         <div style={{
           display: "flex", alignItems: "flex-start", gap: 12,
           borderRadius: 14,
@@ -71,7 +123,7 @@ export default function CAFPanel({ cafs }: { cafs: CAFRow[] }) {
             i
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(255,255,255,0.50)" }}>
-            El intermediario (mock) solicita CAFs al SII automáticamente cuando se agotan. No necesitás hacer nada — así funciona Haulmer real.
+            Estos folios son simulados para el modo de prueba. Sirven para validar el flujo sin emitir documentos reales.
           </div>
         </div>
 
@@ -100,6 +152,8 @@ export default function CAFPanel({ cafs }: { cafs: CAFRow[] }) {
             </div>
           ))}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 
-type TipoDte = 39 | 41;
+type TipoDte = 33 | 34 | 39 | 41;
 
 interface EmitirResponse {
   ok: boolean;
@@ -16,7 +16,7 @@ interface EmitirResponse {
   monto_total?: number;
   track_id?: string;
   estado?: string;
-  proveedor?: "mock" | "libredte" | "sii_local";
+  proveedor?: "mock" | "sii_local" | "simpleapi";
   sandbox?: boolean;
 }
 
@@ -76,6 +76,18 @@ interface ExtensionPageMessage {
     artifact_links?: { kind: string; href: string; text?: string }[];
     persisted?: { ok?: boolean; boleta_id?: string; already_exists?: boolean; error?: string; detalle?: string };
   };
+  ok?: boolean;
+  error?: string;
+  detalle?: string;
+  data?: unknown;
+  step?: string;
+  trackId?: number;
+  dte?: { folio?: number; tipoDte?: number; fecha?: string; total?: number };
+  pdf?: { base64?: string; content_type?: string; filename?: string } | null;
+  dteXml?: string | null;
+  envioXml?: string | null;
+  envio?: unknown;
+  consultaDte?: unknown;
 }
 
 interface LocalWorkerState {
@@ -90,6 +102,18 @@ function fmt(n: number): string {
 
 function parseAmount(value: string): number {
   return Number(value.replace(/[^0-9]/g, ""));
+}
+
+function errorFromUnknownData(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+  for (const key of ["detalle", "error", "message"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  const nested = record.data;
+  if (nested && typeof nested === "object") return errorFromUnknownData(nested);
+  return null;
 }
 
 function makeClientId(): string {
@@ -197,9 +221,9 @@ function draftHasContent(draft: BoletaDraft) {
   );
 }
 
-type EmisionProveedorUi = "mock" | "libredte" | "sii_local";
+type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
-export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; onClose?: (saved?: boolean) => void }) {
+export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   const tipoInicial: TipoDte = empresaTipo === "exento" ? 41 : 39;
@@ -236,12 +260,18 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const tipoEmpresa: TipoDte | null = isExento ? 41 : isAfecto ? 39 : null;
   const tipoDiferenteEmpresa = !!tipoEmpresa && tipoDte !== tipoEmpresa;
   const usesSiiLocal = emisionProveedor === "sii_local";
+  const usesSimpleApi = facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
   const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !emitiendo;
   const canOpenLocalWorker = canSubmit && !localWorkerLoading;
   const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : !canSubmit;
   const primaryLabel = usesSiiLocal
     ? localWorkerLoading ? "Abriendo..." : "Emitir en SII"
-    : emitiendo ? "Emitiendo..." : emisionProveedor === "libredte" ? "Enviar a LibreDTE" : "Emitir DTE";
+    : usesSimpleApi ? emitiendo ? "Generando..." : "Generar con SimpleAPI"
+      : emitiendo ? "Emitiendo..." : "Emitir DTE";
+  const isFactura = tipoDte === 33 || tipoDte === 34;
+  const documentKindLabel = isFactura ? "Factura" : "Boleta";
+  const typeLabel = tipoDte === 33 || tipoDte === 39 ? "Afecta" : "Exenta";
+  const typeColor = tipoDte === 33 || tipoDte === 39 ? "#E8553E" : "#5b9cf6";
 
   useEffect(() => {
     try {
@@ -278,7 +308,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }, [drafts, hydrated, nextDraftSeq, storageKey]);
 
   useEffect(() => {
-    if (total <= 0) {
+    if (total <= 0 || (tipoDte !== 39 && tipoDte !== 41)) {
       setDuplicateCandidates([]);
       setDuplicateLoading(false);
       return;
@@ -317,6 +347,53 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     });
   }, []);
 
+  const persistSimpleApiResult = useEffectEvent(async (data: ExtensionPageMessage) => {
+    setEmitiendo(true);
+    try {
+      const res = await fetch("/api/simpleapi/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          result: {
+            trackId: data.trackId,
+            dte: data.dte,
+            dteXml: data.dteXml,
+            envioXml: data.envioXml,
+            envio: data.envio,
+            consultaDte: data.consultaDte,
+            pdf: data.pdf,
+          },
+          draft: {
+            receptor_rut: receptorRut.trim() || null,
+            receptor_razon_social: receptorRazonSocial.trim() || null,
+            receptor_direccion: receptorDireccion.trim() || null,
+            receptor_comuna: receptorComuna.trim() || null,
+            detalle_nombre: detalleNombre.trim() || null,
+            monto_total: total,
+          },
+        }),
+      });
+      const json = (await res.json()) as EmitirResponse & { already_exists?: boolean };
+      if (!res.ok || !json.ok) {
+        const message = json.detalle ?? json.error ?? "DTE aceptado, pero no se pudo guardar en App Contable.";
+        setErrors([message]);
+        setLastResult({ ok: false, error: message, proveedor: "simpleapi", estado: "aceptado_sin_persistir", track_id: String(data.trackId ?? "--"), folio: data.dte?.folio, monto_total: data.dte?.total ?? total });
+        toast(message, "error");
+        return;
+      }
+      setLastResult({ ok: true, proveedor: "simpleapi", estado: json.estado ?? "aceptado", track_id: json.track_id, folio: json.folio, monto_total: json.monto_total ?? data.dte?.total ?? total });
+      toast(json.already_exists ? `DTE #${json.folio ?? "--"} ya estaba guardado.` : `DTE #${json.folio ?? "--"} emitido y guardado.`, "success");
+      router.refresh();
+    } catch {
+      const message = "DTE aceptado, pero fallo la persistencia en App Contable.";
+      setErrors([message]);
+      setLastResult({ ok: false, error: message, proveedor: "simpleapi", estado: "aceptado_sin_persistir", track_id: String(data.trackId ?? "--"), folio: data.dte?.folio, monto_total: data.dte?.total ?? total });
+      toast(message, "error");
+    } finally {
+      setEmitiendo(false);
+    }
+  });
+
   useEffect(() => {
     function onExtensionMessage(event: MessageEvent<ExtensionPageMessage>) {
       if (event.origin !== window.location.origin) return;
@@ -341,6 +418,20 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         return;
       }
 
+      if (data.type === "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR_RESULT") {
+        setEmitiendo(false);
+        if (data.ok === false) {
+          const message = data.error === "SIMPLEAPI_VAULT_LOCKED"
+            ? "Desbloquea la bóveda SimpleAPI en la extensión antes de generar."
+            : data.detalle ?? data.error ?? errorFromUnknownData(data.data) ?? `SimpleAPI se detuvo en ${data.step ?? "el flujo"}.`;
+          setErrors([message]);
+          toast(message, "error");
+          return;
+        }
+        void persistSimpleApiResult(data);
+        return;
+      }
+
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
 
       setLocalWorker({
@@ -353,7 +444,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
     window.addEventListener("message", onExtensionMessage);
     return () => window.removeEventListener("message", onExtensionMessage);
-  }, [router, toast]);
+  }, [router, toast, total]);
 
   function updateActiveDraft(patch: Partial<BoletaDraft>) {
     setDrafts((current) => current.map((draft) => draft.id === activeDraft.id ? { ...draft, ...patch, updatedAt: Date.now() } : draft));
@@ -435,8 +526,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       }
 
       setLastResult(json);
-      const providerLabel = json.proveedor === "libredte" ? "LibreDTE" : "mock";
-      toast(`DTE emitido: folio #${json.folio ?? "--"} por ${fmt(json.monto_total ?? total)} (${providerLabel})`);
+      if (json.proveedor === "mock") {
+        toast(`DTE simulado: folio #${json.folio ?? "--"} por ${fmt(json.monto_total ?? total)}. No se informó al SII.`);
+      } else {
+        toast(`DTE emitido: folio #${json.folio ?? "--"} por ${fmt(json.monto_total ?? total)} (SII local)`);
+      }
       setDrafts((current) => {
         if (current.length <= 1) {
           const draft = newDraftForOpenSlot(tipoInicial, [], nextDraftSeq);
@@ -455,6 +549,61 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     } finally {
       setEmitiendo(false);
     }
+  }
+
+  function buildSimpleApiInput() {
+    const neto = tipoDte === 33 ? Math.round(total / 1.19) : total;
+    const iva = tipoDte === 33 ? total - neto : 0;
+    return JSON.stringify({
+      Documento: {
+        Encabezado: {
+          IdentificacionDTE: {
+            TipoDTE: tipoDte,
+            FechaEmision: chileTodayString(),
+            FormaPago: 1,
+          },
+          Emisor: {
+            Rut: empresaRut || "",
+            RazonSocial: empresaRazonSocial || "RAZON SOCIAL",
+            Giro: empresaGiro || "GIRO",
+            DireccionOrigen: empresaDireccion || "DIRECCION",
+            ComunaOrigen: empresaComuna || "COMUNA",
+            Telefono: [],
+          },
+          Receptor: {
+            Rut: receptorRut.trim() || "66666666-6",
+            RazonSocial: receptorRazonSocial.trim() || "Cliente sin identificar",
+            Direccion: receptorDireccion.trim() || "Direccion receptor",
+            Comuna: receptorComuna.trim() || "Comuna receptor",
+            Giro: "Giro receptor",
+          },
+          Totales: tipoDte === 33
+            ? { MontoNeto: neto, TasaIVA: 19, IVA: iva, MontoTotal: total }
+            : { MontoExento: total, MontoTotal: total },
+        },
+        Detalles: [{
+          IndicadorExento: tipoDte === 34 ? 1 : 0,
+          Nombre: detalleNombre.trim(),
+          Cantidad: 1,
+          UnidadMedida: "un",
+          Precio: tipoDte === 33 ? neto : total,
+          MontoItem: tipoDte === 33 ? neto : total,
+        }],
+        Referencias: [],
+      },
+    });
+  }
+
+  function sendSimpleApiGenerar() {
+    setEmitiendo(true);
+    setErrors([]);
+    setLastResult(null);
+    window.postMessage({
+      source: "app-contable",
+      type: "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR",
+      protocol_version: 1,
+      input: buildSimpleApiInput(),
+    }, window.location.origin);
   }
 
   function sendLocalSiiJob() {
@@ -611,6 +760,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       openLocalSiiWorker();
       return;
     }
+    if (usesSimpleApi) {
+      if (extensionStatus !== "ready") {
+        toast("Instala o recarga la extensión App Contable Motor Local", "error");
+        return;
+      }
+      sendSimpleApiGenerar();
+      return;
+    }
     void handleEmitir();
   }
 
@@ -647,11 +804,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             <span className="ed-chip">Manual</span>
           </div>
           <h2 style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>Emisión Directa</h2>
-          <p style={{ fontSize: 10, color: "var(--text2)", marginTop: 1 }}>Emite una boleta manual cuando no viene desde una carga masiva.</p>
+          <p style={{ fontSize: 10, color: "var(--text2)", marginTop: 1 }}>Emite o genera un DTE manual cuando no viene desde una carga masiva.</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
           <span style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Tipo actual</span>
-          <strong style={{ fontSize: 12, color: tipoDte === 39 ? "#E8553E" : "#5b9cf6" }}>{tipoDte === 39 ? "Afecta" : "Exenta"}</strong>
+          <strong style={{ fontSize: 12, color: typeColor }}>{documentKindLabel} {typeLabel}</strong>
         </div>
       </div>
 
@@ -673,7 +830,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 boxShadow: active ? `-8px 10px 24px rgba(0,0,0,.24), inset 0 0 0 1px ${draftColor.border}` : undefined,
               }}
             >
-              <span>Boleta {draft.slot}</span>
+              <span>DTE {draft.slot}</span>
               {hasContent && <span style={{ width: 5, height: 5, borderRadius: 999, background: active ? draftColor.dot : "var(--text3)" }} />}
               {(drafts.length > 1 || hasContent) && (
                 <span className="ed-draft-close" onClick={(e) => { e.stopPropagation(); closeDraft(draft.id); }} aria-label="Cerrar boleta pendiente">×</span>
@@ -693,7 +850,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
                 <div>
                   <span className="ed-label">1. Tipo de documento</span>
-                  <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Bloqueado por empresa, desbloqueable para excepciones.</p>
+                <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Boletas por SII local; facturas 33/34 por SimpleAPI cuando esté configurado.</p>
                 </div>
                 {hasEmpresaLock && (
                   <button
@@ -718,6 +875,18 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   <div style={{ fontSize: 12, fontWeight: 800 }}>Boleta exenta</div>
                   <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 41 · Sin IVA</div>
                 </button>
+                {facturasProveedor === "simpleapi" && (
+                  <>
+                    <button className="ed-type-button" onClick={() => setTipo(33)} disabled={tipoLocked} style={{ borderColor: tipoDte === 33 ? "rgba(232,85,62,.45)" : "var(--border)", background: tipoDte === 33 ? "var(--accent-light)" : "var(--surface)", color: tipoDte === 33 ? "#E8553E" : "var(--text2)", opacity: tipoLocked && tipoDte !== 33 ? 0.45 : 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800 }}>Factura afecta</div>
+                      <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 33 · Generar con SimpleAPI</div>
+                    </button>
+                    <button className="ed-type-button" onClick={() => setTipo(34)} disabled={tipoLocked} style={{ borderColor: tipoDte === 34 ? "rgba(91,156,246,.45)" : "var(--border)", background: tipoDte === 34 ? "rgba(91,156,246,.12)" : "var(--surface)", color: tipoDte === 34 ? "#5b9cf6" : "var(--text2)", opacity: tipoLocked && tipoDte !== 34 ? 0.45 : 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800 }}>Factura exenta</div>
+                      <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 34 · Generar con SimpleAPI</div>
+                    </button>
+                  </>
+                )}
               </div>
 
               {tipoLocked && (
@@ -745,7 +914,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               </div>
               <div className="ed-grid-detail">
                 <Field label="Detalle" value={detalleNombre} onChange={(value) => updateActiveDraft({ detalleNombre: value })} placeholder="Servicio prestado" />
-                <Field label={tipoDte === 39 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
+                <Field label={tipoDte === 39 || tipoDte === 33 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
               </div>
             </section>
           </main>
@@ -756,8 +925,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               <div style={{ fontSize: 22, color: "var(--text)", fontWeight: 800, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em", marginTop: 6 }}>{fmt(total)}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 9, fontSize: 10, color: "var(--text2)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>Documento</span><strong style={{ color: "var(--text)" }}>DTE {tipoDte}</strong></div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>Tipo</span><strong style={{ color: tipoDte === 39 ? "#E8553E" : "#5b9cf6" }}>{tipoDte === 39 ? "Afecta" : "Exenta"}</strong></div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>IVA</span><strong style={{ color: "var(--text)" }}>{tipoDte === 39 ? "Incluido" : "No aplica"}</strong></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>Tipo</span><strong style={{ color: typeColor }}>{documentKindLabel} {typeLabel}</strong></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>IVA</span><strong style={{ color: "var(--text)" }}>{tipoDte === 39 || tipoDte === 33 ? "Incluido" : "No aplica"}</strong></div>
               </div>
             </div>
 
@@ -776,7 +945,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   <div style={{ fontSize: 9, color: "#ef4444", lineHeight: 1.35 }}>No encuentro la extensión local. Recárgala en Chrome y vuelve a intentar.</div>
                 )}
                 {total > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <summary style={{ cursor: "pointer", fontSize: 9, fontWeight: 800, color: "var(--text)" }}>
+                      Recuperar emision SII
+                    </summary>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 7 }}>
                     <button
                       type="button"
                       onClick={() => { void persistLatestSiiPdf(); }}
@@ -803,8 +976,15 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                         Guardar folio
                       </button>
                     </div>
-                  </div>
+                    </div>
+                  </details>
                 )}
+              </div>
+            )}
+
+            {usesSimpleApi && (
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(91,156,246,.08)", border: "1px solid rgba(91,156,246,.18)", color: "var(--text2)", fontSize: 9, lineHeight: 1.4 }}>
+                <span className="ed-label" style={{ color: "#93C5FD" }}>SimpleAPI</span><br />Emite con bóveda local desbloqueada. Se marca como emitido sólo si hay aceptación SII, PDF y guardado en App Contable.
               </div>
             )}
 
@@ -846,7 +1026,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
             {lastResult && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.18)", color: "#22c55e", fontSize: 10, lineHeight: 1.5 }}>
-                Emitido folio #{lastResult.folio ?? "--"}<br />Track {lastResult.track_id ?? "--"}
+                {lastResult.proveedor === "simpleapi" ? lastResult.ok ? "Emitido y guardado" : "Aceptado sin guardar" : lastResult.proveedor === "mock" ? "Simulado" : "Emitido"} folio #{lastResult.folio ?? "--"}<br />Track {lastResult.track_id ?? "--"}
+                {lastResult.proveedor === "mock" && <><br />Documento de prueba, sin validez tributaria real.</>}
+                {lastResult.proveedor === "simpleapi" && lastResult.ok && <><br />Aceptación SII, PDF oficial y respaldo guardados.</>}
+                {lastResult.proveedor === "simpleapi" && !lastResult.ok && <><br />No se marca como emitido en App Contable.</>}
               </div>
             )}
 

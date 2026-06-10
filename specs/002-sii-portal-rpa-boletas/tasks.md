@@ -1,7 +1,7 @@
 # Tasks
 
 - [x] Definir recomendacion estrategica: extension Chrome local antes que Electron o cloud RPA.
-- [x] Documentar modos: RPA local asistido, RPA local automatico beta y LibreDTE fallback.
+- [x] Documentar modos: RPA local asistido, RPA local automatico beta y modo de prueba.
 - [x] Registrar restricciones de seguridad: credenciales SII no salen del navegador/equipo del cliente.
 - [x] Definir limite de confianza entre app, extension local, Portal SII y Supabase.
 - [x] Documentar contrato inicial app-extension: handshake, job, estados, resultado, errores e idempotencia.
@@ -15,8 +15,9 @@
 - [x] Implementar overlay base `HUMAN_REQUIRED` y bloqueo `LOCKED_AUTOMATION`.
 - [x] Implementar escaneo interno solo lectura para pagina SII activa.
 - [x] Simplificar UI a una sola accion visible: `Continuar en SII`.
-- [x] Separar lineas de emision activas: `mock`, `libredte` y `sii_local`.
-- [x] Quitar BaseAPI de la UI activa y mapear legado `baseapi` a `libredte`.
+- [x] Separar lineas de emision activas: `mock` y `sii_local`.
+- [x] Quitar BaseAPI de la UI activa y conservarlo solo como compatibilidad historica.
+- [x] Eliminar LibreDTE como proveedor por riesgo/licencia AGPL.
 - [x] Mapear calculadora e-Boleta, cargar monto y disparar emision automatica desde la extension.
 - [x] Completar overlays `PAUSED` y `DONE` con acciones de reintento/cierre.
 - [x] Activar modo aprendizaje seguro `learn_only` para observar el flujo SII real sin presionar `EMITIR`.
@@ -40,4 +41,29 @@
 - [ ] Capturar folio/PDF/XML/HTML en una emision controlada.
 - [ ] Implementar verificacion posterior en consulta/historial SII.
 - [x] Persistir resultado en `boletas_emitidas` con proveedor `sii_local`.
-- [ ] Agregar LibreDTE como proveedor fallback real.
+- [x] Agregar migracion local para `usuarios.dev_mode` y proveedores separados por boletas/facturas.
+- [x] Actualizar configuracion Empresa para modo combinado: boletas `mock|sii_local|simpleapi`, facturas `mock|simpleapi`.
+- [x] Propagar proveedores separados al popup MassDTE, Folios CAF y Emision Directa.
+- [x] Elegir proveedor efectivo server-side por `tipo_dte` en emision directa y lote.
+- [x] Mantener `simpleapi` bloqueado con error explicito hasta implementar proxy efimero.
+- [x] Aplicar migracion `20260608202426_combined_emission_dev_mode.sql` en Supabase remoto via MCP.
+- [x] Implementar proxy SimpleAPI server-side `POST /api/simpleapi/dte/generar` con `SIMPLEAPI_API_KEY` solo backend.
+- [x] Endurecer proxy SimpleAPI: auth directa por `Authorization`, rate limit por empresa y sanitizacion de respuestas upstream.
+- [x] Separar extension en modulos SII local y SimpleAPI/boveda local.
+- [x] Agregar contrato inicial de estado para boveda SimpleAPI sin exponer secretos.
+- [x] Crear UI `options.html` de la extension como Motor Local con apartados SII Local y SimpleAPI.
+- [x] Crear popup de extension solo para estado y acceso a configuracion.
+- [x] Agregar mensaje `APP_CONTABLE_OPEN_EXTENSION_OPTIONS` para abrir configuracion local desde la app.
+- [x] Mostrar Motor Local conectado y estado de boveda SimpleAPI en configuracion de Empresa.
+- [x] Guardar boveda SimpleAPI cifrada localmente desde `options.html` con PFX, CAF, password y passphrase.
+- [x] Desbloquear boveda SimpleAPI temporalmente en memoria desde `options.html`.
+- [x] Agregar contrato `APP_CONTABLE_SIMPLEAPI_DTE_GENERAR` para que la extension llame al proxy con PFX/CAF temporales.
+- [x] Conectar Emision Directa/facturas al contrato `APP_CONTABLE_SIMPLEAPI_DTE_GENERAR` como generacion DTE, sin marcar emitido.
+- [x] Agregar proxies multipart server-side para ciclo SimpleAPI posterior: envio/generar, envio/enviar, consulta/envio, consulta/dte y PDF base64.
+- [x] Agregar contrato `APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART` allowlist para llamar esos proxies desde la extension.
+- [x] Orquestar ciclo SimpleAPI completo desde Emision Directa hasta PDF/evidencia, sin persistencia final.
+- [x] Crear persistencia de facturas emitidas SimpleAPI con PDF oficial y evidencia SII.
+- [x] Persistir avance de folio CAF SimpleAPI dentro de la boveda cifrada.
+- [x] Exigir aceptacion envio/DTE y XML coherente antes de guardar SimpleAPI como aceptado.
+- [x] Agregar escaneo Playwright de red SII e-Boleta con sanitizacion de requests/responses.
+- [x] Agregar boveda SII local cifrada para RUT/Clave Tributaria como base de autologin con fallback humano.

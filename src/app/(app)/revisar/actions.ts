@@ -52,6 +52,7 @@ export async function aprobarPropuesta(
   if (!count) return { error: "No se pudo actualizar — propuesta no encontrada o sin permisos" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -87,6 +88,7 @@ export async function descartarPropuesta(propuestaId: string) {
   if (!count) return { error: "No se pudo descartar" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -107,6 +109,7 @@ export async function ocultarPropuesta(propuestaId: string) {
   if (!count) return { error: "No se pudo ocultar" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -122,6 +125,7 @@ export async function restaurarPropuesta(propuestaId: string) {
   if (!count) return { error: "No se pudo restaurar" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -137,6 +141,7 @@ export async function rechazarPropuesta(propuestaId: string) {
   if (!count) return { error: "No se pudo rechazar" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -165,6 +170,7 @@ export async function editarPropuesta(
   if (!count) return { error: "No se pudo editar" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -208,6 +214,7 @@ export async function aprobarTodas(
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true, count: aprobadas };
 }
 
@@ -241,6 +248,7 @@ export async function devolverAOmitidos(propuestaId: string) {
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   revalidatePath("/subir");
   return { ok: true };
 }

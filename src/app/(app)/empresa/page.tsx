@@ -1,16 +1,23 @@
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import EmisorForm from "./EmisorForm";
-import CertificadoToggle from "./CertificadoToggle";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
 import AiKeyConfig from "./AiKeyConfig";
 import EmpresaFormatoCartola from "./EmpresaFormatoCartola";
 import EmissionProviderConfig from "./EmissionProviderConfig";
-import type { EmisionProveedor } from "./actions";
+import MiembrosPanel from "./MiembrosPanel";
+import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "./actions";
 
-function mapProveedor(raw: string | null | undefined): EmisionProveedor {
+function mapBoletasProveedor(raw: string | null | undefined): BoletasEmisionProveedor {
   if (raw === "sii_local") return "sii_local";
-  if (raw === "libredte" || raw === "baseapi") return "libredte";
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+function mapFacturasProveedor(raw: string | null | undefined): FacturasEmisionProveedor {
+  if (raw === "simpleapi") return "simpleapi";
   return "mock";
 }
 
@@ -19,11 +26,27 @@ export default async function EmpresaPage() {
   const empresa = usuario.empresas;
 
   const supabase = await createClient();
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const admin = serviceUrl && serviceKey
+    ? createServiceClient<Database>(serviceUrl, serviceKey)
+    : supabase;
   const { data: cafs } = await supabase
     .from("boletas_caf_mock")
     .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
     .eq("empresa_id", empresa.id)
     .order("fecha_solicitud", { ascending: false });
+  const { data: miembros } = await admin
+    .from("usuarios")
+    .select("id, email, nombre, rol")
+    .eq("empresa_id", empresa.id)
+    .order("created_at", { ascending: true });
+  const { data: invitaciones } = await admin
+    .from("empresa_invitaciones")
+    .select("id, email, rol, estado, expires_at")
+    .eq("empresa_id", empresa.id)
+    .eq("estado", "pendiente")
+    .order("created_at", { ascending: false });
 
   const inicial = {
     rut: empresa.rut,
@@ -34,6 +57,9 @@ export default async function EmpresaPage() {
     email_sii: empresa.email_sii,
     tipo_contribuyente: empresa.tipo_contribuyente ?? "auto",
   };
+  const boletasProveedor = mapBoletasProveedor(empresa.boletas_emision_proveedor ?? empresa.emision_proveedor);
+  const facturasProveedor = mapFacturasProveedor(empresa.facturas_emision_proveedor);
+  const devMode = usuario.dev_mode === true;
 
   return (
     <main className="max-w-lg mx-auto px-4 py-6 pb-24 space-y-6">
@@ -50,11 +76,6 @@ export default async function EmpresaPage() {
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold mb-2">Certificado digital SII</h2>
-        <CertificadoToggle inicial={empresa.tiene_certificado_sii} />
-      </section>
-
-      <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-sm font-semibold">Formatos de cartola</h2>
           <span className="text-xs text-[#888] dark:text-white/60">Subí 1 ejemplo y mapeá</span>
@@ -65,15 +86,17 @@ export default async function EmpresaPage() {
       <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-sm font-semibold">Folios CAF</h2>
-          <span className="text-xs text-[#888] dark:text-white/60">Gestión automática</span>
+          <span className="text-xs text-[#888] dark:text-white/60">{boletasProveedor === "sii_local" ? "Automático en SII" : boletasProveedor === "simpleapi" ? "SimpleAPI" : "Modo de prueba"}</span>
         </div>
-        <CAFPanel cafs={(cafs ?? []) as CAFRow[]} />
+        <CAFPanel cafs={(cafs ?? []) as CAFRow[]} proveedor={boletasProveedor} />
       </section>
 
       <EmissionProviderConfig
-        inicial={{ proveedor: mapProveedor(empresa.emision_proveedor), baseapiSandbox: false }}
-        libredteConfigured={Boolean(process.env.LIBREDTE_HASH || process.env.LIBREDTE_API_KEY)}
+        inicial={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}
+        devMode={devMode}
       />
+
+      <MiembrosPanel miembros={miembros ?? []} invitaciones={invitaciones ?? []} />
 
       <AiKeyConfig />
     </main>

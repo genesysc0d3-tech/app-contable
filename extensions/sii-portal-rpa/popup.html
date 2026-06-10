@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>App Contable Motor Local</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <section class="status" id="status">
+        <div class="modulo">
+          <span class="dot dot-green" id="sii-dot"></span>
+          <div class="modulo-body">
+            <strong>SII Local</strong>
+            <span id="sii-text">Disponible</span>
+            <small id="sii-detail">Leyendo bóveda SII.</small>
+          </div>
+        </div>
+        <div class="modulo">
+          <span class="dot dot-green" id="simpleapi-dot"></span>
+          <div class="modulo-body">
+            <strong>SimpleAPI</strong>
+            <span id="simpleapi-text">Comprobando...</span>
+            <small id="simpleapi-detail">Leyendo estado local.</small>
+          </div>
+        </div>
+      </section>
+      <button type="button" id="open-options">Abrir configuracion</button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

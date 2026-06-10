@@ -526,12 +526,14 @@ export type Database = {
       empresas: {
         Row: {
           clave_sii: string | null
+          boletas_emision_proveedor: string
           comuna: string | null
           created_at: string
           direccion: string | null
           email_sii: string | null
           emision_baseapi_sandbox: boolean
           emision_proveedor: string
+          facturas_emision_proveedor: string
           giro: string | null
           id: string
           logo_mime_type: string | null
@@ -548,12 +550,14 @@ export type Database = {
         }
         Insert: {
           clave_sii?: string | null
+          boletas_emision_proveedor?: string
           comuna?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
           logo_mime_type?: string | null
@@ -570,12 +574,14 @@ export type Database = {
         }
         Update: {
           clave_sii?: string | null
+          boletas_emision_proveedor?: string
           comuna?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
           logo_mime_type?: string | null
@@ -1104,6 +1110,7 @@ export type Database = {
       usuarios: {
         Row: {
           created_at: string
+          dev_mode: boolean
           email: string
           empresa_id: string
           id: string
@@ -1113,6 +1120,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dev_mode?: boolean
           email: string
           empresa_id: string
           id: string
@@ -1122,6 +1130,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dev_mode?: boolean
           email?: string
           empresa_id?: string
           id?: string
@@ -1135,6 +1144,70 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      empresa_invitaciones: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          empresa_id: string
+          estado: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          rol: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          empresa_id: string
+          estado?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          rol?: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          empresa_id?: string
+          estado?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          rol?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_invitaciones_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_invitaciones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_invitaciones_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]

@@ -226,6 +226,114 @@
     return String(value || "").replace(/\s+/g, " ").trim().toUpperCase();
   }
 
+  function normalizeSearchText(value) {
+    return normalizeText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function isVisibleEnabled(element) {
+    if (!(element instanceof HTMLElement)) return false;
+    if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+    if (element instanceof HTMLInputElement || element instanceof HTMLButtonElement || element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement) {
+      if (element.disabled || element.readOnly) return false;
+      if (element.type === "hidden") return false;
+    }
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && styles.visibility !== "hidden" && styles.display !== "none";
+  }
+
+  function controlText(control) {
+    return normalizeSearchText([
+      control.id,
+      control.getAttribute("name"),
+      control.getAttribute("autocomplete"),
+      control.getAttribute("aria-label"),
+      control.getAttribute("placeholder"),
+      labelFor(control),
+    ].filter(Boolean).join(" "));
+  }
+
+  function setControlValue(control, value) {
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value");
+    automationClickInProgress = true;
+    try {
+      if (descriptor?.set) descriptor.set.call(control, value);
+      else control.value = value;
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+    } finally {
+      automationClickInProgress = false;
+    }
+  }
+
+  function findRutInput() {
+    const inputs = Array.from(document.querySelectorAll("input"))
+      .filter((input) => input instanceof HTMLInputElement && isVisibleEnabled(input));
+    return inputs.find((input) => /\bRUT\b|RUTCNTR|ROL|USUARIO|USERNAME|USER|CODIGO/.test(controlText(input)))
+      || inputs.find((input) => input.type === "text" || input.type === "tel" || input.inputMode === "numeric")
+      || null;
+  }
+
+  function findPasswordInput() {
+    const inputs = Array.from(document.querySelectorAll("input"))
+      .filter((input) => input instanceof HTMLInputElement && isVisibleEnabled(input));
+    return inputs.find((input) => input.type === "password")
+      || inputs.find((input) => /CLAVE|PASS|PASSWORD|CONTRASENA|CONTRASEÑA/.test(controlText(input)))
+      || null;
+  }
+
+  function hasHumanChallenge() {
+    const text = normalizeSearchText(pageText());
+    return /CAPTCHA|RECAPTCHA|CODIGO DE SEGURIDAD|2FA|DOBLE FACTOR|VERIFICACION|AUTENTICADOR|TOKEN|CAMBIO DE CLAVE|ACTUALIZA TU CLAVE/.test(text);
+  }
+
+  function findLoginSubmit() {
+    const candidates = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"))
+      .filter((element) => element instanceof HTMLElement && isVisibleEnabled(element));
+    const exact = candidates.find((element) => /^(INGRESAR|INICIAR SESION|INICIAR SESSION|ENTRAR|ACCEDER)$/.test(normalizeSearchText(visibleText(element) || element.getAttribute("value") || element.getAttribute("title"))));
+    if (exact) return exact;
+    return candidates.find((element) => /INGRESAR|INICIAR SESION|ENTRAR|ACCEDER/.test(normalizeSearchText(visibleText(element) || element.getAttribute("value") || element.getAttribute("title")))) || null;
+  }
+
+  async function attemptAutologin(credentials) {
+    if (hasHumanChallenge()) {
+      throw new Error("SII requiere captcha, 2FA, token o cambio de clave. Inicia sesión manualmente en esta ventana.");
+    }
+
+    const rutInput = findRutInput();
+    const passwordInput = findPasswordInput();
+    if (!rutInput || !passwordInput) {
+      throw new Error("No encontré un formulario de login SII compatible. Inicia sesión manualmente en esta ventana.");
+    }
+
+    renderOverlay("LOCKED_AUTOMATION", "Completando login SII con la bóveda local desbloqueada.");
+    setControlValue(rutInput, credentials.rut);
+    setControlValue(passwordInput, credentials.clave);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    if (hasHumanChallenge()) {
+      throw new Error("SII mostró una verificación humana. Inicia sesión manualmente en esta ventana.");
+    }
+
+    const submit = findLoginSubmit();
+    if (submit) {
+      await clickElement(submit);
+    } else {
+      const form = passwordInput.form || rutInput.form;
+      if (!form) throw new Error("No encontré botón o formulario para enviar login SII.");
+      automationClickInProgress = true;
+      try {
+        if (typeof form.requestSubmit === "function") form.requestSubmit();
+        else form.submit();
+      } finally {
+        automationClickInProgress = false;
+      }
+    }
+
+    renderOverlay("LOCKED_AUTOMATION", "Login SII enviado. Esperando respuesta del portal.");
+    return true;
+  }
+
   function visibleBoxForText(text, root = document) {
     const wanted = normalizeText(text);
     const elements = Array.from(root.querySelectorAll("button, .v-input__slot, .v-select__slot, .v-list-item, [role='button'], div"));
@@ -566,6 +674,15 @@
       fillAndEmit(message.job)
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return true;
+    }
+    if (message.type === "APP_CONTABLE_SII_ATTEMPT_AUTOLOGIN") {
+      attemptAutologin(message.credentials || {})
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => {
+          renderOverlay("HUMAN_REQUIRED", error instanceof Error ? error.message : String(error));
+          sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
+        });
       return true;
     }
     if (message.type === "APP_CONTABLE_SII_CAPTURE_RESULT") {

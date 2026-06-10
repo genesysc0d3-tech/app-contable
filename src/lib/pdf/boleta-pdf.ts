@@ -3,7 +3,7 @@
  * Replica el layout típico que imprime un software facturador chileno:
  * encabezado del emisor, cuadro folio+tipo, receptor (si aplica), detalle,
  * totales, y datos de trazabilidad. Para documentos mock imprime el TED local;
- * para documentos BaseAPI evita mostrar timbres simulados como si fueran reales.
+ * para documentos de proveedores legados evita mostrar timbres simulados como reales.
  */
 
 export interface BoletaPDFData {
@@ -78,7 +78,7 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   doc.text(`N° ${b.folio}`, cuadroX + cuadroW / 2, cuadroY + 17, { align: "center" });
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.text(isBaseApi ? "S.I.I. — SANTIAGO" : "S.I.I. — SANTIAGO (MOCK)", cuadroX + cuadroW / 2, cuadroY + 22, { align: "center" });
+  doc.text(isBaseApi ? "S.I.I. — SANTIAGO" : "DOCUMENTO SIMULADO", cuadroX + cuadroW / 2, cuadroY + 22, { align: "center" });
   doc.setTextColor(0, 0, 0);
 
   y = Math.max(y, cuadroY + cuadroH + 4);
@@ -146,15 +146,15 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.text(isBaseApi ? "Emisión vía BaseAPI" : "Timbre Electrónico SII (mock)", margin, y);
+   doc.text(isBaseApi ? "Emision via proveedor legado" : "Timbre simulado para pruebas", margin, y);
   y += 3;
   if (isBaseApi) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.text(
       b.emision_sandbox
-        ? "Documento emitido usando BaseAPI en modo sandbox."
-        : "Documento emitido usando BaseAPI. Verifique el folio y estado en el SII.",
+        ? "Documento emitido usando proveedor legado en modo sandbox."
+        : "Documento emitido por proveedor legado. Verifique el respaldo tributario real antes de usarlo.",
       margin,
       y,
     );
@@ -171,15 +171,20 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   y += 2;
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7);
-  doc.text(`Track ID: ${b.track_id}   ·   Estado SII: ${b.estado.toUpperCase()}`, margin, y);
+  doc.text(isBaseApi
+    ? `Track ID: ${b.track_id}   ·   Estado proveedor: ${b.estado.toUpperCase()}`
+    : `Track ID: ${b.track_id}   ·   Estado: SIMULADO (demo)`,
+    margin,
+    y,
+  );
   y += 3;
   doc.setFontSize(6);
   doc.setTextColor(120, 120, 120);
   doc.text(isBaseApi
     ? (b.emision_sandbox
-      ? "Documento sandbox de BaseAPI. No usar como respaldo tributario real."
-      : "Verifique documento en www.sii.cl.")
-    : "Verifique documento en www.sii.cl — DOCUMENTO DE PRUEBA, no tiene validez tributaria real.",
+      ? "Documento sandbox de proveedor legado. No usar como respaldo tributario real."
+      : "Documento proveedor legado. Use solo si cuenta con respaldo tributario real externo.")
+    : "DOCUMENTO DE PRUEBA — simulado, no informado al SII y sin validez tributaria real.",
     margin,
     y,
   );

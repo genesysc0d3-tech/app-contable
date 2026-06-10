@@ -22,6 +22,9 @@ export async function GET(
 
   const { empresaId } = await params;
   const resolvedEmpresaId = empresaId === "current" ? usuario.empresa_id : empresaId;
+  if (resolvedEmpresaId !== usuario.empresa_id) {
+    return new NextResponse("No autorizado", { status: 403 });
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -144,6 +144,13 @@ export async function GET() {
             ? "Monto inválido"
             : "Falta RUT y razón social del receptor (monto > $180.000)"
         : null;
+      const motivo_code = !listo_emitir
+        ? !esEmitible
+          ? "no_boletar"
+          : total <= 0
+            ? "monto_invalido"
+            : "falta_receptor"
+        : null;
 
       return {
         id: p.id,
@@ -154,6 +161,7 @@ export async function GET() {
         monto_total: total,
         listo_emitir,
         motivo_no_listo,
+        motivo_code,
         tipo_sugerido: clasif.tipo_dte,
         sugerencia: clasif.sugerencia,
         confianza_clasif: Math.round(clasif.confianza * 100) / 100,

@@ -4,6 +4,11 @@
   "description": "Worker local visible para emitir boletas en Portal SII/MiPyme y devolver respaldo a App Contable.",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
+  "options_page": "options.html",
+  "action": {
+    "default_title": "App Contable Motor Local",
+    "default_popup": "popup.html"
+  },
   "permissions": ["tabs", "scripting", "storage"],
   "host_permissions": [
     "https://www.sii.cl/*",
@@ -14,7 +19,8 @@
     "http://127.0.0.1/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "content_scripts": [
     {

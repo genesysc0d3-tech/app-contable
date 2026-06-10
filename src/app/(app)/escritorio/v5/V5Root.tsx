@@ -1,23 +1,40 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Component, useState, useCallback, useRef, useEffect, type ErrorInfo, type ReactNode } from "react";
 import EmpresaPopup from "./EmpresaPopup";
 import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 import type { EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 
-const TOP_TABS = [
-  { id: "dashboard", label: "Dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
-  { id: "subidos", label: "Subidos", icon: "M12 5v14m-7-7l7-7 7 7" },
-  { id: "revisar", label: "Revisar", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-  { id: "emitir", label: "Emitir", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  { id: "boletas", label: "Boletas", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-];
+class TabErrorBoundary extends Component<{ children: ReactNode; label: string }, { error: string | null }> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message || "Error inesperado" };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[massdte-tab-error]", this.props.label, error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: 360, display: "grid", placeItems: "center", padding: 24, color: "var(--text2)", textAlign: "center" }}>
+          <div style={{ maxWidth: 320 }}>
+            <div style={{ fontSize: 15, fontWeight: 850, color: "var(--text)", letterSpacing: "-.025em" }}>No se pudo cargar {this.props.label}</div>
+            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.45 }}>{this.state.error}</div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function V5Root({
-  dashboardContent, subidosContent, revisarContent, emitirContent, boletasContent,
-  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId, empresaEmisionConfig, libredteConfigured,
+  dashboardContent,
+  empresaInicial, empresaCafs, empresaId, empresaEmisionConfig, devMode = false,
 }: {
   dashboardContent: React.ReactNode;
   subidosContent: React.ReactNode;
@@ -25,55 +42,14 @@ export default function V5Root({
   emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
   empresaInicial: DatosEmisor;
-  empresaTieneCertificado: boolean;
   empresaCafs: CAFRow[];
   empresaId: string;
   empresaEmisionConfig: EmissionProviderState;
-  libredteConfigured: boolean;
+  devMode?: boolean;
 }) {
-  const [tab, setTab] = useState("dashboard");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const [helpStepsEnabled, setHelpStepsEnabled] = useState(true);
   const [savedPulse, setSavedPulse] = useState<{ id: number; label: string } | null>(null);
-  const router = useRouter();
-  const barRef = useRef<HTMLDivElement>(null);
-  const indicatorRef = useRef<HTMLDivElement>(null);
-  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const mountedRef = useRef(false);
-
-  const moveIndicator = useCallback(() => {
-    const idx = TOP_TABS.findIndex(t => t.id === tab);
-    const btn = btnRefs.current[idx];
-    const bar = barRef.current;
-    const indicator = indicatorRef.current;
-    if (!btn || !bar || !indicator) return;
-    const barRect = bar.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    indicator.style.left = (btnRect.left - barRect.left) + "px";
-    indicator.style.width = btnRect.width + "px";
-  }, [tab]);
-
-  // Position indicator on mount and tab change
-  useEffect(() => { moveIndicator(); }, [moveIndicator]);
-
-  // Enable transition only after first paint to avoid FOUC animation
-  useEffect(() => {
-    const indicator = indicatorRef.current;
-    if (!indicator) return;
-    mountedRef.current = true;
-    // Small RAF delay ensures the indicator has been positioned at (0,0)
-    requestAnimationFrame(() => {
-      indicator.style.transition = "left .35s cubic-bezier(.22,1,.36,1), width .35s cubic-bezier(.22,1,.36,1)";
-      moveIndicator();
-    });
-  }, [moveIndicator]);
-
-  // Resize handler
-  useEffect(() => {
-    window.addEventListener("resize", moveIndicator);
-    return () => window.removeEventListener("resize", moveIndicator);
-  }, [moveIndicator]);
 
   useEffect(() => {
     const h = () => setEmpresaOpen(v => !v);
@@ -97,34 +73,15 @@ export default function V5Root({
 
   useEffect(() => {
     const saved = window.localStorage.getItem("v5-help-steps");
-    if (saved === "off") setHelpStepsEnabled(false);
+    if (saved === "off") {
+      window.requestAnimationFrame(() => setHelpStepsEnabled(false));
+    }
   }, []);
 
   const updateHelpSteps = useCallback((enabled: boolean) => {
     setHelpStepsEnabled(enabled);
     window.localStorage.setItem("v5-help-steps", enabled ? "on" : "off");
   }, []);
-
-  const toggleTheme = useCallback((e: React.MouseEvent) => {
-    const btn = e.currentTarget;
-    const rect = btn.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const next = theme === "dark" ? "light" : "dark";
-
-    const apply = () => {
-      setTheme(next);
-      document.documentElement.dataset.theme = next;
-    };
-
-    if (typeof document !== "undefined" && "startViewTransition" in document) {
-      document.documentElement.style.setProperty("--click-x", cx + "px");
-      document.documentElement.style.setProperty("--click-y", cy + "px");
-      (document as any).startViewTransition(apply);
-    } else {
-      apply();
-    }
-  }, [theme, moveIndicator]);
 
   return (
     <>
@@ -141,13 +98,10 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 @keyframes saved-ring{0%{transform:scale(.45);opacity:.9}100%{transform:scale(1.9);opacity:0}}
 `}</style>
 
-        <div className="root-noise" style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
-        {/* TAB CONTENT */}
-        {tab === "dashboard" && <div>{dashboardContent}</div>}
-        {tab === "subidos" && <div style={{ padding: "20px 24px 24px" }}>{subidosContent}</div>}
-        {tab === "revisar" && <div style={{ padding: "20px 24px 24px" }}>{revisarContent}</div>}
-        {tab === "emitir" && <div style={{ padding: "20px 24px 24px" }}>{emitirContent}</div>}
-        {tab === "boletas" && <div style={{ padding: "20px 24px 24px" }}>{boletasContent}</div>}
+      <div className="root-noise" style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
+        <TabErrorBoundary label="Dashboard">
+          <div>{dashboardContent}</div>
+        </TabErrorBoundary>
       </div>
 
       {helpStepsEnabled && <DashboardHelpHarness onDisable={() => updateHelpSteps(false)} />}
@@ -157,11 +111,10 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
       {empresaOpen && (
         <EmpresaPopup
           inicial={empresaInicial}
-          tieneCertificado={empresaTieneCertificado}
           cafs={empresaCafs}
           empresaId={empresaId}
           emisionConfig={empresaEmisionConfig}
-          libredteConfigured={libredteConfigured}
+          devMode={devMode}
           helpStepsEnabled={helpStepsEnabled}
           onHelpStepsChange={updateHelpSteps}
           onClose={() => setEmpresaOpen(false)}

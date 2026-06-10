@@ -16,6 +16,10 @@ const CLEAR_BEFORE_AMOUNT = process.env.SII_EXPLORER_CLEAR_BEFORE_AMOUNT === "1"
 const SNAPSHOT_ONLY = process.env.SII_EXPLORER_SNAPSHOT_ONLY === "1";
 const OPEN_FORM_SELECTS = process.env.SII_EXPLORER_OPEN_FORM_SELECTS === "1";
 const PROBE_FORM_SECTIONS = process.env.SII_EXPLORER_PROBE_FORM_SECTIONS === "1";
+const NETWORK_SCAN = process.env.SII_EXPLORER_NETWORK_SCAN === "1";
+const NETWORK_RESPONSE_BODY = process.env.SII_EXPLORER_NETWORK_RESPONSE_BODY === "1";
+const MAX_CAPTURED_BODY_CHARS = Number(process.env.SII_EXPLORER_MAX_BODY_CHARS || 6000);
+const MAX_CAPTURED_RESPONSE_BYTES = Number(process.env.SII_EXPLORER_MAX_RESPONSE_BYTES || 200000);
 
 const DANGEROUS_TEXT = [
   "EMITIR",
@@ -65,8 +69,35 @@ function sanitize(value) {
   return normalizeText(value)
     .replace(/[0-9]{1,2}\.?[0-9]{3}\.?[0-9]{3}-[0-9Kk]/g, "[RUT]")
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[EMAIL]")
-    .replace(/([?&](?:code|state|token|access_token|id_token)=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/([?&](?:code|state|token|access_token|id_token|csrf|sid|session)=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/("(?:code|state|token|access_token|id_token|csrf|password|clave|secret|authorization|cookie)"\s*:\s*")[^"]+/gi, "$1[REDACTED]")
     .slice(0, 2000);
+}
+
+function sanitizeBody(value) {
+  return sanitize(String(value || "").slice(0, MAX_CAPTURED_BODY_CHARS));
+}
+
+function sanitizeHeaders(headers) {
+  const safe = {};
+  const blocked = /authorization|cookie|set-cookie|x-csrf|csrf|token|secret|password|clave/i;
+  for (const [key, value] of Object.entries(headers || {})) {
+    safe[key] = blocked.test(key) ? "[REDACTED]" : sanitize(String(value));
+  }
+  return safe;
+}
+
+function isAllowedNetworkUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl, START_URL);
+    return url.protocol === "https:" && (/(^|\.)sii\.cl$/.test(url.hostname) || url.hostname === "eboleta.s3.amazonaws.com");
+  } catch {
+    return false;
+  }
+}
+
+function shouldCaptureResource(type) {
+  return ["document", "xhr", "fetch", "script"].includes(type);
 }
 
 function isAllowedUrl(rawUrl) {
@@ -278,6 +309,7 @@ async function clickInDialogByText(page, text) {
     const partial = exact || candidates.find((element) => normalize(element.innerText || element.textContent || element.getAttribute("value")).includes(normalize(wanted)));
     if (!partial) return null;
     const rect = partial.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
     return { x: rect.left + Math.min(rect.width / 2, Math.max(12, rect.width - 12)), y: rect.top + rect.height / 2 };
   }, text);
   if (!box) return false;
@@ -373,6 +405,96 @@ function toMarkdown(maps) {
   return `${lines.join("\n")}\n`;
 }
 
+function networkToMarkdown(events) {
+  const lines = ["# SII e-Boleta Network Exploration", "", `Generated: ${new Date().toISOString()}`, ""];
+  for (const event of events) {
+    lines.push(`## ${event.method || "GET"} ${event.url}`);
+    lines.push("");
+    lines.push(`- Type: ${event.resource_type || "unknown"}`);
+    lines.push(`- Status: ${event.status ?? "pending"}`);
+    lines.push(`- Request body: ${event.request_body ? "captured" : "none"}`);
+    lines.push(`- Response body: ${event.response_body ? "captured" : "not captured"}`);
+    if (event.request_body) {
+      lines.push("", "Request body excerpt:", "", "```txt", event.request_body, "```");
+    }
+    if (event.response_body) {
+      lines.push("", "Response body excerpt:", "", "```txt", event.response_body, "```");
+    }
+    lines.push("");
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function attachNetworkCapture(page, networkEvents) {
+  if (!NETWORK_SCAN) return;
+  const requestIds = new WeakMap();
+  let seq = 0;
+
+  page.on("request", (request) => {
+    if (!isAllowedNetworkUrl(request.url()) || !shouldCaptureResource(request.resourceType())) return;
+    const id = `${Date.now()}-${seq += 1}`;
+    requestIds.set(request, id);
+    networkEvents.push({
+      id,
+      captured_at: new Date().toISOString(),
+      phase: "request",
+      url: sanitize(request.url()),
+      method: request.method(),
+      resource_type: request.resourceType(),
+      headers: sanitizeHeaders(request.headers()),
+      request_body: request.postData() ? sanitizeBody(request.postData()) : null,
+      status: null,
+      response_headers: null,
+      response_body: null,
+    });
+  });
+
+  page.on("response", async (response) => {
+    const request = response.request();
+    const id = requestIds.get(request);
+    if (!id) return;
+    const event = networkEvents.find((item) => item.id === id);
+    if (!event) return;
+    event.status = response.status();
+    event.response_headers = sanitizeHeaders(response.headers());
+
+    const contentType = response.headers()["content-type"] || "";
+    const contentLength = Number(response.headers()["content-length"] || 0);
+    const canCaptureBody = NETWORK_RESPONSE_BODY && /json|text|xml|javascript|html/i.test(contentType) && (!contentLength || contentLength <= MAX_CAPTURED_RESPONSE_BYTES);
+    if (!canCaptureBody) return;
+    try {
+      event.response_body = sanitizeBody(await response.text());
+    } catch {
+      event.response_body = "[UNREADABLE_RESPONSE_BODY]";
+    }
+  });
+}
+
+async function writeExplorationArtifacts(outDir, payload, maps, networkEvents) {
+  const jsonPath = path.join(outDir, "site-map.json");
+  const mdPath = path.join(outDir, "site-map.md");
+  await writeFile(jsonPath, JSON.stringify({ ...payload, maps }, null, 2));
+  await writeFile(mdPath, toMarkdown(maps));
+
+  if (NETWORK_SCAN) {
+    const networkJsonPath = path.join(outDir, "network-map.json");
+    const networkMdPath = path.join(outDir, "network-map.md");
+    await writeFile(networkJsonPath, JSON.stringify({ ...payload, network_events: networkEvents }, null, 2));
+    await writeFile(networkMdPath, networkToMarkdown(networkEvents));
+    return { jsonPath, mdPath, networkJsonPath, networkMdPath };
+  }
+
+  return { jsonPath, mdPath, networkJsonPath: null, networkMdPath: null };
+}
+
+function logArtifacts(label, artifacts) {
+  const lines = [`${label}:`, `- ${artifacts.jsonPath}`, `- ${artifacts.mdPath}`];
+  if (artifacts.networkJsonPath && artifacts.networkMdPath) {
+    lines.push(`- ${artifacts.networkJsonPath}`, `- ${artifacts.networkMdPath}`);
+  }
+  console.log(lines.join("\n"));
+}
+
 async function main() {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = path.join(ARTIFACT_ROOT, runId);
@@ -386,8 +508,10 @@ async function main() {
   page.setDefaultTimeout(3500);
 
   const maps = [];
+  const networkEvents = [];
   const queue = [START_URL];
   const visited = new Set();
+  attachNetworkCapture(page, networkEvents);
 
   await page.goto(START_URL, { waitUntil: "domcontentloaded" });
   await waitForEboletaReady(page);
@@ -395,11 +519,8 @@ async function main() {
   if (SNAPSHOT_ONLY) {
     const map = sanitizeMap(await snapshot(page, "current-page"));
     maps.push(map);
-    const jsonPath = path.join(outDir, "site-map.json");
-    const mdPath = path.join(outDir, "site-map.md");
-    await writeFile(jsonPath, JSON.stringify({ start_url: START_URL, mode: "snapshot_only", maps }, null, 2));
-    await writeFile(mdPath, toMarkdown(maps));
-    console.log(`SII snapshot saved:\n- ${jsonPath}\n- ${mdPath}`);
+    const artifacts = await writeExplorationArtifacts(outDir, { start_url: START_URL, mode: "snapshot_only", network_scan: NETWORK_SCAN }, maps, networkEvents);
+    logArtifacts("SII snapshot saved", artifacts);
     await context.close();
     return;
   }
@@ -434,12 +555,15 @@ async function main() {
       }
     }
 
-    const jsonPath = path.join(outDir, "site-map.json");
-    const mdPath = path.join(outDir, "site-map.md");
-    await writeFile(jsonPath, JSON.stringify({ start_url: START_URL, mode: "amount_only", amount: AMOUNT_TO_ENTER, clicked_calculator_emitir: CLICK_CALCULATOR_EMITIR, maps }, null, 2));
-    await writeFile(mdPath, toMarkdown(maps));
+    const artifacts = await writeExplorationArtifacts(outDir, {
+      start_url: START_URL,
+      mode: "amount_only",
+      amount: AMOUNT_TO_ENTER,
+      clicked_calculator_emitir: CLICK_CALCULATOR_EMITIR,
+      network_scan: NETWORK_SCAN,
+    }, maps, networkEvents);
 
-    console.log(`SII amount inspection saved:\n- ${jsonPath}\n- ${mdPath}`);
+    logArtifacts("SII amount inspection saved", artifacts);
     await context.close();
     return;
   }
@@ -476,12 +600,9 @@ async function main() {
     maps.push(sanitizeMap(await snapshot(page, `menu-${label}`)));
   }
 
-  const jsonPath = path.join(outDir, "site-map.json");
-  const mdPath = path.join(outDir, "site-map.md");
-  await writeFile(jsonPath, JSON.stringify({ start_url: START_URL, maps }, null, 2));
-  await writeFile(mdPath, toMarkdown(maps));
+  const artifacts = await writeExplorationArtifacts(outDir, { start_url: START_URL, network_scan: NETWORK_SCAN }, maps, networkEvents);
 
-  console.log(`SII exploration saved:\n- ${jsonPath}\n- ${mdPath}`);
+  logArtifacts("SII exploration saved", artifacts);
   await context.close();
 }
 

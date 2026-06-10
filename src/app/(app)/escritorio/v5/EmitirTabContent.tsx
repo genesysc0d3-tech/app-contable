@@ -13,6 +13,7 @@ interface Item {
   monto_total: number;
   listo_emitir: boolean;
   motivo_no_listo: string | null;
+  motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null;
   tipo_sugerido: number | null;
   sugerencia: string | null;
   confianza_clasif: number;
@@ -36,6 +37,12 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
+function providerLabel(proveedor: string | null | undefined): string {
+  if (proveedor === "sii_local") return "SII local";
+  if (proveedor === "simpleapi") return "SimpleAPI";
+  return "modo de prueba";
+}
+
 function EmitirEmpty({ loading = false }: { loading?: boolean }) {
   return (
     <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
@@ -52,6 +59,13 @@ function EmitirEmpty({ loading = false }: { loading?: boolean }) {
   );
 }
 
+function nextActionLabel(code: Item["motivo_code"]): string | null {
+  if (code === "falta_receptor") return "Completa receptor en Revisar";
+  if (code === "monto_invalido") return "Corrige el monto en Revisar";
+  if (code === "no_boletar") return "Revisa la clasificacion antes de emitir";
+  return null;
+}
+
 export default function EmitirTabContent() {
   const router = useRouter();
   const { toast } = useToast();
@@ -62,13 +76,26 @@ export default function EmitirTabContent() {
   const [statusFilter, setStatusFilter] = useState<"listas" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    setError(null);
     try {
       const res = await fetch("/api/intermediaria/pendientes-emision");
       const json = await res.json();
-      if (json.ok) setData(json);
-    } catch { toast("Error al cargar pendientes", "error"); }
+      if (json.ok) {
+        setData(json);
+      } else {
+        const message = json.error ?? "No se pudieron cargar los pendientes";
+        setData(null);
+        setError(message);
+        toast(message, "error");
+      }
+    } catch {
+      setData(null);
+      setError("Error al cargar pendientes");
+      toast("Error al cargar pendientes", "error");
+    }
     setLoading(false);
   }, [toast]);
 
@@ -131,6 +158,20 @@ export default function EmitirTabContent() {
     return <EmitirEmpty loading />;
   }
 
+  if (error) {
+    return (
+      <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+        <div style={{maxWidth:300}}>
+          <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>No se pudo cargar Emitir</div>
+          <div style={{marginTop:6,fontSize:11,lineHeight:1.45}}>{error}</div>
+          <button type="button" onClick={fetchData} style={{marginTop:14,border:0,borderRadius:999,padding:"9px 14px",background:"#E8553E",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!loading && totalCount === 0) {
     return <EmitirEmpty />;
   }
@@ -147,9 +188,10 @@ export default function EmitirTabContent() {
       });
       const json = await res.json();
       if (json.ok) {
-        const provider = json.proveedor === "libredte" ? "LibreDTE" : json.proveedor === "sii_local" ? "SII local" : "mock";
+        const provider = providerLabel(json.proveedor);
         const exitos = json.exitos ?? 0;
-        toast(`${exitos} boletas emitidas por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")} (${provider})`, exitos > 0 ? undefined : "error");
+        const suffix = json.proveedor === "mock" ? ". No se informaron al SII." : "";
+        toast(`${exitos} boletas ${json.proveedor === "mock" ? "simuladas" : "emitidas"} por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")} (${provider})${suffix}`, exitos > 0 ? undefined : "error");
         if (exitos > 0) {
           setSelected(new Set());
           setDteOverrides({});
@@ -227,6 +269,7 @@ export default function EmitirTabContent() {
                     <div className="sub rn">
                       <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                       {" "}{item.motivo_no_listo}
+                      {nextActionLabel(item.motivo_code) && <><br />{nextActionLabel(item.motivo_code)}</>}
                     </div>
                   )}
                   {!isDisabled && item.confianza_clasif < 0.7 && (

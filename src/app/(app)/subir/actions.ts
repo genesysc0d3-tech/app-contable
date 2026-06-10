@@ -48,5 +48,6 @@ export async function setDocumentoHint(
 
   revalidatePath("/subir");
   revalidatePath("/escritorio");
+  revalidatePath("/massdte");
   return { ok: true };
 }

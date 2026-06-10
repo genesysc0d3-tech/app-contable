@@ -27,7 +27,7 @@ interface BoletaRaw {
   ted: string;
   track_id: string;
   estado: string;
-  emision_proveedor?: "mock" | "baseapi" | "libredte" | "sii_local";
+  emision_proveedor?: "mock" | "baseapi" | "sii_local";
   emision_sandbox?: boolean;
   proveedor_respuesta?: unknown;
 }
@@ -71,10 +71,10 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
       if (b.emision_proveedor === "baseapi") {
         const pdf = getBaseApiPdf(b.proveedor_respuesta);
         if (!pdf) {
-          toast("Esta emisión BaseAPI no tiene PDF guardado. Emite otra prueba para descargar el PDF del proveedor.", "error");
+          toast("Esta emision de proveedor legado no tiene PDF guardado.", "error");
           return;
         }
-        downloadBaseApiPdf(pdf, `baseapi-${b.tipo_dte}-${b.folio}.pdf`);
+        downloadBaseApiPdf(pdf, `boleta-proveedor-legado-${b.tipo_dte}-${b.folio}.pdf`);
         return;
       }
 

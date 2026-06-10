@@ -1,46 +1,13 @@
 "use strict";
 
-const EXT_SOURCE = "app-contable-extension";
-const PROTOCOL_VERSION = 1;
-const EXTENSION_VERSION = "0.1.0";
-const SII_START_URL = "https://eboleta.sii.cl/emitir/";
-const CAPABILITIES = [
-  "sii_portal_boleta_39",
-  "sii_portal_boleta_41",
-  "dedicated_worker_window",
-  "learn_only",
-  "auto_emit",
-  "result_capture",
-  "pdf_byte_capture",
-];
+import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl } from "./modules/core.js";
+import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
+import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, siiVaultStatus } from "./modules/sii-vault.js";
+import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
+
+const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEAPI_CAPABILITIES];
 
 const activeJobs = new Map();
-
-function isAllowedAppUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.origin === "https://app-contable-five.vercel.app" || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(parsed.origin);
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedSiiUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && /(^|\.)sii\.cl$/.test(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
-
-function baseMessage(message) {
-  return {
-    source: EXT_SOURCE,
-    protocol_version: PROTOCOL_VERSION,
-    ...message,
-  };
-}
 
 function statusMessage(jobId, status, message, recoverable = true) {
   return baseMessage({
@@ -310,6 +277,11 @@ function scanWorkerPage(state, attempt = 1) {
     ));
 
     const excerpt = String(map.body_excerpt || "");
+    if (isLoginPageMap(map)) {
+      attemptSiiAutologin(state, map);
+      return;
+    }
+
     if (attempt < 8 && /Cargando Emisores|Cargando/i.test(excerpt)) {
       setTimeout(() => scanWorkerPage(state, attempt + 1), 1500);
       return;
@@ -360,6 +332,159 @@ function scanWorkerPage(state, attempt = 1) {
   });
 }
 
+function isLoginPageMap(map) {
+  const text = `${map.url || ""} ${map.title || ""} ${map.body_excerpt || ""}`;
+  return /Clave Tributaria|RUT|Ingresar|Autenticaci[oó]n|Inicio de Sesi[oó]n/i.test(text)
+    && !/Calculadora|Emitir e-Boleta|e-Boleta power_settings|Cargando Emisores/i.test(text);
+}
+
+function focusWorkerForHuman(state, message) {
+  state.humanRequired = true;
+  if (state.workerWindowId) chrome.windows.update(state.workerWindowId, { focused: true }).catch(() => undefined);
+  sendToSii(state.workerTabId, {
+    type: "APP_CONTABLE_SII_WORKER_OVERLAY",
+    job_id: state.jobId,
+    mode: "HUMAN_REQUIRED",
+    message,
+  });
+  sendToApp(state, statusMessage(state.jobId, "waiting_manual_login", message, true));
+}
+
+function attemptSiiAutologin(state) {
+  if (state.autologinAttempted) {
+    focusWorkerForHuman(state, "No pudimos iniciar sesión automáticamente. SII puede pedir captcha, 2FA, cambio de clave o selección de contribuyente. Inicia sesión manualmente en esta ventana y continuaremos automáticamente.");
+    return;
+  }
+
+  const credentials = getUnlockedSiiCredentials();
+  if (!credentials?.rut || !credentials?.clave) {
+    siiVaultStatus()
+      .then((status) => {
+        const message = status.configured
+          ? "SII requiere inicio de sesión, pero la bóveda SII está bloqueada. Abre la extensión, ingresa el PIN de 4 números y presiona Desbloquear; luego reintenta la emisión. También puedes iniciar sesión manualmente aquí."
+          : "SII requiere inicio de sesión. Configura la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta.";
+        focusWorkerForHuman(state, message);
+      })
+      .catch(() => focusWorkerForHuman(state, "SII requiere inicio de sesión. Desbloquea la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta."));
+    return;
+  }
+
+  state.autologinAttempted = true;
+  state.humanRequired = false;
+  sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Intentando inicio de sesión SII con la bóveda local desbloqueada.", true));
+  sendToSii(state.workerTabId, {
+    type: "APP_CONTABLE_SII_WORKER_OVERLAY",
+    job_id: state.jobId,
+    mode: "LOCKED_AUTOMATION",
+    message: "Intentando iniciar sesión en SII desde la bóveda local. Si SII pide captcha o 2FA, abriremos esta ventana para intervención manual.",
+  });
+
+  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+    type: "APP_CONTABLE_SII_ATTEMPT_AUTOLOGIN",
+    job_id: state.jobId,
+    credentials,
+  }), (response) => {
+    if (!chrome.runtime.lastError && response?.ok) {
+      setTimeout(() => scanWorkerPage(state), 3500);
+      return;
+    }
+
+    attemptSiiAutologinInFrames(state, credentials, response?.error || chrome.runtime.lastError?.message);
+  });
+}
+
+function attemptSiiAutologinInFrames(state, credentials, previousError) {
+  chrome.scripting.executeScript({
+    target: { tabId: state.workerTabId, allFrames: true },
+    args: [credentials],
+    func: (vaultCredentials) => {
+      const normalize = (value) => String(value || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      const pageText = normalize(document.body?.innerText || document.body?.textContent || "");
+      if (/CAPTCHA|RECAPTCHA|CODIGO DE SEGURIDAD|2FA|DOBLE FACTOR|VERIFICACION|AUTENTICADOR|TOKEN|CAMBIO DE CLAVE|ACTUALIZA TU CLAVE/.test(pageText)) {
+        return { ok: false, error: "SII requiere verificacion humana." };
+      }
+      const visible = (element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+        if (element instanceof HTMLInputElement && (element.disabled || element.readOnly || element.type === "hidden")) return false;
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+      };
+      const labelFor = (control) => {
+        if (control.id) {
+          const label = document.querySelector(`label[for="${CSS.escape(control.id)}"]`);
+          if (label) return label.innerText || label.textContent || "";
+        }
+        return control.closest("label")?.innerText || control.getAttribute("aria-label") || control.getAttribute("placeholder") || "";
+      };
+      const controlText = (input) => normalize([
+        input.id,
+        input.name,
+        input.autocomplete,
+        input.placeholder,
+        input.getAttribute("aria-label"),
+        labelFor(input),
+      ].filter(Boolean).join(" "));
+      const inputs = Array.from(document.querySelectorAll("input")).filter((input) => input instanceof HTMLInputElement && visible(input));
+      const passwordInput = inputs.find((input) => input.type === "password")
+        || inputs.find((input) => /CLAVE|PASSWORD|CONTRASENA/.test(controlText(input)));
+      const rutInput = inputs.find((input) => /RUT|RUTCNTR|ROL|USUARIO|USER|CODIGO/.test(controlText(input)) && input !== passwordInput)
+        || inputs.find((input) => input !== passwordInput && ["text", "tel", "number"].includes(input.type || "text"));
+      if (!rutInput || !passwordInput) return { ok: false, error: "Formulario SII no encontrado en este frame." };
+      const setValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
+        if (descriptor?.set) descriptor.set.call(input, value);
+        else input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      setValue(rutInput, vaultCredentials.rut);
+      setValue(passwordInput, vaultCredentials.clave);
+      const buttonText = (element) => normalize(element.innerText || element.textContent || element.getAttribute("value") || element.getAttribute("title") || "");
+      const submit = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"))
+        .filter((element) => element instanceof HTMLElement && visible(element))
+        .find((element) => /^(INGRESAR|INICIAR SESION|INICIAR SESSION|ENTRAR|ACCEDER)$/.test(buttonText(element)))
+        || Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"))
+          .filter((element) => element instanceof HTMLElement && visible(element))
+          .find((element) => /INGRESAR|INICIAR SESION|ENTRAR|ACCEDER/.test(buttonText(element)));
+      if (submit) {
+        submit.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+        submit.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+        submit.click();
+      } else {
+        const form = passwordInput.form || rutInput.form;
+        if (!form) return { ok: false, error: "Boton de login SII no encontrado." };
+        if (typeof form.requestSubmit === "function") form.requestSubmit();
+        else form.submit();
+      }
+      return { ok: true };
+    },
+  }, (results) => {
+    if (chrome.runtime.lastError) {
+      focusWorkerForHuman(state, previousError || chrome.runtime.lastError.message || "Autologin SII no disponible. Inicia sesión manualmente y continuaremos automáticamente.");
+      return;
+    }
+
+    const success = Array.isArray(results) && results.some((result) => result?.result?.ok);
+    if (success) {
+      sendToApp(state, statusMessage(state.jobId, "autologin_sent", "Login SII enviado desde la bóveda local.", true));
+      setTimeout(() => scanWorkerPage(state), 3500);
+      return;
+    }
+
+    const error = Array.isArray(results)
+      ? results.map((result) => result?.result?.error).filter(Boolean)[0]
+      : null;
+    focusWorkerForHuman(state, error || previousError || "Autologin SII no encontró un formulario compatible. Inicia sesión manualmente y continuaremos automáticamente.");
+  });
+}
+
 function captureWorkerResult(state) {
   sendToApp(state, statusMessage(
     state.jobId,
@@ -383,21 +508,11 @@ function captureWorkerResult(state) {
   });
 }
 
-function validateJob(job) {
-  if (!job || typeof job !== "object") return "JOB_INVALID";
-  if (!job.job_id || typeof job.job_id !== "string") return "JOB_ID_MISSING";
-  if (job.tipo_dte !== 39 && job.tipo_dte !== 41) return "TIPO_DTE_INVALID";
-  if (!job.expires_at || Number.isNaN(Date.parse(job.expires_at))) return "EXPIRES_AT_INVALID";
-  if (Date.parse(job.expires_at) <= Date.now()) return "JOB_EXPIRED";
-  if (job.learn_only !== true && job.auto_emit !== true) return "AUTO_EMIT_OR_LEARN_ONLY_REQUIRED";
-  return null;
-}
-
 async function openWorkerWindow(job, appTabId) {
   const worker = await chrome.windows.create({
     url: SII_START_URL,
     type: "popup",
-    focused: true,
+    focused: false,
     width: 1120,
     height: 820,
   });
@@ -418,16 +533,18 @@ async function openWorkerWindow(job, appTabId) {
     filledDraft: false,
     submitted: false,
     awaitingResult: false,
+    autologinAttempted: false,
+    humanRequired: false,
   };
   activeJobs.set(job.job_id, state);
 
   await sendToSii(workerTabId, {
     type: "APP_CONTABLE_SII_WORKER_OVERLAY",
     job_id: job.job_id,
-    mode: "HUMAN_REQUIRED",
+    mode: "LOCKED_AUTOMATION",
     message: state.learnOnly
-      ? "Modo aprendizaje: inicia sesion y navega el flujo SII. La extension solo observa mapas sanitizados; no emitira."
-      : "Inicia sesion en SII. Cuando estes dentro, vuelve a App Contable para continuar.",
+      ? "Modo aprendizaje: si SII pide login, inicia sesión manualmente. La extensión solo observa mapas sanitizados; no emitirá."
+      : "Preparando SII local. Si no hay sesión, intentaremos autologin local o pediremos intervención manual.",
   });
 
   return state;
@@ -436,6 +553,20 @@ async function openWorkerWindow(job, appTabId) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "APP_CONTABLE_SII_WORKER_ACTION" && isAllowedSiiUrl(sender.url || "")) {
     return handleWorkerAction(message, sender, sendResponse);
+  }
+
+  if (message?.type?.startsWith("APP_CONTABLE_SIMPLEAPI_VAULT_") && sender.url?.startsWith(chrome.runtime.getURL(""))) {
+    handleSimpleApiVaultMessage(message)
+      .then((response) => sendResponse(baseMessage(response)))
+      .catch(() => sendResponse(baseMessage({ type: `${message.type}_RESULT`, ok: false, error: "VAULT_ERROR" })));
+    return true;
+  }
+
+  if (message?.type?.startsWith("APP_CONTABLE_SII_VAULT_") && sender.url?.startsWith(chrome.runtime.getURL(""))) {
+    handleSiiVaultMessage(message)
+      .then((response) => sendResponse(baseMessage(response)))
+      .catch(() => sendResponse(baseMessage({ type: `${message.type}_RESULT`, ok: false, error: "SII_VAULT_ERROR" })));
+    return true;
   }
 
   if (!isAllowedAppUrl(sender.url || "")) return false;
@@ -450,9 +581,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "APP_CONTABLE_OPEN_EXTENSION_OPTIONS") {
+    chrome.runtime.openOptionsPage(() => {
+      sendResponse(baseMessage({
+        type: "APP_CONTABLE_OPEN_EXTENSION_OPTIONS_RESULT",
+        ok: !chrome.runtime.lastError,
+        error: chrome.runtime.lastError?.message ?? null,
+      }));
+    });
+    return true;
+  }
+
   if (message?.type === "APP_CONTABLE_SII_BOLETA_JOB") {
     const job = message.job;
-    const validationError = validateJob(job);
+    const validationError = validateSiiBoletaJob(job);
     if (validationError) {
       sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
       return false;
@@ -472,6 +614,73 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(statusMessage(job.job_id, "error", error instanceof Error ? error.message : String(error), true));
       });
 
+    return true;
+  }
+
+  if (message?.type === "APP_CONTABLE_SIMPLEAPI_VAULT_STATUS") {
+    handleSimpleApiVaultMessage(message)
+      .then((response) => sendResponse(baseMessage(response)))
+      .catch(() => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_VAULT_STATUS_RESULT",
+        status: { configured: false, encrypted: false, has_pfx: false, has_caf: false, updated_at: null },
+      })));
+    return true;
+  }
+
+  if (message?.type === "APP_CONTABLE_SII_VAULT_STATUS") {
+    handleSiiVaultMessage(message)
+      .then((response) => sendResponse(baseMessage(response)))
+      .catch(() => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SII_VAULT_STATUS_RESULT",
+        status: { configured: false, encrypted: false, has_rut: false, has_clave: false, updated_at: null, unlocked: false },
+      })));
+    return true;
+  }
+
+  if (message?.type === "APP_CONTABLE_SIMPLEAPI_DTE_GENERAR") {
+    const origin = sender.url ? new URL(sender.url).origin : "";
+    generateSimpleApiDteFromVault({ appOrigin: origin, input: message.input })
+      .then((response) => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_DTE_GENERAR_RESULT",
+        ...response,
+      })))
+      .catch(() => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_DTE_GENERAR_RESULT",
+        ok: false,
+        error: "SIMPLEAPI_DTE_GENERAR_FAILED",
+      })));
+    return true;
+  }
+
+  if (message?.type === "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR") {
+    const origin = sender.url ? new URL(sender.url).origin : "";
+    emitSimpleApiDteFromVault({ appOrigin: origin, input: message.input })
+      .then((response) => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR_RESULT",
+        ...response,
+      })))
+      .catch(() => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR_RESULT",
+        ok: false,
+        error: "SIMPLEAPI_DTE_EMITIR_FAILED",
+      })));
+    return true;
+  }
+
+  if (message?.type === "APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART") {
+    const origin = sender.url ? new URL(sender.url).origin : "";
+    postSimpleApiMultipartProxy({ appOrigin: origin, path: message.path, input: message.input, files: message.files })
+      .then((response) => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART_RESULT",
+        path: message.path,
+        ...response,
+      })))
+      .catch(() => sendResponse(baseMessage({
+        type: "APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART_RESULT",
+        path: message.path,
+        ok: false,
+        error: "SIMPLEAPI_PROXY_MULTIPART_FAILED",
+      })));
     return true;
   }
 
@@ -499,10 +708,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     sendToSii(tabId, {
       type: "APP_CONTABLE_SII_WORKER_OVERLAY",
       job_id: state.jobId,
-      mode: "HUMAN_REQUIRED",
+      mode: state.learnOnly || state.humanRequired ? "HUMAN_REQUIRED" : "LOCKED_AUTOMATION",
       message: state.learnOnly
         ? "Modo aprendizaje activo. Navega SII normalmente; no se emitira desde la extension."
-        : "Inicia sesion en SII. No cierres esta ventana.",
+        : state.humanRequired
+          ? "Inicia sesion en SII. No cierres esta ventana. Continuaremos automaticamente al entrar a e-Boleta."
+          : "SII cargo una nueva pantalla. La extension continuara automaticamente si el portal esta listo.",
     });
     scanWorkerPage(state);
   }

@@ -1,8 +1,10 @@
 "use server";
 
+import { createHash, randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { validarRut, cleanRut } from "@/lib/sii/validation";
 
 export interface DatosEmisor {
@@ -15,11 +17,25 @@ export interface DatosEmisor {
   tipo_contribuyente?: string;
 }
 
-export type EmisionProveedor = "mock" | "libredte" | "sii_local";
+export type BoletasEmisionProveedor = "mock" | "sii_local" | "simpleapi";
+export type FacturasEmisionProveedor = "mock" | "simpleapi";
+export type EmisionProveedor = BoletasEmisionProveedor | FacturasEmisionProveedor;
 
 export interface EmisionConfigInput {
-  proveedor: EmisionProveedor;
+  boletasProveedor: BoletasEmisionProveedor;
+  facturasProveedor: FacturasEmisionProveedor;
   baseapiSandbox: boolean;
+}
+
+const ROLES_INVITABLES = new Set(["admin", "contador", "viewer"]);
+const ROLES_GESTION_MIEMBROS = new Set(["owner", "admin"]);
+
+function hashInviteToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function normalizeEmail(email: FormDataEntryValue | null): string {
+  return String(email ?? "").trim().toLowerCase();
 }
 
 const LOGO_MIME_TYPES = new Set([
@@ -76,6 +92,7 @@ export async function setDatosEmisor(
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
   revalidatePath("/escritorio/v5");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -122,6 +139,7 @@ export async function setEmpresaLogo(
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
   revalidatePath("/escritorio/v5");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -153,6 +171,7 @@ export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: strin
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
   revalidatePath("/escritorio/v5");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -185,6 +204,7 @@ export async function setCertificadoSii(
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
   revalidatePath("/escritorio/v5");
+  revalidatePath("/massdte");
   return { ok: true };
 }
 
@@ -202,8 +222,11 @@ export async function setEmisionConfig(
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
 
-  if (config.proveedor !== "mock" && config.proveedor !== "libredte" && config.proveedor !== "sii_local") {
-    return { error: "Proveedor de emisión inválido" };
+  if (config.boletasProveedor !== "mock" && config.boletasProveedor !== "sii_local" && config.boletasProveedor !== "simpleapi") {
+    return { error: "Proveedor de boletas inválido" };
+  }
+  if (config.facturasProveedor !== "mock" && config.facturasProveedor !== "simpleapi") {
+    return { error: "Proveedor de facturas inválido" };
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -215,14 +238,16 @@ export async function setEmisionConfig(
   const { error } = await sb
     .from("empresas")
     .update({
-      emision_proveedor: config.proveedor,
+      emision_proveedor: config.boletasProveedor,
+      boletas_emision_proveedor: config.boletasProveedor,
+      facturas_emision_proveedor: config.facturasProveedor,
       emision_baseapi_sandbox: config.baseapiSandbox,
     })
     .eq("id", usuario.empresa_id);
   if (error) {
     const message = String(error.message || "");
-    if (/emision_proveedor|emision_baseapi_sandbox|column|check constraint|violates check/i.test(message)) {
-      return { error: "La base de datos aún no tiene aplicada la migración de proveedores de emisión. Mantén Mock local por ahora y aplica las migraciones de junio." };
+    if (/emision_proveedor|boletas_emision_proveedor|facturas_emision_proveedor|emision_baseapi_sandbox|column|check constraint|violates check/i.test(message)) {
+      return { error: "La base de datos aún no tiene aplicada la migración de proveedores combinados. Mantén Modo de prueba por ahora y aplica las migraciones." };
     }
     return { error: message };
   }
@@ -230,5 +255,134 @@ export async function setEmisionConfig(
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
   revalidatePath("/escritorio/v5");
+  revalidatePath("/massdte");
   return { ok: true };
+}
+
+export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?: boolean; invitePath?: string; error?: string }> {
+  const email = normalizeEmail(formData.get("email"));
+  const rol = String(formData.get("rol") ?? "contador").trim();
+  if (!email || !email.includes("@")) return { error: "Email inválido" };
+  if (!ROLES_INVITABLES.has(rol)) return { error: "Rol inválido" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id, rol")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+  if (!ROLES_GESTION_MIEMBROS.has(usuario.rol)) return { error: "Solo owner/admin puede invitar usuarios" };
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "Backend mal configurado" };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb: any = createServiceClient(url, key);
+
+  const { data: miembroExistente } = await sb
+    .from("usuarios")
+    .select("id")
+    .eq("empresa_id", usuario.empresa_id)
+    .ilike("email", email)
+    .maybeSingle();
+  if (miembroExistente?.id) return { error: "Ese email ya pertenece a la empresa" };
+
+  const { data: invitacionPendiente } = await sb
+    .from("empresa_invitaciones")
+    .select("id")
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("estado", "pendiente")
+    .ilike("email", email)
+    .maybeSingle();
+  if (invitacionPendiente?.id) return { error: "Ya existe una invitación pendiente para ese email" };
+
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashInviteToken(token);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error } = await sb.from("empresa_invitaciones").insert({
+    empresa_id: usuario.empresa_id,
+    email,
+    rol,
+    token_hash: tokenHash,
+    invited_by: user.id,
+    expires_at: expiresAt,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/empresa");
+  return { ok: true, invitePath: `/invitar/${token}` };
+}
+
+export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "Backend mal configurado" };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb: any = createServiceClient(url, key);
+
+  const tokenHash = hashInviteToken(token);
+  const { data: invitacion, error: invError } = await sb
+    .from("empresa_invitaciones")
+    .select("id, empresa_id, email, rol, estado, expires_at")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+
+  if (invError) return { error: invError.message };
+  if (!invitacion) return { error: "Invitación no encontrada" };
+  if (invitacion.estado !== "pendiente") return { error: "Invitación ya no está pendiente" };
+  if (new Date(invitacion.expires_at).getTime() < Date.now()) return { error: "Invitación expirada" };
+  if (String(user.email ?? "").toLowerCase() !== String(invitacion.email).toLowerCase()) {
+    return { error: "Debes iniciar sesión con el email invitado" };
+  }
+  if (!user.email_confirmed_at && !user.confirmed_at) {
+    return { error: "Confirma tu email antes de aceptar la invitación" };
+  }
+
+  const { data: existing } = await sb
+    .from("usuarios")
+    .select("empresa_id, vetado, rol")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (existing?.empresa_id && existing.empresa_id !== invitacion.empresa_id) {
+    return { error: "Este usuario ya pertenece a otra empresa. El selector multiempresa queda para la siguiente fase." };
+  }
+  if (existing?.vetado) return { error: "Esta cuenta está suspendida" };
+
+  if (existing?.empresa_id === invitacion.empresa_id) {
+    await sb.from("empresa_invitaciones").update({
+      estado: "aceptada",
+      accepted_by: user.id,
+      accepted_at: new Date().toISOString(),
+    }).eq("id", invitacion.id);
+    revalidatePath("/empresa");
+    redirect("/");
+  }
+
+  const nombre = user.user_metadata?.nombre || user.user_metadata?.full_name || user.email || "Usuario";
+  const { error: insertError } = await sb.from("usuarios").insert({
+    id: user.id,
+    email: user.email!,
+    nombre,
+    empresa_id: invitacion.empresa_id,
+    rol: invitacion.rol,
+  });
+  if (insertError) return { error: insertError.message };
+
+  await sb.from("empresa_invitaciones").update({
+    estado: "aceptada",
+    accepted_by: user.id,
+    accepted_at: new Date().toISOString(),
+  }).eq("id", invitacion.id);
+
+  revalidatePath("/empresa");
+  redirect("/");
 }

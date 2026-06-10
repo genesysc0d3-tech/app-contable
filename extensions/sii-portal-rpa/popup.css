@@ -1,0 +1,138 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5f2ed;
+  --surface: #fffaf2;
+  --surface-strong: #ffffff;
+  --text: #191714;
+  --muted: #5f584f;
+  --border: rgba(25, 23, 20, 0.12);
+  --accent: #e8553e;
+  --green: #137a52;
+  --warning: #b7791f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11100f;
+    --surface: #1a1816;
+    --surface-strong: #211f1c;
+    --text: #f7f0e8;
+    --muted: #d4c8bb;
+    --border: rgba(255, 255, 255, 0.12);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 280px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.popup-shell {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  margin: 8px;
+}
+
+.status {
+  display: grid;
+  gap: 10px;
+}
+
+.modulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modulo-body {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+}
+
+.modulo strong {
+  font-weight: 600;
+}
+
+.modulo-body span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.modulo-body small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.modulo .ready {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.dot-green {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+.dot-yellow {
+  background: var(--warning);
+  box-shadow: 0 0 6px var(--warning);
+  animation: blink 1s ease-in-out infinite;
+}
+
+.dot-red {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: blink 0.6s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 11px 16px;
+}
+
+button:hover {
+  opacity: .88;
+}
+
+button:active {
+  opacity: .76;
+}
+
+button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, white);
+  outline-offset: 2px;
+}

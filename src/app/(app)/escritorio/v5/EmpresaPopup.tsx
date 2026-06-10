@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EmisorForm from "../../empresa/EmisorForm";
-import CertificadoToggle from "../../empresa/CertificadoToggle";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import AiKeyConfig from "../../empresa/AiKeyConfig";
 import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
@@ -12,21 +11,19 @@ import type { DatosEmisor } from "../../empresa/actions";
 
 export default function EmpresaPopup({
   inicial,
-  tieneCertificado,
   cafs,
   empresaId,
   emisionConfig,
-  libredteConfigured,
+  devMode = false,
   helpStepsEnabled,
   onHelpStepsChange,
   onClose,
 }: {
   inicial: DatosEmisor;
-  tieneCertificado: boolean;
   cafs: CAFRow[];
   empresaId: string;
   emisionConfig: EmissionProviderState;
-  libredteConfigured: boolean;
+  devMode?: boolean;
   helpStepsEnabled?: boolean;
   onHelpStepsChange?: (enabled: boolean) => void;
   onClose: () => void;
@@ -36,7 +33,7 @@ export default function EmpresaPopup({
   const router = useRouter();
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  useEffect(() => { router.refresh(); }, []); // Refresh server data on mount
+  useEffect(() => { router.refresh(); }, [router]); // Refresh server data on mount
 
   const handleClose = useCallback(() => {
     // Auto-save EmisorForm before closing
@@ -644,30 +641,24 @@ export default function EmpresaPopup({
               },
               {
                 n: 2,
-                icon: "M12 3 5 6v5c0 4.5 3 8.2 7 10 4-1.8 7-5.5 7-10V6l-7-3Z",
-                title: "Certificado SII",
-                sub: "Estado del certificado",
-              },
-              {
-                n: 3,
                 icon: "M7 3h7l4 4v14H7V3Z",
                 title: "Formatos de cartola",
                 sub: "Subí y mapeá formatos",
               },
               {
-                n: 4,
+                n: 3,
                 icon: "M4 7h16v12H4V7Z",
                 title: "Folios CAF",
                 sub: "Gestión automática",
               },
               {
-                n: 5,
+                n: 4,
                 icon: "M4 7h16M7 4v16M17 4v16M4 17h16",
                 title: "Emisión",
-                sub: "Mock, LibreDTE o SII local",
+                sub: "Modo de prueba o SII local",
               },
               {
-                n: 6,
+                n: 5,
                 icon: "M14.5 4.5 19.5 9.5M3 21l5.2-1.2L20 8a3.5 3.5 0 0 0-5-5L3.2 14.8 3 21Z",
                 title: "IA (DeepSeek)",
                 sub: "Clave de API",
@@ -748,10 +739,9 @@ export default function EmpresaPopup({
               <div className="ep-content-inner">
                 {[
                   { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" /> },
-                  { key: "certificado", content: <CertificadoToggle inicial={tieneCertificado} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
-                  { key: "folios", content: <CAFPanel cafs={cafs} /> },
-                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} libredteConfigured={libredteConfigured} /> },
+                  { key: "folios", content: <CAFPanel cafs={cafs} proveedor={emisionConfig.boletasProveedor} /> },
+                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} /> },
                   { key: "ia", content: <AiKeyConfig /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>

@@ -83,29 +83,45 @@ function cleanText(value: unknown) {
   return text.length > 0 ? text : null;
 }
 
+function cleanPdfBase64(value: unknown) {
+  const text = cleanText(value);
+  if (!text || text.startsWith("[redacted:")) return null;
+  return text;
+}
+
 function chileDate(value: unknown) {
   const text = cleanText(value);
   return text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
+function pdfInfoFromHref(href: string): SiiLocalPdfInfo | null {
+  let decoded = href;
+  try {
+    decoded = decodeURIComponent(href);
+  } catch {
+    decoded = href;
+  }
+  const pdfMatch = decoded.match(/https:\/\/[^\s"']+\.pdf(?:\?[^\s"']*)?/i);
+  const pdfUrl = pdfMatch?.[0] ?? (/\.pdf(?:\?|$)/i.test(href) ? href : null);
+  if (!pdfUrl) return null;
+
+  const folioMatch = pdfUrl.match(/folio(\d+)_/i);
+  return { href: pdfUrl, folio: folioMatch ? positiveInt(folioMatch[1]) : null };
+}
+
 function extractSiiPdfInfo(result: SiiLocalResultPayload["result"]): SiiLocalPdfInfo | null {
+  const sourceUrl = cleanText(result?.pdf?.source_url);
+  if (sourceUrl) {
+    const sourceInfo = pdfInfoFromHref(sourceUrl);
+    if (sourceInfo) return sourceInfo;
+  }
+
   const links = Array.isArray(result?.artifact_links) ? result.artifact_links : [];
   for (const link of links) {
     const href = cleanText(link.href);
     if (!href) continue;
-
-    let decoded = href;
-    try {
-      decoded = decodeURIComponent(href);
-    } catch {
-      decoded = href;
-    }
-    const pdfMatch = decoded.match(/https:\/\/[^\s"']+\.pdf(?:\?[^\s"']*)?/i);
-    const pdfUrl = pdfMatch?.[0] ?? (/\.pdf(?:\?|$)/i.test(href) ? href : null);
-    if (!pdfUrl) continue;
-
-    const folioMatch = pdfUrl.match(/folio(\d+)_/i);
-    return { href: pdfUrl, folio: folioMatch ? positiveInt(folioMatch[1]) : null };
+    const info = pdfInfoFromHref(href);
+    if (info) return info;
   }
   return null;
 }
@@ -161,7 +177,7 @@ async function uploadExtensionPdf(
   sb: { storage: { from: (bucket: string) => { upload: (path: string, body: Buffer, options: { contentType: string; upsert: boolean }) => Promise<{ error: { message: string } | null }> } } },
   args: { empresaId: string; tipoDte: number; folio: number; pdf: NonNullable<NonNullable<SiiLocalResultPayload["result"]>["pdf"]> },
 ) {
-  const base64 = cleanText(args.pdf.base64);
+  const base64 = cleanPdfBase64(args.pdf.base64);
   if (!base64) return { storagePath: null, error: "PDF_BASE64_MISSING", filename: null, sourceUrl: null };
   if (args.pdf.content_type !== "application/pdf") return { storagePath: null, error: "PDF_CONTENT_TYPE_INVALID", filename: null, sourceUrl: null };
   const buffer = Buffer.from(base64, "base64");
@@ -193,8 +209,9 @@ async function uploadResultPdf(
   sb: { storage: { from: (bucket: string) => { upload: (path: string, body: Buffer, options: { contentType: string; upsert: boolean }) => Promise<{ error: { message: string } | null }> } } },
   args: { empresaId: string; tipoDte: number; folio: number; result: SiiLocalResultPayload["result"]; pdfInfo: SiiLocalPdfInfo | null },
 ) {
-  if (args.result?.pdf?.base64) {
-    return uploadExtensionPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, pdf: args.result.pdf });
+  const pdf = args.result?.pdf;
+  if (pdf && cleanPdfBase64(pdf.base64)) {
+    return uploadExtensionPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, pdf });
   }
   if (args.pdfInfo?.href) {
     return uploadSiiPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, pdfUrl: args.pdfInfo.href });

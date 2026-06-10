@@ -11,9 +11,9 @@ function todayStr() {
   return chileDateString();
 }
 
-type EmisionProveedorUi = "mock" | "libredte" | "sii_local";
+type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
-export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock" }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi }) {
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null }) {
   const [open, setOpen] = useState(false);
 
   function closeWithSavedPulse(saved = false) {
@@ -113,7 +113,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       {open && (
         <div className="ed-overlay">
           <div className="ed-panel">
-            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} onClose={closeWithSavedPulse} />
+            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} onClose={closeWithSavedPulse} />
           </div>
         </div>
       )}
@@ -132,7 +132,7 @@ export function MassDTEAction({}: { empresaId: string }) {
 
   function handleUploaded() {
     closeWithSavedPulse("Archivo subido a Agregados");
-    router.push(`/escritorio/v5?date=${todayStr()}&view=day`);
+    router.push(`/massdte?date=${todayStr()}&view=day`);
     router.refresh();
     window.setTimeout(() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" })), 80);
   }

@@ -32,5 +32,5 @@ export default async function Home() {
     redirect("/planes");
   }
 
-  redirect("/escritorio/v5");
+  redirect("/massdte");
 }

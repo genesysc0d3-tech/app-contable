@@ -42,3 +42,12 @@ next-env.d.ts
 
 # session notes
 SESSION_NOTES.md
+
+# local SII/debug artifacts
+/.sii-explorer-profile/
+/artifacts/
+/*.xlsx
+/~$*.xlsx
+.vercel/token
+.supabase/token
+.git/.git-credentials-local
