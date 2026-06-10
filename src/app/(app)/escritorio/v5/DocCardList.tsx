@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import FieldMapper from "@/components/upload/FieldMapper";
 import HintSelector from "@/components/upload/HintSelector";
+import GlosaComunControl from "./GlosaComunControl";
 import TermHint from "@/components/ui/TermHint";
 import VisualizarArchivo from "./VisualizarArchivo";
 
@@ -20,6 +21,8 @@ interface DocRaw {
   id: string; nombre_archivo: string; tipo: string; estado: string;
   movimientos_detectados: number | null; created_at: string; progreso_ia: unknown;
   tipo_operacion_hint?: string | null;
+  glosa_comun?: string | null;
+  glosa_activa?: boolean | null;
 }
 
 export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix }: {
@@ -188,6 +191,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   )}
                   {isBoletaUnica && <span style={{fontSize:9,color:"var(--text2)",fontWeight:600}}>Registro creado desde Emision Directa</span>}
                 </div>
+                {!isBoletaUnica && doc.estado === "procesado" && (
+                  <GlosaComunControl
+                    documentoId={doc.id}
+                    hint={doc.tipo_operacion_hint ?? null}
+                    glosaInicial={doc.glosa_comun ?? null}
+                    activaInicial={doc.glosa_activa ?? true}
+                  />
+                )}
                 {(() => {
                   // La empresa fijó su tipo, pero esta cartola trae movimientos
                   // del tipo contrario (o mezcla): se recalca sin bloquear nada.

@@ -408,6 +408,8 @@ export type Database = {
           created_at: string
           empresa_id: string
           estado: string
+          glosa_activa: boolean
+          glosa_comun: string | null
           id: string
           movimientos_detectados: number | null
           nombre_archivo: string
@@ -420,6 +422,8 @@ export type Database = {
           created_at?: string
           empresa_id: string
           estado?: string
+          glosa_activa?: boolean
+          glosa_comun?: string | null
           id?: string
           movimientos_detectados?: number | null
           nombre_archivo: string
@@ -432,6 +436,8 @@ export type Database = {
           created_at?: string
           empresa_id?: string
           estado?: string
+          glosa_activa?: boolean
+          glosa_comun?: string | null
           id?: string
           movimientos_detectados?: number | null
           nombre_archivo?: string
