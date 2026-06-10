@@ -57,6 +57,9 @@ export default function GlosaComunControl({
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
       <button
         type="button"
+        role="switch"
+        aria-checked={activa}
+        aria-label="Glosa para todas las boletas de este documento"
         onClick={toggle}
         disabled={saving}
         title="Activa o desactiva la glosa para todas las boletas de este documento"
@@ -82,6 +85,7 @@ export default function GlosaComunControl({
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
           placeholder={placeholder}
           maxLength={80}
+          aria-label="Glosa común de las boletas de este documento"
           title="Misma glosa para todas las boletas de este documento (máx 80). Vacío usa el default por tipo."
           style={{
             flex: 1, minWidth: 160, height: 24, borderRadius: 6, border: "1px solid var(--border)",
