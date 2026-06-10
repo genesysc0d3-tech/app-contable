@@ -36,6 +36,11 @@ npm run dev
 
 - **No necesita** Supabase CLI ni Vercel CLI para programar.
 - **Solo modificar** archivos en `/v5` o componentes compartidos. No tocar `/escritorio` original.
+- **EL LEGACY NO IMPORTA** (vale para todos los agentes): `/escritorio` v1-v4 y sus
+  componentes son código muerto. No analizarlos, no fixearlos, no reportar sus errores.
+  El producto es **/massdte** (alias de `escritorio/v5`) + el stack de emisión
+  (`src/lib/emission/`, `src/app/api/simpleapi/`, `src/app/api/sii-local/`,
+  `extensions/sii-portal-rpa/`). Objetivo actual: llevarlo a producción.
 
 ---
 
@@ -69,6 +74,7 @@ npm run dev
 - Migraciones SQL en `supabase/migrations/` (respetar orden por fecha).
 - Tipado de base de datos en `src/lib/database.types.ts`.
 - Script de limpieza de datos de test: `scripts/limpiar-test.sql`. Conserva `parser_adapters`, `parser_logs`, `clasificacion_reglas`, `boletas_caf_mock`, `clientes`, `usuarios`, `empresas`, `propuestas_ia`, `movimientos_raw`, `documentos_subidos`. Borra solo `audit_chunks`, `ia_uso`, `creditos_uso`, `periodos_contables`.
+- Supabase MCP está configurado para el proyecto `aluuuyecwifaakehvcam`: úsalo como fallback para migraciones, advisors y dry-runs SQL cuando el CLI/pooler o env vars locales bloqueen. El MCP no expone `SUPABASE_SERVICE_ROLE_KEY` ni borra objetos de Storage; para `scripts/limpiar-test-storage.mjs --commit` sigue siendo obligatorio exportar `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sin leer `.env.local`.
 
 ---
 
