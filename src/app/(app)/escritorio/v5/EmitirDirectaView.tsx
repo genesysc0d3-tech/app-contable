@@ -7,6 +7,10 @@ import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
 
 type TipoDte = 33 | 34 | 39 | 41;
+type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro";
+
+// Etiquetas exactas del select "Elija método de pago" del portal e-Boleta SII.
+const FORMAS_PAGO: FormaPago[] = ["Efectivo", "Pago Electrónico", "Transferencia Electrónica", "Cheque", "Otro"];
 
 interface EmitirResponse {
   ok: boolean;
@@ -33,6 +37,7 @@ interface BoletaDraft {
   receptorComuna: string;
   detalleNombre: string;
   monto: string;
+  formaPago: FormaPago;
   updatedAt: number;
 }
 
@@ -198,6 +203,7 @@ function newDraft(tipoDte: TipoDte, seq = 1): BoletaDraft {
     receptorComuna: "",
     detalleNombre: "Servicio prestado",
     monto: "",
+    formaPago: "Efectivo",
     updatedAt: Date.now(),
   };
 }
@@ -274,6 +280,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const receptorComuna = activeDraft.receptorComuna;
   const detalleNombre = activeDraft.detalleNombre;
   const monto = activeDraft.monto;
+  const formaPago = activeDraft.formaPago ?? "Efectivo";
 
   const total = useMemo(() => parseAmount(monto), [monto]);
   const isAfecto = empresaTipo === "afecto";
@@ -670,7 +677,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         learn_only: false,
         auto_emit: true,
         allow_final_emit: true,
-        payment_method: "Efectivo",
+        payment_method: formaPago,
         confirmation_required: false,
       },
     }, window.location.origin);
@@ -961,6 +968,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <Field label="Detalle" value={detalleNombre} onChange={(value) => updateActiveDraft({ detalleNombre: value })} placeholder="Servicio prestado" />
                 <Field label={tipoDte === 39 || tipoDte === 33 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
               </div>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+                <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Forma de pago</span>
+                <select value={formaPago} onChange={(e) => updateActiveDraft({ formaPago: e.target.value as FormaPago })}
+                  style={{ width: "100%", height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", padding: "0 9px", fontSize: 11, outline: "none" }}>
+                  {FORMAS_PAGO.map((fp) => <option key={fp} value={fp}>{fp}</option>)}
+                </select>
+              </label>
             </section>
           </main>
 

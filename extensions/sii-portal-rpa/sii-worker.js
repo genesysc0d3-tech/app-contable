@@ -384,36 +384,34 @@
   // slot refleje el valor elegido. Devuelve true solo si quedó seleccionado.
   async function selectVuetifyOption(slotText, optionText) {
     const dialog = activeEmitDialog() || document;
-    const findSlot = () => Array.from(dialog.querySelectorAll(".v-select__slot, .v-input__slot"))
+    // Captura el slot por referencia: tras elegir, Vuetify actualiza su texto
+    // EN ESE MISMO elemento (de "Elija método de pago" a "Efectivo"), así que
+    // la verificación debe leer el mismo nodo, no re-buscar por el placeholder.
+    const slot = Array.from(dialog.querySelectorAll(".v-select__slot, .v-input__slot"))
       .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText)));
-    const slot = findSlot();
     if (!slot) return false;
-    // Si ya muestra la opción deseada, no hace falta abrir.
-    if (normalizeSearchText(slot.innerText || slot.textContent).includes(normalizeSearchText(optionText))) return true;
+    const shows = () => normalizeSearchText(slot.innerText || slot.textContent).includes(normalizeSearchText(optionText));
+    if (shows()) return true;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await clickElement(slot);
-      // Esperar el menú activo y buscar la opción.
       for (let i = 0; i < 16; i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 180));
         const menus = Array.from(document.querySelectorAll(".v-menu__content"))
           .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
         for (const menu of menus) {
           const items = Array.from(menu.querySelectorAll(".v-list-item, [role='option'], .v-list__tile"));
-          const exact = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === normalizeSearchText(optionText));
-          const partial = items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(normalizeSearchText(optionText)));
-          const opt = exact || partial;
+          const opt = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === normalizeSearchText(optionText))
+            || items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(normalizeSearchText(optionText)));
           if (opt) {
             await clickElement(opt);
             await new Promise((resolve) => setTimeout(resolve, 250));
-            const now = findSlot();
-            if (now && normalizeSearchText(now.innerText || now.textContent).includes(normalizeSearchText(optionText))) return true;
+            if (shows()) return true;
           }
         }
       }
     }
-    const finalSlot = findSlot();
-    return Boolean(finalSlot && normalizeSearchText(finalSlot.innerText || finalSlot.textContent).includes(normalizeSearchText(optionText)));
+    return shows();
   }
 
   async function clickButtonText(text) {
