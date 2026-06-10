@@ -1248,6 +1248,17 @@ export type Database = {
           folio: number
         }[]
       }
+      documento_pipeline_counts: {
+        Args: { p_empresa: string; p_desde: string; p_hasta: string }
+        Returns: {
+          documento_id: string
+          total: number
+          emitida: number
+          lista: number
+          por_revisar: number
+          no_aplica: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
