@@ -90,8 +90,14 @@ export async function generateSimpleApiDteFromVault({ appOrigin, input }) {
   if (typeof input !== "string" || !input.trim()) return { ok: false, error: "INPUT_REQUIRED" };
   if (!isAllowedProxyOrigin(appOrigin)) return { ok: false, error: "APP_ORIGIN_INVALID" };
 
+  // Reconciliar contra la app: el contador local de folios se pierde al
+  // reinstalar la extensión o cambiar de equipo; boletas_emitidas es la
+  // fuente de verdad del último folio usado por SimpleAPI.
+  const tipoDtePeek = peekTipoDte(input);
+  const ultimoFolioApp = tipoDtePeek ? await fetchUltimoFolioApp(appOrigin, tipoDtePeek) : null;
+
   const formData = new FormData();
-  const prepared = prepareDteInput(input);
+  const prepared = prepareDteInput(input, ultimoFolioApp);
   if (!prepared.ok) return prepared;
   formData.set("input", prepared.input);
   formData.set("files", base64ToFile(unlockedVault.secrets.pfx_base64, unlockedVault.secrets.pfx_name || "certificado.pfx", "application/x-pkcs12"));
@@ -108,12 +114,39 @@ export async function generateSimpleApiDteFromVault({ appOrigin, input }) {
     ? await response.json().catch(() => null)
     : await response.text().catch(() => "");
 
-  if (response.ok) await advanceVaultFolio(prepared.tipoDte);
+  if (response.ok) await advanceVaultFolio(prepared.tipoDte, prepared.folio);
   return {
     ok: response.ok,
     status: response.status,
     data,
   };
+}
+
+function peekTipoDte(input) {
+  try {
+    const parsed = JSON.parse(input);
+    const idDoc = parsed?.Documento?.Encabezado?.IdentificacionDTE || parsed?.Documento?.Encabezado?.IdDoc;
+    const tipoDte = Number(idDoc?.TipoDTE || idDoc?.TipoDte || idDoc?.tipoDte);
+    return Number.isInteger(tipoDte) && tipoDte > 0 ? tipoDte : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUltimoFolioApp(appOrigin, tipoDte) {
+  try {
+    const response = await fetch(`${appOrigin}/api/simpleapi/ultimo-folio?tipo_dte=${tipoDte}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const data = await response.json().catch(() => null);
+    const folio = Number(data?.ultimo_folio);
+    return Number.isSafeInteger(folio) && folio > 0 ? folio : null;
+  } catch {
+    // Sin red o sin sesión: se usa solo el contador local (comportamiento previo).
+    return null;
+  }
 }
 
 export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
@@ -395,7 +428,7 @@ function certificatePayload() {
   return { Rut: unlockedVault.secrets.certificate_rut, Password: unlockedVault.secrets.certificate_password };
 }
 
-function prepareDteInput(input) {
+function prepareDteInput(input, ultimoFolioApp = null) {
   try {
     const parsed = JSON.parse(input);
     parsed.Certificado = certificatePayload();
@@ -404,30 +437,39 @@ function prepareDteInput(input) {
     const tipoDte = Number(idDoc.TipoDTE || idDoc.TipoDte || idDoc.tipoDte);
     if (!Number.isInteger(tipoDte)) return { ok: false, error: "TIPO_DTE_REQUIRED" };
     if (!idDoc.Folio) {
-      const folio = nextFolioForTipo(tipoDte);
+      const folio = nextFolioForTipo(tipoDte, ultimoFolioApp);
       if (!folio.ok) return folio;
       idDoc.Folio = folio.folio;
     }
     if (!idDoc.FechaEmision && idDoc.FchEmis) idDoc.FechaEmision = idDoc.FchEmis;
-    return { ok: true, input: JSON.stringify(parsed), tipoDte };
+    return { ok: true, input: JSON.stringify(parsed), tipoDte, folio: Number(idDoc.Folio) };
   } catch {
     return { ok: false, error: "BAD_JSON" };
   }
 }
 
-function nextFolioForTipo(tipoDte) {
+function nextFolioForTipo(tipoDte, ultimoFolioApp = null) {
   const info = unlockedVault.secrets.caf_info;
   if (!info || Number(info.tipoDte) !== Number(tipoDte)) return { ok: false, error: "CAF_TIPO_DTE_MISMATCH" };
-  const folio = Number(info.nextFolio || info.desde);
+  const local = Number(info.nextFolio || info.desde);
+  const folio = Number.isSafeInteger(ultimoFolioApp) && ultimoFolioApp > 0
+    ? Math.max(local, ultimoFolioApp + 1)
+    : local;
   if (!Number.isSafeInteger(folio) || folio < Number(info.desde) || folio > Number(info.hasta)) return { ok: false, error: "CAF_FOLIO_RANGE_EXHAUSTED" };
   return { ok: true, folio };
 }
 
-async function advanceVaultFolio(tipoDte) {
+async function advanceVaultFolio(tipoDte, folioUsado = null) {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
   if (!vault || !unlockedVault?.passphrase || !unlockedVault?.secrets?.caf_info || Number(unlockedVault.secrets.caf_info.tipoDte) !== Number(tipoDte)) return;
-  unlockedVault.secrets.caf_info.nextFolio = Number(unlockedVault.secrets.caf_info.nextFolio || unlockedVault.secrets.caf_info.desde) + 1;
+  const info = unlockedVault.secrets.caf_info;
+  const base = Number(info.nextFolio || info.desde);
+  // El siguiente folio queda después del realmente usado (que pudo venir
+  // reconciliado desde la app), nunca detrás del contador local.
+  info.nextFolio = Number.isSafeInteger(folioUsado) && folioUsado > 0
+    ? Math.max(base, folioUsado + 1)
+    : base + 1;
   unlockedVault.secrets.saved_at = new Date().toISOString();
 
   const salt = crypto.getRandomValues(new Uint8Array(16));

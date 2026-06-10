@@ -13,7 +13,11 @@ export function blockUnsupportedBackendProvider(proveedor: ProveedorEmision) {
 
   if (proveedor === "simpleapi") {
     return NextResponse.json(
-      { ok: false, error: "SIMPLEAPI_PENDIENTE", detalle: "SimpleAPI esta configurado, pero este flujo aun no recibe PFX/CAF desde la boveda local." },
+      {
+        ok: false,
+        error: "SIMPLEAPI_PENDIENTE",
+        detalle: "Las boletas del producto se emiten con SII Local (bot e-Boleta). Cambia el proveedor de boletas a SII Local en Empresa → Emisión, o usa SimpleAPI solo para facturas 33/34.",
+      },
       { status: 501 },
     );
   }

@@ -281,7 +281,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const tipoLocked = hasEmpresaLock && !tipoDesbloqueado;
   const tipoEmpresa: TipoDte | null = isExento ? 41 : isAfecto ? 39 : null;
   const tipoDiferenteEmpresa = !!tipoEmpresa && tipoDte !== tipoEmpresa;
-  const usesSiiLocal = emisionProveedor === "sii_local";
+  // Carriles del producto: boletas 39/41 → bot SII local (e-Boleta);
+  // facturas 33/34 → SimpleAPI. El gate por tipo evita que una factura
+  // termine en el bot de e-Boleta o una boleta en el generador de facturas.
+  const isBoletaTipo = tipoDte === 39 || tipoDte === 41;
+  const usesSiiLocal = emisionProveedor === "sii_local" && isBoletaTipo;
   const usesSimpleApi = facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
   // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
   // un dígito verificador malo termina en rechazo SII.

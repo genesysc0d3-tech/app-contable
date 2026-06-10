@@ -54,7 +54,9 @@ function safeJson(value: unknown): unknown {
 }
 
 function totalsFor(tipoDte: number, total: number) {
-  if (tipoDte === 34) return { monto_neto: 0, iva: 0, monto_exento: total };
+  // 34 (factura exenta) y 41 (boleta exenta): todo exento.
+  if (tipoDte === 34 || tipoDte === 41) return { monto_neto: 0, iva: 0, monto_exento: total };
+  // 33 (factura afecta) y 39 (boleta afecta): total bruto con IVA incluido.
   const neto = Math.round(total / 1.19);
   return { monto_neto: neto, iva: total - neto, monto_exento: 0 };
 }
@@ -117,7 +119,9 @@ export async function POST(request: Request) {
   }
 
   const result = payload.result ?? null;
-  const tipoDte = result?.dte?.tipoDte === 33 || result?.dte?.tipoDte === 34 ? result.dte.tipoDte : null;
+  const tipoDte = result?.dte?.tipoDte === 33 || result?.dte?.tipoDte === 34 || result?.dte?.tipoDte === 39 || result?.dte?.tipoDte === 41
+    ? result.dte.tipoDte
+    : null;
   const folio = positiveInt(result?.dte?.folio);
   const montoTotal = positiveInt(result?.dte?.total ?? payload.draft?.monto_total);
   const fechaEmision = chileDate(result?.dte?.fecha);
