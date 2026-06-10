@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import FieldMapper from "@/components/upload/FieldMapper";
 import HintSelector from "@/components/upload/HintSelector";
+import TermHint from "@/components/ui/TermHint";
 import VisualizarArchivo from "./VisualizarArchivo";
 
 const st: Record<string, string> = {procesado:"#22c55e",procesando:"#5b9cf6",error:"#ef4444",subido:"#f59e0b"};
@@ -21,7 +22,11 @@ interface DocRaw {
   tipo_operacion_hint?: string | null;
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId }: { docs: DocRaw[]; empresaId: string }) {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix }: {
+  docs: DocRaw[]; empresaId: string;
+  tipoEmpresa?: string | null;
+  tipoMix?: Record<string, { afectas: number; exentas: number }>;
+}) {
   const router = useRouter();
   const [docs, setDocs] = useState(initialDocs);
   const [mappingDocId, setMappingDocId] = useState<string | null>(null);
@@ -163,6 +168,31 @@ export default function DocCardList({ docs: initialDocs, empresaId }: { docs: Do
                   )}
                   {isBoletaUnica && <span style={{fontSize:9,color:"var(--text2)",fontWeight:600}}>Registro creado desde Emision Directa</span>}
                 </div>
+                {(() => {
+                  // La empresa fijó su tipo, pero esta cartola trae movimientos
+                  // del tipo contrario: se recalca sin bloquear nada.
+                  if (isBoletaUnica || doc.estado !== "procesado") return null;
+                  const mix = tipoMix?.[doc.id];
+                  const conflicto = tipoEmpresa === "exento" && (mix?.afectas ?? 0) > 0
+                    ? { n: mix!.afectas, clasif: "afectos (con IVA)", cfg: "exenta" }
+                    : tipoEmpresa === "afecto" && (mix?.exentas ?? 0) > 0
+                      ? { n: mix!.exentas, clasif: "exentos (sin IVA)", cfg: "afecta" }
+                      : null;
+                  if (!conflicto) return null;
+                  return (
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,padding:"5px 9px",borderRadius:8,background:"rgba(245,158,11,.07)",border:"1px solid rgba(245,158,11,.18)",color:"#f59e0b",fontSize:9,fontWeight:600,lineHeight:1.4}}>
+                      <span style={{flexShrink:0}}>△</span>
+                      <span style={{minWidth:0}}>
+                        {conflicto.n} movimiento{conflicto.n !== 1 ? "s" : ""} clasificado{conflicto.n !== 1 ? "s" : ""} como {conflicto.clasif}, y tu empresa está configurada {conflicto.cfg}
+                      </span>
+                      <TermHint width={262} align="right">
+                        La app los procesa igual y puedes corregir cada uno en Revisar antes de aprobar.
+                        Para evitar este aviso, sube cartolas solo con los movimientos que quieres boletear,
+                        o ajusta el <strong>Tipo</strong> del documento (el selector de la derecha) para guiar al clasificador.
+                      </TermHint>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );

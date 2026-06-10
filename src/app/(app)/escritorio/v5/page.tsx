@@ -204,6 +204,21 @@ export default async function V5Page({ searchParams }: {
     });
   const docsAgregados = [...boletasComoAgregados, ...docsBase].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  // Mix de tipos por documento: si la empresa fijó afecto/exento y una
+  // cartola trae propuestas del tipo contrario, la card lo recalca para
+  // recordar que conviene subir cartolas con los movimientos deseados.
+  // Solo aviso — la app procesa igual.
+  const docTipoMix: Record<string, { afectas: number; exentas: number }> = {};
+  for (const p of propsData.data ?? []) {
+    if (p.estado !== "pendiente" && p.estado !== "aprobado" && p.estado !== "editado") continue;
+    const docId = p.movimientos_raw?.documentos_subidos?.id;
+    if (!docId) continue;
+    const t = p.tipo_propuesto;
+    if (t === "gasto_egreso" || t === "no_comercial") continue;
+    const mix = (docTipoMix[docId] ??= { afectas: 0, exentas: 0 });
+    if (t === "boleta" || t === "factura") mix.afectas++; else mix.exentas++;
+  }
+
   // All boletas for RCV view
   const { data: boletasAllData } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
@@ -562,7 +577,7 @@ body{font-family:'DM Sans',sans-serif}
                 docsAgregados.length > 0 ? (
                   <div className="r-scroll">
                     <div className="sec" style={{paddingTop:6}}>
-                      <DocCardList docs={docsAgregados} empresaId={empresaId} />
+                      <DocCardList docs={docsAgregados} empresaId={empresaId} tipoEmpresa={usuario.empresas.tipo_contribuyente} tipoMix={docTipoMix} />
                     </div>
                   </div>
                 ) : (
