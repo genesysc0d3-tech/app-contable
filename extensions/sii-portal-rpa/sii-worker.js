@@ -399,6 +399,37 @@
     return null;
   }
 
+  // Activa un toggle Vuetify (Receptor / Detalle) dentro del modal de emisión.
+  async function enableDialogToggle(labelText) {
+    const dialog = activeEmitDialog() || document;
+    const wanted = normalizeSearchText(labelText);
+    const switches = Array.from(dialog.querySelectorAll("input[type='checkbox'], input[role='switch']"));
+    const target = switches.find((el) => normalizeSearchText(labelFor(el)).includes(wanted));
+    if (!target) return false;
+    if (target.checked) return true;
+    await clickElement(target.closest(".v-input__slot") || target.parentElement || target);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return true;
+  }
+
+  function findDialogControl(pattern) {
+    const dialog = activeEmitDialog() || document;
+    return Array.from(dialog.querySelectorAll("input, textarea"))
+      .find((el) => isVisibleEnabled(el) && pattern.test(controlText(el))) || null;
+  }
+
+  // El contador puede operar varias empresas en e-Boleta (selector superior):
+  // antes de emitir se verifica que el RUT emisor visible sea el del job.
+  function assertEmisorRut(job) {
+    const want = String(job?.emisor_rut || "").replace(/[^0-9kK]/g, "").toUpperCase();
+    if (!want) return;
+    const rutsVisibles = (pageText().match(/\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dkK]/g) || [])
+      .map((r) => r.replace(/[^0-9kK]/g, "").toUpperCase());
+    if (rutsVisibles.length > 0 && !rutsVisibles.includes(want)) {
+      throw new Error(`El portal SII tiene seleccionada otra empresa. Elige el emisor RUT ${job.emisor_rut} en el selector superior y reintenta.`);
+    }
+  }
+
   async function clickFinalEmitInDialog(dialog) {
     const buttons = Array.from(dialog.querySelectorAll("button"));
     const finalEmit = buttons.reverse().find((button) => normalizeText(button.innerText || button.textContent || button.getAttribute("value")) === "EMITIR");
@@ -427,7 +458,7 @@
         const probe = `${href} ${text}`.toLowerCase();
         const kind = probe.includes("xml")
           ? "xml"
-          : probe.includes("pdf")
+          : probe.includes("pdf") || probe.includes("descargar")
             ? "pdf"
             : probe.includes("imprimir") || probe.includes("print") || probe.includes("boleta")
               ? "html"
@@ -485,8 +516,9 @@
   }
 
   function captureExplicitFolio(text) {
+    // El portal real muestra "BOLETA ELECTRÓNICA NÚMERO: 2" (sin afecta/exenta).
     const match = text.match(/(?:Nro\.?\s*)?Folio\s*(?:Nro\.?|N(?:°|o)|Numero|#)?\s*[:#-]?\s*(\d{1,10})/i)
-      || text.match(/BOLETA\s+(?:AFECTA|EXENTA)\s+ELECTR[OÓ]NICA\s+N[UÚ]MERO\s*[:#-]?\s*(\d{1,10})/i);
+      || text.match(/BOLETA(?:\s+(?:AFECTA|EXENTA))?\s+ELECTR[OÓ]NICA\s+N[UÚ]MERO\s*[:#-]?\s*(\d{1,10})/i);
     const folio = match ? parseFolio(match[1]) : null;
     if (!folio) return null;
     return {
@@ -579,6 +611,9 @@
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
     if (!buttonByText("EMITIR")) throw new Error("Pantalla e-Boleta no lista");
 
+    // Verificación de emisor antes de tocar nada (cuentas multi-empresa).
+    assertEmisorRut(job);
+
     renderOverlay("LOCKED_AUTOMATION", "Preparando e-Boleta. No escribas ni hagas click.");
 
     for (const digit of amount) {
@@ -603,6 +638,32 @@
     const paymentMethod = job?.payment_method || "Efectivo";
     if (await openSelectByValue("Elija método de pago")) {
       await chooseMenuOption(paymentMethod);
+    }
+
+    // Glosa de la boleta (toggle "Detalle", máx 80 caracteres): identifica el
+    // movimiento de origen — clave para la trazabilidad MASSDTE.
+    const glosa = String(job?.detalles?.[0]?.nombre || "").trim().slice(0, 80);
+    if (glosa) {
+      renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
+      const toggled = await enableDialogToggle("Detalle");
+      if (toggled) {
+        const glosaInput = findDialogControl(/DETALLE/);
+        if (glosaInput) setControlValue(glosaInput, glosa);
+      }
+    }
+
+    // Receptor opcional: solo si el job lo trae (legal sin receptor < $180.000).
+    if (job?.receptor?.rut) {
+      renderOverlay("LOCKED_AUTOMATION", "Completando datos del receptor.");
+      const toggled = await enableDialogToggle("Receptor");
+      if (toggled) {
+        const rutInput = findDialogControl(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/);
+        if (rutInput) setControlValue(rutInput, String(job.receptor.rut));
+        if (job.receptor.razon_social) {
+          const nombreInput = findDialogControl(/NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/);
+          if (nombreInput) setControlValue(nombreInput, String(job.receptor.razon_social));
+        }
+      }
     }
 
     if (job?.allow_final_emit !== true) {

@@ -649,6 +649,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         job_id: jobId,
         expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         empresa_id: empresaId ?? "default",
+        // El worker verifica que el portal tenga seleccionado este emisor
+        // antes de emitir (cuentas SII multi-empresa).
+        emisor_rut: empresaRut ?? undefined,
         tipo_dte: tipoDte,
         fecha_emision: chileTodayString(),
         receptor: {
