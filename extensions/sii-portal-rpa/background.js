@@ -350,6 +350,28 @@ function focusWorkerForHuman(state, message) {
   sendToApp(state, statusMessage(state.jobId, "waiting_manual_login", message, true));
 }
 
+// Cuando el usuario desbloquea (o guarda) la bóveda SII desde las opciones,
+// reanudar solo los trabajos que quedaron esperando login: vuelve a escanear
+// la ventana SII, que ahora encontrará credenciales y hará autologin. Esto
+// es lo que hace que "desbloquear PIN" continúe la emisión sin recargar nada.
+function resumeJobsAfterSiiUnlock() {
+  const credentials = getUnlockedSiiCredentials();
+  if (!credentials?.rut || !credentials?.clave) return;
+  for (const state of activeJobs.values()) {
+    if (state.learnOnly || state.submitted || state.awaitingResult) continue;
+    state.humanRequired = false;
+    state.autologinAttempted = false; // permitir un intento limpio ahora que hay clave
+    sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Bóveda desbloqueada: reanudando inicio de sesión SII automático.", true));
+    sendToSii(state.workerTabId, {
+      type: "APP_CONTABLE_SII_WORKER_OVERLAY",
+      job_id: state.jobId,
+      mode: "LOCKED_AUTOMATION",
+      message: "Bóveda desbloqueada. Reanudando inicio de sesión automático en SII.",
+    });
+    scanWorkerPage(state);
+  }
+}
+
 function attemptSiiAutologin(state) {
   if (state.autologinAttempted) {
     focusWorkerForHuman(state, "No pudimos iniciar sesión automáticamente. SII puede pedir captcha, 2FA, cambio de clave o selección de contribuyente. Inicia sesión manualmente en esta ventana y continuaremos automáticamente.");
@@ -564,7 +586,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type?.startsWith("APP_CONTABLE_SII_VAULT_") && sender.url?.startsWith(chrome.runtime.getURL(""))) {
     handleSiiVaultMessage(message)
-      .then((response) => sendResponse(baseMessage(response)))
+      .then((response) => {
+        sendResponse(baseMessage(response));
+        // Desbloqueo o guardado exitoso → reanudar trabajos en espera de login.
+        if ((message.type === "APP_CONTABLE_SII_VAULT_UNLOCK" || message.type === "APP_CONTABLE_SII_VAULT_SAVE") && response?.ok) {
+          resumeJobsAfterSiiUnlock();
+        }
+      })
       .catch(() => sendResponse(baseMessage({ type: `${message.type}_RESULT`, ok: false, error: "SII_VAULT_ERROR" })));
     return true;
   }
