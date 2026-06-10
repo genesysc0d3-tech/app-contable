@@ -1083,9 +1083,6 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         </div>
       </div>
 
-      <div style={{ padding: "8px 18px", borderTop: "1px solid var(--border)", flexShrink: 0, background: "var(--surface)", fontSize: 10, color: "var(--text2)" }}>
-        La carga masiva sigue disponible en MassDTE.
-      </div>
     </div>
   );
 }

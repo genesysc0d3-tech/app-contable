@@ -62,6 +62,10 @@ export default async function EmpresaPage() {
   const devMode = usuario.dev_mode === true;
 
   return (
+    // Tema oscuro fijo: los paneles (EmisorForm, CAF, proveedor, formatos)
+    // están diseñados sobre fondo oscuro igual que el dashboard massdte;
+    // en modo claro quedaban invisibles (blanco sobre blanco).
+    <div className="dark min-h-screen bg-[#101114] text-white">
     <main className="max-w-lg mx-auto px-4 py-6 pb-24 space-y-6">
       <header>
         <h1 className="text-2xl font-bold">Empresa</h1>
@@ -100,5 +104,6 @@ export default async function EmpresaPage() {
 
       <AiKeyConfig />
     </main>
+    </div>
   );
 }

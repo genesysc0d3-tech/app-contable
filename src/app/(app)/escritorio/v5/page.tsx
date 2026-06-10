@@ -302,6 +302,13 @@ body{font-family:'DM Sans',sans-serif}
 .ep-glow-card{transition:box-shadow 600ms cubic-bezier(0.22,1,0.36,1)}
 .ep-glow-card:hover{box-shadow:0 0 40px -8px rgba(232,85,62,0.40)!important}
 .app{display:grid;grid-template-columns:2.55fr 7.45fr;max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
+/* Móvil/tablet: una sola columna apilada con scroll vertical; el panel de
+   trabajo (tabs) conserva una altura útil propia. */
+@media (max-width: 900px){
+  .app{grid-template-columns:1fr;height:auto;gap:14px;padding:0 10px 24px}
+  .app .left-col{padding-left:0!important}
+  .app > :last-child{height:78vh;min-height:480px}
+}
 .v5-calendar-wrap,.left-col{transition:opacity .28s cubic-bezier(.22,1,.36,1),transform .28s cubic-bezier(.22,1,.36,1)}
 :root.v5-dashboard-fullscreen .v5-calendar-wrap{opacity:0;transform:translateY(-8px);pointer-events:none}
 :root.v5-dashboard-fullscreen .left-col{opacity:0;transform:translateX(-10px);pointer-events:none}
