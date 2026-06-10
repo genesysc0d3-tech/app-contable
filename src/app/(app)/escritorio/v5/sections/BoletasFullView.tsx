@@ -6,6 +6,9 @@ import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 interface BoletaRow {
   id: string; folio: number | null; tipo_dte: number; fecha_emision: string;
   receptor_razon_social: string | null; monto_total: number; estado: string;
+  // Emisión directa (boleta única): se marca distinto y muestra su glosa,
+  // porque sin receptor el detalle es la única forma de reconocerla.
+  es_unica?: boolean; detalle?: string;
 }
 
 function fmt(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
@@ -68,13 +71,16 @@ export default function BoletasFullView({ boletas }: { boletas: BoletaRow[] }) {
                 return (
                   <div key={b.id} style={{
                     padding: "8px 10px", borderRadius: 8,
-                    background: "var(--surface)", border: "1px solid var(--border)",
+                    background: b.es_unica ? "rgba(232,85,62,.035)" : "var(--surface)",
+                    border: b.es_unica ? "1px dashed rgba(232,85,62,.45)" : "1px solid var(--border)",
                     opacity: anulada ? .5 : 1, transition: "all .15s",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                       <div style={{
-                        width: 20, height: 20, borderRadius: 4, background: "var(--border)",
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text2)",
+                        width: 20, height: 20, borderRadius: 4,
+                        background: b.es_unica ? "rgba(232,85,62,.1)" : "var(--border)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        color: b.es_unica ? "#E8553E" : "var(--text2)",
                       }}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
@@ -88,8 +94,12 @@ export default function BoletasFullView({ boletas }: { boletas: BoletaRow[] }) {
                       }}>
                         {b.tipo_dte === 39 ? "AFECTA" : "EXENTA"}
                       </span>
+                      {b.es_unica && <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 4, fontWeight: 800, border: "1px dashed rgba(232,85,62,.55)", background: "rgba(232,85,62,.06)", color: "#E8553E" }}>ÚNICA</span>}
                       {anulada && <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 4, fontWeight: 600, background: "var(--border)", color: "var(--text2)" }}>ANULADA</span>}
                     </div>
+                    {b.es_unica && b.detalle && (
+                      <div style={{ fontSize: 9, color: "var(--text)", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.detalle}</div>
+                    )}
                     <div style={{ fontSize: 9, color: "var(--text2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {b.receptor_razon_social ?? "Sin receptor"}

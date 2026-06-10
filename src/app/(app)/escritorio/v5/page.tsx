@@ -175,7 +175,7 @@ export default async function V5Page({ searchParams }: {
   // Boletas latest 20. Proveedores reales pueden devolver fechas distintas;
   // por eso la vista considera fecha tributaria y fecha de creación.
   const { data: boletasRaw } = await supabase.from("boletas_emitidas")
-    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
+    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado,detalles")
     .eq("empresa_id", empresaId).order("created_at",{ascending:false}).order("folio",{ascending:false}).limit(100);
   const boletas = (boletasRaw ?? []).filter((boleta) => inWorkRange(boleta.fecha_emision) || inWorkRange(boleta.created_at)).slice(0, 20);
 
@@ -203,6 +203,25 @@ export default async function V5Page({ searchParams }: {
       };
     });
   const docsAgregados = [...boletasComoAgregados, ...docsBase].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // Boletas únicas (emisión directa): mismo criterio que Agregados, para que
+  // el tab Boletas las marque igual y muestre su glosa — sin receptor, el
+  // detalle es la única referencia para reconocerlas.
+  const boletaUnicaIds = new Set(
+    docsAgregados
+      .filter((d) => ["boleta_unica", "boleta_sii_local", "dte_simpleapi"].includes(d.tipo))
+      .map((d) => (d.progreso_ia as { boleta_id?: string } | null)?.boleta_id)
+      .filter((v): v is string => Boolean(v)),
+  );
+  const glosaDe = (detalles: unknown) =>
+    Array.isArray(detalles) && detalles[0] && typeof detalles[0] === "object"
+      ? String((detalles[0] as { nombre?: unknown }).nombre ?? "")
+      : "";
+  const boletasView = boletas.map((b) => ({
+    ...b,
+    es_unica: boletaUnicaIds.has(b.id),
+    detalle: glosaDe((b as { detalles?: unknown }).detalles),
+  }));
 
   // Composición por documento (afectas/exentas/gastos): se muestra en la
   // card para decidir de un vistazo qué trae la cartola, y si la empresa
@@ -609,12 +628,12 @@ body{font-family:'DM Sans',sans-serif}
                         Ver reporte RCV
                       </Link>
                     </div>
-                      {boletas!.map(b => {
+                      {boletasView.map(b => {
                         const esAnulada = b.estado === "anulada";
                         return (
                           <div key={b.id} className={`bl-item ${esAnulada ? "an" : ""}`}
                             style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.03)",opacity:esAnulada?0.5:1}}>
-                            <div className="ic" style={{width:28,height:28,borderRadius:6,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"var(--text2)"}}>
+                            <div className="ic" style={{width:28,height:28,borderRadius:6,background:b.es_unica?"rgba(232,85,62,.07)":"var(--bg-muted)",border:b.es_unica?"1px dashed rgba(232,85,62,.5)":"none",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:b.es_unica?"#E8553E":"var(--text2)"}}>
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             </div>
                             <div className="inf" style={{flex:1,minWidth:0}}>
@@ -625,11 +644,15 @@ body{font-family:'DM Sans',sans-serif}
                                     background: b.tipo_dte === 39 ? "var(--accent-light)" : b.tipo_dte === 41 ? "rgba(59,130,246,.1)" : "var(--bg-muted)",
                                     color: b.tipo_dte === 39 ? "#E8553E" : b.tipo_dte === 41 ? "#5b9cf6" : "var(--text2)"}}
                                 >{b.tipo_dte === 39 ? "AFECTA" : b.tipo_dte === 41 ? "EXENTA" : `DTE ${b.tipo_dte}`}</span>
+                                {b.es_unica && (
+                                  <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:800,border:"1px dashed rgba(232,85,62,.55)",background:"rgba(232,85,62,.06)",color:"#E8553E"}}>ÚNICA</span>
+                                )}
                                 {esAnulada && (
                                   <span className="bd an" style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"var(--bg-muted)",color:"var(--text2)"}}>ANULADA</span>
                                 )}
                               </div>
-                              <div className="sub" style={{fontSize:9,color:"var(--text2)",marginTop:1}}>
+                              <div className="sub" style={{fontSize:9,color:"var(--text2)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                {b.es_unica && b.detalle ? <><span style={{color:"var(--text)"}}>{b.detalle}</span> · </> : null}
                                 {b.receptor_razon_social ?? "Sin receptor"} · {(function(){const d=new Date(b.fecha_emision);const ms=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];return d.getDate()+" "+ms[d.getMonth()]+" "+d.getFullYear()})()}
                               </div>
                             </div>
@@ -659,7 +682,7 @@ body{font-family:'DM Sans',sans-serif}
       subidosContent={<SubidosFullView documentos={docsAgregados} />}
       revisarContent={<RevisarFullView propuestas={propsData.data ?? []} empresaId={empresaId} />}
       emitirContent={<EmitirFullView empresaId={empresaId} />}
-      boletasContent={<BoletasFullView boletas={(boletas ?? []) as BoletaRow[]} />}
+      boletasContent={<BoletasFullView boletas={boletasView as (BoletaRow & { es_unica?: boolean; detalle?: string })[]} />}
       empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
       empresaCafs={(cafsData.data ?? []) as CAFRow[]}
       empresaId={empresaId}

@@ -112,9 +112,10 @@ export default function RevisarTabContent({
 
   return (
     <>
-      {/* Document sub-tabs + Aprobar todo */}
+      {/* Referencia al documento de origen — siempre visible para que las
+          propuestas de distintas cartolas no se mezclen */}
       <div className="dtabs">
-        {docMap.length > 1 && docMap.map(dt => (
+        {docMap.map(dt => (
           <div key={dt.docId}
             className={`dtab ${dt.docId === activeDoc.docId ? "act" : ""}`}
             onClick={() => setSelDocId(dt.docId)}
