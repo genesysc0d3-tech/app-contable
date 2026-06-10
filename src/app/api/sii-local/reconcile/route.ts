@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   // Lo que la app ya tiene (vigente) para esta empresa, por (tipo, folio).
   const { data: existentes } = await sb
     .from("boletas_emitidas")
-    .select("tipo_dte, folio")
+    .select("tipo_dte, folio, fecha_emision")
     .eq("empresa_id", empresaId)
     .neq("estado", "anulada");
   const enApp = new Set((existentes ?? []).map((b) => `${b.tipo_dte}:${b.folio}`));
@@ -120,15 +120,26 @@ export async function POST(request: Request) {
     else respaldados.push(r.folio);
   }
 
-  // Fantasmas: en la app pero no en el Resumen del SII (del rango informado).
-  const fantasmas = [...enApp].filter((k) => !enSii.has(k));
+  // Fantasmas: boletas de la app que NO aparecen en el Resumen del SII. Solo
+  // tiene sentido DENTRO del rango que trae el Resumen — comparar todo el
+  // historial contra un rango daría falsos por cada boleta fuera de rango.
+  const desde = typeof body.desde === "string" ? body.desde.slice(0, 10) : null;
+  const hasta = typeof body.hasta === "string" ? body.hasta.slice(0, 10) : null;
+  let fantasmas = 0;
+  if (desde && hasta) {
+    for (const b of existentes ?? []) {
+      const f = String(b.fecha_emision || "").slice(0, 10);
+      if (f >= desde && f <= hasta && !enSii.has(`${b.tipo_dte}:${b.folio}`)) fantasmas += 1;
+    }
+  }
 
   return NextResponse.json({
     ok: true,
     revisados: rows.length,
     respaldados,
     ya_estaban: rows.length - respaldados.length - errores.length,
-    fantasmas_posibles: fantasmas.length,
+    fantasmas_posibles: fantasmas,
+    rango_evaluado: desde && hasta ? { desde, hasta } : null,
     errores,
   });
 }

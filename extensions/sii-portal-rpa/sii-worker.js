@@ -110,14 +110,20 @@
   }
 
   function blockWhenLocked(event) {
-    if (automationClickInProgress) return;          // el propio bot está actuando
+    // Los eventos sintéticos del bot (isTrusted=false) SIEMPRE pasan: nunca
+    // bloqueamos ni toleramos blur sobre la propia automatización (tecleo de
+    // glosa, clicks de selects). Solo bloqueamos el input REAL del usuario.
+    if (event && event.isTrusted === false) return;
+    if (automationClickInProgress) return;
     if (currentMode !== "LOCKED_AUTOMATION") return; // solo mientras el bot trabaja
     event.preventDefault();
     event.stopImmediatePropagation();
-    // Si tu click/foco accidental cayó en un campo del SII, le quitamos el foco
-    // para que ningún tecleo posterior entre a la boleta. (No toca al overlay.)
-    const target = event.target;
-    if (target && typeof target.closest === "function" && !target.closest(`#${OVERLAY_ID}`)) {
+    // Si tu click accidental cayó en un campo del SII, le quitamos el foco para
+    // que ningún tecleo posterior entre a la boleta. Solo en pointer-down real
+    // (no en cada tecla, para no pelear con el estado del formulario).
+    if ((event.type === "mousedown" || event.type === "pointerdown") &&
+        event.target && typeof event.target.closest === "function" &&
+        !event.target.closest(`#${OVERLAY_ID}`)) {
       try {
         const active = document.activeElement;
         if (active && active !== document.body && typeof active.blur === "function") active.blur();
