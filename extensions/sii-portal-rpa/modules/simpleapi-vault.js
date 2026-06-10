@@ -33,10 +33,17 @@ export async function simpleApiVaultStatus() {
     encrypted: Boolean(meta?.encrypted),
     has_pfx: Boolean(meta?.has_pfx),
     has_caf: Boolean(meta?.has_caf),
+    ambiente: meta?.ambiente === 1 ? 1 : 0,
     updated_at: typeof meta?.updated_at === "string" ? meta.updated_at : null,
     unlocked: isUnlocked(),
     unlocked_until: isUnlocked() ? new Date(unlockedVault.expiresAt).toISOString() : null,
   };
+}
+
+// Vaults guardados antes del selector de ambiente no tienen el campo: se
+// asume certificación (0). Nunca defaultear a producción.
+function vaultAmbiente() {
+  return Number(unlockedVault?.secrets?.ambiente) === 1 ? 1 : 0;
 }
 
 export async function handleSimpleApiVaultMessage(message) {
@@ -141,7 +148,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const enviado = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "envio/enviar",
-    input: { Certificado: certificatePayload(), Ambiente: 0, Tipo: dteInfo.tipoDte === 39 || dteInfo.tipoDte === 41 ? 2 : 1 },
+    input: { Certificado: certificatePayload(), Ambiente: vaultAmbiente(), Tipo: dteInfo.tipoDte === 39 || dteInfo.tipoDte === 41 ? 2 : 1 },
     files: [pfxFile("files"), textFile("files2", envioXml, "ENVIO_DTE.xml", "text/xml")],
   });
   if (!enviado.ok) return { ...enviado, step: "envio/enviar", dte: dteInfo };
@@ -151,7 +158,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const consultaEnvio = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "consulta/envio",
-    input: { Certificado: certificatePayload(), RutEmpresa: unlockedVault.secrets.emisor_rut, TrackId: trackId, Ambiente: 0, ServidorBoletaREST: false },
+    input: { Certificado: certificatePayload(), RutEmpresa: unlockedVault.secrets.emisor_rut, TrackId: trackId, Ambiente: vaultAmbiente(), ServidorBoletaREST: false },
     files: [pfxFile("files")],
   });
   const envioAceptado = isAcceptedEnvio(consultaEnvio.data);
@@ -167,7 +174,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
       Total: dteInfo.total,
       FechaDTE: dteInfo.fecha,
       Tipo: dteInfo.tipoDte,
-      Ambiente: 0,
+      Ambiente: vaultAmbiente(),
       ServidorBoletaREST: false,
     },
     files: [pfxFile("files")],
@@ -247,6 +254,7 @@ async function saveSimpleApiVault(payload) {
       encrypted: true,
       has_pfx: true,
       has_caf: true,
+      ambiente: payload.ambiente === 1 ? 1 : 0,
       pfx_name: safeFilename(payload.pfx_name),
       caf_name: safeFilename(payload.caf_name),
       updated_at: now,
@@ -290,6 +298,7 @@ function validatePayload(payload) {
   if (typeof payload.emisor_rut !== "string" || !payload.emisor_rut.trim()) return "EMISOR_RUT_REQUIRED";
   if (typeof payload.resolution_date !== "string" || !payload.resolution_date.trim()) return "RESOLUTION_DATE_REQUIRED";
   if (!Number.isInteger(payload.resolution_number) || payload.resolution_number < 0) return "RESOLUTION_NUMBER_INVALID";
+  if (payload.ambiente !== 0 && payload.ambiente !== 1) return "AMBIENTE_INVALID";
   if (typeof payload.passphrase !== "string" || payload.passphrase.length < 10) return "PASSPHRASE_TOO_SHORT";
   if (base64ByteLength(payload.pfx_base64) > MAX_SECRET_FILE_BYTES) return "PFX_TOO_LARGE";
   if (new TextEncoder().encode(payload.caf_text).byteLength > MAX_SECRET_FILE_BYTES) return "CAF_TOO_LARGE";
@@ -309,6 +318,7 @@ async function encryptPayload(payload, passphrase, salt, iv) {
     emisor_rut: payload.emisor_rut,
     resolution_date: payload.resolution_date,
     resolution_number: payload.resolution_number,
+    ambiente: payload.ambiente === 1 ? 1 : 0,
     caf_info: parseCafInfo(payload.caf_text),
     saved_at: new Date().toISOString(),
   }, passphrase, salt, iv);

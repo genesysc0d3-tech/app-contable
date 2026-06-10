@@ -287,7 +287,8 @@ export async function POST(request: Request) {
         track_id: mockIssue.trackId,
         estado: mockIssue.estadoPersistencia,
         emision_proveedor: proveedorEfectivo,
-        emision_sandbox: false,
+        // Carril solo-mock: emisión simulada, sin validez tributaria.
+        emision_sandbox: true,
         proveedor_respuesta: proveedorRespuesta,
       })
       .select("id, folio, monto_total")

@@ -593,8 +593,10 @@
       throw new Error("El modal Emitir e-Boleta no se abrio; no se presiono el EMITIR final.");
     }
 
+    // El select del modal SII muestra "Boleta afecta" por defecto: se abre por
+    // ese valor visible y luego se elige el tipo deseado.
     const wantedType = job?.tipo_dte === 41 ? "Boleta exenta" : "Boleta afecta";
-    if (await openSelectByValue(job?.tipo_dte === 41 ? "Boleta afecta" : "Boleta afecta")) {
+    if (await openSelectByValue("Boleta afecta")) {
       await chooseMenuOption(wantedType);
     }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 
 interface SiiLocalResultPayload {
   job_id?: string | null;
@@ -45,14 +45,13 @@ interface SiiLocalPdfInfo {
   folio: number | null;
 }
 
-const globalStore = globalThis as typeof globalThis & {
-  __appContableSiiResults?: Array<{ received_at: string; user_id: string | null; job_id: string | null; folio: number | null; status: string; error: string | null; result: unknown }>;
-};
+// Los resultados se persisten en public.sii_local_resultados (service role,
+// RLS deny-all). Antes vivían en un array en memoria, que en serverless
+// multi-instancia hacía que "recuperar última emisión" funcionara solo si la
+// misma instancia había recibido el resultado original.
+const RESULT_RETENTION_DAYS = 7;
 
-function resultLogs() {
-  if (!globalStore.__appContableSiiResults) globalStore.__appContableSiiResults = [];
-  return globalStore.__appContableSiiResults;
-}
+type ServiceDb = SupabaseClient;
 
 function resultForLog(result: unknown) {
   if (!result || typeof result !== "object") return result;
@@ -67,10 +66,26 @@ function resultForLog(result: unknown) {
   return copy;
 }
 
-function rememberResult(entry: { user_id: string | null; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
-  const logs = resultLogs();
-  logs.push({ received_at: new Date().toISOString(), error: null, ...entry, result: resultForLog(entry.result) });
-  if (logs.length > 20) logs.splice(0, logs.length - 20);
+async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
+  try {
+    await sb.from("sii_local_resultados").insert({
+      user_id: entry.user_id,
+      job_id: entry.job_id,
+      folio: entry.folio,
+      status: entry.status,
+      error: entry.error ?? null,
+      result: resultForLog(entry.result) ?? null,
+    });
+    await sb
+      .from("sii_local_resultados")
+      .delete()
+      .eq("user_id", entry.user_id)
+      .lt("received_at", new Date(Date.now() - RESULT_RETENTION_DAYS * 24 * 3600 * 1000).toISOString());
+  } catch (error) {
+    // Log best-effort: si la tabla aún no existe (migración pendiente) no se
+    // bloquea la emisión, solo se pierde la recuperación posterior.
+    console.error("[sii-local-result] no se pudo registrar el resultado", error);
+  }
 }
 
 function positiveInt(value: unknown) {
@@ -237,6 +252,11 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
 
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
+  const sb = createServiceClient(url, key);
+
   let payload: SiiLocalResultPayload;
   try {
     payload = await request.json();
@@ -247,12 +267,25 @@ export async function POST(request: Request) {
   let result = payload.result;
   let effectiveJobId = payload.job_id ?? null;
   if (payload.recover_latest) {
-    const recovered = [...resultLogs()].reverse().find((entry) => {
-      if (entry.user_id !== user.id) return false;
-      if (payload.job_id && entry.job_id !== payload.job_id) return false;
-      return entry.result && typeof entry.result === "object";
-    });
-    if (!recovered) return NextResponse.json({ ok: false, error: "SIN_RESULTADO_SII_RECUPERABLE" }, { status: 404 });
+    let query = sb
+      .from("sii_local_resultados")
+      .select("job_id, result")
+      .eq("user_id", user.id)
+      .not("result", "is", null)
+      .order("received_at", { ascending: false })
+      .limit(1);
+    if (payload.job_id) query = query.eq("job_id", payload.job_id);
+    const { data: recoveredRows, error: recoverErr } = await query;
+    if (recoverErr) {
+      return NextResponse.json(
+        { ok: false, error: "RECUPERACION_NO_DISPONIBLE", detalle: recoverErr.message },
+        { status: 500 },
+      );
+    }
+    const recovered = recoveredRows?.[0] as { job_id: string | null; result: unknown } | undefined;
+    if (!recovered?.result || typeof recovered.result !== "object") {
+      return NextResponse.json({ ok: false, error: "SIN_RESULTADO_SII_RECUPERABLE" }, { status: 404 });
+    }
     result = recovered.result as SiiLocalResultPayload["result"];
     effectiveJobId = recovered.job_id;
   }
@@ -263,8 +296,15 @@ export async function POST(request: Request) {
   const fechaEmision = chileDate(result?.fecha_emision);
 
   const hasStrongEvidence = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
+  // El usuario confirmó el folio a ojo en la pantalla SII: se persiste sin PDF
+  // (queda pdf_upload_error PDF_PENDING_MANUAL) y el respaldo puede adjuntarse
+  // después por el camino de boleta existente.
+  const evidenceSource = result?.folio_evidence && typeof result.folio_evidence === "object"
+    ? (result.folio_evidence as { source?: unknown }).source
+    : null;
+  const manualEvidence = evidenceSource === "manual_visible_receipt";
   if (!folio || !tipoDte || !montoTotal || !fechaEmision || !hasStrongEvidence) {
-    rememberResult({
+    await rememberResult(sb, {
       user_id: user.id,
       job_id: effectiveJobId,
       folio,
@@ -284,11 +324,6 @@ export async function POST(request: Request) {
   if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
   const empresa = usuario.empresas as unknown as { rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null } | null;
   if (!empresa?.rut || !empresa?.razon_social) return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
-  const sb = createServiceClient(url, key);
 
   const { data: existing } = await sb
     .from("boletas_emitidas")
@@ -320,14 +355,14 @@ export async function POST(request: Request) {
         })
         .eq("id", existing.id);
       if (updateErr) {
-        rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
+        await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
         return NextResponse.json({ ok: false, error: "PDF_METADATA_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
       }
-    } else {
-      rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
+    } else if (!manualEvidence) {
+      await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
       return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: pdfUpload.error, already_exists: true, boleta_id: existing.id }, { status: 502 });
     }
-    rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
+    await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
   }
 
@@ -344,8 +379,8 @@ export async function POST(request: Request) {
 
   const trackId = `sii-local:${effectiveJobId ?? result?.job?.job_id ?? "manual"}:${tipoDte}:${folio}`;
   const pdfUpload = await uploadResultPdf(sb, { empresaId: usuario.empresa_id, tipoDte, folio, result, pdfInfo });
-  if (!pdfUpload.storagePath) {
-    rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
+  if (!pdfUpload.storagePath && !manualEvidence) {
+    await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_upload_failed", error: pdfUpload.error, result });
     return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: pdfUpload.error }, { status: 502 });
   }
 
@@ -360,7 +395,7 @@ export async function POST(request: Request) {
       content_type: "application/pdf",
       source_url: pdfUpload.sourceUrl,
     } : null,
-    pdf_upload_error: pdfUpload.error,
+    pdf_upload_error: pdfUpload.storagePath ? null : manualEvidence ? "PDF_PENDING_MANUAL" : pdfUpload.error,
     artifact_links: (result?.artifact_links ?? []).map((link) => ({
       kind: link.kind,
       text: link.text,
@@ -402,7 +437,7 @@ export async function POST(request: Request) {
     .single();
 
   if (insertErr || !boleta) {
-    rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "insert_failed", error: insertErr?.message ?? "DB_INSERT_FAILED", result });
+    await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "insert_failed", error: insertErr?.message ?? "DB_INSERT_FAILED", result });
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
   }
 
@@ -426,7 +461,7 @@ export async function POST(request: Request) {
     },
   });
 
-  rememberResult({ user_id: user.id, job_id: effectiveJobId, folio, status: "persisted", result });
+  await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "persisted", result });
 
   return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id });
 }
@@ -436,10 +471,22 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
 
-  return NextResponse.json({
-    ok: true,
-    results: resultLogs().filter((entry) => entry.user_id === user.id),
-  });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
+  const sb = createServiceClient(url, key);
+
+  const { data, error } = await sb
+    .from("sii_local_resultados")
+    .select("received_at, job_id, folio, status, error, result")
+    .eq("user_id", user.id)
+    .order("received_at", { ascending: false })
+    .limit(20);
+  if (error) {
+    return NextResponse.json({ ok: false, error: "LOG_NO_DISPONIBLE", detalle: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, results: data ?? [] });
 }
 
 export const dynamic = "force-dynamic";

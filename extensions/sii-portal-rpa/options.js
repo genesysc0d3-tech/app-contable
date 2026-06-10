@@ -30,6 +30,8 @@
     emisorRut: document.getElementById("emisor-rut"),
     resolutionDate: document.getElementById("resolution-date"),
     resolutionNumber: document.getElementById("resolution-number"),
+    siiEnvironment: document.getElementById("sii-environment"),
+    vaultAmbiente: document.getElementById("vault-ambiente"),
     vaultPassphrase: document.getElementById("vault-passphrase"),
     refreshStatus: document.getElementById("refresh-status"),
     unlockVault: document.getElementById("unlock-vault"),
@@ -55,6 +57,7 @@
     elements.vaultPfx.textContent = status?.has_pfx ? "Configurado" : "Falta";
     elements.vaultCaf.textContent = status?.has_caf ? "Configurado" : "Falta";
     elements.vaultEncrypted.textContent = status?.encrypted ? "Cifrado local activo" : "Sin bóveda cifrada";
+    elements.vaultAmbiente.textContent = status?.ambiente === 1 ? "Producción" : "Certificación";
     elements.vaultUpdated.textContent = formatDate(status?.updated_at);
     elements.vaultUnlocked.textContent = status?.unlocked ? `Hasta ${formatDate(status.unlocked_until)}` : "Bloqueada";
     elements.simpleApiDiagnostic.textContent = configured
@@ -106,8 +109,8 @@
       elements.siiDiagnostic.textContent = "Ingresa la Clave Tributaria.";
       return;
     }
-    if (!/^\d{4}$/.test(pin)) {
-      elements.siiDiagnostic.textContent = "El PIN local debe tener 4 números.";
+    if (!/^\d{4,8}$/.test(pin)) {
+      elements.siiDiagnostic.textContent = "El PIN local debe tener entre 4 y 8 números.";
       return;
     }
 
@@ -128,8 +131,8 @@
 
   elements.unlockSiiVault?.addEventListener("click", () => {
     const pin = elements.siiPin?.value || "";
-    if (!/^\d{4}$/.test(pin)) {
-      elements.siiDiagnostic.textContent = "Ingresa el PIN local de 4 números para desbloquear.";
+    if (!/^\d{4,8}$/.test(pin)) {
+      elements.siiDiagnostic.textContent = "Ingresa el PIN local (4 a 8 números) para desbloquear.";
       return;
     }
     chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_UNLOCK", pin }, (response) => {
@@ -218,6 +221,7 @@
     const emisorRut = elements.emisorRut?.value || "";
     const resolutionDate = elements.resolutionDate?.value || "";
     const resolutionNumber = Number(elements.resolutionNumber?.value || "0");
+    const ambiente = Number(elements.siiEnvironment?.value || "0");
     const passphrase = elements.vaultPassphrase?.value || "";
     if (!pfx) throw new Error("Selecciona el certificado PFX.");
     if (!caf) throw new Error("Selecciona el CAF XML.");
@@ -226,6 +230,7 @@
     if (!emisorRut.trim()) throw new Error("Ingresa el RUT emisor.");
     if (!resolutionDate) throw new Error("Ingresa la fecha de resolución SII.");
     if (!Number.isInteger(resolutionNumber) || resolutionNumber < 0) throw new Error("Ingresa un número de resolución válido.");
+    if (ambiente !== 0 && ambiente !== 1) throw new Error("Selecciona el ambiente SII.");
     if (passphrase.length < 10) throw new Error("La passphrase local debe tener mínimo 10 caracteres.");
     return {
       pfx_name: pfx.name,
@@ -237,6 +242,7 @@
       emisor_rut: emisorRut.trim(),
       resolution_date: resolutionDate,
       resolution_number: resolutionNumber,
+      ambiente,
       passphrase,
     };
   }
@@ -266,12 +272,14 @@
       CERT_RUT_REQUIRED: "Ingresa el RUT del certificado.",
       EMISOR_RUT_REQUIRED: "Ingresa el RUT emisor.",
       RESOLUTION_DATE_REQUIRED: "Ingresa la fecha de resolución SII.",
+      AMBIENTE_INVALID: "Selecciona el ambiente SII (certificación o producción).",
       PASSPHRASE_TOO_SHORT: "La passphrase local debe tener mínimo 10 caracteres.",
       PASSPHRASE_INVALID: "Passphrase local incorrecta.",
       VAULT_NOT_CONFIGURED: "Primero guarda la boveda cifrada.",
       RUT_REQUIRED: "Ingresa el RUT SII.",
       CLAVE_REQUIRED: "Ingresa la Clave Tributaria.",
-      PIN_INVALID: "El PIN local debe tener 4 números.",
+      PIN_INVALID: "PIN local incorrecto (4 a 8 números).",
+      VAULT_LOCKED_RETRY_LATER: "Demasiados intentos fallidos. Espera 5 minutos y vuelve a intentar.",
       PFX_TOO_LARGE: "El certificado PFX supera 8 MB.",
       CAF_TOO_LARGE: "El CAF XML supera 8 MB.",
       CAF_INVALID: "El CAF XML no parece contener un rango de folios válido.",

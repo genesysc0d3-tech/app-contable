@@ -194,7 +194,8 @@ h2 {
   font-weight: 800;
 }
 
-.vault-form input {
+.vault-form input,
+.vault-form select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -246,7 +247,8 @@ button:disabled {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--accent) 55%, white);
   outline-offset: 2px;
 }

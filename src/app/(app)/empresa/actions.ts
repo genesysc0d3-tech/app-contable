@@ -184,10 +184,13 @@ export async function setCertificadoSii(
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+  if (!ROLES_GESTION_MIEMBROS.has(String(usuario.rol))) {
+    return { error: "Solo owner/admin puede cambiar la configuración fiscal" };
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -217,10 +220,13 @@ export async function setEmisionConfig(
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+  if (!ROLES_GESTION_MIEMBROS.has(String(usuario.rol))) {
+    return { error: "Solo owner/admin puede cambiar el proveedor de emisión" };
+  }
 
   if (config.boletasProveedor !== "mock" && config.boletasProveedor !== "sii_local" && config.boletasProveedor !== "simpleapi") {
     return { error: "Proveedor de boletas inválido" };

@@ -152,7 +152,9 @@ async function handlePost(request: Request) {
       track_id: mockIssue.trackId,
       estado: mockIssue.estadoPersistencia,
       emision_proveedor: proveedorEfectivo,
-      emision_sandbox: false,
+      // Este carril solo emite mock (otros proveedores se bloquean antes):
+      // siempre es una emisión simulada, sin validez tributaria.
+      emision_sandbox: true,
       proveedor_respuesta: proveedorRespuesta,
     })
     .select("id, folio, monto_total, estado, track_id, fecha_emision")
@@ -177,7 +179,7 @@ async function handlePost(request: Request) {
     progreso_ia: {
       origen: "emision_directa",
       proveedor: proveedorEfectivo,
-      sandbox: false,
+      sandbox: true,
       boleta_id: boleta.id,
       folio: boleta.folio,
       tipo_dte: body.tipo_dte,
@@ -198,7 +200,7 @@ async function handlePost(request: Request) {
     estado: boleta.estado,
     registro_agregados: docInsertErr ? "warning" : "ok",
     proveedor: proveedorEfectivo,
-    sandbox: false,
+    sandbox: true,
     mensaje: `Boleta tipo ${body.tipo_dte} folio ${boleta.folio} emitida (${proveedorEfectivo})`,
   });
 }

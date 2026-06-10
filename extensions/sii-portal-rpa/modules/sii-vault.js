@@ -7,8 +7,11 @@ export const SII_VAULT_CAPABILITIES = [
 ];
 
 const STORAGE_KEY = "app_contable_sii_vault_v1";
+const LOCK_KEY = "app_contable_sii_vault_lock_v1";
 const PBKDF2_ITERATIONS = 250000;
 const UNLOCK_TTL_MS = 10 * 60 * 1000;
+const MAX_UNLOCK_ATTEMPTS = 5;
+const LOCK_WINDOW_MS = 5 * 60 * 1000;
 
 let unlockedVault = null;
 
@@ -102,8 +105,29 @@ async function saveSiiVault(payload) {
   return { ok: true };
 }
 
+// Freno a fuerza bruta de PIN vía mensajes: 5 fallos seguidos bloquean el
+// desbloqueo por 5 minutos. Persistido en storage para sobrevivir al sleep
+// del service worker MV3.
+async function getUnlockLock() {
+  const stored = await chrome.storage.local.get(LOCK_KEY);
+  const lock = stored?.[LOCK_KEY];
+  return lock && typeof lock === "object" ? { failed: Number(lock.failed) || 0, until: Number(lock.until) || 0 } : { failed: 0, until: 0 };
+}
+
+async function registerFailedUnlock() {
+  const lock = await getUnlockLock();
+  const failed = lock.failed + 1;
+  if (failed >= MAX_UNLOCK_ATTEMPTS) {
+    await chrome.storage.local.set({ [LOCK_KEY]: { failed: 0, until: Date.now() + LOCK_WINDOW_MS } });
+  } else {
+    await chrome.storage.local.set({ [LOCK_KEY]: { failed, until: 0 } });
+  }
+}
+
 async function unlockSiiVault(pin) {
   if (!isValidPin(pin)) return { ok: false, error: "PIN_INVALID" };
+  const lock = await getUnlockLock();
+  if (lock.until > Date.now()) return { ok: false, error: "VAULT_LOCKED_RETRY_LATER" };
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
   if (!vault?.ciphertext || !vault?.salt || !vault?.iv) return { ok: false, error: "VAULT_NOT_CONFIGURED" };
@@ -116,9 +140,11 @@ async function unlockSiiVault(pin) {
     setTimeout(() => {
       if (unlockedVault && unlockedVault.expiresAt <= Date.now()) unlockedVault = null;
     }, UNLOCK_TTL_MS + 1000);
+    await chrome.storage.local.remove(LOCK_KEY);
     return { ok: true };
   } catch {
     unlockedVault = null;
+    await registerFailedUnlock();
     return { ok: false, error: "PIN_INVALID" };
   }
 }
@@ -132,7 +158,7 @@ function validatePayload(payload) {
 }
 
 function isValidPin(value) {
-  return typeof value === "string" && /^\d{4}$/.test(value);
+  return typeof value === "string" && /^\d{4,8}$/.test(value);
 }
 
 async function encryptCleartext(cleartextPayload, passphrase, salt, iv) {

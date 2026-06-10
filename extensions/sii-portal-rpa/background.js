@@ -361,7 +361,7 @@ function attemptSiiAutologin(state) {
     siiVaultStatus()
       .then((status) => {
         const message = status.configured
-          ? "SII requiere inicio de sesión, pero la bóveda SII está bloqueada. Abre la extensión, ingresa el PIN de 4 números y presiona Desbloquear; luego reintenta la emisión. También puedes iniciar sesión manualmente aquí."
+          ? "SII requiere inicio de sesión, pero la bóveda SII está bloqueada. Abre la extensión, ingresa tu PIN local y presiona Desbloquear; luego reintenta la emisión. También puedes iniciar sesión manualmente aquí."
           : "SII requiere inicio de sesión. Configura la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta.";
         focusWorkerForHuman(state, message);
       })
