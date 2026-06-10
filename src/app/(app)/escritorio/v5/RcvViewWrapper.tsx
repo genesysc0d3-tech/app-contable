@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { RCVContentWrapper } from "./LeftQuickActions";
-import BoletasMensualesView from "./sections/BoletasMensualesView";
+import BoletasMensualesView, { type BoletaRow } from "./sections/BoletasMensualesView";
 
 const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-export default function RcvViewWrapper({ boletas }: { boletas: any[] }) {
+export default function RcvViewWrapper({ boletas }: { boletas: BoletaRow[] }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());

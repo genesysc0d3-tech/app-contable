@@ -61,8 +61,9 @@ export default function EmitirBoletaForm() {
   const [tipoOverride, setTipoOverride] = useState<Map<string, 39 | 41>>(new Map());
   const [progreso, setProgreso] = useState<{ procesadas: number; total: number } | null>(null);
 
+  // No setea loading=true al entrar: el estado inicial ya es true (primer
+  // load desde el effect) y los refresh manuales lo activan en el call site.
   const cargar = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/intermediaria/pendientes-emision", { cache: "no-store" });
       const j = (await res.json()) as PendientesResponse;
@@ -82,7 +83,9 @@ export default function EmitirBoletaForm() {
     setLoading(false);
   }, [toast]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  // Carga inicial. Se difiere a un callback de promesa para que ningún
+  // setState corra síncrono dentro del effect (react-hooks/set-state-in-effect).
+  useEffect(() => { void Promise.resolve().then(cargar); }, [cargar]);
 
   const filtradas = useMemo(() => {
     let base = items;
@@ -193,6 +196,7 @@ export default function EmitirBoletaForm() {
       }
       setSeleccionadas(new Set());
       router.refresh();
+      setLoading(true);
       await cargar();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error de red", "error");

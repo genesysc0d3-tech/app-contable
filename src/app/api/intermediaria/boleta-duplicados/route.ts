@@ -58,8 +58,10 @@ export async function GET(request: Request) {
   }
 
   const candidatos = (data ?? [])
-    .map((row: any) => {
-      const rowDetalle = Array.isArray(row.detalles) ? normalize(row.detalles.map((d: any) => d?.nombre ?? "").join(" ")) : "";
+    .map((row) => {
+      const rowDetalle = Array.isArray(row.detalles)
+        ? normalize(row.detalles.map((d) => (d && typeof d === "object" && !Array.isArray(d) ? String(d.nombre ?? "") : "")).join(" "))
+        : "";
       const motivos: string[] = [];
       let score = 0;
 

@@ -27,6 +27,15 @@ type NormalizedItem = SearchItem & {
 
 type TypeMeta = { label: string; color: string; bg: string; glyph: string };
 
+// Forma del JSON movimientos_raw guardado en propuestas.
+type MovRaw = {
+  fecha?: string;
+  monto?: number;
+  descripcion?: string;
+  n_documento?: string;
+  tipo_flujo?: string;
+};
+
 const TYPE_MAP: Record<SearchItem["type"], TypeMeta> = {
   boleta: { label: "Boleta", color: "#3B82F6", bg: "rgba(59,130,246,.1)", glyph: "B" },
   documento: { label: "Documento", color: "#f59e0b", bg: "rgba(245,158,11,.12)", glyph: "D" },
@@ -108,14 +117,14 @@ function getEditDate(item: SearchItem) {
 function getEmissionDate(item: SearchItem) {
   const d = item.data ?? {};
   if (item.type === "boleta") return String(d.fecha_emision ?? item.fecha ?? "");
-  if (item.type === "propuesta") return String((d.movimientos_raw as any)?.fecha ?? d.created_at ?? item.fecha ?? "");
+  if (item.type === "propuesta") return String((d.movimientos_raw as MovRaw | undefined)?.fecha ?? d.created_at ?? item.fecha ?? "");
   return String(item.fecha ?? d.created_at ?? "");
 }
 
 function getAmount(item: SearchItem) {
   if (typeof item.monto === "number") return item.monto;
   if (typeof item.data?.monto_total === "number") return item.data.monto_total;
-  const mov = item.data?.movimientos_raw as any;
+  const mov = item.data?.movimientos_raw as MovRaw | undefined;
   return typeof mov?.monto === "number" ? mov.monto : null;
 }
 
@@ -135,7 +144,7 @@ function getDocumentId(item: SearchItem) {
 
 function createSearchText(item: SearchItem) {
   const d = item.data ?? {};
-  const mov = (d.movimientos_raw as any) ?? {};
+  const mov = (d.movimientos_raw as MovRaw | undefined) ?? {};
   const parts = [
     item.label,
     item.subtitle,
@@ -175,12 +184,6 @@ function normalizeItem(item: SearchItem, dateMode: DateMode): NormalizedItem {
     typeMeta: TYPE_MAP[item.type],
     deferred,
   };
-}
-
-function rangeLabel(preset: DatePreset, selectedDate: string | null) {
-  if (preset === "all") return "Todas las fechas";
-  if (preset === "day") return selectedDate ? fmtDate(selectedDate, "long") : "Día seleccionado";
-  return RANGE_FILTERS.find((r) => r.key === preset)?.label ?? "Rango";
 }
 
 function inDatePreset(date: string, preset: DatePreset, selectedDate: string | null) {
@@ -223,12 +226,6 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
 
   const normalized = useMemo(() => allItems.map((item) => normalizeItem(item, dateMode)), [allItems, dateMode]);
   const normalizedQuery = debouncedQuery.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-  const counts = useMemo(() => {
-    const result: Record<FilterType, number> = { todo: normalized.length, boleta: 0, documento: 0, propuesta: 0, actividad: 0 };
-    for (const item of normalized) result[item.type] += 1;
-    return result;
-  }, [normalized]);
 
   const filtered = useMemo(() => {
     return normalized.filter((item) => {
@@ -274,14 +271,15 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
     }));
   }, [normalized, normalizedQuery]);
 
-  useEffect(() => {
+  // Al cambiar modo de fecha o búsqueda se colapsan todos los meses menos el
+  // primero. Ajuste de estado durante render (patrón "adjusting state when
+  // props change") en vez de effect, para evitar el render en cascada.
+  const collapseResetKey = `${dateMode}|${normalizedQuery}`;
+  const [prevCollapseResetKey, setPrevCollapseResetKey] = useState<string | null>(null);
+  if (prevCollapseResetKey !== collapseResetKey) {
+    setPrevCollapseResetKey(collapseResetKey);
     setCollapsedMonths(new Set(explorerMonths.slice(1).map((month) => month.key)));
-  }, [dateMode, normalizedQuery]);
-
-  useEffect(() => {
-    if (selectedItem || filtered.length === 0) return;
-    setSelectedId(filtered[0].id);
-  }, [filtered, selectedItem]);
+  }
 
   useEffect(() => {
     function onQueryChange(event: CustomEvent<{ query?: string }>) {
@@ -355,7 +353,7 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
       </header>
 
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${sidebarCollapsed ? 32 : 236}px minmax(520px, 1fr) 324px`, transition: "grid-template-columns .24s cubic-bezier(.22,1,.36,1)" }}>
-        <ExplorerSidebar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((v) => !v)} months={explorerMonths} filter={filter} selectedDate={selectedDate} collapsedMonths={collapsedMonths} libraryCollapsed={libraryCollapsed} datesCollapsed={datesCollapsed} onToggleLibrary={() => setLibraryCollapsed((v) => !v)} onToggleDates={() => setDatesCollapsed((v) => !v)} onToggleMonth={(key) => setCollapsedMonths((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; })} onAll={() => { setFilter("todo"); clearDateFilters(); }} onType={(type) => { setFilter(type); clearDateFilters(); }} onDate={(key) => { setDatePreset("day"); setSelectedDate(key); setFilter("todo"); }} onDateType={(key, type) => { setDatePreset("day"); setSelectedDate(key); setFilter(type); }} />
+        <ExplorerSidebar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((v) => !v)} months={explorerMonths} filter={filter} selectedDate={selectedDate} collapsedMonths={collapsedMonths} libraryCollapsed={libraryCollapsed} datesCollapsed={datesCollapsed} onToggleLibrary={() => setLibraryCollapsed((v) => !v)} onToggleDates={() => setDatesCollapsed((v) => !v)} onToggleMonth={(key) => setCollapsedMonths((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; })} onAll={() => { setFilter("todo"); clearDateFilters(); }} onType={(type) => { setFilter(type); clearDateFilters(); }} onDate={(key) => { setDatePreset("day"); setSelectedDate(key); setFilter("todo"); }} onDateType={(key, type) => { setDatePreset("day"); setSelectedDate(key); setFilter(type); }} />
 
         <main style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--border)", background: "var(--surface)" }}>
           {filtered.length === 0 ? <EmptyState query={debouncedQuery} filtered={allItems.length > 0} /> : <FinderTable grouped={grouped} selectedId={selectedItem?.id ?? null} dateMode={dateMode} query={normalizedQuery} onSelect={setSelectedId} />}
@@ -369,10 +367,6 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
       {viewingDocumentId && <VisualizarArchivo documentoId={viewingDocumentId} onClose={() => setViewingDocumentId(null)} />}
     </div>
   );
-}
-
-function FilterPill({ active, color, label, count, onClick }: { active: boolean; color: string; label: string; count: number; onClick: () => void }) {
-  return <button onClick={onClick} style={{ padding: "6px 10px", borderRadius: 999, border: active ? `1px solid ${color}55` : "1px solid var(--border)", background: active ? `${color}14` : "var(--surface)", color: active ? color : "var(--text2)", fontSize: 10, fontWeight: 850, cursor: "pointer" }}>{label} <span style={{ opacity: .68 }}>{count}</span></button>;
 }
 
 function SegmentedControl({ value, onChange }: { value: DateMode; onChange: (mode: DateMode) => void }) {
@@ -438,10 +432,6 @@ function SectionToggle({ label, collapsed, onClick, style }: { label: string; co
   return <button onClick={onClick} style={{ width: "100%", display: "grid", gridTemplateColumns: "14px 1fr", gap: 6, alignItems: "center", margin: "0 0 6px", padding: "0 8px", border: "none", background: "transparent", color: "var(--text3)", cursor: "pointer", textAlign: "left", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".1em", ...style }}><span style={{ fontSize: 10, lineHeight: 1 }}>{collapsed ? "▸" : "▾"}</span><span>{label}</span></button>;
 }
 
-function SidebarLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ margin: "0 0 6px", padding: "0 8px", fontSize: 8, fontWeight: 900, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".1em", ...style }}>{children}</div>;
-}
-
 function ExplorerButton({ active, label, count, color = "#E8553E", small, tiny, onClick }: { active: boolean; label: string; count: number; color?: string; small?: boolean; tiny?: boolean; onClick: () => void }) {
   return <button onClick={onClick} style={{ width: "100%", display: "grid", gridTemplateColumns: "12px 1fr auto", gap: 6, alignItems: "center", border: active ? `1px solid ${color}42` : "1px solid transparent", background: active ? `${color}14` : "transparent", color: active ? "var(--text)" : "var(--text2)", borderRadius: 8, padding: tiny ? "3px 6px" : small ? "4px 6px" : "5px 7px", cursor: "pointer", textAlign: "left", fontSize: tiny ? 8 : small ? 9 : 10, fontWeight: active ? 850 : 650 }}><span style={{ width: tiny ? 5 : 7, height: tiny ? 5 : 7, borderRadius: 2, background: color, opacity: active ? 1 : .55 }} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span><span style={{ fontSize: 8, color: active ? color : "var(--text3)" }}>{count}</span></button>;
 }
@@ -487,7 +477,7 @@ function ItemDetail({ item, onViewDocument }: { item: NormalizedItem; onViewDocu
   const d = item.data ?? {};
   const statusMeta = Object.values(STATUS_META).find((s) => s.label === item.statusLabel) ?? { label: item.statusLabel, color: "var(--text2)", bg: "var(--bg-muted)" };
   return <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}><div style={{ width: 40, height: 40, borderRadius: 14, display: "grid", placeItems: "center", background: item.typeMeta.bg, color: item.typeMeta.color, fontSize: 13, fontWeight: 900 }}>{item.typeMeta.glyph}</div><div style={{ minWidth: 0, flex: 1 }}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><Badge label={item.typeMeta.label.toUpperCase()} color={item.typeMeta.color} bg={item.typeMeta.bg} />{item.type === "boleta" && <DteBadge tipo={(d as any).tipo_dte} />}<StatusBadge meta={statusMeta} /></div><h2 style={{ margin: "8px 0 0", fontSize: 16, lineHeight: 1.15, fontWeight: 860, letterSpacing: "-.035em", color: "var(--text)" }}>{item.label}</h2></div></div>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}><div style={{ width: 40, height: 40, borderRadius: 14, display: "grid", placeItems: "center", background: item.typeMeta.bg, color: item.typeMeta.color, fontSize: 13, fontWeight: 900 }}>{item.typeMeta.glyph}</div><div style={{ minWidth: 0, flex: 1 }}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><Badge label={item.typeMeta.label.toUpperCase()} color={item.typeMeta.color} bg={item.typeMeta.bg} />{item.type === "boleta" && <DteBadge tipo={d.tipo_dte} />}<StatusBadge meta={statusMeta} /></div><h2 style={{ margin: "8px 0 0", fontSize: 16, lineHeight: 1.15, fontWeight: 860, letterSpacing: "-.035em", color: "var(--text)" }}>{item.label}</h2></div></div>
     <HeroBlock item={item} />
     {item.deferred && <DeferredBadge item={item} />}
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 12, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)" }}><TypeFields item={item} /></div>
@@ -508,9 +498,9 @@ function Hero({ value, label, color }: { value: string; label: string; color: st
 
 function TypeFields({ item }: { item: NormalizedItem }) {
   const d = item.data ?? {};
-  if (item.type === "boleta") return <><Row label="Estado">{item.statusLabel}</Row><Row label="Receptor">{String(d.receptor_razon_social ?? "-")}</Row><Row label="RUT">{String(d.receptor_rut ?? "-")}</Row><Row label="Folio">#{String(d.folio ?? "-")}</Row><Row label="Emisión SII">{fmtDate(item.emissionDate, "long")}</Row><Row label="Subida/Edición">{fmtDate(item.editDate, "long")}</Row><Row label="Neto">{fmtMoney((d as any).monto_neto ?? item.amount) || "-"}</Row><Row label="IVA">{fmtMoney((d as any).iva) || "-"}</Row></>;
-  if (item.type === "documento") { const progreso = (d.progreso_ia as any) ?? {}; return <><Row label="Archivo">{String(d.nombre_archivo ?? item.label)}</Row><Row label="Tipo">{String(d.tipo ?? "Excel")}</Row><Row label="Subido">{fmtDate(item.editDate, "long")}</Row><Row label="Estado">{item.statusLabel}</Row><Row label="Encontrados">{String(progreso.movimientos_encontrados ?? d.movimientos_detectados ?? 0)}</Row>{progreso.duplicados_saltados > 0 && <Row label="Duplicados">{progreso.duplicados_saltados}</Row>}</>; }
-  if (item.type === "propuesta") { const mov = ((d as any).movimientos_raw ?? {}) as any; return <><Row label="Descripción">{String(mov.descripcion ?? item.label)}</Row><Row label="Monto">{item.amountLabel}</Row><Row label="Flujo">{mov.tipo_flujo === "entrada" ? "Ingreso" : mov.tipo_flujo === "salida" ? "Gasto" : "-"}</Row><Row label="Fecha mov.">{mov.fecha ? fmtDate(String(mov.fecha), "long") : "-"}</Row><Row label="Documento">{String(mov.n_documento ?? "-")}</Row></>; }
+  if (item.type === "boleta") return <><Row label="Estado">{item.statusLabel}</Row><Row label="Receptor">{String(d.receptor_razon_social ?? "-")}</Row><Row label="RUT">{String(d.receptor_rut ?? "-")}</Row><Row label="Folio">#{String(d.folio ?? "-")}</Row><Row label="Emisión SII">{fmtDate(item.emissionDate, "long")}</Row><Row label="Subida/Edición">{fmtDate(item.editDate, "long")}</Row><Row label="Neto">{fmtMoney((d.monto_neto as number | undefined) ?? item.amount) || "-"}</Row><Row label="IVA">{fmtMoney(d.iva as number | undefined) || "-"}</Row></>;
+  if (item.type === "documento") { const progreso = (d.progreso_ia as { movimientos_encontrados?: number; duplicados_saltados?: number } | undefined) ?? {}; return <><Row label="Archivo">{String(d.nombre_archivo ?? item.label)}</Row><Row label="Tipo">{String(d.tipo ?? "Excel")}</Row><Row label="Subido">{fmtDate(item.editDate, "long")}</Row><Row label="Estado">{item.statusLabel}</Row><Row label="Encontrados">{String(progreso.movimientos_encontrados ?? d.movimientos_detectados ?? 0)}</Row>{(progreso.duplicados_saltados ?? 0) > 0 && <Row label="Duplicados">{progreso.duplicados_saltados}</Row>}</>; }
+  if (item.type === "propuesta") { const mov = (d.movimientos_raw as MovRaw | undefined) ?? {}; return <><Row label="Descripción">{String(mov.descripcion ?? item.label)}</Row><Row label="Monto">{item.amountLabel}</Row><Row label="Flujo">{mov.tipo_flujo === "entrada" ? "Ingreso" : mov.tipo_flujo === "salida" ? "Gasto" : "-"}</Row><Row label="Fecha mov.">{mov.fecha ? fmtDate(String(mov.fecha), "long") : "-"}</Row><Row label="Documento">{String(mov.n_documento ?? "-")}</Row></>; }
   return <><Row label="Detalle">{item.subtitle || "Registro de actividad"}</Row><Row label="Fecha">{fmtDate(item.activeDate, "long")}</Row></>;
 }
 

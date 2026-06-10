@@ -22,8 +22,6 @@ export default function RightColumnView({
   empresaLogoUrl?: string | null;
 }) {
   const [view, setView] = useState<"dashboard" | "actividad" | "rcv">("dashboard");
-  const viewRef = useRef(view);
-  viewRef.current = view;
   const cardRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -34,7 +32,6 @@ export default function RightColumnView({
     function handler(e: CustomEvent) {
       const v = (e.detail as string) ?? "";
       if (v === "actividad" || v === "rcv" || v === "dashboard") {
-        if (v === viewRef.current) return;
         setView(v);
       }
     }

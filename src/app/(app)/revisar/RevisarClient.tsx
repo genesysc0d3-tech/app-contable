@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
+import { useState, useMemo, useCallback, useEffect, useSyncExternalStore, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import PropuestaCard from "@/components/propuestas/PropuestaCard";
 import SkeletonCard from "@/components/SkeletonCard";
@@ -141,6 +141,18 @@ function ThinRow({ propuesta, onExpand, onEdit, onAction }: {
   );
 }
 
+const emptySubscribe = () => () => {};
+
+function loadBlockMap(storageKey: string): Map<string, number> {
+  if (typeof window === "undefined") return new Map();
+  try {
+    const raw = localStorage.getItem(storageKey);
+    return raw ? new Map(JSON.parse(raw) as [string, number][]) : new Map();
+  } catch {
+    return new Map();
+  }
+}
+
 function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omitidosMap, layout, documentoId }: {
   tipo: "alta" | "media" | "baja" | "omitidos" | "rechazadas"; propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; omitidosMap: OmitidosMap; layout: "mobile" | "desktop"; documentoId: string;
 }) {
@@ -153,26 +165,19 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   // Mounted flag: evita hydration mismatch al usar localStorage.
   // Server renderiza sin bloques (mounted=false), cliente recompone con
   // datos del storage al montar.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   // Persistent block assignment: propuesta_id → block number (1-indexed).
-  // Persistido en localStorage para que sobreviva al recargo.
+  // Persistido en localStorage para que sobreviva al recargo. Se carga lazy
+  // al primer render (el output está gateado por `mounted`, así que no hay
+  // mismatch de hidratación) y se recarga si cambia el storageKey.
   const storageKey = `app-contable:blockmap:${documentoId}:${tipo}`;
-  const blockMapRef = useRef<Map<string, number>>(new Map());
-
-  // Cargar/recargar localStorage cuando se monta o cambia el storageKey.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      blockMapRef.current = raw
-        ? new Map(JSON.parse(raw) as [string, number][])
-        : new Map();
-    } catch {
-      blockMapRef.current = new Map();
-    }
-  }, [storageKey]);
+  const [blockMap, setBlockMap] = useState(() => loadBlockMap(storageKey));
+  const [prevStorageKey, setPrevStorageKey] = useState(storageKey);
+  if (prevStorageKey !== storageKey) {
+    setPrevStorageKey(storageKey);
+    setBlockMap(loadBlockMap(storageKey));
+  }
 
   function toggleCard(id: string) {
     setExpandedCards((prev) => {
@@ -201,7 +206,6 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
       return next;
     });
   }
-  const router = useRouter();
   const { toast } = useToast();
 
   const sorted = useMemo(() => {
@@ -224,8 +228,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
   // max(viejos)+1.
   const blocks = useMemo(() => {
     if (!useBlocks) return [];
-    const map = blockMapRef.current;
-    let mapChanged = false;
+    const map = blockMap;
 
     // 1. Purgar IDs huérfanos: entries del map que ya no existen en la data
     // actual (propuestas borradas, reprocesado, limpieza).
@@ -233,7 +236,6 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     for (const id of Array.from(map.keys())) {
       if (!currentIds.has(id)) {
         map.delete(id);
-        mapChanged = true;
       }
     }
 
@@ -246,7 +248,6 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
       const fresh = renumber.get(old)!;
       if (fresh !== old) {
         map.set(id, fresh);
-        mapChanged = true;
       }
     }
 
@@ -260,15 +261,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
         if (countInBlock >= 10) { nextBlock++; countInBlock = 0; }
         map.set(p.id, nextBlock);
         countInBlock++;
-        mapChanged = true;
       }
-    }
-
-    // Persist if any new IDs were added
-    if (mapChanged && typeof window !== "undefined") {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(Array.from(map.entries())));
-      } catch { /* quota / private mode → ignore */ }
     }
 
     // Group current items by their assigned block number
@@ -282,18 +275,28 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
     return Array.from(byBlock.entries())
       .sort(([a], [b]) => a - b)
       .map(([num, items]) => ({ num, items }));
-  }, [sorted, useBlocks, storageKey]);
+  }, [sorted, useBlocks, blockMap]);
+
+  // Persistir la asignación después de cada recomputo de bloques (el map se
+  // ajusta dentro del useMemo; escribir localStorage es trabajo de effect).
+  useEffect(() => {
+    if (!useBlocks) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(blockMap.entries())));
+    } catch { /* quota / private mode → ignore */ }
+  }, [blocks, blockMap, storageKey, useBlocks]);
 
   const activeBlock = blocks.find((b) => b.num === activeBlockNum) ?? blocks[0] ?? null;
 
-  // Sync activeBlockNum when blocks change (e.g., current block got emptied)
-  useEffect(() => {
-    if (!useBlocks) return;
-    if (blocks.length === 0) { setActiveBlockNum(null); return; }
-    if (activeBlockNum === null || !blocks.some((b) => b.num === activeBlockNum)) {
+  // Sync activeBlockNum when blocks change (e.g., current block got emptied).
+  // Ajuste durante render en vez de effect: converge en un re-render.
+  if (useBlocks) {
+    if (blocks.length === 0) {
+      if (activeBlockNum !== null) setActiveBlockNum(null);
+    } else if (activeBlockNum === null || !blocks.some((b) => b.num === activeBlockNum)) {
       setActiveBlockNum(blocks[0].num);
     }
-  }, [blocks, activeBlockNum, useBlocks]);
+  }
 
   const visible = useBlocks ? (activeBlock?.items ?? []) : sorted;
 

@@ -1,11 +1,10 @@
-// @ts-nocheck
 'use client';
 import { cn } from '@/lib/utils';
-import React, { createContext, type MouseEvent, useContext, useRef, useState } from 'react';
+import React, { createContext, useContext, useRef, useState } from 'react';
 
 interface MousePosition {
-  x: number;
-  y: number;
+  x: number | null;
+  y: number | null;
 }
 
 interface SpotlightProps {
@@ -55,14 +54,14 @@ export const Spotlight = ({
 };
 export function SpotLightItem({ children, className }: SpotlightItemProps) {
   const { HoverFocusSpotlight, ProximitySpotlight, CursorFlowGradient } = useSpotlight();
-  const boxWrapper = useRef(null);
+  const boxWrapper = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
-  const [mousePosition, setMousePosition] = React.useState({
+  const [mousePosition, setMousePosition] = React.useState<MousePosition>({
     x: null,
     y: null,
   });
   React.useEffect(() => {
-    const updateMousePosition = (ev: { clientX: any; clientY: any }) => {
+    const updateMousePosition = (ev: MouseEvent) => {
       setMousePosition({ x: ev.clientX, y: ev.clientY });
     };
     window.addEventListener('mousemove', updateMousePosition);
@@ -72,7 +71,7 @@ export function SpotLightItem({ children, className }: SpotlightItemProps) {
   }, []);
 
   const [overlayColor, setOverlayColor] = useState({ x: 0, y: 0 });
-  const handleMouemove = ({ currentTarget, clientX, clientY }): MouseEvent => {
+  const handleMouemove = ({ currentTarget, clientX, clientY }: React.MouseEvent<HTMLDivElement>) => {
     const { left, top } = currentTarget.getBoundingClientRect();
 
     const x = clientX - left;

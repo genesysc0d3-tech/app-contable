@@ -1,7 +1,6 @@
-// @ts-nocheck
 'use client';
 import { cn } from '@/lib/utils';
-import { motion } from 'motion/react';
+import { motion, type Variants } from 'motion/react';
 import type React from 'react';
 import { useState } from 'react';
 
@@ -37,9 +36,9 @@ export const LiquidGlassCard = ({
 }: LiquidGlassCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleToggleExpansion = (e: { target: { closest: (arg0: string) => any } }) => {
+  const handleToggleExpansion = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!expandable) return;
-    if (e.target.closest('a, button, input, select, textarea')) return;
+    if ((e.target as HTMLElement).closest('a, button, input, select, textarea')) return;
     setIsExpanded(!isExpanded);
   };
 
@@ -70,7 +69,7 @@ export const LiquidGlassCard = ({
     '2xl': '0 4px 4px rgba(0, 0, 0, 0.15), 0 0 12px rgba(0, 0, 0, 0.08), 0 0 60px rgba(255, 255, 255, 0.3)',
   };
 
-  const containerVariants = expandable
+  const containerVariants: Variants = expandable
     ? {
         collapsed: {
           width: width || 'auto',
@@ -84,8 +83,6 @@ export const LiquidGlassCard = ({
         },
       }
     : {};
-
-  const MotionComponent = draggable || expandable ? motion.div : 'div';
 
   const motionProps =
     draggable || expandable
@@ -115,7 +112,7 @@ export const LiquidGlassCard = ({
           </filter>
         </defs>
       </svg>
-      <MotionComponent
+      <motion.div
         className={cn(
           `relative ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${expandable ? 'cursor-pointer' : ''}`,
           className
@@ -132,7 +129,7 @@ export const LiquidGlassCard = ({
         <div className='absolute inset-0 z-10' style={{ borderRadius, boxShadow: glowStyles[glowIntensity] }} />
         <div className='absolute inset-0 z-20' style={{ borderRadius, boxShadow: shadowStyles[shadowIntensity] }} />
         {children}
-      </MotionComponent>
+      </motion.div>
     </>
   );
 };

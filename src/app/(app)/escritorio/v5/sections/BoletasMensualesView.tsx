@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import VerBoletaButton from "@/components/boletas/VerBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 
-interface BoletaRow {
+export interface BoletaRow {
   id: string; folio: number | null; tipo_dte: number; fecha_emision: string; created_at?: string | null;
   receptor_razon_social: string | null; monto_total: number; estado: string;
 }
@@ -24,7 +24,7 @@ const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> =
   61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.1)" },
 };
 
-export default function BoletasMensualesView({ boletas, month, year, onPrevMonth, onNextMonth }: {
+export default function BoletasMensualesView({ boletas, month, year }: {
   boletas: BoletaRow[];
   month: number; year: number;
   onPrevMonth: () => void; onNextMonth: () => void;
@@ -112,7 +112,7 @@ export default function BoletasMensualesView({ boletas, month, year, onPrevMonth
 
       {search && searchResults && (
         <div style={{ fontSize: 10, color: "var(--text2)" }}>
-          {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""} para "{search}"
+          {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""} para &ldquo;{search}&rdquo;
         </div>
       )}
 

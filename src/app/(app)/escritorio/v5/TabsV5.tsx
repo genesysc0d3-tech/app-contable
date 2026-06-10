@@ -2,8 +2,19 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
+const tabs = [
+  { id: "subidos", label: "Agregados",
+    icon: "M12 5v14m-7-7l7-7 7 7" },
+  { id: "revisar", label: "Revisar",
+    icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { id: "emitir", label: "Emitir",
+    icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+  { id: "boletas", label: "Boletas",
+    icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+];
+
 export default function TabsV5({
-  pendCount, aprobCount, nombreEmpresa, fecha,
+  pendCount, aprobCount, fecha,
   subidosContent, revisarContent, emitirContent, boletasContent,
 }: {
   pendCount: number; aprobCount: number; nombreEmpresa: string; fecha: string;
@@ -19,17 +30,17 @@ export default function TabsV5({
 
   const moveIndicator = useCallback(() => {
     const idx = tabs.findIndex(t => t.id === tab);
-      const btn = btnRefs.current[idx];
-      const bar = barRef.current;
-      const indicator = indicatorRef.current;
-      if (!btn || !bar || !indicator) return;
-      const btnRect = btn.getBoundingClientRect();
-      const next = btn.nextElementSibling as HTMLElement | null;
-      const nextArrow = next?.dataset?.tabArrow === "true" ? next : null;
-      indicator.style.left = btn.offsetLeft + "px";
-      indicator.style.width = nextArrow
-        ? (nextArrow.offsetLeft + nextArrow.offsetWidth - btn.offsetLeft) + "px"
-        : btnRect.width + "px";
+    const btn = btnRefs.current[idx];
+    const bar = barRef.current;
+    const indicator = indicatorRef.current;
+    if (!btn || !bar || !indicator) return;
+    const btnRect = btn.getBoundingClientRect();
+    const next = btn.nextElementSibling as HTMLElement | null;
+    const nextArrow = next?.dataset?.tabArrow === "true" ? next : null;
+    indicator.style.left = btn.offsetLeft + "px";
+    indicator.style.width = nextArrow
+      ? (nextArrow.offsetLeft + nextArrow.offsetWidth - btn.offsetLeft) + "px"
+      : btnRect.width + "px";
   }, [tab]);
 
   useEffect(() => {
@@ -48,17 +59,6 @@ export default function TabsV5({
       moveIndicator();
     });
   }, [moveIndicator]);
-
-  const tabs = [
-    { id: "subidos", label: "Agregados",
-      icon: "M12 5v14m-7-7l7-7 7 7" },
-    { id: "revisar", label: "Revisar",
-      icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { id: "emitir", label: "Emitir",
-      icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-    { id: "boletas", label: "Boletas",
-      icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-  ];
 
   const activeContent = tab === "subidos"
     ? subidosContent

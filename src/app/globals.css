@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* El tema se controla con la clase .dark en <html> (script inline en layout
+   + ThemeToggle); las utilidades dark: deben seguir esa clase, no el SO. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #EDE9E1;
   --neo-bg: #F5F1E9;
