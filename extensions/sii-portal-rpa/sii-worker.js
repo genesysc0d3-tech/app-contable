@@ -457,22 +457,25 @@
     return null;
   }
 
-  // Activa un toggle/switch Vuetify (Receptor / Detalle) dentro del modal.
-  // El input real está oculto; hay que clickear el contenedor de controles.
-  async function enableDialogToggle(labelText) {
+  // Activa/desactiva un toggle/switch Vuetify (Receptor / Detalle). El input
+  // real está oculto; se clickea el contenedor de controles.
+  function findToggleRow(labelText) {
     const dialog = activeEmitDialog() || document;
     const wanted = normalizeSearchText(labelText);
     const rows = Array.from(dialog.querySelectorAll(".v-input--selection-controls, .v-input--switch, .v-input"));
-    const target = rows.find((row) => normalizeSearchText(row.innerText || row.textContent).includes(wanted));
+    return rows.find((row) => normalizeSearchText(row.innerText || row.textContent).includes(wanted)) || null;
+  }
+  async function setDialogToggle(labelText, on) {
+    const target = findToggleRow(labelText);
     if (!target) return false;
-    const input = target.querySelector("input[type='checkbox'], input[role='switch']");
-    if (input && input.checked) return true;
-    const clickable = target.querySelector(".v-input--selection-controls__ripple, .v-input--selection-controls__input, label") || input || target;
+    const input = () => target.querySelector("input[type='checkbox'], input[role='switch']");
+    if (Boolean(input()?.checked) === on) return true;
+    const clickable = target.querySelector(".v-input--selection-controls__ripple, .v-input--selection-controls__input, label") || input() || target;
     await clickElement(clickable);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    const after = target.querySelector("input[type='checkbox'], input[role='switch']");
-    return Boolean(after?.checked);
+    return Boolean(input()?.checked) === on;
   }
+  async function enableDialogToggle(labelText) { return setDialogToggle(labelText, true); }
 
   function findDialogControl(pattern) {
     const dialog = activeEmitDialog() || document;
@@ -713,15 +716,39 @@
     }
 
     // Glosa de la boleta (toggle "Detalle", máx 80 caracteres): identifica el
-    // movimiento de origen — clave para la trazabilidad MASSDTE.
+    // movimiento de origen — clave para la trazabilidad MASSDTE. Es best-effort:
+    // si no se logra escribir de forma confiable, se APAGA el toggle Detalle
+    // para no dejar un campo requerido vacío que bloquee el EMITIR. La emisión
+    // siempre tiene prioridad sobre la glosa.
     const glosa = String(job?.detalles?.[0]?.nombre || "").trim().slice(0, 80);
     if (glosa) {
       renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
+      let glosaOk = false;
       const toggled = await enableDialogToggle("Detalle");
       if (toggled) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        const glosaInput = findDialogControl(/DETALLE/);
-        if (glosaInput) setControlValue(glosaInput, glosa);
+        // El campo de glosa aparece tras activar el toggle; esperar a que monte.
+        for (let i = 0; i < 10 && !glosaOk; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const dlg = activeEmitDialog() || document;
+          const glosaInput = Array.from(dlg.querySelectorAll("input, textarea")).find((el) => {
+            if (!isVisibleEnabled(el)) return false;
+            const ph = normalizeSearchText(el.getAttribute("placeholder") || "");
+            const lbl = normalizeSearchText(labelFor(el));
+            // Campo "Detalle" (placeholder/label), excluyendo monto/receptor/etc.
+            return (ph === "detalle" || lbl === "detalle" || /glosa/.test(ph + lbl))
+              && !/monto|total|rut|nombre|mail|telefono|direccion|vendedor/.test(ph + lbl);
+          });
+          if (glosaInput) {
+            setControlValue(glosaInput, glosa);
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            glosaOk = normalizeText(glosaInput.value) === normalizeText(glosa);
+          }
+        }
+      }
+      if (!glosaOk) {
+        // No se pudo escribir la glosa con certeza: apagar Detalle para que el
+        // formulario quede válido y la boleta se emita igual (sin glosa).
+        await setDialogToggle("Detalle", false);
       }
     }
 
@@ -759,8 +786,10 @@
         await new Promise((resolve) => setTimeout(resolve, 1000));
         const dlg = activeEmitDialog();
         if (!dlg) return true; // el modal se cerró tras emitir
+        // Imprimir/Descargar se habilitan SOLO tras emitir (Compartir está
+        // habilitado siempre, así que no sirve como señal).
         const enabled = Array.from(dlg.querySelectorAll("button")).some((b) =>
-          /IMPRIMIR|DESCARGAR|COMPARTIR/.test(normalizeText(b.innerText || b.textContent)) && !b.disabled);
+          /IMPRIMIR|DESCARGAR/.test(normalizeText(b.innerText || b.textContent)) && !b.disabled);
         if (enabled) return true;
         if (/BOLETA ELECTR[OÓ]NICA N[UÚ]MERO|FOLIO/i.test(dlg.innerText || dlg.textContent || "")) return true;
       }
