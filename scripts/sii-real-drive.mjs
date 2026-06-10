@@ -15,6 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EXT = path.resolve(__dirname, "../extensions/sii-portal-rpa");
 const PORT = process.argv[2] || "3001";
 const PIN = process.argv[3] || "";
+const EMISOR = (process.argv[4] || "").trim(); // RUT emisor para el job (prueba)
 const BASE = `http://localhost:${PORT}`;
 const PROFILE = "/tmp/sii-real-test-profile";
 const SHOTS = "/tmp/sii-test";
@@ -39,7 +40,18 @@ ctx.on("page", (pg) => {
 });
 
 const page = ctx.pages()[0] ?? (await ctx.newPage());
-page.on("console", (m) => { const t = m.text(); if (/\[bridge\]/.test(t)) log(`  ↪ ${t.slice(0, 150)}`); });
+// Estado del job tomado de los mensajes del bridge (no del texto de la app,
+// que contiene "Folio" en el dashboard y causaba falsos positivos).
+let jobStatus = "";
+let jobResult = null;
+page.on("console", (m) => {
+  const t = m.text();
+  if (!/\[bridge\]/.test(t)) return;
+  log(`  ↪ ${t.slice(0, 150)}`);
+  const st = t.match(/SII_JOB_STATUS :: (\w+)/);
+  if (st) jobStatus = st[1];
+  if (/SII_JOB_RESULT/.test(t)) jobResult = t;
+});
 await page.addInitScript(() => {
   window.addEventListener("message", (e) => {
     const d = e.data;
@@ -86,56 +98,71 @@ if (extId && PIN) {
 }
 
 // ── EMITIR BOLETA ÚNICA exenta $1 ──
-log("→ EMITIR BOLETA ÚNICA");
-await page.bringToFront();
-await page.locator("text=EMITIR BOLETA ÚNICA").first().click({ timeout: 15000 }).catch((e) => log("✗ botón boleta única: " + e.message));
-await page.waitForTimeout(1500);
-await shot(page, "modal-emision");
+if (EMISOR) {
+  // Modo prueba: el portal tiene seleccionada esa empresa; postear el job
+  // directamente con ese RUT emisor para que la verificación coincida y el
+  // bot emita ahí. Boleta exenta (41) de $1 con glosa "PRUEBA MASSDTE".
+  log(`→ emitiendo job directo (emisor ${EMISOR}, exenta $1)`);
+  await page.evaluate((emisor) => {
+    const id = `test-${Date.now()}`;
+    window.postMessage({
+      source: "app-contable", type: "APP_CONTABLE_SII_BOLETA_JOB", protocol_version: 1,
+      job: {
+        job_id: id, expires_at: new Date(Date.now() + 5 * 60000).toISOString(),
+        empresa_id: "test", emisor_rut: emisor, tipo_dte: 41,
+        fecha_emision: new Date().toISOString().slice(0, 10),
+        receptor: {}, detalles: [{ nombre: "PRUEBA MASSDTE", cantidad: 1, monto_total: 1 }],
+        totales: { monto_total: 1, monto_neto: 0, iva: 0, monto_exento: 1 },
+        learn_only: false, auto_emit: true, allow_final_emit: true,
+        payment_method: "Efectivo", confirmation_required: false,
+      },
+    }, window.location.origin);
+  }, EMISOR);
+  log("→ job enviado a la extensión");
+} else {
+  log("→ EMITIR BOLETA ÚNICA (vía UI)");
+  await page.bringToFront();
+  await page.locator("text=EMITIR BOLETA ÚNICA").first().click({ timeout: 15000 }).catch((e) => log("✗ botón boleta única: " + e.message));
+  await page.waitForTimeout(1500);
+  await shot(page, "modal-emision");
+  const exentaBtn = page.locator('button:has-text("Boleta exenta")').first();
+  if (await exentaBtn.count()) { await exentaBtn.click().catch(() => {}); log("· tipo: exenta"); }
+  const detalle = page.locator('input[placeholder="Servicio prestado"]').first();
+  if (await detalle.count()) { await detalle.fill("PRUEBA MASSDTE"); log("· detalle: PRUEBA MASSDTE"); }
+  const monto = page.locator('input[placeholder="$0"]').first();
+  if (await monto.count()) { await monto.fill("1"); log("· monto: $1"); }
+  else log("✗ no encontré el campo de monto ($0)");
+  await page.waitForTimeout(700);
+  await shot(page, "boleta-lista");
+  const emitirBtn = page.locator('button:has-text("Emitir en SII"), button:has-text("Emitir DTE")').first();
+  if (await emitirBtn.count()) { await emitirBtn.click().catch(() => {}); log("→ Emitir en SII (job enviado)"); }
+  else log("✗ no encontré el botón Emitir en SII");
+}
 
-const exentaBtn = page.locator('button:has-text("Boleta exenta")').first();
-if (await exentaBtn.count()) { await exentaBtn.click().catch(() => {}); log("· tipo: exenta"); }
-const detalle = page.locator('input[placeholder="Servicio prestado"]').first();
-if (await detalle.count()) { await detalle.fill("PRUEBA MASSDTE"); log("· detalle: PRUEBA MASSDTE"); }
-const monto = page.locator('input[placeholder="$0"]').first();  // campo de monto, NO el folio
-if (await monto.count()) { await monto.fill("1"); log("· monto: $1"); }
-else log("✗ no encontré el campo de monto ($0)");
-await page.waitForTimeout(700);
-await shot(page, "boleta-lista");
-
-const emitirBtn = page.locator('button:has-text("Emitir en SII"), button:has-text("Emitir DTE")').first();
-if (await emitirBtn.count()) { await emitirBtn.click().catch(() => {}); log("→ Emitir en SII (job enviado)"); }
-else log("✗ no encontré el botón Emitir en SII");
-
-// ── Seguir la ventana SII (máx 6 min) ──
+// ── Seguir la ventana SII hasta estado terminal (máx 6 min) ──
+// La terminación se basa en los mensajes del bridge (jobStatus), no en el
+// texto de la app. Screenshot continuo de la ventana SII para ver el EMITIR.
 log("⏳ siguiendo el proceso SII...");
 const t0 = Date.now();
-let lastBody = "", lastOverlay = "";
+let lastOverlay = "";
+let shotIdx = 0;
 while (Date.now() - t0 < 360000) {
-  await page.waitForTimeout(5000);
-  const appState = await page.evaluate(() => {
-    const el = document.querySelector(".ed-sidebar") || document.body;
-    const m = el.textContent?.match(/(opening_sii|waiting_sii_login|waiting_manual_login|autologin_\w+|sii_page_ready|submitting|capturing_result|emitted|result_needs_review|error|Boleta emitida|Folio[^.]*)/);
-    return m ? m[0] : null;
-  }).catch(() => null);
-  if (appState && appState !== lastBody) { log(`  app: ${appState}`); lastBody = appState; }
-
+  await page.waitForTimeout(4000);
   const siiPage = siiPages[siiPages.length - 1];
   if (siiPage && !siiPage.isClosed()) {
     const overlay = await siiPage.evaluate(() => {
       const o = document.getElementById("app-contable-sii-worker-overlay");
       return o ? (o.innerText || "").replace(/\s+/g, " ").slice(0, 180) : null;
     }).catch(() => null);
-    if (overlay && overlay !== lastOverlay) { log(`  SII: ${overlay}`); lastOverlay = overlay; }
-    await shot(siiPage, "sii-portal");
+    if (overlay && overlay !== lastOverlay) { log(`  SII overlay: ${overlay}`); lastOverlay = overlay; }
+    await siiPage.screenshot({ path: `/tmp/sii-test/sii-${String(++shotIdx).padStart(2, "0")}.png` }).catch(() => {});
   }
-  await shot(page, "app-progress");
-  if (/emitted|Boleta emitida|Folio/.test(lastBody)) { log("✅ emisión confirmada"); break; }
+  // Estado terminal por bridge.
+  if (jobResult || jobStatus === "emitted") { log(`✅ resultado: ${jobStatus} ${jobResult ? "(JOB_RESULT recibido)" : ""}`); break; }
+  if (jobStatus === "result_needs_review") { log("⚠️  result_needs_review (revisar captura)"); break; }
+  if (jobStatus === "error") { log("✗ error en el job (ver overlay)"); break; }
 }
 
 await shot(page, "final-app");
-await page.locator('button:has-text("Boletas")').first().click().catch(() => {});
-await page.waitForTimeout(2500);
-await shot(page, "final-boletas");
-
-log("— driver en espera (Ctrl+C para cerrar).");
+log(`— driver en espera. jobStatus final: ${jobStatus}`);
 await new Promise((r) => ctx.on("close", r));

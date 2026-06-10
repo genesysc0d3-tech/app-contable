@@ -414,6 +414,28 @@
     return shows();
   }
 
+  // Abre el v-select cuyo slot contiene `slotText` y elige la PRIMERA opción.
+  // Para la sucursal: a veces no auto-selecciona (carrera al cargar emisores)
+  // y es requerida; elegir la primera disponible desbloquea el EMITIR.
+  async function selectFirstVuetifyOption(slotText) {
+    const dialog = activeEmitDialog() || document;
+    const slot = Array.from(dialog.querySelectorAll(".v-select__slot, .v-input__slot"))
+      .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText)));
+    if (!slot) return false;
+    await clickElement(slot);
+    for (let i = 0; i < 16; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      const menus = Array.from(document.querySelectorAll(".v-menu__content"))
+        .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+      for (const menu of menus) {
+        const items = Array.from(menu.querySelectorAll(".v-list-item, [role='option'], .v-list__tile"))
+          .filter((it) => isVisibleEnabled(it) && (it.innerText || it.textContent || "").trim());
+        if (items.length) { await clickElement(items[0]); await new Promise((resolve) => setTimeout(resolve, 250)); return true; }
+      }
+    }
+    return false;
+  }
+
   async function clickButtonText(text) {
     const button = buttonByText(text);
     if (!button) throw new Error(`Boton no encontrado: ${text}`);
@@ -666,6 +688,14 @@
     let dialog = await waitForEmitDialog();
     if (!dialog) {
       throw new Error("El modal Emitir e-Boleta no se abrio; no se presiono el EMITIR final.");
+    }
+
+    // Sucursal: requerida. A veces auto-selecciona (una sola dirección) y a
+    // veces queda en "Elija sucursal" por carrera de carga; si está vacía,
+    // elegir la primera disponible.
+    const dlgSucursal = activeEmitDialog();
+    if (dlgSucursal && /elija sucursal/i.test(dlgSucursal.innerText || dlgSucursal.textContent || "")) {
+      await selectFirstVuetifyOption("elija sucursal");
     }
 
     // Tipo de boleta: el select muestra el valor por defecto; lo abrimos por
