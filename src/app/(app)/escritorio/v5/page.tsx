@@ -241,6 +241,34 @@ export default async function V5Page({ searchParams }: {
     else mix.exentas++;
   }
 
+  // Avance de cada documento por el pipeline (Subidos), reconciliando al total
+  // de propuestas. "emitida" = la propuesta tiene boleta vigente (folio real en
+  // el SII). Sirve además para CONGELAR el documento: con ≥1 emitida no se puede
+  // re-mapear ni deshacer — corregir una boleta emitida es vía Nota de Crédito.
+  const TIPOS_BOLETEABLES = new Set(["boleta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"]);
+  const propsAll = propsData.data ?? [];
+  const allPropIds = propsAll.map((p) => p.id).filter(Boolean);
+  const emitidaPropIds = new Set<string>();
+  if (allPropIds.length > 0) {
+    const { data: emitRows } = await supabase.from("boletas_emitidas")
+      .select("propuesta_id").eq("empresa_id", empresaId).neq("estado", "anulada").in("propuesta_id", allPropIds);
+    for (const r of (emitRows ?? []) as { propuesta_id: string | null }[]) {
+      if (r.propuesta_id) emitidaPropIds.add(r.propuesta_id);
+    }
+  }
+  const docProgress: Record<string, { total: number; emitida: number; lista: number; porRevisar: number; noAplica: number }> = {};
+  for (const p of propsAll) {
+    const docId = p.movimientos_raw?.documentos_subidos?.id;
+    if (!docId) continue;
+    const prog = (docProgress[docId] ??= { total: 0, emitida: 0, lista: 0, porRevisar: 0, noAplica: 0 });
+    prog.total++;
+    if (emitidaPropIds.has(p.id)) { prog.emitida++; continue; }
+    const boleteable = TIPOS_BOLETEABLES.has(p.tipo_propuesto ?? "");
+    if (!boleteable || p.estado === "rechazado" || p.estado === "omitido") { prog.noAplica++; continue; }
+    if (p.estado === "aprobado" || p.estado === "editado") { prog.lista++; continue; }
+    prog.porRevisar++;
+  }
+
   // All boletas for RCV view
   const { data: boletasAllData } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
@@ -599,7 +627,7 @@ body{font-family:'DM Sans',sans-serif}
                 docsAgregados.length > 0 ? (
                   <div className="r-scroll">
                     <div className="sec" style={{paddingTop:6}}>
-                      <DocCardList docs={docsAgregados} empresaId={empresaId} tipoEmpresa={usuario.empresas.tipo_contribuyente} tipoMix={docTipoMix} />
+                      <DocCardList docs={docsAgregados} empresaId={empresaId} tipoEmpresa={usuario.empresas.tipo_contribuyente} tipoMix={docTipoMix} docProgress={docProgress} />
                     </div>
                   </div>
                 ) : (

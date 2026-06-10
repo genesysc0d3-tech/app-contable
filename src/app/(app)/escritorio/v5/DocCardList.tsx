@@ -25,10 +25,51 @@ interface DocRaw {
   glosa_activa?: boolean | null;
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix }: {
+type DocProg = { total: number; emitida: number; lista: number; porRevisar: number; noAplica: number };
+
+// Avance del documento por el pipeline. La barra mide sobre el "boleteable"
+// (total − no aplican) para que refleje el avance real de emisión; el desglose
+// reconcilia al total (incluye "no aplican": gastos/descartadas).
+function DocProgressBar({ p }: { p: DocProg }) {
+  const boleteable = p.total - p.noAplica;
+  const seg = (n: number) => (boleteable > 0 ? `${(n / boleteable) * 100}%` : "0%");
+  const parts = [
+    { n: p.emitida, label: "emitidas", color: "#22c55e" },
+    { n: p.lista, label: "listas", color: "#5b9cf6" },
+    { n: p.porRevisar, label: "por revisar", color: "#f59e0b" },
+  ];
+  return (
+    <div style={{ marginTop: 7, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 8.5, color: "var(--text3)" }}>
+        <span style={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Avance de emisión</span>
+        <span><b style={{ color: "var(--text)" }}>{p.emitida}</b>/{boleteable} boletas{p.noAplica > 0 ? ` · ${p.total} mov` : ""}</span>
+      </div>
+      {boleteable > 0 && (
+        <div style={{ display: "flex", height: 6, borderRadius: 999, overflow: "hidden", background: "var(--bg-muted)", border: "1px solid var(--border)" }}>
+          {parts.map((s) => (s.n > 0 ? <div key={s.label} style={{ width: seg(s.n), background: s.color }} /> : null))}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 9, flexWrap: "wrap", fontSize: 8.5 }}>
+        {parts.map((s) => (s.n > 0 ? (
+          <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--text2)", fontWeight: 600 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.color }} />{s.n} {s.label}
+          </span>
+        ) : null))}
+        {p.noAplica > 0 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--text3)" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--text3)" }} />{p.noAplica} no aplican
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
+  docProgress?: Record<string, DocProg>;
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState(initialDocs);
@@ -80,6 +121,11 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
         <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
         {docs.map((doc) => {
           const isBoletaUnica = doc.tipo === "boleta_unica";
+          const prog = docProgress?.[doc.id];
+          // Documento congelado: ya tiene ≥1 boleta emitida en el SII. No se
+          // puede re-mapear ni deshacer (folio real; se corrige vía Nota de
+          // Crédito). Solo aplica a documentos con propuestas (no boleta única).
+          const frozen = (prog?.emitida ?? 0) > 0;
           const progreso = doc.progreso_ia as {
             estado?:string; lote_actual?:number; total_lotes?:number;
             movimientos_encontrados?:number; error?:string;
@@ -173,16 +219,23 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   </div>
                 )}
                 <div className="da">
-                  {!isBoletaUnica && (doc.estado === "procesado" || doc.estado === "subido") && (
+                  {/* Documento congelado: tiene boletas emitidas → bloqueado */}
+                  {frozen && (
+                    <span title="Documento con boletas emitidas en el SII. Para corregir o anular, emite una Nota de Crédito — no se puede re-mapear ni deshacer." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e",whiteSpace:"nowrap"}}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
+                      Listo · {prog!.emitida} emitida{prog!.emitida !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {!isBoletaUnica && !frozen && (doc.estado === "procesado" || doc.estado === "subido") && (
                     <button className="ht" onClick={() => callApi("/api/procesar-documento", doc.id)}>↻ Reprocesar</button>
                   )}
-                  {!isBoletaUnica && (doc.estado === "procesado" || doc.estado === "error") && (
+                  {!isBoletaUnica && !frozen && (doc.estado === "procesado" || doc.estado === "error") && (
                     <button className="ud" onClick={() => callApi("/api/deshacer-documento", doc.id)}>↩ Deshacer</button>
                   )}
                   {doc.estado === "procesando" && (
                     <button className="cl" onClick={() => callApi("/api/cancelar-documento", doc.id)}>✕ Cancelar</button>
                   )}
-                  {!isBoletaUnica && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>}
+                  {!isBoletaUnica && !frozen && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>}
                   {!isBoletaUnica && <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>}
                   {!isBoletaUnica && doc.estado === "procesado" && (
                     <span style={{marginLeft:"auto"}}>
@@ -191,6 +244,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   )}
                   {isBoletaUnica && <span style={{fontSize:9,color:"var(--text2)",fontWeight:600}}>Registro creado desde Emision Directa</span>}
                 </div>
+                {!isBoletaUnica && doc.estado === "procesado" && prog && prog.total > 0 && (
+                  <DocProgressBar p={prog} />
+                )}
                 {!isBoletaUnica && doc.estado === "procesado" && (
                   <GlosaComunControl
                     documentoId={doc.id}
