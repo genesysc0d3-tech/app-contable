@@ -21,8 +21,8 @@ App contable SaaS para Chile. IA procesa cartolas bancarias, clasifica movimient
 ## Reglas
 - No trabajar directo en main ni dev. Usar feature/* o fix/* desde dev
 - Solo modificar archivos en /v5 o componentes compartidos
-- EL LEGACY NO IMPORTA: /escritorio v1-v4 y sus componentes son código muerto.
-  No analizarlos, no fixearlos, no contar sus errores de lint. Pérdida de tiempo.
+- LEGACY v1-v4 BORRADO (2026-06-11): aprendizajes y cómo recuperarlo en
+  docs/legacy-escritorio-aprendizajes.md (git show cd6c456:ruta)
 - Migraciones en supabase/migrations/
 - Script limpieza: scripts/limpiar-test.sql
 

@@ -8,6 +8,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(target);
   }
 
+  // Legacy v1-v4 borrado (ver docs/legacy-escritorio-aprendizajes.md). Se
+  // conserva el redirect para bookmarks viejos; /escritorio/v5 sigue siendo
+  // el código real re-exportado por /massdte, pero la URL canónica es esa.
   const legacyDashboardRoutes = new Set([
     "/escritorio",
     "/escritorio/v2",
@@ -17,13 +20,10 @@ export async function proxy(request: NextRequest) {
   ]);
 
   if (legacyDashboardRoutes.has(request.nextUrl.pathname)) {
-    const devBypass = process.env.NODE_ENV !== "production" && request.nextUrl.searchParams.get("legacy") === "1";
-    if (!devBypass) {
-      const target = request.nextUrl.clone();
-      target.pathname = "/massdte";
-      target.searchParams.delete("legacy");
-      return NextResponse.redirect(target);
-    }
+    const target = request.nextUrl.clone();
+    target.pathname = "/massdte";
+    target.searchParams.delete("legacy");
+    return NextResponse.redirect(target);
   }
 
   return await updateSession(request);
