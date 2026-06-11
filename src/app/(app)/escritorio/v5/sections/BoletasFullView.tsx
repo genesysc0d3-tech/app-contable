@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 
 interface BoletaRow {
   id: string; folio: number | null; tipo_dte: number; fecha_emision: string;
@@ -107,6 +108,7 @@ export default function BoletasFullView({ boletas }: { boletas: BoletaRow[] }) {
                       <span style={{ fontWeight: 600, color: "var(--text)" }}>{fmt(b.monto_total)}</span>
                     </div>
                     <div style={{ marginTop: 4, display: "flex", justifyContent: "flex-end" }}>
+                      <PreviewBoletaButton id={b.id} />
                       <DescargarBoletaButton id={b.id} />
                     </div>
                   </div>

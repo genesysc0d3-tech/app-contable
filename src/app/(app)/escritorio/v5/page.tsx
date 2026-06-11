@@ -12,6 +12,7 @@ import RevisarFullView from "./sections/RevisarFullView";
 import EmitirFullView from "./sections/EmitirFullView";
 import BoletasFullView from "./sections/BoletasFullView";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import RightColumnView from "./RightColumnView";
 import type { ActividadItem } from "./ActividadView";
 import type { SearchItem } from "@/lib/tree-structure";
@@ -676,6 +677,7 @@ body{font-family:'DM Sans',sans-serif}
                             <span className="mo" style={{fontSize:11,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums",flexShrink:0}}>
                               {fmt(b.monto_total)}
                             </span>
+                            <PreviewBoletaButton id={b.id} />
                             <DescargarBoletaButton id={b.id} />
                           </div>
                         );

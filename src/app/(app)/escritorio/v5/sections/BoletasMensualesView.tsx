@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import VerBoletaButton from "@/components/boletas/VerBoletaButton";
+import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 
 export interface BoletaRow {
@@ -161,7 +161,7 @@ export default function BoletasMensualesView({ boletas, month, year }: {
                   {fmt(b.monto_total)}
                 </span>
                 <div style={{ display: "flex", gap: 1 }}>
-                  <VerBoletaButton id={b.id} />
+                  <PreviewBoletaButton id={b.id} />
                   <DescargarBoletaButton id={b.id} />
                 </div>
               </div>
