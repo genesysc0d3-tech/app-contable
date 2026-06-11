@@ -1,0 +1,217 @@
+INFORME DE SEGURIDAD Y CONTROL - EMISIÓN DE BOLETAS
+===================================================
+
+Basado en auditoría del código fuente (app-contable, rama dev, commit e15c5c8).
+Fecha: 2026-05-21
+
+
+1. DOBLE EMISIÓN / DOBLE CLICK
+-------------------------------
+
+✅ Implementado:
+- Botón "Emitir" se deshabilita tras primer click (estado `emitiendo`)
+- Backend verifica `yaEmitidas` por propuesta contra `boletas_emitidas`
+- Base de datos tiene índice único parcial:
+  `CREATE UNIQUE INDEX idx_boletas_propuesta_unica_vigente ON boletas_emitidas (propuesta_id) WHERE estado <> 'anulada'`
+- Folios atómicos: `consume_next_folio` usa `SELECT ... FOR UPDATE`
+- Cada item del batch se procesa secuencialmente (CONCURRENCY = 1)
+
+❌ No implementado (riesgo alto):
+- No hay idempotency-key por request. Si el cliente reintenta tras timeout, se crea un nuevo batch
+- No hay timeout en el fetch del frontend. Si el servidor no responde, el botón queda en "Emitiendo..." indefinidamente
+- Si el usuario cierra la pestaña mientras `emitiendo=true`, no hay `beforeunload` ni advertencia
+- El catch del `yaEmitidas` query es silencioso: si falla por permisos/timeout, asume "no emitida" y permite duplicados (aunque el índice único de DB es el respaldo)
+
+
+2. ESTADOS DE EMISIÓN
+----------------------
+
+✅ Implementado:
+- Estados en `boletas_emitidas`: aceptado, aceptado_con_reparos, rechazado, anulada
+  (CHECK constraint en base de datos)
+- Cada boleta almacena XML completo, TED, track_id, montos
+- Relación propuesta_id → boleta_emitida (permite consultar después)
+
+❌ No implementado (riesgo medio-alto):
+- No existe estado "enviando" / "pendiente_confirmacion"
+- El mock SII responde instantáneo, pero el SII real es asíncrono (recibir → polling → resultado)
+- No hay polling de estado implementado
+- Si migran a SII real, la app necesita un sistema de colas + webhooks
+
+
+3. ERRORES CON SII
+-------------------
+
+✅ Implementado:
+- SII mock valida 6 tags XML requeridos: TipoDTE, Folio, RUTEmisor, MntTotal, TED, Signature
+- Fallo del SII mock por item: si falla, el resto del batch continúa
+- El catch global envuelve todo en try/catch y retorna 500 con ERROR_INTERNO
+- Cada item tiene su propio bloque try/catch → error local no bloquea el batch
+
+❌ No implementado (riesgo alto):
+- Mock SIEMPRE retorna ACEPTADO (nunca simula ACEPTADO_CON_REPAROS ni RECHAZADO)
+- No hay simulación de latencia del SII real
+- Si el SII acepta el DTE pero el INSERT en boletas_emitidas falla:
+  * El folio fue consumido y NO se puede devolver
+  * La boleta existe en SII pero no en la app
+  * Estado inconsistente irrecuperable
+- No hay tabla audit_log / emission_attempts donde registrar intentos fallidos
+- No hay retry/backoff si el SII falla temporalmente
+- No hay circuit breaker ante fallos consecutivos del SII
+
+
+4. VALIDACIONES ANTES DE EMITIR
+--------------------------------
+
+✅ Implementado (en validarBoleta):
+- Al menos 1 línea de detalle (BLOQUEA)
+- Cada detalle debe tener nombre (BLOQUEA)
+- Monto del detalle > 0 y entero (BLOQUEA)
+- Suma del detalle ≈ total (±1 peso) (BLOQUEA)
+- RUT receptor validado (módulo 11) si se provee (BLOQUEA)
+- Tipo DTE debe ser 39 o 41 (BLOQUEA)
+- Cálculo automático neto/IVA 19% para afecta (BLOQUEA)
+- Máximo 200 items por lote (BLOQUEA)
+
+❌ No implementado (riesgo crítico):
+- RECEPTOR_OBLIGATORIO_DESDE ($180.000 CLP) DESHABILITADO intencionalmente:
+  La app emite boletas sin RUT receptor ni razón social para montos > $180k.
+  El SII REAL rechazaría estos documentos (Res. Ex. 174/2017).
+  Comentario en código: "Validación receptor omitida — el usuario tiene libertad de emisión"
+- Verificación de certificado SII DESHABILITADA (modo demo):
+  Emisiones proceden aunque la empresa no haya delegado su certificado digital
+- `listo_emitir` hardcodeado a `true`: no se muestra ninguna advertencia de "no listo" al usuario
+- No hay validación de monto mínimo (> $0)
+
+
+5. REGISTRO Y TRAZABILIDAD
+---------------------------
+
+✅ Implementado:
+- boletas_emitidas guarda: XML DTE, TED, track_id, montos, estado, fecha_emision
+- created_at timestamp
+- propuesta_id FK vinculado
+- boletas_emitidas.track_id almacena ID de seguimiento SII
+
+❌ No implementado (riesgo medio):
+- No hay columna `emitido_por` (user_id). No se puede auditar QUIÉN emitió cada boleta
+- No hay tabla audit_log/emission_attempts. Los intentos fallidos solo existen en la respuesta HTTP (efímera)
+- Solo console.error para errores catastróficos. No hay logging estructurado
+- No hay batch_id para agrupar emisiones relacionadas
+
+
+6. SEGURIDAD OPERACIONAL
+-------------------------
+
+✅ Implementado:
+- Botón deshabilitado durante emisión (emitiendo = true)
+- Catch global de errores de red → toast informativo
+- Procesamiento secuencial (CONCURRENCY = 1): minimiza impacto de fallo
+
+❌ No implementado (riesgo alto):
+- NO hay beforeunload guard: cerrar pestaña durante emisión NO muestra advertencia.
+  El servidor completa el procesamiento pero el usuario nunca ve el resultado.
+- NO hay AbortController: fetch no se puede cancelar al navegar
+- NO hay timeout explícito en fetch del frontend
+- NO hay detección de offline (navigator.onLine)
+- Si hay fallos parciales en un batch, solo se muestran los primeros 3 errores en toast.
+  Errores adicionales se pierden para el usuario.
+- El usuario no sabe qué items se procesaron antes de una desconexión
+
+
+7. REINTENTOS
+--------------
+
+✅ Implementado:
+- yaEmitidas check permite reintentar: items exitosos en intento anterior se saltan
+- Índice único en DB evita duplicados aunque el check de aplicación falle
+- aprobarTodas maneja batches de 50 items con conteo parcial en fallo
+
+❌ No implementado (riesgo CRÍTICO para producción real):
+- NO hay release_folio / rollback_folio: si consume_next_folio devuelve un folio
+  y luego el SII rechaza o el INSERT falla, EL FOLIO SE PIERDE PERMANENTEMENTE.
+  En producción con CAFs reales, esto es dinero perdido.
+- No hay idempotency-key para reintentos seguros a nivel request
+- No hay botón "reintentar fallidos" → usuario debe re-seleccionar manualmente
+- No hay retry/backoff en llamada al SII
+- No hay concepto de "borrador de emisión"
+
+
+8. PROTECCIONES A NIVEL BASE DE DATOS
+---------------------------------------
+
+✅ CHECK constraints:
+- boletas_emitidas.tipo_dte IN (39, 41, 61)
+- boletas_emitidas.folio > 0
+- boletas_emitidas.monto_total > 0
+- boletas_emitidas.estado IN ('aceptado','aceptado_con_reparos','rechazado','anulada')
+
+✅ UNIQUE constraints:
+- (empresa_id, tipo_dte, folio)
+- Índice parcial único: idx_boletas_propuesta_unica_vigente (propuesta_id) WHERE estado <> 'anulada'
+
+✅ FOREIGN KEYS:
+- boletas_emitidas → propuestas_ia (propuesta_id, ON DELETE SET NULL)
+- boletas_emitidas → boletas_caf_mock (caf_id)
+- boletas_emitidas → boletas_emitidas (anulada_por_id, referencia_id)
+
+✅ consume_next_folio atómico:
+- SELECT ... FOR UPDATE lockea el CAF
+- SECURITY DEFINER + search_path fijo (previene SQL injection)
+
+❌ Observaciones de seguridad:
+- RLS en boletas_emitidas es SELECT-only (INSERT/UPDATE/DELETE sin control)
+- authenticated role puede ejecutar consume_next_folio (debería ser solo service_role)
+- No hay CHECK constraint en propuestas_ia.estado (solo validación en aplicación)
+
+
+9. PRUEBAS MÍNIMAS RECOMENDADAS ANTES DE PRODUCCIÓN
+-----------------------------------------------------
+
+| # | Prueba | Estado |
+|---|--------|--------|
+| 1 | Doble click en "Emitir" | Parcial (frontend OK, falta idempotency-key) |
+| 2 | Caída del SII | No testeable (mock siempre responde) |
+| 3 | Respuesta lenta del SII | No simulada |
+| 4 | Emisión exitosa sin respuesta en app | No cubierta |
+| 5 | Internet interrumpido durante emisión | No probada explícitamente |
+| 6 | Refresh/cierre de pestaña durante emisión | No cubierta |
+| 7 | Datos incompletos (sin receptor > $180k) | Emite igual (validación omitida) |
+| 8 | Reintento posterior a error | Funciona pero quema folios |
+| 9 | Usuario sin permisos | OK |
+| 10 | Emisión masiva con fallos parciales | OK por item, toast muestra solo 3 errores |
+
+
+10. RESUMEN EJECUTIVO
+----------------------
+
+PARA PRUEBAS INTERNAS (mock SII):
+  Riesgo BAJO. Los folios son ficticios, el mock siempre acepta,
+  y el índice único de DB evita duplicados. El flujo es funcional
+  para desarrollo y testing.
+
+PARA PRODUCCIÓN REAL (SII verdadero):
+  Riesgo ALTO. La app NECESITA antes de migrar a producción:
+
+  CRÍTICOS (impiden usar en producción):
+  1. Sistema de release_folio para recuperar folios de intentos fallidos
+  2. Idempotency-key para reintentos seguros sin duplicar
+  3. beforeunload guard para evitar cierre de pestaña durante emisión
+  4. Estado "pendiente_confirmacion" para emisiones asíncronas
+  5. Polling de estado SII (el SII real es asíncrono)
+
+  ALTAMENTE RECOMENDADOS:
+  6. Columna emitido_por para auditoría de usuarios
+  7. Tabla audit_log para registrar todos los intentos
+  8. Re-activar validación de receptor para montos > $180k
+  9. Re-activar verificación de certificado SII
+  10. Timeouts explícitos en llamadas HTTP
+  11. Botón "reintentar fallidos" en UI
+  12. Timeout en fetch del frontend
+
+  MEJORAS DE CALIDAD:
+  13. Simular rechazos y latencia en mock SII
+  14. Mostrar todos los errores del batch en UI
+  15. Rate limiting en endpoints de emisión
+  16. Logging estructurado (JSON con contexto)
+  17. Restringir consume_next_folio a service_role

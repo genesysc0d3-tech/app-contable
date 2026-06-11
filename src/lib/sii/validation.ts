@@ -146,6 +146,11 @@ export function validarBoleta(input: BoletaInput): {
   }
 
   // --- Validación receptor según monto (Res. Ex. 174/2017) ---
+  // NOTA merge 2026-06-11: dev (mayo) había quitado este bloque ("libertad de
+  // emisión"), pero el flujo actual depende de él: pendientes-emision marca
+  // listo_emitir con este mismo umbral y la UI muestra el motivo. Si el equipo
+  // decide relajarlo, hay que cambiarlo AQUÍ y en lib/intermediario/
+  // pendientes-emision.ts a la vez, no solo en un lado.
   if (totalProvisto > RECEPTOR_OBLIGATORIO_DESDE) {
     if (!input.receptor_rut) {
       errors.push({

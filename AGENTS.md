@@ -173,6 +173,26 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 **Próximos pasos:**
 - Revisar visualmente popup empresa.
 - Probar Genie en vivo con sesión real en `localhost:3002`.
+### Sesión paralela del compa (2026-05-22)
+
+**Qué se hizo:**
+- Reset completo de BD (CB4W): `scripts/reset-completo.sql` + `scripts/reset-db.js` + script `npm run cb4w`
+- Reemplazado estilo de pestañas superiores (V5Root.tsx) con el formato de TabsV5 (icono sobre texto, fondo activo `rgba(232,85,62,.1)`, sin sliding pill)
+
+**Archivos modificados:**
+- `scripts/reset-completo.sql` (nuevo) — SQL de reset total
+- `scripts/reset-db.js` (nuevo) — script node para ejecutar reset vía Supabase
+- `package.json` — agregado script `cb4w`
+- `src/app/(app)/escritorio/v5/V5Root.tsx` — pestañas superiores ahora con estilo TabsV5 (icono sobre texto, fondo activo)
+- `src/app/(app)/escritorio/v5/page.tsx` — eliminado TabsV5 del dashboard; las pestañas superiores controlan el flujo
+
+**Decisiones:**
+- CB4W = comando para limpiar base de trabajo y empezar desde 0
+- Las pestañas inferiores (TabsV5) ahora tienen el mismo formato visual que las superiores
+
+**Próximos pasos:**
+- Continuar desarrollo del flujo de emisión
+- Ajustar visual de las secciones
 <!-- MEMORY:END -->
 
 ---

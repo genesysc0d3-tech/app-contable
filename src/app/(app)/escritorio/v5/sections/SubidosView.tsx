@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { Tables } from "@/lib/database.types";
 
 const stColors: Record<string, string> = { procesado: "var(--green)", procesando: "var(--blue)", error: "var(--accent)", subido: "var(--amber)" };
@@ -22,7 +23,14 @@ export default function SubidosView({
   selDate: string;
   viewMode: "day" | "full";
 }) {
+  const router = useRouter();
   const [mode, setMode] = useState<"day" | "full">(initialMode);
+  const hayProcesando = documentos.some(d => d.estado === "procesando");
+  useEffect(() => {
+    if (!hayProcesando) return;
+    const id = setInterval(() => router.refresh(), 2000);
+    return () => clearInterval(id);
+  }, [hayProcesando, router]);
   const activeMode = mode;
   // Group docs by date for full mode
   const byDate = useMemo(() => {
@@ -57,7 +65,8 @@ export default function SubidosView({
             No hay documentos subidos en esta fecha
           </div>
         ) : (
-          dayDocs.map(doc => (
+          <>
+          {dayDocs.map(doc => (
             <div key={doc.id} style={{
               display: "flex", alignItems: "center", gap: 10,
               padding: "10px 12px", borderRadius: 10,
@@ -79,7 +88,14 @@ export default function SubidosView({
                 <span style={{ fontSize: 9, color: "var(--text2)" }}>{doc.movimientos_detectados} mov</span>
               )}
             </div>
-          ))
+          ))}
+          {dayDocs.some(d => d.estado === "procesado") && (
+            <button onClick={() => window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "revisar" } }))}
+              style={{fontSize:11,padding:"8px 20px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",alignSelf:"flex-start"}}>
+              CONTINUAR A PREPARAR
+            </button>
+          )}
+          </>
         )}
       </div>
     );

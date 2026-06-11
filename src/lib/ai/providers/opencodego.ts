@@ -48,28 +48,36 @@ export class OpenCodeGoProvider implements AIProvider {
   private async fetchChat(
     messages: OpenCodeGoMessage[]
   ): Promise<OpenCodeGoResponse> {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        response_format: { type: "json_object" },
-        temperature: 0.1,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(
-        `OpenCode Go API error ${res.status}: ${body.slice(0, 500)}`
-      );
+    try {
+      const res = await fetch(`${BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(
+          `OpenCode Go API error ${res.status}: ${body.slice(0, 500)}`
+        );
+      }
+
+      return res.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return res.json();
   }
 
   async extractMovimientos(

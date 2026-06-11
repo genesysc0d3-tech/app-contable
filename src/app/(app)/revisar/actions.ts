@@ -256,6 +256,57 @@ export async function aprobarTodas(
   return { ok: true, count: aprobadas };
 }
 
+export async function editarMovimientoPropuesta(
+  propuestaId: string,
+  movimientoId: string,
+  campos: {
+    descripcion?: string;
+    monto?: number;
+    tipo_propuesto?: string;
+    receptor_nombre?: string | null;
+    receptor_rut?: string | null;
+    notas?: string | null;
+  }
+) {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error };
+
+  const sb = ctx.sb;
+
+  if (campos.descripcion !== undefined || campos.monto !== undefined) {
+    const movUpdate: Record<string, string | number> = {};
+    if (campos.descripcion !== undefined) movUpdate.descripcion = campos.descripcion.trim();
+    if (campos.monto !== undefined) movUpdate.monto = campos.monto;
+    const { error: movErr } = await sb
+      .from("movimientos_raw")
+      .update(movUpdate)
+      .eq("empresa_id", ctx.empresaId)
+      .eq("id", movimientoId);
+    if (movErr) return { error: movErr.message };
+  }
+
+  const propUpdate: Record<string, string | number | null> = {};
+  if (campos.tipo_propuesto !== undefined) propUpdate.tipo_propuesto = campos.tipo_propuesto;
+  if (campos.receptor_nombre !== undefined) propUpdate.receptor_nombre = campos.receptor_nombre;
+  if (campos.receptor_rut !== undefined) propUpdate.receptor_rut = campos.receptor_rut;
+  if (campos.notas !== undefined) propUpdate.notas = campos.notas;
+
+  if (Object.keys(propUpdate).length > 0) {
+    const { error: propErr, count } = await sb
+      .from("propuestas_ia")
+      .update(propUpdate, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .eq("id", propuestaId);
+
+    if (propErr) return { error: propErr.message };
+    if (!count) return { error: "No se pudo editar la propuesta" };
+  }
+
+  revalidatePath("/revisar");
+  revalidatePath("/escritorio");
+  return { ok: true };
+}
+
 export async function devolverAOmitidos(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };

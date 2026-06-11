@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "sii:explore": "node scripts/sii-explorer.mjs",
-    "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs"
+    "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs",
+    "cb4w": "node scripts/reset-db.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1066.0",
