@@ -37,7 +37,7 @@ async function handlePost(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas(rut, razon_social, giro, direccion, comuna)")
+    .select("empresa_id, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna)")
     .eq("id", user.id)
     .single();
   if (!usuario || !usuario.empresa_id) {

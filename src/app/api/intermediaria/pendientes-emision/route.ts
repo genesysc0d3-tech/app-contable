@@ -29,7 +29,7 @@ export async function GET() {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas(giro, razon_social, tipo_contribuyente)")
+    .select("empresa_id, empresas!usuarios_empresa_id_fkey(giro, razon_social, tipo_contribuyente)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {

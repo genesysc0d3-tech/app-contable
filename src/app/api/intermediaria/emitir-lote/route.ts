@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
+    .select("empresa_id, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
