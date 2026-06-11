@@ -8,6 +8,7 @@
   let automationClickInProgress = false;
   let autoCloseTimer = null;
   let capturedSharePdf = null; // PDF capturado vía COMPARTIR (hook MAIN world)
+  let currentJobLogoutAfter = false; // boleta única → cerrar sesión SII al final
 
   // El hook en MAIN world (sii-notif-suppress.js) intercepta navigator.share y
   // nos manda el PDF de la boleta como base64. Lo guardamos para la captura.
@@ -67,7 +68,7 @@
         </div>`
       : done
         ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-            <button type="button" data-app-contable-action="close" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#0f5132;font-size:12px;font-weight:800;cursor:pointer;">Cerrar ventana</button>
+            <button type="button" data-app-contable-action="${currentJobLogoutAfter ? "logout_and_close" : "close"}" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#0f5132;font-size:12px;font-weight:800;cursor:pointer;">${currentJobLogoutAfter ? "Cerrar sesión y ventana" : "Cerrar ventana"}</button>
           </div>`
         : "";
 
@@ -87,7 +88,13 @@
       // Ya emitió y la app guardó el folio: la ventana se cierra sola tras unos
       // segundos (deja ver el folio un momento). Es automático; el botón
       // "Cerrar ventana" queda solo por si quieres cerrarla antes.
-      autoCloseTimer = setTimeout(() => sendWorkerAction("close"), 5000);
+      autoCloseTimer = setTimeout(() => {
+        if (currentJobLogoutAfter && clickLogout()) {
+          sendWorkerAction("logout_and_close"); // background cierra tras el logout
+        } else {
+          sendWorkerAction("close");
+        }
+      }, 5000);
     }
   }
 
@@ -114,6 +121,7 @@
     if (!action) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (action === "logout_and_close") clickLogout();
     sendWorkerAction(action);
   }, true);
 
@@ -751,6 +759,17 @@
     return capturedSharePdf;
   }
 
+  // Boleta única: clickea el botón "Cerrar sesión" del SII (arriba en la ventana)
+  // para cerrar la sesión de forma oficial. Devuelve true si lo encontró/clickeó.
+  function clickLogout() {
+    const btn = Array.from(document.querySelectorAll("a, button, [role='button'], .v-btn"))
+      .find((el) => /cerrar\s*sesi[oó]n/i.test((el.innerText || el.textContent || "").trim()));
+    if (!btn) return false;
+    automationClickInProgress = true;
+    try { btn.click(); } finally { setTimeout(() => { automationClickInProgress = false; }, 50); }
+    return true;
+  }
+
   async function fillAndEmit(job) {
     const amount = String(Math.max(0, Math.round(Number(job?.totales?.monto_total ?? 0))));
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
@@ -920,6 +939,7 @@
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.source !== EXT_SOURCE) return;
     if (message.job_id) currentJobId = message.job_id;
+    if (message.job && typeof message.job.logout_after === "boolean") currentJobLogoutAfter = message.job.logout_after;
     if (message.type === "APP_CONTABLE_SII_WORKER_OVERLAY") {
       renderOverlay(message.mode || "HUMAN_REQUIRED", message.message || "Ventana segura SII activa.");
       return;

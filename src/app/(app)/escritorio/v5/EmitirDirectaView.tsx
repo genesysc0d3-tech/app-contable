@@ -682,6 +682,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         allow_final_emit: true,
         payment_method: formaPago,
         confirmation_required: false,
+        // Boleta única: al terminar, cerrar sesión SII + cerrar la ventana
+        // (no dejar la sesión abierta). En massdte por lote esto va en false.
+        logout_after: true,
       },
     }, window.location.origin);
   }
