@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "sii:explore": "node scripts/sii-explorer.mjs",
     "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs"
   },
@@ -42,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }

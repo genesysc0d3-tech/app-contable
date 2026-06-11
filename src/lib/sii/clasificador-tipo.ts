@@ -88,7 +88,9 @@ function angleGlosa(descripcion: string | null | undefined): AngleResult {
   // EXENTA — Art. 12/13 DL 825
   if (/\b(matr[ií]cula|colegiatura|pensi[oó]n escolar|arancel|jard[ií]n infantil|colegio|universidad|instituto|capacitaci[oó]n|sence|sostas)\b/.test(desc))
     return { veredicto: "exenta", peso: 0.85, razon: "Educación (Art. 13 N°4 DL 825)" };
-  if (/\b(consulta m[eé]d|kinesi|odont|psic[oó]log|cl[ií]nica|hospital|m[eé]dico|fonoaudi|nutri|farmacia)\b/.test(desc))
+  // Alternativas-prefijo llevan \w* antes del \b: sin él, "consulta médica",
+  // "kinesiología" o "psicólogo" jamás calzaban (no hay borde tras el prefijo).
+  if (/\b(consulta m[eé]d\w*|kinesi\w*|odont\w*|psic[oó]log\w*|cl[ií]nica|hospital|m[eé]dic\w*|fonoaudi\w*|nutri\w*|farmacia)\b/.test(desc))
     return { veredicto: "exenta", peso: 0.80, razon: "Salud (Art. 12 letra E N°7)" };
   if (/\b(uber|didi|cabify|taxi|micro|metro|bus|pasaje|colectivo)\b/.test(desc))
     return { veredicto: "exenta", peso: 0.80, razon: "Transporte de pasajeros (Art. 13 N°3)" };
