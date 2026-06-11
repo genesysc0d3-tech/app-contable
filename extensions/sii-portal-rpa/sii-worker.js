@@ -89,8 +89,11 @@
       // segundos (deja ver el folio un momento). Es automático; el botón
       // "Cerrar ventana" queda solo por si quieres cerrarla antes.
       autoCloseTimer = setTimeout(() => {
-        if (currentJobLogoutAfter && clickLogout()) {
-          sendWorkerAction("logout_and_close"); // background cierra tras el logout
+        // Single: clickLogout hace power → confirmar CERRAR SESIÓN → y cierra la
+        // ventana él mismo (en su confirm-handler). Si no encuentra el botón
+        // power, cerramos igual. MassDTE por lote: cierre normal.
+        if (currentJobLogoutAfter) {
+          if (!clickLogout()) sendWorkerAction("close");
         } else {
           sendWorkerAction("close");
         }
@@ -121,7 +124,7 @@
     if (!action) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (action === "logout_and_close") clickLogout();
+    if (action === "logout_and_close") { clickLogout(); return; } // clickLogout cierra la ventana solo
     sendWorkerAction(action);
   }, true);
 
@@ -802,9 +805,14 @@
       if (ok) {
         automationClickInProgress = true;
         try { ok.click(); } finally { setTimeout(() => { automationClickInProgress = false; }, 50); }
+        // El click ya corrió el handler de logout del SII (cierra la sesión) →
+        // pedir el cierre de la ventana AHORA, síncrono, antes de que la
+        // navegación del logout destruya este contexto. Cierre confiable.
+        sendWorkerAction("close");
         return;
       }
-      if (++confirmTries < 5) setTimeout(confirmLogout, 400);
+      if (++confirmTries < 5) { setTimeout(confirmLogout, 400); }
+      else { sendWorkerAction("close"); } // no apareció el confirm → cerrar igual
     };
     setTimeout(confirmLogout, 500);
     return true;

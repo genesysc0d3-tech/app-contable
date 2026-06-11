@@ -115,6 +115,7 @@ if (EMISOR) {
         totales: { monto_total: 1, monto_neto: 0, iva: 0, monto_exento: 1 },
         learn_only: false, auto_emit: true, allow_final_emit: true,
         payment_method: "Efectivo", confirmation_required: false,
+        logout_after: true, // boleta única → cerrar sesión SII + ventana al final
       },
     }, window.location.origin);
   }, EMISOR);

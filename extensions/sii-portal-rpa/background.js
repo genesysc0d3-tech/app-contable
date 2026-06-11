@@ -256,17 +256,6 @@ function handleWorkerAction(message, sender, sendResponse) {
     return false;
   }
 
-  // Boleta única: el worker ya clickeó "Cerrar sesión" en el SII. Esperamos a
-  // que el logout navegue/se procese server-side y recién cerramos la ventana.
-  if (message.action === "logout_and_close") {
-    setTimeout(() => {
-      sendToApp(state, statusMessage(state.jobId, "closed", "Sesion SII cerrada y ventana cerrada.", false));
-      closeWorker(state);
-    }, 3500);
-    sendResponse?.({ ok: true });
-    return false;
-  }
-
   sendResponse?.({ ok: false, error: "ACTION_INVALID" });
   return false;
 }
