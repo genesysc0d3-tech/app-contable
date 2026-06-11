@@ -247,7 +247,12 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       <HintSelector documentoId={doc.id} current={doc.tipo_operacion_hint ?? null} />
                     </span>
                   )}
-                  {isBoletaUnica && <span style={{fontSize:9,color:"var(--text2)",fontWeight:600}}>Registro creado desde Emision Directa</span>}
+                  {isBoletaUnica && (
+                    <span title="Esta boleta ya fue emitida en el SII. La ves en la pestaña Boletas." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e",whiteSpace:"nowrap"}}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
+                      Emitida · en Boletas
+                    </span>
+                  )}
                 </div>
                 {!isBoletaUnica && doc.estado === "procesado" && prog && prog.total > 0 && (
                   <DocProgressBar p={prog} />
