@@ -120,7 +120,12 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6}}>
         <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
         {docs.map((doc) => {
-          const isBoletaUnica = doc.tipo === "boleta_unica";
+          // Registro de una boleta YA emitida (boleta_unica / boleta_sii_local /
+          // boleta_baseapi, etc.): es solo el comprobante, no una cartola
+          // procesable. Read-only — sin reprocesar/deshacer/mapear (ya está en
+          // Boletas; para corregir, Nota de Crédito). Los uploads son tipo
+          // "excel"/"pdf", nunca "boleta_*", así que no hay colisión.
+          const isBoletaUnica = (doc.tipo ?? "").startsWith("boleta_");
           const prog = docProgress?.[doc.id];
           // Documento congelado: ya tiene ≥1 boleta emitida en el SII. No se
           // puede re-mapear ni deshacer (folio real; se corrige vía Nota de
