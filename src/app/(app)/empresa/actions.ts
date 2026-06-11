@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validarRut, cleanRut } from "@/lib/sii/validation";
@@ -65,8 +66,7 @@ export async function setDatosEmisor(
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const update: Record<string, string | null> = {};
   if (datos.rut !== undefined) update.rut = datos.rut ? cleanRut(datos.rut) : null;
@@ -110,8 +110,7 @@ export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: strin
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const logoDir = `${usuario.empresa_id}/logos`;
   const { data: oldFiles } = await sb.storage.from("documentos").list(logoDir);
@@ -147,8 +146,7 @@ export async function setCertificadoSii(
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const { error } = await sb
     .from("empresas")
@@ -190,8 +188,7 @@ export async function setEmisionConfig(
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const { error } = await sb
     .from("empresas")
@@ -238,8 +235,7 @@ export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?:
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const { data: miembroExistente } = await sb
     .from("usuarios")
@@ -284,8 +280,7 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const tokenHash = hashInviteToken(token);
   const { data: invitacion, error: invError } = await sb

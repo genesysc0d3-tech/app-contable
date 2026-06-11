@@ -17,11 +17,7 @@ interface BoletaRow {
 export default async function BoletasList({ empresaId }: { empresaId: string }) {
   const supabase = await createClient();
 
-  // The boletas_emitidas table may not exist yet (migration pending) and isn't
-  // in the generated database.types yet. Use loose typing to bypass the static
-  // check; query gracefully returns empty if table is missing.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as unknown as any;
+  const sb = supabase;
   let boletas: BoletaRow[] = [];
   try {
     const { data, error } = await sb

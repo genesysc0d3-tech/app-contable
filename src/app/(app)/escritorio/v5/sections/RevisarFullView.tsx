@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { aprobarPropuesta, rechazarPropuesta } from "../../../revisar/actions";
@@ -25,7 +25,7 @@ function dayLabel(s: string) {
 }
 
 export default function RevisarFullView({
-  propuestas, empresaId,
+  propuestas,
 }: {
   propuestas: (Tables<"propuestas_ia"> & {
     movimientos_raw: Tables<"movimientos_raw"> & {
@@ -36,7 +36,6 @@ export default function RevisarFullView({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const pendientes = useMemo(
     () => propuestas.filter(p => p.estado === "pendiente" && !p.notas?.startsWith("Agregado desde visor de omitidos")),
@@ -50,7 +49,6 @@ export default function RevisarFullView({
       const dateKey = p.created_at?.slice(0, 10) ?? "sin-fecha";
       const doc = p.movimientos_raw?.documentos_subidos;
       const docKey = doc?.id ?? "__sin__";
-      const docName = doc?.nombre_archivo ?? "Sin documento";
       if (!dateMap.has(dateKey)) dateMap.set(dateKey, new Map());
       const docMap = dateMap.get(dateKey)!;
       const entry = docMap.get(docKey) ?? [];

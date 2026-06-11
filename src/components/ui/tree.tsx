@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { ChevronRight, File, Folder, FolderOpen, Receipt, Clock, FileText, Search } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, Receipt, Clock, FileText, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type ComponentProps,

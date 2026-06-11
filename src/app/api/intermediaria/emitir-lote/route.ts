@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { validarBoleta } from "@/lib/sii/validation";
 import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
@@ -109,8 +110,7 @@ export async function POST(request: Request) {
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id);
   if (process.env.NODE_ENV !== "production") {
     console.info("[emitir-lote] configuracion emision", {
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
       .eq("empresa_id", usuario.empresa_id)
       .neq("estado", "anulada")
       .in("propuesta_id", ids);
-    yaEmitidas = new Set((existentes ?? []).map((e: { propuesta_id: string }) => e.propuesta_id));
+    yaEmitidas = new Set((existentes ?? []).map((e) => e.propuesta_id).filter((v): v is string => typeof v === "string"));
   } catch { /* tabla missing → todas pendientes */ }
 
   const fecha_emision = chileDateString();

@@ -75,6 +75,7 @@ function LogoImage({ src, alt, maxHeight, onError }: { src: string; alt: string;
   return (
     <span style={{ position: "relative", display: "inline-flex", alignItems: "center", height: maxHeight, maxWidth: "100%", overflow: "visible" }}>
       <style>{`.eb-sil{display:none}.dark .eb-sil{display:block}`}</style>
+      {/* eslint-disable-next-line @next/next/no-img-element -- API same-origin con cookies (el optimizer de next/image no autentica) + tamaño natural */}
       <img
         src={src}
         alt={alt}
@@ -82,6 +83,7 @@ function LogoImage({ src, alt, maxHeight, onError }: { src: string; alt: string;
         style={{ maxHeight, maxWidth: "100%", width: "auto", height: "auto", objectFit: "contain", display: "block" }}
       />
       {silhouette && (
+        // eslint-disable-next-line @next/next/no-img-element -- overlay silueta del mismo recurso
         <img
           src={src}
           alt=""

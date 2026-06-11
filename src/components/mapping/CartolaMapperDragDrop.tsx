@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { UploadSimple, CheckCircle, X, ArrowLeft, CaretDown, Info, Warning } from "@phosphor-icons/react";
+import { UploadSimple, CheckCircle } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
 type Role = "ignorar" | "fecha" | "descripcion" | "monto" | "cargo" | "abono" | "n_documento" | "saldo";
@@ -34,7 +34,7 @@ interface Props {
   previewData?: PreviewData;
 }
 
-export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, previewData }: Props) {
+export default function CartolaMapperDragDrop({ onClose, onSaved, previewData }: Props) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<"upload" | "mapping" | "done">(previewData ? "mapping" : "upload");
@@ -99,7 +99,8 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
     e.preventDefault(); setDragOverZone(null); setDraggingCol(null);
     const colIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
     if (!isNaN(colIdx)) assign(z, colIdx);
-  }, [zoneMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- assign es función estable del componente
+  }, []);
 
   function rolesArr(p: PreviewData): string[] {
     const r = new Array(p.cols).fill("ignorar");
@@ -129,7 +130,6 @@ export default function CartolaMapperDragDrop({ empresaId, onClose, onSaved, pre
 
   const assigned = Object.keys(zoneMap).filter(k => zoneMap[k] !== undefined).length;
   const validationMsg = !zoneMap.fecha ? "Fecha es obligatoria" : !zoneMap.descripcion ? "Descripción / Glosa es obligatoria" : null;
-  const mappedCols = preview?.cols ?? 0;
   const dataRows = preview ? preview.rows.slice(1, 6) : [];
 
   return (

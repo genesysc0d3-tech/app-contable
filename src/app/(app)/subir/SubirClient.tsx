@@ -9,7 +9,7 @@ import { getDocumentosRecientes } from "@/lib/upload";
 import type { DocumentoSubido } from "@/lib/upload";
 import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
-import { DownloadSimple, CaretDown, Receipt, ArrowClockwise } from "@phosphor-icons/react";
+import { DownloadSimple, CaretDown, Receipt } from "@phosphor-icons/react";
 
 interface SubirClientProps {
   empresaId: string;
@@ -123,7 +123,7 @@ export default function SubirClient({ empresaId }: SubirClientProps) {
     const totalErr = errores > 0 ? `${errores} con error` : "";
     toast([totalOk, totalErr].filter(Boolean).join(", "));
     setUploading(false);
-  }, [empresaId, fetchDocumentos, toast]);
+  }, [fetchDocumentos, toast]);
 
   const [historialAbierto, setHistorialAbierto] = useState(false);
 
@@ -204,7 +204,6 @@ function ResumenMensual() {
     resumen_por_tipo: Record<string, { docs: number; neto: number; exento: number; iva: number; total: number }>;
     detalle: RCVRow[];
   } | null>(null);
-  const [expandido, setExpandido] = useState(false);
 
   const mes = new Date().toISOString().slice(0, 7);
 

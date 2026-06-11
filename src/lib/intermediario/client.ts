@@ -20,6 +20,7 @@
  */
 
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import {
   recibirDTE,
   consultarEstadoDTE,
@@ -36,8 +37,7 @@ function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("BACKEND_CONFIG_MISSING");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createServiceClient(url, key) as any;
+  return createServiceClient<Database>(url, key);
 }
 
 export interface VerificacionCertificado {

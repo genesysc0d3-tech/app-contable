@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
 import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
@@ -60,8 +61,8 @@ async function handlePost(request: Request) {
     );
   }
 
-  // DEMO: omitimos verificación de certificado SII.
-  // En producción: const certCheck = await verificarCertificado(usuario.empresa_id);
+  // El certificado SII delegado se verifica más abajo, solo si el proveedor
+  // efectivo NO es mock (la simulación no lo necesita).
 
   // 2. Parse body
   let body: BoletaInput;
@@ -84,7 +85,7 @@ async function handlePost(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
-  const sb = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id).catch(() => null);
   if (!emisionConfig) {
     return NextResponse.json(
@@ -163,7 +164,7 @@ async function handlePost(request: Request) {
       monto_exento: validation.totales.exento,
       iva: validation.totales.iva,
       monto_total: validation.totales.total,
-      detalles: body.detalles,
+      detalles: body.detalles as unknown as Json,
       xml_dte: mockIssue.xmlDte,
       ted: mockIssue.ted,
       track_id: mockIssue.trackId,

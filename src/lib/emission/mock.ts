@@ -1,6 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
 import { asegurarFoliosDisponibles, enviarDTE } from "@/lib/intermediario/client";
 import type { BoletaInput } from "@/lib/sii/validation";
+import type { Database } from "@/lib/database.types";
 
 type TotalesBoleta = { neto: number; exento: number; iva: number; total: number };
 
@@ -13,8 +15,7 @@ export interface MockEmpresaFiscal {
 }
 
 export interface MockIssueInput {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sb: any;
+  sb: SupabaseClient<Database>;
   empresaId: string;
   empresa: MockEmpresaFiscal;
   body: Pick<BoletaInput, "tipo_dte" | "receptor_rut" | "receptor_razon_social" | "receptor_direccion" | "receptor_comuna" | "detalles">;

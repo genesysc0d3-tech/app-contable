@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { procesarDocumento } from "@/lib/ai/processor";
 
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
 
   const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const svc = createServiceClient(svcUrl, svcKey);
+  const svc = createServiceClient<Database>(svcUrl, svcKey);
 
   // Guardar archivo en Storage para FieldMapper y otros usos
   const storagePath = `${usuario.empresa_id}/${doc.id}/${body.nombre}`;
@@ -138,7 +139,7 @@ async function procesarEnBackground(
     console.error(`[bg] ${documentoId} error fatal:`, errorMsg);
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const svc = createServiceClient(url, key);
+    const svc = createServiceClient<Database>(url, key);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (svc as any).from("documentos_subidos").update({
       estado: "error",

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { revalidatePath } from "next/cache";
 
 const HINTS_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
@@ -34,8 +35,7 @@ export async function setDocumentoHint(
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const { error, count } = await sb
     .from("documentos_subidos")
@@ -77,8 +77,7 @@ export async function setDocumentoGlosa(
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const glosa = typeof glosaComun === "string" ? glosaComun.trim().slice(0, 80) : null;
   const { error, count } = await sb

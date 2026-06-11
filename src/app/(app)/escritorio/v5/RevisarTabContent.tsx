@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
-import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
 import type { Tables } from "@/lib/database.types";
 
 type Propuesta = Tables<"propuestas_ia"> & {
@@ -64,13 +63,12 @@ function RevisarEmpty() {
 interface DocTab { docId: string; nombre: string; total: number; }
 
 export default function RevisarTabContent({
-  propuestas, clientes, empresaId, empresaGiro, empresaRazonSocial, empresaTipoContribuyente,
+  propuestas, clientes, empresaId, empresaGiro, empresaTipoContribuyente,
 }: {
   propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string;
   empresaGiro?: string | null; empresaRazonSocial?: string; empresaTipoContribuyente?: string | null;
 }) {
   const router = useRouter();
-  const { toast } = useToast();
 
   // Build document tabs from propuestas data
   const docMap = useMemo(() => {
@@ -166,7 +164,7 @@ function AprobarTodoBtn({ ids }: { ids: string[] }) {
 }
 
 /* ─── Confianza Group Section ─── */
-function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction, empresaTipoContribuyente, empresaGiro }: {
+function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction, empresaTipoContribuyente }: {
   tipo: string; label: string; propuestas: Propuesta[]; color: string; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
   empresaTipoContribuyente?: string | null; empresaGiro?: string | null;
 }) {
@@ -351,7 +349,6 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
   const tipoBadge = tipoMeta(propuesta.tipo_propuesto);
   const empresaSugiereExenta = empresaTipoContribuyente === "exento";
   const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
-  const desacuerdo = (isAfecta && empresaSugiereExenta) || (!isAfecta && empresaSugiereAfecta);
 
   const neto = propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
   const iva = propuesta.iva ?? Math.round(neto * 0.19);

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useToast } from "@/components/Toast";
-import { classifyFile, BADGE_COLORS } from "@/lib/file-classifier";
+import { classifyFile } from "@/lib/file-classifier";
 import type { FileCategory } from "@/lib/file-classifier";
 
 interface QueuedFile {
@@ -73,7 +73,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
   async function handleUploadAll() {
     if (!queue.length) return;
     setUploading(true);
-    let ok = 0, fail = 0;
+    let ok = 0;
     for (const q of queue) {
       try {
         const arrayBuf = await q.file.arrayBuffer();
@@ -94,8 +94,8 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
         });
         const data = await res.json();
         if (data.ok) ok++;
-        else { fail++; toast(`No se pudo subir "${q.customName}". Intenta de nuevo o revisa el archivo.`, "error"); }
-      } catch { fail++; toast(`Error de red subiendo "${q.customName}".`, "error"); }
+        else { toast(`No se pudo subir "${q.customName}". Intenta de nuevo o revisa el archivo.`, "error"); }
+      } catch { toast(`Error de red subiendo "${q.customName}".`, "error"); }
     }
     setUploading(false);
     setQueue([]);

@@ -118,11 +118,6 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
     boxSizing: "border-box" as const,
   };
 
-  const inputFocus = {
-    borderColor: "rgba(167,139,250,0.45)",
-    background: "rgba(255,255,255,0.055)",
-  };
-
   return (
     <>
       <style>{`
@@ -207,6 +202,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
               />
               {hasLogo ? (
                 <div className="ef-logo-card" style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, overflow: "hidden", position: "relative" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- logo servido por API same-origin; next/image no aplica */}
                   <img
                     src={`/api/empresa/logo/current?v=${logoVersion}`}
                     alt="Logo"

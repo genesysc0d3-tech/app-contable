@@ -1,4 +1,4 @@
-import { FileText, Folder, type LucideIcon } from "lucide-react";
+import { FileText, type LucideIcon } from "lucide-react";
 
 export type TreeNodeData =
   | { type: "folder"; name: string; children: TreeNodeData[] }
