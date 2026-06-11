@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isR2Configured, uploadToR2 } from "@/lib/r2";
 
 interface SiiLocalResultPayload {
   job_id?: string | null;
@@ -177,15 +178,28 @@ async function uploadPdfBuffer(
   args: { empresaId: string; tipoDte: number; folio: number; buffer: Buffer },
 ) {
   const invalid = validatePdfBuffer(args.buffer);
-  if (invalid) return { storagePath: null, error: invalid };
+  if (invalid) return { storagePath: null, error: invalid, provider: null };
 
   const storagePath = storagePathFor(args);
+
+  // Si R2 está configurado, los PDFs van a Cloudflare R2 (no a Supabase Storage):
+  // no consume storage ni egress de Supabase, y R2 no cobra egress. El marcador
+  // provider permite que la ruta de lectura sepa de dónde bajarlo.
+  if (isR2Configured()) {
+    try {
+      await uploadToR2(storagePath, args.buffer, "application/pdf");
+      return { storagePath, error: null, provider: "r2" as const };
+    } catch (e) {
+      return { storagePath: null, error: `R2_UPLOAD_${e instanceof Error ? e.name : "ERROR"}`, provider: null };
+    }
+  }
+
   const { error } = await sb.storage.from("documentos").upload(storagePath, args.buffer, {
     contentType: "application/pdf",
     upsert: true,
   });
-  if (error) return { storagePath: null, error: error.message };
-  return { storagePath, error: null };
+  if (error) return { storagePath: null, error: error.message, provider: null };
+  return { storagePath, error: null, provider: "supabase" as const };
 }
 
 async function uploadExtensionPdf(
@@ -231,7 +245,7 @@ async function uploadResultPdf(
   if (args.pdfInfo?.href) {
     return uploadSiiPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, pdfUrl: args.pdfInfo.href });
   }
-  return { storagePath: null, error: "PDF_REQUIRED", filename: null, sourceUrl: null };
+  return { storagePath: null, error: "PDF_REQUIRED", filename: null, sourceUrl: null, provider: null };
 }
 
 function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResultPayload["result"] extends infer R ? R extends { totales?: infer T } ? T : never : never) {
@@ -345,6 +359,7 @@ export async function POST(request: Request) {
               filename: pdfUpload.filename ?? `boleta-sii-${tipoDte}-${folio}.pdf`,
               content_type: "application/pdf",
               source_url: pdfUpload.sourceUrl,
+              provider: pdfUpload.provider,
             },
             pdf_upload_error: null,
           },
@@ -391,6 +406,7 @@ export async function POST(request: Request) {
       filename: pdfUpload.filename ?? `boleta-sii-${tipoDte}-${folio}.pdf`,
       content_type: "application/pdf",
       source_url: pdfUpload.sourceUrl,
+      provider: pdfUpload.provider,
     } : null,
     pdf_pendiente: pdfPendiente,
     pdf_upload_error: pdfUpload.storagePath ? null : (pdfUpload.error || "PDF_PENDIENTE"),

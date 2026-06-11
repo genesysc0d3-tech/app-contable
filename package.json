@@ -11,6 +11,8 @@
     "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1066.0",
+    "@aws-sdk/s3-request-presigner": "^3.1066.0",
     "@mistralai/mistralai": "^2.1.2",
     "@phosphor-icons/react": "^2.1.10",
     "@radix-ui/react-tooltip": "^1.2.8",
