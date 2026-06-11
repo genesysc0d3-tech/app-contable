@@ -337,35 +337,45 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
         {viewMode === "grid" && (() => {
           const sd = selected ? docs.find(d => d.id === selected) : null;
           const sc = sd ? (st[sd.estado] ?? "#9ca3af") : null;
+          // Barra = progreso de emisión (emitida/boleteable). Boleta = 100%.
+          const pct = (doc: DocRaw): number => {
+            if (isBoletaTipo(doc.tipo)) return 1;
+            const p = docProgress?.[doc.id];
+            if (p) { const b = p.total - p.noAplica; return b > 0 ? Math.min(1, p.emitida / b) : 0; }
+            return 0;
+          };
+          const estadoIcon = (e: string) =>
+            e === "procesado" ? <path d="M5 13l4 4L19 7" />
+            : e === "procesando" ? <path d="M21 12a9 9 0 1 1-6.2-8.5" />
+            : e === "error" ? <path d="M12 8v5m0 3.5h.01" />
+            : <><circle cx="12" cy="12" r="8.5" /><path d="M12 8v4.5l3 1.8" /></>;
           return (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <style>{`
-                .agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:10px}
-                .agg-card{position:relative;aspect-ratio:1;border-radius:14px;cursor:pointer;overflow:hidden;background:rgba(255,255,255,.03);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--c-bd);transition:transform .28s cubic-bezier(.16,1,.3,1),box-shadow .28s ease,border-color .2s ease}
-                .agg-card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 135%,var(--c) 0%,transparent 62%);opacity:.16;transition:opacity .3s ease}
-                .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 2px var(--c-bd),0 12px 28px rgba(0,0,0,.36)}
-                .agg-card.sel::before{opacity:.34}
-                .agg-card:hover{transform:translateY(-8px);box-shadow:0 18px 38px rgba(0,0,0,.44),0 0 26px var(--c-glow);border-color:var(--c)}
-                .agg-card:hover::before{opacity:.42}
-                .agg-card:active{transform:translateY(-3px) scale(.98)}
-                .agg-shine{position:absolute;inset:0;background:linear-gradient(120deg,transparent 38%,rgba(255,255,255,.16) 50%,transparent 62%);background-size:220% 100%;background-position:160% 0;opacity:0;pointer-events:none}
-                .agg-card:hover .agg-shine{opacity:1;animation:aggShine 1.5s cubic-bezier(.16,1,.3,1)}
-                @keyframes aggShine{to{background-position:-60% 0}}
-                .agg-letter{position:absolute;inset:0;display:grid;place-items:center;font-size:25px;font-weight:900;color:var(--c);transition:transform .3s cubic-bezier(.16,1,.3,1)}
-                .agg-card:hover .agg-letter{transform:translateY(-15px) scale(.84)}
-                .agg-dot{position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:999px;background:var(--c);box-shadow:0 0 6px var(--c)}
-                .agg-id{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:7.5px;font-weight:700;color:var(--text2);transition:opacity .2s ease;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-card:hover .agg-id{opacity:0}
-                .agg-reveal{position:absolute;left:0;right:0;bottom:0;padding:6px 5px 7px;transform:translateY(101%);opacity:0;transition:transform .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;text-align:center;background:linear-gradient(to top,rgba(8,8,10,.82),transparent)}
-                .agg-card:hover .agg-reveal{transform:translateY(0);opacity:1}
-                .agg-reveal .e{font-size:8px;font-weight:800;color:var(--c);display:block;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-reveal .m{font-size:6.8px;color:rgba(255,255,255,.6);margin-top:1px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:10px}
+                .agg-card{position:relative;aspect-ratio:1;border-radius:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);box-shadow:0 4px 12px -6px rgba(0,0,0,.45);transition:transform .26s cubic-bezier(.16,1,.3,1),box-shadow .26s ease,border-color .2s ease}
+                .agg-card:hover{transform:translateY(-4px);box-shadow:0 16px 28px -12px rgba(0,0,0,.55);border-color:var(--c-bd);z-index:20}
+                .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 1.5px var(--c),0 8px 18px -8px rgba(0,0,0,.5)}
+                .agg-ic{width:25px;height:25px;border-radius:999px;background:var(--c);display:grid;place-items:center;flex-shrink:0;box-shadow:0 4px 9px -3px var(--c-bd)}
+                .agg-ic svg{width:13px;height:13px}
+                .agg-fol{font-size:11px;font-weight:700;color:var(--text);letter-spacing:-.01em;text-align:center;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1}
+                .agg-bar{width:74%;height:3px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
+                .agg-bar i{display:block;height:100%;border-radius:999px;background:var(--c);width:var(--p);transition:width .5s cubic-bezier(.16,1,.3,1)}
+                .agg-pop{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%) translateY(6px) scale(.95);width:190px;padding:11px 13px;border-radius:13px;background:rgba(24,24,28,.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 18px 42px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .28s cubic-bezier(.16,1,.3,1);z-index:40;text-align:left}
+                .agg-card:hover .agg-pop{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+                .agg-pop::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:rgba(24,24,28,.97)}
+                .agg-pop-t{font-size:11.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-pop-row{display:flex;align-items:center;gap:7px;margin-top:7px;font-size:9px;color:var(--text2);flex-wrap:wrap}
+                .agg-pop-s{display:inline-flex;align-items:center;gap:4px;font-weight:800;color:var(--c)}
+                .agg-pop-em{display:inline-flex;align-items:center;gap:3px;color:#22c55e;font-weight:700;margin-top:6px;font-size:9px}
               `}</style>
               {/* CARD-VISOR de tamaño FIJO — la card que fijaste con click */}
               <div style={{height:74,flexShrink:0,borderRadius:14,border:`1px solid ${sc ? `${sc}55` : "rgba(255,255,255,.08)"}`,background:"rgba(255,255,255,.025)",display:"flex",alignItems:"center",gap:12,padding:"0 14px",overflow:"hidden",transition:"border-color .25s ease"}}>
                 {sd && sc ? (
                   <>
-                    <div style={{width:44,height:44,borderRadius:12,display:"grid",placeItems:"center",fontSize:19,fontWeight:900,flexShrink:0,background:`${sc}1f`,border:`1.5px solid ${sc}`,color:sc}}>{tipoLetra(sd)}</div>
+                    <div style={{width:42,height:42,borderRadius:999,flexShrink:0,display:"grid",placeItems:"center",background:sc,boxShadow:`0 5px 13px -4px ${sc}99`}}>
+                      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(sd.estado)}</svg>
+                    </div>
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:13,fontWeight:800,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sd.nombre_archivo}</div>
                       <div style={{fontSize:8,color:"var(--text2)",marginTop:3,letterSpacing:".16em",fontWeight:800}}>VISOR</div>
@@ -410,16 +420,22 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   const c = st[doc.estado] ?? "#9ca3af";
                   return (
                     <button key={doc.id} type="button" className={`agg-card${selected === doc.id ? " sel" : ""}`}
-                      style={{ "--c": c, "--c-bd": `${c}55`, "--c-glow": `${c}40` } as CSSProperties}
+                      style={{ "--c": c, "--c-bd": `${c}66` } as CSSProperties}
                       onClick={() => setSelected(s => s === doc.id ? null : doc.id)} title={doc.nombre_archivo}>
-                      <span className="agg-shine" />
-                      <span className="agg-letter">{tipoLetra(doc)}</span>
-                      <span className="agg-dot" />
-                      <span className="agg-id">{tileId(doc)}</span>
-                      <span className="agg-reveal">
-                        <span className="e">{sl[doc.estado] ?? doc.estado}</span>
-                        <span className="m">{tipoNombre(doc)} · {tileId(doc)}</span>
-                      </span>
+                      <span className="agg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(doc.estado)}</svg></span>
+                      <div className="agg-fol">{isBoletaTipo(doc.tipo) ? tileId(doc) : doc.nombre_archivo}</div>
+                      <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>
+                      <div className="agg-pop">
+                        <div className="agg-pop-t">{doc.nombre_archivo}</div>
+                        <div className="agg-pop-row">
+                          <span className="agg-pop-s"><span style={{width:6,height:6,borderRadius:999,background:c}} />{sl[doc.estado] ?? doc.estado}</span>
+                          <span>· {tipoNombre(doc)}</span>
+                          {doc.movimientos_detectados ? <span>· {doc.movimientos_detectados} mov</span> : null}
+                        </div>
+                        {isBoletaTipo(doc.tipo)
+                          ? <div className="agg-pop-em"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</div>
+                          : <div style={{marginTop:6,fontSize:9,color:"#5b9cf6",fontWeight:700}}>Click para fijar + Visualizar →</div>}
+                      </div>
                     </button>
                   );
                 })}
