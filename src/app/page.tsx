@@ -1,36 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { requireActiveEmpresa } from "@/lib/dal";
 
 export default async function Home() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/auth/login");
-  }
-
-  // Check if user has empresa
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id, vetado, empresas(plan_activo)")
-    .eq("id", user.id)
-    .single();
-
-  if (!usuario) {
-    redirect("/onboarding");
-  }
-
-  if (usuario.vetado) {
-    redirect("/bloqueado");
-  }
-
-  const empresa = usuario.empresas as unknown as { plan_activo: boolean } | null;
-  if (!empresa?.plan_activo) {
-    redirect("/planes");
-  }
-
+  // requireActiveEmpresa usa getUsuario (con fallback service-role keyed a
+  // user.id) y redirige solo si de verdad corresponde: /auth/login (sin sesión),
+  // /onboarding (sin empresa), /bloqueado (vetado) o /planes (plan inactivo).
+  await requireActiveEmpresa();
   redirect("/massdte");
 }
