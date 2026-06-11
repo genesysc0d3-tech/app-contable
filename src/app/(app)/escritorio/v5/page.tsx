@@ -7,6 +7,7 @@ import GlowWrap from "./GlowWrap";
 import TabsV5 from "./TabsV5";
 import RevisarTabContent from "./RevisarTabContent";
 import EmitirTabContent from "./EmitirTabContent";
+import { getPendientesEmision } from "@/lib/intermediario/pendientes-emision";
 import SubidosFullView from "./sections/SubidosFullView";
 import RevisarFullView from "./sections/RevisarFullView";
 import EmitirFullView from "./sections/EmitirFullView";
@@ -123,7 +124,7 @@ export default async function V5Page({ searchParams }: {
   const rcvSummaryStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const rcvSummaryEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
-  const [rcvData, propsData, clData, calProps, calDocs, docsData, pendCountData, aprobCountData, cafsData] = await Promise.all([
+  const [rcvData, propsData, clData, calProps, calDocs, docsData, pendCountData, aprobCountData, cafsData, pendientesData] = await Promise.all([
     supabase.from("boletas_emitidas").select("monto_neto,monto_exento,iva,monto_total").eq("empresa_id", empresaId).neq("estado","anulada").gte("fecha_emision",rcvSummaryStart).lt("fecha_emision",rcvSummaryEnd),
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).gte("created_at",workStart).lt("created_at",workEnd).order("created_at",{ascending:false}),
     supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
@@ -136,6 +137,15 @@ export default async function V5Page({ searchParams }: {
     supabase.from("boletas_caf_mock")
       .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
       .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
+    getPendientesEmision(supabase, empresaId, {
+      giro: usuario.empresas.giro,
+      razon_social: usuario.empresas.razon_social,
+      tipo_contribuyente: usuario.empresas.tipo_contribuyente,
+    }).catch(() => ({
+      items: [] as Awaited<ReturnType<typeof getPendientesEmision>>["items"],
+      totales: { total_pendientes: 0, listas_emitir: 0, bloqueadas: 0, monto_total: 0, monto_listo: 0 },
+      aprobadas_otros_tipos: {} as Record<string, number>,
+    })),
   ]);
 
   const rcvTotal = (rcvData.data ?? []).reduce((s,b) => ({
@@ -632,7 +642,7 @@ body{font-family:'DM Sans',sans-serif}
                   empresaTipoContribuyente={usuario.empresas.tipo_contribuyente}
                 />
               }
-              emitirContent={<EmitirTabContent />}
+              emitirContent={<EmitirTabContent initial={{ ok: true, items: pendientesData.items, totales: pendientesData.totales, aprobadas_otros_tipos: pendientesData.aprobadas_otros_tipos }} />}
               boletasContent={
                 (boletas ?? []).length === 0 ? (
                   compactEmpty("boletas")

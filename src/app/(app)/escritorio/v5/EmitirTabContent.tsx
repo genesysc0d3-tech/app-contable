@@ -72,11 +72,11 @@ function nextActionLabel(code: Item["motivo_code"]): string | null {
   return null;
 }
 
-export default function EmitirTabContent() {
+export default function EmitirTabContent({ initial = null }: { initial?: PendientesResponse | null }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [data, setData] = useState<PendientesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<PendientesResponse | null>(initial);
+  const [loading, setLoading] = useState(!initial);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dteOverrides, setDteOverrides] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<"listas" | "bloqueadas" | "todas">("listas");
@@ -106,9 +106,12 @@ export default function EmitirTabContent() {
   }, [toast]);
 
   useEffect(() => {
+    // Con datos del server (initial), no re-fetch al montar: evita el flash de
+    // carga al cambiar de pestaña. Solo fetch si no vinieron datos del server.
+    if (initial) return;
     const timer = window.setTimeout(() => { void fetchData(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchData]);
+  }, [fetchData, initial]);
 
   const itemsList = useMemo(() => {
     if (!data) return [];
