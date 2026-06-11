@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -82,7 +82,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   // dos canales, dos dimensiones. La info detallada va en el VISOR (arriba),
   // no dentro de cada cuadrado.
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
-  const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
     try { const v = localStorage.getItem("agregados-view"); if (v === "grid" || v === "list") setViewMode(v); } catch { /* noop */ }
   }, []);
@@ -143,19 +143,17 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
 
   return (
     <>
-      <div className="sec" style={{display:"flex",flexDirection:"column",gap:6}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
-          <div style={{display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.07)"}}>
-            {(["grid","list"] as const).map((v) => (
-              <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista cuadrícula (escanear rápido)" : "Vista lista (detalle)"}
-                style={{display:"grid",placeItems:"center",width:27,height:22,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "#E8553E" : "var(--text2)",transition:"all .15s ease"}}>
-                {v === "grid"
-                  ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.6"/></svg>
-                  : <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="4" rx="1.6"/><rect x="3" y="13" width="18" height="4" rx="1.6"/></svg>}
-              </button>
-            ))}
-          </div>
+      <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
+        <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
+        <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
+          {(["grid","list"] as const).map((v) => (
+            <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista cuadrícula (escanear rápido)" : "Vista lista (detalle)"}
+              style={{display:"grid",placeItems:"center",width:27,height:20,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "#E8553E" : "var(--text2)",transition:"all .15s ease"}}>
+              {v === "grid"
+                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.6"/></svg>
+                : <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="4" rx="1.6"/><rect x="3" y="13" width="18" height="4" rx="1.6"/></svg>}
+            </button>
+          ))}
         </div>
         {viewMode === "list" && docs.map((doc) => {
           // Registro de una boleta YA emitida (boleta_unica / boleta_sii_local /
@@ -337,73 +335,91 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           );
         })}
         {viewMode === "grid" && (() => {
-          const hd = hovered ? docs.find(d => d.id === hovered) : null;
+          const sd = selected ? docs.find(d => d.id === selected) : null;
+          const sc = sd ? (st[sd.estado] ?? "#9ca3af") : null;
           return (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {/* VISOR: preview arriba, info (detalle o leyenda) DEBAJO — no dentro de cada cuadrado */}
-              <div style={{borderRadius:14,border:"1px solid rgba(255,255,255,.08)",background:"rgba(255,255,255,.025)",overflow:"hidden"}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",minHeight:60}}>
-                  {hd ? (() => {
-                    const c = st[hd.estado] ?? "var(--text2)";
-                    return (
-                      <>
-                        <div style={{width:42,height:42,borderRadius:11,display:"grid",placeItems:"center",fontSize:18,fontWeight:900,flexShrink:0,background:`${c}1f`,border:`1.5px solid ${c}`,color:c,transition:"all .2s ease"}}>{tipoLetra(hd)}</div>
-                        <div style={{minWidth:0,flex:1}}>
-                          <div style={{fontSize:13,fontWeight:800,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{hd.nombre_archivo}</div>
-                          <div style={{fontSize:8.5,color:"var(--text2)",marginTop:3,letterSpacing:".12em",fontWeight:800}}>VISOR</div>
-                        </div>
-                      </>
-                    );
-                  })() : (
-                    <div style={{display:"flex",alignItems:"center",gap:10,color:"var(--text2)"}}>
-                      <div style={{width:42,height:42,borderRadius:11,display:"grid",placeItems:"center",border:"1.5px dashed rgba(255,255,255,.14)",flexShrink:0}}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                      </div>
-                      <span style={{fontSize:11}}>Pasa el cursor por un cuadrado para ver su detalle acá.</span>
+              <style>{`
+                .agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:10px}
+                .agg-card{position:relative;aspect-ratio:1;border-radius:14px;cursor:pointer;overflow:hidden;background:rgba(255,255,255,.03);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--c-bd);transition:transform .28s cubic-bezier(.16,1,.3,1),box-shadow .28s ease,border-color .2s ease}
+                .agg-card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 135%,var(--c) 0%,transparent 62%);opacity:.16;transition:opacity .3s ease}
+                .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 2px var(--c-bd),0 12px 28px rgba(0,0,0,.36)}
+                .agg-card.sel::before{opacity:.34}
+                .agg-card:hover{transform:translateY(-8px);box-shadow:0 18px 38px rgba(0,0,0,.44),0 0 26px var(--c-glow);border-color:var(--c)}
+                .agg-card:hover::before{opacity:.42}
+                .agg-card:active{transform:translateY(-3px) scale(.98)}
+                .agg-shine{position:absolute;inset:0;background:linear-gradient(120deg,transparent 38%,rgba(255,255,255,.16) 50%,transparent 62%);background-size:220% 100%;background-position:160% 0;opacity:0;pointer-events:none}
+                .agg-card:hover .agg-shine{opacity:1;animation:aggShine 1.5s cubic-bezier(.16,1,.3,1)}
+                @keyframes aggShine{to{background-position:-60% 0}}
+                .agg-letter{position:absolute;inset:0;display:grid;place-items:center;font-size:25px;font-weight:900;color:var(--c);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+                .agg-card:hover .agg-letter{transform:translateY(-15px) scale(.84)}
+                .agg-dot{position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:999px;background:var(--c);box-shadow:0 0 6px var(--c)}
+                .agg-id{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:7.5px;font-weight:700;color:var(--text2);transition:opacity .2s ease;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-card:hover .agg-id{opacity:0}
+                .agg-reveal{position:absolute;left:0;right:0;bottom:0;padding:6px 5px 7px;transform:translateY(101%);opacity:0;transition:transform .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;text-align:center;background:linear-gradient(to top,rgba(8,8,10,.82),transparent)}
+                .agg-card:hover .agg-reveal{transform:translateY(0);opacity:1}
+                .agg-reveal .e{font-size:8px;font-weight:800;color:var(--c);display:block;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-reveal .m{font-size:6.8px;color:rgba(255,255,255,.6);margin-top:1px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+              `}</style>
+              {/* CARD-VISOR de tamaño FIJO — la card que fijaste con click */}
+              <div style={{height:74,flexShrink:0,borderRadius:14,border:`1px solid ${sc ? `${sc}55` : "rgba(255,255,255,.08)"}`,background:"rgba(255,255,255,.025)",display:"flex",alignItems:"center",gap:12,padding:"0 14px",overflow:"hidden",transition:"border-color .25s ease"}}>
+                {sd && sc ? (
+                  <>
+                    <div style={{width:44,height:44,borderRadius:12,display:"grid",placeItems:"center",fontSize:19,fontWeight:900,flexShrink:0,background:`${sc}1f`,border:`1.5px solid ${sc}`,color:sc}}>{tipoLetra(sd)}</div>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:13,fontWeight:800,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sd.nombre_archivo}</div>
+                      <div style={{fontSize:8,color:"var(--text2)",marginTop:3,letterSpacing:".16em",fontWeight:800}}>VISOR</div>
                     </div>
-                  )}
-                </div>
-                <div style={{borderTop:"1px solid rgba(255,255,255,.06)",padding:"9px 14px",display:"flex",flexWrap:"wrap",alignItems:"center",gap:9,fontSize:9.5}}>
-                  {hd ? (() => {
-                    const c = st[hd.estado] ?? "var(--text2)";
-                    return (
-                      <>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:7,background:`${c}18`,color:c,fontWeight:800}}><span style={{width:6,height:6,borderRadius:999,background:c}} />{sl[hd.estado] ?? hd.estado}</span>
-                        <span style={{color:"var(--text2)",fontWeight:600}}>{tipoNombre(hd)}</span>
-                        {hd.movimientos_detectados ? <span style={{color:"var(--text2)"}}>· {hd.movimientos_detectados} mov</span> : null}
-                        {isBoletaTipo(hd.tipo)
-                          ? <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"#22c55e",fontWeight:800}}><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</span>
-                          : <span style={{marginLeft:"auto",color:"#5b9cf6",fontWeight:700}}>Click para visualizar →</span>}
-                      </>
-                    );
-                  })() : (
-                    <>
-                      <span style={{color:"var(--text2)",fontWeight:800}}>Estado:</span>
-                      {([["procesado","Listo"],["procesando","Procesando"],["error","Error"],["subido","Pendiente"]] as const).map(([k,l]) => (
-                        <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><span style={{width:8,height:8,borderRadius:3,background:st[k]}} />{l}</span>
-                      ))}
-                      <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
-                      <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
-                      {([["A","Afecta"],["E","Exenta"],["G","Gasto"],["B","Boleta"]] as const).map(([k,l]) => (
-                        <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><b style={{color:"var(--text)",fontWeight:900}}>{k}</b>{l}</span>
-                      ))}
-                    </>
-                  )}
-                </div>
+                    {!isBoletaTipo(sd.tipo) && <button type="button" onClick={() => setViewDocId(sd.id)} style={{flexShrink:0,fontSize:10,fontWeight:700,padding:"6px 12px",borderRadius:9,border:"1px solid rgba(91,156,246,.3)",background:"rgba(91,156,246,.1)",color:"#5b9cf6",cursor:"pointer"}}>Visualizar</button>}
+                  </>
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",gap:11,color:"var(--text2)"}}>
+                    <div style={{width:44,height:44,borderRadius:12,display:"grid",placeItems:"center",border:"1.5px dashed rgba(255,255,255,.14)",flexShrink:0}}>
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
+                    </div>
+                    <span style={{fontSize:11,lineHeight:1.4}}>Haz <b style={{color:"var(--text)"}}>click</b> en un cuadrado para fijarlo aquí. Pasa el cursor para una vista rápida.</span>
+                  </div>
+                )}
               </div>
-              {/* GRILLA: color = estado, letra = tipo */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(66px, 1fr))",gap:9}}>
+              {/* INFO debajo de la card-visor (no dentro) */}
+              <div style={{padding:"0 2px",display:"flex",flexWrap:"wrap",alignItems:"center",gap:9,fontSize:9.5,minHeight:16}}>
+                {sd && sc ? (
+                  <>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:7,background:`${sc}18`,color:sc,fontWeight:800}}><span style={{width:6,height:6,borderRadius:999,background:sc}} />{sl[sd.estado] ?? sd.estado}</span>
+                    <span style={{color:"var(--text2)",fontWeight:600}}>{tipoNombre(sd)}</span>
+                    {sd.movimientos_detectados ? <span style={{color:"var(--text2)"}}>· {sd.movimientos_detectados} mov</span> : null}
+                    {isBoletaTipo(sd.tipo) && <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"#22c55e",fontWeight:800}}><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</span>}
+                  </>
+                ) : (
+                  <>
+                    <span style={{color:"var(--text2)",fontWeight:800}}>Estado:</span>
+                    {([["procesado","Listo"],["procesando","Procesando"],["error","Error"],["subido","Pendiente"]] as const).map(([k,l]) => (
+                      <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><span style={{width:8,height:8,borderRadius:3,background:st[k]}} />{l}</span>
+                    ))}
+                    <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
+                    <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
+                    {([["A","Afecta"],["E","Exenta"],["G","Gasto"],["B","Boleta"]] as const).map(([k,l]) => (
+                      <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><b style={{color:"var(--text)",fontWeight:900}}>{k}</b>{l}</span>
+                    ))}
+                  </>
+                )}
+              </div>
+              {/* GRILLA de cuadrados: color=estado, letra=tipo. Hover revela info; click lo fija en el visor */}
+              <div className="agg-grid">
                 {docs.map((doc) => {
-                  const c = st[doc.estado] ?? "var(--text2)";
-                  const active = hovered === doc.id;
+                  const c = st[doc.estado] ?? "#9ca3af";
                   return (
-                    <button key={doc.id} type="button" onMouseEnter={() => setHovered(doc.id)} onMouseLeave={() => setHovered(h => h === doc.id ? null : h)} onFocus={() => setHovered(doc.id)}
-                      onClick={() => { if (!isBoletaTipo(doc.tipo)) setViewDocId(doc.id); }}
-                      title={`${doc.nombre_archivo} — ${sl[doc.estado] ?? doc.estado}`}
-                      style={{position:"relative",aspectRatio:"1",borderRadius:12,cursor:"pointer",background:`${c}14`,border:`1.5px solid ${active ? c : `${c}55`}`,boxShadow: active ? `0 0 0 3px ${c}22, 0 12px 28px rgba(0,0,0,.32)` : "none",transform: active ? "translateY(-3px) scale(1.04)" : "none",transition:"transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s ease, border-color .15s ease",display:"grid",placeItems:"center",padding:0}}>
-                      <span style={{fontSize:23,fontWeight:900,color:c,lineHeight:1,transition:"transform .2s ease",transform:active?"scale(1.08)":"none"}}>{tipoLetra(doc)}</span>
-                      <span style={{position:"absolute",bottom:5,left:0,right:0,textAlign:"center",fontSize:7.5,fontWeight:700,color:"var(--text2)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px"}}>{tileId(doc)}</span>
-                      <span style={{position:"absolute",top:6,right:6,width:6,height:6,borderRadius:999,background:c,boxShadow:`0 0 5px ${c}`}} />
+                    <button key={doc.id} type="button" className={`agg-card${selected === doc.id ? " sel" : ""}`}
+                      style={{ "--c": c, "--c-bd": `${c}55`, "--c-glow": `${c}40` } as CSSProperties}
+                      onClick={() => setSelected(s => s === doc.id ? null : doc.id)} title={doc.nombre_archivo}>
+                      <span className="agg-shine" />
+                      <span className="agg-letter">{tipoLetra(doc)}</span>
+                      <span className="agg-dot" />
+                      <span className="agg-id">{tileId(doc)}</span>
+                      <span className="agg-reveal">
+                        <span className="e">{sl[doc.estado] ?? doc.estado}</span>
+                        <span className="m">{tipoNombre(doc)} · {tileId(doc)}</span>
+                      </span>
                     </button>
                   );
                 })}
