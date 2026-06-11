@@ -788,18 +788,25 @@
     if (!btn) return false;
     automationClickInProgress = true;
     try { btn.click(); } finally { setTimeout(() => { automationClickInProgress = false; }, 50); }
-    // Si el logout abre un diálogo de confirmación, aceptarlo. Solo actúa si hay
-    // un diálogo visible (evita clicks falsos cuando el logout es directo).
-    setTimeout(() => {
-      const dialog = document.querySelector(".v-dialog--active, [role='dialog']");
-      if (!dialog) return;
-      const ok = Array.from(dialog.querySelectorAll("button, a, [role='button']"))
-        .find((el) => /s[ií]\b|aceptar|confirmar|cerrar\s*sesi[oó]n|continuar/i.test((el.innerText || el.textContent || "").trim()));
+    // El logout abre un diálogo "¿Está seguro? / CERRAR SESIÓN". Confirmamos
+    // buscando ese botón en TODO el documento (Vuetify monta el contenido del
+    // diálogo fuera del overlay), con reintentos por si tarda en aparecer. El
+    // texto exacto "cerrar sesión" no matchea el botón de power (es un ícono).
+    let confirmTries = 0;
+    const confirmLogout = () => {
+      const ok = Array.from(document.querySelectorAll("button, a, [role='button']")).find((el) => {
+        if (!/^cerrar\s*sesi[oó]n$/i.test((el.innerText || el.textContent || "").trim())) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
       if (ok) {
         automationClickInProgress = true;
         try { ok.click(); } finally { setTimeout(() => { automationClickInProgress = false; }, 50); }
+        return;
       }
-    }, 800);
+      if (++confirmTries < 5) setTimeout(confirmLogout, 400);
+    };
+    setTimeout(confirmLogout, 500);
     return true;
   }
 

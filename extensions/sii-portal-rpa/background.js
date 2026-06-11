@@ -262,7 +262,7 @@ function handleWorkerAction(message, sender, sendResponse) {
     setTimeout(() => {
       sendToApp(state, statusMessage(state.jobId, "closed", "Sesion SII cerrada y ventana cerrada.", false));
       closeWorker(state);
-    }, 2800);
+    }, 3500);
     sendResponse?.({ ok: true });
     return false;
   }
