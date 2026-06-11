@@ -57,15 +57,19 @@ export async function aprobarPropuesta(
 }
 
 export async function crearClienteDesdeRevisar(formData: {
-  empresa_id: string;
+  /** Ignorado: la empresa se deriva de la sesión (nunca confiar en el payload). */
+  empresa_id?: string;
   nombre: string;
   rut?: string;
 }) {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error };
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clientes")
     .insert({
-      empresa_id: formData.empresa_id,
+      empresa_id: ctx.empresaId,
       nombre: formData.nombre.trim(),
       rut: formData.rut?.trim() || null,
     })
@@ -161,9 +165,43 @@ export async function editarPropuesta(
 ) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
+
+  // Allowlist explícita: las server actions son endpoints públicos y el tipo
+  // TS no limita el payload en runtime. Con service role, un spread directo
+  // permitiría setear cualquier columna (empresa_id, estado, confianza...).
+  const update: Record<string, string | number | null> = { estado: "editado" };
+  const strField = (v: unknown): string | null => (v === null ? null : String(v));
+  const numField = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  if (campos.tipo_propuesto !== undefined) update.tipo_propuesto = String(campos.tipo_propuesto);
+  if (campos.receptor_nombre !== undefined) update.receptor_nombre = strField(campos.receptor_nombre);
+  if (campos.receptor_rut !== undefined) update.receptor_rut = strField(campos.receptor_rut);
+  if (campos.notas !== undefined) update.notas = strField(campos.notas);
+  if (campos.moneda_origen !== undefined) update.moneda_origen = strField(campos.moneda_origen);
+  if (campos.monto_neto !== undefined) {
+    const n = numField(campos.monto_neto);
+    if (n === null) return { error: "Monto neto inválido" };
+    update.monto_neto = n;
+  }
+  if (campos.iva !== undefined) {
+    const n = numField(campos.iva);
+    if (n === null) return { error: "IVA inválido" };
+    update.iva = n;
+  }
+  if (campos.total !== undefined) {
+    const n = numField(campos.total);
+    if (n === null) return { error: "Total inválido" };
+    update.total = n;
+  }
+  if (campos.monto_moneda_origen !== undefined) {
+    update.monto_moneda_origen = campos.monto_moneda_origen === null ? null : numField(campos.monto_moneda_origen);
+  }
+
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ ...campos, estado: "editado" }, { count: "exact" })
+    .update(update, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
   if (error) return { error: error.message };

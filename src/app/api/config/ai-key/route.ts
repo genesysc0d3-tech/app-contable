@@ -29,11 +29,22 @@ export async function GET() {
 /**
  * POST /api/config/ai-key
  * Body: { key: string } — saves the AI provider API key to the database.
+ * La key vive en app_config (afecta a TODA la app, no a una empresa), así que
+ * solo usuarios con dev_mode pueden escribirla.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "NO_AUTH" }, { status: 401 });
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("dev_mode")
+    .eq("id", user.id)
+    .single();
+  if (usuario?.dev_mode !== true) {
+    return NextResponse.json({ error: "SOLO_OPERADOR", detalle: "La clave de IA es global y solo la gestiona el operador de la plataforma" }, { status: 403 });
+  }
 
   let body: { key?: string };
   try {

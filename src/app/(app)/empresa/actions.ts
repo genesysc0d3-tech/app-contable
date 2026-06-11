@@ -55,10 +55,13 @@ export async function setDatosEmisor(
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+  if (!ROLES_GESTION_MIEMBROS.has(String(usuario.rol))) {
+    return { error: "Solo owner/admin puede cambiar los datos fiscales del emisor" };
+  }
 
   if (datos.rut && !validarRut(datos.rut)) {
     return { error: "RUT inválido (falla dígito verificador)" };

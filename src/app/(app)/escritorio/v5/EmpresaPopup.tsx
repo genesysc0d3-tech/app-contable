@@ -742,7 +742,7 @@ export default function EmpresaPopup({
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={emisionConfig.boletasProveedor} /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} /> },
-                  { key: "ia", content: <AiKeyConfig /> },
+                  { key: "ia", content: <AiKeyConfig devMode={devMode} /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}

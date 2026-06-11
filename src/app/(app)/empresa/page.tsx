@@ -102,7 +102,7 @@ export default async function EmpresaPage() {
 
       <MiembrosPanel miembros={miembros ?? []} invitaciones={invitaciones ?? []} />
 
-      <AiKeyConfig />
+      <AiKeyConfig devMode={devMode} />
     </main>
     </div>
   );

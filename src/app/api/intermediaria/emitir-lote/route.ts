@@ -21,6 +21,9 @@ import { batchBlockedResult } from "@/lib/emission/provider-guards";
 
 const CONCURRENCY = 1; // secuencial — folios en orden
 
+// Roles que pueden emitir documentos tributarios (viewer solo consulta).
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
+
 interface BatchItem {
   propuesta_id: string;
   ok: boolean;
@@ -39,11 +42,15 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
+    .select("empresa_id, rol, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
     return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  }
+  // Emitir DTEs es un acto tributario: viewer queda fuera.
+  if (!ROLES_EMISION.has(String(usuario.rol))) {
+    return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO", detalle: "Tu rol no permite emitir documentos" }, { status: 403 });
   }
   const empresa = usuario.empresas as unknown as {
     rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null; tipo_contribuyente: string | null;
