@@ -1113,6 +1113,27 @@ export type Database = {
           },
         ]
       }
+      usuario_empresas: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          rol: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          rol?: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          rol?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       usuarios: {
         Row: {
           created_at: string
@@ -1247,6 +1268,10 @@ export type Database = {
           caf_id: string
           folio: number
         }[]
+      }
+      empresas_del_usuario: {
+        Args: Record<string, never>
+        Returns: string[]
       }
       documento_pipeline_counts: {
         Args: { p_empresa: string; p_desde: string; p_hasta: string }
