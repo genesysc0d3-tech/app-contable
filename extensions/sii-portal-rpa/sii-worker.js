@@ -759,14 +759,47 @@
     return capturedSharePdf;
   }
 
-  // Boleta única: clickea el botón "Cerrar sesión" del SII (arriba en la ventana)
-  // para cerrar la sesión de forma oficial. Devuelve true si lo encontró/clickeó.
+  // Boleta única: clickea el botón de "Cerrar sesión" del SII. En e-Boleta es el
+  // botón REDONDO NARANJA con ícono de power (⏻) arriba a la derecha — sin texto.
+  // Lo buscamos por varias señales: aria-label/title, el ícono de power, y como
+  // respaldo el FAB redondo posicionado arriba a la derecha.
   function clickLogout() {
-    const btn = Array.from(document.querySelectorAll("a, button, [role='button'], .v-btn"))
-      .find((el) => /cerrar\s*sesi[oó]n/i.test((el.innerText || el.textContent || "").trim()));
+    const clickables = Array.from(document.querySelectorAll("button, a, [role='button']"));
+    const iconBlob = (el) =>
+      (typeof el.className === "string" ? el.className : "") + " " +
+      Array.from(el.querySelectorAll("i, .v-icon, svg, use"))
+        .map((n) => `${n.className?.baseVal || (typeof n.className === "string" ? n.className : "")} ${n.textContent || ""} ${n.getAttribute?.("href") || ""}`)
+        .join(" ");
+    const semantic = (el) => {
+      const aria = (el.getAttribute("aria-label") || el.getAttribute("title") || "").toLowerCase();
+      if (/cerrar\s*sesi[oó]n|salir|logout/.test(aria)) return true;
+      if (/cerrar\s*sesi[oó]n/i.test((el.innerText || el.textContent || "").trim())) return true;
+      return /power_settings_new|mdi-power|fa-power|power-off|\bpower\b/i.test(iconBlob(el));
+    };
+    let btn = clickables.find(semantic);
+    if (!btn) {
+      // Respaldo: FAB/icon redondo arriba a la derecha de la ventana.
+      btn = clickables
+        .filter((el) => /v-btn--(fab|icon|round)/.test(typeof el.className === "string" ? el.className : ""))
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.top < 160 && r.right > window.innerWidth - 220 && r.width > 28)
+        .sort((a, b) => b.r.right - a.r.right)[0]?.el;
+    }
     if (!btn) return false;
     automationClickInProgress = true;
     try { btn.click(); } finally { setTimeout(() => { automationClickInProgress = false; }, 50); }
+    // Si el logout abre un diálogo de confirmación, aceptarlo. Solo actúa si hay
+    // un diálogo visible (evita clicks falsos cuando el logout es directo).
+    setTimeout(() => {
+      const dialog = document.querySelector(".v-dialog--active, [role='dialog']");
+      if (!dialog) return;
+      const ok = Array.from(dialog.querySelectorAll("button, a, [role='button']"))
+        .find((el) => /s[ií]\b|aceptar|confirmar|cerrar\s*sesi[oó]n|continuar/i.test((el.innerText || el.textContent || "").trim()));
+      if (ok) {
+        automationClickInProgress = true;
+        try { ok.click(); } finally { setTimeout(() => { automationClickInProgress = false; }, 50); }
+      }
+    }, 800);
     return true;
   }
 
