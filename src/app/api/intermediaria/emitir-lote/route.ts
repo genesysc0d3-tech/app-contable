@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta } from "@/lib/sii/validation";
-import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
+import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 import { issueMockBoleta } from "@/lib/emission/mock";
@@ -59,10 +59,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
-  // Gate: DEMO — omitimos verificación de certificado SII.
-  // En producción se debe habilitar:
-  //   const certCheck = await verificarCertificado(usuario.empresa_id);
-  //   if (!certCheck.ok) return NextResponse.json(...)
+  // El certificado SII delegado se verifica más abajo, solo si el proveedor
+  // efectivo NO es mock (la simulación no lo necesita).
 
   // Body acepta:
   //   { propuesta_ids: string[] }  → todas como AFECTA (default histórico)
@@ -120,6 +118,18 @@ export async function POST(request: Request) {
       boletasProveedor: emisionConfig.boletasProveedor,
       facturasProveedor: emisionConfig.facturasProveedor,
     });
+  }
+
+  // Emisión real (no mock) exige certificado digital delegado al intermediario.
+  // El lote solo emite boletas (39/41), así que el proveedor relevante es el de boletas.
+  if (emisionConfig.boletasProveedor !== "mock") {
+    const cert = await verificarCertificado(usuario.empresa_id);
+    if (!cert.ok) {
+      return NextResponse.json(
+        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
+        { status: 412 },
+      );
+    }
   }
 
   // Verifico cuáles ya están emitidas para no duplicar

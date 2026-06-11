@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
-import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
+import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
 import { issueMockBoleta } from "@/lib/emission/mock";
 import { blockUnsupportedBackendProvider } from "@/lib/emission/provider-guards";
@@ -110,6 +110,16 @@ async function handlePost(request: Request) {
   const proveedorRespuesta: Record<string, unknown> | null = null;
 
   if (proveedorEfectivo !== "mock") {
+    // Emisión real exige certificado digital delegado al intermediario. El
+    // check vive ANTES del futuro carril backend para que al implementarlo
+    // no se pueda olvidar. Mock (simulación) no lo necesita.
+    const cert = await verificarCertificado(usuario.empresa_id);
+    if (!cert.ok) {
+      return NextResponse.json(
+        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
+        { status: 412 },
+      );
+    }
     return NextResponse.json(
       { ok: false, error: "PROVEEDOR_NO_IMPLEMENTADO", detalle: "Este proveedor no tiene carril backend habilitado para emisión directa." },
       { status: 502 },

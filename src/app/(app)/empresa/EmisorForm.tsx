@@ -201,7 +201,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
             </div>
 
             <div style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}>
-              <input ref={logoInputRef} type="file" accept="image/png,image/svg+xml,image/webp,image/gif,image/jpeg" disabled={logoPending}
+              <input ref={logoInputRef} type="file" accept="image/png,image/webp,image/gif,image/jpeg" disabled={logoPending}
                 onChange={(e) => { const f = e.target.files?.[0] ?? null; handleLogoChange(f); e.target.value = ""; }}
                 style={{ display: "none" }}
               />
@@ -227,7 +227,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "#FDBA74", overflow: "hidden", textAlign: "center" }}>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: compact ? 9 : 10, fontWeight: 750, lineHeight: 1.15 }}>
                     <span>{logoPending ? "Subiendo..." : "Subir logo"}</span>
-                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "#fca5a5" : "rgba(255,255,255,.42)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>{logoStatus ?? "PNG/SVG transparente"}</span>
+                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "#fca5a5" : "rgba(255,255,255,.42)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
                   </span>
                 </div>
               )}

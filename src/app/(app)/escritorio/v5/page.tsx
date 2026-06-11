@@ -108,8 +108,10 @@ export default async function V5Page({ searchParams }: {
   const now = new Date();
   let y = now.getFullYear(), m = now.getMonth();
   if (monthParam) {
+    // month es 0-indexado ("2026-0" = enero). OJO: pm=0 es falsy — no usar
+    // `py && pm`, o enero queda inalcanzable.
     const [py, pm] = monthParam.split("-").map(Number);
-    if (py && pm && pm >= 0 && pm <= 11) { y = py; m = pm; }
+    if (py && Number.isInteger(pm) && pm >= 0 && pm <= 11) { y = py; m = pm; }
   }
   if (workMode === "day") {
     const [sy, sm] = selDate.split("-").map(Number);
@@ -171,6 +173,9 @@ export default async function V5Page({ searchParams }: {
   const wd = ["D","L","M","M","J","V","S"];
 
   const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  // Navegación ‹/› con rollover de año (dic → ene del siguiente, ene → dic del anterior).
+  const prevMonthParam = m === 0 ? `${y - 1}-11` : `${y}-${m - 1}`;
+  const nextMonthParam = m === 11 ? `${y + 1}-0` : `${y}-${m + 1}`;
   const selectedDateLabel = (() => {
     if (isMonthMode) return monthNames[m].toLowerCase() + " " + y;
     if (isWeekMode) return `semana ${weekRange.start.slice(8, 10)}-${addDaysStr(weekRange.end, -1).slice(8, 10)} ${monthNames[m].toLowerCase()}`;
@@ -267,10 +272,14 @@ export default async function V5Page({ searchParams }: {
     docProgress[r.documento_id] = { total: r.total, emitida: r.emitida, lista: r.lista, porRevisar: r.por_revisar, noAplica: r.no_aplica };
   }
 
-  // All boletas for RCV view
+  // Boletas para el visor RCV (navega por mes client-side). Acotado a los
+  // últimos 24 meses + tope duro: el RCV tributario relevante es año en curso
+  // y anterior. A escala masiva real esto debe pasar a fetch por mes.
+  const rcvDesde = new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString();
   const { data: boletasAllData } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
-    .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false});
+    .eq("empresa_id", empresaId).gte("fecha_emision", rcvDesde)
+    .order("fecha_emision",{ascending:false}).limit(5000);
 
   const [searchDocsData, searchBoletasData, searchPropsData] = await Promise.all([
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa")
@@ -376,7 +385,7 @@ body{font-family:'DM Sans',sans-serif}
 .v5-calendar-wrap,.left-col{transition:opacity .28s cubic-bezier(.22,1,.36,1),transform .28s cubic-bezier(.22,1,.36,1)}
 :root.v5-dashboard-fullscreen .v5-calendar-wrap{opacity:0;transform:translateY(-8px);pointer-events:none}
 :root.v5-dashboard-fullscreen .left-col{opacity:0;transform:translateX(-10px);pointer-events:none}
-.left-glass{background:rgba(255,255,255,.03);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.06);border-radius:20;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)}
+.left-glass{background:rgba(255,255,255,.03);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.06);border-radius:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 32px rgba(0,0,0,.3)}
 .panel-hd-txt .plantilla{margin-left:auto;display:flex;align-items:center;gap:3px;padding:4px 8px;border-radius:5px;border:1px solid rgba(255,255,255,.06);background:transparent;color:var(--text2);font-size:9px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s}
 .panel-hd-txt .plantilla:hover{background:var(--bg-muted);color:var(--text)}
 .panel-hd-txt .plantilla svg{width:11px;height:11px}
@@ -533,9 +542,9 @@ body{font-family:'DM Sans',sans-serif}
           <div className="v5-calendar-wrap" style={{position:"absolute",left:"50%",top:0,transform:"translateX(-50%)",height:38,display:"flex",justifyContent:"center",minWidth:0,overflow:"hidden",zIndex:1}}>
           <div style={{background:"var(--surface)",borderRadius:12,border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",minWidth:0,height:38,display:"flex",alignItems:"center",width:"fit-content"}}>
             <div style={{padding:"0 6px",display:"flex",alignItems:"center",gap:2}}>
-            <Link href={`/massdte?month=${y}-${m-1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
+            <Link href={`/massdte?month=${prevMonthParam}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>‹</Link>
             <span style={{fontSize:10,fontWeight:600,color:"var(--text)",whiteSpace:"nowrap",flexShrink:0,width:100,textAlign:"center"}}>{monthNames[m]} {y}</span>
-            <Link href={`/massdte?month=${y}-${m+1}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
+            <Link href={`/massdte?month=${nextMonthParam}&date=${selDate}&view=${workMode}`} style={{fontSize:11,fontWeight:700,color:"var(--text)",cursor:"pointer",padding:"1px 5px",borderRadius:4,textDecoration:"none",lineHeight:1,background:"var(--bg-muted)",display:"flex",alignItems:"center",justifyContent:"center",height:20,flexShrink:0}} scroll={false}>›</Link>
             <Link href={`/massdte?date=${selDate}&month=${y}-${m}&view=${workMode === "day" ? "week" : workMode === "week" ? "month" : "day"}`} style={{fontSize:9,fontWeight:700,color:"#b4f027",cursor:"pointer",padding:"2px 4px",margin:"0 4px",borderRadius:4,textDecoration:"none",border:workMode !== "day" ? "1px dashed #b4f027" : "1px solid transparent",background:"transparent",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",flexShrink:0,height:28,width:98,justifyContent:"center",lineHeight:1.05}} scroll={false}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               <span style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",lineHeight:1.05,textAlign:"left",fontSize:9,fontWeight:700}}>

@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createSsrClient } from "@/lib/supabase/server";
 
+// SVG excluido a propósito: puede llevar <script> y se sirve same-origin
+// desde /api/empresa/logo → XSS almacenado. Solo formatos raster.
 const ALLOWED_MIME = new Set([
-  "image/png", "image/svg+xml", "image/webp", "image/gif", "image/jpeg",
+  "image/png", "image/webp", "image/gif", "image/jpeg",
 ]);
 
 export async function POST(request: Request) {
@@ -37,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Archivo vacío" }, { status: 400 });
   }
   if (!ALLOWED_MIME.has(file.type as string)) {
-    return NextResponse.json({ error: "Formato no soportado. Usa PNG, SVG, WebP, GIF o JPG" }, { status: 400 });
+    return NextResponse.json({ error: "Formato no soportado. Usa PNG, WebP, GIF o JPG" }, { status: 400 });
   }
   if (file.size > 2 * 1024 * 1024) {
     return NextResponse.json({ error: "El logo no puede superar 2MB" }, { status: 400 });

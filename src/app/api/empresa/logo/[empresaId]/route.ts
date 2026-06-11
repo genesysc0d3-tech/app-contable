@@ -33,7 +33,9 @@ export async function GET(
   const sb = createClient(url, key);
   const logoDir = `${resolvedEmpresaId}/logos`;
   const { data: files, error: listError } = await sb.storage.from("documentos").list(logoDir);
-  const logoFile = files?.find((file) => file.name.startsWith("logo."));
+  // SVG bloqueado también al servir (cubre logos .svg subidos antes del
+  // bloqueo en upload): un SVG con script servido same-origin sería XSS.
+  const logoFile = files?.find((file) => file.name.startsWith("logo.") && !file.name.endsWith(".svg"));
 
   if (listError || !logoFile) {
     return new NextResponse("Logo no encontrado", { status: 404 });
@@ -44,7 +46,8 @@ export async function GET(
 
   return new NextResponse(data, {
     headers: {
-      "Content-Type": data.type || "image/png",
+      "Content-Type": data.type === "image/svg+xml" ? "application/octet-stream" : (data.type || "image/png"),
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=300",
     },
   });

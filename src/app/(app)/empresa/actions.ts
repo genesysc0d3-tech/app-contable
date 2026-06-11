@@ -38,14 +38,6 @@ function normalizeEmail(email: FormDataEntryValue | null): string {
   return String(email ?? "").trim().toLowerCase();
 }
 
-const LOGO_MIME_TYPES = new Set([
-  "image/png",
-  "image/svg+xml",
-  "image/webp",
-  "image/gif",
-  "image/jpeg",
-]);
-
 export async function setDatosEmisor(
   datos: DatosEmisor,
 ): Promise<{ ok?: boolean; error?: string }> {
@@ -99,52 +91,9 @@ export async function setDatosEmisor(
   return { ok: true };
 }
 
-export async function setEmpresaLogo(
-  formData: FormData,
-): Promise<{ ok?: boolean; error?: string }> {
-  const file = formData.get("logo");
-  if (!(file instanceof File) || file.size === 0) return { error: "Selecciona una imagen" };
-  if (!LOGO_MIME_TYPES.has(file.type)) return { error: "Formato no soportado. Usa PNG, SVG, WebP, GIF o JPG" };
-  if (file.size > 2 * 1024 * 1024) return { error: "El logo no puede superar 2MB" };
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "No autenticado" };
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return { error: "Backend mal configurado" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
-
-  const ext = file.type === "image/svg+xml" ? "svg" : (file.name.split(".").pop() || "png").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  const logoDir = `${usuario.empresa_id}/logos`;
-  const storagePath = `${logoDir}/logo.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  const { data: oldFiles } = await sb.storage.from("documentos").list(logoDir);
-  if (oldFiles?.length) {
-    await sb.storage.from("documentos").remove(oldFiles.map((oldFile: { name: string }) => `${logoDir}/${oldFile.name}`));
-  }
-
-  const { error: uploadError } = await sb.storage
-    .from("documentos")
-    .upload(storagePath, buffer, { contentType: file.type, upsert: true });
-  if (uploadError) return { error: uploadError.message };
-
-  revalidatePath("/empresa");
-  revalidatePath("/escritorio");
-  revalidatePath("/escritorio/v5");
-  revalidatePath("/massdte");
-  return { ok: true };
-}
+// La subida de logo vive SOLO en /api/empresa/upload-logo (multipart). Antes
+// había una server action gemela (setEmpresaLogo) sin callers — eliminada para
+// no mantener dos caminos que derivan extensión/bucket distinto.
 
 export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: string }> {
   const supabase = await createClient();
