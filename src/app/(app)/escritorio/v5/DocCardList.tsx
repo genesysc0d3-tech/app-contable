@@ -89,19 +89,16 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   const setView = (v: "list" | "grid") => { setViewMode(v); try { localStorage.setItem("agregados-view", v); } catch { /* noop */ } };
 
   const isBoletaTipo = (t: string) => (t ?? "").startsWith("boleta_");
-  const tipoLetra = (doc: DocRaw): string => {
-    if (isBoletaTipo(doc.tipo)) return "B";
-    const mix = tipoMix?.[doc.id];
-    if (mix) { const m = Math.max(mix.afectas, mix.exentas, mix.gastos); if (m > 0) return mix.afectas === m ? "A" : mix.exentas === m ? "E" : "G"; }
-    return "C";
-  };
-  const tipoNombre = (doc: DocRaw): string =>
-    isBoletaTipo(doc.tipo) ? "Boleta única" : tipoLetra(doc) === "A" ? "Cartola · afecta" : tipoLetra(doc) === "E" ? "Cartola · exenta" : tipoLetra(doc) === "G" ? "Cartola · gasto" : "Cartola";
   const tileId = (doc: DocRaw): string => {
     const f = doc.nombre_archivo.match(/#\s*(\d+)/);
     if (f) return `#${f[1]}`;
     return doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : doc.nombre_archivo.slice(0, 7);
   };
+  const fmtFecha = (s: string): string => {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+  };
+  const tipoEtiqueta = (doc: DocRaw): string => isBoletaTipo(doc.tipo) ? "Boleta única" : "Masivo";
 
   useEffect(() => { setDocs(initialDocs); }, [initialDocs]);
 
@@ -357,12 +354,15 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 .agg-card:hover{transform:translateY(-4px);box-shadow:0 16px 26px -12px rgba(0,0,0,.6);border-color:var(--c);z-index:20}
                 .agg-card:hover::before{opacity:.15}
                 .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 1.5px var(--c)}
-                .agg-top{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+                .agg-top{display:flex;align-items:center;gap:7px;position:relative;z-index:1}
                 .agg-chip{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:var(--c-bg);border:1px solid var(--c-bd);color:var(--c)}
                 .agg-chip svg{width:14px;height:14px}
                 @keyframes aggVisorFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
                 .agg-visor-fade{animation:aggVisorFade .3s cubic-bezier(.16,1,.3,1)}
-                .agg-dot{width:7px;height:7px;border-radius:999px;background:var(--c);box-shadow:0 0 6px var(--c)}
+                .agg-type-top{font-size:9px;font-weight:800;color:var(--c);opacity:0;max-width:0;overflow:hidden;white-space:nowrap;transition:opacity .25s ease,max-width .3s cubic-bezier(.16,1,.3,1)}
+                .agg-card:hover .agg-type-top{opacity:1;max-width:96px}
+                .agg-type-rest{font-size:8.5px;font-weight:700;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:13px;opacity:1;margin-bottom:6px;transition:max-height .3s cubic-bezier(.16,1,.3,1),opacity .25s ease,margin-bottom .3s ease}
+                .agg-card:hover .agg-type-rest{max-height:0;opacity:0;margin-bottom:0}
                 .agg-body{position:relative;flex:1;margin-top:7px;display:flex;flex-direction:column;justify-content:flex-end}
                 .agg-num{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px;transition:font-size .32s cubic-bezier(.16,1,.3,1),margin-bottom .3s ease}
                 .agg-card:hover .agg-num{font-size:13px;margin-bottom:5px}
@@ -410,8 +410,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 ))}
                 <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
                 <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
-                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h14v16.5l-2.33-1.4-2.34 1.4-2.33-1.4-2.34 1.4-2.33-1.4L5 19.5z"/><path d="M8.5 8h7"/><path d="M8.5 11.5h4.5"/></svg>Boleta</span>
-                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Masivo</span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M9 8h6"/><path d="M9 11.5h5"/></svg>Boleta</span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg>Masivo</span>
               </div>
               {/* GRILLA de cuadrados: color=estado, letra=tipo. Hover revela info; click lo fija en el visor */}
               <div className="agg-grid">
@@ -424,16 +424,17 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       <div className="agg-top">
                         <span className="agg-chip">
                           {isBoletaTipo(doc.tipo)
-                            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h14v16.5l-2.33-1.4-2.34 1.4-2.33-1.4-2.34 1.4-2.33-1.4L5 19.5z"/><path d="M8.5 8h7"/><path d="M8.5 11.5h4.5"/></svg>
-                            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>}
+                            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M9 8h6"/><path d="M9 11.5h5"/><path d="M9 15h3.5"/></svg>
+                            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg>}
                         </span>
-                        <span className="agg-dot" />
+                        <span className="agg-type-top">{tipoEtiqueta(doc)}</span>
                       </div>
                       <div className="agg-body">
-                        <div className="agg-num">{isBoletaTipo(doc.tipo) ? tileId(doc) : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—")}</div>
+                        <div className="agg-num">{isBoletaTipo(doc.tipo) ? tileId(doc).replace(/^#/, "") : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—")}</div>
+                        <div className="agg-type-rest">{tipoEtiqueta(doc)}</div>
                         <div className="agg-info">
                           <span className="s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(doc.estado)}</svg>{isBoletaTipo(doc.tipo) ? "Emitida" : (sl[doc.estado] ?? doc.estado)}</span>
-                          <span className="d">{tipoNombre(doc)}{doc.movimientos_detectados ? ` · ${doc.movimientos_detectados} mov` : ""}</span>
+                          <span className="d"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign:"-1px",marginRight:3}}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>{fmtFecha(doc.created_at)}</span>
                           {isBoletaTipo(doc.tipo) && <span className="e"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 13l4 4L19 7"/></svg>en Boletas</span>}
                         </div>
                         <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>
