@@ -7,5 +7,10 @@ import { getUsuario } from "@/lib/dal";
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const usuario = await getUsuario();
   if (usuario?.empresas) redirect("/massdte");
-  return <>{children}</>;
+  // Misma estética que la landing/login: negro + coral + blanco, siempre oscuro.
+  return (
+    <div className="dark min-h-screen flex flex-col bg-[#0a0a0a] text-white">
+      {children}
+    </div>
+  );
 }

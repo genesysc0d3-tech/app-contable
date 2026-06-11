@@ -67,7 +67,7 @@ function LoginContent() {
                 name="email"
                 type="email"
                 required
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="tu@email.com"
               />
             </div>
@@ -84,14 +84,14 @@ function LoginContent() {
                 type="password"
                 required
                 minLength={6}
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="••••••••"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
+              className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
             >
               {loading ? "Entrando..." : "Entrar"}
             </button>
@@ -119,7 +119,7 @@ function LoginContent() {
           No tienes cuenta?{" "}
           <Link
             href={next ? `/auth/registro?next=${encodeURIComponent(next)}` : "/auth/registro"}
-            className="text-blue-400 hover:text-blue-300"
+            className="text-[#e8553e] hover:text-[#e8553e]/80"
           >
             Crear cuenta
           </Link>
