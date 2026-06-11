@@ -325,14 +325,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "RESULTADO_SII_INSUFICIENTE" }, { status: 422 });
   }
 
-  const { data: usuario } = await supabase
+  // Dos queries separadas (sin embed empresas(...), que PostgREST puede no
+  // resolver y haría fallar toda la query → 403 falso).
+  const { data: usuario } = await sb
     .from("usuarios")
-    .select("empresa_id, empresas(rut, razon_social, giro, direccion, comuna)")
+    .select("empresa_id")
     .eq("id", user.id)
     .single();
 
   if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
-  const empresa = usuario.empresas as unknown as { rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null } | null;
+  const { data: empresa } = await sb
+    .from("empresas")
+    .select("rut, razon_social, giro, direccion, comuna")
+    .eq("id", usuario.empresa_id)
+    .single();
   if (!empresa?.rut || !empresa?.razon_social) return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
 
   const { data: existing } = await sb
