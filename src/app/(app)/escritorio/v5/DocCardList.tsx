@@ -336,7 +336,6 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
         })}
         {viewMode === "grid" && (() => {
           const sd = selected ? docs.find(d => d.id === selected) : null;
-          const sc = sd ? (st[sd.estado] ?? "#9ca3af") : null;
           // Barra = progreso de emisión (emitida/boleteable). Boleta = 100%.
           const pct = (doc: DocRaw): number => {
             if (isBoletaTipo(doc.tipo)) return 1;
@@ -361,63 +360,54 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 .agg-top{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
                 .agg-chip{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:7px;background:var(--c-bg);border:1px solid var(--c-bd);color:var(--c);font-size:10.5px;font-weight:900;letter-spacing:.02em}
                 .agg-dot{width:7px;height:7px;border-radius:999px;background:var(--c);box-shadow:0 0 6px var(--c)}
-                .agg-body{position:relative;flex:1;margin-top:7px}
-                .agg-rest{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;transition:opacity .24s ease,transform .32s cubic-bezier(.16,1,.3,1)}
-                .agg-card:hover .agg-rest{opacity:0;transform:translateY(-8px)}
-                .agg-num{font-size:19px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-bar{width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
-                .agg-bar i{display:block;height:100%;border-radius:999px;background:var(--c);width:var(--p);transition:width .6s cubic-bezier(.16,1,.3,1)}
-                .agg-info{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:3px;opacity:0;transform:translateY(9px);transition:opacity .24s ease .02s,transform .32s cubic-bezier(.16,1,.3,1) .02s;pointer-events:none}
-                .agg-card:hover .agg-info{opacity:1;transform:translateY(0)}
+                .agg-body{position:relative;flex:1;margin-top:7px;display:flex;flex-direction:column;justify-content:flex-end}
+                .agg-num{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px;transition:font-size .32s cubic-bezier(.16,1,.3,1),margin-bottom .3s ease}
+                .agg-card:hover .agg-num{font-size:12px;margin-bottom:5px}
+                .agg-info{max-height:0;opacity:0;overflow:hidden;display:flex;flex-direction:column;gap:2px;transition:max-height .34s cubic-bezier(.16,1,.3,1),opacity .25s ease,margin-bottom .3s ease}
+                .agg-card:hover .agg-info{max-height:42px;opacity:1;margin-bottom:6px}
                 .agg-info .s{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:800;color:var(--c);line-height:1.05}
                 .agg-info .s svg{width:10px;height:10px;flex-shrink:0}
                 .agg-info .d{font-size:8px;color:var(--text2);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
                 .agg-info .e{display:flex;align-items:center;gap:3px;font-size:7.5px;font-weight:700;color:#22c55e}
+                .agg-bar{width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
+                .agg-bar i{display:block;height:100%;border-radius:999px;background:var(--c);width:var(--p);transition:width .6s cubic-bezier(.16,1,.3,1)}
               `}</style>
-              {/* CARD-VISOR de tamaño FIJO — la card que fijaste con click */}
-              <div style={{height:74,flexShrink:0,borderRadius:14,border:`1px solid ${sc ? `${sc}55` : "rgba(255,255,255,.08)"}`,background:"rgba(255,255,255,.025)",display:"flex",alignItems:"center",gap:12,padding:"0 14px",overflow:"hidden",transition:"border-color .25s ease"}}>
-                {sd && sc ? (
-                  <>
-                    <div style={{width:42,height:42,borderRadius:999,flexShrink:0,display:"grid",placeItems:"center",background:sc,boxShadow:`0 5px 13px -4px ${sc}99`}}>
-                      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(sd.estado)}</svg>
-                    </div>
-                    <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:13,fontWeight:800,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sd.nombre_archivo}</div>
-                      <div style={{fontSize:8,color:"var(--text2)",marginTop:3,letterSpacing:".16em",fontWeight:800}}>VISOR</div>
-                    </div>
-                    {!isBoletaTipo(sd.tipo) && <button type="button" onClick={() => setViewDocId(sd.id)} style={{flexShrink:0,fontSize:10,fontWeight:700,padding:"6px 12px",borderRadius:9,border:"1px solid rgba(91,156,246,.3)",background:"rgba(91,156,246,.1)",color:"#5b9cf6",cursor:"pointer"}}>Visualizar</button>}
-                  </>
-                ) : (
-                  <div style={{display:"flex",alignItems:"center",gap:11,color:"var(--text2)"}}>
-                    <div style={{width:44,height:44,borderRadius:12,display:"grid",placeItems:"center",border:"1.5px dashed rgba(255,255,255,.14)",flexShrink:0}}>
-                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
-                    </div>
-                    <span style={{fontSize:11,lineHeight:1.4}}>Haz <b style={{color:"var(--text)"}}>click</b> en un cuadrado para fijarlo aquí. Pasa el cursor para una vista rápida.</span>
+              {/* VISOR: el doc fijado (click) se ve IGUAL que en modo fila (mismas clases) */}
+              {sd ? (
+                <div className="doc-card" style={isBoletaTipo(sd.tipo) ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
+                  <div className="dh" style={isBoletaTipo(sd.tipo) ? { padding: "6px 8px", gap: 5 } : undefined}>
+                    {isBoletaTipo(sd.tipo) && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"#E8553E",fontSize:7,fontWeight:900,flexShrink:0}}>B1</span>}
+                    <span className={`dt ${lm[sd.estado] ?? "gn"}`} style={{background:st[sd.estado]??"var(--text2)",boxShadow:`0 0 5px ${st[sd.estado]??"var(--text2)"}40`}} />
+                    <span className="nm">{sd.nombre_archivo}</span>
+                    {isBoletaTipo(sd.tipo) && <span style={{fontSize:6,padding:"1px 4px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
+                    <span className={`st ${lm[sd.estado] ?? "ls"}`}>{sl[sd.estado] ?? sd.estado}</span>
+                    <span className="mt">{sd.movimientos_detectados ? `${sd.movimientos_detectados} mov` : "—"}</span>
                   </div>
-                )}
-              </div>
-              {/* INFO debajo de la card-visor (no dentro) */}
+                  <div className="da">
+                    {isBoletaTipo(sd.tipo)
+                      ? <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e"}}><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</span>
+                      : <button type="button" className="mp" onClick={() => setViewDocId(sd.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>}
+                  </div>
+                </div>
+              ) : (
+                <div style={{display:"flex",alignItems:"center",gap:11,color:"var(--text2)",borderRadius:14,border:"1px dashed rgba(255,255,255,.12)",padding:"12px 14px"}}>
+                  <div style={{width:34,height:34,borderRadius:10,display:"grid",placeItems:"center",border:"1.5px dashed rgba(255,255,255,.14)",flexShrink:0}}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
+                  </div>
+                  <span style={{fontSize:11,lineHeight:1.4}}>Haz <b style={{color:"var(--text)"}}>click</b> en un cuadrado para fijarlo aquí como fila.</span>
+                </div>
+              )}
+              {/* Leyenda PERSISTENTE (siempre): color = estado, letra = tipo. No cambia al fijar */}
               <div style={{padding:"0 2px",display:"flex",flexWrap:"wrap",alignItems:"center",gap:9,fontSize:9.5,minHeight:16}}>
-                {sd && sc ? (
-                  <>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:7,background:`${sc}18`,color:sc,fontWeight:800}}><span style={{width:6,height:6,borderRadius:999,background:sc}} />{sl[sd.estado] ?? sd.estado}</span>
-                    <span style={{color:"var(--text2)",fontWeight:600}}>{tipoNombre(sd)}</span>
-                    {sd.movimientos_detectados ? <span style={{color:"var(--text2)"}}>· {sd.movimientos_detectados} mov</span> : null}
-                    {isBoletaTipo(sd.tipo) && <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"#22c55e",fontWeight:800}}><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</span>}
-                  </>
-                ) : (
-                  <>
-                    <span style={{color:"var(--text2)",fontWeight:800}}>Estado:</span>
-                    {([["procesado","Listo"],["procesando","Procesando"],["error","Error"],["subido","Pendiente"]] as const).map(([k,l]) => (
-                      <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><span style={{width:8,height:8,borderRadius:3,background:st[k]}} />{l}</span>
-                    ))}
-                    <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
-                    <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
-                    {([["A","Afecta"],["E","Exenta"],["G","Gasto"],["B","Boleta"]] as const).map(([k,l]) => (
-                      <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><b style={{color:"var(--text)",fontWeight:900}}>{k}</b>{l}</span>
-                    ))}
-                  </>
-                )}
+                <span style={{color:"var(--text2)",fontWeight:800}}>Estado:</span>
+                {([["procesado","Listo"],["procesando","Procesando"],["error","Error"],["subido","Pendiente"]] as const).map(([k,l]) => (
+                  <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><span style={{width:8,height:8,borderRadius:3,background:st[k]}} />{l}</span>
+                ))}
+                <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
+                <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
+                {([["A","Afecta"],["E","Exenta"],["G","Gasto"],["B","Boleta"]] as const).map(([k,l]) => (
+                  <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><b style={{color:"var(--text)",fontWeight:900}}>{k}</b>{l}</span>
+                ))}
               </div>
               {/* GRILLA de cuadrados: color=estado, letra=tipo. Hover revela info; click lo fija en el visor */}
               <div className="agg-grid">
@@ -432,15 +422,13 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                         <span className="agg-dot" />
                       </div>
                       <div className="agg-body">
-                        <div className="agg-rest">
-                          <div className="agg-num">{isBoletaTipo(doc.tipo) ? tileId(doc) : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—")}</div>
-                          <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>
-                        </div>
+                        <div className="agg-num">{isBoletaTipo(doc.tipo) ? tileId(doc) : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—")}</div>
                         <div className="agg-info">
                           <span className="s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(doc.estado)}</svg>{isBoletaTipo(doc.tipo) ? "Emitida" : (sl[doc.estado] ?? doc.estado)}</span>
                           <span className="d">{tipoNombre(doc)}{doc.movimientos_detectados ? ` · ${doc.movimientos_detectados} mov` : ""}</span>
                           {isBoletaTipo(doc.tipo) && <span className="e"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 13l4 4L19 7"/></svg>en Boletas</span>}
                         </div>
+                        <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>
                       </div>
                     </button>
                   );
