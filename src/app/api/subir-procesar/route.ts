@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { procesarDocumento } from "@/lib/ai/processor";
 
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
     .single();
   if (!usuario) return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
 
-  let body: { nombre?: string; base64?: string; tipo?: string };
+  let body: { nombre?: string; base64?: string; tipo?: string; mime?: string };
   try {
     body = await request.json();
   } catch {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(body.base64, "base64");
   const tipo = body.tipo || "excel";
+  const mime = typeof body.mime === "string" && /^[\w-]+\/[\w.+-]+$/.test(body.mime) ? body.mime : null;
 
   const { data: doc, error: docError } = await supabase
     .from("documentos_subidos")
@@ -46,14 +48,22 @@ export async function POST(request: Request) {
 
   const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const svc = createServiceClient(svcUrl, svcKey);
+  const svc = createServiceClient<Database>(svcUrl, svcKey);
 
   // Guardar archivo en Storage para FieldMapper y otros usos
   const storagePath = `${usuario.empresa_id}/${doc.id}/${body.nombre}`;
+  const contentType = mime
+    ?? (tipo === "pdf"
+      ? "application/pdf"
+      : tipo === "csv"
+        ? "text/csv"
+        : tipo === "imagen"
+          ? "image/jpeg"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   const { error: storageError } = await svc.storage
     .from("documentos")
     .upload(storagePath, buffer, {
-      contentType: tipo === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      contentType,
       upsert: true,
     });
 
@@ -65,7 +75,10 @@ export async function POST(request: Request) {
   await svc.from("documentos_subidos").update({ estado: "procesando" }).eq("id", doc.id);
 
   // Procesar en segundo plano (no await)
-  procesarEnBackground(doc.id, usuario.empresa_id, buffer, tipo).catch(() => {});
+  procesarEnBackground(doc.id, usuario.empresa_id, buffer, tipo, {
+    mime: contentType,
+    nombre: body.nombre,
+  }).catch(() => {});
 
   return NextResponse.json({
     ok: true,
@@ -79,12 +92,9 @@ async function procesarEnBackground(
   empresaId: string,
   buffer: Buffer,
   tipo: string,
+  archivo: { mime: string; nombre: string },
 ) {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const svc = createServiceClient(url, key);
-
     let contenido: string;
     let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
 
@@ -98,6 +108,15 @@ async function procesarEnBackground(
       const pdfParser = new PDFParse(new Uint8Array(buffer));
       const pdfData = await pdfParser.getText();
       contenido = pdfData.text;
+    } else if (tipo === "imagen") {
+      // Foto/captura de cartola: OCR con Mistral antes de clasificar.
+      const { ocrAndGroupImages } = await import("@/lib/ai/ocr");
+      const { groupedText } = await ocrAndGroupImages([{
+        base64: buffer.toString("base64"),
+        mimeType: archivo.mime,
+        fileName: archivo.nombre,
+      }]);
+      contenido = groupedText;
     } else {
       contenido = buffer.toString("utf-8");
     }
@@ -117,13 +136,15 @@ async function procesarEnBackground(
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    // Merge dev+audit: stack en el log y try/catch defensivo (del compa) +
+    // cliente tipado <Database> sin cast any (de la auditoría).
     const errorStack = err instanceof Error ? err.stack : undefined;
     console.error(`[bg] ${documentoId} error fatal:`, errorMsg, errorStack ?? "");
     try {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
       const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
       if (url && key) {
-        const svc = createServiceClient(url, key);
+        const svc = createServiceClient<Database>(url, key);
         await svc.from("documentos_subidos").update({
           estado: "error",
           progreso_ia: { estado: "error", error: errorMsg },

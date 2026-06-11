@@ -7,20 +7,32 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "sii:explore": "node scripts/sii-explorer.mjs",
+    "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs",
     "cb4w": "node scripts/reset-db.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1066.0",
+    "@aws-sdk/s3-request-presigner": "^3.1066.0",
     "@mistralai/mistralai": "^2.1.2",
     "@phosphor-icons/react": "^2.1.10",
+    "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "chart.js": "^4.5.1",
+    "clsx": "^2.1.1",
+    "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
-    "next": "16.2.2",
+    "lucide-react": "^1.16.0",
+    "motion": "^12.40.0",
+    "next": "^16.2.9",
     "pdf-parse": "^2.4.5",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "xlsx": "^0.18.5",
+    "shiki": "^4.1.0",
+    "tailwind-merge": "^3.6.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -32,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }

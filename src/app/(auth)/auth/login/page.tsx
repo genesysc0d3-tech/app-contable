@@ -1,10 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { signIn, signInWithGoogle } from "../actions";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const next = safeNextPath(searchParams.get("next"));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +32,7 @@ export default function LoginPage() {
   async function handleGoogle() {
     setLoading(true);
     setError(null);
-    const result = await signInWithGoogle();
+    const result = await signInWithGoogle(next);
     if (result?.error) {
       setError(result.error);
       setLoading(false);
@@ -46,6 +57,7 @@ export default function LoginPage() {
           )}
 
           <form action={handleSubmit} className="space-y-3">
+            {next && <input type="hidden" name="next" value={next} />}
             <div>
               <label htmlFor="email" className="block text-sm text-white/70 mb-1">
                 Email
@@ -55,7 +67,7 @@ export default function LoginPage() {
                 name="email"
                 type="email"
                 required
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="tu@email.com"
               />
             </div>
@@ -72,14 +84,14 @@ export default function LoginPage() {
                 type="password"
                 required
                 minLength={6}
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="••••••••"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
+              className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
             >
               {loading ? "Entrando..." : "Entrar"}
             </button>
@@ -106,8 +118,8 @@ export default function LoginPage() {
         <p className="text-center text-sm text-white/40">
           No tienes cuenta?{" "}
           <Link
-            href="/auth/registro"
-            className="text-blue-400 hover:text-blue-300"
+            href={next ? `/auth/registro?next=${encodeURIComponent(next)}` : "/auth/registro"}
+            className="text-[#e8553e] hover:text-[#e8553e]/80"
           >
             Crear cuenta
           </Link>
@@ -115,4 +127,10 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+function safeNextPath(value: string | null): string | null {
+  const next = String(value ?? "").trim();
+  if (!next.startsWith("/") || next.startsWith("//")) return null;
+  return next;
 }

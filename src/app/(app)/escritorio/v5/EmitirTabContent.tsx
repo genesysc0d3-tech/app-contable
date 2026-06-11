@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 
@@ -13,6 +13,7 @@ interface Item {
   monto_total: number;
   listo_emitir: boolean;
   motivo_no_listo: string | null;
+  motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null;
   tipo_sugerido: number | null;
   sugerencia: string | null;
   confianza_clasif: number;
@@ -36,29 +37,81 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
-export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuyente?: string }) {
+function providerLabel(proveedor: string | null | undefined): string {
+  if (proveedor === "sii_local") return "SII local";
+  if (proveedor === "simpleapi") return "SimpleAPI";
+  return "modo de prueba";
+}
+
+function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; otrosTipos?: Record<string, number> }) {
+  const otros = Object.values(otrosTipos).reduce((s, n) => s + n, 0);
+  return (
+    <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+      <style>{`@keyframes emitirSonar{0%{transform:scale(.72);opacity:.46}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emitirTrace{0%{stroke-dashoffset:52;opacity:.12}35%{opacity:1}100%{stroke-dashoffset:0;opacity:.32}}@keyframes emitirSparkle{0%,100%{opacity:.18}35%{opacity:1}}`}</style>
+      <div>
+        <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
+          <div style={{position:"absolute",inset:8,borderRadius:"50%",border:"1px solid rgba(180,240,39,.26)",animation:"emitirSonar 2.8s ease-out infinite"}} />
+          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#b4f027"}}><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" fill="rgba(180,240,39,.16)" stroke="currentColor" strokeWidth="4.5" strokeLinejoin="round"/><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" stroke="rgba(255,255,255,.7)" strokeWidth="2" strokeLinejoin="round" strokeDasharray="52" style={{animation:"emitirTrace 2.35s ease-in-out infinite"}}/><circle cx="70" cy="27" r="2.4" fill="currentColor" style={{animation:"emitirSparkle 2.4s ease-in-out .2s infinite"}}/><circle cx="27" cy="67" r="1.8" fill="currentColor" style={{animation:"emitirSparkle 2.4s ease-in-out .8s infinite"}}/></svg>
+        </div>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
+        <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión..." : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
+        {!loading && otros > 0 && (
+          <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"#f59e0b",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
+            {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Revisar.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function nextActionLabel(code: Item["motivo_code"]): string | null {
+  if (code === "falta_receptor") return "Completa receptor en Revisar";
+  if (code === "monto_invalido") return "Corrige el monto en Revisar";
+  if (code === "no_boletar") return "Revisa la clasificacion antes de emitir";
+  return null;
+}
+
+export default function EmitirTabContent({ initial = null }: { initial?: PendientesResponse | null }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [data, setData] = useState<PendientesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<PendientesResponse | null>(initial);
+  const [loading, setLoading] = useState(!initial);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dteOverrides, setDteOverrides] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<"listas" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
-  const isExentoEmpresa = tipoContribuyente === "exento";
-  const lockedTipo = isExentoEmpresa ? 39 : tipoContribuyente === "afecto" ? 41 : 0; // 0 = no lock when auto
+  const [error, setError] = useState<string | null>(null);
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
+    setError(null);
     try {
       const res = await fetch("/api/intermediaria/pendientes-emision");
       const json = await res.json();
-      if (json.ok) setData(json);
-    } catch { toast("Error al cargar pendientes", "error"); }
+      if (json.ok) {
+        setData(json);
+      } else {
+        const message = json.error ?? "No se pudieron cargar los pendientes";
+        setData(null);
+        setError(message);
+        toast(message, "error");
+      }
+    } catch {
+      setData(null);
+      setError("Error al cargar pendientes");
+      toast("Error al cargar pendientes", "error");
+    }
     setLoading(false);
-  }
+  }, [toast]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    // Con datos del server (initial), no re-fetch al montar: evita el flash de
+    // carga al cambiar de pestaña. Solo fetch si no vinieron datos del server.
+    if (initial) return;
+    const timer = window.setTimeout(() => { void fetchData(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData, initial]);
 
   const itemsList = useMemo(() => {
     if (!data) return [];
@@ -91,9 +144,16 @@ export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuye
   }
 
   function toggleTipo(id: string, tipo: number) {
-    if (tipo === lockedTipo) return;
     setDteOverrides(prev => ({ ...prev, [id]: tipo }));
     if (!selected.has(id)) setSelected(prev => new Set(prev).add(id));
+  }
+
+  function removeOverride(id: string) {
+    setDteOverrides(prev => {
+      const n = { ...prev };
+      delete n[id];
+      return n;
+    });
   }
 
   const selectedItems = useMemo(() =>
@@ -102,6 +162,28 @@ export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuye
   );
   const selectedTotal = selectedItems.reduce((s, i) => s + i.monto_total, 0);
   const selectedCount = selectedItems.length;
+
+  if (loading) {
+    return <EmitirEmpty loading />;
+  }
+
+  if (error) {
+    return (
+      <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+        <div style={{maxWidth:300}}>
+          <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>No se pudo cargar Emitir</div>
+          <div style={{marginTop:6,fontSize:11,lineHeight:1.45}}>{error}</div>
+          <button type="button" onClick={fetchData} style={{marginTop:14,border:0,borderRadius:999,padding:"9px 14px",background:"#E8553E",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loading && totalCount === 0) {
+    return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} />;
+  }
 
   async function handleEmitir() {
     if (selectedItems.length === 0) return;
@@ -115,15 +197,16 @@ export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuye
       });
       const json = await res.json();
       if (json.ok) {
-        toast(`${json.exitos ?? 0} boletas emitidas por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")}`);
-        if (json.fallos > 0) {
-          const errores = (json.resultados ?? []).filter((r: any) => !r.ok).slice(0, 3).map((r: any) => r.error_message).filter(Boolean).join(" · ");
-          if (errores) toast(errores, "error");
+        const provider = providerLabel(json.proveedor);
+        const exitos = json.exitos ?? 0;
+        const suffix = json.proveedor === "mock" ? ". No se informaron al SII." : "";
+        toast(`${exitos} boletas ${json.proveedor === "mock" ? "simuladas" : "emitidas"} por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")} (${provider})${suffix}`, exitos > 0 ? undefined : "error");
+        if (exitos > 0) {
+          setSelected(new Set());
+          setDteOverrides({});
+          fetchData();
+          router.refresh();
         }
-        setSelected(new Set());
-        setDteOverrides({});
-        fetchData();
-        router.refresh();
       } else {
         toast(json.error ?? "Error al emitir", "error");
       }
@@ -135,62 +218,47 @@ export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuye
     return dteOverrides[item.id] ?? item.tipo_sugerido ?? 39;
   }
 
-  function renderTipoBtn(tipo: number, isActive: boolean, itemId: string, itemDisabled: boolean) {
-    const isLocked = tipo === lockedTipo && lockedTipo !== 0;
-    const label = tipo === 39 ? "AFE" : "EXE";
-
-    return (
-      <div style={{position:"relative"}}>
-        <button
-          className={isActive ? (tipo === 39 ? "af" : "ex") : "ina"}
-          onClick={() => !itemDisabled && !isLocked && toggleTipo(itemId, tipo)}
-          style={{
-            opacity: isLocked ? 0.4 : 1,
-            filter: isLocked ? "grayscale(0.6)" : "none",
-            cursor: isLocked ? "not-allowed" : "pointer",
-            transition:"all .2s",
-          }}
-        >{label}</button>
-      </div>
-    );
-  }
-
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
         {/* Header */}
         <div className="em-header">
-          <span className="big">{totalCount}</span>
-          <span className="lbl">aprobadas para emisión</span>
+          <span className="big">{listasCount}</span>
+          <span className="lbl">listas para emitir</span>
+          {bloqueadasCount > 0 && (
+            <span className="blk">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {" "}{bloqueadasCount} bloqueadas
+            </span>
+          )}
           <button className="rf" onClick={fetchData}>↻</button>
         </div>
 
-        {/* Items */}
-        {loading ? (
-          <div className="em-empty"><p>Cargando...</p></div>
-        ) : itemsList.length === 0 ? (
-          <div className="em-empty">
-            <div className="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
-            <h4 style={{fontSize:13,fontWeight:600,color:"var(--text2)",marginBottom:6}}>DOCUMENTOS EMITIDOS</h4>
-            <button onClick={() => { sessionStorage.setItem("flow-stage", "completado"); window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "boletas" } })); }}
-              style={{fontSize:11,padding:"8px 20px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff"}}>
-              VISUALIZAR
-            </button>
-          </div>
-        ) : (
-          <>
+        {/* Pills */}
+        <div className="em-pills">
+          <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
+          <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
+          <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
+          <span style={{fontSize:8,color:"var(--text2)",margin:"0 4px"}}>|</span>
+          <button className={`pl ${typeFilter === "todos" ? "act" : "ina"}`} onClick={() => setTypeFilter("todos")}>Todos</button>
+          <button className={`pl ${typeFilter === "afecta" ? "act" : "ina"}`} onClick={() => setTypeFilter("afecta")}>Afecta</button>
+          <button className={`pl ${typeFilter === "exenta" ? "act" : "ina"}`} onClick={() => setTypeFilter("exenta")}>Exenta</button>
           {selectableItems.length > 0 && (
-            <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 10px"}}>
-              <div className={`cb ${allSelected ? "sel" : ""}`}
-                onClick={toggleAll}
-                style={{cursor:"pointer",width:14,height:14,borderRadius:3,border:"1.5px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",transition:"all .15s",flexShrink:0}}
-              >{allSelected ? "✓" : ""}</div>
-              <span style={{fontSize:9,color:"var(--text2)"}}>Seleccionar todas ({selectableItems.length})</span>
-            </div>
+            <label className="sc">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{accentColor:"#E8553E"}} />
+              {" "}Seleccionar todas ({selectableItems.length})
+            </label>
           )}
-          {itemsList.map(item => {
+        </div>
+
+        {/* Items */}
+        {itemsList.length === 0 ? (
+          <EmitirEmpty />
+        ) : (
+          itemsList.map(item => {
             const isDisabled = !item.listo_emitir;
             const isSelected = selected.has(item.id);
+            const isAuto = dteOverrides[item.id] === undefined;
             const tipo = activeTipo(item);
             const isAfecta = tipo === 39;
             const isExenta = tipo === 41;
@@ -210,24 +278,30 @@ export default function EmitirTabContent({ tipoContribuyente }: { tipoContribuye
                     <div className="sub rn">
                       <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                       {" "}{item.motivo_no_listo}
+                      {nextActionLabel(item.motivo_code) && <><br />{nextActionLabel(item.motivo_code)}</>}
                     </div>
                   )}
                   {!isDisabled && item.confianza_clasif < 0.7 && (
                     <div className="sub rn">
                       <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                      {" "}Clasificado como {isAfecta ? "AFE" : "EXE"} automáticamente · Revisá antes de emitir
+                      {" "}Clasificado como {isAfecta ? "AFE" : "EXE"} automáticamente · Revisa antes de emitir
                     </div>
                   )}
                 </div>
-                <div className="tp" style={{position:"relative",display:"flex",gap:2}}>
-                  {renderTipoBtn(39, isAfecta, item.id, isDisabled)}
-                  {renderTipoBtn(41, isExenta, item.id, isDisabled)}
+                <div className="tp">
+                  <button className={isAuto ? "au" : "ina"} onClick={() => !isDisabled && removeOverride(item.id)} title="Programa decide">AUTO</button>
+                  <button className={!isAuto && isAfecta ? "af" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 39)}>AFE</button>
+                  <button className={!isAuto && isExenta ? "ex" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 41)}>EXE</button>
+                  {isAuto && (
+                    <span style={{fontSize:8,color:"var(--text2)",marginLeft:2}}>
+                      {isAfecta ? "→ AFE" : "→ EXE"}
+                    </span>
+                  )}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
               </div>
             );
-          })}
-          </>
+          })
         )}
       </div>
 

@@ -154,7 +154,7 @@ export default function FileUpload({ onFilesQueued }: FileUploadProps) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[13px] font-semibold text-[var(--foreground)] leading-tight">
-            {isDragging ? "Soltá para subir" : "Arrastrá o tocá"}
+            {isDragging ? "Suelta para subir" : "Arrastra o toca"}
           </p>
           <p className="text-[10px] text-[var(--muted-light)] mt-0.5">Excel, PDF, imágenes, CSV</p>
         </div>

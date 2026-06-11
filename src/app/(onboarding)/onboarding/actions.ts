@@ -45,13 +45,16 @@ export async function crearEmpresa(formData: FormData) {
   const nombre =
     user.user_metadata?.nombre || user.user_metadata?.full_name || user.email || "";
 
-  const { error: usuarioError } = await admin.from("usuarios").insert({
+  // upsert (no insert): si ya existe la fila del usuario (cuenta creada sin
+  // empresa, o estado parcial) se actualiza su empresa_id en vez de fallar con
+  // duplicate usuarios_pkey.
+  const { error: usuarioError } = await admin.from("usuarios").upsert({
     id: user.id,
     empresa_id: empresa.id,
     email: user.email!,
     nombre,
     rol: "owner",
-  });
+  }, { onConflict: "id" });
 
   if (usuarioError) {
     // Rollback empresa

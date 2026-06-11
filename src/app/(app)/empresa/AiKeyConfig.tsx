@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/Toast";
 
-export default function AiKeyConfig() {
+export default function AiKeyConfig({ devMode = false }: { devMode?: boolean }) {
   const { toast } = useToast();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [key, setKey] = useState("");
@@ -105,9 +105,9 @@ export default function AiKeyConfig() {
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 760, color: "#eaf0f8" }}>
-                {configured ? "Clave API configurada correctamente" : "API key no configurada"}
+                {configured ? "Clave API configurada correctamente" : devMode ? "API key no configurada" : "Gestionada por el operador de la plataforma"}
               </div>
-              {!configured && (
+              {!configured && devMode && (
                 <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                   <div style={{ position: "relative", flex: 1 }}>
                     <input
@@ -184,7 +184,9 @@ export default function AiKeyConfig() {
 
         {!configured && (
           <div style={{ marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-            La API key se guarda en la base de datos, no en variables de entorno.
+            {devMode
+              ? "La API key se guarda en la base de datos, no en variables de entorno."
+              : "La clave de IA es compartida por toda la plataforma; no necesitas configurar nada aquí."}
           </div>
         )}
       </div>

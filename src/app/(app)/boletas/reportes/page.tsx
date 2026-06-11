@@ -6,7 +6,7 @@ export default function BoletasReportesPage() {
       <header>
         <h1 className="text-2xl font-bold">Reporte RCV</h1>
         <p className="text-sm text-[#888] dark:text-white/60 mt-1">
-          Registro de ventas del mes — mock del reporte que el SII propone a fin de mes.
+          Registro de ventas del mes — borrador para cuadrar con el RCV que el SII propone a fin de mes.
         </p>
       </header>
       <ReportesClient />

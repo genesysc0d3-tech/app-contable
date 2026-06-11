@@ -112,6 +112,8 @@ export type Database = {
           caf_id: string | null
           created_at: string
           detalles: Json
+          emision_proveedor: string
+          emision_sandbox: boolean
           emisor_comuna: string | null
           emisor_direccion: string | null
           emisor_giro: string | null
@@ -128,6 +130,7 @@ export type Database = {
           monto_total: number
           motivo_referencia: string | null
           propuesta_id: string | null
+          proveedor_respuesta: Json | null
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_razon_social: string | null
@@ -143,6 +146,8 @@ export type Database = {
           caf_id?: string | null
           created_at?: string
           detalles?: Json
+          emision_proveedor?: string
+          emision_sandbox?: boolean
           emisor_comuna?: string | null
           emisor_direccion?: string | null
           emisor_giro?: string | null
@@ -159,6 +164,7 @@ export type Database = {
           monto_total: number
           motivo_referencia?: string | null
           propuesta_id?: string | null
+          proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_razon_social?: string | null
@@ -174,6 +180,8 @@ export type Database = {
           caf_id?: string | null
           created_at?: string
           detalles?: Json
+          emision_proveedor?: string
+          emision_sandbox?: boolean
           emisor_comuna?: string | null
           emisor_direccion?: string | null
           emisor_giro?: string | null
@@ -190,6 +198,7 @@ export type Database = {
           monto_total?: number
           motivo_referencia?: string | null
           propuesta_id?: string | null
+          proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_razon_social?: string | null
@@ -399,6 +408,8 @@ export type Database = {
           created_at: string
           empresa_id: string
           estado: string
+          glosa_activa: boolean
+          glosa_comun: string | null
           id: string
           movimientos_detectados: number | null
           nombre_archivo: string
@@ -411,6 +422,8 @@ export type Database = {
           created_at?: string
           empresa_id: string
           estado?: string
+          glosa_activa?: boolean
+          glosa_comun?: string | null
           id?: string
           movimientos_detectados?: number | null
           nombre_archivo: string
@@ -423,6 +436,8 @@ export type Database = {
           created_at?: string
           empresa_id?: string
           estado?: string
+          glosa_activa?: boolean
+          glosa_comun?: string | null
           id?: string
           movimientos_detectados?: number | null
           nombre_archivo?: string
@@ -517,12 +532,18 @@ export type Database = {
       empresas: {
         Row: {
           clave_sii: string | null
+          boletas_emision_proveedor: string
           comuna: string | null
           created_at: string
           direccion: string | null
           email_sii: string | null
+          emision_baseapi_sandbox: boolean
+          emision_proveedor: string
+          facturas_emision_proveedor: string
           giro: string | null
           id: string
+          logo_mime_type: string | null
+          logo_storage_path: string | null
           plan: string | null
           plan_activo: boolean
           plan_vence_at: string | null
@@ -535,12 +556,18 @@ export type Database = {
         }
         Insert: {
           clave_sii?: string | null
+          boletas_emision_proveedor?: string
           comuna?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
+          emision_baseapi_sandbox?: boolean
+          emision_proveedor?: string
+          facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
+          logo_mime_type?: string | null
+          logo_storage_path?: string | null
           plan?: string | null
           plan_activo?: boolean
           plan_vence_at?: string | null
@@ -553,12 +580,18 @@ export type Database = {
         }
         Update: {
           clave_sii?: string | null
+          boletas_emision_proveedor?: string
           comuna?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
+          emision_baseapi_sandbox?: boolean
+          emision_proveedor?: string
+          facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
+          logo_mime_type?: string | null
+          logo_storage_path?: string | null
           plan?: string | null
           plan_activo?: boolean
           plan_vence_at?: string | null
@@ -1080,9 +1113,31 @@ export type Database = {
           },
         ]
       }
+      usuario_empresas: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          rol: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          rol?: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          rol?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       usuarios: {
         Row: {
           created_at: string
+          dev_mode: boolean
           email: string
           empresa_id: string
           id: string
@@ -1092,6 +1147,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dev_mode?: boolean
           email: string
           empresa_id: string
           id: string
@@ -1101,6 +1157,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dev_mode?: boolean
           email?: string
           empresa_id?: string
           id?: string
@@ -1114,6 +1171,70 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      empresa_invitaciones: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          empresa_id: string
+          estado: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          rol: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          empresa_id: string
+          estado?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          rol?: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          empresa_id?: string
+          estado?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          rol?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_invitaciones_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_invitaciones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_invitaciones_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -1146,6 +1267,21 @@ export type Database = {
         Returns: {
           caf_id: string
           folio: number
+        }[]
+      }
+      empresas_del_usuario: {
+        Args: Record<string, never>
+        Returns: string[]
+      }
+      documento_pipeline_counts: {
+        Args: { p_empresa: string; p_desde: string; p_hasta: string }
+        Returns: {
+          documento_id: string
+          total: number
+          emitida: number
+          lista: number
+          por_revisar: number
+          no_aplica: number
         }[]
       }
     }

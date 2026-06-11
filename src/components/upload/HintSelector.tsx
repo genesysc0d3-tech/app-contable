@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretDown, Check, Lightbulb } from "@phosphor-icons/react";
 import { setDocumentoHint } from "@/app/(app)/subir/actions";
@@ -33,9 +33,11 @@ export default function HintSelector({
 
   // Posicionamiento auto del menú: flip arriba si no entra abajo,
   // alinear derecha si no entra por el lado.
-  useLayoutEffect(() => {
-    if (!open || !buttonRef.current) return;
-    const r = buttonRef.current.getBoundingClientRect();
+  function toggleMenu() {
+    if (open) { setOpen(false); return; }
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
     const MENU_H_EST = 280; // estimado con 5 opciones + header + padding
     const MENU_W = 256; // w-64 = 256px
     const MARGIN = 8;
@@ -52,7 +54,8 @@ export default function HintSelector({
     }
     const top = openUp ? Math.max(MARGIN, r.top - MENU_H_EST - 4) : r.bottom + 4;
     setPos({ top, left, openUp });
-  }, [open]);
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -99,7 +102,7 @@ export default function HintSelector({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleMenu}
         disabled={saving}
         title="Tipo de operaciones en esta cartola — ayuda al clasificador a elegir afecta/exenta"
         className="btn-press flex items-center gap-1 text-[10px] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50"

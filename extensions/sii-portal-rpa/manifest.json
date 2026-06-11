@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "App Contable - Motor Local SII",
+  "description": "Worker local visible para emitir boletas en Portal SII/MiPyme y devolver respaldo a App Contable.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "options_page": "options.html",
+  "action": {
+    "default_title": "App Contable Motor Local",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["tabs", "scripting", "storage"],
+  "host_permissions": [
+    "https://www.sii.cl/*",
+    "https://*.sii.cl/*",
+    "https://eboleta.s3.amazonaws.com/*",
+    "https://app-contable-five.vercel.app/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app-contable-five.vercel.app/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["app-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.sii.cl/*",
+        "https://*.sii.cl/*"
+      ],
+      "js": ["sii-notif-suppress.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.sii.cl/*",
+        "https://*.sii.cl/*"
+      ],
+      "js": ["sii-worker.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

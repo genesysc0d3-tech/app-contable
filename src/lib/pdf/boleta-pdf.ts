@@ -1,3 +1,11 @@
+/**
+ * Generador de PDF visual de una boleta emitida.
+ * Replica el layout típico que imprime un software facturador chileno:
+ * encabezado del emisor, cuadro folio+tipo, receptor (si aplica), detalle,
+ * totales, y datos de trazabilidad. Para documentos mock imprime el TED local;
+ * para documentos de proveedores legados evita mostrar timbres simulados como reales.
+ */
+
 export interface BoletaPDFData {
   folio: number;
   tipo_dte: number;
@@ -20,22 +28,20 @@ export interface BoletaPDFData {
   ted: string;
   track_id: string;
   estado: string;
+  emision_proveedor?: "mock" | "baseapi";
+  emision_sandbox?: boolean;
 }
 
 function fmt(n: number): string {
   return n.toLocaleString("es-CL");
 }
 
-export async function generarBoletaPDF(b: BoletaPDFData, action?: "download"): Promise<void>;
-export async function generarBoletaPDF(b: BoletaPDFData, action: "view"): Promise<string>;
-export async function generarBoletaPDF(
-  b: BoletaPDFData,
-  action: "download" | "view" = "download"
-): Promise<void | string> {
+export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const isExenta = b.tipo_dte === 41;
   const isNC = b.tipo_dte === 61;
+  const isBaseApi = b.emision_proveedor === "baseapi";
 
   const titulo = isNC ? "NOTA DE CRÉDITO ELECTRÓNICA" : isExenta ? "BOLETA EXENTA ELECTRÓNICA" : "BOLETA ELECTRÓNICA";
   const margin = 14;
@@ -72,7 +78,7 @@ export async function generarBoletaPDF(
   doc.text(`N° ${b.folio}`, cuadroX + cuadroW / 2, cuadroY + 17, { align: "center" });
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.text("S.I.I. — SANTIAGO (MOCK)", cuadroX + cuadroW / 2, cuadroY + 22, { align: "center" });
+  doc.text(isBaseApi ? "S.I.I. — SANTIAGO" : "DOCUMENTO SIMULADO", cuadroX + cuadroW / 2, cuadroY + 22, { align: "center" });
   doc.setTextColor(0, 0, 0);
 
   y = Math.max(y, cuadroY + cuadroH + 4);
@@ -140,31 +146,49 @@ export async function generarBoletaPDF(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.text("Timbre Electrónico SII (mock)", margin, y);
+   doc.text(isBaseApi ? "Emision via proveedor legado" : "Timbre simulado para pruebas", margin, y);
   y += 3;
-  doc.setFont("courier", "normal");
-  doc.setFontSize(6);
-  const tedLines = b.ted.replace(/\n+/g, "\n").split("\n").slice(0, 18);
-  for (const ln of tedLines) {
-    doc.text(ln.slice(0, 160), margin, y);
-    y += 2.4;
+  if (isBaseApi) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(
+      b.emision_sandbox
+        ? "Documento emitido usando proveedor legado en modo sandbox."
+        : "Documento emitido por proveedor legado. Verifique el respaldo tributario real antes de usarlo.",
+      margin,
+      y,
+    );
+    y += 4;
+  } else {
+    doc.setFont("courier", "normal");
+    doc.setFontSize(6);
+    const tedLines = b.ted.replace(/\n+/g, "\n").split("\n").slice(0, 18);
+    for (const ln of tedLines) {
+      doc.text(ln.slice(0, 160), margin, y);
+      y += 2.4;
+    }
   }
   y += 2;
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7);
-  doc.text(`Track ID: ${b.track_id}   ·   Estado SII: ${b.estado.toUpperCase()}`, margin, y);
+  doc.text(isBaseApi
+    ? `Track ID: ${b.track_id}   ·   Estado proveedor: ${b.estado.toUpperCase()}`
+    : `Track ID: ${b.track_id}   ·   Estado: SIMULADO (demo)`,
+    margin,
+    y,
+  );
   y += 3;
   doc.setFontSize(6);
   doc.setTextColor(120, 120, 120);
-  doc.text(
-    "Verifique documento en www.sii.cl — DOCUMENTO DE PRUEBA, no tiene validez tributaria real.",
+  doc.text(isBaseApi
+    ? (b.emision_sandbox
+      ? "Documento sandbox de proveedor legado. No usar como respaldo tributario real."
+      : "Documento proveedor legado. Use solo si cuenta con respaldo tributario real externo.")
+    : "DOCUMENTO DE PRUEBA — simulado, no informado al SII y sin validez tributaria real.",
     margin,
     y,
   );
 
-  if (action === "view") {
-    return URL.createObjectURL(doc.output("blob"));
-  }
   const filename = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
   doc.save(filename);
 }

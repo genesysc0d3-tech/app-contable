@@ -20,6 +20,7 @@
  */
 
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import {
   recibirDTE,
   consultarEstadoDTE,
@@ -36,8 +37,7 @@ function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("BACKEND_CONFIG_MISSING");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createServiceClient(url, key) as any;
+  return createServiceClient<Database>(url, key);
 }
 
 export interface VerificacionCertificado {
@@ -134,6 +134,82 @@ export interface EnvioResultado {
   mensaje?: string;
   codigo_rechazo?: string;
   detalle?: string;
+}
+
+export type ProveedorBoletas = "mock" | "sii_local" | "simpleapi";
+export type ProveedorFacturas = "mock" | "simpleapi";
+export type ProveedorEmision = ProveedorBoletas | ProveedorFacturas;
+
+export interface ConfigEmision {
+  proveedor: ProveedorEmision;
+  boletasProveedor: ProveedorBoletas;
+  facturasProveedor: ProveedorFacturas;
+  // Columna legacy: se conserva para migraciones/datos antiguos; BaseAPI ya no es un carril activo.
+  baseapiSandbox: boolean;
+}
+
+function normalizeBoletasProvider(raw: string | null | undefined): ProveedorBoletas {
+  if (raw === "sii_local") return "sii_local";
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+function normalizeFacturasProvider(raw: string | null | undefined): ProveedorFacturas {
+  if (raw === "simpleapi") return "simpleapi";
+  return "mock";
+}
+
+export function providerForTipoDte(config: ConfigEmision, tipoDte: number): ProveedorEmision {
+  if (tipoDte === 33 || tipoDte === 34) return config.facturasProveedor;
+  return config.boletasProveedor;
+}
+
+export async function obtenerConfigEmision(empresaId: string): Promise<ConfigEmision> {
+  const sb = serviceClient();
+  const { data, error } = await sb
+    .from("empresas")
+    .select("emision_proveedor, emision_baseapi_sandbox, boletas_emision_proveedor, facturas_emision_proveedor")
+    .eq("id", empresaId)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message || "");
+    if (/emision_proveedor|emision_baseapi_sandbox|boletas_emision_proveedor|facturas_emision_proveedor|column/i.test(message)) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[emision-config] columnas de proveedor no disponibles; usando mock", {
+          empresaId,
+          error: message,
+        });
+      }
+      return { proveedor: "mock", boletasProveedor: "mock", facturasProveedor: "mock", baseapiSandbox: true };
+    }
+    throw new Error(`EMISION_CONFIG_QUERY_FAILED: ${message}`);
+  }
+  if (!data) throw new Error("EMISION_CONFIG_EMPRESA_NOT_FOUND");
+
+  const rawProveedor = data?.emision_proveedor;
+  const legacyProveedor = normalizeBoletasProvider(rawProveedor);
+  const boletasProveedor = normalizeBoletasProvider(data?.boletas_emision_proveedor ?? rawProveedor);
+  const facturasProveedor = normalizeFacturasProvider(data?.facturas_emision_proveedor);
+  const config: ConfigEmision = {
+    proveedor: boletasProveedor ?? legacyProveedor,
+    boletasProveedor,
+    facturasProveedor,
+    baseapiSandbox: data?.emision_baseapi_sandbox !== false,
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[emision-config]", {
+      empresaId,
+      rawProveedor: data?.emision_proveedor ?? null,
+      proveedor: config.proveedor,
+      boletasProveedor: config.boletasProveedor,
+      facturasProveedor: config.facturasProveedor,
+      baseapiSandbox: config.baseapiSandbox,
+    });
+  }
+
+  return config;
 }
 
 /**

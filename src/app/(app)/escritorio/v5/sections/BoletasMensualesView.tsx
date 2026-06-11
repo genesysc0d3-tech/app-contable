@@ -1,26 +1,34 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import VerBoletaButton from "@/components/boletas/VerBoletaButton";
+import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 
-interface BoletaRow {
-  id: string; folio: number | null; tipo_dte: number; fecha_emision: string;
+export interface BoletaRow {
+  id: string; folio: number | null; tipo_dte: number; fecha_emision: string; created_at?: string | null;
   receptor_razon_social: string | null; monto_total: number; estado: string;
 }
 
 function fmt(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
 
+function fmtDate(s?: string | null) {
+  if (!s) return "-";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "");
+}
+
 const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
-  39: { label: "AFE", color: "#E8553E", bg: "rgba(232,85,62,.1)" },
-  41: { label: "EXE", color: "#3B82F6", bg: "rgba(59,130,246,.1)" },
+  39: { label: "AFECTA", color: "#E8553E", bg: "rgba(232,85,62,.1)" },
+  41: { label: "EXENTA", color: "#3B82F6", bg: "rgba(59,130,246,.1)" },
   61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.1)" },
 };
 
-export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[] }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+export default function BoletasMensualesView({ boletas, month, year }: {
+  boletas: BoletaRow[];
+  month: number; year: number;
+  onPrevMonth: () => void; onNextMonth: () => void;
+}) {
   const [search, setSearch] = useState("");
 
   const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -40,8 +48,11 @@ export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[]
   // Month filter (only when no search)
   const monthFiltered = useMemo(() => {
     return boletas.filter(b => {
-      const d = new Date(b.fecha_emision);
-      return d.getFullYear() === year && d.getMonth() === month;
+      const emision = new Date(b.fecha_emision);
+      const edicion = new Date(b.created_at ?? b.fecha_emision);
+      const matchesEmision = emision.getFullYear() === year && emision.getMonth() === month;
+      const matchesEdicion = edicion.getFullYear() === year && edicion.getMonth() === month;
+      return matchesEmision || matchesEdicion;
     }).sort((a, b) => (b.folio ?? 0) - (a.folio ?? 0));
   }, [boletas, year, month]);
 
@@ -56,28 +67,8 @@ export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[]
     return { emitidas, anuladas, total };
   }, [displayed]);
 
-  function prevMonth() { if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); }
-  function nextMonth() { if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>Registro de Ventas</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={prevMonth}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", padding: "4px 8px", fontSize: 13 }}>
-            ‹
-          </button>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", minWidth: 120, textAlign: "center" }}>
-            {monthNames[month]} {year}
-          </span>
-          <button onClick={nextMonth}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text2)", padding: "4px 8px", fontSize: 13 }}>
-            ›
-          </button>
-        </div>
-      </div>
+    <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
 
       {/* Search */}
       <div style={{ position: "relative" }}>
@@ -121,23 +112,26 @@ export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[]
 
       {search && searchResults && (
         <div style={{ fontSize: 10, color: "var(--text2)" }}>
-          {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""} para "{search}"
+          {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""} para &ldquo;{search}&rdquo;
         </div>
       )}
 
       {/* Table */}
       {displayed.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 20px", fontSize: 11, color: "var(--text2)" }}>
-          {search ? "No se encontraron boletas con ese criterio" : `No hay boletas emitidas en ${monthNames[month].toLowerCase()} ${year}`}
+          {search ? "No se encontraron boletas con ese criterio" : `No hay boletas con emisión, edición o subida en ${monthNames[month].toLowerCase()} ${year}`}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "58px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center", padding: "7px 10px", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <span>Folio</span><span>Tipo</span><span>Receptor</span><span>Estado</span><span>Emisión SII</span><span>Edición/Subida</span><span style={{ textAlign: "right" }}>Monto</span><span />
+          </div>
           {displayed.map(b => {
             const anulada = b.estado === "anulada";
             const badge = TIPO_BADGE[b.tipo_dte] ?? { label: `DTE ${b.tipo_dte}`, color: "var(--text2)", bg: "var(--bg-muted)" };
             return (
               <div key={b.id} style={{
-                display: "flex", alignItems: "center", gap: 8,
+                display: "grid", gridTemplateColumns: "58px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center",
                 padding: "8px 10px", borderRadius: 6,
                 background: anulada ? "rgba(239,68,68,.02)" : "rgba(255,255,255,.02)",
                 border: "1px solid var(--border)", opacity: anulada ? .5 : 1,
@@ -151,17 +145,23 @@ export default function BoletasMensualesView({ boletas }: { boletas: BoletaRow[]
                 }}>
                   {badge.label}
                 </span>
-                <span style={{ flex: 1, fontSize: 10, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 10, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {b.receptor_razon_social ?? "Sin receptor"}
                 </span>
-                <span style={{ fontSize: 9, color: "var(--text2)", flexShrink: 0 }}>
-                  {b.fecha_emision?.slice(5) ?? ""}
+                <span style={{ width: "fit-content", padding: "3px 7px", borderRadius: 999, background: anulada ? "rgba(239,68,68,.1)" : "rgba(34,197,94,.1)", color: anulada ? "#ef4444" : "#22c55e", fontSize: 9, fontWeight: 850 }}>
+                  {anulada ? "Anulada" : "Emitida"}
                 </span>
-                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", minWidth: 60, textAlign: "right" }}>
+                <span style={{ fontSize: 10, color: "var(--text)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                  {fmtDate(b.fecha_emision)}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--text2)", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>
+                  {fmtDate(b.created_at)}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
                   {fmt(b.monto_total)}
                 </span>
                 <div style={{ display: "flex", gap: 1 }}>
-                  <VerBoletaButton id={b.id} />
+                  <PreviewBoletaButton id={b.id} />
                   <DescargarBoletaButton id={b.id} />
                 </div>
               </div>

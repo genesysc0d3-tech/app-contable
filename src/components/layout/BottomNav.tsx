@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { UploadSimple, CheckSquare, Buildings } from "@phosphor-icons/react";
 
@@ -15,7 +15,8 @@ const NAV_ITEMS = [
 export default function BottomNav({ initialPendientes = 0 }: { initialPendientes?: number }) {
   const pathname = usePathname();
   const [pendientes, setPendientes] = useState(initialPendientes);
-  const hidden = pathname.startsWith("/escritorio");
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hidden = pathname.startsWith("/escritorio") || pathname.startsWith("/massdte");
 
   useEffect(() => {
     async function fetchCount() {
@@ -31,11 +32,17 @@ export default function BottomNav({ initialPendientes = 0 }: { initialPendientes
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "propuestas_ia" },
-        () => fetchCount()
+        () => {
+          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+          refreshTimerRef.current = setTimeout(() => {
+            void fetchCount();
+          }, 300);
+        }
       )
       .subscribe();
 
     return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       supabase.removeChannel(channel);
     };
   }, []);

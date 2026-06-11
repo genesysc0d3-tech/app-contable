@@ -1,33 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Sun, Moon } from "@phosphor-icons/react";
 
+// El tema inicial lo aplica el script inline de app/layout.tsx antes de
+// hidratar; aquí solo se alterna la clase y se persiste la preferencia.
+// Los iconos se muestran/ocultan vía variantes `dark:` (clase .dark).
 export default function ThemeToggle() {
-  const [mounted, setMounted] = useState(false);
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    const isDark = saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setDark(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
-    setMounted(true);
-  }, []);
-
   function toggle() {
-    const next = !dark;
-    setDark(next);
+    const next = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("theme", next ? "dark" : "light");
-  }
-
-  if (!mounted) {
-    return (
-      <button className="p-2 rounded-xl bg-white dark:bg-white/10 shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none">
-        <Moon size={20} weight="bold" className="text-[#888]" />
-      </button>
-    );
   }
 
   return (
@@ -36,11 +18,8 @@ export default function ThemeToggle() {
       className="p-2 rounded-xl bg-white dark:bg-white/10 shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none hover:scale-105 active:scale-95 transition-transform duration-150"
       aria-label="Cambiar tema"
     >
-      {dark ? (
-        <Sun size={20} weight="bold" className="text-[#F59E0B]" />
-      ) : (
-        <Moon size={20} weight="bold" className="text-[#888]" />
-      )}
+      <Sun size={20} weight="bold" className="hidden dark:block text-[#F59E0B]" />
+      <Moon size={20} weight="bold" className="dark:hidden text-[#888]" />
     </button>
   );
 }

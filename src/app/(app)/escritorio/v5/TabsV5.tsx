@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+
+const tabs = [
+  { id: "subidos", label: "Agregados",
+    icon: "M12 5v14m-7-7l7-7 7 7" },
+  { id: "revisar", label: "Revisar",
+    icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { id: "emitir", label: "Emitir",
+    icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+  { id: "boletas", label: "Boletas",
+    icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+];
 
 export default function TabsV5({
-  pendCount, aprobCount, nombreEmpresa, fecha,
+  pendCount, aprobCount, fecha,
   subidosContent, revisarContent, emitirContent, boletasContent,
 }: {
   pendCount: number; aprobCount: number; nombreEmpresa: string; fecha: string;
@@ -13,77 +24,139 @@ export default function TabsV5({
   boletasContent: React.ReactNode;
 }) {
   const [tab, setTab] = useState("revisar");
-  const [prepararKey, setPrepararKey] = useState(0);
+  const barRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLDivElement>(null);
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const moveIndicator = useCallback(() => {
+    const idx = tabs.findIndex(t => t.id === tab);
+    const btn = btnRefs.current[idx];
+    const bar = barRef.current;
+    const indicator = indicatorRef.current;
+    if (!btn || !bar || !indicator) return;
+    const btnRect = btn.getBoundingClientRect();
+    const next = btn.nextElementSibling as HTMLElement | null;
+    const nextArrow = next?.dataset?.tabArrow === "true" ? next : null;
+    indicator.style.left = btn.offsetLeft + "px";
+    indicator.style.width = nextArrow
+      ? (nextArrow.offsetLeft + nextArrow.offsetWidth - btn.offsetLeft) + "px"
+      : btnRect.width + "px";
+  }, [tab]);
 
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get("tab");
-    if (p && ["subidos","revisar","emitir","boletas"].includes(p)) {
-      setTab(p);
-      if (p === "emitir") setPrepararKey(k => k + 1);
-    }
-    function handler(e: CustomEvent) {
-      const t = (e.detail as { tab?: string })?.tab;
-      if (t && ["subidos","revisar","emitir","boletas"].includes(t)) {
-        if (t === "emitir") setPrepararKey(k => k + 1);
-        setTab(t);
-      }
-    }
-    window.addEventListener("go-to-tab" as any, handler as any);
-    return () => window.removeEventListener("go-to-tab" as any, handler as any);
+    const handler = (e: Event) => setTab((e as CustomEvent).detail);
+    window.addEventListener("switch-tab", handler);
+    return () => window.removeEventListener("switch-tab", handler);
   }, []);
 
-  const tabs = [
-    { id: "subidos", label: "SUBIR", sub: null,
-      icon: "M12 5v14m-7-7l7-7 7 7" },
-    { id: "revisar", label: "PREPARAR", sub: null,
-      icon: "M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2m4-1v4H9V3m4 0h-2M9 14l2 2 4-4" },
-    { id: "emitir", label: "EMITIR", sub: null,
-      icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-    { id: "boletas", label: "VISUALIZAR DTE", sub: null,
-      icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-  ];
+  useEffect(() => { moveIndicator(); }, [moveIndicator]);
+
+  useEffect(() => {
+    const indicator = indicatorRef.current;
+    if (!indicator) return;
+    requestAnimationFrame(() => {
+      indicator.style.transition = "left .35s cubic-bezier(.22,1,.36,1), width .35s cubic-bezier(.22,1,.36,1)";
+      moveIndicator();
+    });
+  }, [moveIndicator]);
+
+  const activeContent = tab === "subidos"
+    ? subidosContent
+    : tab === "revisar"
+      ? revisarContent
+      : tab === "emitir"
+        ? emitirContent
+        : boletasContent;
 
   return (
-    <>
-      {/* TAB BAR */}
-      <div className="tab-bar">
-          {tabs.map((t) => {
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <style>{`
+        @keyframes tabArrowWaveFade {
+          0%, 100% { opacity: .26; }
+          35% { opacity: 1; }
+          68% { opacity: .46; }
+        }
+        .tab-flow-arrow { overflow: hidden; }
+        .tab-flow-arrow.active {
+          color: #fff !important;
+          background: rgba(232,85,62,.14) !important;
+          box-shadow: inset 0 0 0 1px rgba(232,85,62,.20), 0 0 16px rgba(232,85,62,.20) !important;
+        }
+        .tab-flow-static {
+          position: relative;
+          z-index: 1;
+          opacity: 1;
+          letter-spacing: -0.20em;
+        }
+        .tab-flow-active {
+          position: relative;
+          z-index: 1;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          letter-spacing: -0.24em;
+          color: #fff;
+        }
+        .tab-flow-active span {
+          display: inline-block;
+          opacity: .26;
+          animation: tabArrowWaveFade 2.35s ease-in-out infinite both;
+          text-shadow: 0 0 9px rgba(255,255,255,.24), 0 0 13px rgba(232,85,62,.18);
+        }
+        .tab-flow-active span:nth-child(2) { animation-delay: .32s; }
+        .tab-flow-arrow.active .tab-flow-static { display: none; }
+        .tab-flow-arrow.active .tab-flow-active { display: inline-flex; }
+        .tab-flow-arrow.active .tab-flow-static {
+          text-shadow: 0 0 10px rgba(255,255,255,.28), 0 0 14px rgba(232,85,62,.22);
+        }
+      `}</style>
+      {/* TAB BAR + STATS */}
+      <div ref={barRef} className="tab-bar" style={{position:"relative",display:"flex",alignItems:"center",gap:2,padding:"8px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
+        {tabs.map((t, i) => {
           const active = t.id === tab;
+          const arrowActive = i > 0 && tabs[i - 1].id === tab;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`tb ${active ? "act" : ""}`}
+            <React.Fragment key={t.id}>
+            {i > 0 && <span data-tab-arrow="true" aria-hidden="true" className={`tab-flow-arrow${arrowActive ? " active" : ""}`} style={{position:"relative",zIndex:2,width:30,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:900,boxShadow:"none"}}><span className="tab-flow-static">››</span><span className="tab-flow-active"><span>›</span><span>›</span></span></span>}
+            <button ref={el => { btnRefs.current[i] = el; }} onClick={() => setTab(t.id)}
               style={{
-                padding: "4px 6px", borderRadius: 6, border: "none", cursor: "pointer",
-                minWidth: 88,
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                background: active ? "rgba(232,85,62,.1)" : "transparent",
-                color: active ? "#E8553E" : "var(--text2)",
+                position:"relative",zIndex:2,padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 12, fontWeight: active ? 600 : 500, display: "flex", alignItems: "center", gap: 5,
+                background: "transparent",
+                color: active ? "#fff" : "var(--text2)",
+                transition:"color .25s",
               }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
-              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>{t.label}</span>
-              {t.sub && <span style={{fontSize:7,fontWeight:500,lineHeight:1,opacity:0.65,marginTop:1}}>{t.sub}</span>}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
+              {t.label}
             </button>
+            </React.Fragment>
           );
         })}
+        {/* SLIDING PILL INDICATOR */}
+        <div ref={indicatorRef} style={{
+          position:"absolute",top:"50%",left:0,zIndex:1,
+          height:26,borderRadius:6,marginTop:-13,
+          background:"var(--accent)",
+          boxShadow:"0 2px 12px rgba(232,85,62,.35)",
+        }} />
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
+            <span style={{fontSize:13,fontWeight:300}}>{pendCount}</span>
+            <span style={{fontSize:9}}>esperando</span>
+          </span>
+          <span style={{fontSize:9,color:"var(--text3)"}}>·</span>
+          <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
+            <span style={{fontSize:13,fontWeight:300,color:"#b4f027"}}>{aprobCount}</span>
+            <span style={{fontSize:9}}>aprobados</span>
+          </span>
+          <span style={{fontSize:9,color:"var(--text2)",marginLeft:4}}>{fecha}</span>
+        </div>
       </div>
 
-      {/* TOPBAR */}
-      <div className="topbar">
-        <div className="topbar-l">
-          <span className="dot"></span>
-          <h1>{nombreEmpresa}</h1>
-        </div>
-        <div className="topbar-r">
-          <span className="stat"><span className="num" style={{color:"var(--text2)",fontSize:13}}>{aprobCount}</span><span className="lbl" style={{fontSize:9,color:"var(--text2)"}}>aprobadas para emisión</span></span>
-          <span className="date">{fecha}</span>
-        </div>
+      {/* TAB CONTENT */}
+      <div key={`${tab}-${fecha}`} className="r-tab-content act" style={{flex:1, minHeight: 0}}>
+        {activeContent}
       </div>
-
-      {/* TAB CONTENT — renderiza solo el tab activo para que useEffect se dispare fresco */}
-      {tab === "subidos" && <div className="r-tab-content act" style={{flex:1}}>{subidosContent}</div>}
-      {tab === "revisar" && <div key={prepararKey} className="r-tab-content act" style={{flex:1}}>{revisarContent}</div>}
-      {tab === "emitir" && <div className="r-tab-content act" style={{flex:1}}>{emitirContent}</div>}
-      {tab === "boletas" && <div className="r-tab-content act" style={{flex:1}}>{boletasContent}</div>}
-    </>
+    </div>
   );
 }

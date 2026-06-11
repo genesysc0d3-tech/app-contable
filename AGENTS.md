@@ -36,6 +36,11 @@ npm run dev
 
 - **No necesita** Supabase CLI ni Vercel CLI para programar.
 - **Solo modificar** archivos en `/v5` o componentes compartidos. No tocar `/escritorio` original.
+- **EL LEGACY NO IMPORTA** (vale para todos los agentes): `/escritorio` v1-v4 y sus
+  componentes son código muerto. No analizarlos, no fixearlos, no reportar sus errores.
+  El producto es **/massdte** (alias de `escritorio/v5`) + el stack de emisión
+  (`src/lib/emission/`, `src/app/api/simpleapi/`, `src/app/api/sii-local/`,
+  `extensions/sii-portal-rpa/`). Objetivo actual: llevarlo a producción.
 
 ---
 
@@ -69,6 +74,7 @@ npm run dev
 - Migraciones SQL en `supabase/migrations/` (respetar orden por fecha).
 - Tipado de base de datos en `src/lib/database.types.ts`.
 - Script de limpieza de datos de test: `scripts/limpiar-test.sql`. Conserva `parser_adapters`, `parser_logs`, `clasificacion_reglas`, `boletas_caf_mock`, `clientes`, `usuarios`, `empresas`, `propuestas_ia`, `movimientos_raw`, `documentos_subidos`. Borra solo `audit_chunks`, `ia_uso`, `creditos_uso`, `periodos_contables`.
+- Supabase MCP está configurado para el proyecto `aluuuyecwifaakehvcam`: úsalo como fallback para migraciones, advisors y dry-runs SQL cuando el CLI/pooler o env vars locales bloqueen. El MCP no expone `SUPABASE_SERVICE_ROLE_KEY` ni borra objetos de Storage; para `scripts/limpiar-test-storage.mjs --commit` sigue siendo obligatorio exportar `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sin leer `.env.local`.
 
 ---
 
@@ -130,7 +136,44 @@ src/app/(app)/empresa/          ← Componentes de empresa compartidos
 
 _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 
-### Última sesión (2026-05-22)
+### Última sesión (2026-05-24)
+
+**Qué se hizo:**
+- Ramas creadas y descartadas: `feature/v5-dte-unico-actividad-rcv`.
+- Emisión Directa: formulario manual DTE único con endpoint `/api/intermediaria/emitir-boleta`.
+  - Popup/pasos: tipo documento, receptor, detalle+monto, sidebar resumen.
+  - Candado desbloqueable: tipo DTE bloqueado por empresa, desbloqueable para excepciones.
+  - Advertencia si tipo DTE difiere del tipo de empresa.
+- MassDTE: desplegable con carga masiva (`DropzoneUpload`), reemplaza visualmente `Subir documento`.
+- Registro de Actividad: footer izquierdo, al clicar muestra actividad en card derecha vía `RightColumnView`.
+- RCV nuevo estilo colega/nube en card superior izquierda.
+- `ActividadView.tsx`, `RightColumnView.tsx`: contenidos de card derecha.
+- **Animación Genie real del popup Emisión Directa** (sin dependencias):
+  - Canvas scanlines por fila con easing cúbico (`eioC`/`eIn2`/`eOut2`) y glow radial.
+  - Captura DOM → canvas vía SVG `<foreignObject>`: clona offscreen, inyecta CSS vars, serializa, carga como Image, dibuja en canvas.
+  - Popup offscreen pre-renderizado; captura en `requestIdleCallback` al montar; botón deshabilitado hasta tener snapshot.
+  - Apertura: canvas anima desde botón al centro, oculta canvas y muestra panel real con fade overlay.
+  - Cierre: oculta panel real, muestra canvas y anima minimizando al botón.
+  - `prefers-reduced-motion`: salta canvas, muestra overlay directo.
+
+**Archivos modificados:**
+- `src/app/(app)/escritorio/v5/LeftQuickActions.tsx`: reescrita completamente con Genie canvas.
+- `src/app/(app)/escritorio/v5/EmitirDirectaView.tsx`: formulario manual DTE único.
+- `src/app/(app)/escritorio/v5/MassDTEPanel.tsx`: desplegable MassDTE.
+- `src/app/(app)/escritorio/v5/page.tsx`: layout v5 con RCV, LeftQuickActions, RightColumnView.
+- `src/app/(app)/escritorio/v5/ActividadView.tsx`, `RightColumnView.tsx`: feed actividad, alternador derecha.
+
+**Decisiones:**
+- Animación Genie sin instalar `html-to-image` ni `motion/react`: SVG foreignObject + canvas puro.
+- No traer `origin/dev` completo (el compañero borró/reordenó); portar manualmente piezas.
+- No tocar auth (`dal.ts`, `supabase/proxy.ts`) ni relajar validaciones tributarias.
+- `Emisión Directa` usa exclusivamente `/api/intermediaria/emitir-boleta` (no pendientes ni emitir-lote).
+- Botón deshabilitado hasta tener snapshot ready (~200ms idle).
+
+**Próximos pasos:**
+- Revisar visualmente popup empresa.
+- Probar Genie en vivo con sesión real en `localhost:3002`.
+### Sesión paralela del compa (2026-05-22)
 
 **Qué se hizo:**
 - Reset completo de BD (CB4W): `scripts/reset-completo.sql` + `scripts/reset-db.js` + script `npm run cb4w`

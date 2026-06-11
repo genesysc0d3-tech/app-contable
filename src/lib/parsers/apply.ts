@@ -89,12 +89,12 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
     const fechaRaw = r[c.fecha];
     if (!fechaRaw) continue;
 
-    // Convert Date objects (from cellDates:true) to ISO string
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fechaAny = fechaRaw as any;
-    const isDate = fechaAny != null && typeof fechaAny.getFullYear === "function";
+    // Convert Date objects (from cellDates:true) to ISO string. El tipo Row
+    // declara string|number, pero con cellDates el runtime trae Date reales.
+    const fechaVal = fechaRaw as unknown as Date | string | number;
+    const isDate = fechaVal instanceof Date;
     const fechaStr = isDate
-      ? `${fechaAny.getFullYear()}-${String(fechaAny.getMonth() + 1).padStart(2, "0")}-${String(fechaAny.getDate()).padStart(2, "0")}`
+      ? `${fechaVal.getFullYear()}-${String(fechaVal.getMonth() + 1).padStart(2, "0")}-${String(fechaVal.getDate()).padStart(2, "0")}`
       : String(fechaRaw).trim();
 
     if (!isDate && !fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))

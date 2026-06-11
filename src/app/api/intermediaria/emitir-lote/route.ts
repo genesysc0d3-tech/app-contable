@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { validarBoleta, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
-import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
-import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/lib/intermediario/client";
+import type { Database } from "@/lib/database.types";
+import { validarBoleta } from "@/lib/sii/validation";
+import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
+import { chileDateString } from "@/lib/chile-date";
+import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import { issueMockBoleta } from "@/lib/emission/mock";
+import { batchBlockedResult } from "@/lib/emission/provider-guards";
 
 /**
  * Emisión en lote: dado un array de propuesta_ids, emite una boleta por cada
@@ -17,6 +21,9 @@ import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/li
  */
 
 const CONCURRENCY = 1; // secuencial — folios en orden
+
+// Roles que pueden emitir documentos tributarios (viewer solo consulta).
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 interface BatchItem {
   propuesta_id: string;
@@ -36,23 +43,25 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas(rut, razon_social, giro, direccion, comuna)")
+    .select("empresa_id, rol, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
     return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
   }
+  // Emitir DTEs es un acto tributario: viewer queda fuera.
+  if (!ROLES_EMISION.has(String(usuario.rol))) {
+    return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO", detalle: "Tu rol no permite emitir documentos" }, { status: 403 });
+  }
   const empresa = usuario.empresas as unknown as {
-    rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null;
+    rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null; tipo_contribuyente: string | null;
   } | null;
   if (!empresa?.rut) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
-  // Gate: DEMO — omitimos verificación de certificado SII.
-  // En producción se debe habilitar:
-  //   const certCheck = await verificarCertificado(usuario.empresa_id);
-  //   if (!certCheck.ok) return NextResponse.json(...)
+  // El certificado SII delegado se verifica más abajo, solo si el proveedor
+  // efectivo NO es mock (la simulación no lo necesita).
 
   // Body acepta:
   //   { propuesta_ids: string[] }  → todas como AFECTA (default histórico)
@@ -90,7 +99,7 @@ export async function POST(request: Request) {
       id, tipo_propuesto, receptor_nombre, receptor_rut, monto_neto, iva, total, estado,
       cliente_id,
       clientes(id, nombre, rut),
-      movimientos_raw(fecha, descripcion, monto)
+      movimientos_raw(fecha, descripcion, monto, documentos_subidos(tipo_operacion_hint))
     `)
     .eq("empresa_id", usuario.empresa_id)
     .in("id", ids);
@@ -101,8 +110,27 @@ export async function POST(request: Request) {
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb: any = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
+  const emisionConfig = await obtenerConfigEmision(usuario.empresa_id);
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[emitir-lote] configuracion emision", {
+      empresaId: usuario.empresa_id,
+      boletasProveedor: emisionConfig.boletasProveedor,
+      facturasProveedor: emisionConfig.facturasProveedor,
+    });
+  }
+
+  // Emisión real (no mock) exige certificado digital delegado al intermediario.
+  // El lote solo emite boletas (39/41), así que el proveedor relevante es el de boletas.
+  if (emisionConfig.boletasProveedor !== "mock") {
+    const cert = await verificarCertificado(usuario.empresa_id);
+    if (!cert.ok) {
+      return NextResponse.json(
+        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
+        { status: 412 },
+      );
+    }
+  }
 
   // Verifico cuáles ya están emitidas para no duplicar
   let yaEmitidas = new Set<string>();
@@ -113,10 +141,10 @@ export async function POST(request: Request) {
       .eq("empresa_id", usuario.empresa_id)
       .neq("estado", "anulada")
       .in("propuesta_id", ids);
-    yaEmitidas = new Set((existentes ?? []).map((e: { propuesta_id: string }) => e.propuesta_id));
+    yaEmitidas = new Set((existentes ?? []).map((e) => e.propuesta_id).filter((v): v is string => typeof v === "string"));
   } catch { /* tabla missing → todas pendientes */ }
 
-  const fecha_emision = new Date().toISOString().slice(0, 10);
+  const fecha_emision = chileDateString();
   const results: BatchItem[] = [];
 
   // Index propuestas by id for lookup in original order
@@ -146,10 +174,38 @@ export async function POST(request: Request) {
     const cliente = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as
       { id: string; nombre: string; rut: string | null } | null;
     const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as
-      { fecha: string; descripcion: string; monto: number } | null;
+      { fecha: string; descripcion: string; monto: number; documentos_subidos?: { tipo_operacion_hint: string | null } | { tipo_operacion_hint: string | null }[] | null } | null;
     const receptor_rut = p.receptor_rut ?? cliente?.rut ?? undefined;
     const receptor_razon_social = p.receptor_nombre ?? cliente?.nombre ?? undefined;
     const total = Math.round(Number(p.total ?? mov?.monto ?? 0));
+    const fechaMovimiento = (mov?.fecha ?? new Date().toISOString()).slice(0, 10);
+    const docNested = mov?.documentos_subidos;
+    const docHintRaw = (Array.isArray(docNested) ? docNested[0] : docNested)?.tipo_operacion_hint ?? null;
+    const clasif = clasificarBoleta(
+      {
+        descripcion: mov?.descripcion ?? "",
+        monto: total,
+        fecha: fechaMovimiento,
+        receptor_nombre: receptor_razon_social ?? null,
+      },
+      {
+        giro: empresa.giro,
+        razon_social: empresa.razon_social,
+        tipo_contribuyente: empresa.tipo_contribuyente,
+      },
+      undefined,
+      docHintRaw as DocumentoHint,
+    );
+
+    if (clasif.sugerencia === "no_boletar") {
+      results.push({
+        propuesta_id: pid,
+        ok: false,
+        error_code: "NO_BOLETAR",
+        error_message: `No se emite como boleta: ${clasif.razones[0] ?? "movimiento no comercial"}`,
+      });
+      continue;
+    }
 
     const detalles = [{
       nombre: (mov?.descripcion ?? "Servicio").slice(0, 80),
@@ -158,6 +214,7 @@ export async function POST(request: Request) {
 
     // Tipo DTE: 39 (afecta) por default, 41 (exenta) si la UI lo override
     const tipoDte = (tipoPorId.get(pid) ?? 39) as 39 | 41;
+    const proveedorEfectivo = providerForTipoDte(emisionConfig, tipoDte);
 
     const validation = validarBoleta({
       tipo_dte: tipoDte,
@@ -178,52 +235,45 @@ export async function POST(request: Request) {
       continue;
     }
 
-    // El intermediario auto-solicita CAFs al SII cuando se agotan los folios
-    // (así funciona Haulmer/OpenFactura real — el contribuyente no lo toca).
-    await asegurarFoliosDisponibles(usuario.empresa_id, tipoDte);
-    const { data: folioRes, error: folioErr } = await sb.rpc("consume_next_folio", {
-      p_empresa_id: usuario.empresa_id,
-      p_tipo_dte: tipoDte,
-    });
-    if (folioErr || !folioRes || folioRes.length === 0) {
+    const fechaEmisionReal = fecha_emision;
+    const proveedorRespuesta: Record<string, unknown> | null = null;
+
+    const providerBlock = batchBlockedResult(proveedorEfectivo, pid);
+    if (providerBlock) {
+      results.push(providerBlock);
+      continue;
+    }
+
+    if (proveedorEfectivo !== "mock") {
       results.push({
         propuesta_id: pid,
         ok: false,
-        error_code: "SIN_FOLIOS",
-        error_message: "El intermediario no pudo obtener folios del SII",
+        error_code: "PROVEEDOR_NO_IMPLEMENTADO",
+        error_message: "Este proveedor no tiene carril backend habilitado para emisión por lote.",
       });
       continue;
     }
-    const { folio, caf_id } = folioRes[0] as { folio: number; caf_id: string };
 
-    const dteArgs = {
-      tipo_dte: tipoDte,
-      folio,
-      fecha_emision,
-      emisor: {
-        rut: empresa.rut,
-        razon_social: empresa.razon_social,
-        giro: empresa.giro,
-        direccion: empresa.direccion,
-        comuna: empresa.comuna,
+    // El carril mock auto-solicita CAFs mock cuando se agotan los folios.
+    const mockIssue = await issueMockBoleta({
+      sb,
+      empresaId: usuario.empresa_id,
+      empresa,
+      body: {
+        tipo_dte: tipoDte,
+        receptor_rut,
+        receptor_razon_social,
+        detalles,
       },
-      receptor: receptor_rut ? { rut: receptor_rut, razon_social: receptor_razon_social } : undefined,
       totales: validation.totales,
-      detalles,
-    };
-    const xml_dte = generarDTE(dteArgs);
-    const ted = generarTED(dteArgs);
-
-    // El intermediario (emula Haulmer/OpenFactura) envía el DTE al SII mock
-    // y retorna track_id + estado. En producción esto sería un fetch HTTPS
-    // al proveedor real; acá se resuelve in-process.
-    const envio = await enviarDTE(xml_dte);
-    if (!envio.ok || !envio.track_id || !envio.estado_persistencia) {
+      fechaEmision: fechaEmisionReal,
+    });
+    if (!mockIssue.ok) {
       results.push({
         propuesta_id: pid,
         ok: false,
-        error_code: envio.codigo_rechazo ?? "SII_RECHAZO",
-        error_message: envio.detalle ?? envio.mensaje ?? "El SII rechazó el DTE",
+        error_code: mockIssue.codigo_rechazo ?? mockIssue.error,
+        error_message: mockIssue.detalle ?? "El modo de prueba no pudo emitir la boleta simulada",
       });
       continue;
     }
@@ -234,9 +284,9 @@ export async function POST(request: Request) {
         empresa_id: usuario.empresa_id,
         propuesta_id: pid,
         tipo_dte: tipoDte,
-        folio,
-        caf_id,
-        fecha_emision,
+        folio: mockIssue.folio,
+        caf_id: mockIssue.cafId,
+        fecha_emision: fechaEmisionReal,
         emisor_rut: empresa.rut,
         emisor_razon_social: empresa.razon_social,
         emisor_giro: empresa.giro,
@@ -249,10 +299,14 @@ export async function POST(request: Request) {
         iva: validation.totales.iva,
         monto_total: validation.totales.total,
         detalles: detalles,
-        xml_dte,
-        ted,
-        track_id: envio.track_id,
-        estado: envio.estado_persistencia,
+        xml_dte: mockIssue.xmlDte,
+        ted: mockIssue.ted,
+        track_id: mockIssue.trackId,
+        estado: mockIssue.estadoPersistencia,
+        emision_proveedor: proveedorEfectivo,
+        // Carril solo-mock: emisión simulada, sin validez tributaria.
+        emision_sandbox: true,
+        proveedor_respuesta: proveedorRespuesta,
       })
       .select("id, folio, monto_total")
       .single();
@@ -266,6 +320,35 @@ export async function POST(request: Request) {
       });
       continue;
     }
+
+    const receptorLabel = receptor_razon_social?.trim() || "consumidor final";
+    // created_at anclado al día tributario chileno: hora fija 12 UTC (nunca
+    // cruza de fecha — ver fix_chile_evening_emission_dates), pero con
+    // min/seg/ms reales para que el orden dentro del lote sea estable.
+    const tsNow = new Date();
+    const anchorTs = `${fechaEmisionReal}T12:${String(tsNow.getUTCMinutes()).padStart(2, "0")}:${String(tsNow.getUTCSeconds()).padStart(2, "0")}.${String(tsNow.getUTCMilliseconds()).padStart(3, "0")}Z`;
+    await sb.from("documentos_subidos").insert({
+      empresa_id: usuario.empresa_id,
+      nombre_archivo: `Boleta #${boleta.folio} - ${receptorLabel}`,
+      tipo: "boleta_unica",
+      storage_path: `boleta-lote://${boleta.id}`,
+      estado: "procesado",
+      movimientos_detectados: 1,
+      created_at: anchorTs,
+      progreso_ia: {
+        origen: "emision_lote",
+        proveedor: proveedorEfectivo,
+        // Coherente con emision_sandbox de la boleta: este carril es mock.
+        sandbox: true,
+        propuesta_id: pid,
+        boleta_id: boleta.id,
+        folio: boleta.folio,
+        tipo_dte: tipoDte,
+        monto_total: boleta.monto_total,
+        receptor: receptorLabel,
+        etiqueta: "Boleta emitida",
+      },
+    });
 
     results.push({
       propuesta_id: pid,
@@ -286,6 +369,8 @@ export async function POST(request: Request) {
     exitos,
     fallos,
     monto_emitido,
+    proveedor: emisionConfig.boletasProveedor,
+    sandbox: true,
     resultados: results,
   });
   } catch (err) {

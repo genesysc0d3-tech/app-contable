@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Eye } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import { generarBoletaPDF, type BoletaPDFData } from "@/lib/pdf/boleta-pdf";
+import { getBaseApiPdf, openBaseApiPdf } from "@/lib/pdf/baseapi-pdf";
 
 interface BoletaRaw {
   folio: number;
@@ -26,6 +27,9 @@ interface BoletaRaw {
   ted: string;
   track_id: string;
   estado: string;
+  emision_proveedor?: "mock" | "baseapi" | "sii_local";
+  emision_sandbox?: boolean;
+  proveedor_respuesta?: unknown;
 }
 
 export default function VerBoletaButton({ id }: { id: string }) {
@@ -45,6 +49,30 @@ export default function VerBoletaButton({ id }: { id: string }) {
         return;
       }
       const b = j.boleta as BoletaRaw;
+      if (b.emision_proveedor === "sii_local") {
+        const pdfRes = await fetch(`/api/intermediaria/boleta/${id}/pdf`, { cache: "no-store" });
+        if (!pdfRes.ok) {
+          const error = await pdfRes.json().catch(() => ({ error: "PDF_NO_DISPONIBLE" }));
+          toast(error.error ?? "PDF SII no disponible en la app", "error");
+          return;
+        }
+        const blob = await pdfRes.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+
+      if (b.emision_proveedor === "baseapi") {
+        const pdf = getBaseApiPdf(b.proveedor_respuesta);
+        if (!pdf) {
+          toast("Esta emision de proveedor legado no tiene PDF guardado.", "error");
+          return;
+        }
+        openBaseApiPdf(pdf);
+        return;
+      }
+
       const data: BoletaPDFData = {
         folio: b.folio,
         tipo_dte: b.tipo_dte,
@@ -79,9 +107,10 @@ export default function VerBoletaButton({ id }: { id: string }) {
         ted: b.ted,
         track_id: b.track_id,
         estado: b.estado,
+        emision_proveedor: b.emision_proveedor === "mock" ? "mock" : undefined,
+        emision_sandbox: b.emision_sandbox,
       };
-      const blobUrl = await generarBoletaPDF(data, "view");
-      window.open(blobUrl, "_blank");
+      await generarBoletaPDF(data);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error al generar PDF", "error");
     } finally {

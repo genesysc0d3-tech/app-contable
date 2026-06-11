@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
-import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar, editarMovimientoPropuesta } from "../../revisar/actions";
-import { clasificarBoleta } from "@/lib/sii/clasificador-tipo";
+import TermHint from "@/components/ui/TermHint";
 import type { Tables } from "@/lib/database.types";
 
 type Propuesta = Tables<"propuestas_ia"> & {
@@ -33,16 +33,42 @@ function fmtShort(d: string | null | undefined): string {
   return `${dt.getDate()} ${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
-interface DocTab { docId: string; nombre: string; total: number; createdAt: string; }
+// Tipo de la propuesta para decisión rápida: visible tanto en la fila
+// colapsada (sigla) como en el detalle expandido (label completo).
+function tipoMeta(tipoPropuesto: string | null) {
+  if (tipoPropuesto === "gasto_egreso") return { sigla: "GASTO", label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "#f59e0b" };
+  if (tipoPropuesto === "no_comercial") return { sigla: "N/C", label: "No comercial · no se boletea", bg: "rgba(255,255,255,.07)", color: "var(--text2)" };
+  const afecta = tipoPropuesto === "boleta" || tipoPropuesto === "factura";
+  return afecta
+    ? { sigla: "AFE", label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "#b4f027" }
+    : { sigla: "EXE", label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "#5b9cf6" };
+}
+
+function RevisarEmpty() {
+  return (
+    <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
+      <style>{`@keyframes revisarSonar{0%{transform:scale(.72);opacity:.46}70%,100%{transform:scale(1.22);opacity:0}}@keyframes revisarTrace{0%{stroke-dashoffset:42;opacity:.32}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.5}}`}</style>
+      <div style={{transform:"translateY(7px)"}}>
+        <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
+          <div style={{position:"absolute",inset:8,borderRadius:"50%",border:"1px solid rgba(34,197,94,.26)",animation:"revisarSonar 2.8s ease-out infinite"}} />
+          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#22c55e"}}><path d="M48 78c16.568 0 30-13.432 30-30S64.568 18 48 18 18 31.432 18 48s13.432 30 30 30Z" stroke="currentColor" strokeWidth="4"/><path d="m35 48 9 9 19-21" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="42" style={{animation:"revisarTrace 2.8s ease-in-out infinite"}}/></svg>
+        </div>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>Todo despejado</div>
+        <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:270}}>No hay propuestas pendientes para revisar en esta mesa.</div>
+      </div>
+    </div>
+  );
+}
+
+interface DocTab { docId: string; nombre: string; total: number; }
 
 export default function RevisarTabContent({
-  propuestas, clientes, empresaId, empresaGiro, empresaRazonSocial, empresaTipoContribuyente,
+  propuestas, clientes, empresaId, empresaGiro, empresaTipoContribuyente,
 }: {
   propuestas: Propuesta[]; clientes: ClienteResumen[]; empresaId: string;
   empresaGiro?: string | null; empresaRazonSocial?: string; empresaTipoContribuyente?: string | null;
 }) {
   const router = useRouter();
-  const { toast } = useToast();
 
   // Build document tabs from propuestas data
   const docMap = useMemo(() => {
@@ -51,12 +77,12 @@ export default function RevisarTabContent({
       const doc = p.movimientos_raw?.documentos_subidos;
       if (!doc) continue;
       let ent = m.get(doc.id);
-      if (!ent) ent = { docId: doc.id, nombre: doc.nombre_archivo, total: 0, createdAt: doc.created_at ?? "", props: [] };
+      if (!ent) ent = { docId: doc.id, nombre: doc.nombre_archivo, total: 0, props: [] };
       ent.props.push(p);
       ent.total++;
       m.set(doc.id, ent);
     }
-    return Array.from(m.values()).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+    return Array.from(m.values()).sort((a,b) => b.props.length - a.props.length);
   }, [propuestas]);
 
   const [selDocId, setSelDocId] = useState<string | null>(null);
@@ -64,7 +90,7 @@ export default function RevisarTabContent({
 
   // Always call hooks — never after conditional returns
   const emptyProps: Propuesta[] = [];
-  const fallbackDoc = { docId: "", nombre: "", total: 0, createdAt: "", props: emptyProps } as DocTab & { props: Propuesta[] };
+  const fallbackDoc = { docId: "", nombre: "", total: 0, props: emptyProps } as DocTab & { props: Propuesta[] };
   const doc = activeDoc ?? fallbackDoc;
   const currentProps = useMemo(() => doc.props.filter(p => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado"), [doc]);
 
@@ -74,27 +100,20 @@ export default function RevisarTabContent({
 
   const totalPendientes = doc.props.filter(p => p.estado === "pendiente").length;
 
-  const [flowStage] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return sessionStorage.getItem("flow-stage") ?? "";
-  });
+  if (!activeDoc) {
+    return <RevisarEmpty />;
+  }
 
-  if (!activeDoc || flowStage === "completado") {
-    return (
-      <div className="r-scroll" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
-        <div style={{textAlign:"center"}}>
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1.2" style={{display:"block",margin:"0 auto"}}><path d="M12 5v14m-7-7l7-7 7 7"/><path d="M4 7h16v12H4V7Z"/></svg>
-          <p style={{fontSize:12,color:"var(--text3)",marginTop:10,fontWeight:400}}>Subí un archivo para empezar</p>
-        </div>
-      </div>
-    );
+  if (totalPendientes === 0) {
+    return <RevisarEmpty />;
   }
 
   return (
     <>
-      {/* Document sub-tabs + Aprobar todo */}
+      {/* Referencia al documento de origen — siempre visible para que las
+          propuestas de distintas cartolas no se mezclen */}
       <div className="dtabs">
-        {docMap.length > 1 && docMap.map(dt => (
+        {docMap.map(dt => (
           <div key={dt.docId}
             className={`dtab ${dt.docId === activeDoc.docId ? "act" : ""}`}
             onClick={() => setSelDocId(dt.docId)}
@@ -112,24 +131,9 @@ export default function RevisarTabContent({
 
       {/* Scrollable content */}
       <div className="r-scroll" style={{padding:"0"}}>
-        {totalPendientes === 0 ? (
-          <div className="sec" style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px 16px"}}>
-            <div style={{textAlign:"center"}}>
-              <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#E8553E" strokeWidth="1.5" style={{display:"block",margin:"0 auto"}}><circle cx="12" cy="12" r="11"/><path d="M8 12l3 3 5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <p style={{fontSize:13,color:"var(--text2)",marginTop:10,fontWeight:500}}>Todo preparado para emitir</p>
-              <button onClick={() => { sessionStorage.setItem("flow-stage", "emitir"); window.dispatchEvent(new CustomEvent("go-to-tab", { detail: { tab: "emitir" } })); }}
-                style={{marginTop:12,fontSize:11,padding:"8px 20px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff"}}>
-                CONTINUAR
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
-            <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
-            <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
-          </>
-        )}
+        <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
+        <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
+        <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={() => router.refresh()} empresaTipoContribuyente={empresaTipoContribuyente} empresaGiro={empresaGiro} />
       </div>
     </>
   );
@@ -160,7 +164,7 @@ function AprobarTodoBtn({ ids }: { ids: string[] }) {
 }
 
 /* ─── Confianza Group Section ─── */
-function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction, empresaTipoContribuyente, empresaGiro }: {
+function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction, empresaTipoContribuyente }: {
   tipo: string; label: string; propuestas: Propuesta[]; color: string; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
   empresaTipoContribuyente?: string | null; empresaGiro?: string | null;
 }) {
@@ -234,14 +238,14 @@ function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empre
                       style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid rgba(255,255,255,.02)",cursor:"pointer"}}
                     >
                       <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"#E8553E":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
+                      {(() => { const tm = tipoMeta(p.tipo_propuesto); return (
+                        <span title={tm.label} style={{flexShrink:0,minWidth:38,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:tm.bg,color:tm.color}}>{tm.sigla}</span>
+                      ); })()}
                       <div className="info" style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:11,color:"var(--text2)",fontWeight:400,marginBottom:1}}>GLOSA DTE:</div>
-                        <div className="tt" style={{fontSize:11,fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
-                        <div className="mt" style={{fontSize:11,color:"var(--text2)",marginTop:2,display:"flex",alignItems:"center",gap:5}}>
-                          <span>{fmtShort(p.movimientos_raw.fecha)}</span>
-                          <span style={{color:"var(--text3)"}}>·</span>
-                          <span style={{fontWeight:500}}>{fmt(p.movimientos_raw.monto)}</span>
-                          {p.receptor_nombre && <><span style={{color:"var(--text3)"}}>·</span> {p.receptor_nombre}</>}
+                        <div className="tt" style={{fontSize:10,fontWeight:500,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
+                        <div className="mt" style={{fontSize:8,color:"var(--text2)",marginTop:1,display:"flex",alignItems:"center",gap:4}}>
+                          {fmt(p.movimientos_raw.monto)} <span style={{color:"#2a2d36"}}>·</span> {fmtShort(p.movimientos_raw.fecha)}
+                          {p.receptor_nombre && <><span style={{color:"#2a2d36"}}>·</span> {p.receptor_nombre}</>}
                         </div>
                       </div>
                       <span className={`cf ${(p.confianza ?? 0) >= ALTA ? "hi" : (p.confianza ?? 0) >= MEDIA ? "me" : "ba"}`}
@@ -336,10 +340,15 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
   const [newClienteRut, setNewClienteRut] = useState("");
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editDesc, setEditDesc] = useState(propuesta.movimientos_raw?.descripcion ?? "");
-  const [editMonto, setEditMonto] = useState(String(propuesta.movimientos_raw?.monto ?? ""));
   const isAfecta = propuesta.tipo_propuesto === "boleta" || propuesta.tipo_propuesto === "factura";
+  // Gastos y movimientos no comerciales se registran pero no generan boleta;
+  // el badge debe decirlo (antes caían al else y mostraban "Boleta · exenta").
+  const isGasto = propuesta.tipo_propuesto === "gasto_egreso";
+  const isNoComercial = propuesta.tipo_propuesto === "no_comercial";
+  const noBoletea = isGasto || isNoComercial;
+  const tipoBadge = tipoMeta(propuesta.tipo_propuesto);
+  const empresaSugiereExenta = empresaTipoContribuyente === "exento";
+  const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
 
   const neto = propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
   const iva = propuesta.iva ?? Math.round(neto * 0.19);
@@ -375,44 +384,43 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
       <div className="col" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
         <span className={`tag ${isAfecta ? "af" : "ex"}`}
           style={{fontSize:8,padding:"2px 7px",borderRadius:10,fontWeight:600,
-            background: isAfecta ? "rgba(180,240,39,.1)" : "rgba(91,156,246,.1)",
-            color: isAfecta ? "#b4f027" : "#5b9cf6",
+            background: tipoBadge.bg,
+            color: tipoBadge.color,
           }}
-        >{isAfecta ? "Boleta · afecta" : "Boleta · exenta"}</span>
+        >{tipoBadge.label}</span>
+        {noBoletea && (
+          <TermHint width={250}>
+            Este movimiento se registra en tus cuentas, pero no genera boleta ante el SII{isGasto ? " porque es plata que salió (gasto)" : ""}. Si en realidad fue una venta tuya, cámbialo con Editar.
+          </TermHint>
+        )}
         <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "var(--text2)", fontSize:12,fontWeight:700}}>
           {Math.round((propuesta.confianza ?? 0) * 100)}%
         </span>
-      </div>
-      <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>
-        {editMode ? (
-          <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
-            style={{width:"100%",background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.12)",borderRadius:6,color:"var(--text)",fontSize:11,padding:"5px 8px"}} />
-        ) : propuesta.movimientos_raw.descripcion}
-      </div>
-      <div className="sub" style={{fontSize:11,color:"var(--text2)",marginBottom:6}}>
-        {editMode ? (
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{color:"var(--text2)",fontSize:11}}>{fmtShort(propuesta.movimientos_raw.fecha)}</span>
-            <span style={{color:"var(--text3)"}}>·</span>
-            <span style={{color:"var(--text2)",fontSize:11}}>Monto CLP:</span>
-            <input value={editMonto} onChange={e => setEditMonto(e.target.value.replace(/\D/g,""))}
-              style={{width:140,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.12)",borderRadius:6,color:"var(--text)",fontSize:11,padding:"3px 8px",textAlign:"right",fontVariantNumeric:"tabular-nums"}} />
-          </div>
-        ) : (
-          <>{fmtShort(propuesta.movimientos_raw.fecha)} · {fmt(total)} · {propuesta.receptor_nombre ?? "Sin receptor"}</>
+        <TermHint width={250}>
+          Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada antes de aprobar.
+        </TermHint>
+        {empresaSugiereAfecta && !isAfecta && (
+          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(232,85,62,.1)",color:"#E8553E",marginLeft:4}}>Default empresa: AFE</span>
         )}
+        {empresaSugiereExenta && isAfecta && (
+          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(91,156,246,.1)",color:"#5b9cf6",marginLeft:4}}>Default empresa: EXE</span>
+        )}
+      </div>
+      <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>{propuesta.movimientos_raw.descripcion}</div>
+      <div className="sub" style={{fontSize:9,color:"var(--text2)",marginBottom:6}}>
+        {fmt(total)} · {fmtShort(propuesta.movimientos_raw.fecha)} · {propuesta.receptor_nombre ?? "Sin receptor"}
       </div>
       <div className="fin" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:6}}>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>Neto</div>
+          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>Neto</div>
           <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(neto)}</div>
         </div>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>IVA</div>
+          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>IVA</div>
           <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(iva)}</div>
         </div>
         <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:7,color:"var(--text2)"}}>Total</div>
+          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>Total</div>
           <div className="vl ht" style={{fontSize:11,fontWeight:700,color:"#b4f027"}}>{fmt(total)}</div>
         </div>
       </div>
@@ -435,46 +443,19 @@ function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, emp
       )}
       <div className="notas" style={{fontSize:9,color:"var(--text2)",fontStyle:"italic",marginBottom:6}}>{propuesta.notas ?? ""}</div>
       <div className="actions" style={{display:"flex",gap:4}}>
-        {editMode ? (
-          <>
-            <button onClick={async () => {
-              setBusy(true);
-              const editMontoNum = parseInt(editMonto.replace(/\D/g,""), 10) || 0;
-              const r = await editarMovimientoPropuesta(
-                propuesta.id,
-                propuesta.movimiento_id,
-                { descripcion: editDesc, monto: editMontoNum }
-              );
-              if (r.error) toast(r.error, "error");
-              else { toast("Editada"); setEditMode(false); }
-              setBusy(false);
-            }} disabled={busy}
-              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#22c55e",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              {busy ? "..." : "Guardar cambios"}
-            </button>
-            <button onClick={() => { setEditMode(false); setEditDesc(propuesta.movimientos_raw?.descripcion ?? ""); setEditMonto(String(propuesta.movimientos_raw?.monto ?? "")); }}
-              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(255,255,255,.06)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-              Cancelar
-            </button>
-          </>
-        ) : (
-          <>
-            <button onClick={handleAprobar} disabled={busy}
-              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              {busy ? "..." : "Aprobar"}
-            </button>
-            <button onClick={() => setEditMode(true)}
-              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-              ✏️ Editar
-            </button>
-            <button onClick={handleRechazar} disabled={busy}
-              style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
-              ✕ {busy ? "..." : "Rechazar"}
-            </button>
-          </>
-        )}
+        <button onClick={handleAprobar} disabled={busy}
+          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          {busy ? "..." : noBoletea ? (isGasto ? "Aprobar como gasto" : "Aprobar registro") : "Aprobar"}
+        </button>
+        <button onClick={() => onClose()}
+          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+          ✏️ Editar
+        </button>
+        <button onClick={handleRechazar} disabled={busy}
+          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+          ✕ {busy ? "..." : "Rechazar"}
+        </button>
       </div>
     </div>
   );

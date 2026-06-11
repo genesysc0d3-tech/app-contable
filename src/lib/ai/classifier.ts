@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import type { MovimientoExtraido, PropuestaExtraida } from "./types";
 
 /**
@@ -46,9 +47,7 @@ function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  // Untyped client — clasificacion_reglas is new
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createClient(url, key) as any;
+  return createClient<Database>(url, key);
 }
 
 /**

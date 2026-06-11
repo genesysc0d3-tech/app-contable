@@ -1,82 +1,87 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { Buildings } from "@phosphor-icons/react/dist/ssr";
+import { Component, useState, useCallback, useRef, useEffect, type ErrorInfo, type ReactNode } from "react";
 import EmpresaPopup from "./EmpresaPopup";
 import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
+import type { EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 
-const TOP_TABS = [
-  { id: "subir", label: "Subir", icon: "M12 5v14m-7-7l7-7 7 7" },
-  { id: "revisar", label: "Revisar", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-  { id: "emitir", label: "Emitir", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  { id: "visualizar", label: "Visualizar DTE", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-];
+class TabErrorBoundary extends Component<{ children: ReactNode; label: string }, { error: string | null }> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message || "Error inesperado" };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[massdte-tab-error]", this.props.label, error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: 360, display: "grid", placeItems: "center", padding: 24, color: "var(--text2)", textAlign: "center" }}>
+          <div style={{ maxWidth: 320 }}>
+            <div style={{ fontSize: 15, fontWeight: 850, color: "var(--text)", letterSpacing: "-.025em" }}>No se pudo cargar {this.props.label}</div>
+            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.45 }}>{this.state.error}</div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function V5Root({
-  dashboardContent, subirContent, revisarContent, emitirContent, visualizarContent,
-  empresaInicial, empresaTieneCertificado, empresaCafs, empresaId, hasBoletas,
+  dashboardContent,
+  empresaInicial, empresaCafs, empresaId, empresaEmisionConfig, devMode = false,
 }: {
   dashboardContent: React.ReactNode;
-  subirContent: React.ReactNode;
+  subidosContent: React.ReactNode;
   revisarContent: React.ReactNode;
   emitirContent: React.ReactNode;
-  visualizarContent: React.ReactNode;
+  boletasContent: React.ReactNode;
   empresaInicial: DatosEmisor;
-  empresaTieneCertificado: boolean;
   empresaCafs: CAFRow[];
   empresaId: string;
-  hasBoletas?: boolean;
+  empresaEmisionConfig: EmissionProviderState;
+  devMode?: boolean;
 }) {
-  const [tab, setTab] = useState("subir");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [empresaOpen, setEmpresaOpen] = useState(false);
-  const [emitir2Open, setEmitir2Open] = useState(false);
-  const [emitirMode, setEmitirMode] = useState<"dte" | "massdte">("massdte");
-  const navRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
+  const [helpStepsEnabled, setHelpStepsEnabled] = useState(true);
+  const [savedPulse, setSavedPulse] = useState<{ id: number; label: string } | null>(null);
 
   useEffect(() => {
-    function handler(e: CustomEvent) {
-      const t = (e.detail as { tab?: string })?.tab;
-      if (t) { setTab(t); setEmitir2Open(false); }
-    }
-    window.addEventListener("go-to-tab" as any, handler as any);
-    return () => window.removeEventListener("go-to-tab" as any, handler as any);
+    const h = () => setEmpresaOpen(v => !v);
+    window.addEventListener("toggle-empresa", h);
+    return () => window.removeEventListener("toggle-empresa", h);
   }, []);
 
-  // Cerrar Emitir 2 al hacer click fuera
   useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) {
-        setEmitir2Open(false);
-      }
+    function handleSaved(e: Event) {
+      const label = (e as CustomEvent<{ label?: string }>).detail?.label ?? "Información guardada";
+      const id = Date.now();
+      setSavedPulse({ id, label });
+      window.setTimeout(() => {
+        setSavedPulse((current) => current?.id === id ? null : current);
+      }, 1500);
     }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+
+    window.addEventListener("v5-popup-saved", handleSaved);
+    return () => window.removeEventListener("v5-popup-saved", handleSaved);
   }, []);
 
-  const toggleTheme = useCallback((e: React.MouseEvent) => {
-    const btn = e.currentTarget;
-    const rect = btn.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const next = theme === "dark" ? "light" : "dark";
-
-    const apply = () => {
-      setTheme(next);
-      document.documentElement.dataset.theme = next;
-    };
-
-    if (typeof document !== "undefined" && "startViewTransition" in document) {
-      document.documentElement.style.setProperty("--click-x", cx + "px");
-      document.documentElement.style.setProperty("--click-y", cy + "px");
-      (document as any).startViewTransition(apply);
-    } else {
-      apply();
+  useEffect(() => {
+    const saved = window.localStorage.getItem("v5-help-steps");
+    if (saved === "off") {
+      window.requestAnimationFrame(() => setHelpStepsEnabled(false));
     }
-  }, [theme]);
+  }, []);
+
+  const updateHelpSteps = useCallback((enabled: boolean) => {
+    setHelpStepsEnabled(enabled);
+    window.localStorage.setItem("v5-help-steps", enabled ? "on" : "off");
+  }, []);
 
   return (
     <>
@@ -84,185 +89,172 @@ export default function V5Root({
 :root,[data-theme="dark"]{--bg:#0f1014;--surface:#16181d;--surface2:#1a1c24;--border:rgba(255,255,255,.06);--text:#e8eaf0;--text2:#636878;--text3:#4a4d55;--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--green:#22c55e;--amber:#f59e0b;--blue:#5b9cf6;--bg-muted:rgba(255,255,255,.04);--shadow:rgba(0,0,0,.3);--header-bg:rgba(22,24,29,.15);--header-border:rgba(255,255,255,.04)}
 [data-theme="light"]{--bg:#f5f0eb;--surface:#ffffff;--surface2:#faf7f3;--border:rgba(0,0,0,.08);--text:#1a1612;--text2:#8c8279;--text3:#b0a79e;--accent:#E8553E;--accent-light:rgba(232,85,62,.08);--green:#16a34a;--amber:#d97706;--blue:#3b82f6;--bg-muted:rgba(0,0,0,.04);--shadow:rgba(0,0,0,.08);--header-bg:rgba(255,255,255,.2);--header-border:rgba(0,0,0,.04)}
 body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
+.root-noise::before{position:absolute;top:0;left:0;width:100%;height:100%;content:'';opacity:.01;z-index:-1;pointer-events:none;background-image:url(https://www.ui-layouts.com/noise.gif)}
 ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
 ::view-transition-new(root){z-index:9999;clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%));animation:circle-expand .5s cubic-bezier(.22,1,.36,1) forwards}
 @keyframes circle-expand{from{clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%))}to{clip-path:circle(150% at var(--click-x,50%) var(--click-y,50%))}}
 ::view-transition-old(root){z-index:1}
-.dz{padding:14px;border-radius:10px;border:1.5px dashed rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s}
-.dz:hover{border-color:rgba(180,240,39,.3);background:rgba(180,240,39,.02)}
-.dz-icon{width:32px;height:32px;border-radius:8px;background:rgba(180,240,39,.06);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.dz-icon svg{width:16px;height:16px;color:#b4f027}
-.dz-txt h4{font-size:12px;font-weight:600}
-.dz-txt p{font-size:10px;color:var(--text2);margin-top:1px}
-@keyframes sp{to{transform:rotate(360deg)}}
-@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
-.dots-anim::after{content:'';animation:dots 1.4s steps(4) infinite;display:inline-block;width:1.1em;text-align:left}
-@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}100%{content:''}}
+@keyframes saved-pop{0%{opacity:0;transform:translate(-50%,14px) scale(.92);filter:blur(3px)}18%{opacity:1;transform:translate(-50%,0) scale(1.02);filter:blur(0)}72%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-10px) scale(.98)}}
+@keyframes saved-ring{0%{transform:scale(.45);opacity:.9}100%{transform:scale(1.9);opacity:0}}
 `}</style>
 
-      <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
-        {/* NAV — barra superior */}
-        <div ref={navRef} style={{
-          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 50,
-          display: "flex", alignItems: "center", gap: 3,
-          background: "var(--header-bg)", backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderRadius: 16, padding: "4px 6px",
-          border: "1px solid var(--header-border)",
-          boxShadow: "0 4px 24px var(--shadow)",
-          transition: "background .4s,border .4s,box-shadow .4s",
-        }}>
-          {/* Panel */}
-          <button onClick={() => { setTab("dashboard"); setEmitir2Open(false); }}
-            style={{
-              padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 50,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              background: tab === "dashboard" ? "rgba(232,85,62,.1)" : "transparent",
-              color: tab === "dashboard" ? "#E8553E" : "var(--text2)",
-              transition: "all .2s",
-            }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-            </svg>
-            <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>Panel</span>
-          </button>
-
-          {/* Tabs ocultos — siguen funcionales para el flujo masivo via EMITIR MASSDTE */}
-          {TOP_TABS.map((t) => (
-            <button key={t.id} onClick={() => { setTab(t.id); setEmitir2Open(false); }}
-              style={{
-                padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
-                minWidth: 70, display: "none",
-                flexDirection: "column", alignItems: "center", justifyContent: "center",
-                background: tab === t.id ? "rgba(232,85,62,.1)" : "transparent",
-                color: tab === t.id ? "#E8553E" : "var(--text2)",
-                transition: "all .2s",
-              }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={t.icon} /></svg>
-              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>{t.label}</span>
-            </button>
-          ))}
-
-          {/* Emitir 2 — icono y texto dinámicos según último modo usado */}
-          <button onClick={() => setEmitir2Open(o => !o)}
-            style={{
-              padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 56,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              background: emitir2Open ? "rgba(232,85,62,.1)" : "transparent",
-              color: emitir2Open ? "#E8553E" : "var(--text2)",
-              transition: "all .2s",
-            }}>
-            {emitirMode === "dte" ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
-            )}
-            <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>
-              {emitirMode === "dte" ? "EMITIR BOLETA" : "EMITIR MASSDTE"} <span style={{fontSize:7,marginLeft:1}}>{emitir2Open ? "▾" : "▸"}</span>
-            </span>
-          </button>
-
-          {/* Options animadas: EMITIR DTE + EMITIR MASSDTE */}
-          <div style={{
-            overflow: "hidden",
-            display: "flex", alignItems: "center", gap: 3,
-            maxWidth: emitir2Open ? 240 : 0,
-            opacity: emitir2Open ? 1 : 0,
-            transform: emitir2Open ? "translateX(0)" : "translateX(-8px)",
-            transition: "max-width .25s cubic-bezier(.22,1,.36,1), opacity .2s ease, transform .25s cubic-bezier(.22,1,.36,1)",
-          }}>
-            <button onClick={() => { setEmitirMode("dte"); sessionStorage.setItem("emitir-mode", "dte"); setTab("emitir"); setEmitir2Open(false); }}
-              style={{
-                padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                background: "transparent", color: "var(--text2)", whiteSpace: "nowrap",
-                transition: "all .2s",
-              }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR BOLETA</span>
-            </button>
-            <button onClick={() => { setEmitirMode("massdte"); setTab("subir"); setEmitir2Open(false); }}
-              style={{
-                padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                background: tab === "subir" ? "rgba(232,85,62,.1)" : "transparent",
-                color: tab === "subir" ? "#E8553E" : "var(--text2)", whiteSpace: "nowrap",
-                transition: "all .2s",
-              }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
-              <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>EMITIR MASSDTE</span>
-            </button>
-          </div>
-
-          {/* Visualizar — oculto */}
-          <button onClick={() => setTab("visualizar")}
-            style={{
-              padding: "6px 8px", borderRadius: 6, border: "none", cursor: "pointer", minWidth: 70,
-              display: "none",
-              flexDirection: "column", alignItems: "center", justifyContent: "center",
-              background: tab === "visualizar" ? "rgba(232,85,62,.1)" : "transparent",
-              color: tab === "visualizar" ? "#E8553E" : "var(--text2)",
-              transition: "all .2s",
-            }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <span style={{fontSize:10,fontWeight:700,lineHeight:1.2,marginTop:2}}>Visualizar DTE</span>
-          </button>
-        </div>
-
-        {/* TOP RIGHT CONTROLS */}
-        <div style={{position:"fixed",top:22,right:24,zIndex:60,display:"flex",alignItems:"center",gap:8}}>
-          <button onClick={() => { setEmpresaOpen(true); }}
-            style={{width:38,height:38,borderRadius:10,border:"1px solid var(--header-border)",cursor:"pointer",background:"var(--header-bg)",backdropFilter:"blur(8px)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
-            <Buildings size={18} weight="bold" />
-          </button>
-          <button onClick={toggleTheme}
-            style={{
-              width: 38, height: 38, borderRadius: "50%", border: "1px solid var(--header-border)", cursor: "pointer",
-              background: "var(--header-bg)", backdropFilter: "blur(8px)",
-              color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 16, transition: "all .2s",
-            }}>
-            {theme === "dark" ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="5" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-              </svg>
-            )}
-          </button>
-        </div>
-
-        {/* TAB CONTENT */}
-        {tab === "dashboard" && <div style={{ padding: "84px 20px 20px" }}>{dashboardContent}</div>}
-        {tab === "subir" && <div style={{ padding: "100px 24px 24px" }}>{subirContent}</div>}
-        {tab === "revisar" && <div style={{ padding: "100px 24px 24px" }}>{revisarContent}</div>}
-        {tab === "emitir" && <div style={{ padding: "100px 24px 24px" }}>{emitirContent}</div>}
-        {tab === "visualizar" && <div style={{ padding: "100px 24px 24px" }}>{visualizarContent}</div>}
-
+      <div className="root-noise" style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
+        <TabErrorBoundary label="Dashboard">
+          <div>{dashboardContent}</div>
+        </TabErrorBoundary>
       </div>
+
+      {helpStepsEnabled && <DashboardHelpHarness onDisable={() => updateHelpSteps(false)} />}
+
+      {savedPulse && <SavedPulse key={savedPulse.id} label={savedPulse.label} />}
 
       {empresaOpen && (
         <EmpresaPopup
           inicial={empresaInicial}
-          tieneCertificado={empresaTieneCertificado}
           cafs={empresaCafs}
           empresaId={empresaId}
+          emisionConfig={empresaEmisionConfig}
+          devMode={devMode}
+          helpStepsEnabled={helpStepsEnabled}
+          onHelpStepsChange={updateHelpSteps}
           onClose={() => setEmpresaOpen(false)}
         />
       )}
     </>
+  );
+}
+
+function SavedPulse({ label }: { label: string }) {
+  return (
+    <div style={{ position: "fixed", left: "50%", bottom: 34, zIndex: 95, transform: "translateX(-50%)", animation: "saved-pop 1.45s cubic-bezier(.22,1,.36,1) both", pointerEvents: "none" }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 9, padding: "10px 14px 10px 10px", borderRadius: 999, background: "rgba(22,24,29,.86)", border: "1px solid rgba(34,197,94,.28)", color: "rgba(255,255,255,.92)", boxShadow: "0 18px 50px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", fontSize: 11, fontWeight: 850 }}>
+        <span style={{ position: "relative", width: 24, height: 24, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(34,197,94,.16)", color: "#22c55e", flexShrink: 0 }}>
+          <span style={{ position: "absolute", inset: 0, borderRadius: 999, border: "1px solid rgba(34,197,94,.45)", animation: "saved-ring .9s ease-out both" }} />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: "relative" }}><path d="M20 6 9 17l-5-5" /></svg>
+        </span>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function DashboardHelpHarness({ onDisable }: { onDisable: () => void }) {
+  const [markers, setMarkers] = useState<Array<{ n: number; left: number; top: number; width?: number; height?: number; group?: boolean }>>([]);
+  const [hoveredStep, setHoveredStep] = useState<number | null>(null);
+  const markersRef = useRef<Array<{ n: number; left: number; top: number; width?: number; height?: number; group?: boolean }>>([]);
+
+  useEffect(() => {
+    function getTargets() {
+      const step1 = document.querySelector<HTMLElement>(".sparkle-button");
+      const step1b = document.querySelector<HTMLElement>(".mass-sparkle-button");
+      const tabButtons = Array.from(document.querySelectorAll<HTMLElement>(".tab-bar button"));
+      return [[step1, step1b].filter(Boolean) as HTMLElement[], ...tabButtons.slice(0, 4)];
+    }
+
+    function positionMarkers() {
+      const targets = getTargets();
+      setMarkers(targets.flatMap((target, i) => {
+        const n = i + 1;
+        if (Array.isArray(target)) {
+          if (target.length === 0) return [];
+          const rects = target.map(el => el.getBoundingClientRect());
+          const left = Math.min(...rects.map(r => r.left));
+          const top = Math.min(...rects.map(r => r.top));
+          const right = Math.max(...rects.map(r => r.right));
+          const bottom = Math.max(...rects.map(r => r.bottom));
+          return [{ n, left, top, width: right - left, height: bottom - top, group: true }];
+        }
+        if (!target) return [];
+        const rect = target.getBoundingClientRect();
+        return [{ n, left: rect.left + rect.width / 2, top: rect.top, width: rect.width, height: rect.height }];
+      }));
+    }
+
+    const cleanups: Array<() => void> = [];
+    getTargets().forEach((target, i) => {
+      const step = i + 1;
+      const elements = Array.isArray(target) ? target : [target];
+      elements.forEach(el => {
+        if (!el) return;
+        const enter = () => setHoveredStep(step);
+        const leave = () => setHoveredStep(current => current === step ? null : current);
+        el.addEventListener("mouseenter", enter);
+        el.addEventListener("mouseleave", leave);
+        el.addEventListener("focus", enter);
+        el.addEventListener("blur", leave);
+        cleanups.push(() => {
+          el.removeEventListener("mouseenter", enter);
+          el.removeEventListener("mouseleave", leave);
+          el.removeEventListener("focus", enter);
+          el.removeEventListener("blur", leave);
+        });
+      });
+    });
+
+    positionMarkers();
+    const id = window.setInterval(positionMarkers, 300);
+    window.addEventListener("resize", positionMarkers);
+    window.addEventListener("scroll", positionMarkers, true);
+    return () => {
+      cleanups.forEach(cleanup => cleanup());
+      window.clearInterval(id);
+      window.removeEventListener("resize", positionMarkers);
+      window.removeEventListener("scroll", positionMarkers, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    markersRef.current = markers;
+  }, [markers]);
+
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      const found = markersRef.current.find((m) => {
+        const width = m.group ? (m.width ?? 0) + 10 : (m.width ?? 0);
+        const height = m.group ? (m.height ?? 0) + 10 : (m.height ?? 0);
+        const left = m.group ? m.left - 5 : m.left - width / 2;
+        const top = m.group ? m.top - 5 : m.top;
+        return e.clientX >= left && e.clientX <= left + width && e.clientY >= top && e.clientY <= top + height;
+      });
+      setHoveredStep(found?.n ?? null);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 70, pointerEvents: "none" }}>
+      <style>{`
+        .v5-help-step-badge{transition:opacity .16s ease,background .16s ease,border-color .16s ease;color .16s ease;pointer-events:none}
+      `}</style>
+      <button
+        type="button"
+        onClick={onDisable}
+        aria-label="Quitar ayuda de pasos"
+        style={{ position: "fixed", left: 22, bottom: 22, zIndex: 72, pointerEvents: "auto", display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderRadius: 999, border: "1px solid rgba(232,85,62,.36)", background: "rgba(15,16,20,.72)", color: "rgba(255,255,255,.88)", boxShadow: "0 14px 36px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", cursor: "pointer", fontSize: 10, fontWeight: 850, letterSpacing: ".01em" }}
+      >
+        <span style={{ width: 18, height: 18, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(232,85,62,.16)", color: "#E8553E", fontSize: 13, lineHeight: 1, fontWeight: 900 }}>×</span>
+        <span>Quitar ayuda</span>
+      </button>
+      {markers.map((m) => (
+        <div key={m.n}>
+          {m.group && (
+            <div style={{ position: "fixed", left: m.left - 6, top: m.top - 6, width: (m.width ?? 0) + 12, height: (m.height ?? 0) + 12, borderRadius: 16, border: `2px dashed ${hoveredStep === m.n ? "rgba(232,85,62,.95)" : "rgba(232,85,62,.58)"}`, opacity: hoveredStep === m.n ? 1 : .72, background: hoveredStep === m.n ? "rgba(232,85,62,.045)" : "rgba(232,85,62,.018)", boxShadow: hoveredStep === m.n ? "0 0 0 4px rgba(232,85,62,.09)" : "0 0 0 3px rgba(232,85,62,.035)", transition: "opacity .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease", pointerEvents: "none" }} />
+          )}
+          {m.group ? (
+            <span className="v5-help-step-badge" style={{ position: "fixed", left: m.left, top: m.top, transform: "translate(-50%, -18px)", width: 30, height: 30, borderRadius: 999, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, background: hoveredStep === m.n ? "#E8553E" : "rgba(232,85,62,.18)", color: hoveredStep === m.n ? "#fff" : "#E8553E", opacity: hoveredStep === m.n ? 1 : .42, border: `1px solid ${hoveredStep === m.n ? "rgba(255,255,255,.92)" : "rgba(232,85,62,.62)"}`, boxShadow: hoveredStep === m.n ? "0 0 0 4px rgba(232,85,62,.16), 0 8px 18px rgba(0,0,0,.22)" : "0 0 0 3px rgba(232,85,62,.07)", fontVariantNumeric: "tabular-nums", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+              <span style={{ fontSize: 6, fontWeight: 900, lineHeight: 1, textTransform: "uppercase", letterSpacing: ".03em" }}>Paso</span>
+              <span style={{ fontSize: 11, fontWeight: 950, lineHeight: 1 }}>{m.n}</span>
+            </span>
+          ) : (
+            <span className="v5-help-step-badge" style={{ position: "fixed", left: m.left, top: m.top, transform: "translate(-50%, -24px)", width: 30, height: 30, borderRadius: 999, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, background: hoveredStep === m.n ? "#E8553E" : "rgba(232,85,62,.18)", color: hoveredStep === m.n ? "#fff" : "#E8553E", opacity: hoveredStep === m.n ? 1 : .42, border: `1px solid ${hoveredStep === m.n ? "rgba(255,255,255,.92)" : "rgba(232,85,62,.62)"}`, boxShadow: hoveredStep === m.n ? "0 0 0 4px rgba(232,85,62,.16), 0 8px 18px rgba(0,0,0,.22)" : "0 0 0 3px rgba(232,85,62,.07)", fontVariantNumeric: "tabular-nums", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+              <span style={{ fontSize: 6, fontWeight: 900, lineHeight: 1, textTransform: "uppercase", letterSpacing: ".03em" }}>Paso</span>
+              <span style={{ fontSize: 11, fontWeight: 950, lineHeight: 1 }}>{m.n}</span>
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -27,13 +27,33 @@ export const getUsuario = cache(async (): Promise<UsuarioConEmpresa | null> => {
   const user = await getSession();
   const supabase = await createClient();
 
+  // Embed desambiguado: usuario_empresas (junction multiempresa) crea un segundo
+  // camino usuarios↔empresas, así que hay que indicar el FK directo o PostgREST
+  // falla el embed por ambigüedad.
   const { data } = await supabase
     .from("usuarios")
-    .select("*, empresas(*)")
+    .select("*, empresas!usuarios_empresa_id_fkey(*)")
     .eq("id", user.id)
     .single();
 
-  return data as UsuarioConEmpresa | null;
+  if (data) return data as UsuarioConEmpresa;
+
+  // Fallback robusto: si el cliente SSR no resuelve la fila (RLS/JWT no
+  // propagado), buscar por el user.id de la sesión validada vía service role,
+  // con dos queries separadas (sin embed, para evitar problemas de relación).
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url && key) {
+    const { createClient: createServiceClient } = await import("@supabase/supabase-js");
+    const sb = createServiceClient(url, key);
+    const { data: u } = await sb.from("usuarios").select("*").eq("id", user.id).single();
+    if (u?.empresa_id) {
+      const { data: emp } = await sb.from("empresas").select("*").eq("id", u.empresa_id).single();
+      if (emp) return { ...u, empresas: emp } as unknown as UsuarioConEmpresa;
+    }
+  }
+
+  return null;
 });
 
 export async function requireActiveEmpresa(): Promise<UsuarioConEmpresa> {

@@ -58,6 +58,26 @@ export async function POST(request: Request) {
   const movIds = (movimientos ?? []).map((m) => m.id);
 
   if (movIds.length > 0) {
+    // INTEGRIDAD TRIBUTARIA: si alguna propuesta de este documento ya tiene una
+    // boleta emitida (folio real en el SII), NO se puede deshacer — se corrige
+    // vía Nota de Crédito. Deshacer orfanaría folios reales. (El UI ya lo oculta;
+    // este guard es la defensa server-side.)
+    const { data: props } = await svc.from("propuestas_ia").select("id").in("movimiento_id", movIds);
+    const propIds = (props ?? []).map((p) => p.id);
+    if (propIds.length > 0) {
+      const { count } = await svc
+        .from("boletas_emitidas")
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", usuario.empresa_id)
+        .neq("estado", "anulada")
+        .in("propuesta_id", propIds);
+      if ((count ?? 0) > 0) {
+        return NextResponse.json(
+          { error: `Este documento tiene ${count} boleta(s) emitida(s) en el SII. No se puede deshacer; para corregir o anular, emite una Nota de Crédito.` },
+          { status: 409 },
+        );
+      }
+    }
     // Delete propuestas linked to these movimientos
     await svc.from("propuestas_ia").delete().in("movimiento_id", movIds);
   }

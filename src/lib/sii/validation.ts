@@ -145,7 +145,26 @@ export function validarBoleta(input: BoletaInput): {
     exento = totalProvisto;
   }
 
-  // Validación receptor omitida — el usuario tiene libertad de emisión
+  // --- Validación receptor según monto (Res. Ex. 174/2017) ---
+  // NOTA merge 2026-06-11: dev (mayo) había quitado este bloque ("libertad de
+  // emisión"), pero el flujo actual depende de él: pendientes-emision marca
+  // listo_emitir con este mismo umbral y la UI muestra el motivo. Si el equipo
+  // decide relajarlo, hay que cambiarlo AQUÍ y en lib/intermediario/
+  // pendientes-emision.ts a la vez, no solo en un lado.
+  if (totalProvisto > RECEPTOR_OBLIGATORIO_DESDE) {
+    if (!input.receptor_rut) {
+      errors.push({
+        code: "RECEPTOR_RUT_OBLIGATORIO",
+        message: `Para totales sobre $${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")} se requiere RUT del receptor`,
+      });
+    }
+    if (!input.receptor_razon_social || !input.receptor_razon_social.trim()) {
+      errors.push({
+        code: "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA",
+        message: `Para totales sobre $${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")} se requiere razón social del receptor`,
+      });
+    }
+  }
 
   // --- RUT receptor válido (si se provee) ---
   if (input.receptor_rut && !validarRut(input.receptor_rut)) {

@@ -1,12 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
 import type { AdapterConfig, AdapterRow } from "./types";
 
-// Using an untyped client here because parser_adapters and parser_logs are
-// newer than the last database.types.ts regeneration. Every call is already
-// wrapped in try/catch and returns null on failure, so loose typing has no
-// runtime impact.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type LooseClient = any;
+type LooseClient = SupabaseClient<Database>;
+
+// AdapterConfig es serializable pero como interface no satisface el index
+// signature de Json — cast estructural seguro para las columnas jsonb.
+const toJson = (cfg: AdapterConfig): Json => cfg as unknown as Json;
 
 /**
  * Best-effort CRUD for parser_adapters and parser_logs.
@@ -25,7 +25,7 @@ function getServiceClient(): LooseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key);
+  return createClient<Database>(url, key);
 }
 
 export async function getAdapterByFingerprint(
@@ -71,7 +71,7 @@ export async function upsertManualAdapter(args: {
         .from("parser_adapters")
         .update({
           source: "manual",
-          config: args.config,
+          config: toJson(args.config),
           nombre: args.nombre ?? null,
           tipo_doc: args.tipo_doc ?? "cartola_bancaria",
           confianza: 1.0,
@@ -89,7 +89,7 @@ export async function upsertManualAdapter(args: {
         nombre: args.nombre ?? null,
         tipo_doc: args.tipo_doc ?? "cartola_bancaria",
         source: "manual",
-        config: args.config,
+        config: toJson(args.config),
         confianza: 1.0,
         usage_count: 0,
         success_count: 0,
@@ -120,7 +120,7 @@ export async function saveAdapter(args: {
         nombre: args.nombre ?? null,
         tipo_doc: args.tipo_doc ?? "cartola_bancaria",
         source: args.source,
-        config: args.config,
+        config: toJson(args.config),
         confianza: 1.0,
         usage_count: 1,
         success_count: 1,

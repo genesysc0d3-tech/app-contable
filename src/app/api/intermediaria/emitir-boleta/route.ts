@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
-import { generarDTE, generarTED } from "@/lib/sii/dte-xml";
-import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/lib/intermediario/client";
+import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
+import { chileDateString } from "@/lib/chile-date";
+import { issueMockBoleta } from "@/lib/emission/mock";
+import { blockUnsupportedBackendProvider } from "@/lib/emission/provider-guards";
 
 /**
  * Capa intermediaria (emula Haulmer / OpenFactura).
@@ -15,7 +18,22 @@ import { enviarDTE, verificarCertificado, asegurarFoliosDisponibles } from "@/li
  * — la app no se entera.
  */
 
+// Roles que pueden emitir documentos tributarios (viewer solo consulta).
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
+
 export async function POST(request: Request) {
+  try {
+    return await handlePost(request);
+  } catch (error) {
+    console.error("[emitir-boleta] error no controlado", error);
+    return NextResponse.json(
+      { ok: false, error: "EMITIR_BOLETA_FAILED", detalle: error instanceof Error ? error.message : "Error inesperado" },
+      { status: 500 },
+    );
+  }
+}
+
+async function handlePost(request: Request) {
   // 1. Auth
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -23,11 +41,15 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, empresas(rut, razon_social, giro, direccion, comuna)")
+    .select("empresa_id, rol, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna)")
     .eq("id", user.id)
     .single();
   if (!usuario || !usuario.empresa_id) {
     return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  }
+  // Emitir DTEs es un acto tributario: viewer queda fuera.
+  if (!ROLES_EMISION.has(String(usuario.rol))) {
+    return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO", detalle: "Tu rol no permite emitir documentos" }, { status: 403 });
   }
   const empresa = usuario.empresas as unknown as {
     rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null;
@@ -39,8 +61,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // DEMO: omitimos verificación de certificado SII.
-  // En producción: const certCheck = await verificarCertificado(usuario.empresa_id);
+  // El certificado SII delegado se verifica más abajo, solo si el proveedor
+  // efectivo NO es mock (la simulación no lo necesita).
 
   // 2. Parse body
   let body: BoletaInput;
@@ -63,66 +85,62 @@ export async function POST(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
-  const sb = createServiceClient(url, key);
-
-  // 5. Consumir folio del CAF (atómico). El intermediario auto-solicita al
-  // SII si no hay folios activos — como haría Haulmer/OpenFactura real.
-  await asegurarFoliosDisponibles(usuario.empresa_id, body.tipo_dte);
-  const { data: folioRes, error: folioErr } = await sb.rpc("consume_next_folio", {
-    p_empresa_id: usuario.empresa_id,
-    p_tipo_dte: body.tipo_dte,
-  });
-  if (folioErr || !folioRes || folioRes.length === 0) {
+  const sb = createServiceClient<Database>(url, key);
+  const emisionConfig = await obtenerConfigEmision(usuario.empresa_id).catch(() => null);
+  if (!emisionConfig) {
     return NextResponse.json(
-      { ok: false, error: "SIN_FOLIOS_DISPONIBLES", detalle: "El intermediario no pudo obtener folios del SII" },
+      { ok: false, error: "EMISION_CONFIG_ERROR", detalle: "No se pudo leer el proveedor de emisión de la empresa" },
+      { status: 500 },
+    );
+  }
+  const proveedorEfectivo = providerForTipoDte(emisionConfig, body.tipo_dte);
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[emitir-boleta] proveedor efectivo", {
+      empresaId: usuario.empresa_id,
+      tipoDte: body.tipo_dte,
+      proveedor: proveedorEfectivo,
+    });
+  }
+
+  const providerBlock = blockUnsupportedBackendProvider(proveedorEfectivo);
+  if (providerBlock) return providerBlock;
+
+  // 5. Mock consume CAF local. Otros proveedores no deben caer a este carril.
+  const fecha_emision = chileDateString();
+  const fechaEmisionReal = fecha_emision;
+  const proveedorRespuesta: Record<string, unknown> | null = null;
+
+  if (proveedorEfectivo !== "mock") {
+    // Emisión real exige certificado digital delegado al intermediario. El
+    // check vive ANTES del futuro carril backend para que al implementarlo
+    // no se pueda olvidar. Mock (simulación) no lo necesita.
+    const cert = await verificarCertificado(usuario.empresa_id);
+    if (!cert.ok) {
+      return NextResponse.json(
+        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
+        { status: 412 },
+      );
+    }
+    return NextResponse.json(
+      { ok: false, error: "PROVEEDOR_NO_IMPLEMENTADO", detalle: "Este proveedor no tiene carril backend habilitado para emisión directa." },
       { status: 502 },
     );
   }
-  const { folio, caf_id } = folioRes[0] as { folio: number; caf_id: string };
 
-  // 6. Generar XML DTE + TED con datos canonicalizados
-  const fecha_emision = new Date().toISOString().slice(0, 10);
-  const dteArgs = {
-    tipo_dte: body.tipo_dte,
-    folio,
-    fecha_emision,
-    emisor: {
-      rut: empresa.rut,
-      razon_social: empresa.razon_social,
-      giro: empresa.giro,
-      direccion: empresa.direccion,
-      comuna: empresa.comuna,
-    },
-    receptor: body.receptor_rut
-      ? {
-          rut: body.receptor_rut,
-          razon_social: body.receptor_razon_social,
-          direccion: body.receptor_direccion,
-          comuna: body.receptor_comuna,
-        }
-      : undefined,
+  const mockIssue = await issueMockBoleta({
+    sb,
+    empresaId: usuario.empresa_id,
+    empresa,
+    body,
     totales: validation.totales,
-    detalles: body.detalles,
-  };
-  const xml_dte = generarDTE(dteArgs);
-  const ted = generarTED(dteArgs);
-
-  // 7. Enviar el DTE al SII vía el cliente intermediario. In-process en mock;
-  // será fetch a Haulmer/OpenFactura cuando se integre con proveedor real.
-  const envio = await enviarDTE(xml_dte);
-  if (!envio.ok || !envio.track_id || !envio.estado_persistencia) {
+    fechaEmision: fechaEmisionReal,
+  });
+  if (!mockIssue.ok) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "SII_RECHAZO",
-        codigo_rechazo: envio.codigo_rechazo,
-        detalle: envio.detalle ?? envio.mensaje,
-      },
-      { status: 422 },
+      { ok: false, error: mockIssue.error, codigo_rechazo: mockIssue.codigo_rechazo, detalle: mockIssue.detalle },
+      { status: mockIssue.status },
     );
   }
-  const trackId = envio.track_id;
-  const estadoSii = envio.estado_persistencia;
 
   // 8. Persistir boleta
   const { data: boleta, error: insertErr } = await sb
@@ -130,9 +148,9 @@ export async function POST(request: Request) {
     .insert({
       empresa_id: usuario.empresa_id,
       tipo_dte: body.tipo_dte,
-      folio,
-      caf_id,
-      fecha_emision,
+      folio: mockIssue.folio,
+      caf_id: mockIssue.cafId,
+      fecha_emision: fechaEmisionReal,
       emisor_rut: empresa.rut,
       emisor_razon_social: empresa.razon_social,
       emisor_giro: empresa.giro,
@@ -146,11 +164,16 @@ export async function POST(request: Request) {
       monto_exento: validation.totales.exento,
       iva: validation.totales.iva,
       monto_total: validation.totales.total,
-      detalles: body.detalles,
-      xml_dte,
-      ted,
-      track_id: trackId,
-      estado: estadoSii,
+      detalles: body.detalles as unknown as Json,
+      xml_dte: mockIssue.xmlDte,
+      ted: mockIssue.ted,
+      track_id: mockIssue.trackId,
+      estado: mockIssue.estadoPersistencia,
+      emision_proveedor: proveedorEfectivo,
+      // Este carril solo emite mock (otros proveedores se bloquean antes):
+      // siempre es una emisión simulada, sin validez tributaria.
+      emision_sandbox: true,
+      proveedor_respuesta: proveedorRespuesta,
     })
     .select("id, folio, monto_total, estado, track_id, fecha_emision")
     .single();
@@ -162,6 +185,28 @@ export async function POST(request: Request) {
     );
   }
 
+  const receptorLabel = body.receptor_razon_social?.trim() || "consumidor final";
+  const { error: docInsertErr } = await sb.from("documentos_subidos").insert({
+    empresa_id: usuario.empresa_id,
+    nombre_archivo: `Boleta unica #${boleta.folio} - ${receptorLabel}`,
+    tipo: "boleta_unica",
+    storage_path: `boleta-unica://${boleta.id}`,
+    estado: "procesado",
+    movimientos_detectados: 1,
+    created_at: `${fechaEmisionReal}T12:00:00.000Z`,
+    progreso_ia: {
+      origen: "emision_directa",
+      proveedor: proveedorEfectivo,
+      sandbox: true,
+      boleta_id: boleta.id,
+      folio: boleta.folio,
+      tipo_dte: body.tipo_dte,
+      monto_total: boleta.monto_total,
+      receptor: receptorLabel,
+      etiqueta: "Boleta unica",
+    },
+  });
+
   return NextResponse.json({
     ok: true,
     boleta_id: boleta.id,
@@ -171,6 +216,11 @@ export async function POST(request: Request) {
     monto_total: boleta.monto_total,
     track_id: boleta.track_id,
     estado: boleta.estado,
-    mensaje: `Boleta tipo ${body.tipo_dte} folio ${boleta.folio} emitida (mock)`,
+    registro_agregados: docInsertErr ? "warning" : "ok",
+    proveedor: proveedorEfectivo,
+    sandbox: true,
+    mensaje: `Boleta tipo ${body.tipo_dte} folio ${boleta.folio} emitida (${proveedorEfectivo})`,
   });
 }
+
+export const dynamic = "force-dynamic";

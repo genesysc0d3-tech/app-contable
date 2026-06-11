@@ -7,7 +7,7 @@ import { Gear, DeviceMobile, Monitor, Check } from "@phosphor-icons/react";
 type Modo = "mobile" | "escritorio";
 
 function currentModo(pathname: string): Modo {
-  return pathname.startsWith("/escritorio") ? "escritorio" : "mobile";
+  return pathname.startsWith("/escritorio") || pathname.startsWith("/massdte") ? "escritorio" : "mobile";
 }
 
 export default function SettingsMenu() {
@@ -37,7 +37,7 @@ export default function SettingsMenu() {
     localStorage.setItem("ui-modo", next);
     setOpen(false);
     if (next === modo) return;
-    router.push(next === "escritorio" ? "/escritorio" : "/subir");
+    router.push(next === "escritorio" ? "/massdte" : "/subir");
   }
 
   return (

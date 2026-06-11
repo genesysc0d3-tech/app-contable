@@ -3,23 +3,29 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EmisorForm from "../../empresa/EmisorForm";
-import CertificadoToggle from "../../empresa/CertificadoToggle";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import AiKeyConfig from "../../empresa/AiKeyConfig";
+import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
 
 export default function EmpresaPopup({
   inicial,
-  tieneCertificado,
   cafs,
   empresaId,
+  emisionConfig,
+  devMode = false,
+  helpStepsEnabled,
+  onHelpStepsChange,
   onClose,
 }: {
   inicial: DatosEmisor;
-  tieneCertificado: boolean;
   cafs: CAFRow[];
   empresaId: string;
+  emisionConfig: EmissionProviderState;
+  devMode?: boolean;
+  helpStepsEnabled?: boolean;
+  onHelpStepsChange?: (enabled: boolean) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -27,7 +33,7 @@ export default function EmpresaPopup({
   const router = useRouter();
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  useEffect(() => { router.refresh(); }, []); // Refresh server data on mount
+  useEffect(() => { router.refresh(); }, [router]); // Refresh server data on mount
 
   const handleClose = useCallback(() => {
     // Auto-save EmisorForm before closing
@@ -35,6 +41,7 @@ export default function EmpresaPopup({
       const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
       form?.requestSubmit();
     }
+    window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Empresa guardada" } }));
     onClose();
   }, [step, onClose]);
 
@@ -119,30 +126,31 @@ export default function EmpresaPopup({
           z-index: 100;
           display: grid;
           place-items: center;
-          padding: 30px;
+          padding: 24px;
           background: rgba(0, 0, 0, 0.58);
-          backdrop-filter: blur(14px);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          animation: epFadeIn .2s ease both;
         }
 
+        @keyframes epFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
         .ep-modal {
-          width: min(1100px, calc(100vw - 60px));
-          height: min(780px, calc(100dvh - 60px));
+          width: min(1100px, 96vw);
+          height: min(780px, 88vh);
           overflow: hidden;
-          border-radius: 24px;
-          border: 1px solid rgba(255, 255, 255, 0.16);
-          background:
-            radial-gradient(circle at 14% 0%, rgba(139, 92, 246, 0.13), transparent 30%),
-            radial-gradient(circle at 96% 2%, rgba(101, 184, 255, 0.08), transparent 30%),
-            linear-gradient(145deg, rgba(17, 26, 39, 0.96), rgba(9, 16, 26, 0.97));
-          box-shadow: 0 40px 120px rgba(0, 0, 0, 0.56);
+          border-radius: 20px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--border);
           display: grid;
           grid-template-columns: 280px 1fr;
-          color: #f4f7fb;
+          color: var(--text);
         }
 
         .ep-wizard {
-          border-right: 1px solid rgba(255, 255, 255, 0.105);
-          background: linear-gradient(180deg, rgba(13, 22, 35, 0.92), rgba(9, 16, 26, 0.96));
+          border-right: 1px solid var(--border);
+          background: var(--surface);
           padding: 16px;
           display: flex;
           flex-direction: column;
@@ -162,8 +170,8 @@ export default function EmpresaPopup({
           padding: 12px 10px;
           border-radius: 12px;
           border: 1px solid transparent;
-          color: #a8b2c1;
-          background: rgba(255, 255, 255, 0.018);
+          color: var(--text2);
+          background: var(--bg-muted);
           position: relative;
           transition:
             background 160ms ease,
@@ -180,13 +188,13 @@ export default function EmpresaPopup({
           top: -7px;
           width: 1px;
           height: 6px;
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--border);
         }
 
         .ep-step-card:hover {
-          color: #f4f7fb;
-          background: rgba(255, 255, 255, 0.045);
-          border-color: rgba(255, 255, 255, 0.075);
+          color: var(--text);
+          background: var(--bg-muted);
+          border-color: var(--border);
           transform: translateY(-1px);
         }
 
@@ -207,8 +215,8 @@ export default function EmpresaPopup({
           border-radius: 50%;
           display: grid;
           place-items: center;
-          background: rgba(255, 255, 255, 0.105);
-          color: #d7deea;
+          background: var(--surface2, var(--bg-muted));
+          color: var(--text2);
           font-weight: 760;
           font-size: 11px;
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -237,15 +245,15 @@ export default function EmpresaPopup({
         .ep-step-subtitle {
           font-size: 10px;
           line-height: 1.2;
-          color: rgba(225, 232, 242, 0.6);
+          color: var(--text2);
         }
 
         .ep-help-box {
           margin-top: auto;
           padding: 12px;
           border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.10);
-          background: rgba(255, 255, 255, 0.045);
+          border: 1px solid var(--border);
+          background: var(--bg-muted);
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
         }
 
@@ -256,7 +264,7 @@ export default function EmpresaPopup({
           display: grid;
           place-items: center;
           background: linear-gradient(145deg, #E8553E, #cd5832);
-          color: #ffffff;
+          color: var(--text);
           font-weight: 900;
           margin-bottom: 8px;
           font-size: 12px;
@@ -271,7 +279,7 @@ export default function EmpresaPopup({
         }
 
         .ep-help-text {
-          color: #a8b1bf;
+          color: var(--text2);
           font-size: 11px;
           line-height: 1.4;
           margin-bottom: 10px;
@@ -286,11 +294,63 @@ export default function EmpresaPopup({
           text-underline-offset: 3px;
         }
 
+        .ep-help-toggle {
+          width: 100%;
+          padding: 8px 9px;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          font-size: 10px;
+          font-weight: 760;
+          transition: border-color .16s ease, background .16s ease, color .16s ease;
+        }
+
+        .ep-help-toggle:hover {
+          border-color: rgba(232, 85, 62, 0.38);
+          background: rgba(232, 85, 62, 0.06);
+          color: #E8553E;
+        }
+
+        .ep-help-switch {
+          width: 30px;
+          height: 16px;
+          padding: 2px;
+          border-radius: 999px;
+          background: var(--bg-muted);
+          border: 1px solid var(--border);
+          flex-shrink: 0;
+        }
+
+        .ep-help-switch-dot {
+          display: block;
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: var(--text3);
+          transition: transform .18s ease, background .18s ease;
+        }
+
+        .ep-help-toggle.active .ep-help-switch {
+          background: rgba(232, 85, 62, 0.14);
+          border-color: rgba(232, 85, 62, 0.34);
+        }
+
+        .ep-help-toggle.active .ep-help-switch-dot {
+          transform: translateX(14px);
+          background: #E8553E;
+        }
+
         .ep-main-panel {
           min-width: 0;
           display: grid;
           grid-template-rows: auto 1fr auto;
-          max-height: min(780px, calc(100dvh - 60px));
+          max-height: min(780px, 88vh);
         }
 
         .ep-modal-header {
@@ -299,7 +359,7 @@ export default function EmpresaPopup({
           display: flex;
           align-items: center;
           gap: 14px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.105);
+          border-bottom: 1px solid var(--border);
         }
 
         .ep-header-icon {
@@ -313,7 +373,7 @@ export default function EmpresaPopup({
           box-shadow:
             0 18px 40px rgba(232, 85, 62, 0.20),
             inset 0 1px 0 rgba(255, 255, 255, 0.16);
-          color: #fca5a5;
+          color: #fff;
           flex-shrink: 0;
         }
 
@@ -333,12 +393,12 @@ export default function EmpresaPopup({
           line-height: 1.1;
           letter-spacing: -0.04em;
           font-weight: 780;
-          color: #f4f7fb;
+          color: var(--text);
         }
 
         .ep-subtitle {
           margin: 4px 0 0;
-          color: #a8b2c1;
+          color: var(--text2);
           font-size: 12px;
         }
 
@@ -346,9 +406,9 @@ export default function EmpresaPopup({
           width: 36px;
           height: 36px;
           border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.105);
-          background: rgba(255, 255, 255, 0.045);
-          color: #dce3ed;
+          border: 1px solid var(--border);
+          background: var(--bg-muted);
+          color: var(--text2);
           font-size: 30px;
           line-height: 1;
           cursor: pointer;
@@ -359,9 +419,9 @@ export default function EmpresaPopup({
         }
 
         .ep-close-btn:hover {
-          background: rgba(255, 255, 255, 0.075);
-          border-color: rgba(255, 255, 255, 0.16);
-          color: #ffffff;
+          background: var(--surface);
+          border-color: var(--border);
+          color: var(--text);
         }
 
         .ep-content {
@@ -369,6 +429,50 @@ export default function EmpresaPopup({
           padding: 24px 32px 28px;
           scrollbar-width: thin;
           scrollbar-color: rgba(160, 170, 185, 0.32) transparent;
+        }
+
+        .ep-main-panel.step-emisor {
+          max-height: min(820px, 92vh);
+        }
+
+        .ep-modal:has(.ep-main-panel.step-emisor) {
+          height: min(820px, 92vh);
+        }
+
+        .ep-main-panel.step-emisor .ep-modal-header {
+          min-height: 60px;
+          padding: 12px 18px;
+          gap: 10px;
+        }
+
+        .ep-main-panel.step-emisor .ep-header-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+        }
+
+        .ep-main-panel.step-emisor .ep-header-icon svg {
+          width: 19px;
+          height: 19px;
+        }
+
+        .ep-main-panel.step-emisor .ep-modal-header h1 {
+          font-size: 18px;
+        }
+
+        .ep-main-panel.step-emisor .ep-subtitle {
+          margin-top: 2px;
+          font-size: 11px;
+        }
+
+        .ep-main-panel.step-emisor .ep-content {
+          overflow: auto;
+          padding: 12px 18px;
+        }
+
+        .ep-main-panel.step-emisor .ep-main-footer {
+          min-height: 46px;
+          padding: 7px 16px;
         }
 
         .ep-content-inner {
@@ -387,8 +491,8 @@ export default function EmpresaPopup({
         .ep-main-footer {
           min-height: 56px;
           padding: 10px 20px;
-          border-top: 1px solid rgba(255, 255, 255, 0.105);
-          background: rgba(255, 255, 255, 0.025);
+          border-top: 1px solid var(--border);
+          background: var(--surface);
           display: flex;
           gap: 12px;
         }
@@ -403,9 +507,9 @@ export default function EmpresaPopup({
           min-width: 100px;
           height: 36px;
           border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.10);
-          background: rgba(255, 255, 255, 0.055);
-          color: #f5f7fb;
+          border: 1px solid var(--border);
+          background: var(--bg-muted);
+          color: var(--text);
           font-size: 14px;
           font-weight: 760;
           cursor: pointer;
@@ -417,8 +521,8 @@ export default function EmpresaPopup({
         }
 
         .ep-footer-btn:hover {
-          background: rgba(255, 255, 255, 0.085);
-          border-color: rgba(255, 255, 255, 0.16);
+          background: var(--surface);
+          border-color: var(--border);
           transform: translateY(-1px);
         }
 
@@ -521,11 +625,10 @@ export default function EmpresaPopup({
         </main>
       </div>
 
-      <div className="ep-overlay" onClick={handleClose}>
+      <div className="ep-overlay">
         <section
           ref={ref}
           className="ep-modal"
-          onClick={(e) => e.stopPropagation()}
           aria-label="Configuración de empresa"
         >
           <aside className="ep-wizard" aria-label="Pasos de configuración">
@@ -538,21 +641,21 @@ export default function EmpresaPopup({
               },
               {
                 n: 2,
-                icon: "M12 3 5 6v5c0 4.5 3 8.2 7 10 4-1.8 7-5.5 7-10V6l-7-3Z",
-                title: "Certificado SII",
-                sub: "Estado del certificado",
+                icon: "M7 3h7l4 4v14H7V3Z",
+                title: "Formatos de cartola",
+                sub: "Sube y mapea formatos",
               },
               {
                 n: 3,
-                icon: "M7 3h7l4 4v14H7V3Z",
-                title: "Formatos de cartola",
-                sub: "Subí y mapeá formatos",
-              },
-              {
-                n: 4,
                 icon: "M4 7h16v12H4V7Z",
                 title: "Folios CAF",
                 sub: "Gestión automática",
+              },
+              {
+                n: 4,
+                icon: "M4 7h16M7 4v16M17 4v16M4 17h16",
+                title: "Emisión",
+                sub: "Modo de prueba o SII local",
               },
               {
                 n: 5,
@@ -588,13 +691,23 @@ export default function EmpresaPopup({
               <div className="ep-help-icon">?</div>
               <div className="ep-help-title">¿Necesitas ayuda?</div>
               <div className="ep-help-text">
-                Te guiamos en cada paso para dejar la empresa lista.
+                Mostramos números sobre el dashboard para seguir el flujo.
               </div>
-              <div className="ep-help-link">Ver documentación ↗</div>
+              <button
+                type="button"
+                className={`ep-help-toggle${helpStepsEnabled ? " active" : ""}`}
+                aria-pressed={Boolean(helpStepsEnabled)}
+                onClick={() => onHelpStepsChange?.(!helpStepsEnabled)}
+              >
+                <span>{helpStepsEnabled ? "Quitar pasos" : "Mostrar pasos"}</span>
+                <span className="ep-help-switch" aria-hidden="true">
+                  <span className="ep-help-switch-dot" />
+                </span>
+              </button>
             </div>
           </aside>
 
-          <main className="ep-main-panel">
+          <main className={`ep-main-panel${step === 0 ? " step-emisor" : ""}`}>
             <header className="ep-modal-header">
               <div className="ep-header-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -625,11 +738,11 @@ export default function EmpresaPopup({
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <EmisorForm inicial={inicial} /> },
-                  { key: "certificado", content: <CertificadoToggle inicial={tieneCertificado} /> },
+                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
-                  { key: "folios", content: <CAFPanel cafs={cafs} /> },
-                  { key: "ia", content: <AiKeyConfig /> },
+                  { key: "folios", content: <CAFPanel cafs={cafs} proveedor={emisionConfig.boletasProveedor} /> },
+                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} /> },
+                  { key: "ia", content: <AiKeyConfig devMode={devMode} /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}
@@ -652,7 +765,7 @@ export default function EmpresaPopup({
                   Cancelar
                 </button>
 
-                {step < 4 ? (
+                {step < 5 ? (
                   <button className="ep-footer-btn primary" onClick={() => goToStep(step + 1)}>
                     Siguiente ›
                   </button>
