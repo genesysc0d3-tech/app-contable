@@ -358,21 +358,25 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 .agg-card:hover::before{opacity:.15}
                 .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 1.5px var(--c)}
                 .agg-top{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
-                .agg-chip{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:7px;background:var(--c-bg);border:1px solid var(--c-bd);color:var(--c);font-size:10.5px;font-weight:900;letter-spacing:.02em}
+                .agg-chip{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:var(--c-bg);border:1px solid var(--c-bd);color:var(--c)}
+                .agg-chip svg{width:14px;height:14px}
+                @keyframes aggVisorFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+                .agg-visor-fade{animation:aggVisorFade .3s cubic-bezier(.16,1,.3,1)}
                 .agg-dot{width:7px;height:7px;border-radius:999px;background:var(--c);box-shadow:0 0 6px var(--c)}
                 .agg-body{position:relative;flex:1;margin-top:7px;display:flex;flex-direction:column;justify-content:flex-end}
                 .agg-num{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px;transition:font-size .32s cubic-bezier(.16,1,.3,1),margin-bottom .3s ease}
-                .agg-card:hover .agg-num{font-size:12px;margin-bottom:5px}
+                .agg-card:hover .agg-num{font-size:13px;margin-bottom:5px}
                 .agg-info{max-height:0;opacity:0;overflow:hidden;display:flex;flex-direction:column;gap:2px;transition:max-height .34s cubic-bezier(.16,1,.3,1),opacity .25s ease,margin-bottom .3s ease}
                 .agg-card:hover .agg-info{max-height:42px;opacity:1;margin-bottom:6px}
-                .agg-info .s{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:800;color:var(--c);line-height:1.05}
+                .agg-info .s{display:flex;align-items:center;gap:4px;font-size:9px;font-weight:800;color:var(--c);line-height:1.2}
                 .agg-info .s svg{width:10px;height:10px;flex-shrink:0}
-                .agg-info .d{font-size:8px;color:var(--text2);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-info .e{display:flex;align-items:center;gap:3px;font-size:7.5px;font-weight:700;color:#22c55e}
+                .agg-info .d{font-size:8.5px;color:var(--text2);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-info .e{display:flex;align-items:center;gap:3px;font-size:8.5px;font-weight:700;color:#22c55e}
                 .agg-bar{width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
                 .agg-bar i{display:block;height:100%;border-radius:999px;background:var(--c);width:var(--p);transition:width .6s cubic-bezier(.16,1,.3,1)}
               `}</style>
               {/* VISOR: el doc fijado (click) se ve IGUAL que en modo fila (mismas clases) */}
+              <div key={selected ?? "empty"} className="agg-visor-fade">
               {sd ? (
                 <div className="doc-card" style={isBoletaTipo(sd.tipo) ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
                   <div className="dh" style={isBoletaTipo(sd.tipo) ? { padding: "6px 8px", gap: 5 } : undefined}>
@@ -397,6 +401,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   <span style={{fontSize:11,lineHeight:1.4}}>Haz <b style={{color:"var(--text)"}}>click</b> en un cuadrado para fijarlo aquí como fila.</span>
                 </div>
               )}
+              </div>
               {/* Leyenda PERSISTENTE (siempre): color = estado, letra = tipo. No cambia al fijar */}
               <div style={{padding:"0 2px",display:"flex",flexWrap:"wrap",alignItems:"center",gap:9,fontSize:9.5,minHeight:16}}>
                 <span style={{color:"var(--text2)",fontWeight:800}}>Estado:</span>
@@ -405,9 +410,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 ))}
                 <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
                 <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
-                {([["A","Afecta"],["E","Exenta"],["G","Gasto"],["B","Boleta"]] as const).map(([k,l]) => (
-                  <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><b style={{color:"var(--text)",fontWeight:900}}>{k}</b>{l}</span>
-                ))}
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h14v16.5l-2.33-1.4-2.34 1.4-2.33-1.4-2.34 1.4-2.33-1.4L5 19.5z"/><path d="M8.5 8h7"/><path d="M8.5 11.5h4.5"/></svg>Boleta</span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Masivo</span>
               </div>
               {/* GRILLA de cuadrados: color=estado, letra=tipo. Hover revela info; click lo fija en el visor */}
               <div className="agg-grid">
@@ -418,7 +422,11 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       style={{ "--c": c, "--c-bd": `${c}66` } as CSSProperties}
                       onClick={() => setSelected(s => s === doc.id ? null : doc.id)} title={doc.nombre_archivo}>
                       <div className="agg-top">
-                        <span className="agg-chip">{tipoLetra(doc)}</span>
+                        <span className="agg-chip">
+                          {isBoletaTipo(doc.tipo)
+                            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h14v16.5l-2.33-1.4-2.34 1.4-2.33-1.4-2.34 1.4-2.33-1.4L5 19.5z"/><path d="M8.5 8h7"/><path d="M8.5 11.5h4.5"/></svg>
+                            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>}
+                        </span>
                         <span className="agg-dot" />
                       </div>
                       <div className="agg-body">
