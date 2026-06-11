@@ -322,6 +322,11 @@ export async function POST(request: Request) {
     }
 
     const receptorLabel = receptor_razon_social?.trim() || "consumidor final";
+    // created_at anclado al día tributario chileno: hora fija 12 UTC (nunca
+    // cruza de fecha — ver fix_chile_evening_emission_dates), pero con
+    // min/seg/ms reales para que el orden dentro del lote sea estable.
+    const tsNow = new Date();
+    const anchorTs = `${fechaEmisionReal}T12:${String(tsNow.getUTCMinutes()).padStart(2, "0")}:${String(tsNow.getUTCSeconds()).padStart(2, "0")}.${String(tsNow.getUTCMilliseconds()).padStart(3, "0")}Z`;
     await sb.from("documentos_subidos").insert({
       empresa_id: usuario.empresa_id,
       nombre_archivo: `Boleta #${boleta.folio} - ${receptorLabel}`,
@@ -329,11 +334,12 @@ export async function POST(request: Request) {
       storage_path: `boleta-lote://${boleta.id}`,
       estado: "procesado",
       movimientos_detectados: 1,
-      created_at: `${fechaEmisionReal}T12:00:00.000Z`,
+      created_at: anchorTs,
       progreso_ia: {
         origen: "emision_lote",
         proveedor: proveedorEfectivo,
-        sandbox: false,
+        // Coherente con emision_sandbox de la boleta: este carril es mock.
+        sandbox: true,
         propuesta_id: pid,
         boleta_id: boleta.id,
         folio: boleta.folio,
@@ -364,7 +370,7 @@ export async function POST(request: Request) {
     fallos,
     monto_emitido,
     proveedor: emisionConfig.boletasProveedor,
-    sandbox: false,
+    sandbox: true,
     resultados: results,
   });
   } catch (err) {
