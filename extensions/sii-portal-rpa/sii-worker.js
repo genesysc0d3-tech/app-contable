@@ -7,6 +7,23 @@
   let currentJobId = null;
   let automationClickInProgress = false;
   let autoCloseTimer = null;
+  let capturedSharePdf = null; // PDF capturado vía COMPARTIR (hook MAIN world)
+
+  // El hook en MAIN world (sii-notif-suppress.js) intercepta navigator.share y
+  // nos manda el PDF de la boleta como base64. Lo guardamos para la captura.
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    const d = event.data;
+    if (d && d.source === "massdte-share-pdf" && typeof d.base64 === "string" && d.base64.length > 100) {
+      capturedSharePdf = {
+        source: "share_capture",
+        base64: d.base64,
+        content_type: typeof d.type === "string" && /pdf/i.test(d.type) ? d.type : "application/pdf",
+        filename: typeof d.name === "string" && d.name ? d.name : "boleta.pdf",
+        size: typeof d.size === "number" ? d.size : 0,
+      };
+    }
+  }, false);
 
   function ensureOverlay() {
     let overlay = document.getElementById(OVERLAY_ID);
@@ -718,6 +735,22 @@
     };
   }
 
+  // Captura el PDF oficial vía COMPARTIR: clickea el botón del recibo; el hook
+  // en MAIN world intercepta navigator.share y nos manda el PDF como base64.
+  // Es la vía primaria (PDF oficial, sin 403 de S3, sin diálogo, sin OCR).
+  async function tryCaptureSharePdf() {
+    const btn = Array.from(document.querySelectorAll("button"))
+      .find((b) => /compartir/i.test(b.innerText || b.textContent || ""));
+    if (!btn) return null;
+    capturedSharePdf = null;
+    await clickElement(btn);
+    for (let i = 0; i < 24; i += 1) {
+      if (capturedSharePdf) return capturedSharePdf;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return capturedSharePdf;
+  }
+
   async function fillAndEmit(job) {
     const amount = String(Math.max(0, Math.round(Number(job?.totales?.monto_total ?? 0))));
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
@@ -840,6 +873,13 @@
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1200 : 1500));
       const result = captureResult(job);
       if (hasStrongFolioResult(result)) {
+        // Folio fuerte + estamos en el recibo → capturar el PDF oficial vía
+        // COMPARTIR (primario). Si no se logra, el background cae a DESCARGAR.
+        if (!result.pdf?.base64) {
+          renderOverlay("LOCKED_AUTOMATION", "Capturando el PDF de la boleta.");
+          const sharePdf = await tryCaptureSharePdf();
+          if (sharePdf) result.pdf = sharePdf;
+        }
         renderOverlay("DONE", `Boleta emitida. Folio ${result.folio}.`);
         return result;
       }

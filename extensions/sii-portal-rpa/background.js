@@ -51,7 +51,7 @@ function hasCapturedPdf(result) {
   return Boolean(
     result?.pdf?.base64 &&
     result.pdf.content_type === "application/pdf" &&
-    result.pdf.source === "extension_session_fetch",
+    (result.pdf.source === "extension_session_fetch" || result.pdf.source === "share_capture"),
   );
 }
 
