@@ -352,25 +352,27 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           return (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <style>{`
-                .agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-                .agg-card{position:relative;border-radius:18px;cursor:pointer;padding:14px 15px;display:flex;flex-direction:column;gap:11px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 18px -8px rgba(0,0,0,.5);transition:transform .26s cubic-bezier(.16,1,.3,1),box-shadow .26s ease,border-color .2s ease}
-                .agg-card:hover{transform:translateY(-5px);box-shadow:0 22px 36px -14px rgba(0,0,0,.6);border-color:var(--c-bd);z-index:20}
-                .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 1.5px var(--c),0 12px 24px -10px rgba(0,0,0,.55)}
-                .agg-head{display:flex;align-items:center;gap:8px}
-                .agg-ic{width:28px;height:28px;border-radius:999px;background:var(--c);display:grid;place-items:center;flex-shrink:0;box-shadow:0 4px 10px -3px var(--c-bd)}
-                .agg-ic svg{width:15px;height:15px}
-                .agg-label{font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-trend{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--c);flex-shrink:0}
-                .agg-num{font-size:27px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-bar{width:100%;height:6px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden}
+                .agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:9px}
+                .agg-card{position:relative;aspect-ratio:1;border-radius:14px;cursor:pointer;overflow:hidden;padding:9px;display:flex;flex-direction:column;background:rgba(255,255,255,.04);border:1px solid var(--c-bd);box-shadow:0 3px 10px -5px rgba(0,0,0,.5);transition:transform .24s cubic-bezier(.16,1,.3,1),box-shadow .24s ease,border-color .2s ease}
+                .agg-card::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,var(--c) 0%,transparent 60%);opacity:.07;transition:opacity .3s ease;pointer-events:none}
+                .agg-card:hover{transform:translateY(-4px);box-shadow:0 16px 26px -12px rgba(0,0,0,.6);border-color:var(--c);z-index:20}
+                .agg-card:hover::before{opacity:.15}
+                .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 1.5px var(--c)}
+                .agg-top{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+                .agg-chip{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:7px;background:var(--c-bg);border:1px solid var(--c-bd);color:var(--c);font-size:10.5px;font-weight:900;letter-spacing:.02em}
+                .agg-dot{width:7px;height:7px;border-radius:999px;background:var(--c);box-shadow:0 0 6px var(--c)}
+                .agg-body{position:relative;flex:1;margin-top:7px}
+                .agg-rest{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;transition:opacity .24s ease,transform .32s cubic-bezier(.16,1,.3,1)}
+                .agg-card:hover .agg-rest{opacity:0;transform:translateY(-8px)}
+                .agg-num{font-size:19px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-bar{width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
                 .agg-bar i{display:block;height:100%;border-radius:999px;background:var(--c);width:var(--p);transition:width .6s cubic-bezier(.16,1,.3,1)}
-                .agg-pop{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%) translateY(6px) scale(.95);width:190px;padding:11px 13px;border-radius:13px;background:rgba(24,24,28,.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 18px 42px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .28s cubic-bezier(.16,1,.3,1);z-index:40;text-align:left}
-                .agg-card:hover .agg-pop{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
-                .agg-pop::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:rgba(24,24,28,.97)}
-                .agg-pop-t{font-size:11.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-                .agg-pop-row{display:flex;align-items:center;gap:7px;margin-top:7px;font-size:9px;color:var(--text2);flex-wrap:wrap}
-                .agg-pop-s{display:inline-flex;align-items:center;gap:4px;font-weight:800;color:var(--c)}
-                .agg-pop-em{display:inline-flex;align-items:center;gap:3px;color:#22c55e;font-weight:700;margin-top:6px;font-size:9px}
+                .agg-info{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:3px;opacity:0;transform:translateY(9px);transition:opacity .24s ease .02s,transform .32s cubic-bezier(.16,1,.3,1) .02s;pointer-events:none}
+                .agg-card:hover .agg-info{opacity:1;transform:translateY(0)}
+                .agg-info .s{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:800;color:var(--c);line-height:1.05}
+                .agg-info .s svg{width:10px;height:10px;flex-shrink:0}
+                .agg-info .d{font-size:8px;color:var(--text2);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .agg-info .e{display:flex;align-items:center;gap:3px;font-size:7.5px;font-weight:700;color:#22c55e}
               `}</style>
               {/* CARD-VISOR de tamaño FIJO — la card que fijaste con click */}
               <div style={{height:74,flexShrink:0,borderRadius:14,border:`1px solid ${sc ? `${sc}55` : "rgba(255,255,255,.08)"}`,background:"rgba(255,255,255,.025)",display:"flex",alignItems:"center",gap:12,padding:"0 14px",overflow:"hidden",transition:"border-color .25s ease"}}>
@@ -425,23 +427,20 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                     <button key={doc.id} type="button" className={`agg-card${selected === doc.id ? " sel" : ""}`}
                       style={{ "--c": c, "--c-bd": `${c}66` } as CSSProperties}
                       onClick={() => setSelected(s => s === doc.id ? null : doc.id)} title={doc.nombre_archivo}>
-                      <div className="agg-head">
-                        <span className="agg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(doc.estado)}</svg></span>
-                        <span className="agg-label">{isBoletaTipo(doc.tipo) ? "Boleta" : "Movimientos"}</span>
-                        <span className="agg-trend"><span style={{width:6,height:6,borderRadius:999,background:c}} />{isBoletaTipo(doc.tipo) ? "Emitida" : (sl[doc.estado] ?? doc.estado)}</span>
+                      <div className="agg-top">
+                        <span className="agg-chip">{tipoLetra(doc)}</span>
+                        <span className="agg-dot" />
                       </div>
-                      <div className="agg-num">{isBoletaTipo(doc.tipo) ? tileId(doc) : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—")}</div>
-                      <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>
-                      <div className="agg-pop">
-                        <div className="agg-pop-t">{doc.nombre_archivo}</div>
-                        <div className="agg-pop-row">
-                          <span className="agg-pop-s"><span style={{width:6,height:6,borderRadius:999,background:c}} />{sl[doc.estado] ?? doc.estado}</span>
-                          <span>· {tipoNombre(doc)}</span>
-                          {doc.movimientos_detectados ? <span>· {doc.movimientos_detectados} mov</span> : null}
+                      <div className="agg-body">
+                        <div className="agg-rest">
+                          <div className="agg-num">{isBoletaTipo(doc.tipo) ? tileId(doc) : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—")}</div>
+                          <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>
                         </div>
-                        {isBoletaTipo(doc.tipo)
-                          ? <div className="agg-pop-em"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</div>
-                          : <div style={{marginTop:6,fontSize:9,color:"#5b9cf6",fontWeight:700}}>Click para fijar + Visualizar →</div>}
+                        <div className="agg-info">
+                          <span className="s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{estadoIcon(doc.estado)}</svg>{isBoletaTipo(doc.tipo) ? "Emitida" : (sl[doc.estado] ?? doc.estado)}</span>
+                          <span className="d">{tipoNombre(doc)}{doc.movimientos_detectados ? ` · ${doc.movimientos_detectados} mov` : ""}</span>
+                          {isBoletaTipo(doc.tipo) && <span className="e"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 13l4 4L19 7"/></svg>en Boletas</span>}
+                        </div>
                       </div>
                     </button>
                   );
