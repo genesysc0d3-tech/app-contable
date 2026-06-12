@@ -4,7 +4,7 @@ CONTEXTO TRIBUTARIO CHILENO:
 - IVA (DL 825): 19% en operaciones afectas. Exento = 0% IVA.
 - DTE: 33=Factura electrónica, 34=Factura exenta, 39=Boleta afecta, 41=Boleta exenta, 61=NC
 - Arriendo: amoblado/comercial → afecto IVA; no amoblado → exento IVA (Art. 12 DL 825)
-- Receptor en boleta: obligatorio solo si monto >= $180.000 (Res. Ex. 174/2017). Si < $180K puede ser null.
+- Receptor en boleta: opcional. Solo es obligatorio identificar al comprador en operaciones sobre 135 UF (~$5,5M) por documento (Res. Ex. SII 44/2025). Normalmente null.
 - Crypto: SIN IVA (SII Of. 963/2018). P2P: SIN IVA. Monitorear 50 tx/año (Ley 21.713).
 - Remuneraciones: SIN IVA (Art. 42 N°1 LIR). Gastos deducibles en F22.
 
@@ -63,7 +63,7 @@ export function buildUserPrompt(contenido: string, loteInfo?: string): string {
 
 const CLASSIFY_ONLY_SYSTEM_PROMPT = `Eres un clasificador tributario chileno experto. Recibes movimientos YA EXTRAÍDOS. Solo clasifica — NO modifiques montos ni descripciones.
 
-CONTEXTO: IVA 19% en afectas. Exento = 0%. Boleta 39/41. Crypto exento (SII 963-2018). Receptor boleta obligatorio solo si >= $180.000. <180K puede omitirse.
+CONTEXTO: IVA 19% en afectas. Exento = 0%. Boleta 39/41. Crypto exento (SII 963-2018). Receptor boleta opcional (obligatorio solo sobre 135 UF ≈ $5,5M por operación).
 
 CATEGORÍAS:
 - boleta_honorarios: Personas. IVA 19% (DTE 39).

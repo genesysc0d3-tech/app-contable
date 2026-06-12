@@ -4,8 +4,18 @@
  */
 
 const IVA_RATE = 0.19;
-/** Resolución Ex. SII 174/2017: receptor obligatorio si total > 180.000 CLP. */
-export const RECEPTOR_OBLIGATORIO_DESDE = 180_000;
+/**
+ * Res. Ex. SII N°44/2025 (vigente desde 01-09-2025): en boletas electrónicas
+ * que superen 135 UF por operación debe identificarse al comprador (RUT,
+ * nombre y apellido, medio de pago, detalle del producto/servicio).
+ * NO existe restricción ni umbral a $180.000 — la regla anterior era errónea
+ * (confirmado por el contador del equipo, 2026-06).
+ * La UF varía: valor referencial a mantener actualizado; mejora futura =
+ * traerla de config/API (ej. mindicador.cl) en vez de constante.
+ */
+export const UMBRAL_IDENTIFICACION_UF = 135;
+export const UF_REFERENCIA_CLP = 40_611; // UF referencial 2026 — actualizar periódicamente
+export const RECEPTOR_OBLIGATORIO_DESDE = UMBRAL_IDENTIFICACION_UF * UF_REFERENCIA_CLP; // ≈ $5.482.485
 
 export type DteAfecto = 39;
 export type DteExento = 41;
@@ -145,23 +155,21 @@ export function validarBoleta(input: BoletaInput): {
     exento = totalProvisto;
   }
 
-  // --- Validación receptor según monto (Res. Ex. 174/2017) ---
-  // NOTA merge 2026-06-11: dev (mayo) había quitado este bloque ("libertad de
-  // emisión"), pero el flujo actual depende de él: pendientes-emision marca
-  // listo_emitir con este mismo umbral y la UI muestra el motivo. Si el equipo
-  // decide relajarlo, hay que cambiarlo AQUÍ y en lib/intermediario/
-  // pendientes-emision.ts a la vez, no solo en un lado.
+  // --- Identificación del comprador sobre 135 UF (Res. Ex. SII 44/2025) ---
+  // Fase 2 pendiente: capturar también "medio de pago" (la norma lo exige
+  // sobre el umbral; el campo aún no existe en BoletaInput ni en DB). En el
+  // carril masivo el medio es siempre transferencia electrónica (cartola).
   if (totalProvisto > RECEPTOR_OBLIGATORIO_DESDE) {
     if (!input.receptor_rut) {
       errors.push({
         code: "RECEPTOR_RUT_OBLIGATORIO",
-        message: `Para totales sobre $${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")} se requiere RUT del receptor`,
+        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")}): la normativa exige RUT del comprador (Res. Ex. SII 44/2025)`,
       });
     }
     if (!input.receptor_razon_social || !input.receptor_razon_social.trim()) {
       errors.push({
         code: "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA",
-        message: `Para totales sobre $${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")} se requiere razón social del receptor`,
+        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")}): la normativa exige nombre del comprador (Res. Ex. SII 44/2025)`,
       });
     }
   }
