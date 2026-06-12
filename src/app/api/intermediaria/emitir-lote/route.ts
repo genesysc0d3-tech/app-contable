@@ -9,6 +9,7 @@ import { chileDateString } from "@/lib/chile-date";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 import { issueMockBoleta } from "@/lib/emission/mock";
 import { batchBlockedResult } from "@/lib/emission/provider-guards";
+import { verificarEmisionMasiva } from "@/lib/pagos/metering";
 
 /**
  * Emisión en lote: dado un array de propuesta_ids, emite una boleta por cada
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, rol, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
+    .select("empresa_id, rol, dev_mode, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
@@ -131,6 +132,16 @@ export async function POST(request: Request) {
         { status: 412 },
       );
     }
+  }
+
+  // Gate de cuota: las boletas masivas (con propuesta_id) consumen el cupo
+  // del plan/trial. dev_mode bypassa para pruebas internas.
+  const gate = await verificarEmisionMasiva(sb, usuario.empresa_id, ids.length, { devBypass: usuario.dev_mode === true });
+  if (!gate.ok) {
+    return NextResponse.json(
+      { ok: false, error: gate.codigo, detalle: gate.detalle, disponible: gate.disponible },
+      { status: 402 },
+    );
   }
 
   // Verifico cuáles ya están emitidas para no duplicar
