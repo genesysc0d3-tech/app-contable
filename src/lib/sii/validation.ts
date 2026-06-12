@@ -10,11 +10,12 @@ const IVA_RATE = 0.19;
  * nombre y apellido, medio de pago, detalle del producto/servicio).
  * NO existe restricción ni umbral a $180.000 — la regla anterior era errónea
  * (confirmado por el contador del equipo, 2026-06).
- * La UF varía: valor referencial a mantener actualizado; mejora futura =
- * traerla de config/API (ej. mindicador.cl) en vez de constante.
+ * La UF del día se obtiene en runtime vía lib/sii/uf.ts (mindicador.cl con
+ * caché 12h); estas constantes son el FALLBACK si la API no responde y el
+ * default síncrono de validarBoleta cuando no se inyecta el umbral.
  */
 export const UMBRAL_IDENTIFICACION_UF = 135;
-export const UF_REFERENCIA_CLP = 40_611; // UF referencial 2026 — actualizar periódicamente
+export const UF_REFERENCIA_CLP = 40_611; // fallback referencial — la fuente viva es uf.ts
 export const RECEPTOR_OBLIGATORIO_DESDE = UMBRAL_IDENTIFICACION_UF * UF_REFERENCIA_CLP; // ≈ $5.482.485
 
 export type DteAfecto = 39;
@@ -92,6 +93,8 @@ export interface BoletaInput {
   receptor_razon_social?: string;
   receptor_direccion?: string;
   receptor_comuna?: string;
+  /** Obligatorio en operaciones sobre 135 UF (Res. Ex. SII 44/2025). */
+  medio_pago?: string | null;
   detalles: DetalleLinea[];
   /** Si se provee, se usa como override; si no, se calcula desde detalles. */
   monto_total?: number;
@@ -103,13 +106,24 @@ export type ValidationError = { code: string; message: string };
  * Aplica TODAS las validaciones del SII para boleta tipo 39/41.
  * Retorna [] si todo OK, o array de errores.
  */
-export function validarBoleta(input: BoletaInput): {
+export function validarBoleta(
+  input: BoletaInput,
+  opts?: {
+    /**
+     * Umbral de identificación del comprador en pesos (135 UF al día). Las
+     * rutas server lo resuelven con getUmbralIdentificacionClp() (UF viva);
+     * sin opts se usa la constante referencial — la función sigue síncrona.
+     */
+    umbralIdentificacionClp?: number;
+  },
+): {
   ok: boolean;
   errors: ValidationError[];
   /** Computed totals (canonical, used for storage) */
   totales?: { neto: number; exento: number; iva: number; total: number };
 } {
   const errors: ValidationError[] = [];
+  const umbralIdentificacion = opts?.umbralIdentificacionClp ?? RECEPTOR_OBLIGATORIO_DESDE;
 
   // --- Detalle obligatorio ---
   if (!input.detalles || input.detalles.length === 0) {
@@ -156,20 +170,23 @@ export function validarBoleta(input: BoletaInput): {
   }
 
   // --- Identificación del comprador sobre 135 UF (Res. Ex. SII 44/2025) ---
-  // Fase 2 pendiente: capturar también "medio de pago" (la norma lo exige
-  // sobre el umbral; el campo aún no existe en BoletaInput ni en DB). En el
-  // carril masivo el medio es siempre transferencia electrónica (cartola).
-  if (totalProvisto > RECEPTOR_OBLIGATORIO_DESDE) {
+  if (totalProvisto > umbralIdentificacion) {
     if (!input.receptor_rut) {
       errors.push({
         code: "RECEPTOR_RUT_OBLIGATORIO",
-        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")}): la normativa exige RUT del comprador (Res. Ex. SII 44/2025)`,
+        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${umbralIdentificacion.toLocaleString("es-CL")}): la normativa exige RUT del comprador (Res. Ex. SII 44/2025)`,
       });
     }
     if (!input.receptor_razon_social || !input.receptor_razon_social.trim()) {
       errors.push({
         code: "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA",
-        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${RECEPTOR_OBLIGATORIO_DESDE.toLocaleString("es-CL")}): la normativa exige nombre del comprador (Res. Ex. SII 44/2025)`,
+        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${umbralIdentificacion.toLocaleString("es-CL")}): la normativa exige nombre del comprador (Res. Ex. SII 44/2025)`,
+      });
+    }
+    if (!input.medio_pago || !input.medio_pago.trim()) {
+      errors.push({
+        code: "MEDIO_PAGO_OBLIGATORIO",
+        message: `Operación sobre ${UMBRAL_IDENTIFICACION_UF} UF (~$${umbralIdentificacion.toLocaleString("es-CL")}): la normativa exige registrar el medio de pago (Res. Ex. SII 44/2025)`,
       });
     }
   }

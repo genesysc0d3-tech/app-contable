@@ -1,5 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
-import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
+import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
@@ -49,6 +49,9 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
   type PropuestaRaw = NonNullable<typeof propuestas>[number];
   const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id));
 
+  // Umbral 135 UF con la UF del día (fallback a referencial si la API cae).
+  const umbralIdentificacionClp = await getUmbralIdentificacionClp();
+
   const patronDia = new Map<string, number>();
   const patronMes = new Map<string, number>();
   for (const p of visibles) {
@@ -86,7 +89,7 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
       docHint,
     );
 
-    const requiereReceptor = total > RECEPTOR_OBLIGATORIO_DESDE;
+    const requiereReceptor = total > umbralIdentificacionClp;
     const tieneReceptor = !!receptor_rut && !!receptor_nombre;
     const esEmitible = clasif.sugerencia !== "no_boletar";
     const listo_emitir = esEmitible && total > 0 && (!requiereReceptor || tieneReceptor);

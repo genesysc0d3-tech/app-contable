@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { validarBoleta, type BoletaInput } from "@/lib/sii/validation";
+import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
 import { issueMockBoleta } from "@/lib/emission/mock";
@@ -72,8 +73,9 @@ async function handlePost(request: Request) {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
   }
 
-  // 3. Validar usando reglas del SII
-  const validation = validarBoleta(body);
+  // 3. Validar usando reglas del SII (umbral 135 UF con UF del día)
+  const umbralIdentificacionClp = await getUmbralIdentificacionClp();
+  const validation = validarBoleta(body, { umbralIdentificacionClp });
   if (!validation.ok || !validation.totales) {
     return NextResponse.json(
       { ok: false, error: "VALIDACION_FALLIDA", errores: validation.errors },
@@ -160,6 +162,7 @@ async function handlePost(request: Request) {
       receptor_razon_social: body.receptor_razon_social ?? null,
       receptor_direccion: body.receptor_direccion ?? null,
       receptor_comuna: body.receptor_comuna ?? null,
+      medio_pago: body.medio_pago?.trim() || null,
       monto_neto: validation.totales.neto,
       monto_exento: validation.totales.exento,
       iva: validation.totales.iva,

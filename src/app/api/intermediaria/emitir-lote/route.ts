@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { validarBoleta } from "@/lib/sii/validation";
+import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
@@ -145,6 +146,10 @@ export async function POST(request: Request) {
   } catch { /* tabla missing → todas pendientes */ }
 
   const fecha_emision = chileDateString();
+  // Umbral 135 UF con UF del día — una consulta para todo el lote.
+  const umbralIdentificacionClp = await getUmbralIdentificacionClp();
+  // En el carril masivo el medio de pago es siempre el de la cartola.
+  const MEDIO_PAGO_LOTE = "Transferencia Electrónica";
   const results: BatchItem[] = [];
 
   // Index propuestas by id for lookup in original order
@@ -220,9 +225,10 @@ export async function POST(request: Request) {
       tipo_dte: tipoDte,
       receptor_rut,
       receptor_razon_social,
+      medio_pago: MEDIO_PAGO_LOTE,
       detalles,
       monto_total: total,
-    });
+    }, { umbralIdentificacionClp });
 
     if (!validation.ok || !validation.totales) {
       const firstErr = validation.errors[0];
@@ -294,6 +300,7 @@ export async function POST(request: Request) {
         emisor_comuna: empresa.comuna,
         receptor_rut: receptor_rut ?? null,
         receptor_razon_social: receptor_razon_social ?? null,
+        medio_pago: MEDIO_PAGO_LOTE,
         monto_neto: validation.totales.neto,
         monto_exento: validation.totales.exento,
         iva: validation.totales.iva,

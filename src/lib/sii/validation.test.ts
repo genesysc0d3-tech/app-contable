@@ -84,14 +84,35 @@ describe("validarBoleta — reglas SII 39/41", () => {
     expect(codes).toContain("RECEPTOR_RAZON_SOCIAL_OBLIGATORIA");
   });
 
-  it("sobre 135 UF con comprador identificado pasa", () => {
-    const r = validarBoleta({
+  it("sobre 135 UF exige también el medio de pago (Res. 44/2025)", () => {
+    const sinMedio = validarBoleta({
       tipo_dte: 39,
       detalles: linea(RECEPTOR_OBLIGATORIO_DESDE + 1),
       receptor_rut: "12.345.678-5",
       receptor_razon_social: "Cliente SpA",
     });
+    expect(sinMedio.ok).toBe(false);
+    expect(sinMedio.errors.map((e) => e.code)).toContain("MEDIO_PAGO_OBLIGATORIO");
+  });
+
+  it("sobre 135 UF con comprador identificado + medio de pago pasa", () => {
+    const r = validarBoleta({
+      tipo_dte: 39,
+      detalles: linea(RECEPTOR_OBLIGATORIO_DESDE + 1),
+      receptor_rut: "12.345.678-5",
+      receptor_razon_social: "Cliente SpA",
+      medio_pago: "Transferencia Electrónica",
+    });
     expect(r.ok).toBe(true);
+  });
+
+  it("acepta umbral dinámico vía opts (UF del día desde el server)", () => {
+    // Con umbral inyectado de $1.000, una boleta de $2.000 exige identificación
+    const r = validarBoleta({ tipo_dte: 39, detalles: linea(2_000) }, { umbralIdentificacionClp: 1_000 });
+    expect(r.ok).toBe(false);
+    expect(r.errors.map((e) => e.code)).toContain("RECEPTOR_RUT_OBLIGATORIO");
+    // Y la misma boleta con el umbral default pasa sin receptor
+    expect(validarBoleta({ tipo_dte: 39, detalles: linea(2_000) }).ok).toBe(true);
   });
 
   it("rechaza RUT receptor con DV malo", () => {
