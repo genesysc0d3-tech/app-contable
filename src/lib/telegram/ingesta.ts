@@ -12,7 +12,13 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { procesarDocumento } from "@/lib/ai/processor";
+import { sendMessage } from "@/lib/telegram/api";
 import { chileDateString } from "@/lib/chile-date";
+
+/** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
+const MSG_ILEGIBLE =
+  "No pude leer ese comprobante 😕\n" +
+  "Mándame un screenshot nítido (no una foto de la pantalla) y lo proceso al toque.";
 
 function getServiceClient() {
   return createServiceClient<Database>(
@@ -126,6 +132,7 @@ export async function procesarComprobanteTelegram(args: {
   base64: string;
   mime: string;
   nombreArchivo: string;
+  chatId?: number;
 }): Promise<void> {
   const svc = getServiceClient();
   try {
@@ -134,7 +141,19 @@ export async function procesarComprobanteTelegram(args: {
     const { groupedText } = await ocrAndGroupImages([
       { base64: args.base64, mimeType: args.mime, fileName: args.nombreArchivo },
     ]);
-    if (!groupedText.trim()) throw new Error("Comprobante vacio o sin contenido legible");
+    if (!groupedText.trim()) {
+      // OCR sin texto = imagen ilegible. Aviso reactivo: pedir screenshot
+      // justo cuando pasó, y marcar el registro como error (no queda colgado).
+      if (args.chatId) await sendMessage(args.chatId, MSG_ILEGIBLE);
+      await svc
+        .from("documentos_subidos")
+        .update({
+          estado: "error",
+          progreso_ia: { estado: "error", error: "comprobante_ilegible", origen: "telegram" } as Json,
+        })
+        .eq("id", args.documentoId);
+      return;
+    }
 
     const result = await procesarDocumento(args.documentoId, args.empresaId, groupedText);
     if (result.error) {

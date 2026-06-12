@@ -34,7 +34,8 @@ const MSG = {
   errorVincular: "No pude vincular tu cuenta. Intenta de nuevo desde massDTE.",
   bienvenida:
     "✓ Cuenta vinculada a massDTE.\n" +
-    "Mándame fotos de tus comprobantes y las dejo en Agregados, listas para boletear.",
+    "Mándame el comprobante de tus pagos y lo dejo en Agregados, listo para boletear.\n" +
+    "💡 Tip: manda un screenshot — se lee mucho mejor que una foto de la pantalla.",
   noVinculado:
     "Tu Telegram no está vinculado — hazlo desde massDTE (menú → Conectar Telegram).",
   topeDiario: `Llegaste al tope de ${TOPE_DIARIO} comprobantes diarios por Telegram. Mañana puedes seguir mandando.`,
@@ -183,6 +184,7 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
       base64,
       mime,
       nombreArchivo,
+      chatId,
     }),
   );
 
