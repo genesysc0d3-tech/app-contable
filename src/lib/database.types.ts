@@ -125,6 +125,7 @@ export type Database = {
           folio: number
           id: string
           iva: number
+          medio_pago: string | null
           monto_exento: number
           monto_neto: number
           monto_total: number
@@ -159,6 +160,7 @@ export type Database = {
           folio: number
           id?: string
           iva?: number
+          medio_pago?: string | null
           monto_exento?: number
           monto_neto?: number
           monto_total: number
@@ -193,6 +195,7 @@ export type Database = {
           folio?: number
           id?: string
           iva?: number
+          medio_pago?: string | null
           monto_exento?: number
           monto_neto?: number
           monto_total?: number

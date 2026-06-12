@@ -544,6 +544,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         receptor_razon_social: receptorRazonSocial.trim() || undefined,
         receptor_direccion: receptorDireccion.trim() || undefined,
         receptor_comuna: receptorComuna.trim() || undefined,
+        // El formulario ya captura forma de pago — se registra como medio de
+        // pago (obligatorio sobre 135 UF, Res. Ex. SII 44/2025).
+        medio_pago: formaPago,
         detalles: [{ nombre: detalleNombre.trim(), monto: total }],
         monto_total: total,
       };
