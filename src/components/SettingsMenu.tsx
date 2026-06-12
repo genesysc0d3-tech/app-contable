@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Gear, DeviceMobile, Monitor, Check } from "@phosphor-icons/react";
+import { Gear, DeviceMobile, Monitor, Check, PaperPlaneTilt } from "@phosphor-icons/react";
+import { useToast } from "@/components/Toast";
 
 type Modo = "mobile" | "escritorio";
 
@@ -16,6 +17,9 @@ export default function SettingsMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const modo = currentModo(pathname);
+  const { toast } = useToast();
+  const [tgLink, setTgLink] = useState<string | null>(null);
+  const [tgLoading, setTgLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -40,10 +44,34 @@ export default function SettingsMenu() {
     router.push(next === "escritorio" ? "/massdte" : "/subir");
   }
 
+  async function conectarTelegram() {
+    if (tgLoading) return;
+    setTgLoading(true);
+    try {
+      const res = await fetch("/api/telegram/link", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok && data.link) {
+        setTgLink(data.link as string);
+        toast("Abre Telegram y aprieta Iniciar");
+      } else if (res.status === 503) {
+        toast("Telegram próximamente", "error");
+      } else {
+        toast("No se pudo generar el link de Telegram", "error");
+      }
+    } catch {
+      toast("No se pudo generar el link de Telegram", "error");
+    } finally {
+      setTgLoading(false);
+    }
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => !v);
+          setTgLink(null);
+        }}
         aria-label="Configuración"
         aria-expanded={open}
         className="p-2 rounded-xl bg-white dark:bg-white/10 shadow-[0_1px_4px_rgba(0,0,0,0.06)] dark:shadow-none hover:scale-105 active:scale-95 transition-transform duration-150"
@@ -73,6 +101,33 @@ export default function SettingsMenu() {
             Icon={Monitor}
             onClick={() => select("escritorio")}
           />
+          <div className="px-3 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
+            Conexiones
+          </div>
+          <button
+            role="menuitem"
+            onClick={conectarTelegram}
+            disabled={tgLoading}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface)] text-[var(--foreground)] disabled:opacity-60"
+          >
+            <PaperPlaneTilt size={22} weight="regular" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">Conectar Telegram</p>
+              <p className="text-[11px] text-[var(--muted-light)]">
+                {tgLoading ? "Generando link..." : "Manda fotos de comprobantes"}
+              </p>
+            </div>
+          </button>
+          {tgLink && (
+            <a
+              href={tgLink}
+              target="_blank"
+              rel="noreferrer"
+              className="mx-3 mb-3 block rounded-xl bg-[var(--accent-light)] px-3 py-2 text-center text-[12px] font-semibold text-[#E8553E]"
+            >
+              Abrir Telegram →
+            </a>
+          )}
         </div>
       )}
     </div>

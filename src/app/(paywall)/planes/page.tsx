@@ -1,108 +1,275 @@
-"use client";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+import { getUsuario } from "@/lib/dal";
+import { getUfClp } from "@/lib/sii/uf";
+import { clpConIva, estadoCuota } from "@/lib/pagos/metering";
+import CheckoutButton from "./CheckoutButton";
 
-import { useState } from "react";
-import { activarPlan } from "./actions";
+/**
+ * /planes — paywall y catálogo de planes massDTE.
+ * Server component: lee planes_config (policy de lectura authenticated),
+ * la UF del día y el estado de cuota/trial de la empresa. Los precios se
+ * muestran en UF + el equivalente CLP con IVA calculado vivo.
+ */
 
-const PLANES = [
-  {
-    id: "starter",
-    nombre: "Starter",
-    precio: "$7.990",
-    docs: "10 documentos",
-    extra: "$490/doc extra",
-    popular: false,
-  },
-  {
-    id: "pro",
-    nombre: "Pro",
-    precio: "$19.990",
-    docs: "50 documentos",
-    extra: "$290/doc extra",
-    popular: true,
-  },
-  {
-    id: "empresa",
-    nombre: "Empresa",
-    precio: "$39.990",
-    docs: "200 documentos",
-    extra: "$150/doc extra",
-    popular: false,
-  },
-] as const;
+export const dynamic = "force-dynamic";
 
-export default function PlanesPage() {
-  const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function fmtClp(n: number): string {
+  return `$${Math.round(n).toLocaleString("es-CL")}`;
+}
 
-  async function handleSelect(planId: string) {
-    setLoading(planId);
-    setError(null);
-    const formData = new FormData();
-    formData.set("plan", planId);
-    const result = await activarPlan(formData);
-    if (result?.error) {
-      setError(result.error);
-      setLoading(null);
-    }
+function featuresDe(features: unknown): string[] {
+  return Array.isArray(features) ? features.filter((f): f is string => typeof f === "string") : [];
+}
+
+function Linea({ texto, destacada = false }: { texto: string; destacada?: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        fontSize: 11,
+        color: destacada ? "var(--foreground)" : "var(--muted)",
+        fontWeight: destacada ? 650 : 400,
+      }}
+    >
+      <span
+        style={{
+          width: 4,
+          height: 4,
+          borderRadius: 999,
+          background: destacada ? "#E8553E" : "var(--muted-light)",
+          flexShrink: 0,
+        }}
+      />
+      {texto}
+    </div>
+  );
+}
+
+function Aviso({ texto }: { texto: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        border: "1px solid var(--border)",
+        background: "var(--surface)",
+        borderRadius: 10,
+        padding: "8px 14px",
+        marginBottom: 18,
+        fontSize: 11,
+        color: "var(--muted)",
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: "#E8553E", flexShrink: 0 }} />
+      {texto}
+    </div>
+  );
+}
+
+export default async function PlanesPage() {
+  const usuario = await getUsuario();
+  if (!usuario) redirect("/onboarding");
+
+  const supabase = await createClient();
+  const sb = createServiceClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  const [planesRes, uf, cuota] = await Promise.all([
+    supabase.from("planes_config").select("*").eq("activo", true),
+    getUfClp(),
+    estadoCuota(sb, usuario.empresa_id),
+  ]);
+  const planes = (planesRes.data ?? []).slice().sort((a, b) => a.uf_mensual - b.uf_mensual);
+
+  const planActual = planes.find((p) => p.codigo === cuota.plan) ?? null;
+  const trial = cuota.trial;
+
+  // Aviso de contexto: trial / suscripción no activa.
+  let aviso: string | null = null;
+  if (cuota.suscripcionEstado === "morosa") {
+    aviso = "Tu suscripción está morosa — regulariza el pago para reactivar la emisión.";
+  } else if (cuota.suscripcionEstado === "pausada") {
+    aviso = "Tu suscripción está pausada — reactívala para seguir emitiendo boletas.";
+  } else if (trial && trial.activo && trial.inicio) {
+    aviso = `Período de prueba activo — ${trial.diasRestantes} ${trial.diasRestantes === 1 ? "día restante" : "días restantes"} · ${trial.boletasUsadas} de ${trial.boletasMax} boletas usadas`;
+  } else if (trial && trial.activo && !trial.inicio) {
+    aviso = `Prueba gratis: tu primera emisión masiva activa ${trial.diasRestantes} días o ${trial.boletasMax} boletas, lo que ocurra primero.`;
+  } else if (trial && !trial.activo) {
+    aviso = "Tu período de prueba terminó — contrata un plan para seguir emitiendo boletas.";
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Elige tu plan</h1>
-          <p className="text-white/50 mt-2 text-sm">
-            Procesamiento IA ilimitado en todos los planes
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "32px 20px",
+        background: "var(--background)",
+        color: "var(--foreground)",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 900 }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: ".1em",
+              textTransform: "uppercase",
+              color: "var(--muted-light)",
+            }}
+          >
+            massDTE
+          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>Planes</h1>
+          <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+            Emisión masiva de boletas desde tus cartolas. Precios en UF + IVA, cobrados en pesos al valor del día
+            (UF hoy: {fmtClp(uf)}).
           </p>
         </div>
 
-        {error && (
-          <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
-            {error}
+        {aviso && <Aviso texto={aviso} />}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+          {planes.map((plan) => {
+            const esActual = cuota.suscripcionActiva && cuota.plan === plan.codigo;
+            return (
+              <div
+                key={plan.codigo}
+                style={{
+                  border: esActual ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)",
+                  background: "var(--surface)",
+                  borderRadius: 14,
+                  padding: "20px 18px",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: ".08em",
+                      textTransform: "uppercase",
+                      color: "var(--muted)",
+                    }}
+                  >
+                    {plan.nombre}
+                  </span>
+                  {esActual && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: "#E8553E",
+                        border: "1px solid rgba(232,85,62,.35)",
+                        borderRadius: 999,
+                        padding: "3px 8px",
+                        textTransform: "uppercase",
+                        letterSpacing: ".05em",
+                      }}
+                    >
+                      Tu plan
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 12, display: "flex", alignItems: "baseline", gap: 6 }}>
+                  <span style={{ fontSize: 27, fontWeight: 800, letterSpacing: "-0.03em" }}>
+                    UF {plan.uf_mensual}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--muted-light)" }}>/mes + IVA</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                  ≈ {fmtClp(clpConIva(plan.uf_mensual, uf))} /mes con IVA
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 12,
+                    borderTop: "1px solid var(--border)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    flex: 1,
+                  }}
+                >
+                  <Linea destacada texto={`${plan.cuota_masivas.toLocaleString("es-CL")} boletas masivas al mes`} />
+                  <Linea texto="Boletas únicas ilimitadas" />
+                  <Linea
+                    texto={`${plan.ruts_incluidos} RUT${plan.ruts_incluidos > 1 ? "s" : ""} incluido${plan.ruts_incluidos > 1 ? "s" : ""} · +UF ${plan.uf_rut_adicional} c/u adicional`}
+                  />
+                  <Linea
+                    texto={`REFILL: +${plan.refill_boletas.toLocaleString("es-CL")} boletas por ${fmtClp(plan.refill_clp_neto * 1.19)}`}
+                  />
+                  {featuresDe(plan.features).map((f) => (
+                    <Linea key={f} texto={f} />
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <CheckoutButton tipo="plan" plan={plan.codigo} actual={esActual} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {cuota.suscripcionActiva && planActual && (
+          <div
+            style={{
+              marginTop: 16,
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              borderRadius: 12,
+              padding: "14px 18px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700 }}>
+                REFILL — +{planActual.refill_boletas.toLocaleString("es-CL")} boletas masivas este mes
+              </div>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                Usaste {cuota.uso.toLocaleString("es-CL")} de {(cuota.cuota + cuota.refills).toLocaleString("es-CL")}{" "}
+                este mes · quedan {cuota.disponible.toLocaleString("es-CL")} ·{" "}
+                {fmtClp(planActual.refill_clp_neto * 1.19)} con IVA, pago único
+              </div>
+            </div>
+            <div style={{ minWidth: 180 }}>
+              <CheckoutButton tipo="refill" />
+            </div>
           </div>
         )}
 
-        <div className="space-y-3">
-          {PLANES.map((plan) => (
-            <button
-              key={plan.id}
-              onClick={() => handleSelect(plan.id)}
-              disabled={loading !== null}
-              className={`w-full text-left rounded-2xl backdrop-blur-sm border p-5 transition-all ${
-                plan.popular
-                  ? "bg-blue-500/10 border-blue-400/30 hover:border-blue-400/50"
-                  : "bg-white/5 border-white/10 hover:border-white/20"
-              } disabled:opacity-50`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold">{plan.nombre}</span>
-                    {plan.popular && (
-                      <span className="text-[10px] font-semibold bg-blue-500 text-white px-2 py-0.5 rounded-full">
-                        POPULAR
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-white/50 mt-1">
-                    {plan.docs} / mes &middot; {plan.extra}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold">{plan.precio}</p>
-                  <p className="text-xs text-white/40">/mes</p>
-                </div>
-              </div>
-              {loading === plan.id && (
-                <p className="text-xs text-blue-400 mt-2">Activando...</p>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <p className="text-xs text-white/30 text-center">
-          20% descuento con pago anual &middot; Documentos no usados acumulan
-          hasta 3 meses
+        <p style={{ textAlign: "center", fontSize: 10, color: "var(--muted-light)", marginTop: 18 }}>
+          Pagos procesados por Mercado Pago · cancela cuando quieras.
+          {usuario.empresas?.plan_activo && (
+            <>
+              {" · "}
+              <Link href="/massdte" style={{ color: "var(--muted)", textDecoration: "underline" }}>
+                Volver al escritorio
+              </Link>
+            </>
+          )}
         </p>
       </div>
     </div>

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/pagos/cron",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}

@@ -2,6 +2,18 @@
 
 Equipo: Honter (producto/código) + contador. Última actualización: 2026-06-12.
 
+## 0. Vocabulario (regla de oro: "entra una cartola, salen boletas")
+
+| Concepto | Palabra ÚNICA en UI/marketing | Prohibido |
+|---|---|---|
+| Lo que el cliente sube | **cartola** / **archivo** | "documento" |
+| Lo que se emite y lo que cuenta el plan | **boleta** | "documento" |
+| Término técnico-legal | "documento tributario" (con apellido, solo Términos/manual) | "documento" a secas |
+
+"Documento" a secas significa dos cosas opuestas en este dominio (lo que
+entra y lo que sale) — por eso queda prohibida en todo texto visible.
+En código, `documentos_subidos` y demás nombres internos NO se tocan.
+
 ## 1. Los 3 carriles de emisión
 
 | Carril | Qué es | Cuándo usarlo | Requiere |
@@ -27,7 +39,7 @@ Se cambia en **Empresa → Emisión** (solo owner/admin). El check de certificad
 | Boleta real emitida con error | Tipeo/clasificación errada aprobada | **Nunca se borra.** Se corrige con Nota de Crédito tipo 61. Avisar al contador del cliente |
 | Folio duplicado (SimpleAPI) | Folios CAF viven en chrome.storage por equipo (pendiente #6) | Mientras no esté el fix: UN solo equipo emite por empresa vía SimpleAPI |
 | Usuario nuevo cae a /onboarding teniendo empresa | Embed ambiguo usuarios↔empresas | Ya fixeado (`empresas!usuarios_empresa_id_fkey`). NO recrear el usuario |
-| Boletas >umbral bloqueadas pidiendo RUT | Regla $180k vigente en código | Norma real es 135 UF (Res. 44/2025) — cambio aprobado, pendiente de implementar |
+| Boleta sobre 135 UF pide datos del comprador | Res. Ex. SII 44/2025 (umbral con UF del día vía mindicador) | Es lo correcto: RUT + nombre + medio de pago. NO es bug |
 
 ## 4. Datos y limpieza
 

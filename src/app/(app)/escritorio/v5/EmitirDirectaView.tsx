@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
@@ -271,6 +271,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const [localWorker, setLocalWorker] = useState<LocalWorkerState | null>(null);
   const [localWorkerLoading, setLocalWorkerLoading] = useState(false);
   const [manualSiiFolio, setManualSiiFolio] = useState("");
+  const [leyendoComprobante, setLeyendoComprobante] = useState(false);
+  const comprobanteInputRef = useRef<HTMLInputElement>(null);
 
   const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? drafts[0] ?? newDraft(tipoInicial);
   const tipoDte = activeDraft.tipoDte;
@@ -485,6 +487,77 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
   function updateActiveDraft(patch: Partial<BoletaDraft>) {
     setDrafts((current) => current.map((draft) => draft.id === activeDraft.id ? { ...draft, ...patch, updatedAt: Date.now() } : draft));
+  }
+
+  // OCR del comprobante de pago: solo PRE-LLENA el borrador — el usuario
+  // siempre revisa y aprueba antes de emitir.
+  async function leerComprobante(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast("El comprobante debe ser una imagen (foto o captura)", "error");
+      return;
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      toast("La imagen supera los 6 MB — usa una captura más liviana", "error");
+      return;
+    }
+    setLeyendoComprobante(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result ?? "");
+          const coma = result.indexOf(",");
+          resolve(coma >= 0 ? result.slice(coma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/ocr-comprobante", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, mime: file.type }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        detalle?: string;
+        campos?: { monto: number | null; fecha: string | null; glosa: string | null; pagador: string | null };
+        confianza?: { monto: number; fecha: number; pagador: number };
+      };
+      if (!res.ok || !json.ok || !json.campos) {
+        toast(json.detalle ?? json.error ?? "No pude leer el comprobante", "error");
+        return;
+      }
+
+      const campos = json.campos;
+      const patch: Partial<BoletaDraft> = {};
+      if (campos.monto !== null && campos.monto > 0) patch.monto = String(campos.monto);
+      const detalleSinTocar = !detalleNombre.trim() || detalleNombre.trim() === "Servicio prestado";
+      if (campos.glosa && detalleSinTocar) patch.detalleNombre = campos.glosa.slice(0, 80);
+      if (campos.pagador && !receptorRazonSocial.trim()) patch.receptorRazonSocial = campos.pagador;
+      if (Object.keys(patch).length > 0) updateActiveDraft(patch);
+
+      const resumen: string[] = [];
+      if (campos.monto !== null) resumen.push(fmt(campos.monto));
+      if (campos.fecha) resumen.push(`${campos.fecha.slice(8, 10)}-${campos.fecha.slice(5, 7)}`);
+      if (campos.pagador) {
+        const palabras = campos.pagador.split(/\s+/);
+        resumen.push(palabras.length > 1 ? `${palabras[0]} ${palabras[1]?.charAt(0) ?? ""}.` : palabras[0]);
+      }
+      if (resumen.length === 0) {
+        toast("No encontré datos en el comprobante — revisa la imagen", "error");
+      } else if (campos.monto === null) {
+        toast(`Leí ${resumen.join(" · ")} — no encontré el monto, ingrésalo a mano`, "error");
+      } else if ((json.confianza?.monto ?? 0) < 0.6) {
+        toast(`Leí ${resumen.join(" · ")} — verifica el monto antes de emitir`, "error");
+      } else {
+        toast(`Leí ${resumen.join(" · ")}`, "success");
+      }
+    } catch {
+      toast("Error de red al leer el comprobante", "error");
+    } finally {
+      setLeyendoComprobante(false);
+    }
   }
 
   function setTipo(tipo: TipoDte) {
@@ -951,9 +1024,31 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </section>
 
             <section className="ed-card-quiet">
-              <div style={{ marginBottom: 8 }}>
-                <span className="ed-label">2. Receptor</span>
-                <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Datos opcionales del cliente cuando correspondan.</p>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                <div>
+                  <span className="ed-label">2. Receptor</span>
+                  <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Datos opcionales del cliente cuando correspondan.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => comprobanteInputRef.current?.click()}
+                  disabled={leyendoComprobante}
+                  title="Sube la foto o captura del comprobante de pago para pre-llenar monto y receptor"
+                  style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text2)", cursor: leyendoComprobante ? "wait" : "pointer", fontSize: 9, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, opacity: leyendoComprobante ? 0.55 : 1 }}
+                >
+                  {leyendoComprobante ? "Leyendo..." : "Leer comprobante 📷"}
+                </button>
+                <input
+                  ref={comprobanteInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void leerComprobante(file);
+                  }}
+                />
               </div>
               <div className="ed-grid-2">
                 <Field label="RUT receptor" value={receptorRut} onChange={(value) => updateActiveDraft({ receptorRut: value })} placeholder="Opcional (obligatorio sobre 135 UF)" />

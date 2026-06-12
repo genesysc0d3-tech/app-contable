@@ -141,7 +141,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   return (
     <>
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
-        <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Documentos recientes</span>
+        <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>
         <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
           {(["grid","list"] as const).map((v) => (
             <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista cuadrícula (escanear rápido)" : "Vista lista (detalle)"}

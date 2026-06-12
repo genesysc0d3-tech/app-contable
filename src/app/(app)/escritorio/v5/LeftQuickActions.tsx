@@ -194,7 +194,7 @@ export function MassDTEAction({}: { empresaId: string }) {
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="mass-title">EMITIR MASSDTE</span>
-              <span className="mass-subtitle" style={{ display: "block" }}>Subida masiva de documentos</span>
+              <span className="mass-subtitle" style={{ display: "block" }}>Subida masiva de cartolas</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
               <g className="mass-doc mass-doc-new">
