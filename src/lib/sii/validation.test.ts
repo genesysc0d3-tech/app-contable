@@ -65,12 +65,18 @@ describe("validarBoleta — reglas SII 39/41", () => {
     expect(r.totales).toEqual({ neto: 0, exento: 50_000, iva: 0, total: 50_000 });
   });
 
-  it("receptor opcional hasta $180.000 EXACTOS (Res. Ex. 174/2017 es >, no >=)", () => {
+  it("NO existe umbral a $180.000: boletas de $200k y $1M sin receptor pasan (Res. 44/2025)", () => {
+    expect(validarBoleta({ tipo_dte: 39, detalles: linea(200_000) }).ok).toBe(true);
+    expect(validarBoleta({ tipo_dte: 39, detalles: linea(1_000_000) }).ok).toBe(true);
+    expect(validarBoleta({ tipo_dte: 41, detalles: linea(3_000_000) }).ok).toBe(true);
+  });
+
+  it("comprador opcional hasta 135 UF EXACTAS (la exigencia es >, no >=)", () => {
     const r = validarBoleta({ tipo_dte: 39, detalles: linea(RECEPTOR_OBLIGATORIO_DESDE) });
     expect(r.ok).toBe(true);
   });
 
-  it("sobre $180.000 exige RUT y razón social del receptor", () => {
+  it("sobre 135 UF exige identificar al comprador: RUT y nombre (Res. Ex. SII 44/2025)", () => {
     const r = validarBoleta({ tipo_dte: 39, detalles: linea(RECEPTOR_OBLIGATORIO_DESDE + 1) });
     expect(r.ok).toBe(false);
     const codes = r.errors.map((e) => e.code);
@@ -78,10 +84,10 @@ describe("validarBoleta — reglas SII 39/41", () => {
     expect(codes).toContain("RECEPTOR_RAZON_SOCIAL_OBLIGATORIA");
   });
 
-  it("sobre $180.000 con receptor completo pasa", () => {
+  it("sobre 135 UF con comprador identificado pasa", () => {
     const r = validarBoleta({
       tipo_dte: 39,
-      detalles: linea(200_000),
+      detalles: linea(RECEPTOR_OBLIGATORIO_DESDE + 1),
       receptor_rut: "12.345.678-5",
       receptor_razon_social: "Cliente SpA",
     });

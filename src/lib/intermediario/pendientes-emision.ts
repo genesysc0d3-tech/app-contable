@@ -93,7 +93,7 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
 
     const motivo_no_listo = !listo_emitir
       ? !esEmitible ? `No se boletea: ${clasif.razones[0] ?? "movimiento no comercial"}`
-        : total <= 0 ? "Monto inválido" : "Falta RUT y razón social del receptor (monto > $180.000)"
+        : total <= 0 ? "Monto inválido" : "Falta identificar al comprador (operación sobre 135 UF — Res. Ex. SII 44/2025)"
       : null;
     const motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null = !listo_emitir
       ? !esEmitible ? "no_boletar" : total <= 0 ? "monto_invalido" : "falta_receptor"
