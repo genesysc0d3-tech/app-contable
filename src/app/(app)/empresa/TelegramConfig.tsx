@@ -18,14 +18,31 @@ export default function TelegramConfig() {
   const [link, setLink] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/telegram/link")
-      .then((r) => r.json())
-      .then((d) => {
-        setVinculado(Boolean(d.vinculado));
-        setBotConfigured(d.botConfigured !== false);
-      })
-      .catch(() => setVinculado(false))
-      .finally(() => setLoading(false));
+    let cancel = false;
+    const cargar = () => {
+      fetch("/api/telegram/link")
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancel) return;
+          const v = Boolean(d.vinculado);
+          setVinculado(v);
+          setBotConfigured(d.botConfigured !== false);
+          if (v) setLink(null); // ya conectado: no dejar el botón "Abrir Telegram"
+        })
+        .catch(() => { if (!cancel) setVinculado(false); })
+        .finally(() => { if (!cancel) setLoading(false); });
+    };
+    cargar();
+    // Vincular es un viaje app → Telegram → app. Al volver y recuperar el foco
+    // re-chequeamos para que el estado salte a "Conectado" sin refrescar a mano.
+    const onVisible = () => { if (document.visibilityState === "visible") cargar(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      cancel = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, []);
 
   async function conectar() {

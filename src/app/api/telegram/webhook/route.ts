@@ -26,25 +26,41 @@ const TOPE_DIARIO = 50;
 
 const MSG = {
   instruccionesVincular:
-    "Hola, soy el bot de massDTE.\n" +
-    "Para vincular tu cuenta: entra a massDTE → menú → Conectar Telegram y abre el link que te genera.\n" +
-    "Después me mandas fotos de tus comprobantes y las dejo en Agregados.",
+    "👋 <b>Hola, soy el bot de massDTE.</b>\n\n" +
+    "Para conectar tu cuenta:\n" +
+    "1. Entra a massDTE\n" +
+    "2. Abre <b>Empresa → Bot de Telegram</b>\n" +
+    "3. Toca <b>Conectar Telegram</b> y abre el link\n\n" +
+    "Después mándame las fotos de tus comprobantes y las dejo en Agregados.",
   tokenInvalido:
-    "Ese link ya expiró o no es válido. Genera uno nuevo desde massDTE (menú → Conectar Telegram).",
-  errorVincular: "No pude vincular tu cuenta. Intenta de nuevo desde massDTE.",
+    "⌛ <b>Ese link ya venció</b> (dura 15 minutos y es de un solo uso).\n\n" +
+    "Si ya te conectaste antes, no tienes que hacer nada más: solo mándame una foto.\n" +
+    "Si todavía no, genera un link nuevo en massDTE → <b>Empresa → Bot de Telegram</b>.",
+  errorVincular: "😕 No pude conectar tu cuenta. Inténtalo de nuevo desde massDTE en un momento.",
   bienvenida:
-    "✓ Cuenta vinculada a massDTE.\n" +
-    "Mándame el comprobante de tus pagos y lo dejo en Agregados, listo para boletear.\n" +
-    "💡 Tip: manda un screenshot — se lee mucho mejor que una foto de la pantalla.",
+    "✅ <b>Listo, tu cuenta quedó conectada.</b>\n\n" +
+    "Mándame las <b>fotos de tus comprobantes</b> de pago y las dejo en <b>Agregados</b>, listas para boletear.\n\n" +
+    "💡 Tip: manda un <b>screenshot</b> — se lee mucho mejor que una foto de la pantalla.",
   noVinculado:
-    "Tu Telegram no está vinculado — hazlo desde massDTE (menú → Conectar Telegram).",
-  topeDiario: `Llegaste al tope de ${TOPE_DIARIO} comprobantes diarios por Telegram. Mañana puedes seguir mandando.`,
-  muyGrande: "Esa foto pesa más de 6MB y no la puedo procesar. Mándala más liviana.",
-  errorGuardar: "No pude guardar tu comprobante. Intenta de nuevo en un rato.",
-  recibido: "📥 Recibido — tu comprobante quedó en Agregados y se está procesando.",
+    "🔌 <b>Tu Telegram aún no está conectado.</b>\n" +
+    "Conéctalo en massDTE → <b>Empresa → Bot de Telegram</b> y volvemos a empezar.",
+  topeDiario:
+    `🌙 Llegaste al tope de <b>${TOPE_DIARIO} comprobantes</b> por hoy.\n` +
+    "Mañana seguimos — los de hoy ya quedaron en Agregados.",
+  muyGrande:
+    "📦 Esa foto pesa más de <b>6 MB</b> y no la puedo procesar.\n" +
+    "Mándala un poco más liviana (un screenshot normal basta).",
+  errorGuardar: "😕 No pude guardar tu comprobante. Inténtalo de nuevo en un rato.",
+  recibido:
+    "📥 <b>Recibido.</b>\n" +
+    "Lo dejé en <b>Agregados</b> y lo estoy procesando — en unos segundos queda listo.",
   soloFotos:
-    "Solo proceso fotos de comprobantes. Mándame la foto y la dejo en Agregados, lista para boletear.",
+    "📸 Solo proceso <b>fotos de comprobantes</b>.\n" +
+    "Mándame la foto y la dejo en Agregados, lista para boletear.",
 };
+
+/** Todos los mensajes del bot usan formato HTML (negritas). */
+const say = (chatId: number, text: string) => sendMessage(chatId, text, { html: true });
 
 function getServiceClient() {
   return createServiceClient<Database>(
@@ -80,7 +96,7 @@ async function handleMessage(msg: TelegramMessage) {
   if (text === "/start" || text?.startsWith("/start ")) {
     const token = text.slice("/start".length).trim();
     if (token) await vincularConToken(chatId, token);
-    else await sendMessage(chatId, MSG.instruccionesVincular);
+    else await say(chatId, MSG.instruccionesVincular);
     return;
   }
 
@@ -89,7 +105,7 @@ async function handleMessage(msg: TelegramMessage) {
     return;
   }
 
-  await sendMessage(chatId, MSG.soloFotos);
+  await say(chatId, MSG.soloFotos);
 }
 
 async function vincularConToken(chatId: number, token: string) {
@@ -104,7 +120,7 @@ async function vincularConToken(chatId: number, token: string) {
     .gt("expires_at", ahora)
     .maybeSingle();
   if (!linkToken) {
-    await sendMessage(chatId, MSG.tokenInvalido);
+    await say(chatId, MSG.tokenInvalido);
     return;
   }
 
@@ -120,12 +136,12 @@ async function vincularConToken(chatId: number, token: string) {
   );
   if (upsertError) {
     console.error("[telegram-webhook] vincular fallo:", upsertError.message);
-    await sendMessage(chatId, MSG.errorVincular);
+    await say(chatId, MSG.errorVincular);
     return;
   }
 
   await svc.from("telegram_link_tokens").update({ used_at: ahora }).eq("token", token);
-  await sendMessage(chatId, MSG.bienvenida);
+  await say(chatId, MSG.bienvenida);
 }
 
 async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
@@ -139,26 +155,26 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
     .eq("chat_id", chatId)
     .maybeSingle();
   if (!chat?.activo) {
-    await sendMessage(chatId, MSG.noVinculado);
+    await say(chatId, MSG.noVinculado);
     return;
   }
 
   const subidosHoy = await contarComprobantesTelegramHoy(chat.empresa_id);
   if (subidosHoy >= TOPE_DIARIO) {
-    await sendMessage(chatId, MSG.topeDiario);
+    await say(chatId, MSG.topeDiario);
     return;
   }
 
   // Telegram manda los tamaños de menor a mayor: el último es la mejor resolución.
   const foto = photos[photos.length - 1];
   if ((foto.file_size ?? 0) > MAX_FOTO_BYTES) {
-    await sendMessage(chatId, MSG.muyGrande);
+    await say(chatId, MSG.muyGrande);
     return;
   }
 
   const { base64, mime, size } = await getFileBase64(foto.file_id);
   if (size > MAX_FOTO_BYTES) {
-    await sendMessage(chatId, MSG.muyGrande);
+    await say(chatId, MSG.muyGrande);
     return;
   }
 
@@ -171,7 +187,7 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
   });
   if (!creado.ok) {
     console.error("[telegram-webhook] ingesta fallo:", creado.error);
-    await sendMessage(chatId, MSG.errorGuardar);
+    await say(chatId, MSG.errorGuardar);
     return;
   }
 
@@ -188,7 +204,7 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
     }),
   );
 
-  await sendMessage(chatId, MSG.recibido);
+  await say(chatId, MSG.recibido);
 }
 
 export const dynamic = "force-dynamic";

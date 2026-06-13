@@ -17,8 +17,8 @@ import { chileDateString } from "@/lib/chile-date";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
 const MSG_ILEGIBLE =
-  "No pude leer ese comprobante 😕\n" +
-  "Mándame un screenshot nítido (no una foto de la pantalla) y lo proceso al toque.";
+  "😕 <b>No pude leer ese comprobante.</b>\n" +
+  "Mándame un <b>screenshot nítido</b> (no una foto de la pantalla) y lo proceso al toque.";
 
 function getServiceClient() {
   return createServiceClient<Database>(
@@ -144,7 +144,7 @@ export async function procesarComprobanteTelegram(args: {
     if (!groupedText.trim()) {
       // OCR sin texto = imagen ilegible. Aviso reactivo: pedir screenshot
       // justo cuando pasó, y marcar el registro como error (no queda colgado).
-      if (args.chatId) await sendMessage(args.chatId, MSG_ILEGIBLE);
+      if (args.chatId) await sendMessage(args.chatId, MSG_ILEGIBLE, { html: true });
       await svc
         .from("documentos_subidos")
         .update({
