@@ -13,7 +13,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { sendMessage } from "@/lib/telegram/api";
-import { chileDateString } from "@/lib/chile-date";
+import { chileDayStartUtc } from "@/lib/chile-date";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
 const MSG_ILEGIBLE =
@@ -41,23 +41,6 @@ export function nombreComprobanteTelegram(now = new Date()): string {
   return `Telegram ${p("day")}-${p("month")} ${p("hour")}:${p("minute")} comprobante.jpg`;
 }
 
-/** Instante UTC en que parte el día actual en Chile (para el tope diario). */
-function inicioDiaChileIso(now = new Date()): string {
-  const dia = chileDateString(now); // YYYY-MM-DD en hora de Chile
-  const offsetName =
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Santiago",
-      timeZoneName: "longOffset",
-    })
-      .formatToParts(now)
-      .find((part) => part.type === "timeZoneName")?.value ?? "GMT-04:00";
-  const m = offsetName.match(/GMT([+-])(\d{1,2})/);
-  const offsetHoras = m ? (m[1] === "-" ? -1 : 1) * parseInt(m[2], 10) : -4;
-  const inicio = new Date(`${dia}T00:00:00Z`);
-  inicio.setUTCHours(inicio.getUTCHours() - offsetHoras);
-  return inicio.toISOString();
-}
-
 /**
  * Cuenta los comprobantes que esta empresa ya subió HOY vía Telegram.
  * Se filtra por el prefijo del nombre_archivo ("Telegram ...") porque el
@@ -71,7 +54,7 @@ export async function contarComprobantesTelegramHoy(empresaId: string): Promise<
     .select("id", { count: "exact", head: true })
     .eq("empresa_id", empresaId)
     .like("nombre_archivo", "Telegram %")
-    .gte("created_at", inicioDiaChileIso());
+    .gte("created_at", chileDayStartUtc());
   return count ?? 0;
 }
 

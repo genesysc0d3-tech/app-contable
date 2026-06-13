@@ -22,7 +22,7 @@ import DocCardList from "./DocCardList";
 import RcvViewWrapper from "./RcvViewWrapper";
 import RCVSummaryCard from "./RCVSummaryCard";
 import EmpresaBrand from "./EmpresaBrand";
-import { chileDateString } from "@/lib/chile-date";
+import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
@@ -106,7 +106,14 @@ export default async function V5Page({ searchParams }: {
   const supabase = await createClient();
 
   const now = new Date();
-  let y = now.getFullYear(), m = now.getMonth();
+  // Año/mes/día actuales EN CHILE (no UTC del server, que en Vercel corre el
+  // calendario y los rangos): base de todos los filtros y del calendario.
+  const nowChile = chileDateString(now);
+  const curYear = Number(nowChile.slice(0, 4));
+  const curMonth = Number(nowChile.slice(5, 7)) - 1; // 0-indexed
+  const curDay = Number(nowChile.slice(8, 10));
+
+  let y = curYear, m = curMonth;
   if (monthParam) {
     // month es 0-indexado ("2026-0" = enero). OJO: pm=0 es falsy — no usar
     // `py && pm`, o enero queda inalcanzable.
@@ -114,17 +121,25 @@ export default async function V5Page({ searchParams }: {
     if (py && Number.isInteger(pm) && pm >= 0 && pm <= 11) { y = py; m = pm; }
   }
   if (workMode === "day") {
-    const [sy, sm] = selDate.split("-").map(Number);
-    if (sy && sm) { y = sy; m = sm - 1; }
+    const [sy, smonth] = selDate.split("-").map(Number);
+    if (sy && smonth) { y = sy; m = smonth - 1; }
   }
-  const sm = new Date(y,m,1).toISOString();
-  const em = new Date(y,m+1,1).toISOString();
+  // Primer día del mes (y,m) y del siguiente, como "YYYY-MM-DD" de Chile.
+  const firstOfMonth = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  const firstOfNextMonth = m === 11 ? `${y + 1}-01-01` : `${y}-${String(m + 2).padStart(2, "0")}-01`;
+  // Rangos para filtrar created_at (timestamptz): inicio del día/mes EN CHILE
+  // expresado como instante UTC, así no se corren 3-4 h respecto a la hora local.
+  const sm = chileDayStartUtc(firstOfMonth);
+  const em = chileDayStartUtc(firstOfNextMonth);
   const isMonthMode = workMode === "month";
   const isWeekMode = workMode === "week";
-  const workStart = isMonthMode ? sm : isWeekMode ? weekRange.start : selDate;
-  const workEnd = isMonthMode ? em : isWeekMode ? weekRange.end : nextSelDate;
-  const rcvSummaryStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const rcvSummaryEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+  const workStart = isMonthMode ? sm : chileDayStartUtc(isWeekMode ? weekRange.start : selDate);
+  const workEnd = isMonthMode ? em : chileDayStartUtc(isWeekMode ? weekRange.end : nextSelDate);
+  // RCV: mes actual de Chile.
+  const firstThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, "0")}-01`;
+  const firstNextMonth = curMonth === 11 ? `${curYear + 1}-01-01` : `${curYear}-${String(curMonth + 2).padStart(2, "0")}-01`;
+  const rcvSummaryStart = chileDayStartUtc(firstThisMonth);
+  const rcvSummaryEnd = chileDayStartUtc(firstNextMonth);
 
   const [rcvData, propsData, clData, calProps, calDocs, docsData, pendCountData, aprobCountData, cafsData, pendientesData] = await Promise.all([
     supabase.from("boletas_emitidas").select("monto_neto,monto_exento,iva,monto_total").eq("empresa_id", empresaId).neq("estado","anulada").gte("fecha_emision",rcvSummaryStart).lt("fecha_emision",rcvSummaryEnd),
@@ -159,16 +174,16 @@ export default async function V5Page({ searchParams }: {
   const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
-  const mes = String(now.getMonth() + 1).padStart(2, "0") + "-" + now.getFullYear();
+  const mes = String(curMonth + 1).padStart(2, "0") + "-" + curYear;
 
   // Calendar
   const daysInMonth = new Date(y,m+1,0).getDate();
   const byDay = new Map<number,{p:number;a:number;d:number}>();
   for (let d=1; d<=daysInMonth; d++) byDay.set(d,{p:0,a:0,d:0});
-  for (const p of calProps.data ?? []) { const day=new Date(p.created_at).getDate(); const inf=byDay.get(day)!; if(p.estado==="pendiente") inf.p++; else if(["aprobado","editado"].includes(p.estado)) inf.a++; }
-  for (const d of calDocs.data ?? []) { byDay.get(new Date(d.created_at).getDate())!.d++; }
-  const today = new Date().getDate();
-  const isThisMonth = now.getFullYear() === y && now.getMonth() === m;
+  for (const p of calProps.data ?? []) { const inf=byDay.get(chileDayOfMonth(new Date(p.created_at))); if(!inf) continue; if(p.estado==="pendiente") inf.p++; else if(["aprobado","editado"].includes(p.estado)) inf.a++; }
+  for (const d of calDocs.data ?? []) { const inf=byDay.get(chileDayOfMonth(new Date(d.created_at))); if(inf) inf.d++; }
+  const today = curDay;
+  const isThisMonth = curYear === y && curMonth === m;
   const selDay = selDate ? (()=>{const [sy,sm,sd]=selDate.split("-").map(Number); return sy===y&&sm===m+1?sd:null;})() : null;
   const wd = ["D","L","M","M","J","V","S"];
 
@@ -275,7 +290,7 @@ export default async function V5Page({ searchParams }: {
   // Boletas para el visor RCV (navega por mes client-side). Acotado a los
   // últimos 24 meses + tope duro: el RCV tributario relevante es año en curso
   // y anterior. A escala masiva real esto debe pasar a fetch por mes.
-  const rcvDesde = new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString();
+  const rcvDesde = new Date(Date.UTC(curYear - 2, curMonth, 1)).toISOString();
   const { data: boletasAllData } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
     .eq("empresa_id", empresaId).gte("fecha_emision", rcvDesde)
