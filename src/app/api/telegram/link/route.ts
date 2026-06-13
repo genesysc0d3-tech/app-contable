@@ -5,6 +5,42 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
 /**
+ * Estado de vinculación del Telegram de la empresa del usuario autenticado.
+ * Lo usa el panel de empresa para mostrar "Conectado" / "Sin conectar".
+ */
+export async function GET() {
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  const botConfigured = Boolean(botUsername && process.env.TELEGRAM_BOT_TOKEN);
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "NO_AUTH" }, { status: 401 });
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) {
+    return NextResponse.json({ botConfigured, vinculado: false });
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return NextResponse.json({ botConfigured, vinculado: false });
+  const svc = createServiceClient<Database>(url, key);
+
+  const { data: chat } = await svc
+    .from("telegram_chats")
+    .select("chat_id")
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("activo", true)
+    .maybeSingle();
+
+  return NextResponse.json({ botConfigured, vinculado: Boolean(chat) });
+}
+
+/**
  * Genera un link de vinculación de Telegram para el usuario autenticado.
  * El token vive 15 minutos, es de un solo uso, y el webhook lo canjea por
  * una fila en telegram_chats (chat -> empresa).
