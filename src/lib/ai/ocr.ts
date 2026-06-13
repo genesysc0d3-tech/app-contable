@@ -31,7 +31,7 @@ function stripThink(text: string): string {
 async function openCodeChat(
   model: string,
   content: string | Array<Record<string, unknown>>,
-  timeoutMs = 60_000,
+  timeoutMs = 120_000,
 ): Promise<{ text: string; tokens_input: number; tokens_output: number }> {
   const apiKey = process.env.OPENCODE_GO_API_KEY;
   if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");

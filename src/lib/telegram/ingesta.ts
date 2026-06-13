@@ -165,6 +165,17 @@ export async function procesarComprobanteTelegram(args: {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[telegram] ${args.documentoId} error fatal:`, errorMsg);
+    // No dejar al usuario colgado: avisar que reintente (no quedar "trabado").
+    if (args.chatId) {
+      const aborted = /abort/i.test(errorMsg);
+      await sendMessage(
+        args.chatId,
+        aborted
+          ? "⏳ Tardé demasiado leyendo ese comprobante y se cortó. Probá de nuevo en un momento."
+          : "😕 Tuve un problema procesando ese comprobante. Probá de nuevo en un ratito.",
+        { html: true },
+      );
+    }
     try {
       await svc
         .from("documentos_subidos")

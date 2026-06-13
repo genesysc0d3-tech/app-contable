@@ -382,3 +382,6 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
 }
 
 export const dynamic = "force-dynamic";
+// El OCR (visión) + clasificación corren en after(); darles margen para que no
+// se corten a mitad ("This operation was aborted"). Fluid Compute permite 300s.
+export const maxDuration = 300;
