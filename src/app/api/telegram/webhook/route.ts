@@ -5,6 +5,7 @@ import {
   sendMessage,
   editMessageText,
   answerCallbackQuery,
+  tgCall,
   getFileBase64,
   type TelegramUpdate,
   type TelegramMessage,
@@ -108,6 +109,26 @@ async function empresaDelChat(chatId: number): Promise<string | null> {
 
 async function tipoChat(empresaId: string) {
   return tipoBoletaDeContribuyente(await tipoContribuyenteEmpresa(empresaId));
+}
+
+// DIAGNÓSTICO TEMPORAL: GET /api/telegram/webhook?diag=<secret> prueba el envío
+// plano vs HTML desde el propio Vercel y devuelve el error exacto. Quitar luego.
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  if (url.searchParams.get("diag") !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return NextResponse.json({ error: "NO" }, { status: 401 });
+  }
+  const out: Record<string, unknown> = { token: Boolean(process.env.TELEGRAM_BOT_TOKEN) };
+  const { data: chat } = await getServiceClient()
+    .from("telegram_chats").select("chat_id").eq("activo", true).limit(1).maybeSingle();
+  out.chat = chat?.chat_id ?? null;
+  if (chat?.chat_id) {
+    try { await tgCall("sendMessage", { chat_id: chat.chat_id, text: "🔧 diag plano" }); out.plano = "ok"; }
+    catch (e) { out.plano = e instanceof Error ? e.message : String(e); }
+    try { await tgCall("sendMessage", { chat_id: chat.chat_id, text: "🔧 <b>diag html</b>", parse_mode: "HTML" }); out.html = "ok"; }
+    catch (e) { out.html = e instanceof Error ? e.message : String(e); }
+  }
+  return NextResponse.json(out);
 }
 
 export async function POST(request: Request) {
