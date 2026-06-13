@@ -384,9 +384,11 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
     return;
   }
 
+  await sendMessage(chatId, "DBG1 doc creado, voy a mandar Recibido");
   // Confirmar de inmediato, ANTES del OCR (que tarda ~segundos). Así el
   // usuario ve "Recibido" al toque; el procesamiento corre en segundo plano.
   await say(chatId, MSG.recibido);
+  await sendMessage(chatId, "DBG2 Recibido mandado, registro after");
 
   // OCR + clasificación después de responder; after() mantiene viva la
   // function hasta terminar (mismo pipeline del panel).
