@@ -558,6 +558,41 @@ export type Database = {
           },
         ]
       }
+      empresa_identidades: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          fuente: string
+          id: string
+          tipo: string
+          valor: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          fuente?: string
+          id?: string
+          tipo?: string
+          valor: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          fuente?: string
+          id?: string
+          tipo?: string
+          valor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_identidades_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresa_invitaciones: {
         Row: {
           accepted_at: string | null

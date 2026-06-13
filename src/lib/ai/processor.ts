@@ -264,12 +264,18 @@ export async function procesarDocumento(
     .select("razon_social, rut, giro, tipo_contribuyente")
     .eq("id", empresaId)
     .maybeSingle();
+  const { data: identidades } = await supabase
+    .from("empresa_identidades")
+    .select("valor")
+    .eq("empresa_id", empresaId);
+  const aliasList = (identidades ?? []).map((i) => i.valor).filter(Boolean);
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
       `- Razón social: «${emp.razon_social}» | RUT: ${emp.rut}` +
       (emp.giro ? ` | Giro: ${emp.giro}` : "") +
       ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
-      "- Es quien VENDE y RECIBE los pagos: los montos son sus INGRESOS (entrada), salvo que el comprobante diga explícitamente que él pagó/envió."
+      (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +
+      "- Es quien VENDE y RECIBE los pagos: sus montos son INGRESOS (entrada). Si el dinero va HACIA él (PARA/destino/receptor = su razón social, RUT o cualquiera de esos nombres/cuentas) → entrada. Marca salida SOLO si el comprobante dice explícitamente que él pagó/envió."
     : "";
 
   await supabase
