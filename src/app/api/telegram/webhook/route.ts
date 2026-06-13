@@ -41,6 +41,9 @@ const MSG = {
     "✅ <b>Listo, tu cuenta quedó conectada.</b>\n\n" +
     "Mándame las <b>fotos de tus comprobantes</b> de pago y las dejo en <b>Agregados</b>, listas para boletear.\n\n" +
     "💡 Tip: manda un <b>screenshot</b> — se lee mucho mejor que una foto de la pantalla.",
+  yaConectado:
+    "✅ <b>Ya estás conectado.</b>\n" +
+    "Mándame una foto de tu comprobante y la dejo en Agregados, lista para boletear.",
   noVinculado:
     "🔌 <b>Tu Telegram aún no está conectado.</b>\n" +
     "Conéctalo en massDTE → <b>Empresa → Bot de Telegram</b> y volvemos a empezar.",
@@ -67,6 +70,17 @@ function getServiceClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
+}
+
+/** ¿Este chat ya está vinculado y activo? */
+async function chatVinculado(chatId: number): Promise<boolean> {
+  const { data } = await getServiceClient()
+    .from("telegram_chats")
+    .select("chat_id")
+    .eq("chat_id", chatId)
+    .eq("activo", true)
+    .maybeSingle();
+  return Boolean(data);
 }
 
 export async function POST(request: Request) {
@@ -96,6 +110,7 @@ async function handleMessage(msg: TelegramMessage) {
   if (text === "/start" || text?.startsWith("/start ")) {
     const token = text.slice("/start".length).trim();
     if (token) await vincularConToken(chatId, token);
+    else if (await chatVinculado(chatId)) await say(chatId, MSG.yaConectado);
     else await say(chatId, MSG.instruccionesVincular);
     return;
   }
@@ -120,7 +135,10 @@ async function vincularConToken(chatId: number, token: string) {
     .gt("expires_at", ahora)
     .maybeSingle();
   if (!linkToken) {
-    await say(chatId, MSG.tokenInvalido);
+    // Token usado/expirado. Si el chat ya está vinculado no es un error:
+    // probablemente reabrió un link viejo estando ya conectado.
+    if (await chatVinculado(chatId)) await say(chatId, MSG.yaConectado);
+    else await say(chatId, MSG.tokenInvalido);
     return;
   }
 
