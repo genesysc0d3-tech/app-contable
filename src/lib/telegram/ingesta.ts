@@ -155,7 +155,7 @@ export async function procesarComprobanteTelegram(args: {
         : {};
     await svc
       .from("documentos_subidos")
-      .update({ progreso_ia: { ...progreso, origen: "telegram" } as Json })
+      .update({ progreso_ia: { ...progreso, origen: "telegram", debug_ocr: groupedText.slice(0, 800) } as Json })
       .eq("id", args.documentoId);
 
     // Resumen interactivo: "📄 Leí esto" + "🧾 Boleta" con botones por operación.
