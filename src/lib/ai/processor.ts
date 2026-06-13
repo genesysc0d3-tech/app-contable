@@ -588,7 +588,11 @@ export async function procesarDocumento(
           .filter((m) => m.tipo_flujo === "entrada")
           .reduce((sum, m) => sum + (toNum(m.monto) ?? 0), 0);
 
-    if (totalAbonos > 0) {
+    // Solo tiene sentido en un extracto con VARIAS transacciones (el saldo es
+    // una línea grande entre muchas chicas). Con pocos movimientos —p. ej. un
+    // comprobante único de Telegram, que es 1 solo abono = 100% del total— esta
+    // heurística borraría la única venta. Exigir >=5 movimientos para aplicarla.
+    if (totalAbonos > 0 && validMovimientos.length >= 5) {
       const threshold = totalAbonos * 0.5;
       const saldoFilter = new Set<number>();
       for (let i = 0; i < validMovimientos.length; i++) {
