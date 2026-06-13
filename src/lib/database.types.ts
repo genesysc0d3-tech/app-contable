@@ -1507,6 +1507,38 @@ export type Database = {
           },
         ]
       }
+      telegram_pending_edits: {
+        Row: {
+          campo: string
+          chat_id: number
+          created_at: string
+          message_id: number | null
+          propuesta_id: string
+        }
+        Insert: {
+          campo: string
+          chat_id: number
+          created_at?: string
+          message_id?: number | null
+          propuesta_id: string
+        }
+        Update: {
+          campo?: string
+          chat_id?: number
+          created_at?: string
+          message_id?: number | null
+          propuesta_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_pending_edits_propuesta_id_fkey"
+            columns: ["propuesta_id"]
+            isOneToOne: false
+            referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuario_empresas: {
         Row: {
           created_at: string

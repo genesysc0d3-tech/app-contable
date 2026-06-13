@@ -13,6 +13,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { sendMessage } from "@/lib/telegram/api";
+import { enviarResumenPropuestas } from "@/lib/telegram/propuestas";
 import { chileDayStartUtc } from "@/lib/chile-date";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
@@ -156,6 +157,11 @@ export async function procesarComprobanteTelegram(args: {
       .from("documentos_subidos")
       .update({ progreso_ia: { ...progreso, origen: "telegram" } as Json })
       .eq("id", args.documentoId);
+
+    // Resumen interactivo: "📄 Leí esto" + "🧾 Boleta" con botones por operación.
+    if (args.chatId) {
+      await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, groupedText);
+    }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[telegram] ${args.documentoId} error fatal:`, errorMsg);

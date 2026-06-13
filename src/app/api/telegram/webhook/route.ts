@@ -3,10 +3,14 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import {
   sendMessage,
+  editMessageText,
+  answerCallbackQuery,
   getFileBase64,
   type TelegramUpdate,
   type TelegramMessage,
   type TelegramPhotoSize,
+  type TelegramCallbackQuery,
+  type InlineKeyboardMarkup,
 } from "@/lib/telegram/api";
 import {
   crearDocumentoTelegram,
@@ -14,6 +18,21 @@ import {
   contarComprobantesTelegramHoy,
   nombreComprobanteTelegram,
 } from "@/lib/telegram/ingesta";
+import {
+  propuestaPorId,
+  tipoContribuyenteEmpresa,
+  tipoBoletaDeContribuyente,
+  mensajeBoleta,
+  kbCampos,
+  labelCampo,
+  valorActual,
+  aprobarBot,
+  editarCampoBot,
+  setPendingEdit,
+  getPendingEdit,
+  clearPendingEdit,
+  setTipoContribuyente,
+} from "@/lib/telegram/propuestas";
 
 /**
  * Webhook del bot de Telegram: dropzone remoto de comprobantes.
@@ -74,13 +93,21 @@ function getServiceClient() {
 
 /** ¿Este chat ya está vinculado y activo? */
 async function chatVinculado(chatId: number): Promise<boolean> {
+  return (await empresaDelChat(chatId)) !== null;
+}
+
+/** empresa_id del chat si está vinculado y activo, si no null. */
+async function empresaDelChat(chatId: number): Promise<string | null> {
   const { data } = await getServiceClient()
     .from("telegram_chats")
-    .select("chat_id")
+    .select("empresa_id, activo")
     .eq("chat_id", chatId)
-    .eq("activo", true)
     .maybeSingle();
-  return Boolean(data);
+  return data?.activo ? data.empresa_id : null;
+}
+
+async function tipoChat(empresaId: string) {
+  return tipoBoletaDeContribuyente(await tipoContribuyenteEmpresa(empresaId));
 }
 
 export async function POST(request: Request) {
@@ -97,6 +124,7 @@ export async function POST(request: Request) {
   try {
     const update = (await request.json()) as TelegramUpdate;
     if (update?.message) await handleMessage(update.message);
+    else if (update?.callback_query) await handleCallback(update.callback_query);
   } catch (error) {
     console.error("[telegram-webhook] error:", error);
   }
@@ -115,12 +143,138 @@ async function handleMessage(msg: TelegramMessage) {
     return;
   }
 
+  if (text === "/config") {
+    await mostrarConfig(chatId);
+    return;
+  }
+
+  // Si hay una edición pendiente, este texto es el nuevo valor del campo.
+  if (text && !text.startsWith("/")) {
+    const pending = await getPendingEdit(chatId);
+    if (pending) {
+      await aplicarEdicion(chatId, pending, text);
+      return;
+    }
+  }
+
   if (msg.photo?.length) {
     await recibirComprobante(chatId, msg.photo);
     return;
   }
 
   await say(chatId, MSG.soloFotos);
+}
+
+// --- Botones (callback_query): aprobar / editar / volver / config ---
+
+async function handleCallback(cq: TelegramCallbackQuery) {
+  const chatId = cq.message?.chat.id;
+  const messageId = cq.message?.message_id;
+  const data = cq.data ?? "";
+  if (!chatId) { await answerCallbackQuery(cq.id); return; }
+
+  const empresaId = await empresaDelChat(chatId);
+  if (!empresaId) { await answerCallbackQuery(cq.id, "Tu Telegram no está conectado."); return; }
+
+  // Config del tipo de boleta (global de la empresa).
+  if (data === "cfg:afecto" || data === "cfg:exento") {
+    const tipo = data === "cfg:exento" ? "exento" : "afecto";
+    await setTipoContribuyente(empresaId, tipo);
+    if (messageId) await editMessageText(chatId, messageId, textoConfig(tipo), { html: true, replyMarkup: kbConfig(tipo) });
+    await answerCallbackQuery(cq.id, tipo === "exento" ? "Ahora exentas" : "Ahora afectas");
+    return;
+  }
+
+  // Acciones sobre una propuesta: <accion>:<propId>[:<campo>]
+  const [accion, propId, campo] = data.split(":");
+  if (!propId) { await answerCallbackQuery(cq.id); return; }
+  const tipo = await tipoChat(empresaId);
+
+  if (accion === "ap") {
+    const ok = await aprobarBot(propId, empresaId);
+    const prop = await propuestaPorId(propId, empresaId);
+    if (ok && prop && messageId) {
+      await editMessageText(chatId, messageId, mensajeBoleta(prop, tipo).text, { html: true });
+    }
+    await answerCallbackQuery(cq.id, ok ? "✅ Aprobada — está en Agregados" : "No se pudo aprobar");
+    return;
+  }
+
+  if (accion === "ed") {
+    const prop = await propuestaPorId(propId, empresaId);
+    if (prop && messageId) {
+      await editMessageText(chatId, messageId, mensajeBoleta(prop, tipo).text + "\n\n¿Qué querés cambiar?", { html: true, replyMarkup: kbCampos(propId) });
+    }
+    await answerCallbackQuery(cq.id);
+    return;
+  }
+
+  if (accion === "bk") {
+    const prop = await propuestaPorId(propId, empresaId);
+    if (prop && messageId) {
+      const { text, keyboard } = mensajeBoleta(prop, tipo);
+      await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard });
+    }
+    await answerCallbackQuery(cq.id);
+    return;
+  }
+
+  if (accion === "ec" && campo) {
+    const prop = await propuestaPorId(propId, empresaId);
+    if (!prop) { await answerCallbackQuery(cq.id, "No encontré la boleta"); return; }
+    await setPendingEdit(chatId, propId, campo, messageId ?? null);
+    await say(chatId, `✏️ Escribí ${labelCampo(campo)} nuevo.\nActual: <b>${valorActual(prop, campo)}</b> 👇`);
+    await answerCallbackQuery(cq.id);
+    return;
+  }
+
+  await answerCallbackQuery(cq.id);
+}
+
+/** Aplica el valor que el usuario escribió para el campo en edición. */
+async function aplicarEdicion(
+  chatId: number,
+  pending: { propuesta_id: string; campo: string; message_id: number | null },
+  valor: string,
+) {
+  const empresaId = await empresaDelChat(chatId);
+  if (!empresaId) { await clearPendingEdit(chatId); return; }
+  const tipo = await tipoChat(empresaId);
+  const res = await editarCampoBot(pending.propuesta_id, empresaId, pending.campo, valor, tipo);
+  if (!res.ok) {
+    await say(chatId, "⚠️ " + res.error); // sin limpiar: deja reintentar
+    return;
+  }
+  await clearPendingEdit(chatId);
+  const { text, keyboard } = mensajeBoleta(res.prop, tipo);
+  if (pending.message_id) await editMessageText(chatId, pending.message_id, text, { html: true, replyMarkup: keyboard });
+  else await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+  await say(chatId, "✅ Listo, actualizado.");
+}
+
+// --- /config: tipo de boleta por defecto (afecta/exenta) de la empresa ---
+
+async function mostrarConfig(chatId: number) {
+  const empresaId = await empresaDelChat(chatId);
+  if (!empresaId) { await say(chatId, MSG.noVinculado); return; }
+  const tipo = (await tipoContribuyenteEmpresa(empresaId)) === "exento" ? "exento" : "afecto";
+  await sendMessage(chatId, textoConfig(tipo), { html: true, replyMarkup: kbConfig(tipo) });
+}
+
+function textoConfig(tipo: "afecto" | "exento"): string {
+  const actual = tipo === "exento" ? "Exenta (41)" : "Afecta (39)";
+  return (
+    "⚙️ <b>Configuración</b>\n\n" +
+    `Tus boletas se generan como <b>${actual}</b> por defecto.\n` +
+    "Elige el tipo (también lo podés cambiar en massDTE → Empresa):"
+  );
+}
+
+function kbConfig(tipo: "afecto" | "exento"): InlineKeyboardMarkup {
+  return { inline_keyboard: [[
+    { text: (tipo !== "exento" ? "✓ " : "") + "Afecta (39)", callback_data: "cfg:afecto" },
+    { text: (tipo === "exento" ? "✓ " : "") + "Exenta (41)", callback_data: "cfg:exento" },
+  ]] };
 }
 
 async function vincularConToken(chatId: number, token: string) {
