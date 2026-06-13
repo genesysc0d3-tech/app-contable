@@ -209,8 +209,12 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
     return;
   }
 
-  // OCR + clasificación corren después de responderle a Telegram (mismo
-  // pipeline del panel); after() mantiene viva la function hasta terminar.
+  // Confirmar de inmediato, ANTES del OCR (que tarda ~segundos). Así el
+  // usuario ve "Recibido" al toque; el procesamiento corre en segundo plano.
+  await say(chatId, MSG.recibido);
+
+  // OCR + clasificación después de responder; after() mantiene viva la
+  // function hasta terminar (mismo pipeline del panel).
   after(() =>
     procesarComprobanteTelegram({
       documentoId: creado.documentoId,
@@ -221,8 +225,6 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
       chatId,
     }),
   );
-
-  await say(chatId, MSG.recibido);
 }
 
 export const dynamic = "force-dynamic";

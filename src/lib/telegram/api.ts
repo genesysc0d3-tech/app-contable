@@ -57,17 +57,36 @@ export async function tgCall<T = unknown>(
   return json.result as T;
 }
 
-/** Manda un mensaje de texto al chat. HTML opcional (negritas, links). */
+/**
+ * Manda un mensaje de texto al chat. HTML opcional (negritas, links).
+ *
+ * No lanza nunca: un mensaje que falla no debe cortar el flujo del webhook
+ * (p. ej. dejar de procesar el comprobante). Si el envío con HTML es
+ * rechazado, reintenta en texto plano antes de rendirse — mejor un mensaje
+ * sin negritas que silencio. Cualquier fallo final queda logueado.
+ */
 export async function sendMessage(
   chatId: number,
   text: string,
   opts?: { html?: boolean },
 ): Promise<void> {
-  await tgCall("sendMessage", {
-    chat_id: chatId,
-    text,
-    ...(opts?.html ? { parse_mode: "HTML" } : {}),
-  });
+  try {
+    await tgCall("sendMessage", {
+      chat_id: chatId,
+      text,
+      ...(opts?.html ? { parse_mode: "HTML" } : {}),
+    });
+  } catch (err) {
+    if (opts?.html) {
+      try {
+        await tgCall("sendMessage", { chat_id: chatId, text: text.replace(/<\/?[^>]+>/g, "") });
+        console.error("[telegram] sendMessage HTML rechazado, enviado en texto plano:",
+          err instanceof Error ? err.message : err);
+        return;
+      } catch { /* cae al log de abajo */ }
+    }
+    console.error("[telegram] sendMessage falló:", err instanceof Error ? err.message : err);
+  }
 }
 
 const MIME_POR_EXTENSION: Record<string, string> = {
