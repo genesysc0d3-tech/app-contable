@@ -274,7 +274,6 @@ export async function enviarResumenPropuestas(
   ocrText: string,
 ): Promise<void> {
   const props = await propuestasDeDocumento(documentoId, empresaId);
-  await sendMessage(chatId, `DBG4 resumen: ${props.length} propuesta(s) para el doc`);
   if (props.length === 0) {
     await sendMessage(
       chatId,

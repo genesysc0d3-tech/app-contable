@@ -111,7 +111,8 @@ interface ChunkResult {
 async function processChunkWithRetry(
   chunkIndex: number,
   chunkText: string,
-  systemPrompt: string
+  systemPrompt: string,
+  contextoEmpresa = ""
 ): Promise<ChunkResult> {
   const provider = getAIProvider();
   let lastError: Error | null = null;
@@ -119,7 +120,7 @@ async function processChunkWithRetry(
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await provider.extractMovimientos(
-        chunkText,
+        contextoEmpresa ? `${contextoEmpresa}\n\n${chunkText}` : chunkText,
         systemPrompt
       );
       return {
@@ -255,6 +256,22 @@ export async function procesarDocumento(
   const classifyPrompt = getClassifyOnlySystemPrompt();
   const bypassMode = Array.isArray(preExtracted) && preExtracted.length > 0;
 
+  // Contexto del contribuyente, AISLADO por empresa: se prepende al contenido
+  // del flujo de extracción para que el modelo sepa quién vende/recibe y lea
+  // bien dirección y montos. Nunca va en el system prompt global (compartido).
+  const { data: emp } = await supabase
+    .from("empresas")
+    .select("razon_social, rut, giro, tipo_contribuyente")
+    .eq("id", empresaId)
+    .maybeSingle();
+  const contextoEmpresa = emp
+    ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
+      `- Razón social: «${emp.razon_social}» | RUT: ${emp.rut}` +
+      (emp.giro ? ` | Giro: ${emp.giro}` : "") +
+      ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
+      "- Es quien VENDE y RECIBE los pagos: los montos son sus INGRESOS (entrada), salvo que el comprobante diga explícitamente que él pagó/envió."
+    : "";
+
   await supabase
     .from("documentos_subidos")
     .update({ estado: "procesando" })
@@ -380,7 +397,7 @@ export async function procesarDocumento(
         const batch = textChunks.slice(start, start + MAX_CONCURRENT);
         return Promise.all(
           batch.map((c, i) =>
-            processChunkWithRetry(start + i, c.text.join("\n"), systemPrompt)
+            processChunkWithRetry(start + i, c.text.join("\n"), systemPrompt, contextoEmpresa)
           )
         );
       }

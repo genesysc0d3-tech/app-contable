@@ -120,7 +120,6 @@ export async function procesarComprobanteTelegram(args: {
 }): Promise<void> {
   const svc = getServiceClient();
   try {
-    if (args.chatId) await sendMessage(args.chatId, "DBG3 after corriendo (OCR)");
     // Import dinámico igual que /api/subir-procesar (no cargar Mistral de más).
     const { ocrAndGroupImages } = await import("@/lib/ai/ocr");
     const { groupedText } = await ocrAndGroupImages([
