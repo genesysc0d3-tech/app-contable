@@ -15,7 +15,9 @@ const GROUP_MODEL = process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash";
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const OCR_PROMPT =
-  "Extrae TODO el texto visible en esta imagen. Mantén la estructura, números, fechas, montos y nombres exactos. Si es un chat, preserva quién dice qué. Si es un comprobante, preserva todos los campos. Responde solo con el texto, sin explicaciones.";
+  "Extrae TODO el texto visible en esta imagen. Mantén la estructura, fechas, nombres y campos exactos. Si es un chat, preserva quién dice qué; si es un comprobante, preserva todos los campos.\n" +
+  "MONTOS (pesos chilenos): el punto es separador de MILES, NO decimal. '$53.000' son cincuenta y tres mil pesos. Transcribe cada monto como número entero sin puntos ni símbolo: '$53.000' → 53000, '$1.250.000' → 1250000.\n" +
+  "Responde solo con el texto, sin explicaciones.";
 
 interface OcrResult {
   text: string;

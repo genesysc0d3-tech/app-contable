@@ -275,7 +275,8 @@ export async function procesarDocumento(
       (emp.giro ? ` | Giro: ${emp.giro}` : "") +
       ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
       (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +
-      "- Es quien VENDE y RECIBE los pagos: sus montos son INGRESOS (entrada). Si el dinero va HACIA él (PARA/destino/receptor = su razón social, RUT o cualquiera de esos nombres/cuentas) → entrada. Marca salida SOLO si el comprobante dice explícitamente que él pagó/envió."
+      "- Es quien VENDE y RECIBE los pagos: sus montos son INGRESOS (entrada). Si el dinero va HACIA él (PARA/destino/receptor = su razón social, RUT o cualquiera de esos nombres/cuentas) → entrada. Marca salida SOLO si el comprobante dice explícitamente que él pagó/envió.\n" +
+      "- Cada pago recibido (entrada) es una VENTA a boletear: genera SIEMPRE una propuesta (boleta_honorarios / factura_afecta / factura_exenta / compraventa_crypto / transferencia_p2p / operacion_forex según corresponda). NUNCA uses 'no_comercial' para un pago recibido por el contribuyente."
     : "";
 
   await supabase
