@@ -31,6 +31,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/empresa/upload-logo|api/empresa/logo/|api/sii-local/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Webhooks/callbacks externos (Telegram, MercadoPago, cron, SII local)
+    // NO pasan por el check de sesión: llegan sin cookie de usuario y tienen
+    // su propia autenticación (secret header / Bearer). Sin esto el middleware
+    // los redirige a /auth/login y nunca se ejecutan.
+    "/((?!_next/static|_next/image|favicon.ico|api/empresa/upload-logo|api/empresa/logo/|api/sii-local/|api/telegram/|api/pagos/webhook|api/pagos/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
