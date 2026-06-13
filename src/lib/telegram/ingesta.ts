@@ -28,6 +28,60 @@ function getServiceClient() {
   );
 }
 
+/**
+ * Garantía determinística: cada movimiento de ENTRADA (venta) del documento
+ * debe tener una propuesta de boleta. El clasificador a veces extrae bien el
+ * movimiento (monto + dirección) pero omite la propuesta; acá la creamos según
+ * la config de la empresa (exento → exenta sin IVA; afecto → desglose 19%).
+ * Scoped por empresa. No lanza.
+ */
+async function asegurarPropuestasDeVenta(
+  svc: ReturnType<typeof getServiceClient>,
+  documentoId: string,
+  empresaId: string,
+): Promise<void> {
+  const { data: movs } = await svc
+    .from("movimientos_raw")
+    .select("id, monto")
+    .eq("documento_id", documentoId)
+    .eq("tipo_flujo", "entrada");
+  const entradas = movs ?? [];
+  if (entradas.length === 0) return;
+
+  const { data: props } = await svc
+    .from("propuestas_ia")
+    .select("movimiento_id")
+    .in("movimiento_id", entradas.map((m) => m.id));
+  const conPropuesta = new Set((props ?? []).map((p) => p.movimiento_id));
+  const faltantes = entradas.filter((m) => !conPropuesta.has(m.id));
+  if (faltantes.length === 0) return;
+
+  const { data: emp } = await svc
+    .from("empresas")
+    .select("tipo_contribuyente")
+    .eq("id", empresaId)
+    .maybeSingle();
+  const exento = emp?.tipo_contribuyente === "exento";
+
+  const inserts = faltantes.map((m) => {
+    const total = m.monto ?? 0;
+    const neto = exento ? total : Math.round(total / 1.19);
+    return {
+      empresa_id: empresaId,
+      movimiento_id: m.id,
+      estado: "pendiente",
+      tipo_propuesto: "boleta",
+      total,
+      monto_neto: neto,
+      iva: exento ? 0 : total - neto,
+      confianza: 0.7,
+      notas: "Venta detectada en comprobante",
+    };
+  });
+  const { error } = await svc.from("propuestas_ia").insert(inserts);
+  if (error) console.error("[telegram] asegurarPropuestas insert fallo:", error.message);
+}
+
 /** Nombre visible en Agregados: `Telegram dd-mm HH:mm comprobante.jpg` (hora de Chile). */
 export function nombreComprobanteTelegram(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("es-CL", {
@@ -144,6 +198,12 @@ export async function procesarComprobanteTelegram(args: {
       console.error(`[telegram] ${args.documentoId} error pipeline:`, result.error);
     }
 
+    // Garantía determinística: cada movimiento de ENTRADA (venta) debe tener
+    // propuesta. El modelo a veces extrae bien el movimiento pero no genera la
+    // propuesta; la creamos nosotros según la config de la empresa, sin depender
+    // de que la IA obedezca.
+    await asegurarPropuestasDeVenta(svc, args.documentoId, args.empresaId);
+
     const { data: row } = await svc
       .from("documentos_subidos")
       .select("progreso_ia")
@@ -155,7 +215,7 @@ export async function procesarComprobanteTelegram(args: {
         : {};
     await svc
       .from("documentos_subidos")
-      .update({ progreso_ia: { ...progreso, origen: "telegram", debug_ocr: groupedText.slice(0, 800) } as Json })
+      .update({ progreso_ia: { ...progreso, origen: "telegram" } as Json })
       .eq("id", args.documentoId);
 
     // Resumen interactivo: "📄 Leí esto" + "🧾 Boleta" con botones por operación.
