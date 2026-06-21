@@ -290,6 +290,9 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - Modo soporte Genesys quedo app-wide para el grupo `(app)`: `getAppEmpresaContext`
   centraliza la empresa efectiva, el layout muestra banner global, las rutas
   auditadas leen la empresa soportada y `/api/sii-mock/rcv` respeta soporte.
+- Readiness launch 2026-06-21: app web verde para beta controlada; no prometer
+  emision tributaria end-to-end hasta cerrar `LAUNCH-001` smoke real
+  extension/SII/CAF. `LAUNCH-002` cubre runbook de primera beta.
 - Bloque 4-5 del TXT quedo reconciliado contra produccion: migraciones remotas
   alineadas, dry-run sin pendientes, lint remoto sin errores de schema y build
   Next/Vercel local OK. `DEV-001` quedo cerrado.
