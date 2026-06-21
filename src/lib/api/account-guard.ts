@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
-import { validarAccesoCuenta } from "@/lib/entitlements";
+import { contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
+import { getDevSupportMode } from "@/lib/dev/support-mode";
 
 type Sb = SupabaseClient<Database>;
 
@@ -36,6 +37,27 @@ export async function requireAccountApiAccess(options: {
   }
 
   const service = createServiceClient<Database>(url, key);
+
+  const support = await getDevSupportMode();
+  if (support?.ok) {
+    const cuenta = await contextoCuentaPorEmpresa(support.sb, support.empresaId);
+    if (!cuenta) return { ok: false, response: NextResponse.json({ ok: false, error: "EMPRESA_SIN_CUENTA" }, { status: 403 }) };
+    if (options.requirePlan && !cuenta.planActivo) {
+      return { ok: false, response: NextResponse.json({ ok: false, error: "PLAN_INACTIVO" }, { status: 402 }) };
+    }
+
+    return {
+      ok: true,
+      supabase,
+      service: support.sb,
+      userId: support.operatorUserId,
+      empresaId: support.empresaId,
+      rol: "owner",
+      cuentaId: cuenta.cuentaId,
+      plan: cuenta.plan,
+    };
+  }
+
   const { data: usuario, error: usuarioError } = await service
     .from("usuarios")
     .select("id, empresa_id, rol, vetado")
