@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
+import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
 
 type TipoDte = 33 | 34 | 39 | 41;
 type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro";
@@ -101,6 +102,21 @@ interface LocalWorkerState {
   jobId: string | null;
   status: string;
   message: string;
+}
+
+interface EmissionJobStartResponse {
+  ok?: boolean;
+  job_id?: string;
+  expires_at?: string;
+  locked_until?: string;
+  empresa_id?: string;
+  expected_emisor_rut?: string | null;
+  business_mode?: boolean;
+  reserved_folio?: number | null;
+  reserved_tipo_dte?: number | null;
+  error?: string;
+  detalle?: string;
+  bloqueo?: EmissionLockInfo | null;
 }
 
 function fmt(n: number): string {
@@ -270,6 +286,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const [extensionStatus, setExtensionStatus] = useState<ExtensionInstallStatus>("checking");
   const [localWorker, setLocalWorker] = useState<LocalWorkerState | null>(null);
   const [localWorkerLoading, setLocalWorkerLoading] = useState(false);
+  const [simpleApiJobId, setSimpleApiJobId] = useState<string | null>(null);
   const [manualSiiFolio, setManualSiiFolio] = useState("");
   const [leyendoComprobante, setLeyendoComprobante] = useState(false);
   const comprobanteInputRef = useRef<HTMLInputElement>(null);
@@ -297,13 +314,22 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const isBoletaTipo = tipoDte === 39 || tipoDte === 41;
   const usesSiiLocal = emisionProveedor === "sii_local" && isBoletaTipo;
   const usesSimpleApi = facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
+  const currentEmissionJobId = localWorker?.jobId ?? simpleApiJobId;
+  const {
+    status: emissionLock,
+    activeLock: activeEmissionLock,
+    lockedByOther: lockBlocksEmission,
+    setStatus: setEmissionLock,
+  } = useEmissionLockStatus({ enabled: usesSiiLocal || usesSimpleApi, currentJobId: currentEmissionJobId });
   // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
   // un dígito verificador malo termina en rechazo SII.
   const rutReceptorInvalido = receptorRut.trim().length > 0 && !validarRut(receptorRut);
   const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !emitiendo;
-  const canOpenLocalWorker = canSubmit && !localWorkerLoading;
-  const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : !canSubmit;
-  const primaryLabel = usesSiiLocal
+  const canOpenLocalWorker = canSubmit && !localWorkerLoading && !lockBlocksEmission;
+  const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : usesSimpleApi ? !canSubmit || lockBlocksEmission : !canSubmit;
+  const primaryLabel = lockBlocksEmission && (usesSiiLocal || usesSimpleApi)
+    ? "Emisión en curso"
+    : usesSiiLocal
     ? localWorkerLoading ? "Abriendo..." : "Emitir en SII"
     : usesSimpleApi ? emitiendo ? "Generando..." : "Generar con SimpleAPI"
       : emitiendo ? "Emitiendo..." : "Emitir DTE";
@@ -386,13 +412,87 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     });
   }, []);
 
+  async function startEmissionJob(provider: "sii_local" | "simpleapi"): Promise<EmissionJobStartResponse | null> {
+    try {
+      const res = await fetch("/api/emision/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          tipo_dte: tipoDte,
+          origin: "emision_directa",
+          expected_emisor_rut: empresaRut ?? null,
+        }),
+      });
+      const json = (await res.json()) as EmissionJobStartResponse;
+      if (!res.ok || !json.ok || !json.job_id || !json.expires_at) {
+        const message = json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
+        if (json.error === "EMISION_BLOQUEADA") {
+          setEmissionLock({
+            ok: true,
+            locked: Boolean(json.bloqueo),
+            business_mode: Boolean(json.business_mode),
+            bloqueo: json.bloqueo ?? null,
+          });
+        }
+        toast(message, "error");
+        return null;
+      }
+      setEmissionLock({
+        ok: true,
+        locked: true,
+        business_mode: Boolean(json.business_mode),
+        bloqueo: {
+          job_id: json.job_id,
+          provider,
+          locked_until: json.locked_until ?? json.expires_at,
+          is_mine: true,
+          mensaje: "Emisión iniciada desde este computador.",
+        },
+      });
+      return json;
+    } catch {
+      toast("Error de red al iniciar la emisión", "error");
+      return null;
+    }
+  }
+
+  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" = "cancelled") {
+    if (!jobId) return;
+    try {
+      await fetch("/api/emision/jobs", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: jobId, estado }),
+      });
+      setEmissionLock(null);
+    } catch {
+      // Best-effort: si falla, el lock expira por TTL server-side.
+    }
+  }
+
+  async function heartbeatEmissionJob(jobId: string | null | undefined, status: string) {
+    if (!jobId) return;
+    try {
+      await fetch("/api/emision/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: jobId, status }),
+      });
+    } catch {
+      // Best-effort: el lock expira por TTL si el navegador se cae.
+    }
+  }
+
   const persistSimpleApiResult = useEffectEvent(async (data: ExtensionPageMessage) => {
+    const jobId = data.job_id ?? simpleApiJobId;
     setEmitiendo(true);
     try {
       const res = await fetch("/api/simpleapi/result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          job_id: jobId,
           result: {
             trackId: data.trackId,
             dte: data.dte,
@@ -422,11 +522,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       }
       setLastResult({ ok: true, proveedor: "simpleapi", estado: json.estado ?? "aceptado", track_id: json.track_id, folio: json.folio, monto_total: json.monto_total ?? data.dte?.total ?? total });
       toast(json.already_exists ? `DTE #${json.folio ?? "--"} ya estaba guardado.` : `DTE #${json.folio ?? "--"} emitido y guardado.`, "success");
+      setSimpleApiJobId(null);
+      setEmissionLock(null);
       router.refresh();
     } catch {
       const message = "DTE aceptado, pero fallo la persistencia en App Contable.";
       setErrors([message]);
       setLastResult({ ok: false, error: message, proveedor: "simpleapi", estado: "aceptado_sin_persistir", track_id: String(data.trackId ?? "--"), folio: data.dte?.folio, monto_total: data.dte?.total ?? total });
+      void closeEmissionJob(jobId, "failed");
       toast(message, "error");
     } finally {
       setEmitiendo(false);
@@ -460,6 +563,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       if (data.type === "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR_RESULT") {
         setEmitiendo(false);
         if (data.ok === false) {
+          const jobId = data.job_id ?? simpleApiJobId;
+          void closeEmissionJob(jobId, "failed");
+          setSimpleApiJobId(null);
           const message = data.error === "SIMPLEAPI_VAULT_LOCKED"
             ? "Desbloquea la bóveda SimpleAPI en la extensión antes de generar."
             : data.detalle ?? data.error ?? errorFromUnknownData(data.data) ?? `SimpleAPI se detuvo en ${data.step ?? "el flujo"}.`;
@@ -473,17 +579,26 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
 
+      void heartbeatEmissionJob(data.job_id, data.status ?? "running");
       setLocalWorker({
         jobId: data.job_id ?? null,
         status: data.status ?? "error",
         message: data.message ?? "Estado recibido desde motor local SII",
       });
       setLocalWorkerLoading(false);
+      if ((data.status === "error" || data.status === "cancelled") && data.job_id) {
+        void closeEmissionJob(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
+        if (data.job_id === simpleApiJobId) {
+          setEmitiendo(false);
+          setSimpleApiJobId(null);
+          toast(data.message ?? "No se pudo contactar la extensión local", "error");
+        }
+      }
     }
 
     window.addEventListener("message", onExtensionMessage);
     return () => window.removeEventListener("message", onExtensionMessage);
-  }, [router, toast, total]);
+  }, [router, simpleApiJobId, toast, total]);
 
   function updateActiveDraft(patch: Partial<BoletaDraft>) {
     setDrafts((current) => current.map((draft) => draft.id === activeDraft.id ? { ...draft, ...patch, updatedAt: Date.now() } : draft));
@@ -664,14 +779,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }
   }
 
-  function buildSimpleApiInput() {
+  function buildSimpleApiInput(reservedFolio?: number | null) {
     const neto = tipoDte === 33 ? Math.round(total / 1.19) : total;
     const iva = tipoDte === 33 ? total - neto : 0;
+    const folio = Number.isSafeInteger(reservedFolio) && Number(reservedFolio) > 0 ? Number(reservedFolio) : undefined;
     return JSON.stringify({
       Documento: {
         Encabezado: {
           IdentificacionDTE: {
             TipoDTE: tipoDte,
+            ...(folio ? { Folio: folio } : {}),
             FechaEmision: chileTodayString(),
             FormaPago: 1,
           },
@@ -707,34 +824,53 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     });
   }
 
-  function sendSimpleApiGenerar() {
+  async function sendSimpleApiGenerar() {
     setEmitiendo(true);
     setErrors([]);
     setLastResult(null);
+    const job = await startEmissionJob("simpleapi");
+    if (!job?.job_id) {
+      setEmitiendo(false);
+      return;
+    }
+    setSimpleApiJobId(job.job_id);
+    void heartbeatEmissionJob(job.job_id, "submitting");
     window.postMessage({
       source: "app-contable",
       type: "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR",
       protocol_version: 1,
-      input: buildSimpleApiInput(),
+      job_id: job.job_id,
+      reserved_folio: job.reserved_folio ?? null,
+      reserved_tipo_dte: job.reserved_tipo_dte ?? null,
+      expires_at: job.expires_at,
+      input: buildSimpleApiInput(job.reserved_folio),
     }, window.location.origin);
   }
 
-  function sendLocalSiiJob() {
-    const jobId = makeClientId();
+  async function sendLocalSiiJob() {
     setLocalWorkerLoading(true);
-    setLocalWorker({ jobId, status: "opening_sii", message: "Abriendo ventana segura SII..." });
+    setLocalWorker({ jobId: null, status: "opening_sii", message: "Preparando bloqueo de emision..." });
+    const job = await startEmissionJob("sii_local");
+    if (!job?.job_id || !job.expires_at) {
+      setLocalWorkerLoading(false);
+      setLocalWorker(null);
+      return;
+    }
+
+    setLocalWorker({ jobId: job.job_id, status: "opening_sii", message: "Abriendo ventana segura SII..." });
+    void heartbeatEmissionJob(job.job_id, "opening_sii");
 
     window.postMessage({
       source: "app-contable",
       type: "APP_CONTABLE_SII_BOLETA_JOB",
       protocol_version: 1,
       job: {
-        job_id: jobId,
-        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        empresa_id: empresaId ?? "default",
+        job_id: job.job_id,
+        expires_at: job.expires_at,
+        empresa_id: job.empresa_id ?? empresaId ?? "default",
         // El worker verifica que el portal tenga seleccionado este emisor
         // antes de emitir (cuentas SII multi-empresa).
-        emisor_rut: empresaRut ?? undefined,
+        emisor_rut: job.expected_emisor_rut ?? empresaRut ?? undefined,
         tipo_dte: tipoDte,
         fecha_emision: chileTodayString(),
         receptor: {
@@ -771,6 +907,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       toast("Ingresa el folio visible en SII", "error");
       return;
     }
+    if (!localWorker?.jobId) {
+      toast("Primero inicia una emisión SII para crear el job seguro", "error");
+      return;
+    }
 
     setLocalWorkerLoading(true);
     try {
@@ -778,7 +918,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          job_id: localWorker?.jobId ?? `manual:${folio}`,
+          job_id: localWorker.jobId,
           result: {
             folio,
             folio_confidence: "high",
@@ -830,12 +970,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }
 
   async function persistLatestSiiPdf() {
+    if (!localWorker?.jobId) {
+      toast("Primero inicia una emisión SII para crear el job seguro", "error");
+      return;
+    }
     setLocalWorkerLoading(true);
     try {
       const res = await fetch("/api/sii-local/result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recover_latest: true }),
+        body: JSON.stringify({ job_id: localWorker.jobId, recover_latest: true }),
       });
       const json = (await res.json()) as { ok?: boolean; folio?: number; boleta_id?: string; error?: string; detalle?: string; already_exists?: boolean };
       if (!res.ok || !json.ok) {
@@ -859,7 +1003,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   function openLocalSiiWorker() {
     if (!canSubmit || localWorkerLoading) return;
     if (extensionStatus === "ready") {
-      sendLocalSiiJob();
+      void sendLocalSiiJob();
       return;
     }
 
@@ -873,7 +1017,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         return;
       }
       setExtensionStatus("ready");
-      sendLocalSiiJob();
+      void sendLocalSiiJob();
     });
   }
 
@@ -887,7 +1031,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         toast("Instala o recarga la extensión App Contable Motor Local", "error");
         return;
       }
-      sendSimpleApiGenerar();
+      void sendSimpleApiGenerar();
       return;
     }
     void handleEmitir();
@@ -1092,6 +1236,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>IVA</span><strong style={{ color: "var(--text)" }}>{tipoDte === 39 || tipoDte === 33 ? "Incluido" : "No aplica"}</strong></div>
               </div>
             </div>
+
+            {lockBlocksEmission && activeEmissionLock && (usesSiiLocal || usesSimpleApi) && (
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 10, lineHeight: 1.45 }}>
+                <span className="ed-label" style={{ color: "#f59e0b" }}>{emissionLock?.business_mode ? "Equipo" : "Emisión en curso"}</span><br />
+                {activeEmissionLock.mensaje ?? "Hay una emisión en curso para esta cuenta. Intenta nuevamente cuando termine."}
+              </div>
+            )}
 
             {usesSiiLocal && (
               <div style={{ padding: 11, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>

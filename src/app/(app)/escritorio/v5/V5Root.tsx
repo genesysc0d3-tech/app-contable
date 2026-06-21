@@ -2,6 +2,7 @@
 
 import { Component, useState, useCallback, useRef, useEffect, type ErrorInfo, type ReactNode } from "react";
 import EmpresaPopup from "./EmpresaPopup";
+import { EmissionLockProvider, useEmissionLockStatus } from "./useEmissionLockStatus";
 import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 import type { EmissionProviderState } from "../../empresa/EmissionProviderConfig";
@@ -84,7 +85,7 @@ export default function V5Root({
   }, []);
 
   return (
-    <>
+    <EmissionLockProvider>
       <style>{`
 :root,[data-theme="dark"]{--bg:#0f1014;--surface:#16181d;--surface2:#1a1c24;--border:rgba(255,255,255,.06);--text:#e8eaf0;--text2:#636878;--text3:#4a4d55;--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--green:#22c55e;--amber:#f59e0b;--blue:#5b9cf6;--bg-muted:rgba(255,255,255,.04);--shadow:rgba(0,0,0,.3);--header-bg:rgba(22,24,29,.15);--header-border:rgba(255,255,255,.04)}
 [data-theme="light"]{--bg:#f5f0eb;--surface:#ffffff;--surface2:#faf7f3;--border:rgba(0,0,0,.08);--text:#1a1612;--text2:#8c8279;--text3:#b0a79e;--accent:#E8553E;--accent-light:rgba(232,85,62,.08);--green:#16a34a;--amber:#d97706;--blue:#3b82f6;--bg-muted:rgba(0,0,0,.04);--shadow:rgba(0,0,0,.08);--header-bg:rgba(255,255,255,.2);--header-border:rgba(0,0,0,.04)}
@@ -120,7 +121,28 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           onClose={() => setEmpresaOpen(false)}
         />
       )}
-    </>
+      <BusinessEmissionLockBanner />
+    </EmissionLockProvider>
+  );
+}
+
+function BusinessEmissionLockBanner() {
+  const { activeLock, businessMode, lockMessage } = useEmissionLockStatus();
+
+  if (!businessMode || !activeLock || activeLock.is_mine) return null;
+
+  return (
+    <div style={{ position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 96, width: "min(520px, calc(100vw - 28px))", pointerEvents: "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(245,158,11,.24)", background: "rgba(24,20,12,.86)", color: "#f59e0b", boxShadow: "0 18px 48px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
+        <span style={{ width: 26, height: 26, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(245,158,11,.14)", border: "1px solid rgba(245,158,11,.22)", flexShrink: 0 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4" /><path d="M12 18v4" /><path d="m4.93 4.93 2.83 2.83" /><path d="m16.24 16.24 2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="m4.93 19.07 2.83-2.83" /><path d="m16.24 7.76 2.83-2.83" /></svg>
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 2 }}>Equipo</div>
+          <div style={{ fontSize: 11, fontWeight: 750, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lockMessage}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 

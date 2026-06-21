@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
+import { getDevSupportMode } from "@/lib/dev/support-mode";
 import V5Root from "./V5Root";
 import GlowWrap from "./GlowWrap";
 import TabsV5 from "./TabsV5";
@@ -22,6 +23,10 @@ import DocCardList from "./DocCardList";
 import RcvViewWrapper from "./RcvViewWrapper";
 import RCVSummaryCard from "./RCVSummaryCard";
 import EmpresaBrand from "./EmpresaBrand";
+import TeamBusinessPanel from "./TeamBusinessPanel";
+import UsageCountersPanel from "./UsageCountersPanel";
+import DevSupportBanner from "./DevSupportBanner";
+import { listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
@@ -92,8 +97,14 @@ function weekRangeStr(date: string) {
 export default async function V5Page({ searchParams }: {
   searchParams: Promise<{ date?: string; month?: string; view?: string }>;
 }) {
-  const usuario = (await getUsuario())!;
+  const sessionUsuario = (await getUsuario())!;
+  const support = await getDevSupportMode();
+  const supportMode = support?.ok ? support : null;
+  const usuario = supportMode
+    ? ({ ...sessionUsuario, empresa_id: supportMode.empresaId, empresas: supportMode.empresa } as typeof sessionUsuario)
+    : sessionUsuario;
   if (!usuario.empresas) notFound();
+  const supportReadOnlyReason = supportMode ? "Modo soporte: solo lectura" : undefined;
   const empresaId = usuario.empresa_id;
   const boletasProveedor = mapBoletasProveedor(usuario.empresas.boletas_emision_proveedor ?? usuario.empresas.emision_proveedor);
   const facturasProveedor = mapFacturasProveedor(usuario.empresas.facturas_emision_proveedor);
@@ -103,7 +114,7 @@ export default async function V5Page({ searchParams }: {
   const weekRange = weekRangeStr(selDate);
   const workMode = view === "month" || dateParam === "all" ? "month" : view === "week" ? "week" : "day";
 
-  const supabase = await createClient();
+  const supabase = supportMode ? supportMode.sb : await createClient();
 
   const now = new Date();
   // Año/mes/día actuales EN CHILE (no UTC del server, que en Vercel corre el
@@ -172,6 +183,11 @@ export default async function V5Page({ searchParams }: {
 
   const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
   const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
+  const empresasSelector = await listarEmpresasSelector();
+  const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
+  const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
+  const equipoBusiness = await listarEquipoBusiness();
+  const resumenCupos = await listarResumenCupos();
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
   const mes = String(curMonth + 1).padStart(2, "0") + "-" + curYear;
@@ -549,10 +565,14 @@ body{font-family:'DM Sans',sans-serif}
 
       <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", minHeight: "100vh", padding: "20px 20px 20px" }}>
 
+        {supportMode && (
+          <DevSupportBanner empresaNombre={usuario.empresas.razon_social} operatorEmail={supportMode.operatorEmail} />
+        )}
+
         {/* CALENDAR + ACTIONS ROW */}
         <div style={{position:"relative",height:38,marginBottom:12}}>
           <div style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:2}}>
-            <EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} size={38} maxWidth={180} />
+            <EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} size={38} maxWidth={180} />
           </div>
           <div className="v5-calendar-wrap" style={{position:"absolute",left:"50%",top:0,transform:"translateX(-50%)",height:38,display:"flex",justifyContent:"center",minWidth:0,overflow:"hidden",zIndex:1}}>
           <div style={{background:"var(--surface)",borderRadius:12,border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",minWidth:0,height:38,display:"flex",alignItems:"center",width:"fit-content"}}>
@@ -603,6 +623,7 @@ body{font-family:'DM Sans',sans-serif}
 
             {/* RCV CARD */}
             <RCVSummaryCard mes={mes} esRcvExento={esRcvExento} docs={rcvTotal.docs} neto={fmt(rcvTotal.neto)} iva={fmt(rcvTotal.iva)} total={fmt(rcvTotal.total)} />
+            {resumenCupos.ok && <UsageCountersPanel resumen={resumenCupos.resumen} />}
 
             {/* EMITIR PANEL */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
@@ -616,10 +637,11 @@ body{font-family:'DM Sans',sans-serif}
                 empresaGiro={usuario.empresas.giro}
                 empresaDireccion={usuario.empresas.direccion}
                 empresaComuna={usuario.empresas.comuna}
+                readOnlyReason={supportReadOnlyReason}
               />
             </div></GlowWrap>
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <MassDTEAction empresaId={empresaId} />
+              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
             </div></GlowWrap>
 
             {/* ACTION BUTTONS */}
@@ -627,6 +649,15 @@ body{font-family:'DM Sans',sans-serif}
             <ActivityButton />
             <div style={{display:"none"}}><RCVButton /></div>
             </div>
+            {equipoBusiness.ok && equipoBusiness.equipo && (
+              <TeamBusinessPanel
+                cuentaId={equipoBusiness.cuentaId}
+                usuarioId={equipoBusiness.usuarioId}
+                empresaActivaId={equipoBusiness.empresaActivaId}
+                empresaActivaNombre={equipoBusiness.empresaActivaNombre}
+                personas={equipoBusiness.personas}
+              />
+            )}
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}
