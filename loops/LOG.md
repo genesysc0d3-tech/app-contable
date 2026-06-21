@@ -10,6 +10,18 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Observabilidad operacional base - #ops #dev-operator #launch
+
+What: Added sanitized `ops_events`, safe metadata redaction, best-effort ops
+event helpers, `/api/ops/cron` with `CRON_SECRET`, `/dev/diagnostico` health
+snapshot, and instrumentation for upload/IA/OCR, payments, emission jobs,
+SII local and SimpleAPI failures. Remote Supabase migration and schema lint
+passed.
+
+Refs: `supabase/migrations/20260621190000_ops_events.sql`,
+`src/lib/ops/events.ts`, `src/lib/ops/diagnostics.ts`,
+`src/app/api/ops/cron/route.ts`, `src/app/(dev)/dev/diagnostico/page.tsx`.
+
 ## 2026-06-21 - Lighthouse CI agregado - #ci #performance #accessibility
 
 What: Added a dedicated Lighthouse CI workflow using `treosh/lighthouse-ci-action@v12`.

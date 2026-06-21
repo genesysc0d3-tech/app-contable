@@ -25,6 +25,52 @@ respuesta a brechas, derechos ARCO, contratos/DPA y readiness legal antes de
 beta pagada o lanzamiento abierto. No instalar ni copiar codigo del repo externo
 sin decision explicita.
 
+### Sesion 2026-06-21 - Observabilidad operacional
+
+**Que se hizo:**
+- Se implemento la primera capa real de observabilidad operacional en la rama
+  `observability/ops-events`.
+- Se agrego `ops_events` con RLS deny-by-default para eventos internos
+  sanitizados: severidad, fuente, evento, cuenta/empresa/usuario opcionales,
+  recurso, resumen y metadata segura. La migracion
+  `20260621190000_ops_events.sql` quedo aplicada en Supabase remoto.
+- Se agrego sanitizador de metadata ops: redacta tokens, claves, cookies,
+  certificados, PDFs/XML/base64/payloads/prompts/raw, enmascara emails/RUTs y
+  limita largo/profundidad.
+- Se agrego `recordOpsEvent` / `recordOpsError` y snapshot operacional para
+  detectar documentos atascados, locks expirados, jobs de emision fallidos y
+  eventos ops error/critical en 24h.
+- Se agrego `GET /api/ops/cron` protegido por `CRON_SECRET`, programado diario
+  en `vercel.json` por limite Hobby de Vercel, con alerta opcional via
+  `OPS_ALERT_WEBHOOK_URL`. En Pro o con scheduler externo se puede subir la
+  frecuencia a 30 minutos.
+- `/dev/diagnostico` ahora muestra salud operacional segura para Genesys:
+  contadores, hallazgos activos y ultimos eventos ops sin payloads ni secretos.
+- Se instrumentaron fallos/bloqueos en upload/IA/OCR, pagos checkout/webhook/
+  cron, emision jobs, SII local y SimpleAPI result. No se toca extension/SII.
+
+**Verificacion:**
+- `npm run test -- src/lib/ops/sanitize.test.ts`: OK, 3 tests.
+- `rtk tsc --noEmit`: OK.
+- `npm run lint`: OK.
+- `npm run build`: OK con `/api/ops/cron` y `/dev/diagnostico`.
+- `npm run test`: OK, 13 archivos, 89 tests.
+- `git diff --check`: OK.
+- `bash scripts/supabase-local-token.sh db push --dry-run`: OK; solo
+  `20260621190000_ops_events.sql`.
+- `bash scripts/supabase-local-token.sh db push`: OK; migracion aplicada.
+- `bash scripts/supabase-local-token.sh migration list`: OK; remoto muestra
+  `20260621190000`.
+- `bash scripts/supabase-local-token.sh db lint --linked`: OK, sin errores.
+
+**Pendientes criticos:**
+- Implementar `ENG-003` cola durable para OCR/IA/documentos con worker/cron,
+  idempotencia, reintentos y recuperacion de jobs atascados.
+- Configurar `OPS_ALERT_WEBHOOK_URL` si se quiere alerta externa inmediata.
+- Extender Lighthouse autenticado a `/massdte` y `/dev/cuentas` con storage
+  state seguro.
+- Continuar paquete compliance/legal antes de beta pagada abierta.
+
 ### Sesion 2026-06-21 - LAUNCH-001, rate limits y arquitectura durable
 
 **Que se hizo:**

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { extraerComprobante } from "@/lib/comprobante/extract";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { recordOpsError } from "@/lib/ops/events";
 
 /**
  * OCR de comprobantes de transferencia (imagen → campos pre-llenables).
@@ -18,6 +19,13 @@ export async function POST(request: Request) {
     return await handlePost(request);
   } catch (error) {
     console.error("[ocr-comprobante] error no controlado", error);
+    await recordOpsError({
+      severity: "error",
+      source: "ocr",
+      eventName: "ocr_comprobante_unhandled",
+      summary: "OCR de comprobante fallo fuera del flujo controlado",
+      error,
+    });
     return NextResponse.json(
       { ok: false, error: "OCR_COMPROBANTE_FAILED", detalle: "No pude procesar el comprobante. Intenta de nuevo." },
       { status: 500 },
@@ -116,6 +124,16 @@ async function handlePost(request: Request) {
     });
   } catch (error) {
     console.error("[ocr-comprobante] OCR falló", error);
+    await recordOpsError({
+      severity: "error",
+      source: "ocr",
+      eventName: "ocr_comprobante_failed",
+      summary: "El proveedor OCR no pudo leer el comprobante",
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      error,
+      metadata: { mime, bytes },
+    });
     return NextResponse.json(
       { ok: false, error: "OCR_FALLIDO", detalle: "No pude leer la imagen del comprobante. Intenta con una captura más nítida." },
       { status: 502 },

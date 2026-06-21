@@ -9,6 +9,7 @@ import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/cl
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled";
@@ -98,6 +99,17 @@ export async function POST(request: Request) {
   try {
     businessMode = await businessModeForPlan(guard.service, guard.plan);
   } catch (error) {
+    await recordOpsError({
+      sb: guard.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_plan_query_failed",
+      summary: "No se pudo resolver modalidad de plan para emision",
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      usuarioId: guard.userId,
+      error,
+    });
     return NextResponse.json({ ok: false, error: "PLAN_QUERY_FAILED", detalle: error instanceof Error ? error.message : undefined }, { status: 500 });
   }
 
@@ -121,6 +133,18 @@ export async function POST(request: Request) {
 
   const config = await obtenerConfigEmision(guard.empresaId).catch((error) => ({ error }));
   if ("error" in config) {
+    await recordOpsError({
+      sb: guard.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_config_error",
+      summary: "No se pudo leer configuracion de emision",
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      usuarioId: guard.userId,
+      error: config.error,
+      metadata: { provider, tipo_dte: tipoDte },
+    });
     return NextResponse.json({ ok: false, error: "EMISION_CONFIG_ERROR" }, { status: 500 });
   }
   if (providerForTipoDte(config, tipoDte) !== provider) {
@@ -132,7 +156,21 @@ export async function POST(request: Request) {
     .select("rut")
     .eq("id", guard.empresaId)
     .maybeSingle();
-  if (empresaError) return NextResponse.json({ ok: false, error: "EMPRESA_QUERY_FAILED", detalle: empresaError.message }, { status: 500 });
+  if (empresaError) {
+    await recordOpsError({
+      sb: guard.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_empresa_query_failed",
+      summary: "No se pudo leer empresa para preparar emision",
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      usuarioId: guard.userId,
+      error: empresaError,
+      metadata: { provider, tipo_dte: tipoDte },
+    });
+    return NextResponse.json({ ok: false, error: "EMPRESA_QUERY_FAILED", detalle: empresaError.message }, { status: 500 });
+  }
 
   const expectedEmisorRut = cleanText(empresa?.rut) ?? cleanText(payload.expected_emisor_rut);
   if (provider === "sii_local" && !expectedEmisorRut) {
@@ -152,6 +190,17 @@ export async function POST(request: Request) {
 
   if (!lock.ok) {
     if (lock.error === "EMISION_BLOQUEADA") {
+      await recordOpsEvent({
+        sb: guard.service,
+        severity: "warn",
+        source: "emision",
+        eventName: "emission_lock_blocked",
+        summary: "Emision bloqueada por otro job activo en la cuenta",
+        cuentaId: guard.cuentaId,
+        empresaId: guard.empresaId,
+        usuarioId: guard.userId,
+        metadata: { provider, tipo_dte: tipoDte },
+      });
       return NextResponse.json(
         {
           ok: false,
@@ -162,6 +211,17 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+    await recordOpsEvent({
+      sb: guard.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_lock_acquire_failed",
+      summary: "No se pudo crear lock de emision",
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      usuarioId: guard.userId,
+      metadata: { provider, tipo_dte: tipoDte, error: lock.error, detalle: lock.detalle },
+    });
     return NextResponse.json({ ok: false, error: lock.error, detalle: lock.detalle }, { status: 500 });
   }
 
@@ -176,6 +236,19 @@ export async function POST(request: Request) {
     });
     if (!reserva.ok) {
       await releaseCuentaEmissionLock({ sb: guard.service, cuentaId: guard.cuentaId, jobId: lock.jobId, estado: "cancelled" });
+      await recordOpsEvent({
+        sb: guard.service,
+        severity: "error",
+        source: "emision",
+        eventName: "simpleapi_folio_reservation_failed",
+        summary: "No se pudo reservar folio para emision SimpleAPI",
+        cuentaId: guard.cuentaId,
+        empresaId: guard.empresaId,
+        usuarioId: guard.userId,
+        resourceType: "emision_job",
+        resourceId: lock.jobId,
+        metadata: { tipo_dte: tipoDte, error: reserva.error, detalle: reserva.detalle },
+      });
       return NextResponse.json(
         { ok: false, error: reserva.error, detalle: reserva.detalle ?? "No se pudo reservar folio SimpleAPI." },
         { status: 409 },
@@ -249,7 +322,20 @@ export async function DELETE(request: Request) {
     .select("job_id, cuenta_id, usuario_id, estado")
     .eq("job_id", jobId)
     .maybeSingle();
-  if (error) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED", detalle: error.message }, { status: 500 });
+  if (error) {
+    await recordOpsError({
+      sb: service.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_job_delete_query_failed",
+      summary: "No se pudo consultar job para cancelar emision",
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobId,
+      error,
+    });
+    return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED", detalle: error.message }, { status: 500 });
+  }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
   if (["completed", "failed", "cancelled", "expired"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado });
@@ -289,7 +375,20 @@ export async function PATCH(request: Request) {
     .select("job_id, cuenta_id, usuario_id, estado")
     .eq("job_id", jobId)
     .maybeSingle();
-  if (error) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED", detalle: error.message }, { status: 500 });
+  if (error) {
+    await recordOpsError({
+      sb: service.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_job_patch_query_failed",
+      summary: "No se pudo consultar job para heartbeat de emision",
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobId,
+      error,
+    });
+    return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED", detalle: error.message }, { status: 500 });
+  }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
   if (["completed", "failed", "cancelled", "expired"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado, closed: true });
@@ -301,14 +400,44 @@ export async function PATCH(request: Request) {
     .from("emision_jobs")
     .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now })
     .eq("job_id", job.job_id);
-  if (updateJobError) return NextResponse.json({ ok: false, error: "JOB_UPDATE_FAILED", detalle: updateJobError.message }, { status: 500 });
+  if (updateJobError) {
+    await recordOpsError({
+      sb: service.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_job_heartbeat_failed",
+      summary: "No se pudo actualizar heartbeat del job de emision",
+      cuentaId: job.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: job.job_id,
+      error: updateJobError,
+      metadata: { estado_visible: estado },
+    });
+    return NextResponse.json({ ok: false, error: "JOB_UPDATE_FAILED", detalle: updateJobError.message }, { status: 500 });
+  }
 
   const { error: updateLockError } = await service.service
     .from("emision_locks")
     .update({ estado_visible: estado, heartbeat_at: now })
     .eq("cuenta_id", job.cuenta_id)
     .eq("job_id", job.job_id);
-  if (updateLockError) return NextResponse.json({ ok: false, error: "LOCK_UPDATE_FAILED", detalle: updateLockError.message }, { status: 500 });
+  if (updateLockError) {
+    await recordOpsError({
+      sb: service.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_lock_heartbeat_failed",
+      summary: "No se pudo actualizar heartbeat del lock de emision",
+      cuentaId: job.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: job.job_id,
+      error: updateLockError,
+      metadata: { estado_visible: estado },
+    });
+    return NextResponse.json({ ok: false, error: "LOCK_UPDATE_FAILED", detalle: updateLockError.message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, estado, heartbeat_at: now });
 }
