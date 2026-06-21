@@ -10,6 +10,19 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Matriz de roles auditada parcialmente - #dev-operator #audit #plans
+
+What: Added `scripts/audit-role-matrix.mjs` and `npm run audit:roles` to
+exercise Genesys support mode by plan without touching SII, uploads, payments,
+jobs or locks. Production audit validated the available Start account:
+support banner visible, Uso del mes visible, Equipo hidden and
+`business_mode=false`. Pro, Business and non-dev access checks remain skipped
+until fixtures/sessions exist.
+
+Refs: `artifacts/runs/2026-06-21-massdte-role-matrix-audit-2026-06-21T04-53-49-938Z.md`,
+`artifacts/tasks/DEV-002-role-matrix-fixtures.md`,
+`scripts/audit-role-matrix.mjs`.
+
 ## 2026-06-20 - Auditoria DevTools autenticada agregada - #dev-operator #audit #playwright
 
 What: Added a local Chrome DevTools MCP config and a repeatable Playwright
