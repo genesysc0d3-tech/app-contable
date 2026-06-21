@@ -6,6 +6,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { parseExcel } from "@/lib/parsers";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
+import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
@@ -14,6 +15,13 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const limited = enforceRateLimit({
+    key: rateLimitKey("subir-procesar", user.id),
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
 
   const { data: usuario } = await supabase
     .from("usuarios")

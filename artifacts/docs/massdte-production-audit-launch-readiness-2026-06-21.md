@@ -20,8 +20,9 @@ de soporte desaparecia fuera de `/massdte`. Se corrigio, se mergeo, se
 redeployo y se verifico con auditoria final en produccion.
 
 La frontera clara es esta: la app web esta razonablemente lista para beta
-controlada, pero aun falta smoke real con extension/SII/CAF antes de prometer
-emision tributaria end-to-end a usuarios externos.
+controlada y LAUNCH-001 ya fue reportado OK en smoke manual con
+extension/SII/CAF. Aun no conviene prometer operacion masiva abierta hasta tener
+observabilidad, soporte validado, cola durable y compliance operacional.
 
 ## Evidencia Principal
 
@@ -126,7 +127,7 @@ Estado: cerrado y redeployado.
 
 | Prioridad | Item | Estado | Artifact |
 |---|---|---|---|
-| P0 | Smoke real extension/SII/CAF | open | `artifacts/tasks/LAUNCH-001-extension-sii-caf-smoke.md` |
+| P0 | Smoke real extension/SII/CAF | done manual | `artifacts/tasks/LAUNCH-001-extension-sii-caf-smoke.md` |
 | P1 | Runbook beta primer cliente | in_progress | `artifacts/tasks/LAUNCH-002-first-beta-runbook.md` |
 | P1 | Compliance Chile minimo | in_progress | `artifacts/tasks/COMPLIANCE-001-ley-21719-21595-readiness.md` |
 | P1 | Checklist final compra/onboarding/mobile | pendiente | crear despues de runbook beta |
@@ -136,14 +137,16 @@ Estado: cerrado y redeployado.
 ## Decision Recomendada
 
 La web puede pasar a beta controlada si el mensaje comercial evita prometer
-emision real completa hasta cerrar LAUNCH-001.
+emision masiva abierta hasta cerrar observabilidad, cola durable y compliance
+operacional, aunque LAUNCH-001 ya tenga smoke manual reportado OK.
 
 No conviene lanzar abierto ni cobrar con promesa de emision tributaria final
 hasta completar:
 
-1. Smoke extension/SII/CAF real.
-2. Runbook de soporte/rollback para primera cuenta beta.
+1. Observabilidad y alertas para emision real, upload, IA, pagos y locks.
+2. Runbook de soporte/rollback validado con la primera cuenta beta.
 3. Checklist de compra/onboarding en produccion.
+4. Cola durable para procesamiento pesado de documentos/OCR/IA.
 
 ## Comandos De Referencia
 

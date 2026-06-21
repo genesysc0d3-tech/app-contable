@@ -25,6 +25,40 @@ respuesta a brechas, derechos ARCO, contratos/DPA y readiness legal antes de
 beta pagada o lanzamiento abierto. No instalar ni copiar codigo del repo externo
 sin decision explicita.
 
+### Sesion 2026-06-21 - LAUNCH-001, rate limits y arquitectura durable
+
+**Que se hizo:**
+- `LAUNCH-001` queda cerrado por smoke manual informado por el usuario:
+  extension/SII/CAF emite en flujo real controlado. La evidencia versionada se
+  limita a resumen no sensible en
+  `artifacts/runs/2026-06-21-launch-001-user-smoke.md`.
+- Se agrego rate limit inicial in-memory en `src/lib/security/rate-limit.ts` y
+  se aplico a endpoints caros/sensibles: `/api/subir-procesar`,
+  `/api/ocr-comprobante`, `/api/pagos/checkout` y `POST/DELETE/PATCH`
+  `/api/emision/jobs`.
+- Se creo `ENG-003` como contrato de cola durable para documentos/OCR/IA. No se
+  implementa una cola incompleta sin worker; el siguiente cierre real requiere
+  tabla de jobs, worker/cron, idempotencia, reintentos y deteccion de jobs
+  atascados.
+- El reporte CTO queda actualizado a 74/100 post-LAUNCH-001 + hardening
+  inicial. La beta controlada puede incluir emision real con soporte presente,
+  pero el lanzamiento abierto sigue bloqueado por observabilidad, cola durable
+  y compliance/legal.
+
+**Verificacion:**
+- `npm run test -- src/lib/security/rate-limit.test.ts`: OK, 3 tests.
+- `npm run lint`: OK.
+- `git diff --check`: OK.
+- `npm run test`: OK, 12 archivos, 86 tests.
+- `npm audit --audit-level=moderate`: OK, 0 vulnerabilidades.
+- `npm run build`: OK con Next 16.2.9.
+
+**Pendientes criticos:**
+- Observabilidad/alertas para emision, upload, IA, pagos, locks y webhooks.
+- Implementar `ENG-003` cola durable para procesamiento pesado.
+- Validar runbook beta con primera cuenta controlada.
+- Revision legal externa y bajada producto de `COMPLIANCE-001`.
+
 ### Sesion 2026-06-21 - Readiness tecnico/compliance
 
 **Que se hizo:**
@@ -55,9 +89,10 @@ sin decision explicita.
 - `npm audit --audit-level=moderate`: OK, 0 vulnerabilidades.
 - `git diff --check`: OK.
 
-**Pendiente critico:**
-- `LAUNCH-001`: smoke real extension/SII/CAF sigue siendo P0 antes de prometer
-  emision tributaria real completa.
+**Estado posterior:**
+- `LAUNCH-001` fue cerrado despues por smoke manual informado por el usuario.
+  Ver la sesion "LAUNCH-001, rate limits y arquitectura durable" en este mismo
+  archivo.
 
 ## 1. Cliente Objetivo
 

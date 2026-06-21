@@ -14,8 +14,9 @@ semirreales, pero el mensaje comercial debe ser acotado:
 
 - Permitido: "beta controlada para subir cartolas, revisar propuestas, emitir
   pruebas controladas, ver historial/reportes y recibir soporte".
-- No permitido: prometer emision tributaria completa end-to-end hasta cerrar
-  `LAUNCH-001`.
+- No permitido: prometer operacion masiva abierta de emision tributaria sin
+  observabilidad, soporte y compliance operacional, aunque `LAUNCH-001` ya haya
+  sido reportado OK en smoke manual controlado.
 - Si se cobra, debe quedar claro que es una beta controlada y que soporte puede
   intervenir en modo solo lectura.
 
@@ -44,7 +45,8 @@ Go:
 
 No-go:
 
-- `LAUNCH-001` abierto y el mensaje comercial promete emision real completa.
+- El mensaje comercial promete emision masiva abierta sin observabilidad,
+  soporte ni plan de incidentes.
 - Lint/build/test rojo.
 - Upload/IA/pagos sin rollback operativo.
 - No hay forma clara de contactar al usuario si una emision, pago o carga queda
@@ -60,7 +62,9 @@ No-go:
 5. Revisar propuestas y explicar que el usuario siempre aprueba antes de emitir.
 6. Revisar historial/reportes.
 7. Si se prueba pago, usar una compra chica o fixture controlado.
-8. Si se prueba emision real, detenerse y ejecutar `LAUNCH-001`, no improvisar.
+8. Si se prueba emision real, usar el checklist de `LAUNCH-001`, registrar solo
+   evidencia no sensible y confirmar lock/job/folio sin guardar documentos
+   tributarios crudos.
 
 ## Soporte Genesys
 

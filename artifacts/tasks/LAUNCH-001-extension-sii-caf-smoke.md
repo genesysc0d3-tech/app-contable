@@ -1,6 +1,6 @@
 ---
 kind: task
-status: open
+status: done
 priority: critical
 owner_loop: engineering
 created_at: 2026-06-21
@@ -55,3 +55,9 @@ CAF/folios reales y resultado tributario real.
 ## Timeline
 
 - 2026-06-21 - Creada despues de cerrar auditoria web, roles y lock remoto sin SII.
+- 2026-06-21 - Cerrada por smoke manual informado por el usuario: extension/SII/CAF
+  emite en flujo real controlado. La evidencia versionada queda limitada a
+  resumen no sensible en
+  `artifacts/runs/2026-06-21-launch-001-user-smoke.md`; no se guardan claves,
+  cookies, CAF XML, XML/PDF tributarios, screenshots con datos completos ni
+  credenciales.

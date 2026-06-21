@@ -8,6 +8,7 @@ import { buildVisibleEmissionLock, type ActiveEmissionLock } from "@/lib/emissio
 import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { createClient } from "@/lib/supabase/server";
+import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled";
@@ -86,6 +87,13 @@ export async function POST(request: Request) {
 
   const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
+  const limited = enforceRateLimit({
+    key: rateLimitKey("emision-jobs-post", guard.userId),
+    limit: 12,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   let businessMode = false;
   try {
     businessMode = await businessModeForPlan(guard.service, guard.plan);
@@ -216,6 +224,13 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
 
+  const limited = enforceRateLimit({
+    key: rateLimitKey("emision-jobs-delete", user.id),
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   const service = await serviceClientOrResponse();
   if (!service.ok) return service.response;
 
@@ -248,6 +263,13 @@ export async function PATCH(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+
+  const limited = enforceRateLimit({
+    key: rateLimitKey("emision-jobs-patch", user.id),
+    limit: 240,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
 
   const service = await serviceClientOrResponse();
   if (!service.ok) return service.response;
