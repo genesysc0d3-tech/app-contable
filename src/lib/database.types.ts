@@ -459,6 +459,73 @@ export type Database = {
           },
         ]
       }
+      ops_events: {
+        Row: {
+          created_at: string
+          cuenta_id: string | null
+          empresa_id: string | null
+          event_name: string
+          id: string
+          metadata: Json
+          resource_id: string | null
+          resource_type: string | null
+          severity: string
+          source: string
+          summary: string
+          usuario_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          cuenta_id?: string | null
+          empresa_id?: string | null
+          event_name: string
+          id?: string
+          metadata?: Json
+          resource_id?: string | null
+          resource_type?: string | null
+          severity: string
+          source: string
+          summary: string
+          usuario_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          cuenta_id?: string | null
+          empresa_id?: string | null
+          event_name?: string
+          id?: string
+          metadata?: Json
+          resource_id?: string | null
+          resource_type?: string | null
+          severity?: string
+          source?: string
+          summary?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ops_events_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ops_events_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ops_events_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cuentas: {
         Row: {
           created_at: string

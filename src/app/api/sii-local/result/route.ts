@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 import { requireEmisionJob } from "@/lib/emission/jobs";
 import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 interface SiiLocalResultPayload {
   job_id?: string | null;
@@ -56,7 +58,7 @@ interface SiiLocalPdfInfo {
 const RESULT_RETENTION_DAYS = 7;
 const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
-type ServiceDb = SupabaseClient;
+type ServiceDb = SupabaseClient<Database>;
 
 function resultForLog(result: unknown) {
   if (!result || typeof result !== "object") return result;
@@ -71,6 +73,39 @@ function resultForLog(result: unknown) {
   return copy;
 }
 
+function safeJson(value: unknown): Json {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  try {
+    return JSON.parse(JSON.stringify(value)) as Json;
+  } catch {
+    return null;
+  }
+}
+
+async function recordSiiLocalFailure(
+  sb: ServiceDb,
+  job: { cuenta_id: string; empresa_id: string; usuario_id: string; job_id: string },
+  error: string,
+  summary: string,
+  metadata: Record<string, unknown> = {},
+  severity: "warn" | "error" = "error",
+) {
+  await recordOpsEvent({
+    sb,
+    severity,
+    source: "sii-local",
+    eventName: severity === "warn" ? "sii_local_result_warning" : "sii_local_result_failed",
+    summary,
+    cuentaId: job.cuenta_id,
+    empresaId: job.empresa_id,
+    usuarioId: job.usuario_id,
+    resourceType: "emision_job",
+    resourceId: job.job_id,
+    metadata: { error, ...metadata },
+  });
+}
+
 async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
   try {
     await sb.from("sii_local_resultados").insert({
@@ -79,7 +114,7 @@ async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: s
       folio: entry.folio,
       status: entry.status,
       error: entry.error ?? null,
-      result: resultForLog(entry.result) ?? null,
+      result: safeJson(resultForLog(entry.result)),
     });
     await sb
       .from("sii_local_resultados")
@@ -273,7 +308,7 @@ export async function POST(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
-  const sb = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   let payload: SiiLocalResultPayload;
   try {
@@ -324,7 +359,20 @@ export async function POST(request: Request) {
   }
 
   const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId: effectiveJobId, provider: "sii_local" });
-  if (!jobGate.ok) return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  if (!jobGate.ok) {
+    await recordOpsEvent({
+      sb,
+      severity: jobGate.status >= 500 ? "error" : "warn",
+      source: "sii-local",
+      eventName: "sii_local_job_gate_failed",
+      summary: "Resultado SII local rechazado por gate de job",
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: effectiveJobId,
+      metadata: { error: jobGate.error, detalle: jobGate.detalle },
+    });
+    return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  }
   const job = jobGate.job;
   const empresaId = job.empresa_id;
 
@@ -355,6 +403,13 @@ export async function POST(request: Request) {
         error: "RESULTADO_SII_INSUFICIENTE",
       },
     });
+    await recordSiiLocalFailure(sb, job, "RESULTADO_SII_INSUFICIENTE", "Resultado SII local insuficiente", {
+      has_folio: Boolean(folio),
+      has_tipo_dte: Boolean(tipoDte),
+      has_monto_total: Boolean(montoTotal),
+      has_fecha_emision: Boolean(fechaEmision),
+      has_strong_evidence: hasStrongEvidence,
+    });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "RESULTADO_SII_INSUFICIENTE" }, { status: 422 });
   }
@@ -366,6 +421,7 @@ export async function POST(request: Request) {
     .single();
   if (!empresa?.rut || !empresa?.razon_social) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSiiLocalFailure(sb, job, "EMPRESA_SIN_DATOS_FISCALES", "Empresa sin datos fiscales para persistir SII local");
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
@@ -386,7 +442,7 @@ export async function POST(request: Request) {
       const { error: updateErr } = await sb
         .from("boletas_emitidas")
         .update({
-          proveedor_respuesta: {
+          proveedor_respuesta: safeJson({
             ...previousResponse,
             pdf: {
               storage_path: pdfUpload.storagePath,
@@ -396,18 +452,28 @@ export async function POST(request: Request) {
               provider: pdfUpload.provider,
             },
             pdf_upload_error: null,
-          },
+          }),
         })
         .eq("id", existing.id);
       if (updateErr) {
         await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
         await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+        await recordSiiLocalFailure(sb, job, "PDF_METADATA_UPDATE_FAILED", "No se pudo actualizar metadata PDF de boleta SII local existente", {
+          boleta_id: existing.id,
+          detalle: updateErr.message,
+        });
         return NextResponse.json({ ok: false, error: "PDF_METADATA_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
       }
     } else {
       // El PDF no se pudo subir ahora: la boleta YA existe y queda registrada;
       // el PDF se reintenta/adjunta luego. Nunca se pierde la boleta por esto.
       await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_pendiente", error: pdfUpload.error, result });
+      await recordSiiLocalFailure(sb, job, "PDF_PENDIENTE", "Boleta SII local existente quedo sin PDF adjunto", {
+        boleta_id: existing.id,
+        tipo_dte: tipoDte,
+        folio,
+        pdf_error: pdfUpload.error,
+      }, "warn");
     }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
@@ -481,7 +547,7 @@ export async function POST(request: Request) {
       estado: "aceptado",
       emision_proveedor: "sii_local",
       emision_sandbox: false,
-      proveedor_respuesta: proveedorRespuesta,
+      proveedor_respuesta: safeJson(proveedorRespuesta),
     })
     .select("id, folio, monto_total, estado, track_id, fecha_emision")
     .single();
@@ -504,6 +570,11 @@ export async function POST(request: Request) {
         error: "DB_INSERT_FAILED",
       },
     });
+    await recordSiiLocalFailure(sb, job, "DB_INSERT_FAILED", "No se pudo guardar la boleta emitida con SII local", {
+      tipo_dte: tipoDte,
+      folio,
+      detalle: insertErr?.message,
+    });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
   }
@@ -513,7 +584,7 @@ export async function POST(request: Request) {
     empresa_id: empresaId,
     nombre_archivo: `Boleta SII #${boleta.folio} - ${receptorLabel}`,
     tipo: "boleta_sii_local",
-    storage_path: pdfUpload.storagePath,
+    storage_path: pdfUpload.storagePath ?? `sii-local-pdf-pendiente/${empresaId}/${tipoDte}-${folio}`,
     estado: "procesado",
     movimientos_detectados: 1,
     created_at: new Date().toISOString(),
@@ -529,6 +600,13 @@ export async function POST(request: Request) {
   });
 
   await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
+  if (pdfPendiente) {
+    await recordSiiLocalFailure(sb, job, "PDF_PENDIENTE", "Boleta SII local persistida sin PDF adjunto", {
+      tipo_dte: tipoDte,
+      folio,
+      pdf_error: pdfUpload.error,
+    }, "warn");
+  }
   await recordCuentaAudit({
     sb,
     cuentaId: job.cuenta_id,
@@ -558,7 +636,7 @@ export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
-  const sb = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
 
   const { data, error } = await sb
     .from("sii_local_resultados")

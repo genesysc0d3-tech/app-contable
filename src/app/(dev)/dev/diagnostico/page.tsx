@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getDevOperatorDiagnostics } from "@/lib/dev/support-mode";
+import { getDevOperatorContext, getDevOperatorDiagnostics } from "@/lib/dev/support-mode";
+import { collectOpsSnapshot, type OpsSnapshot } from "@/lib/ops/diagnostics";
 
 const C = {
   bg: "#0f1014",
@@ -41,9 +42,125 @@ function boolText(value: boolean | null) {
   return value ? "true" : "false";
 }
 
+function statusLabel(status: OpsSnapshot["status"]) {
+  if (status === "critical") return "crítico";
+  if (status === "degraded") return "degradado";
+  return "OK";
+}
+
+function severityColor(severity: string) {
+  if (severity === "critical" || severity === "error") return C.accent;
+  if (severity === "warn") return C.amber;
+  return C.green;
+}
+
+function Metric({ label, value, tone }: { label: string; value: number; tone?: "ok" | "warn" | "critical" }) {
+  const color = tone === "critical" ? C.accent : tone === "warn" ? C.amber : C.green;
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, background: C.muted }}>
+      <div style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 900 }}>
+        {label}
+      </div>
+      <div style={{ marginTop: 7, fontSize: 24, lineHeight: 1, color, fontWeight: 950 }}>{value}</div>
+    </div>
+  );
+}
+
+function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
+  if (!snapshot) {
+    return (
+      <section style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+        <div style={{ color: C.amber, fontSize: 13, fontWeight: 900 }}>Salud operacional no disponible</div>
+        <p style={{ margin: "8px 0 0", color: C.text2, fontSize: 12 }}>
+          Entra como operador dev valido para leer el snapshot productivo.
+        </p>
+      </section>
+    );
+  }
+
+  const statusColor = snapshot.status === "critical" ? C.accent : snapshot.status === "degraded" ? C.amber : C.green;
+  return (
+    <section style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+        <div>
+          <div style={{ color: statusColor, fontSize: 13, fontWeight: 900 }}>
+            Salud operacional {statusLabel(snapshot.status)}
+          </div>
+          <p style={{ margin: "5px 0 0", color: C.text2, fontSize: 12 }}>
+            Snapshot seguro: sin payloads, claves, XML, PDFs ni prompts.
+          </p>
+        </div>
+        <div style={{ color: C.text3, fontSize: 11, fontWeight: 800 }}>
+          {new Date(snapshot.checkedAt).toLocaleString("es-CL", { timeZone: "America/Santiago" })}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))",
+          gap: 10,
+          marginTop: 14,
+        }}
+      >
+        <Metric label="Docs atascados" value={snapshot.metrics.documentosAtascados} tone={snapshot.metrics.documentosAtascados > 0 ? "critical" : "ok"} />
+        <Metric label="Locks expirados" value={snapshot.metrics.locksExpirados} tone={snapshot.metrics.locksExpirados > 0 ? "warn" : "ok"} />
+        <Metric label="Emisión fallida 24h" value={snapshot.metrics.jobsEmisionFallidos24h} tone={snapshot.metrics.jobsEmisionFallidos24h > 0 ? "warn" : "ok"} />
+        <Metric label="Errores ops 24h" value={snapshot.metrics.opsErrores24h} tone={snapshot.metrics.opsCriticos24h > 0 ? "critical" : snapshot.metrics.opsErrores24h > 0 ? "warn" : "ok"} />
+      </div>
+
+      {snapshot.findings.length > 0 ? (
+        <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+          <div style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 900 }}>
+            Hallazgos activos
+          </div>
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+            {snapshot.findings.map((finding) => (
+              <div key={finding.eventName} style={{ display: "grid", gridTemplateColumns: "82px minmax(0, 1fr)", gap: 10 }}>
+                <span style={{ color: severityColor(finding.severity), fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>
+                  {finding.severity}
+                </span>
+                <span style={{ color: C.text2, fontSize: 12, lineHeight: 1.45 }}>{finding.summary}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <div style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 900 }}>
+          Últimos eventos ops
+        </div>
+        {snapshot.latestEvents.length === 0 ? (
+          <p style={{ margin: "8px 0 0", color: C.text2, fontSize: 12 }}>Sin eventos operacionales recientes.</p>
+        ) : (
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 9 }}>
+            {snapshot.latestEvents.map((event) => (
+              <div key={event.id} style={{ borderTop: `1px solid ${C.border}`, paddingTop: 9 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                  <span style={{ color: severityColor(event.severity), fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>
+                    {event.severity} · {event.source}
+                  </span>
+                  <span style={{ color: C.text3, fontSize: 11 }}>
+                    {new Date(event.created_at).toLocaleString("es-CL", { timeZone: "America/Santiago" })}
+                  </span>
+                </div>
+                <div style={{ marginTop: 4, color: C.text, fontSize: 12, fontWeight: 850 }}>{event.event_name}</div>
+                <div style={{ marginTop: 2, color: C.text2, fontSize: 12, lineHeight: 1.45 }}>{event.summary}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default async function DevDiagnosticoPage() {
   const data = await getDevOperatorDiagnostics();
   if (!data.authenticated) redirect("/auth/login?next=/dev/diagnostico");
+  const operator = data.ok ? await getDevOperatorContext() : null;
+  const opsSnapshot = operator?.ok ? await collectOpsSnapshot(operator.sb).catch(() => null) : null;
 
   return (
     <main
@@ -55,7 +172,7 @@ export default async function DevDiagnosticoPage() {
         padding: 18,
       }}
     >
-      <div style={{ maxWidth: 820, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ maxWidth: 920, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <div>
             <div style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800 }}>
@@ -115,6 +232,8 @@ export default async function DevDiagnosticoPage() {
           <Row label="Resultado" value={data.ok ? "puede entrar a /dev/cuentas" : data.error ?? "bloqueado"} ok={data.ok} />
           {data.detalle && <Row label="Detalle" value={data.detalle} ok={false} />}
         </section>
+
+        <OpsHealth snapshot={opsSnapshot} />
       </div>
     </main>
   );

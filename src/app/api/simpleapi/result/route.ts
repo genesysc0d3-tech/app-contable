@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { requireSimpleApiFolioReserva } from "@/lib/emission/folio-reservas";
 import { requireEmisionJob } from "@/lib/emission/jobs";
 import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
+type ServiceDb = SupabaseClient<Database>;
 
 interface SimpleApiResultPayload {
   job_id?: string | null;
@@ -115,6 +117,28 @@ function validDteXml(args: { xml: string; tipoDte: number; folio: number; total:
   return Number(tipoMatch?.[1]) === args.tipoDte && Number(folioMatch?.[1]) === args.folio && Number(totalMatch?.[1]) === args.total;
 }
 
+async function recordSimpleApiFailure(
+  sb: ServiceDb,
+  job: { cuenta_id: string; empresa_id: string; usuario_id: string; job_id: string },
+  error: string,
+  summary: string,
+  metadata: Record<string, unknown> = {},
+) {
+  await recordOpsEvent({
+    sb,
+    severity: "error",
+    source: "simpleapi",
+    eventName: "simpleapi_result_failed",
+    summary,
+    cuentaId: job.cuenta_id,
+    empresaId: job.empresa_id,
+    usuarioId: job.usuario_id,
+    resourceType: "emision_job",
+    resourceId: job.job_id,
+    metadata: { error, ...metadata },
+  });
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -152,7 +176,20 @@ export async function POST(request: Request) {
   if (!ROLES_EMISION.has(String(usuario.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
 
   const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId: payload.job_id, provider: "simpleapi" });
-  if (!jobGate.ok) return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  if (!jobGate.ok) {
+    await recordOpsEvent({
+      sb,
+      severity: jobGate.status >= 500 ? "error" : "warn",
+      source: "simpleapi",
+      eventName: "simpleapi_job_gate_failed",
+      summary: "Resultado SimpleAPI rechazado por gate de job",
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: payload.job_id ?? null,
+      metadata: { error: jobGate.error, detalle: jobGate.detalle },
+    });
+    return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  }
   const job = jobGate.job;
   const empresaId = job.empresa_id;
 
@@ -173,6 +210,15 @@ export async function POST(request: Request) {
         },
       });
     }
+    await recordSimpleApiFailure(sb, job, "RESULTADO_SIMPLEAPI_INSUFICIENTE", "Resultado SimpleAPI insuficiente", {
+      has_tipo_dte: Boolean(tipoDte),
+      has_folio: Boolean(folio),
+      has_monto_total: Boolean(montoTotal),
+      has_fecha_emision: Boolean(fechaEmision),
+      has_track_id: Boolean(trackId),
+      has_xml: Boolean(xmlDte),
+      has_pdf: Boolean(pdfBase64),
+    });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "RESULTADO_SIMPLEAPI_INSUFICIENTE" }, { status: 422 });
   }
@@ -187,19 +233,32 @@ export async function POST(request: Request) {
   });
   if (!reserva.ok) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, reserva.error, "Reserva de folio SimpleAPI no calza con el resultado", {
+      detalle: reserva.detalle,
+      tipo_dte: tipoDte,
+      folio,
+    });
     return NextResponse.json({ ok: false, error: reserva.error, detalle: reserva.detalle }, { status: reserva.status });
   }
 
   if (result?.pdf?.content_type !== "application/pdf") {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, "PDF_CONTENT_TYPE_INVALID", "SimpleAPI entrego PDF con content-type invalido", {
+      content_type: result?.pdf?.content_type,
+    });
     return NextResponse.json({ ok: false, error: "PDF_CONTENT_TYPE_INVALID" }, { status: 422 });
   }
   if (!validDteXml({ xml: xmlDte, tipoDte, folio, total: montoTotal })) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, "XML_DTE_INVALID", "XML DTE SimpleAPI no calza con folio/tipo/monto", { tipo_dte: tipoDte, folio });
     return NextResponse.json({ ok: false, error: "XML_DTE_INVALID" }, { status: 422 });
   }
   if (!isAcceptedEnvio(result?.envio) || !isAcceptedDte(result?.consultaDte)) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, "SII_ACCEPTANCE_REQUIRED", "Respuesta SimpleAPI no acredita aceptacion SII", {
+      envio_estado: responseEstado(result?.envio),
+      consulta_dte_estado: responseEstado(result?.consultaDte),
+    });
     return NextResponse.json({ ok: false, error: "SII_ACCEPTANCE_REQUIRED" }, { status: 422 });
   }
 
@@ -210,6 +269,7 @@ export async function POST(request: Request) {
     .single();
   if (!empresa?.rut || !empresa?.razon_social) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, "EMPRESA_SIN_DATOS_FISCALES", "Empresa sin datos fiscales para persistir SimpleAPI");
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
@@ -217,6 +277,7 @@ export async function POST(request: Request) {
   const invalidPdf = validatePdfBuffer(pdfBuffer);
   if (invalidPdf) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, invalidPdf, "PDF SimpleAPI invalido", { tipo_dte: tipoDte, folio });
     return NextResponse.json({ ok: false, error: invalidPdf }, { status: 422 });
   }
 
@@ -227,6 +288,11 @@ export async function POST(request: Request) {
   });
   if (uploadErr) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    await recordSimpleApiFailure(sb, job, "PDF_UPLOAD_FAILED", "No se pudo guardar PDF SimpleAPI", {
+      tipo_dte: tipoDte,
+      folio,
+      storage_error: uploadErr.message,
+    });
     return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: uploadErr.message }, { status: 502 });
   }
 
@@ -259,6 +325,10 @@ export async function POST(request: Request) {
       .eq("id", existing.id);
     if (updateErr) {
       await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+      await recordSimpleApiFailure(sb, job, "DB_UPDATE_FAILED", "No se pudo actualizar documento SimpleAPI existente", {
+        boleta_id: existing.id,
+        detalle: updateErr.message,
+      });
       return NextResponse.json({ ok: false, error: "DB_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
     }
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
@@ -316,6 +386,11 @@ export async function POST(request: Request) {
         proveedor: "simpleapi",
         error: "DB_INSERT_FAILED",
       },
+    });
+    await recordSimpleApiFailure(sb, job, "DB_INSERT_FAILED", "No se pudo guardar el documento emitido con SimpleAPI", {
+      tipo_dte: tipoDte,
+      folio,
+      detalle: insertErr?.message,
     });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });

@@ -4,6 +4,7 @@ import { crearPersonaAdicionalCuenta, crearRefillCuenta, crearSuscripcion } from
 import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { recordOpsError } from "@/lib/ops/events";
 
 /**
  * Inicia un checkout de Mercado Pago:
@@ -16,6 +17,7 @@ import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 const ROLES_PAGO = new Set(["owner", "admin"]);
 
 export async function POST(request: Request) {
+  const opsContext: { usuarioId?: string; empresaId?: string; cuentaId?: string; tipo?: string; plan?: string } = {};
   try {
     const supportBlock = await getDevSupportWriteBlock();
     if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
@@ -23,6 +25,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+    opsContext.usuarioId = user.id;
 
     const limited = enforceRateLimit({
       key: rateLimitKey("pagos-checkout", user.id),
@@ -39,6 +42,7 @@ export async function POST(request: Request) {
     if (!usuario?.empresa_id) {
       return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
     }
+    opsContext.empresaId = usuario.empresa_id;
 
     let body: { tipo?: string; plan?: string } = {};
     try {
@@ -46,6 +50,8 @@ export async function POST(request: Request) {
     } catch {
       return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
     }
+    opsContext.tipo = body.tipo;
+    opsContext.plan = body.plan;
 
     if (body.tipo !== "persona_adicional" && !ROLES_PAGO.has(String(usuario.rol))) {
       return NextResponse.json(
@@ -58,6 +64,7 @@ export async function POST(request: Request) {
     if (!cuenta) {
       return NextResponse.json({ ok: false, error: "CUENTA_NO_CONFIGURADA" }, { status: 409 });
     }
+    opsContext.cuentaId = cuenta.cuentaId;
 
     let result;
     if (body.tipo === "plan") {
@@ -102,6 +109,17 @@ export async function POST(request: Request) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[pagos/checkout]", msg);
+    await recordOpsError({
+      severity: "error",
+      source: "pagos",
+      eventName: "checkout_failed",
+      summary: "No se pudo iniciar checkout",
+      cuentaId: opsContext.cuentaId,
+      empresaId: opsContext.empresaId,
+      usuarioId: opsContext.usuarioId,
+      error: err,
+      metadata: { tipo: opsContext.tipo, plan: opsContext.plan },
+    });
     return NextResponse.json({ ok: false, error: "ERROR_INTERNO", detalle: msg }, { status: 500 });
   }
 }

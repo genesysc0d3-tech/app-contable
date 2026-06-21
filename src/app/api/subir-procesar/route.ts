@@ -7,6 +7,7 @@ import { parseExcel } from "@/lib/parsers";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
@@ -54,7 +55,19 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (docError) return NextResponse.json({ error: docError.message }, { status: 500 });
+  if (docError) {
+    await recordOpsError({
+      severity: "error",
+      source: "upload",
+      eventName: "upload_document_insert_failed",
+      summary: "No se pudo crear el documento subido",
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      error: docError,
+      metadata: { tipo: validated.tipo, mime: validated.contentType, nombre: validated.nombre },
+    });
+    return NextResponse.json({ error: docError.message }, { status: 500 });
+  }
   if (!doc) return NextResponse.json({ error: "DB_ERROR" }, { status: 500 });
 
   const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -73,6 +86,19 @@ export async function POST(request: Request) {
 
   if (!storageError) {
     await svc.from("documentos_subidos").update({ storage_path: storagePath }).eq("id", doc.id);
+  } else {
+    await recordOpsEvent({
+      sb: svc,
+      severity: "warn",
+      source: "upload",
+      eventName: "upload_storage_failed",
+      summary: "El archivo fue aceptado pero no se pudo guardar en Storage",
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      resourceType: "documento_subido",
+      resourceId: doc.id,
+      metadata: { storage_error: storageError.message, tipo: validated.tipo, mime: contentType },
+    });
   }
 
   // Marcar como procesando y devolver respuesta inmediatamente
@@ -137,6 +163,16 @@ async function procesarEnBackground(
 
     if (result.error) {
       console.error(`[bg] ${documentoId} error:`, result.error);
+      await recordOpsEvent({
+        severity: "error",
+        source: "ia",
+        eventName: "procesar_documento_error",
+        summary: "El procesamiento IA devolvio error",
+        empresaId,
+        resourceType: "documento_subido",
+        resourceId: documentoId,
+        metadata: { processor_error: result.error, tipo },
+      });
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -149,6 +185,18 @@ async function procesarEnBackground(
       const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
       if (url && key) {
         const svc = createServiceClient<Database>(url, key);
+        await recordOpsError({
+          sb: svc,
+          severity: "error",
+          source: tipo === "imagen" ? "ocr" : "ia",
+          eventName: "procesar_documento_fatal",
+          summary: "El procesamiento de documento fallo en background",
+          empresaId,
+          resourceType: "documento_subido",
+          resourceId: documentoId,
+          error: err,
+          metadata: { tipo, mime: archivo.mime, nombre: archivo.nombre },
+        });
         await svc.from("documentos_subidos").update({
           estado: "error",
           progreso_ia: { estado: "error", error: errorMsg },
@@ -156,6 +204,16 @@ async function procesarEnBackground(
       }
     } catch (e) {
       console.error(`[bg] ${documentoId} fallo al marcar error:`, e);
+      await recordOpsError({
+        severity: "critical",
+        source: "upload",
+        eventName: "document_error_state_update_failed",
+        summary: "No se pudo marcar como error un documento fallido",
+        empresaId,
+        resourceType: "documento_subido",
+        resourceId: documentoId,
+        error: e,
+      });
     }
   }
 }

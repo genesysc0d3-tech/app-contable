@@ -6,6 +6,7 @@ import { addDaysStr, clpConIva } from "@/lib/pagos/metering";
 import { actualizarMontoSuscripcion, mpConfigurado, obtenerRecurso } from "@/lib/pagos/mercadopago";
 import { getUfClp } from "@/lib/sii/uf";
 import { empresasActivasDeCuenta } from "@/lib/entitlements";
+import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 
 /**
  * Cron diario de cobranza (vercel.json → 12:00 UTC ≈ 8-9 AM Chile):
@@ -146,7 +147,19 @@ export async function GET(request: Request) {
         if (Math.abs(objetivo - actual) / actual > 0.01) {
           const upd = await actualizarMontoSuscripcion(s.proveedor_ref, objetivo);
           if (upd.ok) actualizadas++;
-          else console.error("[pagos/cron] no se pudo actualizar monto", { suscripcion: s.id, detalle: upd.detalle });
+          else {
+            console.error("[pagos/cron] no se pudo actualizar monto", { suscripcion: s.id, detalle: upd.detalle });
+            await recordOpsEvent({
+              sb,
+              severity: "warn",
+              source: "pagos/cron",
+              eventName: "subscription_amount_update_failed",
+              summary: "No se pudo actualizar monto mensual en Mercado Pago",
+              resourceType: "suscripcion",
+              resourceId: s.id,
+              metadata: { plan_codigo: s.plan_codigo, objetivo_clp: objetivo, detalle: upd.detalle },
+            });
+          }
         }
       }
     }
@@ -155,6 +168,13 @@ export async function GET(request: Request) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[pagos/cron]", msg);
+    await recordOpsError({
+      severity: "error",
+      source: "pagos/cron",
+      eventName: "billing_cron_failed",
+      summary: "El cron de cobranza fallo",
+      error: err,
+    });
     return NextResponse.json({ ok: false, error: "ERROR_INTERNO", detalle: msg }, { status: 500 });
   }
 }

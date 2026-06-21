@@ -6,6 +6,7 @@ import { obtenerRecurso } from "@/lib/pagos/mercadopago";
 import { addOneMonth, periodoActual } from "@/lib/pagos/metering";
 import { chileDateString } from "@/lib/chile-date";
 import { empresaPrincipalDeCuenta, empresasActivasDeCuenta } from "@/lib/entitlements";
+import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 
 /**
  * Webhook de Mercado Pago.
@@ -333,9 +334,22 @@ export async function POST(request: Request) {
 
     const secret = process.env.MP_WEBHOOK_SECRET?.trim();
     if (!secret && process.env.NODE_ENV === "production") {
+      await recordOpsEvent({
+        severity: "critical",
+        source: "pagos/webhook",
+        eventName: "mp_webhook_secret_missing",
+        summary: "MP_WEBHOOK_SECRET no esta configurado en produccion",
+      });
       return NextResponse.json({ ok: false, error: "MP_WEBHOOK_SECRET_MISSING" }, { status: 503 });
     }
     if (secret && !firmaValida(request, dataId, secret)) {
+      await recordOpsEvent({
+        severity: "warn",
+        source: "pagos/webhook",
+        eventName: "mp_webhook_invalid_signature",
+        summary: "Webhook de Mercado Pago rechazado por firma invalida",
+        metadata: { has_data_id: Boolean(dataId), tipo },
+      });
       return NextResponse.json({ ok: false, error: "FIRMA_INVALIDA" }, { status: 401 });
     }
 
@@ -357,6 +371,13 @@ export async function POST(request: Request) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[pagos/webhook]", msg);
+    await recordOpsError({
+      severity: "error",
+      source: "pagos/webhook",
+      eventName: "mercadopago_webhook_failed",
+      summary: "No se pudo procesar webhook de Mercado Pago",
+      error: err,
+    });
     // 500 a propósito: MP reintenta los no-200 y el evento no se pierde.
     return NextResponse.json({ ok: false, error: "ERROR_INTERNO" }, { status: 500 });
   }
