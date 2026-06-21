@@ -1,7 +1,9 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/server";
-import type { Tables } from "./database.types";
+import type { Database, Tables } from "./database.types";
+import { validarAccesoCuenta } from "./entitlements";
 
 export type Usuario = Tables<"usuarios">;
 export type Empresa = Tables<"empresas">;
@@ -67,7 +69,22 @@ export async function requireActiveEmpresa(): Promise<UsuarioConEmpresa> {
     redirect("/bloqueado");
   }
 
-  if (!usuario.empresas.plan_activo) {
+  const supabase = await createClient();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const accesoClient = url && key ? createServiceClient<Database>(url, key) : supabase;
+  const acceso = await validarAccesoCuenta(accesoClient, usuario.id, usuario.empresa_id);
+
+  if (!acceso.ok) {
+    if (acceso.codigo === "EMPRESA_SIN_CUENTA" && usuario.empresas.plan_activo) {
+      return usuario;
+    }
+    redirect(acceso.codigo === "USUARIO_SIN_CUENTA" ? "/bloqueado" : "/planes");
+  }
+
+  // Con cuenta pagadora creada, la cuenta es la autoridad. empresas.plan_activo
+  // solo se conserva para filas pre-backfill detectadas arriba.
+  if (!acceso.planActivo) {
     redirect("/planes");
   }
 
