@@ -10,6 +10,19 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Matriz Start Pro Business cerrada - #dev-operator #audit #production
+
+What: Added Pro/Business audit fixtures in Supabase, fixed support-mode account
+API resolution and support logo access, merged PR #10, redeployed production,
+and reran `npm run audit:roles` with Genesys plus a temporary non-dev state.
+The final production report covers Business, Pro and Start with 0 findings:
+Business shows Equipo and `business_mode=true`; Pro/Start hide Equipo and
+return `business_mode=false`; non-dev does not see `/dev/cuentas`.
+
+Refs: `artifacts/runs/2026-06-21-massdte-role-matrix-audit-2026-06-21T05-11-52-751Z.md`,
+`artifacts/tasks/DEV-002-role-matrix-fixtures.md`,
+`supabase/migrations/20260621010000_role_matrix_audit_fixtures.sql`.
+
 ## 2026-06-21 - Matriz de roles auditada parcialmente - #dev-operator #audit #plans
 
 What: Added `scripts/audit-role-matrix.mjs` and `npm run audit:roles` to

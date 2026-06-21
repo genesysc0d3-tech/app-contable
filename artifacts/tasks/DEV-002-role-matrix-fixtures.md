@@ -1,6 +1,6 @@
 ---
 kind: task
-status: open
+status: done
 priority: high
 owner_loop: dev-operator
 created_at: 2026-06-21
@@ -12,12 +12,12 @@ tags: [audit, roles, plans, dev-operator, privacy]
 ## Context
 
 La auditoria de matriz de roles en produccion quedo operativa con
-`scripts/audit-role-matrix.mjs`, pero el panel `/dev/cuentas` solo tenia una
-cuenta Start disponible para modo cliente. La corrida valida Start, pero Pro y
-Business quedan saltados por falta de cuentas disponibles.
+`scripts/audit-role-matrix.mjs`. Inicialmente `/dev/cuentas` solo tenia una
+cuenta Start disponible para modo cliente; se agregaron fixtures Pro/Business y
+se corrigio el modo soporte para APIs compartidas.
 
 Reporte base:
-`artifacts/runs/2026-06-21-massdte-role-matrix-audit-2026-06-21T04-53-49-938Z.md`.
+`artifacts/runs/2026-06-21-massdte-role-matrix-audit-2026-06-21T05-11-52-751Z.md`.
 
 ## Scope
 
@@ -51,3 +51,7 @@ Reporte base:
 
 - 2026-06-21 - Creada tras auditoria productiva: Start validado OK; Pro,
   Business y non-dev quedaron saltados por falta de fixtures/sesion.
+- 2026-06-21 - Cerrada: se agregaron fixtures Pro/Business, se redeployo
+  produccion y la matriz completa cerro con 0 hallazgos. Business mostro
+  Equipo y `business_mode=true`; Pro/Start ocultaron Equipo y respondieron
+  `business_mode=false`; la sesion no-dev termino en login sin ver panel dev.
