@@ -1,6 +1,6 @@
 ---
 kind: task
-status: open
+status: done
 priority: high
 owner_loop: engineering
 created_at: 2026-06-21
@@ -75,3 +75,9 @@ con reintentos, idempotencia y visibilidad operacional.
 - 2026-06-21 - Creada despues de agregar rate limits iniciales y cerrar
   LAUNCH-001 por smoke manual. Queda como siguiente bloque real de arquitectura
   escalable; no se implementa una cola incompleta sin worker.
+- 2026-06-21 - Implementada cola durable base:
+  `document_processing_jobs`, worker `processDocumentQueue`,
+  `/api/document-processing/cron`, retry dev en
+  `/api/document-processing/retry`, upload/reprocesar encolan jobs antes de
+  responder y la UI sigue `documentos_subidos.estado/progreso_ia`.
+  El kick oportunista solo acelera; la durabilidad depende de tabla + cron.

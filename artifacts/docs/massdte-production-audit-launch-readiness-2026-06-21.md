@@ -21,8 +21,10 @@ redeployo y se verifico con auditoria final en produccion.
 
 La frontera clara es esta: la app web esta razonablemente lista para beta
 controlada y LAUNCH-001 ya fue reportado OK en smoke manual con
-extension/SII/CAF. Aun no conviene prometer operacion masiva abierta hasta tener
-observabilidad, soporte validado, cola durable y compliance operacional.
+extension/SII/CAF. Observabilidad base, cola durable OCR/IA/documentos y
+compliance beta 8/10 ya quedaron versionados. Aun no conviene prometer
+operacion masiva abierta sin validar la primera beta real, alertas externas,
+Lighthouse autenticado y revision legal externa.
 
 ## Evidencia Principal
 
@@ -114,8 +116,9 @@ Estado: cerrado y redeployado.
 - Falta checklist de rollback/soporte para fallos de emision real.
 - Falta definir criterio de exito para primera emision real aceptada/rechazada.
 - Falta una pasada manual mobile/desktop final de onboarding y compra.
-- Compliance minimo iniciado: RAT/proveedores/ARCO/retencion/brechas/MPD. Falta
-  revision legal y bajada a flujos operativos.
+- Compliance beta 8/10 versionado: RAT, DPA/subencargados, retencion, brechas,
+  MPD inicial y paginas publicas legales. Falta revision legal externa para
+  lanzamiento abierto.
 
 ### P2 Post Beta
 
@@ -124,15 +127,17 @@ Estado: cerrado y redeployado.
   `.github/workflows/lighthouse.yml`; falta extenderlo a rutas autenticadas con
   estado Playwright controlado.
 - Reportes intermedios viejos sin trackear siguen en workspace local.
-- Falta dashboards/alertas de operacion continuas mas alla de artifacts.
+- Falta configurar `OPS_ALERT_WEBHOOK_URL` y, si se requiere menor latencia,
+  scheduler externo o Vercel Pro para correr crons con frecuencia subdiaria.
 
 ## Backlog Priorizado
 
 | Prioridad | Item | Estado | Artifact |
 |---|---|---|---|
 | P0 | Smoke real extension/SII/CAF | done manual | `artifacts/tasks/LAUNCH-001-extension-sii-caf-smoke.md` |
+| P0 | Cola durable OCR/IA/documentos | done beta | `artifacts/tasks/ENG-003-cola-durable-documentos-ia.md` |
 | P1 | Runbook beta primer cliente | in_progress | `artifacts/tasks/LAUNCH-002-first-beta-runbook.md` |
-| P1 | Compliance Chile minimo | in_progress | `artifacts/tasks/COMPLIANCE-001-ley-21719-21595-readiness.md` |
+| P1 | Compliance Chile beta 8/10 | done_beta | `artifacts/tasks/COMPLIANCE-001-ley-21719-21595-readiness.md` |
 | P1 | Checklist final compra/onboarding/mobile | pendiente | crear despues de runbook beta |
 | P2 | Lighthouse performance/accessibility | in_progress | CI agregado para `/auth/login`, `/auth/registro` y `/bloqueado`; falta modo autenticado |
 | P2 | Limpieza de reportes intermedios locales | pendiente | no borrar sin decision explicita |
@@ -140,16 +145,16 @@ Estado: cerrado y redeployado.
 ## Decision Recomendada
 
 La web puede pasar a beta controlada si el mensaje comercial evita prometer
-emision masiva abierta hasta cerrar observabilidad, cola durable y compliance
-operacional, aunque LAUNCH-001 ya tenga smoke manual reportado OK.
+emision masiva abierta y se opera con soporte cercano. LAUNCH-001, observabilidad
+base, cola durable y compliance beta ya estan cubiertos a nivel tecnico.
 
 No conviene lanzar abierto ni cobrar con promesa de emision tributaria final
 hasta completar:
 
-1. Observabilidad y alertas para emision real, upload, IA, pagos y locks.
+1. Alertas externas para emision real, upload, IA, pagos y locks.
 2. Runbook de soporte/rollback validado con la primera cuenta beta.
 3. Checklist de compra/onboarding en produccion.
-4. Cola durable para procesamiento pesado de documentos/OCR/IA.
+4. Revision legal externa de privacidad, terminos, DPA, retencion y MPD.
 
 ## Comandos De Referencia
 
@@ -164,4 +169,5 @@ npm run audit:locks -- --base-url=https://app-contable-five.vercel.app --state=/
 - 2026-06-21 - Matriz Start/Pro/Business cerrada con 0 hallazgos.
 - 2026-06-21 - DEV-003 detectado, corregido, redeployado y verificado.
 - 2026-06-21 - Lock remoto auditado en produccion sin extension/SII.
+- 2026-06-21 - Cola durable y compliance beta 8/10 agregados al plan.
 - 2026-06-21 - Este informe convierte resultados en backlog launch.

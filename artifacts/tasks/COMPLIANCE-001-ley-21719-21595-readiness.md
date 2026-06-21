@@ -1,7 +1,7 @@
 ---
 id: COMPLIANCE-001
 title: Readiness Ley 21.719 y Ley 21.595 para MassDTE
-status: in_progress
+status: done_beta
 priority: critical
 created_at: 2026-06-21
 owner: product-engineering
@@ -102,3 +102,9 @@ Entregables minimos:
   inicial, proveedores, ARCO manual, retencion, brechas y MPD minimo. Queda
   pendiente revision legal externa y bajada a flujos/producto antes de
   lanzamiento abierto.
+- 2026-06-21 - Paquete ampliado para readiness 8/10 beta controlada:
+  `artifacts/docs/compliance/massdte-compliance-8-readiness-2026-06-21.md`,
+  `artifacts/docs/compliance/massdte-rat-dpa-brechas-retencion-mpd-2026-06-21.md`
+  y paginas publicas `/legal`, `/legal/privacidad`, `/legal/terminos` y
+  `/legal/seguridad`. No reemplaza revision legal externa; queda como base
+  ordenada para abogado y operacion beta.

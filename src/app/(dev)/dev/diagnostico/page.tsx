@@ -107,6 +107,10 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
         <Metric label="Locks expirados" value={snapshot.metrics.locksExpirados} tone={snapshot.metrics.locksExpirados > 0 ? "warn" : "ok"} />
         <Metric label="Emisión fallida 24h" value={snapshot.metrics.jobsEmisionFallidos24h} tone={snapshot.metrics.jobsEmisionFallidos24h > 0 ? "warn" : "ok"} />
         <Metric label="Errores ops 24h" value={snapshot.metrics.opsErrores24h} tone={snapshot.metrics.opsCriticos24h > 0 ? "critical" : snapshot.metrics.opsErrores24h > 0 ? "warn" : "ok"} />
+        <Metric label="Cola docs lista" value={snapshot.metrics.documentJobsQueued} tone={snapshot.metrics.documentJobsQueued > 10 ? "warn" : "ok"} />
+        <Metric label="Cola docs corriendo" value={snapshot.metrics.documentJobsRunning} tone="ok" />
+        <Metric label="Cola docs fallida 24h" value={snapshot.metrics.documentJobsFailed24h} tone={snapshot.metrics.documentJobsFailed24h > 0 ? "warn" : "ok"} />
+        <Metric label="Cola docs atascada" value={snapshot.metrics.documentJobsStale} tone={snapshot.metrics.documentJobsStale > 0 ? "critical" : "ok"} />
       </div>
 
       {snapshot.findings.length > 0 ? (
