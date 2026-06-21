@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { requireAccountApiAccess } from "@/lib/api/account-guard";
 
 /**
  * Devuelve folios disponibles por tipo DTE para la empresa del usuario.
@@ -8,27 +7,13 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
  * cuando hay 0.
  */
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  if (!guard.ok) return guard.response;
 
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-  if (!usuario?.empresa_id) {
-    return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
-  }
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const sb = createServiceClient(url, key);
-
-  const { data: cafs } = await sb
+  const { data: cafs } = await guard.service
     .from("boletas_caf_mock")
     .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", guard.empresaId)
     .eq("estado", "activo")
     .gt("fecha_vence", new Date().toISOString());
 

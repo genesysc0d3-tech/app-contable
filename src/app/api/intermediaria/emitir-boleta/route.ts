@@ -8,6 +8,9 @@ import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "
 import { chileDateString } from "@/lib/chile-date";
 import { issueMockBoleta } from "@/lib/emission/mock";
 import { blockUnsupportedBackendProvider } from "@/lib/emission/provider-guards";
+import { validarAccesoCuenta } from "@/lib/entitlements";
+import { recordCuentaAudit } from "@/lib/audit/account";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
 /**
  * Capa intermediaria (emula Haulmer / OpenFactura).
@@ -35,6 +38,9 @@ export async function POST(request: Request) {
 }
 
 async function handlePost(request: Request) {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
+
   // 1. Auth
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -88,6 +94,13 @@ async function handlePost(request: Request) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   const sb = createServiceClient<Database>(url, key);
+  const acceso = await validarAccesoCuenta(sb, user.id, usuario.empresa_id);
+  if (!acceso.ok) {
+    return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
+  }
+  if (!acceso.planActivo) {
+    return NextResponse.json({ ok: false, error: "PLAN_INACTIVO", detalle: "Tu plan no está activo." }, { status: 402 });
+  }
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id).catch(() => null);
   if (!emisionConfig) {
     return NextResponse.json(
@@ -207,6 +220,24 @@ async function handlePost(request: Request) {
       monto_total: boleta.monto_total,
       receptor: receptorLabel,
       etiqueta: "Boleta unica",
+    },
+  });
+
+  await recordCuentaAudit({
+    sb,
+    cuentaId: acceso.cuentaId,
+    empresaId: usuario.empresa_id,
+    usuarioId: user.id,
+    accion: "boleta_emitida",
+    recursoTipo: "boleta_emitida",
+    recursoId: boleta.id,
+    resumen: `Boleta #${boleta.folio} emitida`,
+    metadata: {
+      tipo_dte: body.tipo_dte,
+      folio: boleta.folio,
+      proveedor: proveedorEfectivo,
+      sandbox: true,
+      origen: "emision_directa",
     },
   });
 

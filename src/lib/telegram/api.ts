@@ -19,15 +19,43 @@ export interface TelegramMessage {
   message_id: number;
   chat: { id: number; type: string };
   from?: { id: number; first_name?: string; username?: string };
+  date?: number;
   text?: string;
   caption?: string;
   photo?: TelegramPhotoSize[];
 }
 
+export interface TelegramCallbackQuery {
+  id: string;
+  from?: { id: number };
+  message?: TelegramMessage;
+  data?: string;
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 }
+
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data?: string;
+  url?: string;
+}
+
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
+}
+
+export interface ForceReply {
+  force_reply: true;
+  input_field_placeholder?: string;
+}
+
+export type TelegramSentMessage = TelegramMessage;
+
+const answeredCallbackIds = new Set<string>();
 
 function getBotToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -57,17 +85,79 @@ export async function tgCall<T = unknown>(
   return json.result as T;
 }
 
-/** Manda un mensaje de texto al chat. HTML opcional (negritas, links). */
+/**
+ * Manda un mensaje de texto al chat. HTML opcional (negritas, links).
+ *
+ * No lanza nunca: un mensaje que falla no debe cortar el flujo del webhook
+ * (p. ej. dejar de procesar el comprobante). Si el envío con HTML es
+ * rechazado, reintenta en texto plano antes de rendirse — mejor un mensaje
+ * sin negritas que silencio. Cualquier fallo final queda logueado.
+ */
 export async function sendMessage(
   chatId: number,
   text: string,
-  opts?: { html?: boolean },
-): Promise<void> {
-  await tgCall("sendMessage", {
-    chat_id: chatId,
-    text,
-    ...(opts?.html ? { parse_mode: "HTML" } : {}),
-  });
+  opts?: { html?: boolean; replyMarkup?: InlineKeyboardMarkup | ForceReply },
+): Promise<TelegramSentMessage | null> {
+  const markup = opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {};
+  try {
+    return await tgCall<TelegramSentMessage>("sendMessage", {
+      chat_id: chatId,
+      text,
+      ...(opts?.html ? { parse_mode: "HTML" } : {}),
+      ...markup,
+    });
+  } catch (err) {
+    if (opts?.html) {
+      try {
+        const msg = await tgCall<TelegramSentMessage>("sendMessage", { chat_id: chatId, text: text.replace(/<\/?[^>]+>/g, ""), ...markup });
+        console.error("[telegram] sendMessage HTML rechazado, enviado en texto plano:",
+          err instanceof Error ? err.message : err);
+        return msg;
+      } catch { /* cae al log de abajo */ }
+    }
+    console.error("[telegram] sendMessage falló:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/** Edita un mensaje ya enviado (texto + botones). No lanza. */
+export async function editMessageText(
+  chatId: number,
+  messageId: number,
+  text: string,
+  opts?: { html?: boolean; replyMarkup?: InlineKeyboardMarkup },
+): Promise<boolean> {
+  try {
+    await tgCall("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      ...(opts?.html ? { parse_mode: "HTML" } : {}),
+      ...(opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
+    });
+    return true;
+  } catch (err) {
+    console.error("[telegram] editMessageText falló:", err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
+/** Responde el tap de un botón (quita el "reloj" de carga). No lanza. */
+export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  if (answeredCallbackIds.has(callbackQueryId)) return;
+  answeredCallbackIds.add(callbackQueryId);
+  if (answeredCallbackIds.size > 1000) {
+    const oldest = answeredCallbackIds.values().next().value;
+    if (oldest) answeredCallbackIds.delete(oldest);
+  }
+  try {
+    await tgCall("answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+      ...(text ? { text } : {}),
+    });
+  } catch (err) {
+    console.error("[telegram] answerCallbackQuery falló:", err instanceof Error ? err.message : err);
+  }
 }
 
 const MIME_POR_EXTENSION: Record<string, string> = {

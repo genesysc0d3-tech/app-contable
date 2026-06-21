@@ -21,6 +21,7 @@ export type SimpleApiProxySuccess = {
   pfx: File;
   caf: File;
   tipoDte: number;
+  folio: number | null;
 };
 
 export type SimpleApiProxyPayload = SimpleApiProxySuccess | SimpleApiProxyError;
@@ -87,7 +88,7 @@ export function parseSimpleApiMultipart(formData: FormData): SimpleApiProxyPaylo
     return { ok: false, status: 422, error: "TIPO_DTE_REQUIRED", detalle: "No se pudo detectar TipoDTE en input." };
   }
 
-  return { ok: true, input: inputValue, pfx, caf, tipoDte };
+  return { ok: true, input: inputValue, pfx, caf, tipoDte, folio: extractFolio(inputValue) };
 }
 
 export function simpleApiAllowedForTipo(config: ConfigEmision, tipoDte: number): boolean {
@@ -140,6 +141,15 @@ function extractTipoDte(input: string): number | null {
   }
 }
 
+function extractFolio(input: string): number | null {
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    return findFolio(parsed);
+  } catch {
+    return null;
+  }
+}
+
 function findTipoDte(value: unknown): number | null {
   if (!value || typeof value !== "object") return null;
   if (Array.isArray(value)) {
@@ -159,6 +169,30 @@ function findTipoDte(value: unknown): number | null {
 
   for (const nested of Object.values(record)) {
     const found = findTipoDte(nested);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findFolio(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFolio(item);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["Folio", "folio"]) {
+    const raw = record[key];
+    const numeric = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    if (Number.isSafeInteger(numeric) && numeric > 0) return numeric;
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findFolio(nested);
     if (found) return found;
   }
   return null;

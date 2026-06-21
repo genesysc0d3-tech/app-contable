@@ -17,6 +17,7 @@ import { clpConIva, periodoActual } from "./metering";
 
 const MP_BASE = "https://api.mercadopago.com";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app-contable-five.vercel.app";
+const UF_PERSONA_ADICIONAL = 0.2;
 
 export type MpError = { ok: false; error: string; detalle?: string };
 export type MpCheckout = { ok: true; url: string };
@@ -82,6 +83,7 @@ async function mpFetch<T>(path: string, init?: RequestInit): Promise<{ ok: true;
  * Monto = UF del plan * UF del día * 1.19 (total con IVA), en CLP.
  */
 export async function crearSuscripcion(
+  cuentaId: string,
   empresaId: string,
   planCodigo: string,
   emailPagador: string,
@@ -104,7 +106,7 @@ export async function crearSuscripcion(
     method: "POST",
     body: JSON.stringify({
       reason: `massDTE ${plan.nombre}`,
-      external_reference: `${empresaId}|plan|${plan.codigo}`,
+      external_reference: `${cuentaId}|plan|${plan.codigo}`,
       payer_email: emailPagador,
       auto_recurring: {
         frequency: 1,
@@ -122,6 +124,7 @@ export async function crearSuscripcion(
   }
 
   const { error: insErr } = await db.from("suscripciones").insert({
+    cuenta_id: cuentaId,
     empresa_id: empresaId,
     plan_codigo: plan.codigo,
     proveedor: "mercadopago",
@@ -138,13 +141,23 @@ export async function crearSuscripcion(
  * precio y las boletas del REFILL salen del plan vigente).
  */
 export async function crearRefill(empresaId: string): Promise<MpCheckout | MpError> {
+  const db = serviceDb();
+  const { data: cuentaEmpresa } = await db
+    .from("cuenta_empresas")
+    .select("cuenta_id")
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+  return crearRefillCuenta(cuentaEmpresa?.cuenta_id ?? empresaId, empresaId);
+}
+
+export async function crearRefillCuenta(cuentaId: string, empresaId: string): Promise<MpCheckout | MpError> {
   if (!mpConfigurado()) return { ok: false, error: "MP_NO_CONFIGURADO" };
 
   const db = serviceDb();
   const { data: suscripcion } = await db
     .from("suscripciones")
     .select("plan_codigo")
-    .eq("empresa_id", empresaId)
+    .eq("cuenta_id", cuentaId)
     .eq("estado", "activa")
     .order("created_at", { ascending: false })
     .limit(1)
@@ -174,19 +187,98 @@ export async function crearRefill(empresaId: string): Promise<MpCheckout | MpErr
           currency_id: "CLP",
         },
       ],
-      external_reference: `${empresaId}|refill|${periodo}`,
+      external_reference: `${cuentaId}|refill|${periodo}`,
       back_urls: {
         success: `${APP_URL}/planes?mp=back`,
         pending: `${APP_URL}/planes?mp=back`,
         failure: `${APP_URL}/planes?mp=back`,
       },
-      metadata: { empresa_id: empresaId, tipo: "refill", periodo },
+      metadata: { cuenta_id: cuentaId, empresa_id: empresaId, tipo: "refill", periodo },
     }),
   });
   if (!res.ok) return res;
   if (typeof res.data.init_point !== "string") {
     return { ok: false, error: "MP_API_ERROR", detalle: "Mercado Pago no devolvió init_point" };
   }
+  return { ok: true, url: res.data.init_point };
+}
+
+export async function crearPersonaAdicionalCuenta(cuentaId: string, empresaId: string): Promise<MpCheckout | MpError> {
+  if (!mpConfigurado()) return { ok: false, error: "MP_NO_CONFIGURADO" };
+
+  const db = serviceDb();
+  const { data: cuenta } = await db
+    .from("cuentas")
+    .select("plan_codigo, plan_activo")
+    .eq("id", cuentaId)
+    .maybeSingle();
+  const { data: plan } = cuenta?.plan_codigo
+    ? await db.from("planes_config").select("nombre, equipo").eq("codigo", cuenta.plan_codigo).maybeSingle()
+    : { data: null };
+  if (!cuenta?.plan_activo || plan?.equipo !== true) {
+    return { ok: false, error: "EQUIPO_NO_DISPONIBLE", detalle: "Personas adicionales están disponibles en Business" };
+  }
+
+  const uf = await getUfClp();
+  const monto = clpConIva(UF_PERSONA_ADICIONAL, uf);
+  const periodo = periodoActual();
+
+  const { data: intent, error: intentError } = await db
+    .from("cuenta_addons")
+    .insert({
+      cuenta_id: cuentaId,
+      tipo: "persona_adicional",
+      cantidad: 1,
+      periodo,
+      estado: "pendiente",
+      origen: "mercadopago",
+    })
+    .select("id")
+    .single();
+  if (intentError) {
+    if (intentError.code === "23505") {
+      return {
+        ok: false,
+        error: "ADDON_PENDIENTE",
+        detalle: "Ya hay una compra de persona adicional pendiente. Complétala o espera a que falle antes de intentar de nuevo.",
+      };
+    }
+    return { ok: false, error: "DB_ERROR", detalle: intentError.message };
+  }
+
+  const res = await mpFetch<MpPreference>("/checkout/preferences", {
+    method: "POST",
+    body: JSON.stringify({
+      items: [
+        {
+          title: `massDTE persona adicional (${plan.nombre})`,
+          quantity: 1,
+          unit_price: monto,
+          currency_id: "CLP",
+        },
+      ],
+      external_reference: `${cuentaId}|addon|persona_adicional|${intent.id}`,
+      back_urls: {
+        success: `${APP_URL}/planes?mp=back`,
+        pending: `${APP_URL}/planes?mp=back`,
+        failure: `${APP_URL}/planes?mp=back`,
+      },
+      metadata: { cuenta_id: cuentaId, empresa_id: empresaId, tipo: "addon", addon_tipo: "persona_adicional", cantidad: 1, addon_id: intent.id },
+    }),
+  });
+  if (!res.ok) {
+    await db.from("cuenta_addons").update({ estado: "cancelado" }).eq("id", intent.id).eq("estado", "pendiente");
+    return res;
+  }
+  if (typeof res.data.init_point !== "string") {
+    await db.from("cuenta_addons").update({ estado: "cancelado" }).eq("id", intent.id).eq("estado", "pendiente");
+    return { ok: false, error: "MP_API_ERROR", detalle: "Mercado Pago no devolvió init_point" };
+  }
+  await db
+    .from("cuenta_addons")
+    .update({ proveedor_ref: res.data.id ?? null })
+    .eq("id", intent.id)
+    .eq("estado", "pendiente");
   return { ok: true, url: res.data.init_point };
 }
 

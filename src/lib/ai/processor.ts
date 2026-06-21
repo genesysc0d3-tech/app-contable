@@ -111,7 +111,8 @@ interface ChunkResult {
 async function processChunkWithRetry(
   chunkIndex: number,
   chunkText: string,
-  systemPrompt: string
+  systemPrompt: string,
+  contextoEmpresa = ""
 ): Promise<ChunkResult> {
   const provider = getAIProvider();
   let lastError: Error | null = null;
@@ -119,7 +120,7 @@ async function processChunkWithRetry(
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await provider.extractMovimientos(
-        chunkText,
+        contextoEmpresa ? `${contextoEmpresa}\n\n${chunkText}` : chunkText,
         systemPrompt
       );
       return {
@@ -255,6 +256,29 @@ export async function procesarDocumento(
   const classifyPrompt = getClassifyOnlySystemPrompt();
   const bypassMode = Array.isArray(preExtracted) && preExtracted.length > 0;
 
+  // Contexto del contribuyente, AISLADO por empresa: se prepende al contenido
+  // del flujo de extracción para que el modelo sepa quién vende/recibe y lea
+  // bien dirección y montos. Nunca va en el system prompt global (compartido).
+  const { data: emp } = await supabase
+    .from("empresas")
+    .select("razon_social, rut, giro, tipo_contribuyente")
+    .eq("id", empresaId)
+    .maybeSingle();
+  const { data: identidades } = await supabase
+    .from("empresa_identidades")
+    .select("valor")
+    .eq("empresa_id", empresaId);
+  const aliasList = (identidades ?? []).map((i) => i.valor).filter(Boolean);
+  const contextoEmpresa = emp
+    ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
+      `- Razón social: «${emp.razon_social}» | RUT: ${emp.rut}` +
+      (emp.giro ? ` | Giro: ${emp.giro}` : "") +
+      ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
+      (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +
+      "- Es quien VENDE y RECIBE los pagos: sus montos son INGRESOS (entrada). Si el dinero va HACIA él (PARA/destino/receptor = su razón social, RUT o cualquiera de esos nombres/cuentas) → entrada. Marca salida SOLO si el comprobante dice explícitamente que él pagó/envió.\n" +
+      "- Cada pago recibido (entrada) es una VENTA a boletear: genera SIEMPRE una propuesta (boleta_honorarios / factura_afecta / factura_exenta / compraventa_crypto / transferencia_p2p / operacion_forex según corresponda). NUNCA uses 'no_comercial' para un pago recibido por el contribuyente."
+    : "";
+
   await supabase
     .from("documentos_subidos")
     .update({ estado: "procesando" })
@@ -380,7 +404,7 @@ export async function procesarDocumento(
         const batch = textChunks.slice(start, start + MAX_CONCURRENT);
         return Promise.all(
           batch.map((c, i) =>
-            processChunkWithRetry(start + i, c.text.join("\n"), systemPrompt)
+            processChunkWithRetry(start + i, c.text.join("\n"), systemPrompt, contextoEmpresa)
           )
         );
       }
@@ -565,7 +589,11 @@ export async function procesarDocumento(
           .filter((m) => m.tipo_flujo === "entrada")
           .reduce((sum, m) => sum + (toNum(m.monto) ?? 0), 0);
 
-    if (totalAbonos > 0) {
+    // Solo tiene sentido en un extracto con VARIAS transacciones (el saldo es
+    // una línea grande entre muchas chicas). Con pocos movimientos —p. ej. un
+    // comprobante único de Telegram, que es 1 solo abono = 100% del total— esta
+    // heurística borraría la única venta. Exigir >=5 movimientos para aplicarla.
+    if (totalAbonos > 0 && validMovimientos.length >= 5) {
       const threshold = totalAbonos * 0.5;
       const saldoFilter = new Set<number>();
       for (let i = 0; i < validMovimientos.length; i++) {

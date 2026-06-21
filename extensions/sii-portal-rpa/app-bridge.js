@@ -20,7 +20,7 @@
   function reportBridgeError(data, message) {
     postToPage({
       type: "APP_CONTABLE_SII_JOB_STATUS",
-      job_id: data?.job?.job_id ?? null,
+      job_id: data?.job?.job_id ?? data?.job_id ?? null,
       status: "error",
       recoverable: true,
       message,

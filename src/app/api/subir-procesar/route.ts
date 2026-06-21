@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { parseExcel } from "@/lib/parsers";
 import { procesarDocumento } from "@/lib/ai/processor";
 
 export async function POST(request: Request) {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });

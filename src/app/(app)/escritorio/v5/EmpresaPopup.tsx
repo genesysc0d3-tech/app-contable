@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EmisorForm from "../../empresa/EmisorForm";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
-import AiKeyConfig from "../../empresa/AiKeyConfig";
+import TelegramConfig from "../../empresa/TelegramConfig";
 import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
@@ -659,9 +659,9 @@ export default function EmpresaPopup({
               },
               {
                 n: 5,
-                icon: "M14.5 4.5 19.5 9.5M3 21l5.2-1.2L20 8a3.5 3.5 0 0 0-5-5L3.2 14.8 3 21Z",
-                title: "IA (DeepSeek)",
-                sub: "Clave de API",
+                icon: "M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z",
+                title: "Bot de Telegram",
+                sub: "Sube fotos por chat",
               },
             ].map((s, i) => (
               <div
@@ -742,7 +742,7 @@ export default function EmpresaPopup({
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={emisionConfig.boletasProveedor} /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} /> },
-                  { key: "ia", content: <AiKeyConfig devMode={devMode} /> },
+                  { key: "telegram", content: <TelegramConfig /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}

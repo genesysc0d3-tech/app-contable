@@ -14,6 +14,7 @@ import type { Tables } from "@/lib/database.types";
 import {
   actualizarPlan,
   buscarEmpresa,
+  entrarModoClienteDev,
   otorgarRefillCortesia,
   togglePlanActivo,
   type EmpresaHit,
@@ -490,6 +491,7 @@ function FilaEmpresa({
   onCantidad,
   onTogglePlan,
   onRegalar,
+  onModoCliente,
 }: {
   hit: EmpresaHit;
   ocupada: boolean;
@@ -498,6 +500,7 @@ function FilaEmpresa({
   onCantidad: (v: string) => void;
   onTogglePlan: () => void;
   onRegalar: () => void;
+  onModoCliente: () => void;
 }) {
   const sobreCuota = hit.cuota > 0 && hit.uso > hit.cuota;
   return (
@@ -570,6 +573,9 @@ function FilaEmpresa({
         />
         <BotonChico onClick={onRegalar} deshabilitado={ocupada}>
           Regalar refill
+        </BotonChico>
+        <BotonChico onClick={onModoCliente} deshabilitado={ocupada} destacado>
+          Ver como cliente
         </BotonChico>
         {aviso && (
           <span
@@ -668,6 +674,18 @@ function BuscadorEmpresas() {
     router.refresh();
   }
 
+  async function entrarComoCliente(hit: EmpresaHit) {
+    marcarOcupada(hit.id, true);
+    setAvisos((a) => ({ ...a, [hit.id]: { ok: true, msg: "preparando modo cliente..." } }));
+    const res = await entrarModoClienteDev(hit.id);
+    marcarOcupada(hit.id, false);
+    if ("error" in res) {
+      setAvisos((a) => ({ ...a, [hit.id]: { ok: false, msg: res.error } }));
+      return;
+    }
+    router.push("/massdte");
+  }
+
   return (
     <section style={cardStyle}>
       <h2 style={{ ...tituloZonaStyle, marginBottom: 8 }}>Empresas</h2>
@@ -705,6 +723,7 @@ function BuscadorEmpresas() {
             onCantidad={(v) => setRefillCantidades((r) => ({ ...r, [h.id]: v }))}
             onTogglePlan={() => cambiarPlanActivo(h)}
             onRegalar={() => regalarRefill(h)}
+            onModoCliente={() => entrarComoCliente(h)}
           />
         ))}
       </div>
@@ -723,6 +742,17 @@ function TopUsoMasivas({
   cortesiasBoletas: number;
   cortesiasRegalos: number;
 }) {
+  const router = useRouter();
+  const [abriendo, setAbriendo] = useState<string | null>(null);
+
+  async function entrarComoCliente(empresaId: string) {
+    setAbriendo(empresaId);
+    const res = await entrarModoClienteDev(empresaId);
+    setAbriendo(null);
+    if ("error" in res) return;
+    router.push("/massdte");
+  }
+
   return (
     <section style={cardStyle}>
       <div
@@ -808,6 +838,9 @@ function TopUsoMasivas({
                 />
               </div>
             </div>
+            <BotonChico onClick={() => entrarComoCliente(e.id)} deshabilitado={abriendo === e.id}>
+              {abriendo === e.id ? "Abriendo..." : "Ver"}
+            </BotonChico>
           </div>
         );
       })}
@@ -868,9 +901,27 @@ export default function DevPanelClient({
               massDTE
             </span>
           </div>
-          <span style={{ fontSize: 10, color: C.text2, fontVariantNumeric: "tabular-nums" }}>
-            {mesLegible(stats.periodo)} · UF {fmtClp(stats.ufClp)}
-          </span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <a
+              href="/dev/cuentas"
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "5px 10px",
+                borderRadius: 7,
+                border: `1px solid ${C.border}`,
+                color: C.text2,
+                background: C.muted,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Cuentas
+            </a>
+            <span style={{ fontSize: 10, color: C.text2, fontVariantNumeric: "tabular-nums" }}>
+              {mesLegible(stats.periodo)} · UF {fmtClp(stats.ufClp)}
+            </span>
+          </div>
         </div>
 
         <FilaStats stats={stats} />

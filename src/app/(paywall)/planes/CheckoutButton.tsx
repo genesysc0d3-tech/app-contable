@@ -13,7 +13,7 @@ export default function CheckoutButton({
   actual = false,
   label,
 }: {
-  tipo: "plan" | "refill";
+  tipo: "plan" | "refill" | "persona_adicional";
   plan?: string;
   actual?: boolean;
   label?: string;
@@ -60,7 +60,7 @@ export default function CheckoutButton({
       if (res.status === 503 || data?.error === "MP_NO_CONFIGURADO") {
         setMensaje("Pagos próximamente — escríbenos y activamos tu plan.");
       } else if (res.status === 403) {
-        setMensaje("Solo el dueño o un admin de la empresa pueden contratar.");
+        setMensaje("Tu cuenta no puede contratar este plan desde este acceso.");
       } else {
         setMensaje(data?.detalle ?? "No se pudo iniciar el pago — intenta de nuevo.");
       }
@@ -89,7 +89,7 @@ export default function CheckoutButton({
           transition: "background .2s, border-color .2s",
         }}
       >
-        {cargando ? "Abriendo Mercado Pago…" : label ?? (tipo === "plan" ? "Contratar con Mercado Pago" : "Comprar REFILL")}
+        {cargando ? "Abriendo Mercado Pago…" : label ?? (tipo === "plan" ? "Contratar con Mercado Pago" : "Comprar extra")}
       </button>
       {mensaje && (
         <p style={{ fontSize: 10, color: "var(--muted)", textAlign: "center", margin: 0 }}>{mensaje}</p>

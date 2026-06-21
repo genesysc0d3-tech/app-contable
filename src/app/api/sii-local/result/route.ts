@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
+import { requireEmisionJob } from "@/lib/emission/jobs";
+import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { recordCuentaAudit } from "@/lib/audit/account";
 
 interface SiiLocalResultPayload {
   job_id?: string | null;
@@ -51,6 +54,7 @@ interface SiiLocalPdfInfo {
 // multi-instancia hacía que "recuperar última emisión" funcionara solo si la
 // misma instancia había recibido el resultado original.
 const RESULT_RETENTION_DAYS = 7;
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 type ServiceDb = SupabaseClient;
 
@@ -309,6 +313,21 @@ export async function POST(request: Request) {
   const montoTotal = positiveInt(result?.monto_total ?? result?.totales?.monto_total);
   const fechaEmision = chileDate(result?.fecha_emision);
 
+  const { data: usuario } = await sb
+    .from("usuarios")
+    .select("rol, vetado")
+    .eq("id", user.id)
+    .single();
+  if (!usuario || usuario.vetado) return NextResponse.json({ ok: false, error: "USUARIO_BLOQUEADO" }, { status: 403 });
+  if (!ROLES_EMISION.has(String(usuario.rol))) {
+    return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
+  }
+
+  const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId: effectiveJobId, provider: "sii_local" });
+  if (!jobGate.ok) return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  const job = jobGate.job;
+  const empresaId = job.empresa_id;
+
   // Evidencia fuerte = el SII entregó folio con confianza alta (o folio en la
   // URL del PDF). Es el ÚNICO requisito para registrar la boleta: el folio es
   // la prueba de emisión. El PDF se adjunta aparte (puede quedar pendiente).
@@ -322,35 +341,44 @@ export async function POST(request: Request) {
       error: "RESULTADO_SII_INSUFICIENTE",
       result: result ?? null,
     });
+    await recordCuentaAudit({
+      sb,
+      cuentaId: job.cuenta_id,
+      empresaId,
+      usuarioId: job.usuario_id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: job.job_id,
+      resumen: "Resultado SII local insuficiente",
+      metadata: {
+        proveedor: "sii_local",
+        error: "RESULTADO_SII_INSUFICIENTE",
+      },
+    });
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "RESULTADO_SII_INSUFICIENTE" }, { status: 422 });
   }
 
-  // Dos queries separadas (sin embed empresas(...), que PostgREST puede no
-  // resolver y haría fallar toda la query → 403 falso).
-  const { data: usuario } = await sb
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
   const { data: empresa } = await sb
     .from("empresas")
     .select("rut, razon_social, giro, direccion, comuna")
-    .eq("id", usuario.empresa_id)
+    .eq("id", empresaId)
     .single();
-  if (!empresa?.rut || !empresa?.razon_social) return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
+  if (!empresa?.rut || !empresa?.razon_social) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
+  }
 
   const { data: existing } = await sb
     .from("boletas_emitidas")
     .select("id, folio, estado, proveedor_respuesta")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", empresaId)
     .eq("tipo_dte", tipoDte)
     .eq("folio", folio)
     .maybeSingle();
 
   if (existing) {
-    const pdfUpload = await uploadResultPdf(sb, { empresaId: usuario.empresa_id, tipoDte, folio, result, pdfInfo });
+    const pdfUpload = await uploadResultPdf(sb, { empresaId, tipoDte, folio, result, pdfInfo });
     if (pdfUpload.storagePath) {
       const previousResponse = existing.proveedor_respuesta && typeof existing.proveedor_respuesta === "object"
         ? existing.proveedor_respuesta as Record<string, unknown>
@@ -373,6 +401,7 @@ export async function POST(request: Request) {
         .eq("id", existing.id);
       if (updateErr) {
         await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
+        await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
         return NextResponse.json({ ok: false, error: "PDF_METADATA_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
       }
     } else {
@@ -381,6 +410,7 @@ export async function POST(request: Request) {
       await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_pendiente", error: pdfUpload.error, result });
     }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
   }
 
@@ -399,7 +429,7 @@ export async function POST(request: Request) {
   // PRINCIPIO DE CONFIANZA: con folio de evidencia fuerte (ya validado arriba),
   // la boleta SE REGISTRA SIEMPRE, tenga PDF o no. El PDF es respaldo adjuntable
   // después; jamás bloquea el registro de una boleta realmente emitida en el SII.
-  const pdfUpload = await uploadResultPdf(sb, { empresaId: usuario.empresa_id, tipoDte, folio, result, pdfInfo });
+  const pdfUpload = await uploadResultPdf(sb, { empresaId, tipoDte, folio, result, pdfInfo });
   const pdfPendiente = !pdfUpload.storagePath;
 
   const proveedorRespuesta = {
@@ -427,7 +457,7 @@ export async function POST(request: Request) {
   const { data: boleta, error: insertErr } = await sb
     .from("boletas_emitidas")
     .insert({
-      empresa_id: usuario.empresa_id,
+      empresa_id: empresaId,
       tipo_dte: tipoDte,
       folio,
       fecha_emision: fechaEmision,
@@ -458,12 +488,29 @@ export async function POST(request: Request) {
 
   if (insertErr || !boleta) {
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "insert_failed", error: insertErr?.message ?? "DB_INSERT_FAILED", result });
+    await recordCuentaAudit({
+      sb,
+      cuentaId: job.cuenta_id,
+      empresaId,
+      usuarioId: job.usuario_id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: job.job_id,
+      resumen: "No se pudo guardar la boleta emitida con SII local",
+      metadata: {
+        tipo_dte: tipoDte,
+        folio,
+        proveedor: "sii_local",
+        error: "DB_INSERT_FAILED",
+      },
+    });
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
   }
 
   const receptorLabel = cleanText(receptor?.razon_social) ?? "consumidor final";
   await sb.from("documentos_subidos").insert({
-    empresa_id: usuario.empresa_id,
+    empresa_id: empresaId,
     nombre_archivo: `Boleta SII #${boleta.folio} - ${receptorLabel}`,
     tipo: "boleta_sii_local",
     storage_path: pdfUpload.storagePath,
@@ -482,6 +529,23 @@ export async function POST(request: Request) {
   });
 
   await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
+  await recordCuentaAudit({
+    sb,
+    cuentaId: job.cuenta_id,
+    empresaId,
+    usuarioId: job.usuario_id,
+    accion: "boleta_emitida",
+    recursoTipo: "boleta_emitida",
+    recursoId: boleta.id,
+    resumen: `Boleta #${boleta.folio} emitida con SII local`,
+    metadata: {
+      tipo_dte: tipoDte,
+      folio: boleta.folio,
+      proveedor: "sii_local",
+      pdf_pendiente: pdfPendiente,
+    },
+  });
+  await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
 
   return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id, pdf_pendiente: pdfPendiente });
 }

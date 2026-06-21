@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import { useEmissionLockStatus } from "./useEmissionLockStatus";
 
 interface Item {
   id: string;
@@ -83,6 +84,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
 
   const fetchData = useCallback(async () => {
     setError(null);
@@ -187,6 +189,10 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
 
   async function handleEmitir() {
     if (selectedItems.length === 0) return;
+    if (lockedByOther) {
+      toast(lockMessage, "error");
+      return;
+    }
     setEmitiendo(true);
     try {
       const body = { items: selectedItems.map(i => ({ id: i.id, tipo_dte: dteOverrides[i.id] ?? i.tipo_sugerido ?? 39 })) };
@@ -311,14 +317,19 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
           <div className="l">
             <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
           </div>
+          {lockedByOther && (
+            <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
+              <strong style={{ fontSize: 9 }}>{businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
+            </div>
+          )}
           <div className="r">
-            <button className="emit" onClick={handleEmitir} disabled={emitiendo || selectedCount === 0}>
+            <button className="emit" onClick={handleEmitir} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{emitiendo ? "Emitiendo..." : `Emitir ${selectedCount}`}
+              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>

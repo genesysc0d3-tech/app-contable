@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import EmitirDirectaView from "./EmitirDirectaView";
 import DropzoneUpload from "./DropzoneUpload";
 import GlowWrap from "./GlowWrap";
+import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { chileDateString } from "@/lib/chile-date";
 
 function todayStr() {
@@ -13,14 +14,22 @@ function todayStr() {
 
 type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
-export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null }) {
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
   const [open, setOpen] = useState(false);
+  const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
+  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
 
   function closeWithSavedPulse(saved = false) {
     setOpen(false);
     if (saved) {
       window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Borrador guardado" } }));
     }
+  }
+
+  function openIfAvailable() {
+    if (readOnlyReason) return;
+    if (lockedByOther) return;
+    setOpen(true);
   }
 
   return (
@@ -32,6 +41,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
         .sp{position:relative;z-index:0;width:100%;overflow:hidden}
         .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:9;--accent-s:79%;--accent-l:58%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 79%) 68% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 79%) 58% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 34%) + 18%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(232,85,62,.13), rgba(232,85,62,.04));color:#E8553E;cursor:pointer;text-align:left;white-space:nowrap;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
         .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:white;outline:none}
+        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:#f59e0b;cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
         .sparkle-button:active{filter:brightness(.96);transition:.3s}
         .sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .22);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
         .spark{position:absolute;inset:0;border-radius:inherit;rotate:0deg;overflow:hidden;mask:linear-gradient(white,transparent 50%);animation:flip calc(var(--spark) * 2) infinite steps(2,end);pointer-events:none}
@@ -44,6 +54,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
         .sparkle-title{font-size:12px;font-weight:700;color:currentColor;transition:color var(--transition)}
         .sparkle-subtitle{font-size:9px;color:var(--text2);margin-top:1px;transition:color var(--transition)}
         .sparkle-button:is(:hover,:focus-visible) .sparkle-subtitle{color:hsl(0 0% 86%)}
+        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:#f59e0b}
         .receipt-sparkle{inline-size:1.38em;translate:-8% -3%;flex-shrink:0;position:relative;z-index:1;color:currentColor;overflow:visible}
         .receipt-sparkle .receipt-paper{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;filter:drop-shadow(0 0 calc(var(--active) * 8px) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .7));transform-box:fill-box;transform-origin:center;transition:stroke var(--transition),filter var(--transition)}
         .receipt-sparkle .receipt-line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;opacity:.7;transform-origin:left;transition:opacity var(--transition)}
@@ -68,7 +79,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       `}</style>
 
       <div className="sp">
-        <button className="sparkle-button" onClick={() => setOpen(true)}>
+        <button className="sparkle-button" onClick={openIfAvailable} disabled={lockedByOther || Boolean(readOnlyReason)}>
           <span className="spark" />
           <span className="backdrop" />
           <span className="sparkle-label">
@@ -77,7 +88,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="sparkle-title">EMITIR BOLETA ÚNICA</span>
-              <span className="sparkle-subtitle" style={{ display: "block" }}>DTE manual individual</span>
+              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOther ? "Emisión bloqueada" : "DTE manual individual")}</span>
             </span>
             <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
               <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
@@ -110,6 +121,13 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
         </span>
       </div>
 
+      {(lockedByOther || readOnlyReason) && (
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "#f59e0b", fontSize: 9, lineHeight: 1.35 }}>
+          <strong style={{ display: "block", marginBottom: 2, fontSize: 9, textTransform: "uppercase", letterSpacing: ".05em" }}>{readOnlyReason ? "Solo lectura" : businessMode ? "Equipo" : "Emisión en curso"}</strong>
+          {readOnlyReason ?? lockMessage}
+        </div>
+      )}
+
       {open && (
         <div className="ed-overlay">
           <div className="ed-panel">
@@ -121,7 +139,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
   );
 }
 
-export function MassDTEAction({}: { empresaId: string }) {
+export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyReason?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -185,7 +203,7 @@ export function MassDTEAction({}: { empresaId: string }) {
       `}</style>
 
       <div className="mass-sp">
-        <button className="mass-sparkle-button" onClick={() => setOpen(true)}>
+        <button className="mass-sparkle-button" onClick={() => { if (!readOnlyReason) setOpen(true); }} disabled={Boolean(readOnlyReason)}>
           <span className="mass-spark" />
           <span className="mass-backdrop" />
           <span className="mass-label">
@@ -194,7 +212,7 @@ export function MassDTEAction({}: { empresaId: string }) {
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="mass-title">EMITIR MASSDTE</span>
-              <span className="mass-subtitle" style={{ display: "block" }}>Subida masiva de cartolas</span>
+              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? "Subida masiva de cartolas"}</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
               <g className="mass-doc mass-doc-new">
@@ -249,6 +267,12 @@ export function MassDTEAction({}: { empresaId: string }) {
           ))}
         </span>
       </div>
+      {readOnlyReason && (
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "#f59e0b", fontSize: 9, lineHeight: 1.35 }}>
+          <strong style={{ display: "block", marginBottom: 2, fontSize: 9, textTransform: "uppercase", letterSpacing: ".05em" }}>Solo lectura</strong>
+          {readOnlyReason}
+        </div>
+      )}
 
       {open && (
         <div className="md-overlay">

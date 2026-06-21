@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAccountApiAccess } from "@/lib/api/account-guard";
 
 function normalize(value: string | null | undefined) {
   return (value ?? "")
@@ -16,19 +16,8 @@ function parseAmount(value: string | null) {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!usuario?.empresa_id) {
-    return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
-  }
+  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  if (!guard.ok) return guard.response;
 
   const url = new URL(request.url);
   const tipoDte = Number(url.searchParams.get("tipo_dte"));
@@ -44,10 +33,10 @@ export async function GET(request: Request) {
   const desde = new Date();
   desde.setDate(desde.getDate() - 90);
 
-  const { data, error } = await supabase
+  const { data, error } = await guard.service
     .from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_razon_social,monto_total,estado,detalles")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", guard.empresaId)
     .neq("estado", "anulada")
     .gte("fecha_emision", desde.toISOString().slice(0, 10))
     .order("fecha_emision", { ascending: false })

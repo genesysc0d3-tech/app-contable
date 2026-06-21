@@ -2,11 +2,14 @@
 
 import { createHash, randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validarRut, cleanRut } from "@/lib/sii/validation";
+import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { recordCuentaAudit } from "@/lib/audit/account";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
 export interface DatosEmisor {
   rut?: string | null;
@@ -30,6 +33,7 @@ export interface EmisionConfigInput {
 
 const ROLES_INVITABLES = new Set(["admin", "contador", "viewer"]);
 const ROLES_GESTION_MIEMBROS = new Set(["owner", "admin"]);
+type Sb = SupabaseClient<Database>;
 
 function hashInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -39,9 +43,87 @@ function normalizeEmail(email: FormDataEntryValue | null): string {
   return String(email ?? "").trim().toLowerCase();
 }
 
+async function blockSupportWrite() {
+  return getDevSupportWriteBlock();
+}
+
+async function capacidadEquipo(
+  sb: Sb,
+  empresaId: string,
+): Promise<{ ok: true; cuentaId: string; limite: number; personasActivas: number } | { ok: false; error: string }> {
+  const cuenta = await contextoCuentaPorEmpresa(sb, empresaId);
+  if (!cuenta) return { ok: false, error: "La empresa no tiene cuenta pagadora configurada" };
+  if (!cuenta.planActivo) return { ok: false, error: "Tu plan no está activo" };
+  if (!cuenta.equipo) return { ok: false, error: "Equipo está disponible solo en Business" };
+
+  const { data: addons, error: addonsError } = await sb
+    .from("cuenta_addons")
+    .select("cantidad")
+    .eq("cuenta_id", cuenta.cuentaId)
+    .eq("tipo", "persona_adicional")
+    .eq("estado", "activo");
+  if (addonsError) return { ok: false, error: addonsError.message };
+
+  const extras = (addons ?? []).reduce((sum, addon) => sum + (addon.cantidad ?? 0), 0);
+  return {
+    ok: true,
+    cuentaId: cuenta.cuentaId,
+    limite: cuenta.personasIncluidas + extras,
+    personasActivas: cuenta.personasActivas,
+  };
+}
+
+async function verificarCupoAceptacion(
+  sb: Sb,
+  empresaId: string,
+  userId: string,
+): Promise<{ ok: true; cuentaId: string; yaActivo: boolean } | { ok: false; error: string }> {
+  const capacidad = await capacidadEquipo(sb, empresaId);
+  if (!capacidad.ok) return capacidad;
+  const { data: miembro } = await sb
+    .from("cuenta_usuarios")
+    .select("activo")
+    .eq("cuenta_id", capacidad.cuentaId)
+    .eq("usuario_id", userId)
+    .maybeSingle();
+  if (miembro?.activo) return { ok: true, cuentaId: capacidad.cuentaId, yaActivo: true };
+  if (capacidad.personasActivas >= capacidad.limite) {
+    return { ok: false, error: "No quedan personas disponibles en el plan" };
+  }
+  return { ok: true, cuentaId: capacidad.cuentaId, yaActivo: false };
+}
+
+function inviteErrorMessage(code: string | null | undefined): string {
+  switch (code) {
+    case "SOLO_TITULAR_CUENTA":
+      return "Solo la cuenta pagadora puede agregar personas";
+    case "PLAN_INACTIVO":
+      return "Tu plan no está activo";
+    case "EQUIPO_NO_DISPONIBLE":
+      return "Equipo está disponible solo en Business";
+    case "CUPO_PERSONAS_AGOTADO":
+      return "No quedan personas disponibles en el plan";
+    case "EMAIL_YA_EN_CUENTA":
+      return "Ese email ya pertenece al equipo";
+    case "INVITACION_YA_EXISTE":
+      return "Ya existe una invitación pendiente para ese email";
+    case "EMAIL_INVALIDO":
+      return "Email inválido";
+    case "ROL_INVALIDO":
+      return "Rol inválido";
+    case "CUENTA_NO_CONFIGURADA":
+      return "La empresa no tiene cuenta pagadora configurada";
+    default:
+      return code ? `No se pudo crear la invitación (${code})` : "No se pudo crear la invitación";
+  }
+}
+
 export async function setDatosEmisor(
   datos: DatosEmisor,
 ): Promise<{ ok?: boolean; error?: string }> {
+  const supportBlock = await blockSupportWrite();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
@@ -96,6 +178,9 @@ export async function setDatosEmisor(
 // no mantener dos caminos que derivan extensión/bucket distinto.
 
 export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: string }> {
+  const supportBlock = await blockSupportWrite();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
@@ -129,6 +214,9 @@ export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: strin
 export async function setCertificadoSii(
   activo: boolean,
 ): Promise<{ ok?: boolean; error?: string }> {
+  const supportBlock = await blockSupportWrite();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
@@ -164,6 +252,9 @@ export async function setCertificadoSii(
 export async function setEmisionConfig(
   config: EmisionConfigInput,
 ): Promise<{ ok?: boolean; error?: string }> {
+  const supportBlock = await blockSupportWrite();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
@@ -215,6 +306,9 @@ export async function setEmisionConfig(
 }
 
 export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?: boolean; invitePath?: string; error?: string }> {
+  const supportBlock = await blockSupportWrite();
+  if (supportBlock) return supportBlock;
+
   const email = normalizeEmail(formData.get("email"));
   const rol = String(formData.get("rol") ?? "contador").trim();
   if (!email || !email.includes("@")) return { error: "Email inválido" };
@@ -226,53 +320,54 @@ export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?:
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, rol")
+    .select("empresa_id")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
-  if (!ROLES_GESTION_MIEMBROS.has(usuario.rol)) return { error: "Solo owner/admin puede invitar usuarios" };
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
 
-  const { data: miembroExistente } = await sb
-    .from("usuarios")
-    .select("id")
-    .eq("empresa_id", usuario.empresa_id)
-    .ilike("email", email)
-    .maybeSingle();
-  if (miembroExistente?.id) return { error: "Ese email ya pertenece a la empresa" };
-
-  const { data: invitacionPendiente } = await sb
-    .from("empresa_invitaciones")
-    .select("id")
-    .eq("empresa_id", usuario.empresa_id)
-    .eq("estado", "pendiente")
-    .ilike("email", email)
-    .maybeSingle();
-  if (invitacionPendiente?.id) return { error: "Ya existe una invitación pendiente para ese email" };
-
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashInviteToken(token);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { error } = await sb.from("empresa_invitaciones").insert({
-    empresa_id: usuario.empresa_id,
-    email,
-    rol,
-    token_hash: tokenHash,
-    invited_by: user.id,
-    expires_at: expiresAt,
+  const { data: invitacionResult, error } = await sb.rpc("crear_empresa_invitacion_titular", {
+    p_email: email,
+    p_empresa_id: usuario.empresa_id,
+    p_expires_at: expiresAt,
+    p_invited_by: user.id,
+    p_rol: rol,
+    p_token_hash: tokenHash,
   });
   if (error) return { error: error.message };
+
+  const result = invitacionResult?.[0];
+  if (!result?.ok || !result.invitacion_id || !result.cuenta_id) {
+    return { error: inviteErrorMessage(result?.error) };
+  }
+
+  await recordCuentaAudit({
+    sb,
+    cuentaId: result.cuenta_id,
+    empresaId: usuario.empresa_id,
+    usuarioId: user.id,
+    accion: "persona_invitada",
+    recursoTipo: "empresa_invitacion",
+    recursoId: result.invitacion_id,
+    resumen: "Persona invitada al equipo",
+  });
 
   revalidatePath("/empresa");
   return { ok: true, invitePath: `/invitar/${token}` };
 }
 
 export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?: string }> {
+  const supportBlock = await blockSupportWrite();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -310,12 +405,43 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   }
   if (existing?.vetado) return { error: "Esta cuenta está suspendida" };
 
+  const cupoAceptacion = await verificarCupoAceptacion(sb, invitacion.empresa_id, user.id);
+  if (!cupoAceptacion.ok) return { error: cupoAceptacion.error };
+
   if (existing?.empresa_id === invitacion.empresa_id) {
+    if (cupoAceptacion.cuentaId) {
+      const [{ error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
+        sb.from("cuenta_usuarios").upsert({
+          cuenta_id: cupoAceptacion.cuentaId,
+          usuario_id: user.id,
+          activo: true,
+          es_titular: false,
+        }, { onConflict: "cuenta_id,usuario_id" }),
+        sb.from("usuario_empresas").upsert({
+          usuario_id: user.id,
+          empresa_id: invitacion.empresa_id,
+          rol: invitacion.rol,
+        }, { onConflict: "usuario_id,empresa_id" }),
+      ]);
+      const membershipError = cuentaUsuarioError ?? usuarioEmpresaError;
+      if (membershipError) return { error: membershipError.message };
+    }
     await sb.from("empresa_invitaciones").update({
       estado: "aceptada",
       accepted_by: user.id,
       accepted_at: new Date().toISOString(),
     }).eq("id", invitacion.id);
+    await recordCuentaAudit({
+      sb,
+      cuentaId: cupoAceptacion.cuentaId,
+      empresaId: invitacion.empresa_id,
+      usuarioId: user.id,
+      accion: "persona_agregada",
+      recursoTipo: "usuario",
+      recursoId: user.id,
+      resumen: "Persona agregada al equipo",
+      metadata: { invitacion_id: invitacion.id },
+    });
     revalidatePath("/empresa");
     redirect("/");
   }
@@ -330,11 +456,44 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   });
   if (insertError) return { error: insertError.message };
 
+  if (cupoAceptacion.cuentaId) {
+    const [{ error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
+      sb.from("cuenta_usuarios").upsert({
+        cuenta_id: cupoAceptacion.cuentaId,
+        usuario_id: user.id,
+        activo: true,
+        es_titular: false,
+      }, { onConflict: "cuenta_id,usuario_id" }),
+      sb.from("usuario_empresas").upsert({
+        usuario_id: user.id,
+        empresa_id: invitacion.empresa_id,
+        rol: invitacion.rol,
+      }, { onConflict: "usuario_id,empresa_id" }),
+    ]);
+    const membershipError = cuentaUsuarioError ?? usuarioEmpresaError;
+    if (membershipError) {
+      await sb.from("usuarios").delete().eq("id", user.id);
+      return { error: membershipError.message };
+    }
+  }
+
   await sb.from("empresa_invitaciones").update({
     estado: "aceptada",
     accepted_by: user.id,
     accepted_at: new Date().toISOString(),
   }).eq("id", invitacion.id);
+
+  await recordCuentaAudit({
+    sb,
+    cuentaId: cupoAceptacion.cuentaId,
+    empresaId: invitacion.empresa_id,
+    usuarioId: user.id,
+    accion: "persona_agregada",
+    recursoTipo: "usuario",
+    recursoId: user.id,
+    resumen: "Persona agregada al equipo",
+    metadata: { invitacion_id: invitacion.id },
+  });
 
   revalidatePath("/empresa");
   redirect("/");

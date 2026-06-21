@@ -1,0 +1,427 @@
+DECISION FINAL DE PRODUCTO MASSDTE
+
+Este archivo contiene la decision final completa sobre planes, cuenta pagadora,
+multiempresa, equipo Business, Telegram, extension SII, SimpleAPI local,
+bloqueo global de emision, realtime y gating.
+
+Debe leerse directo antes de implementar cualquier cambio relacionado. No es un
+resumen corto. No reinterpretar estas reglas sin hablar con el usuario.
+
+CLIENTE OBJETIVO
+
+MassDTE no esta pensado principalmente para contadores. El cliente real es una
+persona que no quiere pagar contador para tareas repetitivas y tampoco quiere
+gastar tiempo digitando boletas o entendiendo contabilidad.
+
+El producto debe hablar simple. En la pagina de planes y en UX comercial no usar
+DTE, API, endpoints, entitlements, cuota_masivas, multi-RUT ni jerga tributaria.
+Usar empresa, boletas desde cartolas, boletas manuales, comprobantes por
+Telegram, equipo, historial y reportes.
+
+PLANES BASE
+
+Start:
+- Precio base: 0,5 UF/mes.
+- 1 empresa incluida.
+- 1 persona incluida.
+- 300 boletas desde cartolas al mes.
+- Boletas manuales ilimitadas.
+- Sin Telegram.
+- Sin equipo.
+- Sin multiempresa.
+- Historial basico.
+
+Pro:
+- Precio base: 1 UF/mes.
+- 1 empresa incluida.
+- 1 persona incluida.
+- 1.000 boletas desde cartolas al mes.
+- Boletas manuales ilimitadas.
+- 100 comprobantes por Telegram al mes.
+- Sin equipo.
+- Sin multiempresa.
+- Historial completo.
+
+Business:
+- Precio base: 2 UF/mes.
+- 1 empresa incluida.
+- 1 persona incluida.
+- 3.000 boletas desde cartolas al mes.
+- Boletas manuales ilimitadas.
+- 500 comprobantes por Telegram al mes.
+- Equipo habilitado.
+- Multiempresa habilitada.
+- Historial completo.
+- Reportes consolidados.
+- Empresas adicionales pagadas aparte.
+- Personas adicionales pagadas aparte.
+
+ADD-ONS
+
+Empresa adicional:
+- Precio propuesto: +0,5 UF/mes.
+- Disponible en Business.
+- Agrega otra empresa/RUT/dashboard a la misma cuenta.
+
+Persona de equipo adicional:
+- Precio propuesto: +0,2 UF/mes.
+- Disponible en Business.
+- Agrega otra persona con control total.
+
+Refill boletas desde cartolas:
+- +500 boletas desde cartolas para el mes.
+- Pago unico mensual.
+- Disponible en todos los planes.
+
+Telegram extra:
+- Pack mensual adicional.
+- Disponible en Pro y Business.
+
+REGLAS DE COBRO
+
+Boleta manual/directa:
+- Gratis.
+- Ilimitada.
+- No consume cuota de boletas desde cartolas.
+
+Boleta desde cartola/MassDTE:
+- Si consume cuota.
+- Se mide como boleta emitida desde cartola.
+- Regla tecnica actual correcta: boletas_emitidas.propuesta_id IS NOT NULL.
+
+Comprobante Telegram:
+- Consume cupo Telegram si es util.
+- No consume cuota de boletas desde cartolas.
+
+Boleta generada desde Telegram:
+- No cuenta como boleta desde cartola.
+- Es un flujo mas automatico que evita digitacion, pero no se mezcla con MassDTE
+  de cartolas.
+
+Usuario extra del equipo:
+- Add-on mensual.
+
+Empresa/RUT extra:
+- Add-on mensual.
+
+CUENTA PAGADORA
+
+La arquitectura debe tener una cuenta pagadora central.
+
+Capas:
+- cuentas: cliente que paga.
+- empresas: cada empresa/RUT/dashboard.
+- usuarios: personas que entran.
+- cuenta_empresas: empresas asociadas a la cuenta.
+- cuenta_usuarios: personas asociadas al equipo de la cuenta.
+- usuarios.empresa_id: empresa/dashboard activo actual.
+
+La app debe seguir aislando datos por empresa_id. Cambiar empresa significa
+cambiar usuarios.empresa_id y refrescar el dashboard. No se mezclan datos entre
+empresas.
+
+No conviene seguir extendiendo empresas.plan como si cada empresa fuera la
+cuenta pagadora cuando Business puede tener varias empresas y varias personas
+bajo el mismo pago.
+
+MULTIEMPRESA
+
+Multiempresa significa que una cuenta puede manejar varias empresas propias.
+No es principalmente un sistema de invitaciones.
+
+Cada empresa es un dashboard separado. Cada empresa tiene documentos, boletas,
+clientes, CAF, Telegram, propuestas, historial y configuracion propios.
+
+El selector va en el logo/nombre de empresa arriba a la izquierda. Click en el
+logo abre lista de empresas. Elegir una empresa actualiza usuarios.empresa_id y
+refresca /massdte.
+
+No cambiar todas las RLS a multiempresa como primer paso. Mantener RLS por
+empresa activa al inicio y validar el cambio de empresa en backend.
+
+EQUIPO BUSINESS
+
+Equipo solo aparece en Business. En Start y Pro no aparece panel Equipo, teaser
+ni circulitos.
+
+No hay roles visibles para usuarios del equipo. Todos tienen control total.
+Internamente puede existir lo minimo tecnico, pero la UI no debe hablar de
+owner/admin/contador/viewer/permisos.
+
+Regla: si una persona esta en el equipo, puede usar todo.
+
+Personas adicionales se cobran aparte. Si la persona no esta pagada o activa, no
+entra al dashboard.
+
+El panel Equipo va abajo de las cards de la columna izquierda. Es compacto:
+
+Equipo
+TA  JP  MR  +2
+3 conectados
+
+Estados:
+- Verde: conectado y activo.
+- Amarillo: conectado, pero inactivo.
+- Gris: desconectado.
+
+Maximo 5 circulitos visibles y luego +N. Click en la card abre mini panel con
+personas y boton Agregar persona.
+
+PRESENCIA Y REALTIME
+
+Business necesita presencia y realtime. Usar presencia por cuenta:
+
+presence:cuenta:{cuentaId}
+
+Cada usuario publica nombre visible, iniciales, empresa activa, ultima actividad
+y estado activo/inactivo.
+
+Realtime requerido:
+- Documentos.
+- Propuestas.
+- Boletas emitidas.
+- Equipo conectado.
+- Cambio de empresa activa.
+- Estados de procesamiento.
+- Estados de emision local.
+
+Como todos tienen control total, debe existir auditoria basica: quien emitio,
+quien aprobo, quien cambio empresa, quien agrego persona, etc. La auditoria es
+para trazabilidad, no para permisos.
+
+BOLETAS DESDE CARTOLAS
+
+La cuota principal de planes mide boletas desde cartolas, no operaciones
+procesadas.
+
+Consume cuota:
+- Boleta emitida desde una propuesta de MassDTE/cartola.
+- Regla tecnica actual: boletas_emitidas.propuesta_id IS NOT NULL.
+
+No consume cuota:
+- Boletas manuales/directas.
+- Comprobantes Telegram.
+- Documentos subidos sin emitir.
+- Propuestas pendientes.
+- Duplicados.
+- Salidas/no comerciales.
+- Errores de lectura.
+
+Debe existir bloqueo preventivo. Si quedan pocas boletas y el archivo/lote trae
+mas boletas emitibles que las disponibles, bloquear antes de emitir y, cuando se
+pueda, antes de procesar.
+
+Ejemplo: quedan 11 boletas y la cartola parece traer 30 emitibles. La app debe
+decir que no alcanza el cupo y pedir refill, subir plan o dividir lote.
+
+TELEGRAM
+
+Telegram tiene cupo propio. No consume cuota de boletas desde cartolas.
+
+Producto: Captura automatica por Telegram.
+
+Cuenta contra cupo Telegram:
+- Comprobante util que termina en propuesta de ingreso lista para revisar.
+- Comprobante aceptado manualmente como ingreso.
+
+No cuenta:
+- Imagen ilegible.
+- Duplicado.
+- Salida marcada No es ingreso.
+- Mensaje que no es comprobante.
+- Comprobante ambiguo sin confirmar.
+- Error de procesamiento.
+
+En Business multiempresa, si la cuenta tiene 2 o mas empresas, al recibir imagen
+se pregunta empresa antes de procesar:
+
+Recibi el comprobante.
+Para que empresa lo cargo?
+
+76.xxx.xxx-x - ALPHA CODE
+77.xxx.xxx-x - BETA SPA
+78.xxx.xxx-x - GAMMA SPA
+
+Primer tap cambia el boton seleccionado a OK? manteniendo los demas botones:
+
+OK? 76.xxx.xxx-x - ALPHA CODE
+77.xxx.xxx-x - BETA SPA
+78.xxx.xxx-x - GAMMA SPA
+
+Segundo tap confirma. Recien ahi se descarga/guarda/procesa la imagen. No OCR,
+no documento y no consumo de cupo antes de confirmar empresa.
+
+EXTENSION SII Y SIMPLEAPI LOCAL
+
+La extension es local por navegador/persona. No se comparte entre usuarios.
+Cada usuario del equipo configura su propia extension local si va a emitir desde
+su computador.
+
+La app no guarda ni reparte claves SII/certificados entre usuarios desde
+servidores. Si un usuario no tiene extension configurada, puede usar dashboard,
+revisar, subir y editar, pero no emitir con proveedor local desde su maquina.
+
+Riesgo actual a corregir: /api/sii-local/result y /api/simpleapi/result guardan
+usando empresa activa actual del usuario. En multiempresa eso puede guardar una
+boleta bajo empresa equivocada si el usuario cambia de empresa mientras la
+extension esta emitiendo.
+
+Solucion obligatoria: crear emision_jobs.
+
+emision_jobs:
+- job_id
+- cuenta_id
+- empresa_id
+- usuario_id
+- proveedor
+- origen
+- estado
+- emisor_rut_esperado
+- propuesta_id / boleta_origen_id
+- created_at
+- expires_at
+
+La app crea el job antes de llamar a la extension. La extension devuelve job_id.
+El backend guarda resultados usando job.empresa_id, nunca usando la empresa
+activa actual.
+
+RESTRICCION SII: UNA EMISION REAL A LA VEZ
+
+Esta es una regla critica del sistema. El SII puede bloquear o exigir
+validaciones si hay emisiones simultaneas desde distintas IPs/computadores.
+
+Regla final:
+
+UNA EMISION SII REAL ACTIVA A LA VEZ POR CUENTA PAGADORA.
+
+Cuando una persona inicia una emision real con extension, el boton Emitir se
+bloquea para todos los usuarios de la cuenta hasta que esa emision termine,
+
+Durante el bloqueo, el equipo puede seguir subiendo documentos, revisando
+propuestas, editando clientes, navegando dashboard, preparando lotes y usando
+historial.
+
+Durante el bloqueo, nadie puede iniciar otra emision real desde otro computador,
+
+MVP conservador: bloqueo por cuenta completa, no solo por empresa. Despues se
+puede optimizar a bloqueo por credencial SII, pero no ahora.
+
+emision_locks:
+- cuenta_id
+- empresa_id
+- usuario_id
+- job_id
+- proveedor
+- estado
+- started_at
+- heartbeat_at
+- expires_at
+
+Estados visibles:
+- Juan esta abriendo SII.
+- Juan debe desbloquear la extension.
+- Juan esta emitiendo.
+- Guardando folio en MassDTE.
+- Terminado.
+- Fallo.
+- Expiro.
+
+Si hay lock activo y alguien intenta emitir por API, backend responde
+EMISION_BLOQUEADA con mensaje humano indicando quien esta emitiendo.
+
+La extension debe mandar estados y heartbeat mientras trabaja. Si el computador
+se cae, el lock se libera por expiracion segura, no instantanea.
+
+SIMPLEAPI LOCAL Y FOLIOS CAF
+
+SimpleAPI local es mas delicado porque la extension guarda certificado, CAF, RUT
+emisor y folios locales. En multiusuario, dos computadores pueden tener el mismo
+CAF y contador local desfasado.
+
+Reglas:
+- SimpleAPI local respeta el lock global de emision por cuenta.
+- A futuro debe existir reserva central de folios.
+
+folio_reservas:
+- empresa_id
+- tipo_dte
+- folio
+- job_id
+- estado
+
+La app reserva folio antes de generar XML. La extension usa ese folio. Nunca
+depender solo de chrome.storage para decidir folio en multiusuario.
+
+ENTITLEMENTS Y GATING
+
+Crear src/lib/entitlements.ts para resolver desde cuenta pagadora:
+- Plan activo.
+- Empresas incluidas.
+- Personas incluidas.
+- Add-ons activos.
+- Cupo de boletas desde cartolas.
+- Cupo Telegram.
+- Si puede usar Telegram.
+- Si puede usar equipo.
+- Si puede agregar empresa.
+- Si puede agregar persona.
+- Si puede emitir.
+- Si puede usar reportes Business.
+
+Gating importante debe ser backend. UI puede ocultar, pero backend debe bloquear.
+
+Bloquear server-side:
+- Agregar empresa.
+- Agregar persona.
+- Procesar Telegram sin cupo.
+- Emitir desde cartolas sin cuota.
+- Iniciar emision real con lock activo.
+- Entrar a empresa inactiva/no pagada.
+- Reportes Business sin plan.
+
+PAGINA DE PLANES
+
+La pagina de planes debe ser para personas que quieren ahorrar tiempo, no para
+contadores. No usar jerga tecnica. Cards simples:
+
+Start: para probar.
+Pro: para negocios que emiten seguido.
+Business: para varias empresas o equipo.
+
+Usar empresas, personas, boletas desde cartolas, boletas manuales,
+comprobantes por Telegram, equipo en tiempo real, historial y reportes.
+
+ORDEN DE IMPLEMENTACION
+
+1. Crear cuentas, cuenta_empresas, cuenta_usuarios y cuenta_addons.
+2. Backfill de datos actuales.
+3. Crear entitlements.ts.
+4. Adaptar billing para leer desde cuenta pagadora.
+5. Mantener compatibilidad temporal con empresas.plan.
+6. Crear selector de empresa arriba izquierda.
+7. Crear server action cambiarEmpresaActiva.
+8. Agregar contadores de boletas desde cartolas y Telegram.
+9. Agregar gating backend por plan/add-ons.
+10. Crear panel Equipo solo Business.
+11. Agregar presencia realtime.
+12. Crear emision_jobs.
+13. Crear emision_locks global por cuenta.
+14. Adaptar /api/sii-local/result y /api/simpleapi/result para usar job.empresa_id.
+15. Adaptar extension/app bridge para preservar job_id y estados.
+16. Agregar bloqueo realtime de emision para todo el equipo.
+17. Adaptar Telegram Business multiempresa con pregunta de empresa antes de OCR.
+18. Agregar reserva central de folios para SimpleAPI local.
+
+PRINCIPIOS INNEGOCIABLES
+
+- Boleta manual gratis e ilimitada.
+- Telegram no consume cuota de boletas desde cartolas.
+- Business no regala empresas/personas extra si son add-ons.
+- Equipo no muestra roles visibles.
+- Todos los miembros de equipo tienen control total.
+- Panel Equipo solo en Business.
+- Una emision SII real a la vez por cuenta.
+- Resultado de extension se guarda por job_id, no por empresa activa actual.
+- No compartir claves SII/certificados entre usuarios desde servidores.
+- Backend valida plan, acceso, cupo y locks.
+- Cada empresa es su mundo.

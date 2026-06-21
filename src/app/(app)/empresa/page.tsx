@@ -4,7 +4,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import EmisorForm from "./EmisorForm";
 import CAFPanel, { type CAFRow } from "./CAFPanel";
-import AiKeyConfig from "./AiKeyConfig";
+import TelegramConfig from "./TelegramConfig";
 import EmpresaFormatoCartola from "./EmpresaFormatoCartola";
 import EmissionProviderConfig from "./EmissionProviderConfig";
 import MiembrosPanel from "./MiembrosPanel";
@@ -102,7 +102,7 @@ export default async function EmpresaPage() {
 
       <MiembrosPanel miembros={miembros ?? []} invitaciones={invitaciones ?? []} />
 
-      <AiKeyConfig devMode={devMode} />
+      <TelegramConfig />
     </main>
     </div>
   );

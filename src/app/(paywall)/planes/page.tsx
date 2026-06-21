@@ -17,6 +17,8 @@ import CheckoutButton from "./CheckoutButton";
 
 export const dynamic = "force-dynamic";
 
+const UF_PERSONA_ADICIONAL = 0.2;
+
 function fmtClp(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
@@ -135,7 +137,7 @@ export default async function PlanesPage() {
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>Planes</h1>
           <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-            Emisión masiva de boletas desde tus cartolas. Precios en UF + IVA, cobrados en pesos al valor del día
+            Boletas desde tus cartolas, boletas manuales cuando las necesites y comprobantes por Telegram según tu plan. Precios en UF + IVA, cobrados en pesos al valor del día
             (UF hoy: {fmtClp(uf)}).
           </p>
         </div>
@@ -208,14 +210,18 @@ export default async function PlanesPage() {
                     flex: 1,
                   }}
                 >
-                  <Linea destacada texto={`${plan.cuota_masivas.toLocaleString("es-CL")} boletas masivas al mes`} />
-                  <Linea texto="Boletas únicas ilimitadas" />
-                  <Linea
-                    texto={`${plan.ruts_incluidos} RUT${plan.ruts_incluidos > 1 ? "s" : ""} incluido${plan.ruts_incluidos > 1 ? "s" : ""} · +UF ${plan.uf_rut_adicional} c/u adicional`}
-                  />
-                  <Linea
-                    texto={`REFILL: +${plan.refill_boletas.toLocaleString("es-CL")} boletas por ${fmtClp(plan.refill_clp_neto * 1.19)}`}
-                  />
+                  <Linea destacada texto={`${plan.cuota_masivas.toLocaleString("es-CL")} boletas desde cartolas al mes`} />
+                  <Linea texto="Boletas manuales ilimitadas" />
+                  <Linea texto={`${plan.empresas_incluidas} empresa incluida`} />
+                  <Linea texto={`${plan.personas_incluidas} persona incluida`} />
+                  {plan.telegram_comprobantes > 0 ? (
+                    <Linea texto={`${plan.telegram_comprobantes.toLocaleString("es-CL")} comprobantes por Telegram al mes`} />
+                  ) : (
+                    <Linea texto="Sin comprobantes por Telegram" />
+                  )}
+                  {plan.equipo && <Linea texto="Equipo habilitado" />}
+                  {plan.multiempresa && <Linea texto="Multiempresa con add-ons" />}
+                  <Linea texto={`Extra: +${plan.refill_boletas.toLocaleString("es-CL")} boletas desde cartolas por ${fmtClp(plan.refill_clp_neto * 1.19)}`} />
                   {featuresDe(plan.features).map((f) => (
                     <Linea key={f} texto={f} />
                   ))}
@@ -230,39 +236,68 @@ export default async function PlanesPage() {
         </div>
 
         {cuota.suscripcionActiva && planActual && (
-          <div
-            style={{
-              marginTop: 16,
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              borderRadius: 12,
-              padding: "14px 18px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 14,
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700 }}>
-                REFILL — +{planActual.refill_boletas.toLocaleString("es-CL")} boletas masivas este mes
+          <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+            <div
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                borderRadius: 12,
+                padding: "14px 18px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 14,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>
+                  Extra — +{planActual.refill_boletas.toLocaleString("es-CL")} boletas desde cartolas este mes
+                </div>
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                  Usaste {cuota.uso.toLocaleString("es-CL")} de {(cuota.cuota + cuota.refills).toLocaleString("es-CL")}{" "}
+                  este mes · quedan {cuota.disponible.toLocaleString("es-CL")} ·{" "}
+                  {fmtClp(planActual.refill_clp_neto * 1.19)} con IVA, pago único
+                </div>
               </div>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-                Usaste {cuota.uso.toLocaleString("es-CL")} de {(cuota.cuota + cuota.refills).toLocaleString("es-CL")}{" "}
-                este mes · quedan {cuota.disponible.toLocaleString("es-CL")} ·{" "}
-                {fmtClp(planActual.refill_clp_neto * 1.19)} con IVA, pago único
+              <div style={{ minWidth: 180 }}>
+                <CheckoutButton tipo="refill" />
               </div>
             </div>
-            <div style={{ minWidth: 180 }}>
-              <CheckoutButton tipo="refill" />
-            </div>
+
+            {planActual.equipo && (
+              <div
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  borderRadius: 12,
+                  padding: "14px 18px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>
+                    Extra — 1 persona adicional
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                    Solo la cuenta pagadora puede comprarlo · {fmtClp(clpConIva(UF_PERSONA_ADICIONAL, uf))} con IVA
+                  </div>
+                </div>
+                <div style={{ minWidth: 180 }}>
+                  <CheckoutButton tipo="persona_adicional" label="Comprar persona" />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         <p style={{ textAlign: "center", fontSize: 10, color: "var(--muted-light)", marginTop: 18 }}>
           Pagos procesados por Mercado Pago · cancela cuando quieras.
-          {usuario.empresas?.plan_activo && (
+          {(cuota.suscripcionActiva || usuario.empresas?.plan_activo) && (
             <>
               {" · "}
               <Link href="/massdte" style={{ color: "var(--muted)", textDecoration: "underline" }}>

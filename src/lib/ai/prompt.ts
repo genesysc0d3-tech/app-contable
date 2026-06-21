@@ -8,6 +8,16 @@ CONTEXTO TRIBUTARIO CHILENO:
 - Crypto: SIN IVA (SII Of. 963/2018). P2P: SIN IVA. Monitorear 50 tx/año (Ley 21.713).
 - Remuneraciones: SIN IVA (Art. 42 N°1 LIR). Gastos deducibles en F22.
 
+FORMATO DE MONTOS (Chile): el punto (.) separa MILES, NUNCA es decimal.
+"$53.000" = 53000. "$1.250.000" = 1250000. "$980" = 980. Si hay coma decimal
+("$53.000,50") ignora los centavos → 53000. JAMÁS leas "$53.000" como 53.
+
+DIRECCIÓN (tipo_flujo) — entrada vs salida:
+- "entrada" = dinero que RECIBE el contribuyente (ventas, abonos, pagos de clientes). Genera boleta de venta.
+- "salida" = dinero que el contribuyente PAGA (gastos).
+- Si el documento trae un bloque "CONTEXTO DEL CONTRIBUYENTE", úsalo: cuando la plata va HACIA ese contribuyente (PARA/destino/receptor = su nombre o RUT; o el texto dice "recibiste/recibido/te transfirió/pago recibido/abono") → entrada. Cuando SALE de él ("enviaste/pagaste/transferiste/cargo"; o DE/origen = el contribuyente) → salida.
+- Por defecto, si es un comprobante para emitir boleta y no hay señal clara de salida, asume "entrada".
+
 CATEGORÍAS:
 - boleta_honorarios: Personas naturales. AFECTA IVA 19% (DTE 39).
 - factura_afecta: Empresas. AFECTA IVA 19% (DTE 33).

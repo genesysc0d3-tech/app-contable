@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { validarAccesoCuenta } from "@/lib/entitlements";
+
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 /**
  * Reconciliación sii-local contra el Resumen de Ventas del SII (la fuente de
@@ -41,8 +44,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
 
   const { data: usuario } = await supabase
-    .from("usuarios").select("empresa_id").eq("id", user.id).single();
+    .from("usuarios").select("empresa_id, rol").eq("id", user.id).single();
   if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "SIN_EMPRESA" }, { status: 403 });
+  if (!ROLES_EMISION.has(String(usuario.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
   const empresaId = usuario.empresa_id;
 
   let body: { rows?: ReconRow[]; desde?: string; hasta?: string } = {};
@@ -66,6 +70,9 @@ export async function POST(request: Request) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_MAL_CONFIGURADO" }, { status: 500 });
   const sb = createServiceClient<Database>(url, key);
+  const acceso = await validarAccesoCuenta(sb, user.id, empresaId);
+  if (!acceso.ok) return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
+  if (!acceso.planActivo) return NextResponse.json({ ok: false, error: "PLAN_INACTIVO" }, { status: 402 });
 
   // Datos del emisor (columnas NOT NULL de la boleta).
   const { data: empresa } = await sb

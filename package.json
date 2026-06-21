@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "audit:app": "node scripts/audit-app-devtools.mjs",
     "sii:explore": "node scripts/sii-explorer.mjs",
     "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs",
     "cb4w": "node scripts/reset-db.js"
