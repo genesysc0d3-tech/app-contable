@@ -10,6 +10,33 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Sprint readiness tecnico/compliance implementado - #security #ci #compliance #launch
+
+What: Implemented the production readiness plan on
+`chore/production-readiness-compliance`: lint green, GitHub Actions CI,
+security headers, structured Excel preview without generated HTML,
+`/api/subir-procesar` upload validation, dependency audit clean, first beta
+runbook and minimum Chile compliance docs. Local lint, tests, build, audit and
+diff check passed. LAUNCH-001 remains the P0 blocker before promising real SII
+emission.
+
+Refs: `.github/workflows/ci.yml`,
+`artifacts/docs/first-beta-runbook-2026-06-21.md`,
+`artifacts/docs/compliance/massdte-compliance-minimo-2026-06-21.md`,
+`artifacts/runs/2026-06-21-cto-project-audit.md`.
+
+## 2026-06-21 - Compliance Chile agregado a auditoria CTO - #compliance #security #launch
+
+What: Reviewed `compliance-cl` and its referenced official sources for Ley
+21.719, Ley 21.595 and Ley 20.393, then added a Chile compliance addendum to
+the CTO audit. Opened `COMPLIANCE-001` for RAT/inventory, privacy policy, DPA,
+ARCO process, retention, breach plan and minimum MPD readiness before paid beta
+or open launch.
+
+Refs: `artifacts/runs/2026-06-21-cto-project-audit.md`,
+`artifacts/tasks/COMPLIANCE-001-ley-21719-21595-readiness.md`,
+`docs/MEMORIA.md`.
+
 ## 2026-06-21 - Reporte launch y backlog creados - #product #launch #audit
 
 What: Converted the production audit results into a launch readiness report and

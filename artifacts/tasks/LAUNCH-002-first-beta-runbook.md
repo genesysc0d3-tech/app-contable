@@ -1,6 +1,6 @@
 ---
 kind: task
-status: open
+status: in_progress
 priority: high
 owner_loop: product
 created_at: 2026-06-21
@@ -48,3 +48,6 @@ considera exito.
 ## Timeline
 
 - 2026-06-21 - Creada despues de consolidar auditoria productiva y backlog launch.
+- 2026-06-21 - Runbook inicial creado en
+  `artifacts/docs/first-beta-runbook-2026-06-21.md`. Queda pendiente validarlo
+  despues de deploy con auditorias productivas y simulacion Genesys.

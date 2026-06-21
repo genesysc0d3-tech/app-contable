@@ -22,7 +22,7 @@ const DASH_TABS = [
 
 export default function DashboardTabs({
   rcvCard,
-  calendar,
+  calendar: _calendar,
   dashboardOverview,
   actividadContent,
   boletasEmitidasContent,

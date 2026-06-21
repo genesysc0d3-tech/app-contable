@@ -283,7 +283,7 @@ async function enterCalculatorAmount(page, amount) {
   }
 }
 
-async function clickTextBox(page, text) {
+async function _clickTextBox(page, text) {
   const box = await page.evaluate((wanted) => {
     const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim().toUpperCase();
     const elements = Array.from(document.querySelectorAll(".v-input, .v-select__slot, .v-input__slot, [role='button'], div, button"));

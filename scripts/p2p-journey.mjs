@@ -150,7 +150,6 @@ if (await searchBox.count()) {
   await searchBox.fill("");
 } else {
   // La búsqueda puede vivir en el header (search-history-query-change)
-  const headerSearch = page.locator("input").filter({ hasNot: page.locator('[type="file"]') });
   notas.push("No encontré caja de búsqueda obvia en el historial");
   await shot("15-historial-sin-busqueda", 800);
 }

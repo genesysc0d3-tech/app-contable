@@ -5,6 +5,7 @@ import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { parseExcel } from "@/lib/parsers";
 import { procesarDocumento } from "@/lib/ai/processor";
+import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
 
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
@@ -28,19 +29,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "BAD_JSON" }, { status: 400 });
   }
 
-  if (!body.base64) return NextResponse.json({ error: "BASE64_REQUERIDO" }, { status: 422 });
-  if (!body.nombre) return NextResponse.json({ error: "NOMBRE_REQUERIDO" }, { status: 422 });
+  const validated = validateProcesarUploadPayload(body);
+  if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: validated.status });
 
-  const buffer = Buffer.from(body.base64, "base64");
-  const tipo = body.tipo || "excel";
-  const mime = typeof body.mime === "string" && /^[\w-]+\/[\w.+-]+$/.test(body.mime) ? body.mime : null;
+  const buffer = Buffer.from(validated.base64, "base64");
 
   const { data: doc, error: docError } = await supabase
     .from("documentos_subidos")
     .insert({
       empresa_id: usuario.empresa_id,
-      nombre_archivo: body.nombre,
-      tipo,
+      nombre_archivo: validated.nombre,
+      tipo: validated.tipo,
       storage_path: "memoria",
       estado: "subido",
     })
@@ -55,15 +54,8 @@ export async function POST(request: Request) {
   const svc = createServiceClient<Database>(svcUrl, svcKey);
 
   // Guardar archivo en Storage para FieldMapper y otros usos
-  const storagePath = `${usuario.empresa_id}/${doc.id}/${body.nombre}`;
-  const contentType = mime
-    ?? (tipo === "pdf"
-      ? "application/pdf"
-      : tipo === "csv"
-        ? "text/csv"
-        : tipo === "imagen"
-          ? "image/jpeg"
-          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  const storagePath = `${usuario.empresa_id}/${doc.id}/${validated.nombre}`;
+  const contentType = validated.contentType;
   const { error: storageError } = await svc.storage
     .from("documentos")
     .upload(storagePath, buffer, {
@@ -79,9 +71,9 @@ export async function POST(request: Request) {
   await svc.from("documentos_subidos").update({ estado: "procesando" }).eq("id", doc.id);
 
   // Procesar en segundo plano (no await)
-  procesarEnBackground(doc.id, usuario.empresa_id, buffer, tipo, {
+  procesarEnBackground(doc.id, usuario.empresa_id, buffer, validated.tipo, {
     mime: contentType,
-    nombre: body.nombre,
+    nombre: validated.nombre,
   }).catch(() => {});
 
   return NextResponse.json({

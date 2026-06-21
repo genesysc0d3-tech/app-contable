@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getDevOperatorDiagnostics } from "@/lib/dev/support-mode";
 
@@ -62,7 +63,7 @@ export default async function DevDiagnosticoPage() {
             </div>
             <h1 style={{ margin: "3px 0 0", fontSize: 22 }}>Diagnóstico de acceso dev</h1>
           </div>
-          <a
+          <Link
             href="/dev/cuentas"
             style={{
               border: `1px solid ${C.border}`,
@@ -76,7 +77,7 @@ export default async function DevDiagnosticoPage() {
             }}
           >
             Reintentar cuentas
-          </a>
+          </Link>
         </header>
 
         <section

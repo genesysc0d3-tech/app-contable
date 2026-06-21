@@ -484,6 +484,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }
   }
 
+  const closeEmissionJobEvent = useEffectEvent(closeEmissionJob);
+  const heartbeatEmissionJobEvent = useEffectEvent(heartbeatEmissionJob);
+
   const persistSimpleApiResult = useEffectEvent(async (data: ExtensionPageMessage) => {
     const jobId = data.job_id ?? simpleApiJobId;
     setEmitiendo(true);
@@ -564,7 +567,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         setEmitiendo(false);
         if (data.ok === false) {
           const jobId = data.job_id ?? simpleApiJobId;
-          void closeEmissionJob(jobId, "failed");
+          void closeEmissionJobEvent(jobId, "failed");
           setSimpleApiJobId(null);
           const message = data.error === "SIMPLEAPI_VAULT_LOCKED"
             ? "Desbloquea la bóveda SimpleAPI en la extensión antes de generar."
@@ -579,7 +582,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
 
-      void heartbeatEmissionJob(data.job_id, data.status ?? "running");
+      void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
       setLocalWorker({
         jobId: data.job_id ?? null,
         status: data.status ?? "error",
@@ -587,7 +590,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       });
       setLocalWorkerLoading(false);
       if ((data.status === "error" || data.status === "cancelled") && data.job_id) {
-        void closeEmissionJob(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
+        void closeEmissionJobEvent(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
         if (data.job_id === simpleApiJobId) {
           setEmitiendo(false);
           setSimpleApiJobId(null);
