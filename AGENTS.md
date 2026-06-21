@@ -281,6 +281,12 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - `requireAccountApiAccess` respeta modo soporte Genesys para lecturas de APIs
   compartidas; `/api/empresa/logo/[empresaId]` permite la empresa de soporte y
   devuelve 204 si no hay logo para evitar ruido de consola.
+- `audit:app` ahora recorre modo soporte Start/Pro/Business en `/massdte`,
+  `/empresa`, `/revisar`, `/subir`, `/clientes` y `/boletas/reportes`, con
+  probes read-only para upload, checkout, jobs de emision y emision directa.
+- Modo soporte Genesys quedo app-wide para el grupo `(app)`: `getAppEmpresaContext`
+  centraliza la empresa efectiva, el layout muestra banner global, las rutas
+  auditadas leen la empresa soportada y `/api/sii-mock/rcv` respeta soporte.
 - Bloque 4-5 del TXT quedo reconciliado contra produccion: migraciones remotas
   alineadas, dry-run sin pendientes, lint remoto sin errores de schema y build
   Next/Vercel local OK. `DEV-001` quedo cerrado.
@@ -315,6 +321,14 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
   OK, 0 hallazgos. Business checked con Equipo visible y `business_mode=true`;
   Pro/Start checked con Equipo oculto y `business_mode=false`; no-dev no ve
   `/dev/cuentas`.
+- `npm run build`: OK con soporte app-wide.
+- Vercel produccion redeploy OK (`dpl_BpXBLWhKSDrdvMTRnEEUsA14HGcR`); alias
+  `https://app-contable-five.vercel.app` actualizado.
+- `AUDIT_NONDEV_STATE=/tmp/e2e-state-nondev.json npm run audit:app --
+  --base-url=https://app-contable-five.vercel.app
+  --state=/tmp/e2e-state-vercel.json --expect-dev`: OK, 0 hallazgos. Rutas
+  soporte Start/Pro/Business 6/6, escrituras bloqueadas con
+  `DEV_SUPPORT_READ_ONLY`, no-dev termina en login.
 - `bash scripts/supabase-local-token.sh inspect db locks`: OK; solo mostro la
   query de inspeccion activa.
 - Inspecciones opcionales en paralelo (`long-running-queries`, `table-stats`)

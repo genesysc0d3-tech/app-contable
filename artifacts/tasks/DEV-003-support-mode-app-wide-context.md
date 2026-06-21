@@ -1,6 +1,6 @@
 ---
 kind: task
-status: in_progress
+status: done
 priority: high
 owner_loop: dev-operator
 created_at: 2026-06-21
@@ -36,3 +36,7 @@ cuenta cliente y algunas lecturas seguian usando la empresa activa normal.
 ## Timeline
 
 - 2026-06-21 - Creada desde hallazgo de auditoria productiva: banner ausente en rutas app fuera de `/massdte`.
+- 2026-06-21 - Cerrada: PR #12 fue mergeado, Vercel redeployo produccion
+  (`dpl_BpXBLWhKSDrdvMTRnEEUsA14HGcR`) y la auditoria final
+  `artifacts/runs/2026-06-21-massdte-dev-audit-2026-06-21T05-46-03-770Z.md`
+  termino con 0 hallazgos.

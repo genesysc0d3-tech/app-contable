@@ -10,6 +10,20 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Auditoria produccion soporte app-wide cerrada - #dev-operator #audit #support-mode
+
+What: Extended `audit:app` to sweep Start/Pro/Business support mode across
+`/massdte`, `/empresa`, `/revisar`, `/subir`, `/clientes` and
+`/boletas/reportes`. The first production run found DEV-003: support banner and
+effective company context were missing outside `/massdte`. Fixed app-wide
+support context, merged PR #12, redeployed production and reran the audit with
+0 findings. Write probes still return `DEV_SUPPORT_READ_ONLY`; non-dev remains
+blocked from `/dev/cuentas`.
+
+Refs: `artifacts/runs/2026-06-21-massdte-production-audit-summary.md`,
+`artifacts/tasks/DEV-003-support-mode-app-wide-context.md`,
+`scripts/audit-app-devtools.mjs`.
+
 ## 2026-06-21 - Matriz Start Pro Business cerrada - #dev-operator #audit #production
 
 What: Added Pro/Business audit fixtures in Supabase, fixed support-mode account
