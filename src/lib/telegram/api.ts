@@ -19,6 +19,7 @@ export interface TelegramMessage {
   message_id: number;
   chat: { id: number; type: string };
   from?: { id: number; first_name?: string; username?: string };
+  date?: number;
   text?: string;
   caption?: string;
   photo?: TelegramPhotoSize[];
@@ -51,6 +52,10 @@ export interface ForceReply {
   force_reply: true;
   input_field_placeholder?: string;
 }
+
+export type TelegramSentMessage = TelegramMessage;
+
+const answeredCallbackIds = new Set<string>();
 
 function getBotToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -92,10 +97,10 @@ export async function sendMessage(
   chatId: number,
   text: string,
   opts?: { html?: boolean; replyMarkup?: InlineKeyboardMarkup | ForceReply },
-): Promise<void> {
+): Promise<TelegramSentMessage | null> {
   const markup = opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {};
   try {
-    await tgCall("sendMessage", {
+    return await tgCall<TelegramSentMessage>("sendMessage", {
       chat_id: chatId,
       text,
       ...(opts?.html ? { parse_mode: "HTML" } : {}),
@@ -104,13 +109,14 @@ export async function sendMessage(
   } catch (err) {
     if (opts?.html) {
       try {
-        await tgCall("sendMessage", { chat_id: chatId, text: text.replace(/<\/?[^>]+>/g, ""), ...markup });
+        const msg = await tgCall<TelegramSentMessage>("sendMessage", { chat_id: chatId, text: text.replace(/<\/?[^>]+>/g, ""), ...markup });
         console.error("[telegram] sendMessage HTML rechazado, enviado en texto plano:",
           err instanceof Error ? err.message : err);
-        return;
+        return msg;
       } catch { /* cae al log de abajo */ }
     }
     console.error("[telegram] sendMessage falló:", err instanceof Error ? err.message : err);
+    return null;
   }
 }
 
@@ -120,7 +126,7 @@ export async function editMessageText(
   messageId: number,
   text: string,
   opts?: { html?: boolean; replyMarkup?: InlineKeyboardMarkup },
-): Promise<void> {
+): Promise<boolean> {
   try {
     await tgCall("editMessageText", {
       chat_id: chatId,
@@ -129,13 +135,21 @@ export async function editMessageText(
       ...(opts?.html ? { parse_mode: "HTML" } : {}),
       ...(opts?.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
     });
+    return true;
   } catch (err) {
     console.error("[telegram] editMessageText falló:", err instanceof Error ? err.message : err);
+    return false;
   }
 }
 
 /** Responde el tap de un botón (quita el "reloj" de carga). No lanza. */
 export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  if (answeredCallbackIds.has(callbackQueryId)) return;
+  answeredCallbackIds.add(callbackQueryId);
+  if (answeredCallbackIds.size > 1000) {
+    const oldest = answeredCallbackIds.values().next().value;
+    if (oldest) answeredCallbackIds.delete(oldest);
+  }
   try {
     await tgCall("answerCallbackQuery", {
       callback_query_id: callbackQueryId,

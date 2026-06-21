@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
+import type { Database, Json } from "@/lib/database.types";
+import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
 import {
   sendMessage,
   editMessageText,
@@ -20,10 +21,15 @@ import {
 } from "@/lib/telegram/ingesta";
 import {
   propuestaPorId,
+  propuestasPendientesEmpresa,
   tipoContribuyenteEmpresa,
   tipoBoletaDeContribuyente,
   mensajeBoleta,
+  mensajeMovimientoSinBoleta,
+  mensajeDuplicado,
   kbCampos,
+  kbConfirmarIngreso,
+  kbConfirmarDuplicado,
   labelCampo,
   valorActual,
   aprobarBot,
@@ -32,6 +38,18 @@ import {
   getPendingEdit,
   clearPendingEdit,
   setTipoContribuyente,
+  registrarMensajeTelegram,
+  markMensajeEstado,
+  movimientoPorId,
+  ignorarMovimientoSalidaBot,
+  convertirMovimientoEnIngresoBot,
+  prepararConfirmacionDuplicado,
+  setDuplicadoMessage,
+  descartarDuplicadoBot,
+  aceptarDuplicadoBot,
+  propuestasDeDocumento,
+  movimientosSinPropuestaDeDocumento,
+  duplicadosDeDocumento,
 } from "@/lib/telegram/propuestas";
 
 /**
@@ -75,11 +93,24 @@ const MSG = {
   errorGuardar: "😕 No pude guardar tu comprobante. Inténtalo de nuevo en un rato.",
   recibido:
     "📥 <b>Recibido.</b>\n" +
-    "Lo dejé en <b>Agregados</b> y lo estoy procesando — en unos segundos queda listo.",
+    "Estoy preparando la boleta — te la muestro en unos segundos.",
+  recibidoElegirEmpresa:
+    "📥 <b>Recibí el comprobante.</b>\n" +
+    "¿Para qué empresa lo cargo?",
   soloFotos:
     "📸 Solo proceso <b>fotos de comprobantes</b>.\n" +
     "Mándame la foto y la dejo en Agregados, lista para boletear.",
 };
+
+type Svc = ReturnType<typeof getServiceClient>;
+
+type TelegramEmpresaOpcion = {
+  id: string;
+  rut: string | null;
+  nombre: string;
+};
+
+type TelegramPendienteOpciones = TelegramEmpresaOpcion[];
 
 /** Todos los mensajes del bot usan formato HTML (negritas). */
 const say = (chatId: number, text: string) => sendMessage(chatId, text, { html: true });
@@ -104,6 +135,71 @@ async function empresaDelChat(chatId: number): Promise<string | null> {
     .eq("chat_id", chatId)
     .maybeSingle();
   return data?.activo ? data.empresa_id : null;
+}
+
+function pendingToken() {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+}
+
+function empresaLabel(empresa: TelegramEmpresaOpcion) {
+  return [empresa.rut, empresa.nombre].filter(Boolean).join(" - ");
+}
+
+function parseOpciones(value: Json | null): TelegramPendienteOpciones {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, Json | undefined> : null)
+    .filter((item): item is Record<string, Json | undefined> => Boolean(item))
+    .map((item) => ({
+      id: typeof item.id === "string" ? item.id : "",
+      rut: typeof item.rut === "string" ? item.rut : null,
+      nombre: typeof item.nombre === "string" ? item.nombre : "",
+    }))
+    .filter((item) => item.id && item.nombre);
+}
+
+function kbElegirEmpresa(token: string, opciones: TelegramEmpresaOpcion[], selectedEmpresaId?: string | null): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: opciones.map((empresa, index) => [{
+      text: `${selectedEmpresaId === empresa.id ? "OK? " : ""}${empresaLabel(empresa)}`,
+      callback_data: `tgemp:${token}:${index}`,
+    }]),
+  };
+}
+
+async function empresasParaTelegramMultiempresa(svc: Svc, empresaId: string): Promise<{ cuentaId: string; empresas: TelegramEmpresaOpcion[] } | null> {
+  const cuenta = await contextoCuentaPorEmpresa(svc, empresaId);
+  if (!cuenta?.planActivo || !cuenta.multiempresa || cuenta.empresasActivas < 2) return null;
+
+  const { data: membresias, error: membresiasError } = await svc
+    .from("cuenta_empresas")
+    .select("empresa_id")
+    .eq("cuenta_id", cuenta.cuentaId)
+    .eq("activa", true)
+    .order("es_principal", { ascending: false })
+    .order("created_at", { ascending: true });
+  if (membresiasError) throw new Error(`TELEGRAM_EMPRESAS_QUERY_FAILED:${membresiasError.message}`);
+
+  const ids = (membresias ?? []).map((row) => row.empresa_id);
+  if (ids.length < 2) return null;
+
+  const { data: empresas, error: empresasError } = await svc
+    .from("empresas")
+    .select("id, rut, razon_social")
+    .in("id", ids);
+  if (empresasError) throw new Error(`TELEGRAM_EMPRESAS_DATA_FAILED:${empresasError.message}`);
+
+  const byId = new Map((empresas ?? []).map((empresa) => [empresa.id, empresa]));
+  const opciones = ids
+    .map((id) => byId.get(id))
+    .filter((empresa): empresa is NonNullable<typeof empresa> => Boolean(empresa))
+    .map((empresa) => ({
+      id: empresa.id,
+      rut: empresa.rut ?? null,
+      nombre: empresa.razon_social,
+    }));
+
+  return opciones.length >= 2 ? { cuentaId: cuenta.cuentaId, empresas: opciones } : null;
 }
 
 async function tipoChat(empresaId: string) {
@@ -148,6 +244,22 @@ async function handleMessage(msg: TelegramMessage) {
     return;
   }
 
+  if (text === "/cancelar") {
+    await clearPendingEdit(chatId);
+    await say(chatId, "✅ Cancelé la edición pendiente. No voy a aplicar el próximo texto a una boleta vieja.");
+    return;
+  }
+
+  if (text === "/pendientes") {
+    await mostrarPendientes(chatId);
+    return;
+  }
+
+  if (text === "/ultimo") {
+    await mostrarUltimo(chatId);
+    return;
+  }
+
   // Si hay una edición pendiente, este texto es el nuevo valor del campo.
   if (text && !text.startsWith("/")) {
     const pending = await getPendingEdit(chatId);
@@ -158,7 +270,7 @@ async function handleMessage(msg: TelegramMessage) {
   }
 
   if (msg.photo?.length) {
-    await recibirComprobante(chatId, msg.photo);
+    await recibirComprobante(chatId, msg.photo, msg.date);
     return;
   }
 
@@ -176,6 +288,15 @@ async function handleCallback(cq: TelegramCallbackQuery) {
   const empresaId = await empresaDelChat(chatId);
   if (!empresaId) { await answerCallbackQuery(cq.id, "Tu Telegram no está conectado."); return; }
 
+  if (data.startsWith("tgemp:")) {
+    await handleEmpresaComprobanteCallback(chatId, messageId, cq.id, data);
+    return;
+  }
+
+  // Responder de inmediato a Telegram quita el spinner del botón. Las llamadas
+  // posteriores a answerCallbackQuery son no-op para este callback.
+  void answerCallbackQuery(cq.id);
+
   // Config del tipo de boleta (global de la empresa).
   if (data === "cfg:afecto" || data === "cfg:exento") {
     const tipo = data === "cfg:exento" ? "exento" : "afecto";
@@ -190,20 +311,44 @@ async function handleCallback(cq: TelegramCallbackQuery) {
   if (!propId) { await answerCallbackQuery(cq.id); return; }
   const tipo = await tipoChat(empresaId);
 
+  if (accion === "mv") {
+    await handleMovimientoCallback(chatId, messageId, cq.id, empresaId, propId, campo);
+    return;
+  }
+
+  if (accion === "du") {
+    await handleDuplicadoCallback(chatId, messageId, cq.id, empresaId, propId, campo);
+    return;
+  }
+
   if (accion === "ap") {
-    const ok = await aprobarBot(propId, empresaId);
+    const status = await aprobarBot(propId, empresaId);
     const prop = await propuestaPorId(propId, empresaId);
-    if (ok && prop && messageId) {
-      await editMessageText(chatId, messageId, mensajeBoleta(prop, tipo).text, { html: true });
+    if ((status === "aprobado" || status === "ya_aprobado") && prop) {
+      const text = mensajeBoleta(prop, tipo).text;
+      const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true }) : false;
+      if (!edited) {
+        const msg = await sendMessage(chatId, text, { html: true });
+        await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta", estado: "aprobado" });
+      } else {
+        await markMensajeEstado(chatId, messageId, "aprobado");
+      }
     }
-    await answerCallbackQuery(cq.id, ok ? "✅ Aprobada — está en Agregados" : "No se pudo aprobar");
+    const answer =
+      status === "aprobado" ? "✅ Aprobada — está en Agregados" :
+      status === "ya_aprobado" ? "Ya estaba aprobada" :
+      status === "estado_invalido" ? "Esta boleta ya no está pendiente" :
+      "No encontré la boleta";
+    await answerCallbackQuery(cq.id, answer);
     return;
   }
 
   if (accion === "ed") {
     const prop = await propuestaPorId(propId, empresaId);
     if (prop && messageId) {
-      await editMessageText(chatId, messageId, mensajeBoleta(prop, tipo).text + "\n\n¿Qué querés cambiar?", { html: true, replyMarkup: kbCampos(propId) });
+      const text = mensajeBoleta(prop, tipo).text + "\n\n¿Qué querés cambiar?";
+      const edited = await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbCampos(propId) });
+      if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbCampos(propId) });
     }
     await answerCallbackQuery(cq.id);
     return;
@@ -213,7 +358,8 @@ async function handleCallback(cq: TelegramCallbackQuery) {
     const prop = await propuestaPorId(propId, empresaId);
     if (prop && messageId) {
       const { text, keyboard } = mensajeBoleta(prop, tipo);
-      await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard });
+      const edited = await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard });
+      if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
     }
     await answerCallbackQuery(cq.id);
     return;
@@ -229,6 +375,242 @@ async function handleCallback(cq: TelegramCallbackQuery) {
   }
 
   await answerCallbackQuery(cq.id);
+}
+
+async function handleMovimientoCallback(
+  chatId: number,
+  messageId: number | undefined,
+  callbackId: string,
+  empresaId: string,
+  movId: string,
+  accion: string | undefined,
+) {
+  const tipo = await tipoChat(empresaId);
+  const mov = await movimientoPorId(movId, empresaId);
+  if (!mov) {
+    await answerCallbackQuery(callbackId, accion === "d" ? "Ya estaba ignorado" : "No encontré el movimiento");
+    return;
+  }
+
+  if (accion === "bk") {
+    const { text, keyboard } = mensajeMovimientoSinBoleta(mov);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "d") {
+    const status = await ignorarMovimientoSalidaBot(movId, empresaId, chatId);
+    const text = status === "con_propuesta"
+      ? "⚠️ Esta operación ya tiene una propuesta asociada. Revisala en Agregados."
+      : "🚫 <b>No es ingreso.</b>\nNo generé boleta y quité esta transferencia del flujo contable.";
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true });
+    await markMensajeEstado(chatId, messageId, "descartado");
+    await answerCallbackQuery(callbackId, status === "ignorado" ? "Ignorado" : "Ya estaba resuelto");
+    return;
+  }
+
+  if (accion === "i1") {
+    const text =
+      "⚠️ <b>Confirmá esto antes de crear la boleta.</b>\n\n" +
+      "Este comprobante parece una transferencia enviada. Por defecto no genera boleta.\n\n" +
+      "Solo seguí si realmente fue un pago recibido por tu empresa. ¿Confirmás?";
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbConfirmarIngreso(movId) }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbConfirmarIngreso(movId) });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "i2") {
+    const prop = await convertirMovimientoEnIngresoBot(movId, empresaId, chatId);
+    if (!prop) { await answerCallbackQuery(callbackId, "No pude crear la boleta"); return; }
+    const { text, keyboard } = mensajeBoleta(prop, tipo);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) {
+      const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+      await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta" });
+    } else {
+      await registrarMensajeTelegram({ chatId, empresaId, messageId, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta" });
+    }
+    await answerCallbackQuery(callbackId, "Boleta creada para revisar");
+    return;
+  }
+
+  await answerCallbackQuery(callbackId);
+}
+
+async function handleDuplicadoCallback(
+  chatId: number,
+  messageId: number | undefined,
+  callbackId: string,
+  empresaId: string,
+  actionId: string,
+  accion: string | undefined,
+) {
+  const tipo = await tipoChat(empresaId);
+
+  if (accion === "bk") {
+    const d = await prepararConfirmacionDuplicado(actionId, empresaId);
+    if (!d) { await answerCallbackQuery(callbackId, "No encontré el duplicado"); return; }
+    const { text, keyboard } = mensajeDuplicado(d);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "d") {
+    const status = await descartarDuplicadoBot(actionId, empresaId, chatId);
+    const text = status === "ya_aceptado"
+      ? "Ese duplicado ya había sido aceptado."
+      : "🗑️ <b>Duplicado descartado.</b>\nNo se creará otra boleta por esta operación.";
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true });
+    await markMensajeEstado(chatId, messageId, "descartado");
+    await answerCallbackQuery(callbackId, status === "descartado" ? "Descartado" : "Ya estaba resuelto");
+    return;
+  }
+
+  if (accion === "a1") {
+    const d = await prepararConfirmacionDuplicado(actionId, empresaId);
+    if (!d) { await answerCallbackQuery(callbackId, "No encontré el duplicado"); return; }
+    const text =
+      "⚠️ <b>¿Seguro?</b>\n\n" +
+      `Esta operación ya parece registrada: <b>${Math.round(d.monto).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })}</b>.\n` +
+      "Si aceptás igual, voy a crear otra propuesta y podrías duplicar la boleta.";
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbConfirmarDuplicado(actionId) }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbConfirmarDuplicado(actionId) });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "a2") {
+    const res = await aceptarDuplicadoBot(actionId, empresaId, chatId);
+    if (res.estado === "procesando") { await answerCallbackQuery(callbackId, "Ya estoy procesando ese duplicado"); return; }
+    if (res.estado === "descartado") { await answerCallbackQuery(callbackId, "Ya estaba descartado"); return; }
+    if (res.estado === "no_encontrado") { await answerCallbackQuery(callbackId, "No encontré el duplicado"); return; }
+    if (res.estado === "error") { await answerCallbackQuery(callbackId, "No pude aceptar el duplicado"); return; }
+    if (res.estado !== "aceptado" && res.estado !== "ya_aceptado") { await answerCallbackQuery(callbackId); return; }
+    const prop = res.prop;
+    if (!prop) { await answerCallbackQuery(callbackId, "Aceptado, pero sin propuesta"); return; }
+
+    const { text, keyboard } = mensajeBoleta(prop, tipo);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) {
+      const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+      await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta" });
+    } else {
+      await registrarMensajeTelegram({ chatId, empresaId, messageId, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta" });
+    }
+    await answerCallbackQuery(callbackId, res.estado === "ya_aceptado" ? "Ya estaba aceptado" : "Duplicado aceptado");
+    return;
+  }
+
+  await answerCallbackQuery(callbackId);
+}
+
+async function handleEmpresaComprobanteCallback(
+  chatId: number,
+  messageId: number | undefined,
+  callbackId: string,
+  data: string,
+) {
+  const [, token, indexRaw] = data.split(":");
+  const index = Number(indexRaw);
+  if (!token || !Number.isInteger(index)) {
+    await answerCallbackQuery(callbackId, "No pude leer esa opción.");
+    return;
+  }
+
+  const svc = getServiceClient();
+  const nowIso = new Date().toISOString();
+  const { data: pending, error } = await svc
+    .from("telegram_comprobante_pendientes")
+    .select("token, chat_id, cuenta_id, empresa_origen_id, selected_empresa_id, file_id, file_size, received_at, opciones, estado, expires_at")
+    .eq("token", token)
+    .eq("chat_id", chatId)
+    .maybeSingle();
+
+  if (error || !pending) {
+    await answerCallbackQuery(callbackId, "Ese comprobante ya no está disponible.");
+    return;
+  }
+  if (pending.expires_at <= nowIso || !["pendiente", "confirmando"].includes(pending.estado)) {
+    await svc
+      .from("telegram_comprobante_pendientes")
+      .update({ estado: "expirado", updated_at: nowIso })
+      .eq("token", token)
+      .in("estado", ["pendiente", "confirmando"]);
+    if (messageId) {
+      await editMessageText(chatId, messageId, "⌛ Ese comprobante venció. Mándalo de nuevo y elige la empresa.", { html: true });
+    }
+    await answerCallbackQuery(callbackId, "El comprobante venció.");
+    return;
+  }
+
+  const opciones = parseOpciones(pending.opciones);
+  const selected = opciones[index];
+  if (!selected) {
+    await answerCallbackQuery(callbackId, "No encontré esa empresa.");
+    return;
+  }
+
+  const { data: membresia } = await svc
+    .from("cuenta_empresas")
+    .select("empresa_id, activa")
+    .eq("cuenta_id", pending.cuenta_id)
+    .eq("empresa_id", selected.id)
+    .maybeSingle();
+  if (!membresia?.activa) {
+    await answerCallbackQuery(callbackId, "Esa empresa ya no está disponible.");
+    return;
+  }
+
+  if (pending.selected_empresa_id !== selected.id) {
+    await svc
+      .from("telegram_comprobante_pendientes")
+      .update({ selected_empresa_id: selected.id, estado: "confirmando", updated_at: nowIso })
+      .eq("token", token);
+    if (messageId) {
+      await editMessageText(chatId, messageId, MSG.recibidoElegirEmpresa, {
+        html: true,
+        replyMarkup: kbElegirEmpresa(token, opciones, selected.id),
+      });
+    }
+    await answerCallbackQuery(callbackId, "Toca de nuevo para confirmar.");
+    return;
+  }
+
+  const { count: confirmedCount, error: confirmedError } = await svc
+    .from("telegram_comprobante_pendientes")
+    .update({ estado: "procesando", updated_at: nowIso }, { count: "exact" })
+    .eq("token", token)
+    .eq("selected_empresa_id", selected.id)
+    .eq("estado", "confirmando");
+  if (confirmedError || !confirmedCount) {
+    await answerCallbackQuery(callbackId, "Ya estoy procesando ese comprobante.");
+    return;
+  }
+
+  const text =
+    `📥 <b>Recibido para ${empresaLabel(selected)}.</b>\n` +
+    "Estoy preparando la boleta — te la muestro en unos segundos.";
+  if (messageId) await editMessageText(chatId, messageId, text, { html: true });
+  await answerCallbackQuery(callbackId, "Empresa confirmada.");
+
+  after(() =>
+    guardarYProcesarComprobanteTelegram({
+      chatId,
+      empresaId: selected.id,
+      fileId: pending.file_id,
+      fileSize: pending.file_size,
+      receivedAt: pending.received_at ?? undefined,
+      pendingToken: token,
+      sendReceivedMessage: false,
+    }),
+  );
 }
 
 /** Aplica el valor que el usuario escribió para el campo en edición. */
@@ -247,9 +629,106 @@ async function aplicarEdicion(
   }
   await clearPendingEdit(chatId);
   const { text, keyboard } = mensajeBoleta(res.prop, tipo);
-  if (pending.message_id) await editMessageText(chatId, pending.message_id, text, { html: true, replyMarkup: keyboard });
-  else await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+  if (pending.message_id) {
+    const edited = await editMessageText(chatId, pending.message_id, text, { html: true, replyMarkup: keyboard });
+    if (!edited) {
+      const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+      await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: res.prop.documento_id, propuestaId: res.prop.id, kind: "propuesta" });
+    }
+  } else {
+    const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: res.prop.documento_id, propuestaId: res.prop.id, kind: "propuesta" });
+  }
   await say(chatId, "✅ Listo, actualizado.");
+}
+
+async function mostrarPendientes(chatId: number) {
+  const empresaId = await empresaDelChat(chatId);
+  if (!empresaId) { await say(chatId, MSG.noVinculado); return; }
+  const props = await propuestasPendientesEmpresa(empresaId, 10);
+  if (props.length === 0) {
+    await say(chatId, "✅ No tenés boletas pendientes para revisar por ahora.");
+    return;
+  }
+  const tipo = await tipoChat(empresaId);
+  await say(chatId, `📌 Tenés <b>${props.length}</b> boleta${props.length === 1 ? "" : "s"} pendiente${props.length === 1 ? "" : "s"}. Te las reenvío:`);
+  for (const prop of props) {
+    const { text, keyboard } = mensajeBoleta(prop, tipo);
+    const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta" });
+  }
+}
+
+async function mostrarUltimo(chatId: number) {
+  const empresaId = await empresaDelChat(chatId);
+  if (!empresaId) { await say(chatId, MSG.noVinculado); return; }
+  const { data: doc } = await getServiceClient()
+    .from("documentos_subidos")
+    .select("id, nombre_archivo, estado, created_at, movimientos_detectados, progreso_ia")
+    .eq("empresa_id", empresaId)
+    .like("nombre_archivo", "Telegram %")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!doc) {
+    await say(chatId, "Todavía no tengo comprobantes de Telegram para esta cuenta.");
+    return;
+  }
+
+  if (doc.estado === "procesando") {
+    await say(chatId, `⏳ El último comprobante (<b>${doc.nombre_archivo}</b>) sigue procesándose.`);
+    return;
+  }
+  if (doc.estado === "error") {
+    const progreso = doc.progreso_ia && typeof doc.progreso_ia === "object" && !Array.isArray(doc.progreso_ia)
+      ? doc.progreso_ia as Record<string, unknown>
+      : {};
+    await say(chatId, `😕 El último comprobante quedó con error: <b>${String(progreso.error ?? "sin detalle")}</b>.`);
+    return;
+  }
+
+  const progreso = doc.progreso_ia && typeof doc.progreso_ia === "object" && !Array.isArray(doc.progreso_ia)
+    ? doc.progreso_ia as Record<string, unknown>
+    : {};
+  if (progreso.telegram_estado === "ignorado_no_ingreso") {
+    await say(chatId, `🚫 Último comprobante: <b>${doc.nombre_archivo}</b>.\nFue marcado como <b>no ingreso</b>, no generó boleta.`);
+    return;
+  }
+
+  const props = await propuestasDeDocumento(doc.id, empresaId);
+  const dups = await duplicadosDeDocumento(doc.id, empresaId);
+  const movs = await movimientosSinPropuestaDeDocumento(doc.id, empresaId);
+  const tipo = await tipoChat(empresaId);
+
+  await say(chatId, `📄 Último comprobante: <b>${doc.nombre_archivo}</b>.`);
+  if (props.length > 0) {
+    await say(chatId, `🧾 Tiene <b>${props.length}</b> boleta${props.length === 1 ? "" : "s"} para revisar:`);
+    for (const prop of props) {
+      const { text, keyboard } = mensajeBoleta(prop, tipo);
+      const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+      await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: prop.documento_id, propuestaId: prop.id, kind: "propuesta" });
+    }
+    return;
+  }
+  if (dups.length > 0) {
+    await say(chatId, `⚠️ Tiene <b>${dups.length}</b> duplicado${dups.length === 1 ? "" : "s"} pendiente${dups.length === 1 ? "" : "s"}. Te reenvío los botones:`);
+    for (const d of dups) {
+      const { text, keyboard } = mensajeDuplicado(d);
+      const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+      await setDuplicadoMessage(d.actionId, empresaId, msg?.message_id);
+      await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: doc.id, kind: "duplicado" });
+    }
+    return;
+  }
+  if (movs.length > 0) {
+    const m = movs[0];
+    const { text, keyboard } = mensajeMovimientoSinBoleta(m);
+    const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await registrarMensajeTelegram({ chatId, empresaId, messageId: msg?.message_id, documentoId: doc.id, kind: "salida" });
+    return;
+  }
+  await say(chatId, "✅ El último comprobante quedó procesado, sin acciones pendientes.");
 }
 
 // --- /config: tipo de boleta por defecto (afecta/exenta) de la empresa ---
@@ -316,7 +795,106 @@ async function vincularConToken(chatId: number, token: string) {
   await say(chatId, MSG.bienvenida);
 }
 
-async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
+async function guardarYProcesarComprobanteTelegram(args: {
+  chatId: number;
+  empresaId: string;
+  fileId: string;
+  fileSize?: number | null;
+  receivedAt?: number;
+  pendingToken?: string;
+  sendReceivedMessage: boolean;
+}) {
+  const svc = getServiceClient();
+  try {
+    const subidosHoy = await contarComprobantesTelegramHoy(args.empresaId);
+    if (subidosHoy >= TOPE_DIARIO) {
+      if (args.pendingToken) {
+        await svc
+          .from("telegram_comprobante_pendientes")
+          .update({ estado: "cancelado", updated_at: new Date().toISOString() })
+          .eq("token", args.pendingToken);
+      }
+      await say(args.chatId, MSG.topeDiario);
+      return;
+    }
+
+    if ((args.fileSize ?? 0) > MAX_FOTO_BYTES) {
+      if (args.pendingToken) {
+        await svc
+          .from("telegram_comprobante_pendientes")
+          .update({ estado: "fallido", updated_at: new Date().toISOString() })
+          .eq("token", args.pendingToken);
+      }
+      await say(args.chatId, MSG.muyGrande);
+      return;
+    }
+
+    const { base64, mime, size } = await getFileBase64(args.fileId);
+    if (size > MAX_FOTO_BYTES) {
+      if (args.pendingToken) {
+        await svc
+          .from("telegram_comprobante_pendientes")
+          .update({ estado: "fallido", updated_at: new Date().toISOString() })
+          .eq("token", args.pendingToken);
+      }
+      await say(args.chatId, MSG.muyGrande);
+      return;
+    }
+
+    const nombreArchivo = nombreComprobanteTelegram();
+    const creado = await crearDocumentoTelegram({
+      empresaId: args.empresaId,
+      base64,
+      mime,
+      nombreArchivo,
+    });
+    if (!creado.ok) {
+      console.error("[telegram-webhook] ingesta fallo:", creado.error);
+      if (args.pendingToken) {
+        await svc
+          .from("telegram_comprobante_pendientes")
+          .update({ estado: "fallido", updated_at: new Date().toISOString() })
+          .eq("token", args.pendingToken);
+      }
+      await say(args.chatId, MSG.errorGuardar);
+      return;
+    }
+
+    if (args.sendReceivedMessage) await say(args.chatId, MSG.recibido);
+
+    const run = async () => {
+      await procesarComprobanteTelegram({
+        documentoId: creado.documentoId,
+        empresaId: args.empresaId,
+        base64,
+        mime,
+        nombreArchivo,
+        chatId: args.chatId,
+        receivedAt: args.receivedAt,
+      });
+      if (args.pendingToken) {
+        await getServiceClient()
+          .from("telegram_comprobante_pendientes")
+          .update({ estado: "completado", updated_at: new Date().toISOString() })
+          .eq("token", args.pendingToken);
+      }
+    };
+
+    if (args.pendingToken) await run();
+    else after(run);
+  } catch (error) {
+    console.error("[telegram-webhook] procesar comprobante fallo:", error);
+    if (args.pendingToken) {
+      await svc
+        .from("telegram_comprobante_pendientes")
+        .update({ estado: "fallido", updated_at: new Date().toISOString() })
+        .eq("token", args.pendingToken);
+    }
+    await say(args.chatId, MSG.errorGuardar);
+  }
+}
+
+async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number) {
   const svc = getServiceClient();
 
   // Chat no vinculado = CERO procesamiento (ni OCR ni storage): el costo
@@ -331,12 +909,6 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
     return;
   }
 
-  const subidosHoy = await contarComprobantesTelegramHoy(chat.empresa_id);
-  if (subidosHoy >= TOPE_DIARIO) {
-    await say(chatId, MSG.topeDiario);
-    return;
-  }
-
   // Telegram manda los tamaños de menor a mayor: el último es la mejor resolución.
   const foto = photos[photos.length - 1];
   if ((foto.file_size ?? 0) > MAX_FOTO_BYTES) {
@@ -344,41 +916,57 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[]) {
     return;
   }
 
-  const { base64, mime, size } = await getFileBase64(foto.file_id);
-  if (size > MAX_FOTO_BYTES) {
-    await say(chatId, MSG.muyGrande);
-    return;
-  }
-
-  const nombreArchivo = nombreComprobanteTelegram();
-  const creado = await crearDocumentoTelegram({
-    empresaId: chat.empresa_id,
-    base64,
-    mime,
-    nombreArchivo,
+  const multiempresa = await empresasParaTelegramMultiempresa(svc, chat.empresa_id).catch((error) => {
+    console.error("[telegram-webhook] selector multiempresa fallo:", error);
+    return null;
   });
-  if (!creado.ok) {
-    console.error("[telegram-webhook] ingesta fallo:", creado.error);
-    await say(chatId, MSG.errorGuardar);
+  if (multiempresa) {
+    const token = pendingToken();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await svc
+      .from("telegram_comprobante_pendientes")
+      .update({ estado: "cancelado", updated_at: new Date().toISOString() })
+      .eq("chat_id", chatId)
+      .in("estado", ["pendiente", "confirmando"]);
+
+    const { error: insertError } = await svc.from("telegram_comprobante_pendientes").insert({
+      token,
+      chat_id: chatId,
+      cuenta_id: multiempresa.cuentaId,
+      empresa_origen_id: chat.empresa_id,
+      file_id: foto.file_id,
+      file_size: foto.file_size ?? null,
+      received_at: receivedAt ?? null,
+      opciones: multiempresa.empresas as unknown as Json,
+      expires_at: expiresAt,
+    });
+    if (insertError) {
+      console.error("[telegram-webhook] pendiente multiempresa fallo:", insertError.message);
+      await say(chatId, MSG.errorGuardar);
+      return;
+    }
+
+    const msg = await sendMessage(chatId, MSG.recibidoElegirEmpresa, {
+      html: true,
+      replyMarkup: kbElegirEmpresa(token, multiempresa.empresas),
+    });
+    if (msg?.message_id) {
+      await svc
+        .from("telegram_comprobante_pendientes")
+        .update({ message_id: msg.message_id })
+        .eq("token", token);
+    }
     return;
   }
 
-  // Confirmar de inmediato, ANTES del OCR (que tarda ~segundos). Así el
-  // usuario ve "Recibido" al toque; el procesamiento corre en segundo plano.
-  await say(chatId, MSG.recibido);
-
-  // OCR + clasificación después de responder; after() mantiene viva la
-  // function hasta terminar (mismo pipeline del panel).
-  after(() =>
-    procesarComprobanteTelegram({
-      documentoId: creado.documentoId,
-      empresaId: chat.empresa_id,
-      base64,
-      mime,
-      nombreArchivo,
-      chatId,
-    }),
-  );
+  await guardarYProcesarComprobanteTelegram({
+    chatId,
+    empresaId: chat.empresa_id,
+    fileId: foto.file_id,
+    fileSize: foto.file_size,
+    receivedAt,
+    sendReceivedMessage: true,
+  });
 }
 
 export const dynamic = "force-dynamic";
