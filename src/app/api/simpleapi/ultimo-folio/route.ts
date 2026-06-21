@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAccountApiAccess } from "@/lib/api/account-guard";
 
 /**
  * Último folio emitido vía SimpleAPI para la empresa del usuario.
@@ -8,26 +8,18 @@ import { createClient } from "@/lib/supabase/server";
  * o cambiar de equipo, así que la fuente de verdad es boletas_emitidas.
  */
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-  if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  if (!guard.ok) return guard.response;
 
   const tipoDte = Number(new URL(request.url).searchParams.get("tipo_dte"));
   if (![33, 34, 39, 41].includes(tipoDte)) {
     return NextResponse.json({ ok: false, error: "TIPO_DTE_INVALID" }, { status: 422 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await guard.service
     .from("boletas_emitidas")
     .select("folio")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", guard.empresaId)
     .eq("tipo_dte", tipoDte)
     .eq("emision_proveedor", "simpleapi")
     .order("folio", { ascending: false })

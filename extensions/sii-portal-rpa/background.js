@@ -671,13 +671,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SIMPLEAPI_DTE_GENERAR") {
     const origin = sender.url ? new URL(sender.url).origin : "";
-    generateSimpleApiDteFromVault({ appOrigin: origin, input: message.input })
+    generateSimpleApiDteFromVault({ appOrigin: origin, input: message.input, jobId: message.job_id, reservedFolio: message.reserved_folio })
       .then((response) => sendResponse(baseMessage({
         type: "APP_CONTABLE_SIMPLEAPI_DTE_GENERAR_RESULT",
+        job_id: message.job_id ?? null,
+        reserved_folio: message.reserved_folio ?? null,
         ...response,
       })))
       .catch(() => sendResponse(baseMessage({
         type: "APP_CONTABLE_SIMPLEAPI_DTE_GENERAR_RESULT",
+        job_id: message.job_id ?? null,
+        reserved_folio: message.reserved_folio ?? null,
         ok: false,
         error: "SIMPLEAPI_DTE_GENERAR_FAILED",
       })));
@@ -686,13 +690,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR") {
     const origin = sender.url ? new URL(sender.url).origin : "";
-    emitSimpleApiDteFromVault({ appOrigin: origin, input: message.input })
+    emitSimpleApiDteFromVault({ appOrigin: origin, input: message.input, jobId: message.job_id, reservedFolio: message.reserved_folio })
       .then((response) => sendResponse(baseMessage({
         type: "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR_RESULT",
+        job_id: message.job_id ?? null,
+        reserved_folio: message.reserved_folio ?? null,
         ...response,
       })))
       .catch(() => sendResponse(baseMessage({
         type: "APP_CONTABLE_SIMPLEAPI_DTE_EMITIR_RESULT",
+        job_id: message.job_id ?? null,
+        reserved_folio: message.reserved_folio ?? null,
         ok: false,
         error: "SIMPLEAPI_DTE_EMITIR_FAILED",
       })));
@@ -701,14 +709,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART") {
     const origin = sender.url ? new URL(sender.url).origin : "";
-    postSimpleApiMultipartProxy({ appOrigin: origin, path: message.path, input: message.input, files: message.files })
+    postSimpleApiMultipartProxy({ appOrigin: origin, path: message.path, input: message.input, files: message.files, jobId: message.job_id })
       .then((response) => sendResponse(baseMessage({
         type: "APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART_RESULT",
+        job_id: message.job_id ?? null,
         path: message.path,
         ...response,
       })))
       .catch(() => sendResponse(baseMessage({
         type: "APP_CONTABLE_SIMPLEAPI_PROXY_MULTIPART_RESULT",
+        job_id: message.job_id ?? null,
         path: message.path,
         ok: false,
         error: "SIMPLEAPI_PROXY_MULTIPART_FAILED",

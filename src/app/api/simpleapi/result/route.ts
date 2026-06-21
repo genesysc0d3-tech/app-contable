@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
+import { requireSimpleApiFolioReserva } from "@/lib/emission/folio-reservas";
+import { requireEmisionJob } from "@/lib/emission/jobs";
+import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { recordCuentaAudit } from "@/lib/audit/account";
+
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 interface SimpleApiResultPayload {
+  job_id?: string | null;
   result?: {
     trackId?: number | string | null;
     dte?: { folio?: number | null; tipoDte?: number | null; fecha?: string | null; total?: number | null } | null;
@@ -44,10 +52,11 @@ function validatePdfBuffer(buffer: Buffer) {
   return null;
 }
 
-function safeJson(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value ?? null;
+function safeJson(value: unknown): Json {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
   try {
-    return JSON.parse(JSON.stringify(value));
+    return JSON.parse(JSON.stringify(value)) as Json;
   } catch {
     return null;
   }
@@ -129,49 +138,102 @@ export async function POST(request: Request) {
   const xmlDte = cleanText(result?.dteXml);
   const pdfBase64 = cleanText(result?.pdf?.base64);
 
-  if (!tipoDte || !folio || !montoTotal || !fechaEmision || !trackId || !xmlDte || !pdfBase64) {
-    return NextResponse.json({ ok: false, error: "RESULTADO_SIMPLEAPI_INSUFICIENTE" }, { status: 422 });
-  }
-  if (result?.pdf?.content_type !== "application/pdf") {
-    return NextResponse.json({ ok: false, error: "PDF_CONTENT_TYPE_INVALID" }, { status: 422 });
-  }
-  if (!validDteXml({ xml: xmlDte, tipoDte, folio, total: montoTotal })) {
-    return NextResponse.json({ ok: false, error: "XML_DTE_INVALID" }, { status: 422 });
-  }
-  if (!isAcceptedEnvio(result?.envio) || !isAcceptedDte(result?.consultaDte)) {
-    return NextResponse.json({ ok: false, error: "SII_ACCEPTANCE_REQUIRED" }, { status: 422 });
-  }
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna)")
-    .eq("id", user.id)
-    .single();
-
-  if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
-  const empresa = usuario.empresas as unknown as { rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null } | null;
-  if (!empresa?.rut || !empresa?.razon_social) return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
-  const sb = createServiceClient(url, key);
+  const sb = createServiceClient<Database>(url, key);
+
+  const { data: usuario } = await sb
+    .from("usuarios")
+    .select("rol, vetado")
+    .eq("id", user.id)
+    .single();
+  if (!usuario || usuario.vetado) return NextResponse.json({ ok: false, error: "USUARIO_BLOQUEADO" }, { status: 403 });
+  if (!ROLES_EMISION.has(String(usuario.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
+
+  const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId: payload.job_id, provider: "simpleapi" });
+  if (!jobGate.ok) return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  const job = jobGate.job;
+  const empresaId = job.empresa_id;
+
+  if (!tipoDte || !folio || !montoTotal || !fechaEmision || !trackId || !xmlDte || !pdfBase64) {
+    if (job) {
+      await recordCuentaAudit({
+        sb,
+        cuentaId: job.cuenta_id,
+        empresaId,
+        usuarioId: job.usuario_id,
+        accion: "emision_fallida",
+        recursoTipo: "emision_job",
+        recursoId: job.job_id,
+        resumen: "Resultado SimpleAPI insuficiente",
+        metadata: {
+          proveedor: "simpleapi",
+          error: "RESULTADO_SIMPLEAPI_INSUFICIENTE",
+        },
+      });
+    }
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "RESULTADO_SIMPLEAPI_INSUFICIENTE" }, { status: 422 });
+  }
+
+  const reserva = await requireSimpleApiFolioReserva({
+    sb,
+    empresaId,
+    jobId: job.job_id,
+    tipoDte,
+    folio,
+    allowedEstados: ["generado"],
+  });
+  if (!reserva.ok) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: reserva.error, detalle: reserva.detalle }, { status: reserva.status });
+  }
+
+  if (result?.pdf?.content_type !== "application/pdf") {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "PDF_CONTENT_TYPE_INVALID" }, { status: 422 });
+  }
+  if (!validDteXml({ xml: xmlDte, tipoDte, folio, total: montoTotal })) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "XML_DTE_INVALID" }, { status: 422 });
+  }
+  if (!isAcceptedEnvio(result?.envio) || !isAcceptedDte(result?.consultaDte)) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "SII_ACCEPTANCE_REQUIRED" }, { status: 422 });
+  }
+
+  const { data: empresa } = await sb
+    .from("empresas")
+    .select("rut, razon_social, giro, direccion, comuna")
+    .eq("id", empresaId)
+    .single();
+  if (!empresa?.rut || !empresa?.razon_social) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
+  }
 
   const pdfBuffer = Buffer.from(pdfBase64, "base64");
   const invalidPdf = validatePdfBuffer(pdfBuffer);
-  if (invalidPdf) return NextResponse.json({ ok: false, error: invalidPdf }, { status: 422 });
+  if (invalidPdf) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: invalidPdf }, { status: 422 });
+  }
 
-  const storagePath = storagePathFor({ empresaId: usuario.empresa_id, tipoDte, folio });
+  const storagePath = storagePathFor({ empresaId, tipoDte, folio });
   const { error: uploadErr } = await sb.storage.from("documentos").upload(storagePath, pdfBuffer, {
     contentType: "application/pdf",
     upsert: true,
   });
-  if (uploadErr) return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: uploadErr.message }, { status: 502 });
+  if (uploadErr) {
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: uploadErr.message }, { status: 502 });
+  }
 
   const { data: existing } = await sb
     .from("boletas_emitidas")
     .select("id, folio, estado, track_id, proveedor_respuesta")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", empresaId)
     .eq("tipo_dte", tipoDte)
     .eq("folio", folio)
     .maybeSingle();
@@ -195,7 +257,11 @@ export async function POST(request: Request) {
       .from("boletas_emitidas")
       .update({ proveedor_respuesta: { ...previous, ...proveedorRespuesta } })
       .eq("id", existing.id);
-    if (updateErr) return NextResponse.json({ ok: false, error: "DB_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
+    if (updateErr) {
+      await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+      return NextResponse.json({ ok: false, error: "DB_UPDATE_FAILED", detalle: updateErr.message, already_exists: true, boleta_id: existing.id }, { status: 500 });
+    }
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, track_id: existing.track_id, already_exists: true });
   }
 
@@ -204,7 +270,7 @@ export async function POST(request: Request) {
   const { data: boleta, error: insertErr } = await sb
     .from("boletas_emitidas")
     .insert({
-      empresa_id: usuario.empresa_id,
+      empresa_id: empresaId,
       tipo_dte: tipoDte,
       folio,
       fecha_emision: fechaEmision,
@@ -235,12 +301,29 @@ export async function POST(request: Request) {
 
   if (insertErr || !boleta) {
     await sb.storage.from("documentos").remove([storagePath]);
+    await recordCuentaAudit({
+      sb,
+      cuentaId: job.cuenta_id,
+      empresaId,
+      usuarioId: job.usuario_id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: job.job_id,
+      resumen: "No se pudo guardar el documento emitido con SimpleAPI",
+      metadata: {
+        tipo_dte: tipoDte,
+        folio,
+        proveedor: "simpleapi",
+        error: "DB_INSERT_FAILED",
+      },
+    });
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
   }
 
   const receptorLabel = cleanText(payload.draft?.receptor_razon_social) ?? "cliente sin identificar";
   await sb.from("documentos_subidos").insert({
-    empresa_id: usuario.empresa_id,
+    empresa_id: empresaId,
     nombre_archivo: `DTE SimpleAPI #${boleta.folio} - ${receptorLabel}`,
     tipo: "dte_simpleapi",
     storage_path: storagePath,
@@ -258,6 +341,24 @@ export async function POST(request: Request) {
       track_id: boleta.track_id,
     },
   });
+
+  await recordCuentaAudit({
+    sb,
+    cuentaId: job.cuenta_id,
+    empresaId,
+    usuarioId: job.usuario_id,
+    accion: "boleta_emitida",
+    recursoTipo: "boleta_emitida",
+    recursoId: boleta.id,
+    resumen: `Documento #${boleta.folio} emitido con SimpleAPI`,
+    metadata: {
+      tipo_dte: tipoDte,
+      folio: boleta.folio,
+      proveedor: "simpleapi",
+      track_id: boleta.track_id,
+    },
+  });
+  await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
 
   return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id });
 }

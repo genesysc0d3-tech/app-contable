@@ -10,6 +10,10 @@ import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tip
 import { issueMockBoleta } from "@/lib/emission/mock";
 import { batchBlockedResult } from "@/lib/emission/provider-guards";
 import { verificarEmisionMasiva } from "@/lib/pagos/metering";
+import { validarAccesoCuenta } from "@/lib/entitlements";
+import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { recordCuentaAudit } from "@/lib/audit/account";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
 /**
  * Emisión en lote: dado un array de propuesta_ids, emite una boleta por cada
@@ -39,6 +43,9 @@ interface BatchItem {
 
 export async function POST(request: Request) {
   try {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
@@ -113,6 +120,13 @@ export async function POST(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const sb = createServiceClient<Database>(url, key);
+  const acceso = await validarAccesoCuenta(sb, user.id, usuario.empresa_id);
+  if (!acceso.ok) {
+    return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
+  }
+  if (!acceso.planActivo) {
+    return NextResponse.json({ ok: false, error: "PLAN_INACTIVO", detalle: "Tu plan no está activo." }, { status: 402 });
+  }
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id);
   if (process.env.NODE_ENV !== "production") {
     console.info("[emitir-lote] configuracion emision", {
@@ -134,10 +148,29 @@ export async function POST(request: Request) {
     }
   }
 
+  const lock = await acquireCuentaEmissionLock({
+    sb,
+    cuentaId: acceso.cuentaId,
+    empresaId: usuario.empresa_id,
+    userId: user.id,
+    provider: "mock",
+    ttlSeconds: 300,
+  });
+  if (!lock.ok) {
+    return NextResponse.json(
+      { ok: false, error: lock.error, detalle: lock.detalle ?? "Ya hay una emisión activa en esta cuenta." },
+      { status: lock.error === "EMISION_BLOQUEADA" ? 409 : 500 },
+    );
+  }
+
+  let lockEstado: "completed" | "failed" | "cancelled" = "failed";
+  try {
+
   // Gate de cuota: las boletas masivas (con propuesta_id) consumen el cupo
   // del plan/trial. dev_mode bypassa para pruebas internas.
   const gate = await verificarEmisionMasiva(sb, usuario.empresa_id, ids.length, { devBypass: usuario.dev_mode === true });
   if (!gate.ok) {
+    lockEstado = "cancelled";
     return NextResponse.json(
       { ok: false, error: gate.codigo, detalle: gate.detalle, disponible: gate.disponible },
       { status: 402 },
@@ -381,6 +414,44 @@ export async function POST(request: Request) {
   const fallos = results.length - exitos;
   const monto_emitido = results.filter((r) => r.ok).reduce((s, r) => s + (r.monto_total ?? 0), 0);
 
+  if (exitos > 0) {
+    await recordCuentaAudit({
+      sb,
+      cuentaId: acceso.cuentaId,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      accion: "boleta_emitida",
+      recursoTipo: "emision_lote",
+      recursoId: lock.jobId,
+      resumen: `${exitos} boletas emitidas desde cartolas`,
+      metadata: {
+        cantidad: exitos,
+        fallos,
+        proveedor: emisionConfig.boletasProveedor,
+        sandbox: true,
+        origen: "cartolas",
+      },
+    });
+  } else if (fallos > 0) {
+    await recordCuentaAudit({
+      sb,
+      cuentaId: acceso.cuentaId,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_lote",
+      recursoId: lock.jobId,
+      resumen: "Emision desde cartolas fallida",
+      metadata: {
+        cantidad: results.length,
+        proveedor: emisionConfig.boletasProveedor,
+        sandbox: true,
+        origen: "cartolas",
+      },
+    });
+  }
+
+  lockEstado = "completed";
   return NextResponse.json({
     ok: true,
     procesadas: results.length,
@@ -391,6 +462,9 @@ export async function POST(request: Request) {
     sandbox: true,
     resultados: results,
   });
+  } finally {
+    await releaseCuentaEmissionLock({ sb, cuentaId: acceso.cuentaId, jobId: lock.jobId, estado: lockEstado });
+  }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[emitir-lote]", msg);

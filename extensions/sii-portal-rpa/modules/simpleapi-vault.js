@@ -85,9 +85,10 @@ export async function handleSimpleApiVaultMessage(message) {
   return null;
 }
 
-export async function generateSimpleApiDteFromVault({ appOrigin, input }) {
+export async function generateSimpleApiDteFromVault({ appOrigin, input, jobId, reservedFolio = null }) {
   if (!isUnlocked()) return { ok: false, error: "SIMPLEAPI_VAULT_LOCKED" };
   if (typeof input !== "string" || !input.trim()) return { ok: false, error: "INPUT_REQUIRED" };
+  if (typeof jobId !== "string" || !jobId.trim()) return { ok: false, error: "JOB_ID_REQUIRED" };
   if (!isAllowedProxyOrigin(appOrigin)) return { ok: false, error: "APP_ORIGIN_INVALID" };
 
   // Reconciliar contra la app: el contador local de folios se pierde al
@@ -97,9 +98,10 @@ export async function generateSimpleApiDteFromVault({ appOrigin, input }) {
   const ultimoFolioApp = tipoDtePeek ? await fetchUltimoFolioApp(appOrigin, tipoDtePeek) : null;
 
   const formData = new FormData();
-  const prepared = prepareDteInput(input, ultimoFolioApp);
+  const prepared = prepareDteInput(input, ultimoFolioApp, reservedFolio);
   if (!prepared.ok) return prepared;
   formData.set("input", prepared.input);
+  formData.set("job_id", jobId);
   formData.set("files", base64ToFile(unlockedVault.secrets.pfx_base64, unlockedVault.secrets.pfx_name || "certificado.pfx", "application/x-pkcs12"));
   formData.set("files2", new File([unlockedVault.secrets.caf_text], unlockedVault.secrets.caf_name || "caf.xml", { type: "text/xml" }));
 
@@ -149,8 +151,8 @@ async function fetchUltimoFolioApp(appOrigin, tipoDte) {
   }
 }
 
-export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
-  const generated = await generateSimpleApiDteFromVault({ appOrigin, input });
+export async function emitSimpleApiDteFromVault({ appOrigin, input, jobId, reservedFolio = null }) {
+  const generated = await generateSimpleApiDteFromVault({ appOrigin, input, jobId, reservedFolio });
   if (!generated.ok) return { ...generated, step: "dte/generar" };
 
   const dteXml = extractXml(generated.data, "DTE");
@@ -163,6 +165,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const envioGenerado = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "envio/generar",
+    jobId,
     input: {
       Certificado: certificatePayload(),
       Caratula: {
@@ -181,6 +184,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const enviado = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "envio/enviar",
+    jobId,
     input: { Certificado: certificatePayload(), Ambiente: vaultAmbiente(), Tipo: dteInfo.tipoDte === 39 || dteInfo.tipoDte === 41 ? 2 : 1 },
     files: [pfxFile("files"), textFile("files2", envioXml, "ENVIO_DTE.xml", "text/xml")],
   });
@@ -191,6 +195,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const consultaEnvio = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "consulta/envio",
+    jobId,
     input: { Certificado: certificatePayload(), RutEmpresa: unlockedVault.secrets.emisor_rut, TrackId: trackId, Ambiente: vaultAmbiente(), ServidorBoletaREST: false },
     files: [pfxFile("files")],
   });
@@ -199,6 +204,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const consultaDte = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "consulta/dte",
+    jobId,
     input: {
       Certificado: certificatePayload(),
       RutEmpresa: unlockedVault.secrets.emisor_rut,
@@ -217,6 +223,7 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   const pdf = await postSimpleApiMultipartProxy({
     appOrigin,
     path: "impresion/base64/carta/v2/cedible",
+    jobId,
     input: {
       NumeroResolucion: unlockedVault.secrets.resolution_number,
       FechaResolucion: unlockedVault.secrets.resolution_date,
@@ -242,12 +249,14 @@ export async function emitSimpleApiDteFromVault({ appOrigin, input }) {
   };
 }
 
-export async function postSimpleApiMultipartProxy({ appOrigin, path, input, files }) {
+export async function postSimpleApiMultipartProxy({ appOrigin, path, input, files, jobId }) {
   if (!SIMPLEAPI_MULTIPART_PROXY_PATHS.has(path)) return { ok: false, error: "SIMPLEAPI_PATH_NOT_ALLOWED" };
   if (!isAllowedProxyOrigin(appOrigin)) return { ok: false, error: "APP_ORIGIN_INVALID" };
+  if (typeof jobId !== "string" || !jobId.trim()) return { ok: false, error: "JOB_ID_REQUIRED" };
 
   const formData = new FormData();
   formData.set("input", typeof input === "string" ? input : JSON.stringify(input ?? {}));
+  formData.set("job_id", jobId);
   for (const file of Array.isArray(files) ? files : []) {
     if (!file?.field || !file?.base64) continue;
     const name = safeFilename(file.name) || `${file.field}.bin`;
@@ -428,7 +437,7 @@ function certificatePayload() {
   return { Rut: unlockedVault.secrets.certificate_rut, Password: unlockedVault.secrets.certificate_password };
 }
 
-function prepareDteInput(input, ultimoFolioApp = null) {
+function prepareDteInput(input, ultimoFolioApp = null, reservedFolio = null) {
   try {
     const parsed = JSON.parse(input);
     parsed.Certificado = certificatePayload();
@@ -436,10 +445,20 @@ function prepareDteInput(input, ultimoFolioApp = null) {
     if (!idDoc || typeof idDoc !== "object") return { ok: false, error: "ID_DOC_MISSING" };
     const tipoDte = Number(idDoc.TipoDTE || idDoc.TipoDte || idDoc.tipoDte);
     if (!Number.isInteger(tipoDte)) return { ok: false, error: "TIPO_DTE_REQUIRED" };
-    if (!idDoc.Folio) {
+    const reserved = Number(reservedFolio);
+    if (Number.isSafeInteger(reserved) && reserved > 0) {
+      const existing = Number(idDoc.Folio);
+      if (Number.isSafeInteger(existing) && existing > 0 && existing !== reserved) return { ok: false, error: "FOLIO_RESERVA_MISMATCH" };
+      const range = folioInCafRange(tipoDte, reserved);
+      if (!range.ok) return range;
+      idDoc.Folio = reserved;
+    } else if (!idDoc.Folio) {
       const folio = nextFolioForTipo(tipoDte, ultimoFolioApp);
       if (!folio.ok) return folio;
       idDoc.Folio = folio.folio;
+    } else {
+      const range = folioInCafRange(tipoDte, Number(idDoc.Folio));
+      if (!range.ok) return range;
     }
     if (!idDoc.FechaEmision && idDoc.FchEmis) idDoc.FechaEmision = idDoc.FchEmis;
     return { ok: true, input: JSON.stringify(parsed), tipoDte, folio: Number(idDoc.Folio) };
@@ -457,6 +476,13 @@ function nextFolioForTipo(tipoDte, ultimoFolioApp = null) {
     : local;
   if (!Number.isSafeInteger(folio) || folio < Number(info.desde) || folio > Number(info.hasta)) return { ok: false, error: "CAF_FOLIO_RANGE_EXHAUSTED" };
   return { ok: true, folio };
+}
+
+function folioInCafRange(tipoDte, folio) {
+  const info = unlockedVault.secrets.caf_info;
+  if (!info || Number(info.tipoDte) !== Number(tipoDte)) return { ok: false, error: "CAF_TIPO_DTE_MISMATCH" };
+  if (!Number.isSafeInteger(folio) || folio < Number(info.desde) || folio > Number(info.hasta)) return { ok: false, error: "CAF_FOLIO_RANGE_EXHAUSTED" };
+  return { ok: true };
 }
 
 async function advanceVaultFolio(tipoDte, folioUsado = null) {

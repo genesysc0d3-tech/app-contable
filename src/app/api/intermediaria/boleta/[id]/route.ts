@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAccountApiAccess } from "@/lib/api/account-guard";
 
 /**
  * Retorna el detalle completo de una boleta emitida para render de PDF
@@ -10,14 +10,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  const guard = await requireAccountApiAccess({ requirePlan: true });
+  if (!guard.ok) return guard.response;
 
-  const { data, error } = await supabase
+  const { data, error } = await guard.service
     .from("boletas_emitidas")
     .select("*")
     .eq("id", id)
+    .eq("empresa_id", guard.empresaId)
     .maybeSingle();
 
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { obtenerConfigEmision } from "@/lib/intermediario/client";
+import { validarAccesoCuenta } from "@/lib/entitlements";
+import { requireSimpleApiFolioReservaForJob } from "@/lib/emission/folio-reservas";
+import { requireEmisionJob } from "@/lib/emission/jobs";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import {
   isSimpleApiProxyError,
   sanitizeSimpleApiResponse,
@@ -8,25 +14,7 @@ import {
   simpleApiEndpoint,
 } from "@/lib/emission/simpleapi";
 
-const MAX_INPUT_BYTES = 512 * 1024;
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
-const SIMPLEAPI_SECOND_LIMIT = 3;
-const SIMPLEAPI_MINUTE_LIMIT = 40;
-const ALLOWED_FILE_FIELDS = new Set(["files", "files2", "files3", "fileEnvio", "logo"]);
-
-type RateBucket = {
-  secondWindow: number;
-  secondCount: number;
-  minuteWindow: number;
-  minuteCount: number;
-};
-
-const globalRateLimiter = globalThis as typeof globalThis & {
-  __appContableSimpleApiMultipartRateBuckets?: Map<string, RateBucket>;
-};
-
-const rateBuckets = globalRateLimiter.__appContableSimpleApiMultipartRateBuckets ?? new Map<string, RateBucket>();
-globalRateLimiter.__appContableSimpleApiMultipartRateBuckets = rateBuckets;
+const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 export async function proxySimpleApiMultipart(request: Request, path: string) {
   try {
@@ -41,16 +29,28 @@ export async function proxySimpleApiMultipart(request: Request, path: string) {
 }
 
 async function handleProxy(request: Request, path: string) {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  if (!ROLES_EMISION.has(String(usuario.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
+  const sb = createServiceClient<Database>(url, key);
+  const acceso = await validarAccesoCuenta(sb, user.id, usuario.empresa_id);
+  if (!acceso.ok) return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
+  if (!acceso.planActivo) return NextResponse.json({ ok: false, error: "PLAN_INACTIVO" }, { status: 402 });
 
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id).catch(() => null);
   if (!emisionConfig) {
@@ -66,124 +66,49 @@ async function handleProxy(request: Request, path: string) {
     );
   }
 
+  const formData = await request.formData();
+  const jobId = typeof formData.get("job_id") === "string" ? String(formData.get("job_id")).trim() : null;
+  const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId, provider: "simpleapi" });
+  if (!jobGate.ok) return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
+  if (jobGate.job.empresa_id !== usuario.empresa_id) {
+    return NextResponse.json({ ok: false, error: "EMISION_JOB_EMPRESA_MISMATCH" }, { status: 409 });
+  }
+
+  const reserva = await requireSimpleApiFolioReservaForJob({
+    sb,
+    empresaId: jobGate.job.empresa_id,
+    jobId: jobGate.job.job_id,
+    allowedEstados: ["generado"],
+  });
+  if (!reserva.ok) {
+    return NextResponse.json({ ok: false, error: reserva.error, detalle: reserva.detalle }, { status: reserva.status });
+  }
+
   const authHeaders = simpleApiAuthHeaders();
   if (isSimpleApiProxyError(authHeaders)) {
     return NextResponse.json({ ok: false, error: authHeaders.error, detalle: authHeaders.detalle }, { status: authHeaders.status });
   }
 
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().includes("multipart/form-data")) {
-    return NextResponse.json(
-      { ok: false, error: "MULTIPART_REQUIRED", detalle: "SimpleAPI requiere multipart/form-data." },
-      { status: 415 },
-    );
-  }
-
-  const formData = await request.formData();
-  const upstreamForm = validateAndBuildForm(formData);
-  if (!upstreamForm.ok) {
-    return NextResponse.json({ ok: false, error: upstreamForm.error, detalle: upstreamForm.detalle }, { status: upstreamForm.status });
-  }
-
-  const rateLimit = checkSimpleApiRateLimit(usuario.empresa_id, path);
-  if (!rateLimit.ok) {
-    return NextResponse.json(
-      { ok: false, error: "SIMPLEAPI_RATE_LIMITED", detalle: rateLimit.detalle },
-      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
-    );
+  const upstreamForm = new FormData();
+  for (const [key, value] of formData.entries()) {
+    if (key === "job_id") continue;
+    if (value instanceof File) {
+      upstreamForm.set(key, value, value.name);
+    } else {
+      upstreamForm.set(key, value);
+    }
   }
 
   const upstream = await fetch(simpleApiEndpoint(path), {
     method: "POST",
     headers: authHeaders,
-    body: upstreamForm.form,
+    body: upstreamForm,
     cache: "no-store",
   });
-
-  const upstreamContentType = upstream.headers.get("content-type") ?? "";
-  const upstreamBody = upstreamContentType.includes("application/json")
+  const contentType = upstream.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
     ? await upstream.json().catch(() => null)
     : await upstream.text().catch(() => "");
 
-  return NextResponse.json(
-    {
-      ok: upstream.ok,
-      proveedor: "simpleapi",
-      upstream_path: path,
-      upstream_status: upstream.status,
-      data: sanitizeSimpleApiResponse(upstreamBody),
-    },
-    { status: upstream.ok ? 200 : upstream.status },
-  );
-}
-
-function validateAndBuildForm(formData: FormData):
-  | { ok: true; form: FormData }
-  | { ok: false; status: number; error: string; detalle?: string } {
-  const input = formData.get("input");
-  if (typeof input !== "string" || !input.trim()) {
-    return { ok: false, status: 400, error: "INPUT_REQUIRED", detalle: "El multipart debe incluir input." };
-  }
-  if (new TextEncoder().encode(input).byteLength > MAX_INPUT_BYTES) {
-    return { ok: false, status: 413, error: "INPUT_TOO_LARGE", detalle: "El JSON input supera el tamaño permitido." };
-  }
-
-  const upstream = new FormData();
-  upstream.set("input", input);
-  let fileCount = 0;
-
-  for (const [key, value] of formData.entries()) {
-    if (key === "input") continue;
-    if (!ALLOWED_FILE_FIELDS.has(key)) continue;
-    if (!(value instanceof File) || value.size <= 0) continue;
-    if (value.size > MAX_FILE_BYTES) {
-      return { ok: false, status: 413, error: "FILE_TOO_LARGE", detalle: `El archivo ${key} supera el tamaño permitido.` };
-    }
-    upstream.set(key, value, value.name || `${key}.bin`);
-    fileCount += 1;
-  }
-
-  if (fileCount === 0) {
-    return { ok: false, status: 400, error: "FILES_REQUIRED", detalle: "El multipart debe incluir al menos un archivo permitido." };
-  }
-
-  return { ok: true, form: upstream };
-}
-
-function checkSimpleApiRateLimit(empresaId: string, path: string): { ok: true } | { ok: false; retryAfterSeconds: number; detalle: string } {
-  const now = Date.now();
-  const secondWindow = Math.floor(now / 1000);
-  const minuteWindow = Math.floor(now / 60000);
-  const key = `${path}:${empresaId}`;
-  const bucket = rateBuckets.get(key);
-  const nextBucket: RateBucket = bucket
-    ? {
-        secondWindow,
-        secondCount: bucket.secondWindow === secondWindow ? bucket.secondCount : 0,
-        minuteWindow,
-        minuteCount: bucket.minuteWindow === minuteWindow ? bucket.minuteCount : 0,
-      }
-    : { secondWindow, secondCount: 0, minuteWindow, minuteCount: 0 };
-
-  if (nextBucket.secondCount >= SIMPLEAPI_SECOND_LIMIT) {
-    return { ok: false, retryAfterSeconds: 1, detalle: "SimpleAPI permite hasta 3 solicitudes por segundo." };
-  }
-  if (nextBucket.minuteCount >= SIMPLEAPI_MINUTE_LIMIT) {
-    const retryAfterSeconds = Math.max(1, 60 - Math.floor((now % 60000) / 1000));
-    return { ok: false, retryAfterSeconds, detalle: "SimpleAPI permite hasta 40 solicitudes por minuto." };
-  }
-
-  nextBucket.secondCount += 1;
-  nextBucket.minuteCount += 1;
-  rateBuckets.set(key, nextBucket);
-  pruneRateBuckets(now);
-  return { ok: true };
-}
-
-function pruneRateBuckets(now: number) {
-  if (rateBuckets.size < 1000) return;
-  const staleMinuteWindow = Math.floor(now / 60000) - 2;
-  for (const [key, bucket] of rateBuckets.entries()) {
-    if (bucket.minuteWindow < staleMinuteWindow) rateBuckets.delete(key);
-  }
+  return NextResponse.json({ ok: upstream.ok, status: upstream.status, data: sanitizeSimpleApiResponse(data) }, { status: upstream.ok ? 200 : upstream.status });
 }
