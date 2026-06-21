@@ -1,15 +1,27 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/server";
 import type { Database, Tables } from "./database.types";
 import { validarAccesoCuenta } from "./entitlements";
+import { getDevSupportMode, type DevSupportMode } from "./dev/support-mode";
 
 export type Usuario = Tables<"usuarios">;
 export type Empresa = Tables<"empresas">;
 
 export type UsuarioConEmpresa = Usuario & {
   empresas: Empresa;
+};
+
+type ActiveDevSupportMode = Extract<DevSupportMode, { ok: true }>;
+
+export type AppEmpresaContext = {
+  usuario: UsuarioConEmpresa;
+  empresaId: string;
+  empresa: Empresa;
+  supabase: SupabaseClient<Database>;
+  supportMode: ActiveDevSupportMode | null;
+  readOnlyReason?: string;
 };
 
 export const getSession = cache(async () => {
@@ -89,4 +101,35 @@ export async function requireActiveEmpresa(): Promise<UsuarioConEmpresa> {
   }
 
   return usuario;
+}
+
+export async function getAppEmpresaContext(): Promise<AppEmpresaContext> {
+  const sessionUsuario = await requireActiveEmpresa();
+  const support = await getDevSupportMode();
+
+  if (support?.ok) {
+    const usuario = {
+      ...sessionUsuario,
+      empresa_id: support.empresaId,
+      empresas: support.empresa,
+    } as UsuarioConEmpresa;
+
+    return {
+      usuario,
+      empresaId: support.empresaId,
+      empresa: support.empresa,
+      supabase: support.sb,
+      supportMode: support,
+      readOnlyReason: "Modo soporte: solo lectura",
+    };
+  }
+
+  const supabase = await createClient();
+  return {
+    usuario: sessionUsuario,
+    empresaId: sessionUsuario.empresa_id,
+    empresa: sessionUsuario.empresas,
+    supabase,
+    supportMode: null,
+  };
 }

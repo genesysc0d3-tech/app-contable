@@ -1,16 +1,16 @@
 import { Suspense } from "react";
-import { getUsuario } from "@/lib/dal";
+import { getAppEmpresaContext } from "@/lib/dal";
 import SubirClient from "./SubirClient";
 import MobileHero from "@/components/MobileHero";
 
 export default async function SubirPage() {
-  const usuario = (await getUsuario())!;
+  const { empresaId, empresa } = await getAppEmpresaContext();
   return (
     <>
       <Suspense fallback={null}>
-        <MobileHero empresaId={usuario.empresa_id} empresa={usuario.empresas.razon_social} />
+        <MobileHero empresaId={empresaId} empresa={empresa.razon_social} />
       </Suspense>
-      <SubirClient empresaId={usuario.empresa_id} />
+      <SubirClient empresaId={empresaId} />
     </>
   );
 }

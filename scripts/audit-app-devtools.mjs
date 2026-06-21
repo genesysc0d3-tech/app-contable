@@ -40,6 +40,10 @@ Login env vars:
 
 Optional comparison:
   AUDIT_NONDEV_STATE=/tmp/nondev-state.json verifies a non-dev session cannot see /dev/cuentas.
+
+Default authenticated scope:
+  Audits /dev/cuentas, client support mode, Start/Pro/Business read-only routes
+  and support-mode write blocks without touching extension/SII.
 `);
 }
 
@@ -125,6 +129,16 @@ const protectedRoutes = [
   },
 ];
 
+const supportAuditPlans = [
+  { code: "business", label: "Business", equipoExpected: true },
+  { code: "pro", label: "Pro", equipoExpected: false },
+  { code: "start", label: "Start", equipoExpected: false },
+];
+
+const supportModeRoutes = protectedRoutes.filter((route) =>
+  ["massdte", "empresa", "revisar", "subir", "clientes", "boletas-reportes"].includes(route.name)
+);
+
 const audit = {
   startedAt,
   baseUrl: BASE_URL,
@@ -135,6 +149,7 @@ const audit = {
   hadAuthState: false,
   routes: [],
   dynamicRoutes: [],
+  supportScenarios: [],
   businessChecks: [],
   console: [],
   pageErrors: [],
@@ -144,6 +159,7 @@ const audit = {
   storage: [],
   findings: [],
   lighthouse: [],
+  screenshotCount: 0,
 };
 
 if (CAPTURE_LOGIN) {
@@ -193,6 +209,7 @@ async function main() {
   const page = await context.newPage();
   await runRouteAudit(page, audit, protectedRoutes);
   await runDevSpecificFlows(page, audit);
+  await runPlanSupportReadOnlyFlows(page, audit);
   await runMassdteBusinessSignals(page, audit);
   await collectStorageSummary(context, audit);
 
@@ -477,7 +494,206 @@ async function runDevSpecificFlows(page, target) {
   }
 }
 
-async function probeReadOnlyBlocks(page, target) {
+async function runPlanSupportReadOnlyFlows(page, target) {
+  if (!target.hadAuthState || !EXPECT_DEV) {
+    target.businessChecks.push(check("support-plan-readonly-matrix", "skipped", "Sin sesion dev esperada; no se audito matriz read-only por plan."));
+    return;
+  }
+
+  const devRoute = target.routes.find((route) => route.name === "dev-cuentas");
+  if (!devRoute || devRoute.status !== "ok") {
+    target.businessChecks.push(check("support-plan-readonly-matrix", "blocked", "No se pudo usar /dev/cuentas como punto de partida para matriz read-only."));
+    return;
+  }
+
+  for (const plan of supportAuditPlans) {
+    const scenario = {
+      plan: plan.label,
+      query: plan.code,
+      status: "unknown",
+      searchPath: `/dev/cuentas?q=${plan.code}`,
+      supportPath: "",
+      screenshots: {},
+      candidate: null,
+      signals: {},
+      emissionApi: null,
+      routeStatuses: [],
+      checks: [],
+    };
+    target.supportScenarios.push(scenario);
+
+    await page.goto(`${BASE_URL}/dev/cuentas?q=${encodeURIComponent(plan.code)}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(900);
+    scenario.screenshots.search = await screenshot(page, `readonly-search-${plan.code}`);
+
+    const candidates = await collectClientCandidates(page, plan.label);
+    const candidate = candidates.find((item) => item.matchesPlan && !item.disabled) ?? candidates.find((item) => item.matchesPlan);
+    scenario.candidate = candidate
+      ? {
+          buttonIndex: candidate.buttonIndex,
+          matchesPlan: candidate.matchesPlan,
+          disabled: candidate.disabled,
+          rowTextSample: sanitizeText(candidate.rowText),
+        }
+      : null;
+
+    if (!candidate) {
+      scenario.status = "skipped";
+      addSupportScenarioCheck(
+        target,
+        scenario,
+        `readonly-${plan.code}-available`,
+        "skipped",
+        `No se encontro una cuenta ${plan.label} con boton Ver cliente en /dev/cuentas?q=${plan.code}.`,
+        scenario.screenshots.search,
+      );
+      continue;
+    }
+
+    if (candidate.disabled) {
+      scenario.status = "skipped";
+      addSupportScenarioCheck(
+        target,
+        scenario,
+        `readonly-${plan.code}-support-entry`,
+        "skipped",
+        `La cuenta ${plan.label} encontrada no tiene empresa principal disponible para modo cliente.`,
+        scenario.screenshots.search,
+      );
+      continue;
+    }
+
+    const clicked = await page.getByRole("button", { name: /Ver cliente/i }).nth(candidate.buttonIndex).click()
+      .then(() => true)
+      .catch((error) => {
+        addSupportScenarioCheck(
+          target,
+          scenario,
+          `readonly-${plan.code}-support-entry`,
+          "fail",
+          `Click Ver cliente fallo: ${sanitizeText(error.message)}`,
+          scenario.screenshots.search,
+        );
+        return false;
+      });
+    if (!clicked) {
+      scenario.status = "failed-entry";
+      continue;
+    }
+
+    await page.waitForURL((url) => /\/massdte$/.test(url.pathname), { timeout: 20000 }).catch(() => {});
+    await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+
+    scenario.supportPath = sanitizePath(pathFromUrl(page.url()));
+    scenario.screenshots.massdte = await screenshot(page, `readonly-${plan.code}-massdte`);
+    scenario.signals = await collectSupportSignals(page);
+    scenario.emissionApi = await readSupportEmissionJobs(page);
+    scenario.status = "checked";
+
+    addSupportScenarioCheck(
+      target,
+      scenario,
+      `readonly-${plan.code}-support-banner`,
+      scenario.signals.supportBanner ? "pass" : "fail",
+      scenario.signals.supportBanner
+        ? `${plan.label}: banner Modo soporte Genesys visible.`
+        : `${plan.label}: no se encontro banner de modo soporte.`,
+      scenario.screenshots.massdte,
+    );
+    addSupportScenarioCheck(
+      target,
+      scenario,
+      `readonly-${plan.code}-usage`,
+      scenario.signals.usoDelMes ? "pass" : "warn",
+      scenario.signals.usoDelMes
+        ? `${plan.label}: Uso del mes visible.`
+        : `${plan.label}: no se encontro Uso del mes en /massdte.`,
+      scenario.screenshots.massdte,
+    );
+    addSupportScenarioCheck(
+      target,
+      scenario,
+      `readonly-${plan.code}-team-panel`,
+      scenario.signals.equipo === plan.equipoExpected ? "pass" : "fail",
+      plan.equipoExpected
+        ? scenario.signals.equipo
+          ? `${plan.label}: Equipo visible como corresponde.`
+          : `${plan.label}: falta Equipo.`
+        : scenario.signals.equipo
+          ? `${plan.label}: aparece Equipo aunque el plan no debe mostrarlo.`
+          : `${plan.label}: Equipo oculto como corresponde.`,
+      scenario.screenshots.massdte,
+    );
+
+    if (scenario.emissionApi.status === 200 && scenario.emissionApi.body?.ok) {
+      const businessMode = scenario.emissionApi.body.business_mode === true;
+      addSupportScenarioCheck(
+        target,
+        scenario,
+        `readonly-${plan.code}-business-mode-api`,
+        businessMode === plan.equipoExpected ? "pass" : "fail",
+        `${plan.label}: /api/emision/jobs business_mode=${businessMode}; esperado=${plan.equipoExpected}.`,
+      );
+    } else {
+      addSupportScenarioCheck(
+        target,
+        scenario,
+        `readonly-${plan.code}-emission-api`,
+        "warn",
+        `${plan.label}: GET /api/emision/jobs devolvio HTTP ${scenario.emissionApi.status}.`,
+      );
+    }
+
+    await runSupportRouteSweep(page, target, scenario, plan);
+
+    await page.goto(`${BASE_URL}/massdte`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(900);
+    await probeReadOnlyBlocks(page, target, { prefix: `readonly-${plan.code}`, label: plan.label });
+    await leaveSupportMode(page, target, scenario, plan);
+  }
+}
+
+async function runSupportRouteSweep(page, target, scenario, plan) {
+  for (const route of supportModeRoutes) {
+    await page.goto(`${BASE_URL}${route.path}`, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(900);
+
+    const finalPath = sanitizePath(pathFromUrl(page.url()));
+    const redirectedToLogin = /\/auth\/login/.test(finalPath);
+    const supportBanner = await includesText(page, "Modo soporte Genesys");
+    const routeSignals = await collectSignals(page, route.signals);
+    const shot = await screenshot(page, `readonly-${plan.code}-${route.name}`);
+    const status = redirectedToLogin ? "login-redirect" : supportBanner ? "ok" : "missing-support-banner";
+
+    const item = {
+      name: `readonly-${plan.code}-${route.name}`,
+      status,
+      finalPath,
+      screenshot: shot,
+      signals: routeSignals,
+    };
+    scenario.routeStatuses.push(item);
+    target.dynamicRoutes.push(item);
+    addSupportScenarioCheck(
+      target,
+      scenario,
+      `readonly-${plan.code}-${route.name}-support-banner`,
+      status === "ok" ? "pass" : "fail",
+      status === "ok"
+        ? `${plan.label}: ${route.path} mantiene banner de modo soporte.`
+        : `${plan.label}: ${route.path} termino en ${finalPath} sin banner de soporte.`,
+      shot,
+    );
+  }
+}
+
+async function probeReadOnlyBlocks(page, target, options = {}) {
+  const { prefix = "", label = "" } = options;
   const probes = [
     {
       name: "support-block-upload",
@@ -536,14 +752,123 @@ async function probeReadOnlyBlocks(page, target) {
     }, probe).catch((error) => ({ status: 0, ok: false, error: "EVALUATE_FAILED", detalle: sanitizeText(error.message) }));
 
     const passed = result.status === 403 && result.error === "DEV_SUPPORT_READ_ONLY";
+    const name = prefix ? `${prefix}-${probe.name}` : probe.name;
+    const detailPrefix = label ? `${label}: ` : "";
     target.businessChecks.push(check(
-      probe.name,
+      name,
       passed ? "pass" : "fail",
       passed
-        ? "Escritura bloqueada con DEV_SUPPORT_READ_ONLY."
-        : `Respuesta inesperada: HTTP ${result.status}, error ${sanitizeText(result.error ?? "sin error")}.`,
+        ? `${detailPrefix}escritura bloqueada con DEV_SUPPORT_READ_ONLY.`
+        : `${detailPrefix}respuesta inesperada: HTTP ${result.status}, error ${sanitizeText(result.error ?? "sin error")}.`,
     ));
   }
+}
+
+function addSupportScenarioCheck(target, scenario, name, status, detail, evidence = "") {
+  const item = check(name, status, detail, evidence);
+  scenario.checks.push(item);
+  target.businessChecks.push(item);
+}
+
+async function collectClientCandidates(page, expectedPlanLabel) {
+  return page.evaluate((planLabel) => {
+    const visible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const clean = (value) => (value ?? "").replace(/\s+/g, " ").trim();
+    const planRegex = new RegExp(planLabel, "i");
+    const buttons = Array.from(document.querySelectorAll("button"))
+      .filter((button) => visible(button) && clean(button.textContent).includes("Ver cliente"));
+
+    return buttons.map((button, buttonIndex) => {
+      let node = button.parentElement;
+      let rowText = clean(button.textContent);
+      while (node && node !== document.body) {
+        const text = clean(node.textContent);
+        if (text.includes("Detalle") && text.includes("Empresas") && text.includes("Personas")) {
+          rowText = text;
+          break;
+        }
+        node = node.parentElement;
+      }
+      return {
+        buttonIndex,
+        disabled: button.disabled,
+        matchesPlan: planRegex.test(rowText),
+        rowText,
+      };
+    });
+  }, expectedPlanLabel).catch(() => []);
+}
+
+async function collectSupportSignals(page) {
+  return {
+    supportBanner: await includesText(page, "Modo soporte Genesys"),
+    volverDev: await includesText(page, "Volver a dev"),
+    usoDelMes: await includesText(page, "Uso del mes"),
+    equipo: await includesText(page, "Equipo"),
+    cambiarEmpresa: await includesText(page, "Cambiar empresa"),
+    emitirBloqueado: await includesText(page, "Emitir bloqueado"),
+  };
+}
+
+async function readSupportEmissionJobs(page) {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/emision/jobs", { cache: "no-store" });
+    const body = await response.json().catch(() => null);
+    return {
+      status: response.status,
+      body: body
+        ? {
+            ok: body.ok === true,
+            locked: body.locked === true,
+            business_mode: body.business_mode === true,
+            status_message: body.status_message ?? null,
+          }
+        : null,
+    };
+  }).catch((error) => ({ status: 0, body: { ok: false, error: sanitizeText(error.message) } }));
+}
+
+async function leaveSupportMode(page, target, scenario, plan) {
+  const volver = page.getByRole("button", { name: /Volver a dev/i }).first();
+  if (!(await volver.count())) {
+    addSupportScenarioCheck(
+      target,
+      scenario,
+      `readonly-${plan.code}-support-exit`,
+      "fail",
+      `${plan.label}: no se encontro boton Volver a dev para cerrar modo soporte.`,
+      scenario.screenshots.massdte,
+    );
+    return;
+  }
+
+  await volver.click().catch((error) => {
+    addSupportScenarioCheck(
+      target,
+      scenario,
+      `readonly-${plan.code}-support-exit`,
+      "fail",
+      `${plan.label}: click Volver a dev fallo: ${sanitizeText(error.message)}`,
+      scenario.screenshots.massdte,
+    );
+  });
+  await page.waitForURL((url) => /\/dev\/cuentas$/.test(url.pathname), { timeout: 12000 }).catch(() => {});
+  await page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(900);
+  const returned = /\/dev\/cuentas$/.test(pathFromUrl(page.url()));
+  addSupportScenarioCheck(
+    target,
+    scenario,
+    `readonly-${plan.code}-support-exit`,
+    returned ? "pass" : "fail",
+    returned
+      ? `${plan.label}: Volver a dev retorna a /dev/cuentas.`
+      : `${plan.label}: Volver a dev termino en ${sanitizePath(pathFromUrl(page.url()))}.`,
+  );
 }
 
 async function runMassdteBusinessSignals(page, target) {
@@ -771,7 +1096,7 @@ function summarizeResponses(responses) {
 }
 
 async function screenshot(page, name) {
-  const fileName = `${String(audit.routes.length + audit.dynamicRoutes.length + 1).padStart(2, "0")}-${slug(name)}.png`;
+  const fileName = `${String(++audit.screenshotCount).padStart(2, "0")}-${slug(name)}.png`;
   const output = path.join(screenshotDir, fileName);
   await page.screenshot({ path: output, fullPage: true }).catch((error) => {
     audit.findings.push({
@@ -971,6 +1296,7 @@ async function writeReport() {
     "## Summary",
     "",
     `- Routes visited: ${audit.routes.length + audit.dynamicRoutes.length}`,
+    `- Support plan scenarios: ${audit.supportScenarios.length}`,
     `- Business checks: ${audit.businessChecks.length}`,
     `- Console errors: ${audit.console.filter((item) => item.type === "error").length}`,
     `- Console warnings: ${audit.console.filter((item) => item.type === "warning").length}`,
@@ -1001,6 +1327,29 @@ async function writeReport() {
   }
   for (const route of audit.dynamicRoutes) {
     lines.push(`| ${route.name} | ${route.status} | ${route.finalPath} |  |  | ${route.screenshot} | dynamic |`);
+  }
+
+  lines.push("", "## Support Read-Only Matrix", "");
+  if (audit.supportScenarios.length === 0) {
+    lines.push("- No ejecutada.");
+  } else {
+    lines.push("| Plan | Status | Support path | Banner | Uso | Equipo UI | business_mode | Routes OK | Screenshot |");
+    lines.push("|---|---|---|---|---|---|---|---:|---|");
+    for (const scenario of audit.supportScenarios) {
+      const api = scenario.emissionApi?.body;
+      const okRoutes = scenario.routeStatuses.filter((route) => route.status === "ok").length;
+      lines.push([
+        scenario.plan,
+        scenario.status,
+        scenario.supportPath || "n/a",
+        boolCell(scenario.signals.supportBanner),
+        boolCell(scenario.signals.usoDelMes),
+        boolCell(scenario.signals.equipo),
+        typeof api?.business_mode === "boolean" ? String(api.business_mode) : "n/a",
+        `${okRoutes}/${supportModeRoutes.length}`,
+        scenario.screenshots.massdte ?? scenario.screenshots.search ?? "",
+      ].map(escapeCell).join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+    }
   }
 
   lines.push("", "## Route Deep Detail", "");
@@ -1120,6 +1469,11 @@ function formatObject(value) {
   const entries = Object.entries(value ?? {});
   if (entries.length === 0) return "n/a";
   return entries.map(([key, count]) => `${key}:${count}`).join(", ");
+}
+
+function boolCell(value) {
+  if (typeof value !== "boolean") return "n/a";
+  return value ? "yes" : "no";
 }
 
 function formatList(value) {

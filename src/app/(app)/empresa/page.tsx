@@ -1,5 +1,4 @@
-import { getUsuario } from "@/lib/dal";
-import { createClient } from "@/lib/supabase/server";
+import { getAppEmpresaContext } from "@/lib/dal";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import EmisorForm from "./EmisorForm";
@@ -22,13 +21,13 @@ function mapFacturasProveedor(raw: string | null | undefined): FacturasEmisionPr
 }
 
 export default async function EmpresaPage() {
-  const usuario = (await getUsuario())!;
-  const empresa = usuario.empresas;
+  const { usuario, empresa, supabase, supportMode } = await getAppEmpresaContext();
 
-  const supabase = await createClient();
   const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const admin = serviceUrl && serviceKey
+  const admin = supportMode
+    ? supabase
+    : serviceUrl && serviceKey
     ? createServiceClient<Database>(serviceUrl, serviceKey)
     : supabase;
   const { data: cafs } = await supabase
@@ -59,7 +58,7 @@ export default async function EmpresaPage() {
   };
   const boletasProveedor = mapBoletasProveedor(empresa.boletas_emision_proveedor ?? empresa.emision_proveedor);
   const facturasProveedor = mapFacturasProveedor(empresa.facturas_emision_proveedor);
-  const devMode = usuario.dev_mode === true;
+  const devMode = !supportMode && usuario.dev_mode === true;
 
   return (
     // Tema oscuro fijo: los paneles (EmisorForm, CAF, proveedor, formatos)
