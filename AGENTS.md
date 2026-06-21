@@ -273,6 +273,14 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
   ambigua detectada por `db lint`.
 - Las rutas `/dev` viven en `src/app/(dev)/dev`, no en `src/app/(app)/dev`,
   para no heredar el layout de cliente ni `BottomNav`.
+- La matriz de roles Start/Pro/Business quedo automatizada con
+  `scripts/audit-role-matrix.mjs` / `npm run audit:roles`. Produccion tiene
+  fixtures Pro/Business marcados como `AUDIT ... FIXTURE` via migracion
+  `20260621010000_role_matrix_audit_fixtures.sql`; no contienen documentos,
+  pagos, XML ni credenciales.
+- `requireAccountApiAccess` respeta modo soporte Genesys para lecturas de APIs
+  compartidas; `/api/empresa/logo/[empresaId]` permite la empresa de soporte y
+  devuelve 204 si no hay logo para evitar ruido de consola.
 - Bloque 4-5 del TXT quedo reconciliado contra produccion: migraciones remotas
   alineadas, dry-run sin pendientes, lint remoto sin errores de schema y build
   Next/Vercel local OK. `DEV-001` quedo cerrado.
@@ -293,6 +301,20 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - `bash scripts/supabase-local-token.sh db push --dry-run`: OK; remoto al dia.
 - `bash scripts/supabase-local-token.sh db lint --linked`: OK, sin errores de
   schema.
+- `bash scripts/supabase-local-token.sh db push --dry-run`: OK; detecto solo
+  `20260621010000_role_matrix_audit_fixtures.sql`.
+- `bash scripts/supabase-local-token.sh db push`: OK; fixtures Pro/Business
+  aplicados en Supabase remoto.
+- `bash scripts/supabase-local-token.sh migration list`: OK; remoto muestra
+  `20260621010000`.
+- `npm run build`: OK con fixes de soporte de matriz de roles.
+- Vercel produccion redeploy OK; alias `https://app-contable-five.vercel.app`
+  actualizado.
+- `npm run audit:roles -- --base-url=https://app-contable-five.vercel.app
+  --state=/tmp/e2e-state-vercel.json` con `AUDIT_NONDEV_STATE` temporal:
+  OK, 0 hallazgos. Business checked con Equipo visible y `business_mode=true`;
+  Pro/Start checked con Equipo oculto y `business_mode=false`; no-dev no ve
+  `/dev/cuentas`.
 - `bash scripts/supabase-local-token.sh inspect db locks`: OK; solo mostro la
   query de inspeccion activa.
 - Inspecciones opcionales en paralelo (`long-running-queries`, `table-stats`)
