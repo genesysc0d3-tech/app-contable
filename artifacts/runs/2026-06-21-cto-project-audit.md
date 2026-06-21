@@ -49,26 +49,29 @@ SII, certificados, cookies, CAF ni XML/PDF tributarios crudos.
 
 | Area | Score | Lectura CTO |
 |---|---:|---|
-| Arquitectura y estructura | 7.0/10 | Buena separacion app/dev/lib/migrations/artifacts, pero aun hay legacy operativo, scripts de prueba SII y mucha logica pesada en route handlers/server actions. |
-| Calidad y mantenibilidad | 7.0/10 | TypeScript estricto, lint verde y dominios claros; persisten componentes grandes, estilos inline extensos y caminos duplicados de procesamiento. |
-| Seguridad | 7.6/10 | Auth/RLS/guards estan bastante trabajados; ahora hay headers, preview Excel sin HTML, limites de upload, audit limpio y rate limit inicial en endpoints caros/sensibles. Falta observabilidad. |
-| Escalabilidad y performance | 6.1/10 | Build OK y queries con limites en varias rutas; LAUNCH-001 ya no bloquea, pero IA/OCR y parseo siguen en background volatil. La cola durable queda especificada en ENG-003. |
-| Testing y cobertura | 6.4/10 | Tests pasan, incluyendo upload, preview Excel, headers y rate limit; faltan coverage threshold, API/billing/extension reproducible y corrida CI remota. |
-| DevOps / CI-CD readiness | 6.7/10 | Se agrega GitHub Actions con lint/test/build/audit y audit limpio; falta branch protection, PR real verde y deploy menos manual. |
-| Deuda tecnica / riesgos prod | 6.4/10 | LAUNCH-001 baja el riesgo de emision real, pero uploads/AI siguen fragiles sin cola durable y la superficie API ya es grande. |
-| Mejores practicas SaaS | 7.3/10 | Cuenta pagadora, planes, cupos, multiempresa, soporte read-only, locks por cuenta y smoke real controlado son buenas bases; faltan flags, observabilidad, runbook beta validado y billing end-to-end. |
-| Compliance Chile | 4.2/10 | Se agrego paquete operativo minimo RAT/proveedores/ARCO/retencion/brechas/MPD; falta revision legal, terminos/DPA formales y flujos producto. |
+| Arquitectura y estructura | 7.6/10 | Buena separacion app/dev/lib/migrations/artifacts y ahora existe cola durable para documentos/OCR/IA; persisten componentes grandes, estilos inline extensos y algunos caminos duplicados. |
+| Calidad y mantenibilidad | 7.3/10 | TypeScript estricto, lint verde, dominios claros y helpers de cola testeados; aun falta reducir componentes largos y estandarizar mas mutaciones service-role. |
+| Seguridad | 8.1/10 | Auth/RLS/guards, headers, preview Excel seguro, upload hardening, rate limits, soporte read-only, ops sanitizados y validacion de paths agrupados. Falta rate limit distribuido y alertas externas. |
+| Escalabilidad y performance | 7.4/10 | Upload/OCR/IA ya no depende de background volatil: hay job durable, idempotencia, reintentos, watchdog y limite por empresa. Falta worker dedicado/frecuencia subdiaria y load test real. |
+| Testing y cobertura | 7.1/10 | CI, Lighthouse, lint, build y 93 tests pasan; faltan coverage threshold, API/billing/extension reproducible y pruebas reales Excel/PDF/imagen post-cola. |
+| DevOps / CI-CD readiness | 7.6/10 | PRs reales verdes, Vercel preview/prod OK, migraciones remotas aplicadas, Lighthouse CI y cron versionado. Falta branch protection formal, alertas externas y menos deploy manual. |
+| Deuda tecnica / riesgos prod | 7.2/10 | Observabilidad base y cola durable bajan los riesgos rojos de upload/IA; quedan deuda de billing, flags, retention automation y smoke extension reproducible. |
+| Mejores practicas SaaS | 7.8/10 | Cuenta pagadora, planes/cupos, multiempresa, equipo Business, soporte read-only, Account 360, locks y legal pages publicas son buena base. Faltan flags auditables y billing E2E reforzado. |
+| Compliance Chile | 8.0/10 | RAT/DPA/subencargados, privacidad, terminos, seguridad, brechas, retencion y MPD inicial quedan versionados para beta controlada. No reemplaza revision legal externa. |
 
 **Score tecnico original: 65/100. Score general post-readiness: 70/100. Score
-general post-LAUNCH-001 + rate limits iniciales: 74/100.**
+general post-LAUNCH-001 + rate limits iniciales: 74/100. Score actual post
+observabilidad + cola durable + compliance beta: 82/100 para beta controlada.**
 
 ## Resumen Ejecutivo
 
 El proyecto esta bien encaminado para una beta controlada de la capa SaaS web y
 la emision real dejo de ser el bloqueo principal despues del smoke manual
-reportado OK con extension/SII/CAF. Aun no esta listo para lanzamiento abierto:
-faltan observabilidad, cola durable, runbook operativo validado, mas pruebas de
-billing/API y cierre compliance/legal.
+reportado OK con extension/SII/CAF. Desde el cierre posterior, observabilidad
+base, cola durable OCR/IA/documentos y compliance chileno 8/10 beta quedaron
+implementados/versionados. Aun no esta listo para lanzamiento abierto masivo:
+faltan revision legal externa, alertas externas, runbook operativo validado y
+mas pruebas de billing/API/documentos reales.
 
 La parte fuerte es producto/tenancy: cuenta pagadora, planes Start/Pro/Business,
 modo soporte Genesys, read-only, Account 360, lock remoto de emision y folios
@@ -77,11 +80,11 @@ verde con 0 hallazgos, y el lock remoto tambien fue probado sin ejecutar SII.
 
 La parte debil sigue siendo readiness operacional avanzada y compliance formal:
 ya hay CI versionado, lint/test/build/audit verdes, headers, upload hardening,
-preview Excel sin HTML y rate limit inicial en endpoints caros/sensibles, pero
-faltan rate limiting distribuido, observabilidad/alertas, cola durable para
-archivos/IA y revision legal externa. Para un SaaS chileno que procesa RUT, cartolas,
-boletas, clientes, documentos, Telegram e IA, el paquete compliance minimo es
-un avance operativo, no un cierre legal.
+preview Excel sin HTML, rate limit inicial, observabilidad sanitizada y cola
+durable. Para un SaaS chileno que procesa RUT, cartolas, boletas, clientes,
+documentos, Telegram e IA, el paquete compliance 8 beta es una base ordenada
+para operar beta controlada y para que un abogado revise, no un dictamen legal
+final.
 
 ## Riesgos Criticos Rojos
 
@@ -96,21 +99,21 @@ reproducible con checklist versionado: version de extension, tipo DTE, job/lock,
 folio reservado/liberado y resultado persistido, todo enmascarado.
 
 Decision: permitir beta controlada con emision real y soporte presente. No
-prometer operacion masiva abierta hasta tener observabilidad, runbook y smoke
-repetible sin datos sensibles.
+prometer operacion masiva abierta hasta tener alertas externas, runbook validado
+y smoke repetible sin datos sensibles.
 
-### R2 - CI/CD recien agregado, aun sin corrida remota obligatoria
+### R2 - CI/CD verde, falta enforcement formal
 
-Evidencia: esta rama agrega `.github/workflows/ci.yml` con `npm ci`, lint, test,
-build y audit production. Localmente `npm run lint`, `npm run test`,
-`npm run build` y `npm audit` estan verdes.
+Evidencia: los PRs posteriores corrieron checks reales en GitHub: CI principal,
+Lighthouse y Vercel preview quedaron verdes antes del merge.
 
-Impacto: el riesgo bajo, pero no desaparece hasta correr el workflow en GitHub y
-exigir branch protection antes de merge/deploy.
+Impacto: el riesgo bajo, pero no desaparece hasta exigir branch protection y
+checks requeridos en GitHub.
 
-Decision: abrir PR y exigir que CI quede verde antes de mergear a `dev`.
+Decision: mantener PR obligatorio y configurar branch protection formal en
+`dev`/`main`.
 
-### R3 - Superficie de upload/IA parcialmente mitigada, aun sin cola durable
+### R3 - Superficie de upload/IA mitigada con cola durable base
 
 Evidencia:
 
@@ -119,15 +122,18 @@ Evidencia:
   sanitizado.
 - `src/lib/security/rate-limit.ts` agrega rate limit in-memory y se aplica a
   upload/procesar, OCR comprobante, checkout y jobs de emision.
-- `src/app/api/procesar-documento/route.ts` procesa PDF/OCR/IA dentro del
-  request.
+- `document_processing_jobs` persiste jobs con idempotencia, reintentos,
+  backoff, watchdog de jobs atascados y metadata sin contenido crudo.
+- `/api/subir-procesar` y `/api/procesar-documento` encolan antes de trabajo
+  pesado; el kick oportunista solo acelera, no es la fuente de durabilidad.
 
-Impacto: archivos grandes, multiples OCR o PDFs pesados pueden agotar memoria,
-tiempo de funcion o presupuesto de IA. En serverless, el background no durable
-puede quedar cortado.
+Impacto: baja fuerte el riesgo de perder trabajos o quemar serverless/IA por
+background volatil. Sigue existiendo riesgo de costo/tiempo si la frecuencia
+del cron diario no alcanza o si entran muchos documentos simultaneos.
 
-Decision: mantener rate limits como defensa inmediata, pero mover procesamiento
-pesado a cola/job durable (`ENG-003`) y agregar observabilidad de costos/errores.
+Decision: beta controlada puede usar esta cola base. Para escala abierta,
+subir frecuencia con scheduler externo/Vercel Pro o worker dedicado y agregar
+metricas de duracion/costo por proveedor.
 
 ### R4 - Riesgo XSS en preview de Excel mitigado
 
@@ -225,8 +231,9 @@ este proyecto son:
 - Auth Failures: Supabase Auth esta bien integrado; login propio no aplica tanto
   porque Supabase protege. APIs internas criticas ya tienen throttling inicial,
   falta hacerlo distribuido y con metricas.
-- Logging and Alerting: hay audit events y artifacts, pero no Sentry/log drain,
-  alertas ni dashboard operativo.
+- Logging and Alerting: hay `ops_events`, `/dev/diagnostico`, cron ops y
+  hallazgos de cola/jobs; falta Sentry/log drain, uptime checks y alertas
+  externas.
 - Mishandling Exceptional Conditions: muchos catch devuelven mensajes internos
   o `detalle`; util para beta, debe endurecerse antes de produccion abierta.
 
@@ -238,31 +245,24 @@ referenciadas como insumo.
 
 ### Ley 21.719 - Datos personales
 
-Score preliminar: **3.5/10**.
+Score beta controlada: **8.0/10**.
 
 La app tiene buena base tecnica en aislamiento por empresa/cuenta, soporte
 read-only, auditoria, locks y enmascaramiento del panel dev. Eso ayuda, pero no
-equivale a cumplimiento de datos personales.
+equivale por si solo a cumplimiento de datos personales. Despues del cierre
+post-auditoria quedan versionados RAT inicial, politica de privacidad,
+terminos, pagina de seguridad, DPA/subencargados, retencion/borrado, brechas y
+cola durable que evita guardar contenido crudo en jobs.
 
-Brechas principales:
+Queda pendiente para 9/10:
 
-- Sin inventario/RAT de tratamientos: usuarios, empresas, clientes, cartolas,
-  boletas, PDFs/XML, Telegram, IA, pagos, logs, soporte dev y artifacts.
-- Sin matriz de bases legales por flujo: registro, carga de cartolas,
-  procesamiento IA/OCR, emision, soporte, Telegram, billing, logs.
-- Sin canal/proceso de derechos ARCO: acceso, rectificacion, supresion,
-  oposicion, portabilidad, bloqueo y trazabilidad de respuesta.
-- Sin politica de privacidad/terminos/DPA versionados para clientes B2B SaaS.
-- Sin mapa formal de encargados/subencargados: Supabase, Vercel, Mistral,
-  DeepSeek, Telegram, Mercado Pago, GitHub/Vercel logs y cualquier storage.
-- Sin decision documentada sobre transferencias internacionales y clausulas
-  contractuales/protecciones equivalentes.
-- Sin politica de retencion/borrado para documentos tributarios, cartolas,
-  XML/PDF, imagenes Telegram, prompts/respuestas IA y logs.
-- Sin plan de brechas: deteccion, registro, clasificacion, notificacion,
-  comunicacion a titulares cuando aplique y postmortem.
-- Sin EIPD/analisis de alto riesgo para IA/OCR sobre informacion financiera y
+- Revision legal externa de privacidad, terminos, DPA, transferencias
+  internacionales y bases legales por flujo.
+- Nombramiento formal de responsable/oficial de privacidad.
+- Canal operativo para derechos ARCO con registro de solicitudes y SLA.
+- EIPD/analisis de alto riesgo para IA/OCR sobre informacion financiera y
   tributaria.
+- Automatizar retencion/borrado cuando el volumen real lo justifique.
 
 Prioridad: alta antes de beta pagada. La entrada sustantiva indicada por las
 fuentes revisadas es el 1 de diciembre de 2026, pero el costo de arreglar datos
@@ -270,44 +270,41 @@ mal gobernados crece rapido una vez que hay clientes reales.
 
 ### Ley 21.595 / Ley 20.393 - Delitos economicos
 
-Score preliminar: **2.5/10**.
+Score beta controlada: **7.8/10**.
 
 La app ya tiene controles tecnicos que sirven como evidencia parcial:
 auditoria de cuenta, soporte read-only, modo Genesys acotado, locks de emision,
-validaciones de pago y logs de acciones sensibles. Pero no hay un sistema de
-prevencion como tal.
+validaciones de pago, logs de acciones sensibles y documentos iniciales de MPD.
+Es una base proporcional para beta controlada, no un modelo certificado.
 
-Brechas principales:
+Pendiente para 9/10:
 
-- Sin responsable/oficial de prevencion definido.
-- Sin matriz de riesgos por proceso: emision, soporte, pagos, proveedores IA,
-  SII/local extension, datos tributarios, Telegram, acceso dev y billing.
-- Sin codigo de etica/conducta aplicable al equipo operador.
-- Sin canal de denuncia anonimo y proteccion contra represalias.
-- Sin controles escritos de segregacion/autorizacion para pagos, soporte,
-  acceso a datos, cambios productivos y manejo de incidentes.
-- Sin capacitacion ni evidencia de aceptacion de politicas.
-- Sin supervision externa periodica del modelo.
+- Responsable/oficial de prevencion nombrado formalmente.
+- Codigo de etica/conducta y canal de denuncia anonimo aplicable al equipo.
+- Evidencia de capacitacion/aceptacion de politicas.
+- Controles escritos mas detallados para pagos, soporte, cambios productivos y
+  manejo de incidentes.
+- Supervision o revision externa periodica del modelo.
 
 Prioridad: alta para operar como SaaS que toca impuestos, documentos y pagos.
-No bloquea programar, pero si deberia bloquear venta abierta sin documentos y
-controles minimos.
+No bloquea beta controlada, pero si deberia bloquear venta abierta sin revision
+legal/externa.
 
 ### Plan compliance incorporado
 
 Quick wins (1-3 dias):
 
-1. Crear inventario de tratamientos/RAT inicial con datos, finalidad, base legal,
+1. Hecho beta: inventario de tratamientos/RAT inicial con datos, finalidad,
    origen, destinatarios, retencion, seguridad y proveedor.
-2. Escribir politica de privacidad, terminos SaaS y DPA cliente-proveedor
-   versionados en `artifacts/docs` o carpeta legal separada.
-3. Definir proceso ARCO manual asistido: correo/canal, SLA interno, responsable,
+2. Hecho beta: politica de privacidad, terminos SaaS y DPA/subencargados
+   versionados, mas paginas publicas `/legal/*`.
+3. Hecho beta: proceso ARCO manual asistido: correo/canal, SLA interno,
    checklist de busqueda/exportacion/borrado y log de respuesta.
-4. Mapear proveedores y transferencias: Supabase, Vercel, IA, Telegram, Mercado
+4. Hecho beta: mapa de proveedores y transferencias: Supabase, Vercel, IA, Telegram, Mercado
    Pago, GitHub/logs. Decidir que datos puede recibir cada uno.
-5. Crear plan de brechas v0: severidad, registro, comunicacion interna,
+5. Hecho beta: plan de brechas v0: severidad, registro, comunicacion interna,
    contencion, notificacion, evidencias y postmortem.
-6. Crear MPD minimo: responsable, matriz de riesgos, codigo de conducta,
+6. Hecho beta: MPD minimo: responsable, matriz de riesgos, codigo de conducta,
    canal de denuncias, controles, capacitacion y revision periodica.
 7. Usar `compliance-cl` solo como herramienta/referencia en rama separada si se
    decide adoptarla; no copiar codigo ni documentos sin revision.
@@ -405,9 +402,8 @@ Debilidades:
 
 - Dashboard `/massdte` hace muchas queries server-side y algunas traen hasta
   5000 boletas.
-- OCR/parse/AI puede exceder tiempo/memoria serverless.
-- No hay cola durable implementada para documentos, OCR ni IA; `ENG-003`
-  especifica el contrato de cierre.
+- OCR/parse/AI ya pasa por cola durable base, pero el worker corre en Vercel
+  Functions y el cron actual es diario por configuracion conservadora.
 - Lighthouse CI queda integrado para rutas publicas sin sesion; falta extender
   budgets a `/massdte` y `/dev/cuentas` con estado autenticado controlado.
 - No hay load test ni simulacion de multiples cuentas/equipos.
@@ -416,9 +412,10 @@ Debilidades:
 
 Estado:
 
-- `npm run test`: 11 archivos, 83 tests, OK.
+- `npm run test`: 14 archivos, 93 tests, OK.
 - Playwright audits productivos cubren dev/support/roles/locks.
-- Nuevos tests cubren upload validation, preview Excel estructurado y headers.
+- Nuevos tests cubren upload validation, preview Excel estructurado, headers,
+  rate limits, sanitizacion ops y helpers de cola durable.
 
 Brechas:
 
@@ -426,7 +423,8 @@ Brechas:
 - Falta test de API para cada mutacion service-role.
 - Falta test de billing: webhook firmado, idempotencia, estados morosa/pausada,
   addon pendiente.
-- Falta ampliar upload tests a ruta HTTP completa y PDFs maliciosos.
+- Falta ampliar upload tests a ruta HTTP completa, PDFs maliciosos y corrida
+  real post-cola con Excel/PDF/imagen.
 - Falta automatizar o repetir con checklist versionado el smoke extension/SII
   real ya informado OK por el usuario.
 
@@ -435,18 +433,20 @@ Brechas:
 Fortalezas:
 
 - GitHub Actions agregado con install, lint, test, build y audit production.
-- Vercel build OK.
-- `vercel.json` tiene cron de pagos.
+- Lighthouse CI agregado para rutas publicas sin sesion.
+- Vercel preview/prod OK en PRs reales.
+- `vercel.json` tiene cron de pagos, ops y documentos.
 - Supabase migrations y scripts locales existen.
 - `.gitignore` ignora `.vercel/token` y `.supabase/token`; no aparecen
   versionados en `git ls-files`.
 
 Debilidades:
 
-- Falta correr CI en PR real y activar branch protection.
+- Falta activar branch protection formal.
 - Deploy manual/agent-driven.
-- No hay observabilidad formal: Sentry, alertas, log drains, uptime checks.
-- Runbook beta inicial creado; falta validarlo post-deploy con auditorias.
+- Hay observabilidad base en `ops_events` y `/dev/diagnostico`; falta Sentry,
+  log drain, uptime checks y alertas externas.
+- Runbook beta inicial creado; falta validarlo con primera cuenta beta real.
 
 ### SaaS
 
@@ -477,8 +477,8 @@ Brechas:
 3. Hecho: `npm audit --audit-level=moderate` en 0 vulnerabilidades.
 4. Hecho: headers base de seguridad en `next.config.ts`.
 5. Hecho: preview Excel sin `dangerouslySetInnerHTML`.
-6. Hecho parcial: `/api/subir-procesar` valida base64, tamano, tipo, MIME,
-   extension y nombre; falta aplicar patron al resto de OCR/documentos.
+6. Hecho: `/api/subir-procesar` valida base64, tamano, tipo, MIME, extension y
+   nombre, y encola job durable antes del trabajo pesado.
 7. Hecho parcial: rate limit inicial en upload/procesar, OCR comprobante,
    checkout y jobs de emision.
 8. Pendiente: centralizar guard de modo soporte read-only para mutaciones.
@@ -486,17 +486,19 @@ Brechas:
    account guard, upload, checkout, emision jobs.
 10. Hecho parcial: `LAUNCH-002` tiene runbook beta inicial; falta validar
    post-deploy.
-11. Hecho parcial: `COMPLIANCE-001` tiene RAT/proveedores/ARCO/retencion/
-    brechas/MPD minimo; falta revision legal y bajada a producto.
+11. Hecho beta: `COMPLIANCE-001` tiene RAT/DPA/proveedores/ARCO/retencion/
+    brechas/MPD, paginas publicas legales y score 8/10 para beta controlada;
+    falta revision legal externa.
 
 ### Medio Plazo (1-3 semanas)
 
 1. Convertir `LAUNCH-001` en smoke reproducible: checklist versionado,
    evidencia enmascarada, version de extension, job/lock/folio y resultado.
-2. Implementar cola durable para OCR/IA/procesamiento:
-   Supabase queue/table jobs, Inngest/Trigger.dev/Cloud Tasks o worker propio.
-3. Observabilidad: Sentry, Vercel log drain, alertas por 5xx, errores IA,
-   pagos fallidos, jobs atascados, locks expirados, webhook retries.
+2. Escalar cola durable OCR/IA/procesamiento:
+   scheduler subdiario, worker dedicado o proveedor tipo Inngest/Trigger.dev/
+   Cloud Tasks si el volumen supera Vercel cron diario.
+3. Observabilidad avanzada: Sentry, Vercel log drain, alertas por 5xx, errores
+   IA, pagos fallidos, jobs atascados, locks expirados, webhook retries.
 4. Feature flags/auditoria de flags para proveedores de emision, Telegram,
    billing y modo beta.
 5. Test suite API/integration para billing completo:
@@ -521,20 +523,24 @@ Go para beta controlada de la app web, con mensaje acotado:
 
 No-go para lanzamiento abierto o venta fuerte de emision SII masiva:
 
-- Falta observabilidad y alertas sobre emision real, upload, IA, pagos y locks.
-- Falta cola durable para OCR/IA/procesamiento.
 - Falta runbook operacional validado con primera cuenta beta.
-- Falta programa minimo de privacidad/compliance chileno para datos personales,
-  proveedores, derechos ARCO, retencion, brechas y MPD.
+- Falta revision legal externa del paquete compliance 8 beta y contratos/DPA.
+- Falta alertas externas/log drain/Sentry para emision real, upload, IA, pagos
+  y locks.
+- Falta smoke reproducible de extension/SII/CAF versionado y enmascarado.
+- Falta prueba real post-cola con Excel/PDF/imagen y monitoreo de costos IA.
 
 ## Score Final
 
-**74/100 post-LAUNCH-001 y hardening inicial.**
+**82/100 para beta controlada despues de observabilidad base, cola durable
+OCR/IA/documentos y compliance Chile 8/10 beta.**
 
 Referencia interna: el score ajustado con compliance antes de esta rama era
 62/100. Sube por lint/CI/audit/headers/upload/Excel/runbook/compliance minimo,
-smoke manual SII/CAF y rate limits iniciales, pero sigue bloqueado para
-lanzamiento abierto por observabilidad, cola durable y revision legal externa.
+smoke manual SII/CAF, rate limits iniciales, observabilidad base, cola durable
+y paquete compliance 8 beta. Sigue bloqueado para lanzamiento abierto por
+revision legal externa, alertas externas, smoke reproducible y pruebas reales
+de carga/documentos.
 
 Lectura directa: producto bien pensado, base SaaS prometedora, pero aun no es
 produccion madura. Esta en el punto correcto para ordenar fundamentos
