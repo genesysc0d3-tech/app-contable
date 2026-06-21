@@ -49,7 +49,16 @@ SESSION_NOTES.md
 
 # local SII/debug artifacts
 /.sii-explorer-profile/
-/artifacts/
+/artifacts/*
+!/artifacts/README.md
+!/artifacts/signals/
+!/artifacts/signals/*.md
+!/artifacts/tasks/
+!/artifacts/tasks/*.md
+!/artifacts/docs/
+!/artifacts/docs/*.md
+!/artifacts/runs/
+!/artifacts/runs/*.md
 /*.xlsx
 /~$*.xlsx
 .vercel/token

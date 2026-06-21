@@ -1,0 +1,8 @@
+{
+  "project": "MassDTE",
+  "feature_directory": "specs",
+  "feature_numbering": "sequential",
+  "agent_runtime": ["codex", "claude"],
+  "workflow": "specify-plan-tasks-implement",
+  "notes": "Spec Kit local para coordinar agentes. No requiere CLI instalado para trabajar."
+}
