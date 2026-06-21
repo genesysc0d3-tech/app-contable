@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
+import { formatShortDateEsCl } from "@/lib/display-date";
 
 interface Item {
   id: string;
@@ -278,7 +279,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                 <div className="inf">
                   <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
                   <div className="sub">
-                    {item.receptor_rut ?? "Sin RUT"} · {(function(){const d=new Date(item.fecha);const ms=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];return d.getDate()+" "+ms[d.getMonth()]+" "+d.getFullYear()})()}
+                    {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
                   </div>
                   {item.motivo_no_listo && (
                     <div className="sub rn">

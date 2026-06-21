@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { formatShortDateEsCl } from "@/lib/display-date";
+import { addDaysIso, chileDateString } from "@/lib/chile-date";
 
 interface ActivityEvent {
   type: "subida" | "aprobacion" | "emision" | "rechazo";
@@ -11,13 +13,11 @@ interface ActivityEvent {
 }
 
 function dayLabel(s: string) {
-  const d = new Date(s + "T12:00:00");
-  const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
-  const diff = Math.round((hoy.getTime() - d.getTime()) / 86400000);
-  if (diff === 0) return "Hoy";
-  if (diff === 1) return "Ayer";
-  const ms = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  return `${d.getDate()} ${ms[d.getMonth()]} ${d.getFullYear()}`;
+  if (!s || s === "sin-fecha") return "Sin fecha";
+  const hoy = chileDateString();
+  if (s === hoy) return "Hoy";
+  if (s === addDaysIso(hoy, -1)) return "Ayer";
+  return formatShortDateEsCl(s, true);
 }
 
 const TYPE_META: Record<string, { icon: string; color: string; bg: string }> = {

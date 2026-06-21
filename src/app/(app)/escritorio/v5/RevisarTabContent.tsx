@@ -6,6 +6,7 @@ import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRev
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import type { Tables } from "@/lib/database.types";
+import { formatShortDateEsCl } from "@/lib/display-date";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -27,10 +28,7 @@ function fmt(n: number | null | undefined): string {
 }
 
 function fmtShort(d: string | null | undefined): string {
-  if (!d) return "";
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return "";
-  return `${dt.getDate()} ${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][dt.getMonth()]} ${dt.getFullYear()}`;
+  return formatShortDateEsCl(d, true);
 }
 
 // Tipo de la propuesta para decisión rápida: visible tanto en la fila

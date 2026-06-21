@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { aprobarPropuesta, rechazarPropuesta } from "../../../revisar/actions";
 import type { Tables } from "@/lib/database.types";
+import { formatShortDateEsCl } from "@/lib/display-date";
+import { addDaysIso, chileDateString } from "@/lib/chile-date";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -15,13 +17,11 @@ type Propuesta = Tables<"propuestas_ia"> & {
 function fmt(n: number | null | undefined) { return `$${Math.round(n ?? 0).toLocaleString("es-CL")}`; }
 
 function dayLabel(s: string) {
-  const d = new Date(s + "T12:00:00");
-  const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
-  const diff = Math.round((hoy.getTime() - d.getTime()) / 86400000);
-  if (diff === 0) return "Hoy";
-  if (diff === 1) return "Ayer";
-  const ms = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  return `${ms[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  if (!s || s === "sin-fecha") return "Sin fecha";
+  const hoy = chileDateString();
+  if (s === hoy) return "Hoy";
+  if (s === addDaysIso(hoy, -1)) return "Ayer";
+  return formatShortDateEsCl(s, true).replace(/^(\d+) (\w+) (.+)$/, "$2 $1, $3");
 }
 
 export default function RevisarFullView({

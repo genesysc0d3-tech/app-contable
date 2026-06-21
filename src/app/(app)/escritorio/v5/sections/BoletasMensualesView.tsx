@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import { chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
 export interface BoletaRow {
   id: string; folio: number | null; tipo_dte: number; fecha_emision: string; created_at?: string | null;
@@ -12,10 +13,7 @@ export interface BoletaRow {
 function fmt(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
 
 function fmtDate(s?: string | null) {
-  if (!s) return "-";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "");
+  return formatDisplayDateEsCl(s, { day: "2-digit", month: "short", year: "numeric" }, "-").replace(/\./g, "");
 }
 
 const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
@@ -47,11 +45,10 @@ export default function BoletasMensualesView({ boletas, month, year }: {
 
   // Month filter (only when no search)
   const monthFiltered = useMemo(() => {
+    const targetMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
     return boletas.filter(b => {
-      const emision = new Date(b.fecha_emision);
-      const edicion = new Date(b.created_at ?? b.fecha_emision);
-      const matchesEmision = emision.getFullYear() === year && emision.getMonth() === month;
-      const matchesEdicion = edicion.getFullYear() === year && edicion.getMonth() === month;
+      const matchesEmision = chileDisplayMonthKey(b.fecha_emision) === targetMonth;
+      const matchesEdicion = chileDisplayMonthKey(b.created_at ?? b.fecha_emision) === targetMonth;
       return matchesEmision || matchesEdicion;
     }).sort((a, b) => (b.folio ?? 0) - (a.folio ?? 0));
   }, [boletas, year, month]);

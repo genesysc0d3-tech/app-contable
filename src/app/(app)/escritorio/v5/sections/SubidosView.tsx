@@ -3,17 +3,14 @@
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Tables } from "@/lib/database.types";
+import { formatDisplayDateEsCl, formatShortDateEsCl } from "@/lib/display-date";
 
 const stColors: Record<string, string> = { procesado: "var(--green)", procesando: "var(--blue)", error: "var(--accent)", subido: "var(--amber)" };
 const stLabels: Record<string, string> = { procesado: "Listo", procesando: "Procesando", error: "Error", subido: "Pendiente" };
 const extIcons: Record<string, string> = { excel: "XLS", pdf: "PDF", csv: "CSV", imagen: "IMG", whatsapp: "WP" };
 
-const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 function fmtFecha(s: string) {
-  if (!s) return "";
-  const d = new Date(s);
-  if (isNaN(d.getTime())) return s;
-  return `${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
+  return formatShortDateEsCl(s, true) || s;
 }
 
 export default function SubidosView({
@@ -121,7 +118,7 @@ export default function SubidosView({
             fontSize: 10, fontWeight: 600, color: "var(--text2)", padding: "0 0 4px",
             borderBottom: "1px solid var(--border)",
           }}>
-            {new Date(date + "T12:00:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}
+            {formatDisplayDateEsCl(date, { weekday: "short", day: "numeric", month: "short" }, date)}
           </div>
           {docs.length === 0 ? (
             <div style={{ fontSize: 9, color: "var(--text3)", padding: 8, textAlign: "center" }}>Sin docs</div>

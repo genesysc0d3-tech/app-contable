@@ -13,6 +13,7 @@ import {
   crearClienteDesdeRevisar,
   devolverAOmitidos,
 } from "@/app/(app)/revisar/actions";
+import { formatShortDateEsCl } from "@/lib/display-date";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw">;
@@ -64,9 +65,7 @@ function recalcIva(total: number, tieneIva: boolean) {
 }
 
 function formatFecha(d: string): string {
-  const dt = new Date(d);
-  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  return `${dt.getDate()} ${meses[dt.getMonth()]}`;
+  return formatShortDateEsCl(d);
 }
 
 export default function PropuestaCard({ propuesta, clientes, empresaId, onAction, omitidosAnidados = [], initialEditing = false }: PropuestaCardProps) {
@@ -339,9 +338,7 @@ function OmitidosAnidados({ omitidos, onAction }: { omitidos: Propuesta[]; onAct
   const { toast } = useToast();
 
   function formatFecha(d: string) {
-    const dt = new Date(d);
-    const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-    return `${dt.getDate()} ${meses[dt.getMonth()]}`;
+    return formatShortDateEsCl(d);
   }
 
   async function handleAprobar(id: string) {

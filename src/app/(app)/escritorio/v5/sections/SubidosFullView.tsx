@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { formatShortDateEsCl } from "@/lib/display-date";
+import { addDaysIso, chileDateString } from "@/lib/chile-date";
 
 interface DocRaw {
   id: string; nombre_archivo: string; tipo: string; estado: string;
@@ -12,12 +14,11 @@ const stLabels: Record<string, string> = { procesado: "Listo", procesando: "Proc
 const tipoIcons: Record<string, string> = { excel: "XLS", pdf: "PDF", csv: "CSV", imagen: "IMG", whatsapp: "WP", boleta_unica: "DTE" };
 
 function dayLabel(s: string) {
-  const d = new Date(s + "T12:00:00");
-  const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
-  const diff = Math.round((hoy.getTime() - d.getTime()) / 86400000);
-  if (diff === 0) return "Hoy";
-  if (diff === 1) return "Ayer";
-  const __meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]; return __meses[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  if (!s || s === "sin-fecha") return "Sin fecha";
+  const hoy = chileDateString();
+  if (s === hoy) return "Hoy";
+  if (s === addDaysIso(hoy, -1)) return "Ayer";
+  return formatShortDateEsCl(s, true).replace(/^(\d+) (\w+) (.+)$/, "$2 $1, $3");
 }
 
 export default function SubidosFullView({ documentos }: { documentos: DocRaw[] }) {
