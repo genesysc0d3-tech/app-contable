@@ -109,10 +109,12 @@ Estado: cerrado y redeployado.
 
 ### P1 Antes De Beta Pagada
 
-- Runbook de primera cuenta beta todavia no esta formalizado.
+- Runbook de primera cuenta beta ya existe; falta validarlo despues del deploy.
 - Falta checklist de rollback/soporte para fallos de emision real.
 - Falta definir criterio de exito para primera emision real aceptada/rechazada.
 - Falta una pasada manual mobile/desktop final de onboarding y compra.
+- Compliance minimo iniciado: RAT/proveedores/ARCO/retencion/brechas/MPD. Falta
+  revision legal y bajada a flujos operativos.
 
 ### P2 Post Beta
 
@@ -125,7 +127,8 @@ Estado: cerrado y redeployado.
 | Prioridad | Item | Estado | Artifact |
 |---|---|---|---|
 | P0 | Smoke real extension/SII/CAF | open | `artifacts/tasks/LAUNCH-001-extension-sii-caf-smoke.md` |
-| P1 | Runbook beta primer cliente | open | `artifacts/tasks/LAUNCH-002-first-beta-runbook.md` |
+| P1 | Runbook beta primer cliente | in_progress | `artifacts/tasks/LAUNCH-002-first-beta-runbook.md` |
+| P1 | Compliance Chile minimo | in_progress | `artifacts/tasks/COMPLIANCE-001-ley-21719-21595-readiness.md` |
 | P1 | Checklist final compra/onboarding/mobile | pendiente | crear despues de runbook beta |
 | P2 | Lighthouse performance/accessibility | pendiente | puede agregarse a `audit:app --lighthouse` si se instala paquete |
 | P2 | Limpieza de reportes intermedios locales | pendiente | no borrar sin decision explicita |

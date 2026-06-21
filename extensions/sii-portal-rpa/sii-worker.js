@@ -425,7 +425,7 @@
     return true;
   }
 
-  async function openSelectByValue(value) {
+  async function _openSelectByValue(value) {
     const dialog = document.querySelector(".v-dialog.v-dialog--active") || document;
     const slots = Array.from(dialog.querySelectorAll(".v-select__slot, .v-input__slot"));
     const slot = slots.find((element) => normalizeText(element.innerText || element.textContent).includes(normalizeText(value)));
@@ -434,7 +434,7 @@
     return true;
   }
 
-  async function chooseMenuOption(option) {
+  async function _chooseMenuOption(option) {
     await new Promise((resolve) => setTimeout(resolve, 450));
     return clickVisibleText(option, document);
   }

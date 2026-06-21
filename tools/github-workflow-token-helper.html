@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guardar token GitHub workflow</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1014;
+      --surface: #17191f;
+      --surface2: #20232b;
+      --border: rgba(255,255,255,.12);
+      --text: #f3f4f6;
+      --muted: #a1a7b3;
+      --accent: #E8553E;
+      --good: #22c55e;
+      --bad: #ef4444;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(720px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 24px 80px rgba(0,0,0,.35);
+      overflow: hidden;
+    }
+
+    header, section {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section:last-child { border-bottom: 0; }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      color: var(--text);
+      padding: 12px;
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: color-mix(in srgb, var(--accent), white 20%);
+      box-shadow: 0 0 0 3px rgba(232,85,62,.18);
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    button {
+      border: 1px solid rgba(232,85,62,.55);
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      padding: 12px 14px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: var(--surface2);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+      padding: 14px;
+      border-radius: 8px;
+      background: #0b0c10;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status {
+      min-height: 22px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .ok { color: var(--good); }
+    .bad { color: var(--bad); }
+
+    @media (max-width: 620px) {
+      body { padding: 12px; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Guardar token GitHub con workflow</h1>
+      <p>Este archivo es local. No envia el token a ningun servidor. Solo escribe <strong>.env.github</strong> dentro de la carpeta del proyecto que elijas.</p>
+    </header>
+
+    <section class="grid">
+      <div>
+        <label for="token">GH_TOKEN</label>
+        <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_... o ghp_...">
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="user">GH_USER</label>
+          <input id="user" autocomplete="off" spellcheck="false" value="genesysc0d3-tech">
+        </div>
+        <div>
+          <label for="email">GH_EMAIL</label>
+          <input id="email" type="email" autocomplete="off" spellcheck="false" placeholder="tu email GitHub">
+        </div>
+      </div>
+
+      <button id="save">Elegir carpeta del proyecto y guardar .env.github</button>
+      <button id="download" class="secondary">Fallback: descargar .env.github</button>
+      <div id="status" class="status">Listo.</div>
+    </section>
+
+    <section class="grid">
+      <p>Despues de guardar, vuelve al chat y yo hago el push con:</p>
+      <pre>set -a; source .env.github; set +a; GIT_TERMINAL_PROMPT=0 git push -u "https://x-access-token:${GH_TOKEN}@github.com/genesysc0d3-tech/app-contable.git" chore/production-readiness-compliance</pre>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $("status");
+
+    function setStatus(message, tone = "") {
+      statusEl.className = `status ${tone}`;
+      statusEl.textContent = message;
+    }
+
+    function clean(value) {
+      return String(value || "").trim();
+    }
+
+    function buildEnv() {
+      const token = clean($("token").value);
+      const user = clean($("user").value) || "genesysc0d3-tech";
+      const email = clean($("email").value);
+
+      if (!token) throw new Error("Pega el GH_TOKEN primero.");
+      if (!/^(ghp_|github_pat_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9_]+/.test(token)) {
+        throw new Error("El token no parece de GitHub. Debe empezar con ghp_ o github_pat_.");
+      }
+      if (!email) throw new Error("Agrega GH_EMAIL.");
+
+      return `GH_TOKEN=${token}\nGH_USER=${user}\nGH_EMAIL=${email}\n`;
+    }
+
+    async function verifyProjectFolder(dirHandle) {
+      try {
+        await dirHandle.getFileHandle("package.json");
+        await dirHandle.getFileHandle("AGENTS.md");
+      } catch {
+        throw new Error("Esa carpeta no parece /Users/take/Desktop/app-contable. Elige la carpeta del proyecto.");
+      }
+    }
+
+    $("save").addEventListener("click", async () => {
+      try {
+        const env = buildEnv();
+        if (!window.showDirectoryPicker) {
+          throw new Error("Tu navegador no permite guardar directo en una carpeta. Usa Chrome o el boton fallback.");
+        }
+
+        const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+        await verifyProjectFolder(dirHandle);
+        const fileHandle = await dirHandle.getFileHandle(".env.github", { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(env);
+        await writable.close();
+        $("token").value = "";
+        setStatus("Guardado: .env.github actualizado dentro del proyecto.", "ok");
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "No se pudo guardar.", "bad");
+      }
+    });
+
+    $("download").addEventListener("click", () => {
+      try {
+        const env = buildEnv();
+        const blob = new Blob([env], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = ".env.github";
+        a.click();
+        URL.revokeObjectURL(url);
+        $("token").value = "";
+        setStatus("Descargado .env.github. Muevelo a la carpeta del proyecto si usaste fallback.", "ok");
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "No se pudo descargar.", "bad");
+      }
+    });
+  </script>
+</body>
+</html>

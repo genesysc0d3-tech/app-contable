@@ -7,6 +7,58 @@ facturacion o gating.
 No es una bitacora corta. Es contexto operativo y de producto para no volver a
 decidir desde cero.
 
+## 0. Referencias Compliance / Legal
+
+Referencia externa a considerar para una fase separada de compliance chileno:
+`https://github.com/Lelemon-studio/compliance-cl`.
+
+Segun su README, `compliance-cl` es una skill para auditar SaaS chilenos contra
+Ley 21.719 de datos personales y Ley 21.595 de delitos economicos, usando texto
+oficial versionado. Promete generar inventario, diagnostico tecnico y documentos
+como RAT, politica de privacidad, DPA, plan de brechas, modelo de prevencion de
+delitos, codigo de etica y matriz de riesgos en `.compliance/`.
+
+Uso recomendado para MassDTE: evaluarla como insumo/herramienta cuando se abra
+la fase de privacidad, datos personales, retencion de documentos tributarios,
+transferencias a proveedores (Supabase, Vercel, IA, Telegram, Mercado Pago),
+respuesta a brechas, derechos ARCO, contratos/DPA y readiness legal antes de
+beta pagada o lanzamiento abierto. No instalar ni copiar codigo del repo externo
+sin decision explicita.
+
+### Sesion 2026-06-21 - Readiness tecnico/compliance
+
+**Que se hizo:**
+- Se implemento un sprint de readiness en la rama
+  `chore/production-readiness-compliance`.
+- Lint quedo verde y se agrego CI en GitHub Actions con install, lint, test,
+  build y audit production.
+- Se agregaron headers base en `next.config.ts`: HSTS, nosniff,
+  Referrer-Policy, Permissions-Policy, X-Frame-Options y CSP minima.
+- `VisualizarArchivo` dejo de usar `XLSX.utils.sheet_to_html` y
+  `dangerouslySetInnerHTML`; ahora renderiza celdas como React desde datos
+  estructurados.
+- `/api/subir-procesar` valida base64 antes de `Buffer.from`, limite decoded
+  10 MiB, tipo/MIME/extension permitidos y nombre sanitizado.
+- `npm audit` quedo en 0 vulnerabilidades con updates no destructivos y override
+  de `postcss`.
+- Se creo runbook de primera beta controlada:
+  `artifacts/docs/first-beta-runbook-2026-06-21.md`.
+- Se creo paquete compliance minimo:
+  `artifacts/docs/compliance/massdte-compliance-minimo-2026-06-21.md`.
+- `LAUNCH-002` y `COMPLIANCE-001` quedan `in_progress`, no cerrados: falta
+  validacion post-deploy, revision legal externa y bajada a flujos producto.
+
+**Verificacion:**
+- `npm run lint`: OK.
+- `npm run test`: OK, 11 archivos, 83 tests.
+- `npm run build`: OK.
+- `npm audit --audit-level=moderate`: OK, 0 vulnerabilidades.
+- `git diff --check`: OK.
+
+**Pendiente critico:**
+- `LAUNCH-001`: smoke real extension/SII/CAF sigue siendo P0 antes de prometer
+  emision tributaria real completa.
+
 ## 1. Cliente Objetivo
 
 MassDTE no se vende principalmente a contadores. Se vende a personas que no

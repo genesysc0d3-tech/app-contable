@@ -9,6 +9,7 @@
  */
 
 import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Tables } from "@/lib/database.types";
 import {
@@ -902,7 +903,7 @@ export default function DevPanelClient({
             </span>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <a
+            <Link
               href="/dev/cuentas"
               style={{
                 fontSize: 10,
@@ -917,7 +918,7 @@ export default function DevPanelClient({
               }}
             >
               Cuentas
-            </a>
+            </Link>
             <span style={{ fontSize: 10, color: C.text2, fontVariantNumeric: "tabular-nums" }}>
               {mesLegible(stats.periodo)} · UF {fmtClp(stats.ufClp)}
             </span>

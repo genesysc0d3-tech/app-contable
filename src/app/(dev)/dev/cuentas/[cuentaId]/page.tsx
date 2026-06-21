@@ -144,7 +144,6 @@ function QuickCheck({
   tone: "ok" | "warning" | "error" | "muted";
   sub?: string;
 }) {
-  const color = toneColor(tone);
   return (
     <div style={{ borderTop: `1px solid ${C.border}`, padding: "9px 0", minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>

@@ -153,6 +153,12 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
   `.specify/memory/constitution.md` antes de abrir o ejecutar una feature
   grande en `specs/NNN-nombre`. Los loops deciden que trabajo existe; Spec Kit
   define spec/plan/tasks antes de implementar.
+- Referencia compliance Chile: considerar
+  `https://github.com/Lelemon-studio/compliance-cl` cuando se trabaje
+  privacidad, Ley 21.719, Ley 21.595, politicas, DPA, RAT, respuesta a
+  brechas, modelo de prevencion de delitos o readiness legal/compliance. Es una
+  skill/repo externo; no copiar codigo sin decision explicita, usarla como
+  referencia o posible herramienta para una fase separada de compliance.
 
 ### Sesion actual (2026-06-15)
 

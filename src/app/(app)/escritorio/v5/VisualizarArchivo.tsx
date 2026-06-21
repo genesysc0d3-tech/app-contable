@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
+import { workbookToPreviewSheets, type ExcelPreviewSheet } from "@/lib/excel/preview";
 import * as XLSX from "xlsx";
 
 export default function VisualizarArchivo({
@@ -14,7 +15,7 @@ export default function VisualizarArchivo({
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sheets, setSheets] = useState<{ name: string; html: string; rows: number; cols: number }[]>([]);
+  const [sheets, setSheets] = useState<ExcelPreviewSheet[]>([]);
   const [activeSheet, setActiveSheet] = useState(0);
   const [fileName, setFileName] = useState("");
 
@@ -52,18 +53,7 @@ export default function VisualizarArchivo({
         const buffer = await file.arrayBuffer();
         const workbook = XLSX.read(buffer, { type: "array" });
 
-        const parsed = workbook.SheetNames.map((name) => {
-          const sheet = workbook.Sheets[name];
-          const html = XLSX.utils.sheet_to_html(sheet, { id: `sheet-${name}` });
-          const ref = sheet["!ref"];
-          if (ref) {
-            const range = XLSX.utils.decode_range(ref);
-            return { name, html, rows: range.e.r - range.s.r + 1, cols: range.e.c - range.s.c + 1 };
-          }
-          return { name, html, rows: 0, cols: 0 };
-        });
-
-        setSheets(parsed);
+        setSheets(workbookToPreviewSheets(workbook));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al leer archivo");
       } finally {
@@ -160,20 +150,28 @@ export default function VisualizarArchivo({
               {error}
             </div>
           ) : (
-            <div
-              className="vx-scroll"
-              style={{ padding: "4px 0", minHeight: 200, overflowX: "auto" }}
-              dangerouslySetInnerHTML={{ __html: sheets[activeSheet]?.html ?? "" }}
-            />
+            <div className="vx-scroll" style={{ padding: "4px 0", minHeight: 200, overflowX: "auto" }}>
+              <table className="vx-table">
+                <tbody>
+                  {(sheets[activeSheet]?.rows ?? []).map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, colIndex) => (
+                        <td key={colIndex}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {/* FOOTER */}
         {sheets[activeSheet] && (
           <div style={{ padding: "8px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: 12, fontSize: 10, color: "var(--text2)", flexShrink: 0 }}>
-            <span>{sheets[activeSheet].rows} filas</span>
+            <span>{sheets[activeSheet].rowCount} filas</span>
             <span>·</span>
-            <span>{sheets[activeSheet].cols} columnas</span>
+            <span>{sheets[activeSheet].colCount} columnas</span>
           </div>
         )}
       </div>

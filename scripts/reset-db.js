@@ -1,23 +1,23 @@
-const { createClient } = require("@supabase/supabase-js");
-const fs = require("fs");
-const path = require("path");
+async function main() {
+  const { createClient } = await import("@supabase/supabase-js");
+  const fs = await import("node:fs");
+  const path = await import("node:path");
 
-// Read .env.local manually
-const envPath = path.join(__dirname, "..", ".env.local");
-const envContent = fs.readFileSync(envPath, "utf-8");
-const env = Object.fromEntries(
-  envContent.split("\n").filter(l => l.trim() && !l.startsWith("#")).map(l => {
-    const idx = l.indexOf("=");
-    return [l.slice(0, idx).trim(), l.slice(idx + 1).trim()];
-  })
-);
+  // Read .env.local manually
+  const envPath = path.join(process.cwd(), ".env.local");
+  const envContent = fs.readFileSync(envPath, "utf-8");
+  const env = Object.fromEntries(
+    envContent.split("\n").filter(l => l.trim() && !l.startsWith("#")).map(l => {
+      const idx = l.indexOf("=");
+      return [l.slice(0, idx).trim(), l.slice(idx + 1).trim()];
+    })
+  );
 
-const supabase = createClient(
-  env.NEXT_PUBLIC_SUPABASE_URL,
-  env.SUPABASE_SERVICE_ROLE_KEY
-);
+  const supabase = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
 
-async function reset() {
   const tables = [
     "items_documento",
     "boletas_emitidas",
@@ -39,4 +39,5 @@ async function reset() {
   }
   console.log("Done");
 }
-reset().catch(console.error);
+
+main().catch(console.error);
