@@ -1,5 +1,7 @@
 "use client";
 
+import { formatShortDateEsCl } from "@/lib/display-date";
+
 export interface ActividadItem {
   id: string;
   tipo: "subida" | "emision" | "aprobacion" | "rechazo";
@@ -10,10 +12,7 @@ export interface ActividadItem {
 }
 
 function timeAgo(dateStr: string): string {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "sin fecha";
-  const months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"];
-  return `${d.getDate()} ${months[d.getMonth()]}`;
+  return formatShortDateEsCl(dateStr) || "sin fecha";
 }
 
 export default function ActividadView({ items = [] }: { items?: ActividadItem[] }) {

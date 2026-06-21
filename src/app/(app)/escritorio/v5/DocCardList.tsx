@@ -10,6 +10,7 @@ import HintSelector from "@/components/upload/HintSelector";
 import GlosaComunControl from "./GlosaComunControl";
 import TermHint from "@/components/ui/TermHint";
 import VisualizarArchivo from "./VisualizarArchivo";
+import { formatDisplayDateEsCl } from "@/lib/display-date";
 
 const st: Record<string, string> = {procesado:"#22c55e",procesando:"#5b9cf6",error:"#ef4444",subido:"#f59e0b"};
 const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",error:"Error",subido:"Pendiente"};
@@ -95,8 +96,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
     return doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : doc.nombre_archivo.slice(0, 7);
   };
   const fmtFecha = (s: string): string => {
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+    return formatDisplayDateEsCl(s, { day: "2-digit", month: "short", year: "numeric" }, "");
   };
   const tipoEtiqueta = (doc: DocRaw): string => isBoletaTipo(doc.tipo) ? "Boleta única" : "Masivo";
 

@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toast";
 import { useAppStore } from "@/store/appStore";
 import type { Tables } from "@/lib/database.types";
 import { CaretRight, FileText, CheckCircle, Check, PencilSimple, XCircle, Warning, WarningOctagon, WarningCircle } from "@phosphor-icons/react";
+import { formatShortDateEsCl } from "@/lib/display-date";
 
 type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -50,11 +51,7 @@ function fmtCLP(n: number | null | undefined): string {
 }
 
 function fmtFechaCorta(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "";
-  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  return `${d.getDate()} ${meses[d.getMonth()]}`;
+  return formatShortDateEsCl(dateStr);
 }
 
 function ThinRow({ propuesta, onExpand, onEdit, onAction }: {
@@ -473,9 +470,7 @@ function ConfianzaGroup({ tipo, propuestas, clientes, empresaId, onAction, omiti
 function DocumentTab({ group, selected, onClick }: {
   group: DocumentGroup; selected: boolean; onClick: () => void;
 }) {
-  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  const d = new Date(group.fechaSubida);
-  const fecha = `${d.getDate()} ${meses[d.getMonth()]}`;
+  const fecha = formatShortDateEsCl(group.fechaSubida);
 
   return (
     <button

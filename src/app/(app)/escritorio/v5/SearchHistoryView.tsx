@@ -5,6 +5,8 @@ import { Search } from "lucide-react";
 import type { SearchItem } from "@/lib/tree-structure";
 import VisualizarArchivo from "./VisualizarArchivo";
 import EmpresaBrand from "./EmpresaBrand";
+import { addDaysIso, chileDateString } from "@/lib/chile-date";
+import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
 type FilterType = "todo" | SearchItem["type"];
 type DateMode = "emision" | "edicion";
@@ -79,43 +81,24 @@ function fmtMoney(n?: number | null) {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
-// Fechas date-only ("2026-06-09", típicas de fecha_emision) se interpretan
-// como UTC midnight por JS: formatearlas en hora local de Chile las corría
-// un día hacia atrás (grupo "9 de junio" mostraba 08-06-26). Date-only se
-// formatea en UTC (día literal); timestamps completos, en hora local.
-function isDateOnly(fecha: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(fecha);
-}
-
 function fmtDate(fecha: string, style: "short" | "long" = "short") {
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return "Sin fecha";
   const opts: Intl.DateTimeFormatOptions = style === "long"
     ? { day: "numeric", month: "long", year: "numeric" }
     : { day: "2-digit", month: "2-digit", year: "2-digit" };
-  if (isDateOnly(fecha)) opts.timeZone = "UTC";
-  return d.toLocaleDateString("es-CL", opts);
+  return formatDisplayDateEsCl(fecha, opts);
 }
 
 function fmtMonth(fecha: string) {
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return "Sin fecha";
-  const label = d.toLocaleDateString("es-CL", isDateOnly(fecha) ? { month: "long", year: "numeric", timeZone: "UTC" } : { month: "long", year: "numeric" });
+  const label = formatDisplayDateEsCl(fecha, { month: "long", year: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function getDateKey(fecha: string) {
-  if (isDateOnly(fecha)) return fecha;
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return "sin-fecha";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return chileDisplayDateKey(fecha);
 }
 
 function getMonthKey(fecha: string) {
-  if (isDateOnly(fecha)) return fecha.slice(0, 7);
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return "sin-fecha";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return chileDisplayMonthKey(fecha);
 }
 
 function getWorkspaceSubtitle(datePreset: DatePreset, selectedDate: string | null) {
@@ -204,15 +187,13 @@ function normalizeItem(item: SearchItem, dateMode: DateMode): NormalizedItem {
 function inDatePreset(date: string, preset: DatePreset, selectedDate: string | null) {
   if (preset === "all") return true;
   if (preset === "day") return selectedDate ? getDateKey(date) === selectedDate : true;
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return false;
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  if (preset === "today") return t === startToday;
-  if (preset === "7d") return t >= startToday - 6 * 86400000 && t <= startToday;
-  if (preset === "30d") return t >= startToday - 29 * 86400000 && t <= startToday;
-  if (preset === "month") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  const key = getDateKey(date);
+  if (key === "sin-fecha") return false;
+  const today = chileDateString();
+  if (preset === "today") return key === today;
+  if (preset === "7d") return key >= addDaysIso(today, -6) && key <= today;
+  if (preset === "30d") return key >= addDaysIso(today, -29) && key <= today;
+  if (preset === "month") return getMonthKey(date) === today.slice(0, 7);
   return true;
 }
 

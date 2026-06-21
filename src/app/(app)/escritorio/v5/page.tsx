@@ -28,6 +28,7 @@ import UsageCountersPanel from "./UsageCountersPanel";
 import DevSupportBanner from "./DevSupportBanner";
 import { listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
+import { formatDisplayDateEsCl, formatShortDateEsCl } from "@/lib/display-date";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
@@ -210,8 +211,7 @@ export default async function V5Page({ searchParams }: {
   const selectedDateLabel = (() => {
     if (isMonthMode) return monthNames[m].toLowerCase() + " " + y;
     if (isWeekMode) return `semana ${weekRange.start.slice(8, 10)}-${addDaysStr(weekRange.end, -1).slice(8, 10)} ${monthNames[m].toLowerCase()}`;
-    const [year, month, day] = selDate.split("-").map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+    return formatDisplayDateEsCl(selDate, { weekday: "long", day: "numeric", month: "long" }, selDate);
   })();
 
   const workStartDay = workStart.slice(0, 10);
@@ -736,7 +736,7 @@ body{font-family:'DM Sans',sans-serif}
                               </div>
                               <div className="sub" style={{fontSize:9,color:"var(--text2)",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                                 {b.es_unica && b.detalle ? <><span style={{color:"var(--text)"}}>{b.detalle}</span> · </> : null}
-                                {b.receptor_razon_social ?? "Sin receptor"} · {(function(){const d=new Date(b.fecha_emision);const ms=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];return d.getDate()+" "+ms[d.getMonth()]+" "+d.getFullYear()})()}
+                                {b.receptor_razon_social ?? "Sin receptor"} · {formatShortDateEsCl(b.fecha_emision, true)}
                               </div>
                             </div>
                             <span className="mo" style={{fontSize:11,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums",flexShrink:0}}>
