@@ -19,6 +19,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../database.types";
 import { chileDateString } from "../chile-date";
+import { contextoCuentaPorEmpresa, empresasActivasDeCuenta } from "../entitlements";
 
 type Sb = SupabaseClient<Database>;
 
@@ -105,12 +106,13 @@ function horaChile(date: Date): number {
   );
 }
 
-/** Boletas masivas emitidas desde `desdeIso` (y antes de `hastaIso` si viene). */
-async function contarMasivas(sb: Sb, empresaId: string, desdeIso: string, hastaIso?: string): Promise<number> {
+/** Boletas desde cartolas emitidas desde `desdeIso` (y antes de `hastaIso` si viene). */
+async function contarMasivas(sb: Sb, empresaIds: string[], desdeIso: string, hastaIso?: string): Promise<number> {
+  if (empresaIds.length === 0) return 0;
   let q = sb
     .from("boletas_emitidas")
     .select("id", { count: "exact", head: true })
-    .eq("empresa_id", empresaId)
+    .in("empresa_id", empresaIds)
     .not("propuesta_id", "is", null)
     .neq("estado", "anulada")
     .gte("created_at", desdeIso);
@@ -141,36 +143,54 @@ export interface EstadoCuota {
 export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new Date()): Promise<EstadoCuota> {
   const periodo = periodoActual(ahora);
   const rango = chileMonthUtcRange(periodo);
+  const cuenta = await contextoCuentaPorEmpresa(sb, empresaId);
+  const empresaIds = cuenta ? await empresasActivasDeCuenta(sb, cuenta.cuentaId) : [empresaId];
 
   const [suscripcionRes, usoMes] = await Promise.all([
-    sb
-      .from("suscripciones")
-      .select("plan_codigo, estado")
-      .eq("empresa_id", empresaId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    contarMasivas(sb, empresaId, rango.desde, rango.hasta),
+    cuenta
+      ? sb
+          .from("suscripciones")
+          .select("plan_codigo, estado")
+          .eq("cuenta_id", cuenta.cuentaId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : sb
+          .from("suscripciones")
+          .select("plan_codigo, estado")
+          .eq("empresa_id", empresaId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+    contarMasivas(sb, empresaIds, rango.desde, rango.hasta),
   ]);
 
   const suscripcion = suscripcionRes.data ?? null;
+  const planActivoManual = cuenta?.planActivo && cuenta.plan ? cuenta.plan : null;
+  const planActivo = suscripcion?.estado === "activa" ? suscripcion.plan_codigo : planActivoManual;
 
-  if (suscripcion?.estado === "activa") {
-    const [planRes, refillsRes] = await Promise.all([
-      sb.from("planes_config").select("cuota_masivas").eq("codigo", suscripcion.plan_codigo).maybeSingle(),
-      sb.from("refills").select("boletas").eq("empresa_id", empresaId).eq("periodo", periodo),
+  if (planActivo) {
+    const [planRes, refillsCuentaRes, refillsLegacyRes] = await Promise.all([
+      sb.from("planes_config").select("cuota_masivas").eq("codigo", planActivo).maybeSingle(),
+      cuenta
+        ? sb.from("refills").select("boletas").eq("cuenta_id", cuenta.cuentaId).eq("periodo", periodo)
+        : sb.from("refills").select("boletas").eq("empresa_id", empresaId).eq("periodo", periodo),
+      cuenta
+        ? sb.from("refills").select("boletas").is("cuenta_id", null).in("empresa_id", empresaIds).eq("periodo", periodo)
+        : Promise.resolve({ data: [], error: null }),
     ]);
     const cuota = planRes.data?.cuota_masivas ?? 0;
-    const refills = (refillsRes.data ?? []).reduce((s, r) => s + (r.boletas ?? 0), 0);
+    const refills = [...(refillsCuentaRes.data ?? []), ...(refillsLegacyRes.data ?? [])]
+      .reduce((s, r) => s + (r.boletas ?? 0), 0);
     return {
-      plan: suscripcion.plan_codigo,
+      plan: planActivo,
       cuota,
       refills,
       uso: usoMes,
       disponible: Math.max(0, cuota + refills - usoMes),
       trial: null,
       suscripcionActiva: true,
-      suscripcionEstado: suscripcion.estado,
+      suscripcionEstado: suscripcion?.estado ?? "activa_manual",
     };
   }
 
@@ -184,7 +204,7 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
   const trialMax = planTrialRes.data?.trial_boletas ?? 100;
   const inicio = empresaRes.data?.trial_inicio ?? null;
   // El cupo del trial se mide desde su inicio (no por mes calendario).
-  const boletasUsadas = inicio ? await contarMasivas(sb, empresaId, inicio) : 0;
+  const boletasUsadas = inicio ? await contarMasivas(sb, [empresaId], inicio) : 0;
   const vigencia = trialVigente(inicio, ahora, trialDias, boletasUsadas, trialMax);
 
   return {

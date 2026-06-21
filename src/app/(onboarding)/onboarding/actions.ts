@@ -62,5 +62,48 @@ export async function crearEmpresa(formData: FormData) {
     return { error: usuarioError.message };
   }
 
+  const { data: cuenta, error: cuentaError } = await admin
+    .from("cuentas")
+    .insert({
+      nombre: razon_social,
+      owner_usuario_id: user.id,
+      plan_codigo: null,
+      plan_activo: false,
+    })
+    .select("id")
+    .single();
+
+  if (cuentaError || !cuenta) {
+    await admin.from("empresas").delete().eq("id", empresa.id);
+    return { error: cuentaError?.message ?? "No se pudo crear la cuenta pagadora" };
+  }
+
+  const [{ error: cuentaEmpresaError }, { error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
+    admin.from("cuenta_empresas").insert({
+      cuenta_id: cuenta.id,
+      empresa_id: empresa.id,
+      es_principal: true,
+      activa: true,
+    }),
+    admin.from("cuenta_usuarios").insert({
+      cuenta_id: cuenta.id,
+      usuario_id: user.id,
+      es_titular: true,
+      activo: true,
+    }),
+    admin.from("usuario_empresas").insert({
+      usuario_id: user.id,
+      empresa_id: empresa.id,
+      rol: "titular",
+    }),
+  ]);
+
+  const membershipError = cuentaEmpresaError ?? cuentaUsuarioError ?? usuarioEmpresaError;
+  if (membershipError) {
+    await admin.from("cuentas").delete().eq("id", cuenta.id);
+    await admin.from("empresas").delete().eq("id", empresa.id);
+    return { error: membershipError.message };
+  }
+
   redirect("/planes");
 }

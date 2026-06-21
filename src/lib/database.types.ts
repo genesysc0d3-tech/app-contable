@@ -276,6 +276,419 @@ export type Database = {
           },
         ]
       }
+      cuenta_addons: {
+        Row: {
+          cantidad: number
+          cuenta_id: string
+          created_at: string
+          estado: string
+          id: string
+          origen: string
+          periodo: string | null
+          proveedor_ref: string | null
+          tipo: string
+        }
+        Insert: {
+          cantidad?: number
+          cuenta_id: string
+          created_at?: string
+          estado?: string
+          id?: string
+          origen?: string
+          periodo?: string | null
+          proveedor_ref?: string | null
+          tipo: string
+        }
+        Update: {
+          cantidad?: number
+          cuenta_id?: string
+          created_at?: string
+          estado?: string
+          id?: string
+          origen?: string
+          periodo?: string | null
+          proveedor_ref?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuenta_addons_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cuenta_empresas: {
+        Row: {
+          activa: boolean
+          cuenta_id: string
+          created_at: string
+          empresa_id: string
+          es_principal: boolean
+        }
+        Insert: {
+          activa?: boolean
+          cuenta_id: string
+          created_at?: string
+          empresa_id: string
+          es_principal?: boolean
+        }
+        Update: {
+          activa?: boolean
+          cuenta_id?: string
+          created_at?: string
+          empresa_id?: string
+          es_principal?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuenta_empresas_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuenta_empresas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cuenta_usuarios: {
+        Row: {
+          activo: boolean
+          cuenta_id: string
+          created_at: string
+          es_titular: boolean
+          usuario_id: string
+        }
+        Insert: {
+          activo?: boolean
+          cuenta_id: string
+          created_at?: string
+          es_titular?: boolean
+          usuario_id: string
+        }
+        Update: {
+          activo?: boolean
+          cuenta_id?: string
+          created_at?: string
+          es_titular?: boolean
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuenta_usuarios_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuenta_usuarios_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cuenta_audit_events: {
+        Row: {
+          accion: string
+          cuenta_id: string
+          created_at: string
+          empresa_id: string | null
+          id: string
+          metadata: Json
+          recurso_id: string | null
+          recurso_tipo: string | null
+          resumen: string
+          usuario_id: string | null
+        }
+        Insert: {
+          accion: string
+          cuenta_id: string
+          created_at?: string
+          empresa_id?: string | null
+          id?: string
+          metadata?: Json
+          recurso_id?: string | null
+          recurso_tipo?: string | null
+          resumen: string
+          usuario_id?: string | null
+        }
+        Update: {
+          accion?: string
+          cuenta_id?: string
+          created_at?: string
+          empresa_id?: string | null
+          id?: string
+          metadata?: Json
+          recurso_id?: string | null
+          recurso_tipo?: string | null
+          resumen?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuenta_audit_events_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuenta_audit_events_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuenta_audit_events_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cuentas: {
+        Row: {
+          created_at: string
+          id: string
+          nombre: string
+          owner_usuario_id: string | null
+          plan_activo: boolean
+          plan_codigo: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nombre: string
+          owner_usuario_id?: string | null
+          plan_activo?: boolean
+          plan_codigo?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nombre?: string
+          owner_usuario_id?: string | null
+          plan_activo?: boolean
+          plan_codigo?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuentas_owner_usuario_id_fkey"
+            columns: ["owner_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuentas_plan_codigo_fkey"
+            columns: ["plan_codigo"]
+            isOneToOne: false
+            referencedRelation: "planes_config"
+            referencedColumns: ["codigo"]
+          },
+        ]
+      }
+      emision_jobs: {
+        Row: {
+          created_at: string
+          cuenta_id: string
+          empresa_id: string
+          estado: string
+          estado_visible: string
+          expected_emisor_rut: string | null
+          expires_at: string
+          heartbeat_at: string
+          id: string
+          job_id: string
+          locked_until: string | null
+          origin: string
+          provider: string
+          status_message: string | null
+          updated_at: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          cuenta_id: string
+          empresa_id: string
+          estado?: string
+          estado_visible?: string
+          expected_emisor_rut?: string | null
+          expires_at: string
+          heartbeat_at?: string
+          id?: string
+          job_id: string
+          locked_until?: string | null
+          origin?: string
+          provider: string
+          status_message?: string | null
+          updated_at?: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          cuenta_id?: string
+          empresa_id?: string
+          estado?: string
+          estado_visible?: string
+          expected_emisor_rut?: string | null
+          expires_at?: string
+          heartbeat_at?: string
+          id?: string
+          job_id?: string
+          locked_until?: string | null
+          origin?: string
+          provider?: string
+          status_message?: string | null
+          updated_at?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emision_jobs_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emision_jobs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emision_jobs_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emision_locks: {
+        Row: {
+          cuenta_id: string
+          created_at: string
+          estado_visible: string
+          heartbeat_at: string
+          job_id: string
+          locked_until: string
+          provider: string
+          usuario_id: string
+        }
+        Insert: {
+          cuenta_id: string
+          created_at?: string
+          estado_visible?: string
+          heartbeat_at?: string
+          job_id: string
+          locked_until: string
+          provider: string
+          usuario_id: string
+        }
+        Update: {
+          cuenta_id?: string
+          created_at?: string
+          estado_visible?: string
+          heartbeat_at?: string
+          job_id?: string
+          locked_until?: string
+          provider?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emision_locks_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: true
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emision_locks_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "emision_jobs"
+            referencedColumns: ["job_id"]
+          },
+          {
+            foreignKeyName: "emision_locks_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folio_reservas: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          estado: string
+          expires_at: string
+          folio: number
+          id: string
+          job_id: string
+          tipo_dte: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          estado?: string
+          expires_at: string
+          folio: number
+          id?: string
+          job_id: string
+          tipo_dte: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          estado?: string
+          expires_at?: string
+          folio?: number
+          id?: string
+          job_id?: string
+          tipo_dte?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folio_reservas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folio_reservas_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "emision_jobs"
+            referencedColumns: ["job_id"]
+          },
+        ]
+      }
       clasificacion_reglas: {
         Row: {
           activa: boolean
@@ -947,6 +1360,7 @@ export type Database = {
       }
       pagos: {
         Row: {
+          cuenta_id: string | null
           created_at: string
           empresa_id: string | null
           estado: string
@@ -958,6 +1372,7 @@ export type Database = {
           tipo: string
         }
         Insert: {
+          cuenta_id?: string | null
           created_at?: string
           empresa_id?: string | null
           estado: string
@@ -969,6 +1384,7 @@ export type Database = {
           tipo: string
         }
         Update: {
+          cuenta_id?: string | null
           created_at?: string
           empresa_id?: string | null
           estado?: string
@@ -980,6 +1396,13 @@ export type Database = {
           tipo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pagos_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pagos_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -1164,11 +1587,16 @@ export type Database = {
           activo: boolean
           codigo: string
           cuota_masivas: number
+          empresas_incluidas: number
+          equipo: boolean
           features: Json
+          multiempresa: boolean
           nombre: string
+          personas_incluidas: number
           refill_boletas: number
           refill_clp_neto: number
           ruts_incluidos: number
+          telegram_comprobantes: number
           trial_boletas: number
           trial_dias: number
           uf_mensual: number
@@ -1179,11 +1607,16 @@ export type Database = {
           activo?: boolean
           codigo: string
           cuota_masivas: number
+          empresas_incluidas?: number
+          equipo?: boolean
           features?: Json
+          multiempresa?: boolean
           nombre: string
+          personas_incluidas?: number
           refill_boletas?: number
           refill_clp_neto?: number
           ruts_incluidos?: number
+          telegram_comprobantes?: number
           trial_boletas?: number
           trial_dias?: number
           uf_mensual: number
@@ -1194,11 +1627,16 @@ export type Database = {
           activo?: boolean
           codigo?: string
           cuota_masivas?: number
+          empresas_incluidas?: number
+          equipo?: boolean
           features?: Json
+          multiempresa?: boolean
           nombre?: string
+          personas_incluidas?: number
           refill_boletas?: number
           refill_clp_neto?: number
           ruts_incluidos?: number
+          telegram_comprobantes?: number
           trial_boletas?: number
           trial_dias?: number
           uf_mensual?: number
@@ -1349,6 +1787,7 @@ export type Database = {
       refills: {
         Row: {
           boletas: number
+          cuenta_id: string | null
           created_at: string
           empresa_id: string
           id: string
@@ -1358,6 +1797,7 @@ export type Database = {
         }
         Insert: {
           boletas: number
+          cuenta_id?: string | null
           created_at?: string
           empresa_id: string
           id?: string
@@ -1367,6 +1807,7 @@ export type Database = {
         }
         Update: {
           boletas?: number
+          cuenta_id?: string | null
           created_at?: string
           empresa_id?: string
           id?: string
@@ -1375,6 +1816,13 @@ export type Database = {
           proveedor_ref?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "refills_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "refills_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -1420,6 +1868,7 @@ export type Database = {
       suscripciones: {
         Row: {
           clp_ultimo_cobro: number | null
+          cuenta_id: string | null
           created_at: string
           empresa_id: string
           estado: string
@@ -1432,6 +1881,7 @@ export type Database = {
         }
         Insert: {
           clp_ultimo_cobro?: number | null
+          cuenta_id?: string | null
           created_at?: string
           empresa_id: string
           estado?: string
@@ -1444,6 +1894,7 @@ export type Database = {
         }
         Update: {
           clp_ultimo_cobro?: number | null
+          cuenta_id?: string | null
           created_at?: string
           empresa_id?: string
           estado?: string
@@ -1455,6 +1906,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "suscripciones_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "suscripciones_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -1542,6 +2000,86 @@ export type Database = {
           },
         ]
       }
+      telegram_comprobante_pendientes: {
+        Row: {
+          chat_id: number
+          cuenta_id: string
+          created_at: string
+          empresa_origen_id: string
+          estado: string
+          expires_at: string
+          file_id: string
+          file_size: number | null
+          message_id: number | null
+          opciones: Json
+          received_at: number | null
+          selected_empresa_id: string | null
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          cuenta_id: string
+          created_at?: string
+          empresa_origen_id: string
+          estado?: string
+          expires_at: string
+          file_id: string
+          file_size?: number | null
+          message_id?: number | null
+          opciones?: Json
+          received_at?: number | null
+          selected_empresa_id?: string | null
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          cuenta_id?: string
+          created_at?: string
+          empresa_origen_id?: string
+          estado?: string
+          expires_at?: string
+          file_id?: string
+          file_size?: number | null
+          message_id?: number | null
+          opciones?: Json
+          received_at?: number | null
+          selected_empresa_id?: string | null
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_comprobante_pendientes_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_chats"
+            referencedColumns: ["chat_id"]
+          },
+          {
+            foreignKeyName: "telegram_comprobante_pendientes_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_comprobante_pendientes_empresa_origen_id_fkey"
+            columns: ["empresa_origen_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_comprobante_pendientes_selected_empresa_id_fkey"
+            columns: ["selected_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_pending_edits: {
         Row: {
           campo: string
@@ -1567,6 +2105,200 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "telegram_pending_edits_propuesta_id_fkey"
+            columns: ["propuesta_id"]
+            isOneToOne: false
+            referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_propuesta_messages: {
+        Row: {
+          chat_id: number
+          created_at: string
+          documento_id: string | null
+          empresa_id: string
+          estado: string
+          id: string
+          kind: string
+          message_id: number
+          propuesta_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id: string
+          estado?: string
+          id?: string
+          kind?: string
+          message_id: number
+          propuesta_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string
+          estado?: string
+          id?: string
+          kind?: string
+          message_id?: number
+          propuesta_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_propuesta_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_chats"
+            referencedColumns: ["chat_id"]
+          },
+          {
+            foreignKeyName: "telegram_propuesta_messages_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_propuesta_messages_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_propuesta_messages_propuesta_id_fkey"
+            columns: ["propuesta_id"]
+            isOneToOne: false
+            referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_duplicate_actions: {
+        Row: {
+          created_at: string
+          detalle: Json
+          documento_id: string
+          empresa_id: string
+          estado: string
+          fingerprint: string
+          id: string
+          message_id: number | null
+          movimiento_id: string | null
+          propuesta_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          detalle: Json
+          documento_id: string
+          empresa_id: string
+          estado?: string
+          fingerprint: string
+          id?: string
+          message_id?: number | null
+          movimiento_id?: string | null
+          propuesta_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          detalle?: Json
+          documento_id?: string
+          empresa_id?: string
+          estado?: string
+          fingerprint?: string
+          id?: string
+          message_id?: number | null
+          movimiento_id?: string | null
+          propuesta_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_duplicate_actions_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_duplicate_actions_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_duplicate_actions_movimiento_id_fkey"
+            columns: ["movimiento_id"]
+            isOneToOne: false
+            referencedRelation: "movimientos_raw"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_duplicate_actions_propuesta_id_fkey"
+            columns: ["propuesta_id"]
+            isOneToOne: false
+            referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_audit_events: {
+        Row: {
+          action: string
+          chat_id: number | null
+          created_at: string
+          documento_id: string | null
+          empresa_id: string
+          id: string
+          metadata: Json
+          propuesta_id: string | null
+        }
+        Insert: {
+          action: string
+          chat_id?: number | null
+          created_at?: string
+          documento_id?: string | null
+          empresa_id: string
+          id?: string
+          metadata?: Json
+          propuesta_id?: string | null
+        }
+        Update: {
+          action?: string
+          chat_id?: number | null
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string
+          id?: string
+          metadata?: Json
+          propuesta_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_audit_events_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_audit_events_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_audit_events_propuesta_id_fkey"
             columns: ["propuesta_id"]
             isOneToOne: false
             referencedRelation: "propuestas_ia"
@@ -1663,6 +2395,22 @@ export type Database = {
           folio: number
         }[]
       }
+      crear_empresa_invitacion_titular: {
+        Args: {
+          p_email: string
+          p_empresa_id: string
+          p_expires_at: string
+          p_invited_by: string
+          p_rol: string
+          p_token_hash: string
+        }
+        Returns: {
+          cuenta_id: string | null
+          error: string | null
+          invitacion_id: string | null
+          ok: boolean
+        }[]
+      }
       documento_pipeline_counts: {
         Args: { p_desde: string; p_empresa: string; p_hasta: string }
         Returns: {
@@ -1675,6 +2423,8 @@ export type Database = {
         }[]
       }
       empresas_del_usuario: { Args: never; Returns: string[] }
+      cuenta_de_empresa: { Args: { p_empresa_id: string }; Returns: string }
+      cuentas_del_usuario: { Args: never; Returns: string[] }
     }
     Enums: {
       [_ in never]: never

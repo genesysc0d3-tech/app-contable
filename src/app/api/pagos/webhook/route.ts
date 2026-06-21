@@ -5,6 +5,7 @@ import type { Database, Json } from "@/lib/database.types";
 import { obtenerRecurso } from "@/lib/pagos/mercadopago";
 import { addOneMonth, periodoActual } from "@/lib/pagos/metering";
 import { chileDateString } from "@/lib/chile-date";
+import { empresaPrincipalDeCuenta, empresasActivasDeCuenta } from "@/lib/entitlements";
 
 /**
  * Webhook de Mercado Pago.
@@ -23,16 +24,55 @@ type Sb = SupabaseClient<Database>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** external_reference con formato `${empresaId}|plan|${codigo}` o `${empresaId}|refill|${periodo}`. */
-function parseRef(ref: unknown): { empresaId: string; tipo: "plan" | "refill"; valor: string } | null {
+/** external_reference nuevo: `${cuentaId}|...`; legacy: `${empresaId}|...`. */
+function parseRef(ref: unknown): { sujetoId: string; tipo: "plan" | "refill" | "addon"; valor: string; intentId?: string } | null {
   if (typeof ref !== "string") return null;
   const parts = ref.split("|");
+  const [sujetoId, tipo, valor] = parts;
+  if (!UUID_RE.test(sujetoId)) return null;
+  if (tipo === "addon") {
+    const intentId = parts[3];
+    if (parts.length !== 4 || valor !== "persona_adicional" || !UUID_RE.test(intentId)) return null;
+    return { sujetoId, tipo, valor, intentId };
+  }
   if (parts.length !== 3) return null;
-  const [empresaId, tipo, valor] = parts;
-  if (!UUID_RE.test(empresaId)) return null;
   if (tipo !== "plan" && tipo !== "refill") return null;
   if (!valor) return null;
-  return { empresaId, tipo, valor };
+  return { sujetoId, tipo, valor };
+}
+
+async function resolverTargetPago(sb: Sb, sujetoId: string): Promise<{ cuentaId: string | null; empresaId: string | null }> {
+  const { data: cuenta } = await sb.from("cuentas").select("id").eq("id", sujetoId).maybeSingle();
+  if (cuenta?.id) {
+    return { cuentaId: cuenta.id, empresaId: await empresaPrincipalDeCuenta(sb, cuenta.id) };
+  }
+
+  const { data: cuentaEmpresa } = await sb
+    .from("cuenta_empresas")
+    .select("cuenta_id")
+    .eq("empresa_id", sujetoId)
+    .maybeSingle();
+  return { cuentaId: cuentaEmpresa?.cuenta_id ?? null, empresaId: sujetoId };
+}
+
+async function syncPlanActivo(sb: Sb, target: { cuentaId: string | null; empresaId: string | null }, plan: string, activo: boolean) {
+  if (target.cuentaId) {
+    const { error: cuentaError } = await sb
+      .from("cuentas")
+      .update({ plan_codigo: plan, plan_activo: activo, updated_at: new Date().toISOString() })
+      .eq("id", target.cuentaId);
+    if (cuentaError) throw new Error(`No se pudo actualizar la cuenta: ${cuentaError.message}`);
+    const empresaIds = await empresasActivasDeCuenta(sb, target.cuentaId);
+    if (empresaIds.length > 0) {
+      const { error: empresasError } = await sb.from("empresas").update({ plan_activo: activo, plan }).in("id", empresaIds);
+      if (empresasError) throw new Error(`No se pudieron actualizar empresas de la cuenta: ${empresasError.message}`);
+    }
+    return;
+  }
+  if (target.empresaId) {
+    const { error: empresaError } = await sb.from("empresas").update({ plan_activo: activo, plan }).eq("id", target.empresaId);
+    if (empresaError) throw new Error(`No se pudo actualizar la empresa: ${empresaError.message}`);
+  }
 }
 
 /**
@@ -79,9 +119,10 @@ async function yaProcesado(sb: Sb, proveedorRef: string, estado: string): Promis
 
 async function registrarPago(
   sb: Sb,
-  args: { empresaId: string | null; proveedorRef: string; tipo: "suscripcion" | "refill"; montoClp: number | null; estado: string; raw: Record<string, unknown> },
+  args: { cuentaId: string | null; empresaId: string | null; proveedorRef: string; tipo: "suscripcion" | "refill" | "addon"; montoClp: number | null; estado: string; raw: Record<string, unknown> },
 ) {
   const { error } = await sb.from("pagos").insert({
+    cuenta_id: args.cuentaId,
     empresa_id: args.empresaId,
     proveedor: "mercadopago",
     proveedor_ref: args.proveedorRef,
@@ -90,7 +131,7 @@ async function registrarPago(
     estado: args.estado,
     raw: args.raw as unknown as Json,
   });
-  if (error) console.error("[pagos/webhook] no se pudo registrar pago", error.message);
+  if (error && error.code !== "23505") console.error("[pagos/webhook] no se pudo registrar pago", error.message);
 }
 
 async function procesarPreapproval(sb: Sb, preapprovalId: string) {
@@ -106,38 +147,42 @@ async function procesarPreapproval(sb: Sb, preapprovalId: string) {
   const autoRec = (recurso.auto_recurring ?? {}) as { transaction_amount?: unknown };
   const monto = typeof autoRec.transaction_amount === "number" ? Math.round(autoRec.transaction_amount) : null;
 
+  const target = ref ? await resolverTargetPago(sb, ref.sujetoId) : { cuentaId: null, empresaId: null };
+
   if (ref?.tipo === "plan") {
     const ahoraIso = new Date().toISOString();
     if (status === "authorized") {
       // Suscripción autorizada: activa la fila local y enciende el plan.
-      await sb
+      const { error: subError } = await sb
         .from("suscripciones")
         .update({
           estado: "activa",
           periodo_hasta: addOneMonth(chileDateString()),
           clp_ultimo_cobro: monto,
           updated_at: ahoraIso,
+          cuenta_id: target.cuentaId,
         })
-        .eq("empresa_id", ref.empresaId)
         .eq("proveedor_ref", preapprovalId);
-      await sb.from("empresas").update({ plan_activo: true, plan: ref.valor }).eq("id", ref.empresaId);
+      if (subError) throw new Error(`No se pudo activar la suscripción: ${subError.message}`);
+      await syncPlanActivo(sb, target, ref.valor, true);
     } else if (status === "cancelled") {
-      await sb
+      const { error: subError } = await sb
         .from("suscripciones")
         .update({ estado: "cancelada", updated_at: ahoraIso })
-        .eq("empresa_id", ref.empresaId)
         .eq("proveedor_ref", preapprovalId);
+      if (subError) throw new Error(`No se pudo cancelar la suscripción: ${subError.message}`);
     } else if (status === "paused") {
-      await sb
+      const { error: subError } = await sb
         .from("suscripciones")
         .update({ estado: "pausada", updated_at: ahoraIso })
-        .eq("empresa_id", ref.empresaId)
         .eq("proveedor_ref", preapprovalId);
+      if (subError) throw new Error(`No se pudo pausar la suscripción: ${subError.message}`);
     }
   }
 
   await registrarPago(sb, {
-    empresaId: ref?.empresaId ?? null,
+    cuentaId: target.cuentaId,
+    empresaId: target.empresaId,
     proveedorRef: preapprovalId,
     tipo: "suscripcion",
     montoClp: monto,
@@ -159,55 +204,105 @@ async function procesarPayment(sb: Sb, paymentId: string) {
   const ref = parseRef(recurso.external_reference);
   const monto = typeof recurso.transaction_amount === "number" ? Math.round(recurso.transaction_amount) : null;
 
+  const target = ref ? await resolverTargetPago(sb, ref.sujetoId) : { cuentaId: null, empresaId: null };
+
+  if (ref?.tipo === "addon" && ref.valor === "persona_adicional" && ref.intentId && target.cuentaId) {
+    if (status === "approved") {
+      const { data: addon, error: addonError } = await sb
+        .from("cuenta_addons")
+        .update({
+          estado: "activo",
+          proveedor_ref: paymentId,
+          origen: "mercadopago",
+        })
+        .eq("id", ref.intentId)
+        .eq("cuenta_id", target.cuentaId)
+        .eq("tipo", "persona_adicional")
+        .eq("estado", "pendiente")
+        .select("id")
+        .maybeSingle();
+      if (addonError) throw new Error(`No se pudo activar la persona adicional: ${addonError.message}`);
+      if (!addon) {
+        const { data: existingAddon } = await sb
+          .from("cuenta_addons")
+          .select("id, estado, proveedor_ref")
+          .eq("id", ref.intentId)
+          .eq("cuenta_id", target.cuentaId)
+          .eq("tipo", "persona_adicional")
+          .maybeSingle();
+        if (existingAddon?.estado !== "activo" || existingAddon.proveedor_ref !== paymentId) {
+          throw new Error("Pago de persona adicional sin intención pendiente válida");
+        }
+      }
+    } else if (["cancelled", "rejected", "refunded", "charged_back"].includes(status)) {
+      const { error: cancelError } = await sb
+        .from("cuenta_addons")
+        .update({ estado: "cancelado", proveedor_ref: paymentId })
+        .eq("id", ref.intentId)
+        .eq("cuenta_id", target.cuentaId)
+        .eq("tipo", "persona_adicional")
+        .eq("estado", "pendiente");
+      if (cancelError) throw new Error(`No se pudo liberar compra pendiente de persona adicional: ${cancelError.message}`);
+    }
+  }
+
   if (status === "approved" && ref?.tipo === "refill") {
     // Las boletas del REFILL salen del plan vigente de la empresa.
-    const { data: suscripcion } = await sb
+    let suscripcionQuery = sb
       .from("suscripciones")
       .select("plan_codigo")
-      .eq("empresa_id", ref.empresaId)
       .eq("estado", "activa")
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    suscripcionQuery = target.cuentaId ? suscripcionQuery.eq("cuenta_id", target.cuentaId) : suscripcionQuery.eq("empresa_id", target.empresaId ?? ref.sujetoId);
+    const { data: suscripcion } = await suscripcionQuery.maybeSingle();
     const { data: plan } = suscripcion
       ? await sb.from("planes_config").select("refill_boletas").eq("codigo", suscripcion.plan_codigo).maybeSingle()
       : { data: null };
     const boletas = plan?.refill_boletas ?? 0;
     if (boletas > 0) {
       const periodo = /^\d{4}-\d{2}$/.test(ref.valor) ? ref.valor : periodoActual();
-      await sb.from("refills").insert({
-        empresa_id: ref.empresaId,
+      const { error: refillError } = await sb.from("refills").insert({
+        cuenta_id: target.cuentaId,
+        empresa_id: target.empresaId ?? ref.sujetoId,
         periodo,
         boletas,
         origen: "mercadopago",
         proveedor_ref: paymentId,
       });
+      if (refillError && refillError.code !== "23505") {
+        throw new Error(`No se pudo registrar el extra de boletas: ${refillError.message}`);
+      }
     } else {
       // Pago recibido sin plan vigente: queda en `pagos` para conciliar a mano.
-      console.warn("[pagos/webhook] refill aprobado sin suscripción activa", { paymentId, empresaId: ref.empresaId });
+      console.warn("[pagos/webhook] refill aprobado sin suscripción activa", { paymentId, target });
     }
   }
 
   if (status === "approved" && ref?.tipo === "plan") {
     // Cobro recurrente del mes: renueva el período y reactiva si estaba morosa.
-    await sb
+    let updateQuery = sb
       .from("suscripciones")
       .update({
         estado: "activa",
         periodo_hasta: addOneMonth(chileDateString()),
         clp_ultimo_cobro: monto,
         updated_at: new Date().toISOString(),
+        cuenta_id: target.cuentaId,
       })
-      .eq("empresa_id", ref.empresaId)
       .eq("plan_codigo", ref.valor)
       .in("estado", ["activa", "pendiente", "morosa"]);
-    await sb.from("empresas").update({ plan_activo: true, plan: ref.valor }).eq("id", ref.empresaId);
+    updateQuery = target.cuentaId ? updateQuery.eq("cuenta_id", target.cuentaId) : updateQuery.eq("empresa_id", target.empresaId ?? ref.sujetoId);
+    const { error: subError } = await updateQuery;
+    if (subError) throw new Error(`No se pudo renovar la suscripción: ${subError.message}`);
+    await syncPlanActivo(sb, target, ref.valor, true);
   }
 
   await registrarPago(sb, {
-    empresaId: ref?.empresaId ?? null,
+    cuentaId: target.cuentaId,
+    empresaId: target.empresaId,
     proveedorRef: paymentId,
-    tipo: ref?.tipo === "refill" ? "refill" : "suscripcion",
+    tipo: ref?.tipo === "refill" ? "refill" : ref?.tipo === "addon" ? "addon" : "suscripcion",
     montoClp: monto,
     estado: status,
     raw: recurso,
@@ -237,6 +332,9 @@ export async function POST(request: Request) {
       (typeof body.topic === "string" ? body.topic : null);
 
     const secret = process.env.MP_WEBHOOK_SECRET?.trim();
+    if (!secret && process.env.NODE_ENV === "production") {
+      return NextResponse.json({ ok: false, error: "MP_WEBHOOK_SECRET_MISSING" }, { status: 503 });
+    }
     if (secret && !firmaValida(request, dataId, secret)) {
       return NextResponse.json({ ok: false, error: "FIRMA_INVALIDA" }, { status: 401 });
     }

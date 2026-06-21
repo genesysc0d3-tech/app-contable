@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { crearRefill, crearSuscripcion } from "@/lib/pagos/mercadopago";
+import { crearPersonaAdicionalCuenta, crearRefillCuenta, crearSuscripcion } from "@/lib/pagos/mercadopago";
+import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
 /**
  * Inicia un checkout de Mercado Pago:
@@ -14,6 +16,9 @@ const ROLES_PAGO = new Set(["owner", "admin"]);
 
 export async function POST(request: Request) {
   try {
+    const supportBlock = await getDevSupportWriteBlock();
+    if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
@@ -26,12 +31,6 @@ export async function POST(request: Request) {
     if (!usuario?.empresa_id) {
       return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
     }
-    if (!ROLES_PAGO.has(String(usuario.rol))) {
-      return NextResponse.json(
-        { ok: false, error: "ROL_SIN_PERMISO", detalle: "Solo el dueño o un admin pueden contratar planes" },
-        { status: 403 },
-      );
-    }
 
     let body: { tipo?: string; plan?: string } = {};
     try {
@@ -40,16 +39,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
     }
 
+    if (body.tipo !== "persona_adicional" && !ROLES_PAGO.has(String(usuario.rol))) {
+      return NextResponse.json(
+        { ok: false, error: "ROL_SIN_PERMISO", detalle: "Tu cuenta no puede contratar planes desde este acceso" },
+        { status: 403 },
+      );
+    }
+
+    const cuenta = await contextoCuentaPorEmpresa(supabase, usuario.empresa_id);
+    if (!cuenta) {
+      return NextResponse.json({ ok: false, error: "CUENTA_NO_CONFIGURADA" }, { status: 409 });
+    }
+
     let result;
     if (body.tipo === "plan") {
       const plan = typeof body.plan === "string" ? body.plan.trim() : "";
       if (!plan) return NextResponse.json({ ok: false, error: "PLAN_REQUERIDO" }, { status: 400 });
-      result = await crearSuscripcion(usuario.empresa_id, plan, user.email ?? "");
+      result = await crearSuscripcion(cuenta.cuentaId, usuario.empresa_id, plan, user.email ?? "");
     } else if (body.tipo === "refill") {
-      result = await crearRefill(usuario.empresa_id);
+      result = await crearRefillCuenta(cuenta.cuentaId, usuario.empresa_id);
+    } else if (body.tipo === "persona_adicional") {
+      const [{ data: cuentaRow }, { data: membresia }] = await Promise.all([
+        supabase.from("cuentas").select("owner_usuario_id").eq("id", cuenta.cuentaId).maybeSingle(),
+        supabase.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", cuenta.cuentaId).eq("usuario_id", user.id).maybeSingle(),
+      ]);
+      if (cuentaRow?.owner_usuario_id !== user.id && membresia?.es_titular !== true) {
+        return NextResponse.json(
+          { ok: false, error: "SOLO_TITULAR_CUENTA", detalle: "Solo la cuenta pagadora puede comprar personas adicionales" },
+          { status: 403 },
+        );
+      }
+      result = await crearPersonaAdicionalCuenta(cuenta.cuentaId, usuario.empresa_id);
     } else {
       return NextResponse.json(
-        { ok: false, error: "TIPO_INVALIDO", detalle: "tipo debe ser 'plan' o 'refill'" },
+        { ok: false, error: "TIPO_INVALIDO", detalle: "tipo debe ser 'plan', 'refill' o 'persona_adicional'" },
         { status: 400 },
       );
     }
@@ -63,7 +86,7 @@ export async function POST(request: Request) {
       }
       const status =
         result.error === "PLAN_INVALIDO" ? 400 :
-        result.error === "SIN_SUSCRIPCION_ACTIVA" ? 409 : 502;
+        result.error === "SIN_SUSCRIPCION_ACTIVA" || result.error === "ADDON_PENDIENTE" || result.error === "EQUIPO_NO_DISPONIBLE" ? 409 : 502;
       return NextResponse.json({ ok: false, error: result.error, detalle: result.detalle }, { status });
     }
 

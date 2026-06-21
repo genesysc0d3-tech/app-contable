@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { chileDateString } from "@/lib/chile-date";
 import { addDaysStr, clpConIva } from "@/lib/pagos/metering";
 import { actualizarMontoSuscripcion, mpConfigurado, obtenerRecurso } from "@/lib/pagos/mercadopago";
 import { getUfClp } from "@/lib/sii/uf";
+import { empresasActivasDeCuenta } from "@/lib/entitlements";
 
 /**
  * Cron diario de cobranza (vercel.json → 12:00 UTC ≈ 8-9 AM Chile):
@@ -17,6 +18,42 @@ import { getUfClp } from "@/lib/sii/uf";
  */
 
 const GRACIA_DIAS = 5;
+type Sb = SupabaseClient<Database>;
+
+async function apagarPlan(sb: Sb, args: { cuentaId?: string | null; empresaId?: string | null }) {
+  if (args.cuentaId) {
+    const { error: cuentaError } = await sb
+      .from("cuentas")
+      .update({ plan_activo: false, updated_at: new Date().toISOString() })
+      .eq("id", args.cuentaId);
+    if (cuentaError) throw new Error(`No se pudo apagar la cuenta: ${cuentaError.message}`);
+    const empresaIds = await empresasActivasDeCuenta(sb, args.cuentaId);
+    if (empresaIds.length > 0) {
+      const { error: empresasError } = await sb.from("empresas").update({ plan_activo: false }).in("id", empresaIds);
+      if (empresasError) throw new Error(`No se pudieron apagar empresas de la cuenta: ${empresasError.message}`);
+    }
+    return;
+  }
+  if (args.empresaId) {
+    const { error: empresaError } = await sb.from("empresas").update({ plan_activo: false }).eq("id", args.empresaId);
+    if (empresaError) throw new Error(`No se pudo apagar la empresa: ${empresaError.message}`);
+  }
+}
+
+async function tieneOtraSuscripcionActivaVigente(
+  sb: Sb,
+  args: { excluirId: string; cuentaId?: string | null; empresaId?: string | null; fechaMinima: string },
+) {
+  let query = sb
+    .from("suscripciones")
+    .select("id, periodo_hasta")
+    .eq("estado", "activa")
+    .neq("id", args.excluirId);
+  query = args.cuentaId ? query.eq("cuenta_id", args.cuentaId) : query.eq("empresa_id", args.empresaId ?? "");
+  const { data, error } = await query;
+  if (error) throw new Error(`No se pudieron revisar suscripciones activas: ${error.message}`);
+  return (data ?? []).some((s) => !s.periodo_hasta || s.periodo_hasta >= args.fechaMinima);
+}
 
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
@@ -36,48 +73,49 @@ export async function GET(request: Request) {
     // (a) Activas vencidas (más allá de la gracia) → morosas, plan apagado.
     const { data: vencidas, error: vencErr } = await sb
       .from("suscripciones")
-      .select("id, empresa_id")
+      .select("id, empresa_id, cuenta_id")
       .eq("estado", "activa")
       .lt("periodo_hasta", corte);
     if (vencErr) throw new Error(`No se pudieron leer suscripciones vencidas: ${vencErr.message}`);
 
     let morosas = 0;
     for (const s of vencidas ?? []) {
+      const otraActiva = await tieneOtraSuscripcionActivaVigente(sb, {
+        excluirId: s.id,
+        cuentaId: s.cuenta_id,
+        empresaId: s.empresa_id,
+        fechaMinima: corte,
+      });
       const { error: e1 } = await sb
         .from("suscripciones")
         .update({ estado: "morosa", updated_at: new Date().toISOString() })
         .eq("id", s.id);
-      const { error: e2 } = await sb.from("empresas").update({ plan_activo: false }).eq("id", s.empresa_id);
-      if (!e1 && !e2) morosas++;
+      if (!otraActiva) await apagarPlan(sb, { cuentaId: s.cuenta_id, empresaId: s.empresa_id });
+      if (!e1) morosas++;
     }
 
     // (a2) Canceladas/pausadas cuyo período pagado ya terminó → plan apagado
     // (solo si la empresa no tiene otra suscripción activa).
     const { data: terminadas } = await sb
       .from("suscripciones")
-      .select("empresa_id")
+      .select("empresa_id, cuenta_id")
       .in("estado", ["cancelada", "pausada"])
       .lt("periodo_hasta", hoy);
     let desactivadas = 0;
-    const empresasTerminadas = [...new Set((terminadas ?? []).map((s) => s.empresa_id))];
-    if (empresasTerminadas.length > 0) {
-      const { data: conPlan } = await sb
-        .from("empresas")
-        .select("id")
-        .in("id", empresasTerminadas)
-        .eq("plan_activo", true);
-      for (const emp of conPlan ?? []) {
-        const { data: otraActiva } = await sb
-          .from("suscripciones")
-          .select("id")
-          .eq("empresa_id", emp.id)
-          .eq("estado", "activa")
-          .limit(1)
-          .maybeSingle();
-        if (otraActiva) continue;
-        const { error } = await sb.from("empresas").update({ plan_activo: false }).eq("id", emp.id);
-        if (!error) desactivadas++;
-      }
+    const processed = new Set<string>();
+    for (const s of terminadas ?? []) {
+      const key = s.cuenta_id ?? s.empresa_id;
+      if (!key || processed.has(key)) continue;
+      processed.add(key);
+      const otraActiva = await tieneOtraSuscripcionActivaVigente(sb, {
+        excluirId: "00000000-0000-0000-0000-000000000000",
+        cuentaId: s.cuenta_id,
+        empresaId: s.empresa_id,
+        fechaMinima: hoy,
+      });
+      if (otraActiva) continue;
+      await apagarPlan(sb, { cuentaId: s.cuenta_id, empresaId: s.empresa_id });
+      desactivadas++;
     }
 
     // (b) Día 1 del mes (Chile): re-anclar montos a la UF del día.
