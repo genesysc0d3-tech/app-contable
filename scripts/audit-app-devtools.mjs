@@ -838,7 +838,10 @@ async function classifyFindings(target) {
     (item) => `${item.url}:${item.text}`,
   );
   const uniquePageErrors = uniqueBy(target.pageErrors, (item) => `${item.url}:${item.text}`);
-  const uniqueFailed = uniqueBy(target.failedRequests, (item) => `${item.method}:${item.url}:${item.failure}`);
+  const uniqueFailed = uniqueBy(
+    target.failedRequests.filter((item) => !isExpectedRequestFailure(item)),
+    (item) => `${item.method}:${item.url}:${item.failure}`,
+  );
   const http5xx = target.httpIssues.filter((item) => item.status >= 500);
   const http4xx = target.httpIssues.filter((item) => item.status >= 400 && item.status < 500 && !isExpectedHttpIssue(item));
   const failedBusiness = target.businessChecks.filter((item) => item.status === "fail");
@@ -901,6 +904,22 @@ function isExpectedHttpIssue(item) {
   return isExpectedAuthIssue(item) || isExpectedSupportReadOnlyProbe(item);
 }
 
+function isExpectedRequestFailure(item) {
+  return isExpectedNextNavigationAbort(item);
+}
+
+function isExpectedNextNavigationAbort(item) {
+  if (item.failure !== "net::ERR_ABORTED") return false;
+  try {
+    const base = new URL(BASE_URL);
+    const url = new URL(item.url);
+    if (url.origin !== base.origin) return false;
+    return item.resourceType === "fetch" || url.searchParams.has("_rsc") || item.method === "POST";
+  } catch {
+    return false;
+  }
+}
+
 function isExpectedSupportReadOnlyProbe(item) {
   if (item.status !== 403 || item.method !== "POST") return false;
   const path = pathFromUrl(item.url);
@@ -923,6 +942,8 @@ async function writeReport() {
     : audit.findings.some((finding) => finding.severity === "high")
       ? "open"
       : "done";
+  const expectedFailedRequests = audit.failedRequests.filter(isExpectedRequestFailure);
+  const unexpectedFailedRequests = audit.failedRequests.filter((item) => !isExpectedRequestFailure(item));
 
   const lines = [
     "---",
@@ -954,7 +975,7 @@ async function writeReport() {
     `- Console errors: ${audit.console.filter((item) => item.type === "error").length}`,
     `- Console warnings: ${audit.console.filter((item) => item.type === "warning").length}`,
     `- Page errors: ${audit.pageErrors.length}`,
-    `- Failed requests: ${audit.failedRequests.length}`,
+    `- Failed requests: ${audit.failedRequests.length} (${unexpectedFailedRequests.length} unexpected, ${expectedFailedRequests.length} expected navigation aborts)`,
     `- HTTP 4xx/5xx: ${audit.httpIssues.length}`,
     `- Findings: ${audit.findings.length}`,
     "",
@@ -1038,7 +1059,8 @@ async function writeReport() {
 
   lines.push("", "### Network");
   const networkRows = [
-    ...uniqueBy(audit.failedRequests, (item) => `${item.method}:${item.url}:${item.failure}`).map((item) => `- FAILED ${item.method} ${item.url} :: ${item.failure}`),
+    ...uniqueBy(audit.failedRequests, (item) => `${item.method}:${item.url}:${item.failure}`)
+      .map((item) => `- FAILED ${item.method} ${item.url} :: ${item.failure}${isExpectedRequestFailure(item) ? " (esperado: navegación Next cancelada)" : ""}`),
     ...uniqueBy(audit.httpIssues, (item) => `${item.status}:${item.method}:${item.url}`).map((item) => `- HTTP ${item.status} ${item.method} ${item.url}${isExpectedSupportReadOnlyProbe(item) ? " (esperado: modo soporte read-only)" : ""}`),
   ].slice(0, 40);
   if (networkRows.length === 0) lines.push("- Sin fallos de red ni HTTP 4xx/5xx registrados.");
