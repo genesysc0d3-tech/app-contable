@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createSsrClient } from "@/lib/supabase/server";
+import { getDevSupportMode } from "@/lib/dev/support-mode";
 
 export async function GET(
   _request: Request,
@@ -21,8 +22,10 @@ export async function GET(
   }
 
   const { empresaId } = await params;
-  const resolvedEmpresaId = empresaId === "current" ? usuario.empresa_id : empresaId;
-  if (resolvedEmpresaId !== usuario.empresa_id) {
+  const support = await getDevSupportMode();
+  const allowedEmpresaId = support?.ok ? support.empresaId : usuario.empresa_id;
+  const resolvedEmpresaId = empresaId === "current" ? allowedEmpresaId : empresaId;
+  if (resolvedEmpresaId !== allowedEmpresaId) {
     return new NextResponse("No autorizado", { status: 403 });
   }
 
@@ -38,11 +41,11 @@ export async function GET(
   const logoFile = files?.find((file) => file.name.startsWith("logo.") && !file.name.endsWith(".svg"));
 
   if (listError || !logoFile) {
-    return new NextResponse("Logo no encontrado", { status: 404 });
+    return new NextResponse(null, { status: 204 });
   }
 
   const { data, error } = await sb.storage.from("documentos").download(`${logoDir}/${logoFile.name}`);
-  if (error || !data) return new NextResponse("Logo no disponible", { status: 404 });
+  if (error || !data) return new NextResponse(null, { status: 204 });
 
   return new NextResponse(data, {
     headers: {
