@@ -10,6 +10,17 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Lighthouse CI agregado - #ci #performance #accessibility
+
+What: Added a dedicated Lighthouse CI workflow using `treosh/lighthouse-ci-action@v12`.
+It builds the app, starts Next locally, audits unauthenticated public routes
+(`/auth/login`, `/auth/registro`, `/bloqueado`) and uploads reports as private
+GitHub Actions artifacts. Public temporary storage is intentionally disabled.
+Local build plus HTTP smoke for the audited routes passed.
+
+Refs: `.github/workflows/lighthouse.yml`, `lighthouserc.json`,
+`artifacts/docs/massdte-production-audit-launch-readiness-2026-06-21.md`.
+
 ## 2026-06-21 - LAUNCH-001 cerrado y hardening runtime iniciado - #launch #security #architecture
 
 What: Recorded the user-reported real extension/SII/CAF smoke as done without
