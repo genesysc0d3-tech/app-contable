@@ -57,3 +57,9 @@ falle, se cancele o expire.
   cuenta, `POST /api/emision/jobs` devuelve `EMISION_BLOQUEADA`, el frontend v5
   consume `useEmissionLockStatus`, Business muestra mensaje de equipo y
   Start/Pro reciben mensaje generico. Se agrego test unitario de locks.
+- 2026-06-21 - Verificado en produccion sin tocar extension/SII:
+  `scripts/audit-emission-lock.mjs` creo un job temporal `sii_local`, confirmo
+  `GET /api/emision/jobs locked=true`, actualizo `estado_visible` con `PATCH`,
+  vio texto de bloqueo en `/massdte`, cancelo con `DELETE` y confirmo
+  `locked=false`. Reporte:
+  `artifacts/runs/2026-06-21-massdte-emission-lock-audit.md`.

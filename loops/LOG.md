@@ -10,6 +10,20 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Lock remoto auditado en produccion - #engineering #audit #emision
+
+What: Added `npm run audit:locks` / `scripts/audit-emission-lock.mjs` and ran
+it against production with the Genesys state. The harness created one temporary
+`sii_local` job, confirmed `GET /api/emision/jobs` reported `locked=true`,
+patched `estado_visible=audit_probe`, verified `/massdte` showed emission
+blocked/in-progress text, cancelled the job with `DELETE`, and confirmed
+`locked=false`. No extension, SII portal, SimpleAPI upstream or real emission
+flow was executed.
+
+Refs: `artifacts/runs/2026-06-21-massdte-emission-lock-audit.md`,
+`artifacts/tasks/ENG-002-bloqueo-remoto-emision.md`,
+`scripts/audit-emission-lock.mjs`.
+
 ## 2026-06-21 - Auditoria produccion soporte app-wide cerrada - #dev-operator #audit #support-mode
 
 What: Extended `audit:app` to sweep Start/Pro/Business support mode across

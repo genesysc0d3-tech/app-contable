@@ -284,6 +284,9 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - `audit:app` ahora recorre modo soporte Start/Pro/Business en `/massdte`,
   `/empresa`, `/revisar`, `/subir`, `/clientes` y `/boletas/reportes`, con
   probes read-only para upload, checkout, jobs de emision y emision directa.
+- `audit:locks` (`scripts/audit-emission-lock.mjs`) audita el lock remoto sin
+  extension/SII: crea un job temporal si no hay lock previo, valida GET/PATCH/UI,
+  cancela con DELETE y confirma `locked=false`.
 - Modo soporte Genesys quedo app-wide para el grupo `(app)`: `getAppEmpresaContext`
   centraliza la empresa efectiva, el layout muestra banner global, las rutas
   auditadas leen la empresa soportada y `/api/sii-mock/rcv` respeta soporte.
@@ -329,6 +332,10 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
   --state=/tmp/e2e-state-vercel.json --expect-dev`: OK, 0 hallazgos. Rutas
   soporte Start/Pro/Business 6/6, escrituras bloqueadas con
   `DEV_SUPPORT_READ_ONLY`, no-dev termina en login.
+- `npm run audit:locks -- --base-url=https://app-contable-five.vercel.app
+  --state=/tmp/e2e-state-vercel.json`: OK, 0 hallazgos. Creo job temporal
+  `sii_local`, confirmo lock activo, `PATCH estado_visible=audit_probe`, UI de
+  `/massdte` con bloqueo visible, `DELETE cancelled` y `locked=false` final.
 - `bash scripts/supabase-local-token.sh inspect db locks`: OK; solo mostro la
   query de inspeccion activa.
 - Inspecciones opcionales en paralelo (`long-running-queries`, `table-stats`)
