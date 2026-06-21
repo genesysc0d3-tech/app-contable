@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { crearPersonaAdicionalCuenta, crearRefillCuenta, crearSuscripcion } from "@/lib/pagos/mercadopago";
 import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 
 /**
  * Inicia un checkout de Mercado Pago:
@@ -22,6 +23,13 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+
+    const limited = enforceRateLimit({
+      key: rateLimitKey("pagos-checkout", user.id),
+      limit: 8,
+      windowMs: 5 * 60_000,
+    });
+    if (limited) return limited;
 
     const { data: usuario } = await supabase
       .from("usuarios")

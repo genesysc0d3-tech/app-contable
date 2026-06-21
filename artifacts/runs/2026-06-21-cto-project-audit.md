@@ -14,8 +14,10 @@ DevOps y riesgos de produccion del proyecto privado `app-contable`, con foco en
 la app activa MassDTE (`/massdte`, `src/app/(app)/escritorio/v5`), panel dev,
 emision local/SimpleAPI, multiempresa, billing y Telegram.
 
-No se ejecuto emision real contra SII ni se tocaron credenciales SII/extension.
-La extension/SII/CAF real queda cubierta por `LAUNCH-001`.
+La emision real con extension/SII/CAF fue reportada OK por el usuario en smoke
+manual controlado el 2026-06-21 y quedo registrada sin secretos en
+`artifacts/runs/2026-06-21-launch-001-user-smoke.md`. El agente no toco claves
+SII, certificados, cookies, CAF ni XML/PDF tributarios crudos.
 
 ## Evidencia Usada
 
@@ -49,21 +51,24 @@ La extension/SII/CAF real queda cubierta por `LAUNCH-001`.
 |---|---:|---|
 | Arquitectura y estructura | 7.0/10 | Buena separacion app/dev/lib/migrations/artifacts, pero aun hay legacy operativo, scripts de prueba SII y mucha logica pesada en route handlers/server actions. |
 | Calidad y mantenibilidad | 7.0/10 | TypeScript estricto, lint verde y dominios claros; persisten componentes grandes, estilos inline extensos y caminos duplicados de procesamiento. |
-| Seguridad | 7.2/10 | Auth/RLS/guards estan bastante trabajados; esta rama agrega headers, preview Excel sin HTML, limites de upload y audit limpio. Faltan rate limiting y observabilidad. |
-| Escalabilidad y performance | 5.8/10 | Build OK y queries con limites en varias rutas, pero IA/OCR y parseo corren en request/background volatil; no hay cola durable ni load testing. |
-| Testing y cobertura | 6.2/10 | 83 tests pasan, incluyendo upload, preview Excel y headers; faltan coverage threshold, API/billing/extension real y corrida CI remota. |
+| Seguridad | 7.6/10 | Auth/RLS/guards estan bastante trabajados; ahora hay headers, preview Excel sin HTML, limites de upload, audit limpio y rate limit inicial en endpoints caros/sensibles. Falta observabilidad. |
+| Escalabilidad y performance | 6.1/10 | Build OK y queries con limites en varias rutas; LAUNCH-001 ya no bloquea, pero IA/OCR y parseo siguen en background volatil. La cola durable queda especificada en ENG-003. |
+| Testing y cobertura | 6.4/10 | Tests pasan, incluyendo upload, preview Excel, headers y rate limit; faltan coverage threshold, API/billing/extension reproducible y corrida CI remota. |
 | DevOps / CI-CD readiness | 6.7/10 | Se agrega GitHub Actions con lint/test/build/audit y audit limpio; falta branch protection, PR real verde y deploy menos manual. |
-| Deuda tecnica / riesgos prod | 6.0/10 | La deuda esta documentada y priorizada, pero SII real pendiente, uploads/AI son fragiles y la superficie API ya es grande. |
-| Mejores practicas SaaS | 7.0/10 | Cuenta pagadora, planes, cupos, multiempresa, soporte read-only y locks por cuenta son buenas bases; faltan flags, observabilidad, runbook beta y pruebas billing end-to-end. |
+| Deuda tecnica / riesgos prod | 6.4/10 | LAUNCH-001 baja el riesgo de emision real, pero uploads/AI siguen fragiles sin cola durable y la superficie API ya es grande. |
+| Mejores practicas SaaS | 7.3/10 | Cuenta pagadora, planes, cupos, multiempresa, soporte read-only, locks por cuenta y smoke real controlado son buenas bases; faltan flags, observabilidad, runbook beta validado y billing end-to-end. |
 | Compliance Chile | 4.2/10 | Se agrego paquete operativo minimo RAT/proveedores/ARCO/retencion/brechas/MPD; falta revision legal, terminos/DPA formales y flujos producto. |
 
-**Score tecnico original: 65/100. Score general post-readiness: 70/100.**
+**Score tecnico original: 65/100. Score general post-readiness: 70/100. Score
+general post-LAUNCH-001 + rate limits iniciales: 74/100.**
 
 ## Resumen Ejecutivo
 
-El proyecto esta bien encaminado para una beta controlada de la capa SaaS web,
-pero no esta listo para lanzamiento abierto ni para prometer emision tributaria
-end-to-end sin cerrar el smoke real con extension/SII/CAF.
+El proyecto esta bien encaminado para una beta controlada de la capa SaaS web y
+la emision real dejo de ser el bloqueo principal despues del smoke manual
+reportado OK con extension/SII/CAF. Aun no esta listo para lanzamiento abierto:
+faltan observabilidad, cola durable, runbook operativo validado, mas pruebas de
+billing/API y cierre compliance/legal.
 
 La parte fuerte es producto/tenancy: cuenta pagadora, planes Start/Pro/Business,
 modo soporte Genesys, read-only, Account 360, lock remoto de emision y folios
@@ -71,25 +76,28 @@ reservados muestran pensamiento de SaaS real. La auditoria productiva web quedo
 verde con 0 hallazgos, y el lock remoto tambien fue probado sin ejecutar SII.
 
 La parte debil sigue siendo readiness operacional avanzada y compliance formal:
-ya hay CI versionado, lint/test/build/audit verdes, headers, upload hardening y
-preview Excel sin HTML, pero faltan rate limiting centralizado,
-observabilidad/alertas, cola durable para archivos/IA, smoke real SII/CAF y
-revision legal externa. Para un SaaS chileno que procesa RUT, cartolas,
+ya hay CI versionado, lint/test/build/audit verdes, headers, upload hardening,
+preview Excel sin HTML y rate limit inicial en endpoints caros/sensibles, pero
+faltan rate limiting distribuido, observabilidad/alertas, cola durable para
+archivos/IA y revision legal externa. Para un SaaS chileno que procesa RUT, cartolas,
 boletas, clientes, documentos, Telegram e IA, el paquete compliance minimo es
 un avance operativo, no un cierre legal.
 
 ## Riesgos Criticos Rojos
 
-### R1 - Emision real SII/CAF no validada end-to-end
+### R1 - Emision real SII/CAF validada manualmente, no automatizada
 
-Evidencia: `LAUNCH-001` esta abierto y los reportes productivos declaran fuera
-de alcance extension, SII real, SimpleAPI upstream y CAF real.
+Evidencia: `LAUNCH-001` quedo `done` por smoke manual informado por el usuario
+el 2026-06-21. El artifact versionado solo registra resumen no sensible:
+`artifacts/runs/2026-06-21-launch-001-user-smoke.md`.
 
-Impacto: si se vende como emision real antes de cerrar esto, el riesgo no es
-solo tecnico: puede ser tributario, reputacional y operativo.
+Impacto: baja el riesgo P0 de emision real, pero sigue faltando una corrida
+reproducible con checklist versionado: version de extension, tipo DTE, job/lock,
+folio reservado/liberado y resultado persistido, todo enmascarado.
 
-Decision: no prometer emision final a clientes externos hasta completar
-`LAUNCH-001`.
+Decision: permitir beta controlada con emision real y soporte presente. No
+prometer operacion masiva abierta hasta tener observabilidad, runbook y smoke
+repetible sin datos sensibles.
 
 ### R2 - CI/CD recien agregado, aun sin corrida remota obligatoria
 
@@ -102,13 +110,15 @@ exigir branch protection antes de merge/deploy.
 
 Decision: abrir PR y exigir que CI quede verde antes de mergear a `dev`.
 
-### R3 - Superficie de upload/IA susceptible a DoS y fallos serverless
+### R3 - Superficie de upload/IA parcialmente mitigada, aun sin cola durable
 
 Evidencia:
 
 - `src/app/api/subir-procesar/route.ts` quedo mitigado con validacion previa de
   base64, limite decoded 10 MiB, allowlist de tipo/MIME/extension y nombre
   sanitizado.
+- `src/lib/security/rate-limit.ts` agrega rate limit in-memory y se aplica a
+  upload/procesar, OCR comprobante, checkout y jobs de emision.
 - `src/app/api/procesar-documento/route.ts` procesa PDF/OCR/IA dentro del
   request.
 
@@ -116,8 +126,8 @@ Impacto: archivos grandes, multiples OCR o PDFs pesados pueden agotar memoria,
 tiempo de funcion o presupuesto de IA. En serverless, el background no durable
 puede quedar cortado.
 
-Decision: mover procesamiento pesado a cola/job durable y aplicar el mismo
-modelo de limites al resto de endpoints de OCR/documentos.
+Decision: mantener rate limits como defensa inmediata, pero mover procesamiento
+pesado a cola/job durable (`ENG-003`) y agregar observabilidad de costos/errores.
 
 ### R4 - Riesgo XSS en preview de Excel mitigado
 
@@ -212,9 +222,9 @@ este proyecto son:
   keychain.
 - Injection/XSS: SQL va por Supabase query builder, bien. XSS pendiente en
   preview Excel. AI prompt/data injection no esta modelado formalmente.
-- Auth Failures: Supabase Auth esta bien integrado; faltan rate limits en login
-  propio no aplica tanto porque Supabase protege, pero APIs internas necesitan
-  throttling.
+- Auth Failures: Supabase Auth esta bien integrado; login propio no aplica tanto
+  porque Supabase protege. APIs internas criticas ya tienen throttling inicial,
+  falta hacerlo distribuido y con metricas.
 - Logging and Alerting: hay audit events y artifacts, pero no Sentry/log drain,
   alertas ni dashboard operativo.
 - Mishandling Exceptional Conditions: muchos catch devuelven mensajes internos
@@ -373,7 +383,8 @@ Fortalezas:
 
 Debilidades:
 
-- No hay rate limiting visible.
+- Rate limiting inicial existe, pero es in-memory por instancia; falta backend
+  distribuido si aumenta trafico o concurrencia.
 - Upload/IA aun tiene limites inconsistentes fuera de `/api/subir-procesar`.
 - `getDevSupportWriteBlock` esta distribuido por endpoint/action, no garantizado
   por una politica central de mutacion.
@@ -395,7 +406,8 @@ Debilidades:
 - Dashboard `/massdte` hace muchas queries server-side y algunas traen hasta
   5000 boletas.
 - OCR/parse/AI puede exceder tiempo/memoria serverless.
-- No hay cola durable para documentos, OCR, IA ni emision.
+- No hay cola durable implementada para documentos, OCR ni IA; `ENG-003`
+  especifica el contrato de cierre.
 - No vi budgets de performance ni Lighthouse integrado.
 - No hay load test ni simulacion de multiples cuentas/equipos.
 
@@ -414,7 +426,8 @@ Brechas:
 - Falta test de billing: webhook firmado, idempotencia, estados morosa/pausada,
   addon pendiente.
 - Falta ampliar upload tests a ruta HTTP completa y PDFs maliciosos.
-- Falta test extension/SII real controlado (`LAUNCH-001`).
+- Falta automatizar o repetir con checklist versionado el smoke extension/SII
+  real ya informado OK por el usuario.
 
 ### DevOps
 
@@ -465,18 +478,21 @@ Brechas:
 5. Hecho: preview Excel sin `dangerouslySetInnerHTML`.
 6. Hecho parcial: `/api/subir-procesar` valida base64, tamano, tipo, MIME,
    extension y nombre; falta aplicar patron al resto de OCR/documentos.
-7. Pendiente: centralizar guard de modo soporte read-only para mutaciones.
-8. Pendiente: crear tests de contrato para endpoints mutantes principales: soporte mode,
+7. Hecho parcial: rate limit inicial en upload/procesar, OCR comprobante,
+   checkout y jobs de emision.
+8. Pendiente: centralizar guard de modo soporte read-only para mutaciones.
+9. Pendiente: crear tests de contrato para endpoints mutantes principales: soporte mode,
    account guard, upload, checkout, emision jobs.
-9. Hecho parcial: `LAUNCH-002` tiene runbook beta inicial; falta validar
+10. Hecho parcial: `LAUNCH-002` tiene runbook beta inicial; falta validar
    post-deploy.
-10. Hecho parcial: `COMPLIANCE-001` tiene RAT/proveedores/ARCO/retencion/
+11. Hecho parcial: `COMPLIANCE-001` tiene RAT/proveedores/ARCO/retencion/
     brechas/MPD minimo; falta revision legal y bajada a producto.
 
 ### Medio Plazo (1-3 semanas)
 
-1. Cerrar `LAUNCH-001`: smoke real extension/SII/CAF con empresa controlada.
-2. Implementar cola durable para OCR/IA/procesamiento/emision:
+1. Convertir `LAUNCH-001` en smoke reproducible: checklist versionado,
+   evidencia enmascarada, version de extension, job/lock/folio y resultado.
+2. Implementar cola durable para OCR/IA/procesamiento:
    Supabase queue/table jobs, Inngest/Trigger.dev/Cloud Tasks o worker propio.
 3. Observabilidad: Sentry, Vercel log drain, alertas por 5xx, errores IA,
    pagos fallidos, jobs atascados, locks expirados, webhook retries.
@@ -499,25 +515,25 @@ Brechas:
 Go para beta controlada de la app web, con mensaje acotado:
 
 - Gestion de cartolas, propuestas, reportes, soporte y pruebas controladas.
-- Sin prometer emision tributaria real completa hasta cerrar `LAUNCH-001`.
+- Emision real permitida solo como prueba controlada con soporte y evidencia no
+  sensible.
 
-No-go para lanzamiento abierto o venta fuerte de emision SII end-to-end:
+No-go para lanzamiento abierto o venta fuerte de emision SII masiva:
 
-- Falta smoke real extension/SII/CAF.
-- Falta CI y lint verde.
-- Falta hardening de uploads/XSS/rate limits.
-- Falta observabilidad y runbook operacional.
+- Falta observabilidad y alertas sobre emision real, upload, IA, pagos y locks.
+- Falta cola durable para OCR/IA/procesamiento.
+- Falta runbook operacional validado con primera cuenta beta.
 - Falta programa minimo de privacidad/compliance chileno para datos personales,
   proveedores, derechos ARCO, retencion, brechas y MPD.
 
 ## Score Final
 
-**70/100 post-readiness.**
+**74/100 post-LAUNCH-001 y hardening inicial.**
 
 Referencia interna: el score ajustado con compliance antes de esta rama era
 62/100. Sube por lint/CI/audit/headers/upload/Excel/runbook/compliance minimo,
-pero sigue bloqueado para lanzamiento abierto por SII real, observabilidad,
-colas y revision legal externa.
+smoke manual SII/CAF y rate limits iniciales, pero sigue bloqueado para
+lanzamiento abierto por observabilidad, cola durable y revision legal externa.
 
 Lectura directa: producto bien pensado, base SaaS prometedora, pero aun no es
 produccion madura. Esta en el punto correcto para ordenar fundamentos

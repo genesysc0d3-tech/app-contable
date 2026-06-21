@@ -10,6 +10,20 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - LAUNCH-001 cerrado y hardening runtime iniciado - #launch #security #architecture
+
+What: Recorded the user-reported real extension/SII/CAF smoke as done without
+storing secrets or tax documents, added in-memory rate limits to expensive or
+sensitive endpoints, updated the CTO score to 74/100, and opened ENG-003 as the
+durable queue contract for document/OCR/AI processing. Open launch still waits
+on observability, queue implementation and compliance/legal closure.
+
+Refs: `artifacts/tasks/LAUNCH-001-extension-sii-caf-smoke.md`,
+`artifacts/runs/2026-06-21-launch-001-user-smoke.md`,
+`artifacts/tasks/ENG-003-cola-durable-documentos-ia.md`,
+`src/lib/security/rate-limit.ts`,
+`artifacts/runs/2026-06-21-cto-project-audit.md`.
+
 ## 2026-06-21 - Sprint readiness tecnico/compliance implementado - #security #ci #compliance #launch
 
 What: Implemented the production readiness plan on

@@ -20,7 +20,7 @@ considera exito.
 
 - Definir perfil de la primera cuenta beta.
 - Definir mensaje comercial permitido: beta controlada, no promesa abierta de
-  emision tributaria completa hasta cerrar LAUNCH-001.
+  emision tributaria masiva sin observabilidad, soporte y compliance operacional.
 - Definir flujo de onboarding: registro, empresa, proveedor de emision, cartola,
   propuestas, reportes y soporte.
 - Definir soporte Genesys: cuando entrar a modo cliente, que mirar y que no
@@ -51,3 +51,5 @@ considera exito.
 - 2026-06-21 - Runbook inicial creado en
   `artifacts/docs/first-beta-runbook-2026-06-21.md`. Queda pendiente validarlo
   despues de deploy con auditorias productivas y simulacion Genesys.
+- 2026-06-21 - Ajustado despues del smoke manual LAUNCH-001 reportado OK: la
+  beta puede incluir emision real controlada, pero no lanzamiento abierto.
