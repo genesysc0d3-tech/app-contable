@@ -18,6 +18,10 @@ jobs:
   lighthouse:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: lighthouse-ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: lighthouse-ci-service-role-key
 
     steps:
       - name: Checkout
