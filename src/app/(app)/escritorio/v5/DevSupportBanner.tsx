@@ -44,7 +44,7 @@ export default function DevSupportBanner({
         <div style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
           Modo soporte Genesys
         </div>
-        <div style={{ fontSize: 11, color: "var(--text)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 11, color: "var(--text, #111827)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           Viendo {empresaNombre} como cliente. Sesion: {operatorEmail}. Solo lectura.
         </div>
       </div>

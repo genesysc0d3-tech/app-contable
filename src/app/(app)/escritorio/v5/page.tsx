@@ -25,7 +25,6 @@ import RCVSummaryCard from "./RCVSummaryCard";
 import EmpresaBrand from "./EmpresaBrand";
 import TeamBusinessPanel from "./TeamBusinessPanel";
 import UsageCountersPanel from "./UsageCountersPanel";
-import DevSupportBanner from "./DevSupportBanner";
 import { listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
 import { formatDisplayDateEsCl, formatShortDateEsCl } from "@/lib/display-date";
@@ -564,10 +563,6 @@ body{font-family:'DM Sans',sans-serif}
 `}</style>
 
       <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", minHeight: "100vh", padding: "20px 20px 20px" }}>
-
-        {supportMode && (
-          <DevSupportBanner empresaNombre={usuario.empresas.razon_social} operatorEmail={supportMode.operatorEmail} />
-        )}
 
         {/* CALENDAR + ACTIONS ROW */}
         <div style={{position:"relative",height:38,marginBottom:12}}>

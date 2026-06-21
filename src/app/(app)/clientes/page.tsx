@@ -1,20 +1,8 @@
-import { Suspense } from "react";
-import { getUsuario } from "@/lib/dal";
-import { createClient } from "@/lib/supabase/server";
-import ClientesLoading from "./loading";
+import { getAppEmpresaContext } from "@/lib/dal";
 import ClientesClient from "./ClientesClient";
 
 export default async function ClientesPage() {
-  const usuario = (await getUsuario())!;
-  return (
-    <Suspense fallback={<ClientesLoading />}>
-      <ClientesData empresaId={usuario.empresa_id} />
-    </Suspense>
-  );
-}
-
-async function ClientesData({ empresaId }: { empresaId: string }) {
-  const supabase = await createClient();
+  const { empresaId, supabase } = await getAppEmpresaContext();
 
   const { data: clientes } = await supabase
     .from("clientes")

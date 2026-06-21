@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { getDevSupportMode } from "@/lib/dev/support-mode";
 
 /**
  * Mock SII — Registro de Compras y Ventas (RCV/RCOF).
@@ -12,16 +15,27 @@ import { createClient } from "@/lib/supabase/server";
  * boletas que emitimos en el mock — solo el lado de VENTAS.
  */
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  const support = await getDevSupportMode();
+  let supabase: SupabaseClient<Database>;
+  let empresaId: string | null = null;
 
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-  if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "SIN_EMPRESA" }, { status: 403 });
+  if (support?.ok) {
+    supabase = support.sb;
+    empresaId = support.empresaId;
+  } else {
+    supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+
+    const { data: usuario } = await supabase
+      .from("usuarios")
+      .select("empresa_id")
+      .eq("id", user.id)
+      .single();
+    empresaId = usuario?.empresa_id ?? null;
+  }
+
+  if (!empresaId) return NextResponse.json({ ok: false, error: "SIN_EMPRESA" }, { status: 403 });
 
   const url = new URL(request.url);
   const mes = url.searchParams.get("mes") ?? new Date().toISOString().slice(0, 7);
@@ -36,7 +50,7 @@ export async function GET(request: Request) {
   const { data: boletas, error } = await supabase
     .from("boletas_emitidas")
     .select("id, tipo_dte, folio, fecha_emision, emisor_rut, receptor_rut, receptor_razon_social, monto_neto, monto_exento, iva, monto_total, estado")
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", empresaId)
     .gte("fecha_emision", desde)
     .lt("fecha_emision", hasta)
     .neq("estado", "anulada")

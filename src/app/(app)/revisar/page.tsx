@@ -1,20 +1,8 @@
-import { Suspense } from "react";
-import { getUsuario } from "@/lib/dal";
-import { createClient } from "@/lib/supabase/server";
-import RevisarLoading from "./loading";
+import { getAppEmpresaContext } from "@/lib/dal";
 import RevisarClient from "./RevisarClient";
 
 export default async function RevisarPage() {
-  const usuario = (await getUsuario())!;
-  return (
-    <Suspense fallback={<RevisarLoading />}>
-      <RevisarData empresaId={usuario.empresa_id} />
-    </Suspense>
-  );
-}
-
-async function RevisarData({ empresaId }: { empresaId: string }) {
-  const supabase = await createClient();
+  const { empresaId, supabase } = await getAppEmpresaContext();
 
   const [{ data: propuestas }, { data: clientes }] = await Promise.all([
     supabase
