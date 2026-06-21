@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { recordCuentaAudit } from "@/lib/audit/account";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
 const BATCH_SIZE = 50;
 
@@ -16,6 +18,9 @@ const BATCH_SIZE = 50;
  * causing the optimistic UI to "approve" things that never persisted.
  */
 async function getEmpresaAndService() {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" } as const;
@@ -32,7 +37,7 @@ async function getEmpresaAndService() {
   if (!url || !key) return { error: "Backend mal configurado" } as const;
 
   const sb = createServiceClient(url, key);
-  return { empresaId: usuario.empresa_id, sb } as const;
+  return { empresaId: usuario.empresa_id, userId: user.id, sb } as const;
 }
 
 export async function aprobarPropuesta(
@@ -50,6 +55,15 @@ export async function aprobarPropuesta(
 
   if (error) return { error: error.message };
   if (!count) return { error: "No se pudo actualizar — propuesta no encontrada o sin permisos" };
+  await recordCuentaAudit({
+    sb: ctx.sb,
+    empresaId: ctx.empresaId,
+    usuarioId: ctx.userId,
+    accion: "propuesta_aprobada",
+    recursoTipo: "propuesta_ia",
+    recursoId: propuestaId,
+    resumen: "Propuesta aprobada",
+  });
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
@@ -249,6 +263,17 @@ export async function aprobarTodas(
       count: 0,
     };
   }
+
+  await recordCuentaAudit({
+    sb: ctx.sb,
+    empresaId: ctx.empresaId,
+    usuarioId: ctx.userId,
+    accion: "propuestas_aprobadas",
+    recursoTipo: "propuesta_ia",
+    recursoId: null,
+    resumen: `${aprobadas} propuestas aprobadas`,
+    metadata: { cantidad: aprobadas },
+  });
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");

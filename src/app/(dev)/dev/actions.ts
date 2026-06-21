@@ -7,9 +7,11 @@
  * campo a campo con validación numérica — jamás spread del payload.
  */
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, TablesUpdate } from "@/lib/database.types";
+import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { recordCuentaAudit } from "@/lib/audit/account";
+import { clearDevSupportEmpresaCookie, getDevOperatorContext, getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { cuotaEmpresaMes, periodoActualChile, rangoMesActualChileUtc } from "./helpers";
 
 type ServiceClient = ReturnType<typeof createServiceClient<Database>>;
@@ -18,24 +20,10 @@ type ServiceClient = ReturnType<typeof createServiceClient<Database>>;
  * Doble gate: usuario autenticado + usuarios.dev_mode === true. Solo si pasa
  * ambas se entrega el service client. Mismo patrón que /api/config/ai-key.
  */
-async function gateOperador(): Promise<{ error: string } | { sb: ServiceClient }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Solo operador" };
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("dev_mode")
-    .eq("id", user.id)
-    .single();
-  if (usuario?.dev_mode !== true) return { error: "Solo operador" };
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return { error: "Backend mal configurado" };
-  return { sb: createServiceClient<Database>(url, key) };
+async function gateOperador(): Promise<{ error: string } | { sb: ServiceClient; userId: string }> {
+  const operador = await getDevOperatorContext();
+  if (!operador.ok) return { error: "Solo operador Genesys" };
+  return { sb: operador.sb, userId: operador.userId };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,6 +57,12 @@ export async function actualizarPlan(
   codigo: string,
   campos: PlanCamposInput,
 ): Promise<{ ok: true } | { error: string }> {
+  if (process.env.MASSDTE_ENABLE_LEGACY_DEV !== "1") {
+    void codigo;
+    void campos;
+    return { error: "Panel legacy deshabilitado. Usa /dev/cuentas." };
+  }
+
   const gate = await gateOperador();
   if ("error" in gate) return gate;
 
@@ -144,6 +138,12 @@ export async function togglePlanActivo(
   empresaId: string,
   activo: boolean,
 ): Promise<{ ok: true } | { error: string }> {
+  if (process.env.MASSDTE_ENABLE_LEGACY_DEV !== "1") {
+    void empresaId;
+    void activo;
+    return { error: "Panel legacy deshabilitado. Usa /dev/cuentas." };
+  }
+
   const gate = await gateOperador();
   if ("error" in gate) return gate;
 
@@ -168,6 +168,12 @@ export async function otorgarRefillCortesia(
   empresaId: string,
   boletas: number,
 ): Promise<{ ok: true; boletas: number } | { error: string }> {
+  if (process.env.MASSDTE_ENABLE_LEGACY_DEV !== "1") {
+    void empresaId;
+    void boletas;
+    return { error: "Panel legacy deshabilitado. Usa /dev/cuentas." };
+  }
+
   const gate = await gateOperador();
   if ("error" in gate) return gate;
 
@@ -207,6 +213,11 @@ export type EmpresaHit = {
 export async function buscarEmpresa(
   q: string,
 ): Promise<{ ok: true; resultados: EmpresaHit[] } | { error: string }> {
+  if (process.env.MASSDTE_ENABLE_LEGACY_DEV !== "1") {
+    void q;
+    return { error: "Panel legacy deshabilitado. Usa /dev/cuentas." };
+  }
+
   const gate = await gateOperador();
   if ("error" in gate) return gate;
   const sb = gate.sb;
@@ -291,4 +302,62 @@ export async function buscarEmpresa(
   });
 
   return { ok: true, resultados };
+}
+
+export async function entrarModoClienteDev(
+  empresaId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+
+  if (typeof empresaId !== "string" || !UUID_RE.test(empresaId)) {
+    return { error: "Empresa invalida" };
+  }
+
+  const [empresaRes, cuenta] = await Promise.all([
+    gate.sb.from("empresas").select("id").eq("id", empresaId).maybeSingle(),
+    contextoCuentaPorEmpresa(gate.sb, empresaId).catch(() => null),
+  ]);
+  if (empresaRes.error) return { error: empresaRes.error.message };
+  if (!empresaRes.data) return { error: "Empresa no encontrada" };
+  if (!cuenta) return { error: "Empresa sin cuenta pagadora" };
+
+  await setDevSupportEmpresaCookie(empresaId);
+  await recordCuentaAudit({
+    sb: gate.sb,
+    cuentaId: cuenta.cuentaId,
+    empresaId,
+    usuarioId: gate.userId,
+    accion: "modo_soporte_entrado",
+    recursoTipo: "empresa",
+    recursoId: empresaId,
+    resumen: "Operador dev entro en modo cliente read-only",
+  });
+  revalidatePath("/massdte");
+  revalidatePath("/escritorio/v5");
+  return { ok: true };
+}
+
+export async function salirModoClienteDev(): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+
+  const support = await getDevSupportMode();
+  if (support?.ok) {
+    const cuenta = await contextoCuentaPorEmpresa(gate.sb, support.empresaId).catch(() => null);
+    await recordCuentaAudit({
+      sb: gate.sb,
+      cuentaId: cuenta?.cuentaId ?? null,
+      empresaId: support.empresaId,
+      usuarioId: support.operatorUserId,
+      accion: "modo_soporte_salido",
+      recursoTipo: "empresa",
+      recursoId: support.empresaId,
+      resumen: "Operador dev salio de modo cliente read-only",
+    });
+  }
+  await clearDevSupportEmpresaCookie();
+  revalidatePath("/massdte");
+  revalidatePath("/escritorio/v5");
+  return { ok: true };
 }

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { validarRut } from "@/lib/rut";
 
 export async function crearCliente(formData: {
@@ -13,6 +14,9 @@ export async function crearCliente(formData: {
   notas?: string;
   tipo_contribuyente?: string;
 }) {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return supportBlock;
+
   if (!formData.nombre.trim()) {
     return { error: "El nombre es obligatorio" };
   }
@@ -52,6 +56,9 @@ export async function editarCliente(
     tipo_contribuyente?: string;
   }
 ) {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return supportBlock;
+
   if (campos.rut && campos.rut.trim() && !validarRut(campos.rut)) {
     return { error: "RUT inválido" };
   }
@@ -75,6 +82,9 @@ export async function editarCliente(
 }
 
 export async function eliminarCliente(clienteId: string) {
+  const supportBlock = await getDevSupportWriteBlock();
+  if (supportBlock) return supportBlock;
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("clientes")
