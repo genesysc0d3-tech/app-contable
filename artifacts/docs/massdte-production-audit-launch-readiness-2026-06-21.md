@@ -119,7 +119,10 @@ Estado: cerrado y redeployado.
 
 ### P2 Post Beta
 
-- Lighthouse no se ejecuto como parte de la corrida final.
+- Lighthouse no se ejecuto como parte de la corrida final productiva. Queda
+  cubierto en CI para rutas publicas sin sesion mediante
+  `.github/workflows/lighthouse.yml`; falta extenderlo a rutas autenticadas con
+  estado Playwright controlado.
 - Reportes intermedios viejos sin trackear siguen en workspace local.
 - Falta dashboards/alertas de operacion continuas mas alla de artifacts.
 
@@ -131,7 +134,7 @@ Estado: cerrado y redeployado.
 | P1 | Runbook beta primer cliente | in_progress | `artifacts/tasks/LAUNCH-002-first-beta-runbook.md` |
 | P1 | Compliance Chile minimo | in_progress | `artifacts/tasks/COMPLIANCE-001-ley-21719-21595-readiness.md` |
 | P1 | Checklist final compra/onboarding/mobile | pendiente | crear despues de runbook beta |
-| P2 | Lighthouse performance/accessibility | pendiente | puede agregarse a `audit:app --lighthouse` si se instala paquete |
+| P2 | Lighthouse performance/accessibility | in_progress | CI agregado para `/auth/login`, `/auth/registro` y `/bloqueado`; falta modo autenticado |
 | P2 | Limpieza de reportes intermedios locales | pendiente | no borrar sin decision explicita |
 
 ## Decision Recomendada

@@ -408,7 +408,8 @@ Debilidades:
 - OCR/parse/AI puede exceder tiempo/memoria serverless.
 - No hay cola durable implementada para documentos, OCR ni IA; `ENG-003`
   especifica el contrato de cierre.
-- No vi budgets de performance ni Lighthouse integrado.
+- Lighthouse CI queda integrado para rutas publicas sin sesion; falta extender
+  budgets a `/massdte` y `/dev/cuentas` con estado autenticado controlado.
 - No hay load test ni simulacion de multiples cuentas/equipos.
 
 ### Testing

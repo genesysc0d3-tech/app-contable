@@ -40,6 +40,11 @@ sin decision explicita.
   implementa una cola incompleta sin worker; el siguiente cierre real requiere
   tabla de jobs, worker/cron, idempotencia, reintentos y deteccion de jobs
   atascados.
+- Se agrego Lighthouse CI en `.github/workflows/lighthouse.yml` con
+  `treosh/lighthouse-ci-action@v12`, build local de Next, `next start` en
+  `127.0.0.1:3000` y auditoria de rutas publicas sin sesion:
+  `/auth/login`, `/auth/registro` y `/bloqueado`. Los reportes quedan como
+  artifacts privados de GitHub Actions, sin `temporaryPublicStorage`.
 - El reporte CTO queda actualizado a 74/100 post-LAUNCH-001 + hardening
   inicial. La beta controlada puede incluir emision real con soporte presente,
   pero el lanzamiento abierto sigue bloqueado por observabilidad, cola durable
@@ -52,10 +57,15 @@ sin decision explicita.
 - `npm run test`: OK, 12 archivos, 86 tests.
 - `npm audit --audit-level=moderate`: OK, 0 vulnerabilidades.
 - `npm run build`: OK con Next 16.2.9.
+- `node -e "JSON.parse(...lighthouserc.json...)"`: OK.
+- `next start` local con permiso ampliado + `curl -fsSI` a `/auth/login`,
+  `/auth/registro` y `/bloqueado`: OK, HTTP 200.
 
 **Pendientes criticos:**
 - Observabilidad/alertas para emision, upload, IA, pagos, locks y webhooks.
 - Implementar `ENG-003` cola durable para procesamiento pesado.
+- Extender Lighthouse a `/massdte` y `/dev/cuentas` con storage state
+  controlado, sin publicar reportes con datos sensibles.
 - Validar runbook beta con primera cuenta controlada.
 - Revision legal externa y bajada producto de `COMPLIANCE-001`.
 
