@@ -25,6 +25,59 @@ respuesta a brechas, derechos ARCO, contratos/DPA y readiness legal antes de
 beta pagada o lanzamiento abierto. No instalar ni copiar codigo del repo externo
 sin decision explicita.
 
+### Sesion 2026-06-21 - Cola durable OCR/IA y compliance 8 beta
+
+**Que se hizo:**
+- Se implemento la cola durable base para documentos/OCR/IA en la rama
+  `feature/durable-document-processing-compliance`.
+- Nueva tabla `document_processing_jobs` con RLS deny-by-default, idempotencia
+  por documento/version de pipeline, estados `queued/running/retryable/
+  completed/failed/cancelled`, reintentos con backoff, locks, watchdog de jobs
+  atascados y metadata operacional sin contenido crudo.
+- `/api/subir-procesar` ya no depende de background volatil para hacer parseo,
+  OCR o IA: guarda archivo en Storage, crea job durable, marca el documento
+  como encolado y solo dispara un kick oportunista. Si Storage o la cola fallan,
+  responde error y deja evento ops sanitizado.
+- `/api/procesar-documento` queda como reproceso durable: valida propiedad,
+  rechaza documentos solo en memoria, soporta imagenes agrupadas y reusa jobs
+  completados sin duplicar procesamiento.
+- Se agregaron worker y endpoints internos: `processDocumentQueue`,
+  `/api/document-processing/cron` protegido por `CRON_SECRET` y
+  `/api/document-processing/retry` solo para operador Genesys con auditoria.
+- `/dev/diagnostico` ahora muestra cola docs lista/corriendo/fallida 24h/
+  atascada, y el snapshot operacional levanta hallazgos para jobs fallidos o
+  running viejos.
+- Se agregaron paginas publicas `/legal`, `/legal/privacidad`,
+  `/legal/terminos` y `/legal/seguridad` como base conservadora para beta.
+- `COMPLIANCE-001` queda `done_beta`: se versiono paquete RAT/DPA/brechas/
+  retencion/MPD y un reporte de readiness para apuntar a 8/10 en compliance
+  chileno beta controlada. No reemplaza revision legal externa.
+
+**Verificacion:**
+- `git diff --check`: OK.
+- `npm run test -- src/lib/document-processing/queue.test.ts`: OK, 4 tests.
+- `rtk tsc --noEmit`: OK.
+- `npm run lint`: OK.
+- `npm run test`: OK, 14 archivos, 93 tests.
+- `npm run build`: OK con `/api/document-processing/cron`,
+  `/api/document-processing/retry` y `/legal/*`.
+- `bash scripts/supabase-local-token.sh db push --dry-run`: OK; solo
+  `20260621223000_document_processing_jobs.sql`.
+- `bash scripts/supabase-local-token.sh db push`: OK; migracion aplicada.
+- `bash scripts/supabase-local-token.sh db lint --linked`: OK, sin errores.
+- `bash scripts/supabase-local-token.sh migration list`: fallo despues por
+  auth temporal del pooler (`cli_login_postgres` / `ECIRCUITBREAKER`) tras
+  aplicar la migracion; no reintentar de inmediato.
+
+**Pendientes criticos:**
+- Configurar/verificar `CRON_SECRET` en Vercel antes de depender del cron de
+  documentos; en Hobby queda diario, para beta conviene scheduler externo o
+  Vercel Pro si se requiere frecuencia subdiaria.
+- Probar con un Excel, PDF e imagen reales en produccion y revisar
+  `/dev/diagnostico` despues del primer procesamiento.
+- Revision legal externa antes de lanzamiento abierto; el estado actual es
+  readiness tecnico/legal beta, no opinion legal final.
+
 ### Sesion 2026-06-21 - Observabilidad operacional
 
 **Que se hizo:**

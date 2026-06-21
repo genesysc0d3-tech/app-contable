@@ -965,6 +965,97 @@ export type Database = {
           },
         ]
       }
+      document_processing_jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          documento_id: string
+          empresa_id: string
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          metadata: Json
+          next_run_at: string
+          pipeline_version: string
+          started_at: string | null
+          status: string
+          storage_path: string
+          tipo: string
+          updated_at: string
+          usuario_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          documento_id: string
+          empresa_id: string
+          id?: string
+          idempotency_key: string
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          metadata?: Json
+          next_run_at?: string
+          pipeline_version?: string
+          started_at?: string | null
+          status?: string
+          storage_path: string
+          tipo: string
+          updated_at?: string
+          usuario_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          documento_id?: string
+          empresa_id?: string
+          id?: string
+          idempotency_key?: string
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          metadata?: Json
+          next_run_at?: string
+          pipeline_version?: string
+          started_at?: string | null
+          status?: string
+          storage_path?: string
+          tipo?: string
+          updated_at?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_jobs_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_processing_jobs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_processing_jobs_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documentos_tributarios: {
         Row: {
           cliente_id: string | null

@@ -1,176 +1,136 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { procesarDocumento } from "@/lib/ai/processor";
-import { parseExcel } from "@/lib/parsers";
-import { ocrAndGroupImages } from "@/lib/ai/ocr";
+import type { Database } from "@/lib/database.types";
+import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
+import { recordOpsError } from "@/lib/ops/events";
+
+function cleanGroupedImages(value: unknown, args: { empresaId: string; documentoId: string }) {
+  if (!Array.isArray(value)) return [];
+  const allowedPrefix = `${args.empresaId}/${args.documentoId}/`;
+  return value.slice(0, 12).flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const path = typeof record.path === "string" ? record.path.trim() : "";
+    if (!path || path.includes("..") || !path.startsWith(allowedPrefix)) return [];
+    return [{
+      path,
+      mime: typeof record.mime === "string" ? record.mime.trim().slice(0, 80) : "image/jpeg",
+      name: typeof record.name === "string" ? record.name.trim().slice(0, 120) : "imagen",
+    }];
+  });
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, error: "No autenticado" }, { status: 401 });
 
   const { data: usuario } = await supabase
     .from("usuarios")
     .select("empresa_id")
     .eq("id", user.id)
     .single();
+  if (!usuario) return NextResponse.json({ ok: false, error: "Usuario sin empresa" }, { status: 403 });
 
-  if (!usuario) {
-    return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
   }
 
-  const body = await request.json();
-  const { documento_id, grouped_images } = body;
-
-  if (!documento_id) {
-    return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
-  }
+  const documentoId = typeof body.documento_id === "string" ? body.documento_id.trim() : "";
+  if (!documentoId) return NextResponse.json({ ok: false, error: "documento_id requerido" }, { status: 400 });
 
   const { data: documento } = await supabase
     .from("documentos_subidos")
     .select("id, empresa_id, storage_path, tipo, estado")
-    .eq("id", documento_id)
+    .eq("id", documentoId)
     .eq("empresa_id", usuario.empresa_id)
     .single();
+  if (!documento) return NextResponse.json({ ok: false, error: "Documento no encontrado" }, { status: 404 });
 
-  if (!documento) {
-    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
+  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!svcUrl || !svcKey) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
+  const svc = createServiceClient<Database>(svcUrl, svcKey);
+
+  const groupedImagesInput = Array.isArray(body.grouped_images) ? body.grouped_images : null;
+  const groupedImages = cleanGroupedImages(groupedImagesInput, {
+    empresaId: usuario.empresa_id,
+    documentoId: documento.id,
+  });
+  if (groupedImagesInput && groupedImagesInput.length > 0 && groupedImages.length === 0) {
+    return NextResponse.json({ ok: false, error: "GROUPED_IMAGES_INVALID" }, { status: 400 });
   }
-
-  if (documento.estado === "procesando") {
-    return NextResponse.json({ error: "Documento ya esta siendo procesado" }, { status: 409 });
+  const storagePath = groupedImages[0]?.path ?? documento.storage_path;
+  if (storagePath === "memoria") {
+    return NextResponse.json({ ok: false, error: "Archivo original no disponible en almacenamiento — subilo nuevamente desde el escritorio" }, { status: 422 });
   }
-
-  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const svc = createServiceClient(svcUrl, svcKey);
-
-  // Mark as procesando
-  await svc
-    .from("documentos_subidos")
-    .update({ estado: "procesando" })
-    .eq("id", documento.id);
 
   try {
-    // Grouped images path
-    if (grouped_images && Array.isArray(grouped_images) && grouped_images.length > 0) {
-      const images: { base64: string; mimeType: string; fileName: string }[] = [];
-      for (const imgPath of grouped_images) {
-        const { data: fileData } = await supabase.storage
-          .from("documentos")
-          .download(imgPath.path);
-        if (fileData) {
-          const buffer = await fileData.arrayBuffer();
-          const base64 = Buffer.from(buffer).toString("base64");
-          images.push({
-            base64,
-            mimeType: imgPath.mime || "image/jpeg",
-            fileName: imgPath.name || "imagen",
-          });
-        }
-      }
-      if (images.length === 0) throw new Error("No se pudieron descargar las imágenes");
+    const job = await enqueueDocumentProcessingJob(svc, {
+      documentoId: documento.id,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      tipo: documento.tipo,
+      storagePath,
+      metadata: groupedImages.length ? { grouped_images: groupedImages } : {},
+    });
 
-      const { groupedText } = await ocrAndGroupImages(images);
-      if (!groupedText.trim()) throw new Error("OCR no extrajo texto de las imágenes");
-
-      const result = await procesarDocumento(
-        documento.id,
-        usuario.empresa_id,
-        groupedText
-      );
-
+    if (job.status === "completed") {
       return NextResponse.json({
         ok: true,
         documento_id: documento.id,
-        movimientos: result.movimientos_total,
-        error: result.error ?? null,
+        job_id: job.id,
+        status: job.status,
+        message: "Documento ya procesado.",
       });
     }
 
-    // Standard file processing
-    if (documento.storage_path === "memoria") {
-      return NextResponse.json({ error: "Archivo original no disponible en almacenamiento — subilo nuevamente desde el escritorio" }, { status: 422 });
-    }
+    await svc.from("documentos_subidos").update({
+      estado: "procesando",
+      progreso_ia: { estado: "queued", job_id: job.id },
+    }).eq("id", documento.id);
 
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("documentos")
-      .download(documento.storage_path);
-
-    if (downloadError || !fileData) {
-      return NextResponse.json({ error: "Error descargando archivo desde almacenamiento" }, { status: 500 });
-    }
-
-    let contenido: string;
-    let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
-
-    if (documento.tipo === "excel") {
-      const buffer = await fileData.arrayBuffer();
-      const parsed = await parseExcel(buffer, { documento_id: documento.id });
-      contenido = parsed.content;
-      preExtracted = parsed.preExtracted;
-    } else if (["csv", "whatsapp"].includes(documento.tipo)) {
-      contenido = await fileData.text();
-    } else if (documento.tipo === "pdf") {
-      const arrayBuf = await fileData.arrayBuffer();
-      const { PDFParse } = await import("pdf-parse");
-      const pdfParser = new PDFParse(new Uint8Array(arrayBuf));
-      const pdfData = await pdfParser.getText();
-      contenido = pdfData.text;
-    } else if (documento.tipo === "imagen") {
-      const buffer = await fileData.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString("base64");
-      const { groupedText } = await ocrAndGroupImages([{
-        base64,
-        mimeType: "image/jpeg",
-        fileName: documento.storage_path.split("/").pop() || "imagen",
-      }]);
-      if (!groupedText.trim()) throw new Error("OCR no extrajo texto de la imagen");
-      contenido = groupedText;
-    } else {
-      contenido = await fileData.text();
-    }
-
-    if (!contenido.trim()) {
-      // Update document state to error
-      await svc.from("documentos_subidos").update({
-        estado: "error",
-        progreso_ia: { estado: "error", error: "Documento vacio o sin contenido legible" },
-      }).eq("id", documento.id);
-
-      return NextResponse.json({ error: "Documento vacio o sin contenido legible" }, { status: 422 });
-    }
-
-    const result = await procesarDocumento(
-      documento.id,
-      usuario.empresa_id,
-      contenido,
-      undefined,
-      preExtracted ?? undefined
-    );
+    processDocumentQueue({ sb: svc, limit: 1, lockOwner: "manual-reprocess-kick" }).catch((error) => {
+      void recordOpsError({
+        sb: svc,
+        severity: "error",
+        source: "ia",
+        eventName: "document_processing_reprocess_kick_failed",
+        summary: "No se pudo iniciar reprocesamiento oportunista",
+        empresaId: usuario.empresa_id,
+        usuarioId: user.id,
+        resourceType: "document_processing_job",
+        resourceId: job.id,
+        error,
+      });
+    });
 
     return NextResponse.json({
       ok: true,
       documento_id: documento.id,
-      movimientos: result.movimientos_total,
-      error: result.error ?? null,
+      job_id: job.id,
+      status: job.status,
+      message: "Procesamiento encolado.",
     });
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[procesar-documento] ${documento.id} error:`, errorMsg);
-
-    await svc.from("documentos_subidos").update({
-      estado: "error",
-      progreso_ia: { estado: "error", error: errorMsg },
-    }).eq("id", documento.id);
-
-    return NextResponse.json({ ok: false, error: errorMsg }, { status: 500 });
+  } catch (error) {
+    await recordOpsError({
+      sb: svc,
+      severity: "critical",
+      source: "ia",
+      eventName: "document_processing_manual_enqueue_failed",
+      summary: "No se pudo encolar reprocesamiento de documento",
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      resourceType: "documento_subido",
+      resourceId: documento.id,
+      error,
+    });
+    return NextResponse.json({ ok: false, error: "PROCESSING_JOB_FAILED" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";

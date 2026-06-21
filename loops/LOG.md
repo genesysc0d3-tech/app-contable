@@ -10,6 +10,23 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-21 - Cola durable documentos y compliance beta 8 - #engineering #ops #compliance
+
+What: Added durable OCR/AI/document processing with `document_processing_jobs`,
+idempotent enqueue, worker/cron, stale-job recovery, dev retry endpoint, upload
+and manual reprocess routes that persist jobs before heavy work, plus ops
+diagnostic metrics. Also added public legal pages and a versioned Chile
+compliance readiness package targeting 8/10 for controlled beta. Local lint,
+tests, TypeScript, build and Supabase schema lint passed; `migration list` later
+hit the known pooler auth circuit breaker after the migration was applied.
+
+Refs: `supabase/migrations/20260621223000_document_processing_jobs.sql`,
+`src/lib/document-processing/queue.ts`,
+`src/app/api/document-processing/cron/route.ts`,
+`src/app/api/document-processing/retry/route.ts`,
+`src/app/legal/privacidad/page.tsx`,
+`artifacts/docs/compliance/massdte-compliance-8-readiness-2026-06-21.md`.
+
 ## 2026-06-21 - Observabilidad operacional base - #ops #dev-operator #launch
 
 What: Added sanitized `ops_events`, safe metadata redaction, best-effort ops

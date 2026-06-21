@@ -3,11 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
-import { parseExcel } from "@/lib/parsers";
-import { procesarDocumento } from "@/lib/ai/processor";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
+import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
 
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
@@ -87,133 +86,83 @@ export async function POST(request: Request) {
   if (!storageError) {
     await svc.from("documentos_subidos").update({ storage_path: storagePath }).eq("id", doc.id);
   } else {
+    await svc.from("documentos_subidos").update({
+      estado: "error",
+      progreso_ia: { estado: "error", error: "No se pudo guardar archivo en Storage" },
+    }).eq("id", doc.id);
     await recordOpsEvent({
       sb: svc,
-      severity: "warn",
+      severity: "error",
       source: "upload",
       eventName: "upload_storage_failed",
-      summary: "El archivo fue aceptado pero no se pudo guardar en Storage",
+      summary: "No se pudo guardar archivo en Storage; no se encolo procesamiento",
       empresaId: usuario.empresa_id,
       usuarioId: user.id,
       resourceType: "documento_subido",
       resourceId: doc.id,
       metadata: { storage_error: storageError.message, tipo: validated.tipo, mime: contentType },
     });
+    return NextResponse.json({ ok: false, error: "STORAGE_UPLOAD_FAILED" }, { status: 502 });
   }
 
-  // Marcar como procesando y devolver respuesta inmediatamente
-  await svc.from("documentos_subidos").update({ estado: "procesando" }).eq("id", doc.id);
+  let job;
+  try {
+    job = await enqueueDocumentProcessingJob(svc, {
+      documentoId: doc.id,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      tipo: validated.tipo,
+      storagePath,
+      metadata: { mime: contentType, nombre: validated.nombre },
+    });
+  } catch (error) {
+    await svc.from("documentos_subidos").update({
+      estado: "error",
+      progreso_ia: { estado: "error", error: "No se pudo encolar procesamiento" },
+    }).eq("id", doc.id);
+    await recordOpsError({
+      sb: svc,
+      severity: "critical",
+      source: "upload",
+      eventName: "document_processing_enqueue_failed",
+      summary: "No se pudo crear job durable para documento",
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      resourceType: "documento_subido",
+      resourceId: doc.id,
+      error,
+      metadata: { tipo: validated.tipo, mime: contentType },
+    });
+    return NextResponse.json({ ok: false, error: "PROCESSING_JOB_FAILED" }, { status: 500 });
+  }
 
-  // Procesar en segundo plano (no await)
-  procesarEnBackground(doc.id, usuario.empresa_id, buffer, validated.tipo, {
-    mime: contentType,
-    nombre: validated.nombre,
-  }).catch(() => {});
+  await svc.from("documentos_subidos").update({
+    estado: "procesando",
+    progreso_ia: { estado: "queued", job_id: job.id },
+  }).eq("id", doc.id);
+
+  // Kick oportunista: si la funcion serverless muere, el job durable queda y
+  // el cron lo retoma. No dependemos de esta promesa para no perder trabajo.
+  processDocumentQueue({ sb: svc, limit: 1, lockOwner: "upload-kick" }).catch((error) => {
+    void recordOpsError({
+      sb: svc,
+      severity: "error",
+      source: "upload",
+      eventName: "document_processing_kick_failed",
+      summary: "No se pudo iniciar procesamiento oportunista despues de upload",
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      resourceType: "document_processing_job",
+      resourceId: job.id,
+      error,
+    });
+  });
 
   return NextResponse.json({
     ok: true,
     documento_id: doc.id,
-    message: "Procesamiento iniciado.",
+    job_id: job.id,
+    status: job.status,
+    message: "Procesamiento encolado.",
   });
-}
-
-async function procesarEnBackground(
-  documentoId: string,
-  empresaId: string,
-  buffer: Buffer,
-  tipo: string,
-  archivo: { mime: string; nombre: string },
-) {
-  try {
-    let contenido: string;
-    let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
-
-    if (tipo === "excel") {
-      const arrayBuf = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as unknown as ArrayBuffer;
-      const parsed = await parseExcel(arrayBuf, { documento_id: documentoId });
-      contenido = parsed.content;
-      preExtracted = parsed.preExtracted;
-    } else if (tipo === "pdf") {
-      const { PDFParse } = await import("pdf-parse");
-      const pdfParser = new PDFParse(new Uint8Array(buffer));
-      const pdfData = await pdfParser.getText();
-      contenido = pdfData.text;
-    } else if (tipo === "imagen") {
-      // Foto/captura de cartola: OCR con Mistral antes de clasificar.
-      const { ocrAndGroupImages } = await import("@/lib/ai/ocr");
-      const { groupedText } = await ocrAndGroupImages([{
-        base64: buffer.toString("base64"),
-        mimeType: archivo.mime,
-        fileName: archivo.nombre,
-      }]);
-      contenido = groupedText;
-    } else {
-      contenido = buffer.toString("utf-8");
-    }
-
-    if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
-
-    const result = await procesarDocumento(
-      documentoId,
-      empresaId,
-      contenido,
-      undefined,
-      preExtracted ?? undefined
-    );
-
-    if (result.error) {
-      console.error(`[bg] ${documentoId} error:`, result.error);
-      await recordOpsEvent({
-        severity: "error",
-        source: "ia",
-        eventName: "procesar_documento_error",
-        summary: "El procesamiento IA devolvio error",
-        empresaId,
-        resourceType: "documento_subido",
-        resourceId: documentoId,
-        metadata: { processor_error: result.error, tipo },
-      });
-    }
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    // Merge dev+audit: stack en el log y try/catch defensivo (del compa) +
-    // cliente tipado <Database> sin cast any (de la auditoría).
-    const errorStack = err instanceof Error ? err.stack : undefined;
-    console.error(`[bg] ${documentoId} error fatal:`, errorMsg, errorStack ?? "");
-    try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-      if (url && key) {
-        const svc = createServiceClient<Database>(url, key);
-        await recordOpsError({
-          sb: svc,
-          severity: "error",
-          source: tipo === "imagen" ? "ocr" : "ia",
-          eventName: "procesar_documento_fatal",
-          summary: "El procesamiento de documento fallo en background",
-          empresaId,
-          resourceType: "documento_subido",
-          resourceId: documentoId,
-          error: err,
-          metadata: { tipo, mime: archivo.mime, nombre: archivo.nombre },
-        });
-        await svc.from("documentos_subidos").update({
-          estado: "error",
-          progreso_ia: { estado: "error", error: errorMsg },
-        }).eq("id", documentoId);
-      }
-    } catch (e) {
-      console.error(`[bg] ${documentoId} fallo al marcar error:`, e);
-      await recordOpsError({
-        severity: "critical",
-        source: "upload",
-        eventName: "document_error_state_update_failed",
-        summary: "No se pudo marcar como error un documento fallido",
-        empresaId,
-        resourceType: "documento_subido",
-        resourceId: documentoId,
-        error: e,
-      });
-    }
-  }
 }

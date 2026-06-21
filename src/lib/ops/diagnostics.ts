@@ -34,6 +34,10 @@ export type OpsSnapshot = {
     jobsEmisionFallidos24h: number;
     opsErrores24h: number;
     opsCriticos24h: number;
+    documentJobsQueued: number;
+    documentJobsRunning: number;
+    documentJobsFailed24h: number;
+    documentJobsStale: number;
   };
   findings: OpsFinding[];
   latestEvents: OpsLatestEvent[];
@@ -63,6 +67,10 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     jobsFallidosResult,
     opsErroresResult,
     opsCriticosResult,
+    documentJobsQueuedResult,
+    documentJobsRunningResult,
+    documentJobsFailedResult,
+    documentJobsStaleResult,
     latestEventsResult,
   ] = await Promise.all([
     sb
@@ -90,6 +98,25 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
       .eq("severity", "critical")
       .gte("created_at", since24h),
     sb
+      .from("document_processing_jobs")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["queued", "retryable"])
+      .lte("next_run_at", checkedAt),
+    sb
+      .from("document_processing_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "running"),
+    sb
+      .from("document_processing_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "failed")
+      .gte("updated_at", since24h),
+    sb
+      .from("document_processing_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "running")
+      .lt("locked_at", new Date(now.getTime() - 15 * 60 * 1000).toISOString()),
+    sb
       .from("ops_events")
       .select("id, severity, source, event_name, summary, resource_type, resource_id, created_at")
       .order("created_at", { ascending: false })
@@ -102,6 +129,10 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     jobsEmisionFallidos24h: countFrom(jobsFallidosResult, "emision_jobs", queryErrors),
     opsErrores24h: countFrom(opsErroresResult, "ops_events_error", queryErrors),
     opsCriticos24h: countFrom(opsCriticosResult, "ops_events_critical", queryErrors),
+    documentJobsQueued: countFrom(documentJobsQueuedResult, "document_processing_jobs_queued", queryErrors),
+    documentJobsRunning: countFrom(documentJobsRunningResult, "document_processing_jobs_running", queryErrors),
+    documentJobsFailed24h: countFrom(documentJobsFailedResult, "document_processing_jobs_failed", queryErrors),
+    documentJobsStale: countFrom(documentJobsStaleResult, "document_processing_jobs_stale", queryErrors),
   };
 
   if (latestEventsResult.error) queryErrors.push(`ops_events_latest: ${latestEventsResult.error.message}`);
@@ -129,6 +160,22 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
       eventName: "emision_jobs_fallidos_24h",
       summary: `${metrics.jobsEmisionFallidos24h} job(s) de emision fallidos o expirados en 24 horas`,
       metadata: { count: metrics.jobsEmisionFallidos24h },
+    });
+  }
+  if (metrics.documentJobsStale > 0) {
+    findings.push({
+      severity: "critical",
+      eventName: "document_processing_jobs_atascados",
+      summary: `${metrics.documentJobsStale} job(s) de documentos llevan mas de 15 minutos running`,
+      metadata: { count: metrics.documentJobsStale, threshold_minutes: 15 },
+    });
+  }
+  if (metrics.documentJobsFailed24h > 0) {
+    findings.push({
+      severity: "warn",
+      eventName: "document_processing_jobs_failed_24h",
+      summary: `${metrics.documentJobsFailed24h} job(s) de documentos fallidos en 24 horas`,
+      metadata: { count: metrics.documentJobsFailed24h },
     });
   }
   if (metrics.locksExpirados > 0) {
