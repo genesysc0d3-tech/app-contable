@@ -357,7 +357,7 @@ function focusWorkerForHuman(state, message) {
 // Cuando el usuario desbloquea (o guarda) la bóveda SII desde las opciones,
 // reanudar solo los trabajos que quedaron esperando login: vuelve a escanear
 // la ventana SII, que ahora encontrará credenciales y hará autologin. Esto
-// es lo que hace que "desbloquear PIN" continúe la emisión sin recargar nada.
+// es lo que hace que "desbloquear bóveda" continúe la emisión sin recargar nada.
 function resumeJobsAfterSiiUnlock() {
   const credentials = getUnlockedSiiCredentials();
   if (!credentials?.rut || !credentials?.clave) return;
@@ -387,7 +387,7 @@ function attemptSiiAutologin(state) {
     siiVaultStatus()
       .then((status) => {
         const message = status.configured
-          ? "SII requiere inicio de sesión, pero la bóveda SII está bloqueada. Abre la extensión, ingresa tu PIN local y presiona Desbloquear; luego reintenta la emisión. También puedes iniciar sesión manualmente aquí."
+          ? "SII requiere inicio de sesión, pero la bóveda SII está bloqueada. Abre la extensión, ingresa tu passphrase local y presiona Desbloquear; luego reintenta la emisión. También puedes iniciar sesión manualmente aquí."
           : "SII requiere inicio de sesión. Configura la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta.";
         focusWorkerForHuman(state, message);
       })

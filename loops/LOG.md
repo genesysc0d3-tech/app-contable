@@ -10,6 +10,38 @@ tags: [loops, log]
 Read the latest 5-10 entries before major loop work. Add one concise entry after
 major loop work. Link artifacts when possible.
 
+## 2026-06-23 - Hardening preauditoria 9 aplicado - #compliance #security #performance #extension
+
+What: Implemented the first pre-audit 9 hardening pass: versioned emission
+authorizations and backend job gate, SII vault passphrase enforcement,
+SimpleAPI vault lockout, production extension manifest without localhost,
+production page-map shutdown/sanitization, sanitized SII result logs,
+session-scoped emission drafts, and monthly lazy loading for RCV data instead
+of hydrating 5000 rows on `/massdte`. `audit:locks` now prepares the required
+emission authorization before creating its temporary lock.
+
+Refs: `src/app/api/emision/authorizations/route.ts`,
+`supabase/migrations/20260623100000_emission_authorizations.sql`,
+`extensions/sii-portal-rpa/manifest.prod.json`, `docs/MEMORIA.md`.
+
+Follow-up: migration applied remotely and production redeployed as
+`dpl_DNdgdoUDKHmwSCDQfYo5bWgcwq5y` on `https://app-contable-five.vercel.app`.
+Post-deploy `audit:roles`, `audit:app` and `audit:locks` passed with 0
+findings. Reports are in `artifacts/runs/2026-06-23-*`.
+
+## 2026-06-22 - Plan preauditoria 9.3 conciliado - #compliance #security #performance #extension
+
+What: Preserved the pre-audit 9.3+ plan after three analysis passes
+(legal/compliance, extension/security, and performance/architecture). The plan
+sets MassDTE's next phase around versioned emission authorization, stronger
+extension vault controls, production page-map shutdown/sanitization, safe
+dashboard snapshots, lazy loading for heavy `/massdte` data, compliance v2 and
+an assisted tax-incident support runbook. No runtime code changed in this step.
+
+Refs:
+`artifacts/docs/compliance/massdte-preauditoria-9-plan-y-contexto-2026-06-22.md`,
+`docs/MEMORIA.md`.
+
 ## 2026-06-21 - Cola durable documentos y compliance beta 8 - #engineering #ops #compliance
 
 What: Added durable OCR/AI/document processing with `document_processing_jobs`,

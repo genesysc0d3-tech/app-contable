@@ -10,6 +10,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
+import { CURRENT_EMISSION_AUTHORIZATION_VERSION, getEmissionAuthorizationStatus } from "@/lib/emission/authorizations";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled";
@@ -175,6 +176,41 @@ export async function POST(request: Request) {
   const expectedEmisorRut = cleanText(empresa?.rut) ?? cleanText(payload.expected_emisor_rut);
   if (provider === "sii_local" && !expectedEmisorRut) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_RUT" }, { status: 422 });
+  }
+
+  try {
+    const authorization = await getEmissionAuthorizationStatus({
+      sb: guard.service,
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      userId: guard.userId,
+      provider,
+    });
+    if (!authorization.authorized) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "EMISSION_AUTHORIZATION_REQUIRED",
+          provider,
+          legal_version: CURRENT_EMISSION_AUTHORIZATION_VERSION,
+        },
+        { status: 428 },
+      );
+    }
+  } catch (error) {
+    await recordOpsError({
+      sb: guard.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_authorization_query_failed",
+      summary: "No se pudo validar autorizacion de emision",
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      usuarioId: guard.userId,
+      error,
+      metadata: { provider, tipo_dte: tipoDte },
+    });
+    return NextResponse.json({ ok: false, error: "EMISSION_AUTHORIZATION_QUERY_FAILED" }, { status: 500 });
   }
 
   const lock = await acquireCuentaEmissionLock({

@@ -100,7 +100,7 @@
     event.preventDefault();
     const rut = elements.siiRut?.value || "";
     const clave = elements.siiClave?.value || "";
-    const pin = elements.siiPin?.value || "";
+    const passphrase = elements.siiPin?.value || "";
     if (!rut.trim()) {
       elements.siiDiagnostic.textContent = "Ingresa el RUT SII.";
       return;
@@ -109,14 +109,14 @@
       elements.siiDiagnostic.textContent = "Ingresa la Clave Tributaria.";
       return;
     }
-    if (!/^\d{4,8}$/.test(pin)) {
-      elements.siiDiagnostic.textContent = "El PIN local debe tener entre 4 y 8 números.";
+    if (!isStrongSiiPassphrase(passphrase)) {
+      elements.siiDiagnostic.textContent = "La passphrase local debe tener mínimo 12 caracteres y no puede ser sólo números.";
       return;
     }
 
     elements.saveSiiVault.disabled = true;
     elements.siiDiagnostic.textContent = "Cifrando clave SII localmente...";
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave, pin } }, (response) => {
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave, passphrase } }, (response) => {
       elements.saveSiiVault.disabled = false;
       if (chrome.runtime.lastError || !response?.ok) {
         elements.siiDiagnostic.textContent = errorMessage(response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED");
@@ -130,12 +130,12 @@
   });
 
   elements.unlockSiiVault?.addEventListener("click", () => {
-    const pin = elements.siiPin?.value || "";
-    if (!/^\d{4,8}$/.test(pin)) {
-      elements.siiDiagnostic.textContent = "Ingresa el PIN local (4 a 8 números) para desbloquear.";
+    const passphrase = elements.siiPin?.value || "";
+    if (!isStrongSiiPassphrase(passphrase)) {
+      elements.siiDiagnostic.textContent = "Ingresa la passphrase local de al menos 12 caracteres para desbloquear.";
       return;
     }
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_UNLOCK", pin }, (response) => {
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_UNLOCK", passphrase }, (response) => {
       if (chrome.runtime.lastError || !response?.ok) {
         elements.siiDiagnostic.textContent = errorMessage(response?.error || chrome.runtime.lastError?.message || "SII_UNLOCK_FAILED");
         return;
@@ -278,7 +278,7 @@
       VAULT_NOT_CONFIGURED: "Primero guarda la boveda cifrada.",
       RUT_REQUIRED: "Ingresa el RUT SII.",
       CLAVE_REQUIRED: "Ingresa la Clave Tributaria.",
-      PIN_INVALID: "PIN local incorrecto (4 a 8 números).",
+      SII_PASSPHRASE_INVALID: "Passphrase SII inválida o incorrecta. Debe tener mínimo 12 caracteres y no ser sólo números.",
       VAULT_LOCKED_RETRY_LATER: "Demasiados intentos fallidos. Espera 5 minutos y vuelve a intentar.",
       PFX_TOO_LARGE: "El certificado PFX supera 8 MB.",
       CAF_TOO_LARGE: "El CAF XML supera 8 MB.",
@@ -287,5 +287,9 @@
       CAF_FOLIO_RANGE_EXHAUSTED: "El rango de folios del CAF está agotado.",
     };
     return messages[code] || "No se pudo guardar la boveda local.";
+  }
+
+  function isStrongSiiPassphrase(value) {
+    return typeof value === "string" && value.length >= 12 && !/^\d+$/.test(value);
   }
 })();

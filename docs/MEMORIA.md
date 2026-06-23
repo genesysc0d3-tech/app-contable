@@ -25,6 +25,110 @@ respuesta a brechas, derechos ARCO, contratos/DPA y readiness legal antes de
 beta pagada o lanzamiento abierto. No instalar ni copiar codigo del repo externo
 sin decision explicita.
 
+### Sesion 2026-06-22 - Plan preauditoria 9.3
+
+**Decision guardada:**
+- La siguiente fase apunta a dejar MassDTE en 9.2-9.4/10 tecnico/compliance
+  antes de pagar auditoria externa. El 10/10 no se autodeclara; se prepara
+  evidencia para que abogado/auditor lo valide.
+- Se creo el memo durable
+  `artifacts/docs/compliance/massdte-preauditoria-9-plan-y-contexto-2026-06-22.md`
+  como contexto completo para reinicios o cambio de IA.
+- Postura producto/legal: MassDTE es herramienta de automatizacion asistida.
+  El usuario autorizado revisa, aprueba y ordena la emision; la extension
+  ejecuta acciones equivalentes a teclado/mouse sobre una sesion SII/proveedor
+  configurada por el usuario. MassDTE responde por seguridad, autorizacion,
+  trazabilidad, prevencion razonable, soporte y correccion asistida.
+- Soporte contable asistido: si usuario o app detectan un problema, soporte
+  contacta al cliente, el contador interno revisa, el cliente autoriza cualquier
+  correccion tributaria real y se cierra con evidencia sanitizada.
+
+**Plan conciliado:**
+- Crear aceptacion versionada antes de emision real y bloquear
+  `allow_final_emit` si no existe autorizacion vigente por usuario, empresa,
+  proveedor y version legal.
+- Endurecer extension: migrar boveda SII desde PIN 4-8 a passphrase fuerte en
+  produccion, agregar lockout a SimpleAPI vault, separar manifest dev/prod sin
+  localhost en produccion y actualizar README/arquitectura.
+- Apagar `page-map` en produccion por defecto; si se activa, sanitizar antes de
+  salir de la extension. Evitar `body_excerpt`, RUT/email, montos largos, URLs
+  completas y formularios crudos.
+- Sanear `sii_local_resultados` y drafts de emision: no retener PDF base64,
+  XML completo, page excerpts crudos ni datos tributarios sensibles en
+  `localStorage`.
+- Performance: `DashboardSafeSnapshot` server-side, cache allowlist y primer
+  render de `/massdte` solo con snapshot, top 20 visibles, contadores,
+  calendario agregado y locks frescos. RCV 24 meses, search/history y
+  pendientes completos deben pasar a carga bajo demanda.
+- Compliance v2: RAT por flujo, matriz de bases legales, DPA/proveedores,
+  transferencias, retencion, ARCO, brechas, EIPD IA/OCR, MPD proporcional y
+  conclusion Ley 21.663.
+
+**No hacer:**
+- No guardar claves SII en backend.
+- No abrir `<all_urls>` en la extension.
+- No usar "todo cifrado en localStorage" como solucion.
+- No cachear localmente PDFs, XML, cartolas, OCR crudo, prompts IA, RUT/email
+  completos, CAF, certificados, tokens ni pagos raw.
+
+### Sesion 2026-06-23 - Aplicacion hardening preauditoria 9
+
+**Que se aplico en `feature/preaudit-9-hardening`:**
+- Se agrego `emission_authorizations` con autorizacion versionada por cuenta,
+  empresa, usuario, proveedor y version legal. La tabla no guarda XML, PDFs,
+  claves ni payload tributario.
+- `/api/emision/authorizations` permite consultar/registrar la aceptacion de
+  emision real; registra evento `emision_autorizacion_aceptada` en auditoria
+  de cuenta con metadata allowlist.
+- `/api/emision/jobs` ahora falla cerrado con
+  `EMISSION_AUTHORIZATION_REQUIRED` si no existe autorizacion vigente para
+  `sii_local` o `simpleapi` antes de crear locks/jobs.
+- `EmitirDirectaView` confirma explicitamente autorizacion de emision asistida
+  antes de pedir job y guarda drafts de emision en `sessionStorage` con TTL de
+  12 horas en vez de `localStorage` durable.
+- Extension SII: la boveda dejo de aceptar PIN numerico 4-8 y exige
+  passphrase local de al menos 12 caracteres que no sea solo numerica; textos
+  de opciones/background quedaron alineados.
+- Extension SimpleAPI: la boveda ahora tiene lockout persistido tras fallos de
+  passphrase y limpia el lock al guardar/desbloquear correctamente.
+- Se agrego `extensions/sii-portal-rpa/manifest.prod.json` sin permisos a
+  `localhost`/`127.0.0.1`; `manifest.json` queda como dev/local.
+- `/api/sii-local/page-map` queda apagado por defecto en produccion salvo
+  `MASSDTE_ENABLE_SII_PAGE_MAP=1`; aun activado, sanitiza URLs, RUTs, emails,
+  secretos y longitud antes de guardar en memoria.
+- `sii_local_resultados` sanea logs de resultado: redacted para base64,
+  XML/HTML, certificados, tokens/clave/cookies y excerpts de pagina.
+- RCV de `/massdte` deja de hidratar hasta 5000 boletas en primer render:
+  SSR carga solo mes inicial y `RcvViewWrapper` trae meses bajo demanda desde
+  `/api/boletas/rcv`.
+- `scripts/audit-emission-lock.mjs` fue actualizado para registrar/validar
+  autorizacion de emision antes de crear el job temporal del audit de locks.
+
+**Pendiente de esta linea de trabajo:**
+- La migracion `20260623100000_emission_authorizations.sql` fue aplicada en
+  Supabase remoto el 2026-06-23. `migration list` confirmo local/remoto
+  alineados hasta `20260623100000`; `db push --dry-run` y `db lint --linked`
+  posteriores quedaron bloqueados por `ECIRCUITBREAKER`/auth temporal del
+  pooler, no por SQL.
+- Produccion quedo redeployada en Vercel con deployment
+  `dpl_DNdgdoUDKHmwSCDQfYo5bWgcwq5y`; alias
+  `https://app-contable-five.vercel.app`.
+- `npm run build`: OK local antes del deploy y OK en Vercel.
+- `audit:roles` produccion 2026-06-23: OK, 0 hallazgos.
+  Reporte: `artifacts/runs/2026-06-23-massdte-role-matrix-audit.md`.
+- `audit:app` produccion 2026-06-23: OK, 0 hallazgos despues de clasificar
+  aborts de logo de empresa como cancelacion esperada de navegacion.
+  Reporte: `artifacts/runs/2026-06-23-massdte-dev-audit-2026-06-23T05-55-21-300Z.md`.
+- `audit:locks` produccion 2026-06-23: OK, 0 hallazgos; registro
+  autorizacion de emision, creo lock temporal, hizo heartbeat, valido UI y
+  limpio el job. Reporte:
+  `artifacts/runs/2026-06-23-massdte-emission-lock-audit.md`.
+
+**Pendiente de esta linea de trabajo:**
+- Probar en navegador con extension recargada, passphrase nueva y emision real
+  controlada.
+- Lighthouse autenticado post-deploy.
+
 ### Sesion 2026-06-21 - Cola durable OCR/IA y compliance 8 beta
 
 **Que se hizo:**

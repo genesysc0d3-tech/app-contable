@@ -1239,6 +1239,7 @@ function isExpectedNextNavigationAbort(item) {
     const base = new URL(BASE_URL);
     const url = new URL(item.url);
     if (url.origin !== base.origin) return false;
+    if (item.resourceType === "image" && pathFromUrl(item.url).startsWith("/api/empresa/logo/")) return true;
     return item.resourceType === "fetch" || url.searchParams.has("_rsc") || item.method === "POST";
   } catch {
     return false;

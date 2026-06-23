@@ -12,6 +12,7 @@ export type CuentaAuditAction =
   | "persona_agregada"
   | "propuesta_aprobada"
   | "propuestas_aprobadas"
+  | "emision_autorizacion_aceptada"
   | "boleta_emitida"
   | "emision_fallida"
   | "modo_soporte_entrado"

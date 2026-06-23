@@ -18,9 +18,12 @@ const SIMPLEAPI_MULTIPART_PROXY_PATHS = new Set([
 ]);
 
 const STORAGE_KEY = "app_contable_simpleapi_vault_v1";
+const LOCK_KEY = "app_contable_simpleapi_vault_lock_v1";
 const MAX_SECRET_FILE_BYTES = 8 * 1024 * 1024;
 const PBKDF2_ITERATIONS = 250000;
 const UNLOCK_TTL_MS = 10 * 60 * 1000;
+const MAX_UNLOCK_ATTEMPTS = 5;
+const LOCK_WINDOW_MS = 5 * 60 * 1000;
 
 let unlockedVault = null;
 
@@ -304,12 +307,16 @@ async function saveSimpleApiVault(payload) {
   };
 
   await chrome.storage.local.set({ [STORAGE_KEY]: vault });
+  await chrome.storage.local.remove(LOCK_KEY);
   unlockedVault = null;
   return { ok: true };
 }
 
 async function unlockSimpleApiVault(passphrase) {
   if (typeof passphrase !== "string" || passphrase.length < 10) return { ok: false, error: "PASSPHRASE_TOO_SHORT" };
+  const lock = await getUnlockLock();
+  if (lock.until > Date.now()) return { ok: false, error: "VAULT_LOCKED_RETRY_LATER" };
+
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
   if (!vault?.ciphertext || !vault?.salt || !vault?.iv) return { ok: false, error: "VAULT_NOT_CONFIGURED" };
@@ -324,10 +331,28 @@ async function unlockSimpleApiVault(passphrase) {
     setTimeout(() => {
       if (unlockedVault && unlockedVault.expiresAt <= Date.now()) unlockedVault = null;
     }, UNLOCK_TTL_MS + 1000);
+    await chrome.storage.local.remove(LOCK_KEY);
     return { ok: true };
   } catch {
     unlockedVault = null;
+    await registerFailedUnlock();
     return { ok: false, error: "PASSPHRASE_INVALID" };
+  }
+}
+
+async function getUnlockLock() {
+  const stored = await chrome.storage.local.get(LOCK_KEY);
+  const lock = stored?.[LOCK_KEY];
+  return lock && typeof lock === "object" ? { failed: Number(lock.failed) || 0, until: Number(lock.until) || 0 } : { failed: 0, until: 0 };
+}
+
+async function registerFailedUnlock() {
+  const lock = await getUnlockLock();
+  const failed = lock.failed + 1;
+  if (failed >= MAX_UNLOCK_ATTEMPTS) {
+    await chrome.storage.local.set({ [LOCK_KEY]: { failed: 0, until: Date.now() + LOCK_WINDOW_MS } });
+  } else {
+    await chrome.storage.local.set({ [LOCK_KEY]: { failed, until: 0 } });
   }
 }
 

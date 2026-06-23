@@ -302,14 +302,16 @@ export default async function V5Page({ searchParams }: {
     docProgress[r.documento_id] = { total: r.total, emitida: r.emitida, lista: r.lista, porRevisar: r.por_revisar, noAplica: r.no_aplica };
   }
 
-  // Boletas para el visor RCV (navega por mes client-side). Acotado a los
-  // últimos 24 meses + tope duro: el RCV tributario relevante es año en curso
-  // y anterior. A escala masiva real esto debe pasar a fetch por mes.
-  const rcvDesde = new Date(Date.UTC(curYear - 2, curMonth, 1)).toISOString();
-  const { data: boletasAllData } = await supabase.from("boletas_emitidas")
+  // Boletas para el visor RCV: SSR carga solo el mes inicial; los demás meses
+  // se piden bajo demanda desde /api/boletas/rcv para no hidratar miles de filas.
+  const { data: boletasRcvData } = await supabase.from("boletas_emitidas")
     .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
-    .eq("empresa_id", empresaId).gte("fecha_emision", rcvDesde)
-    .order("fecha_emision",{ascending:false}).limit(5000);
+    .eq("empresa_id", empresaId)
+    .gte("fecha_emision", firstThisMonth)
+    .lt("fecha_emision", firstNextMonth)
+    .order("fecha_emision",{ascending:false})
+    .order("folio",{ascending:false})
+    .limit(1000);
 
   const [searchDocsData, searchBoletasData, searchPropsData] = await Promise.all([
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa")
@@ -372,7 +374,7 @@ export default async function V5Page({ searchParams }: {
 
   // RCV content for right column
   const rcvContent = (
-    <RcvViewWrapper boletas={(boletasAllData ?? []) as BoletaRow[]} />
+    <RcvViewWrapper boletas={(boletasRcvData ?? []) as BoletaRow[]} initialYear={curYear} initialMonth={curMonth} />
   );
 
   const compactEmpty = (kind: "subidos" | "boletas") => {
