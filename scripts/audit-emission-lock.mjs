@@ -148,6 +148,16 @@ async function runAudit(page) {
     return;
   }
 
+  const authorization = await ensureEmissionAuthorization(page);
+  addCheck(
+    "emission-authorization",
+    authorization.ok ? "pass" : "fail",
+    authorization.ok
+      ? `Autorizacion de emision ${authorization.created ? "registrada" : "vigente"} para ${sanitizeText(PROVIDER)}.`
+      : `No se pudo preparar autorizacion de emision: HTTP ${authorization.status}, error ${sanitizeText(authorization.body?.error ?? "sin error")}.`,
+  );
+  if (!authorization.ok) return;
+
   const created = await createJob(page);
   if (!created.ok) {
     addCheck(
@@ -314,6 +324,29 @@ async function createJob(page) {
   }, { provider: PROVIDER, tipoDte: TIPO_DTE }).catch((error) => ({ status: 0, ok: false, body: { error: sanitizeText(error.message) } }));
 }
 
+async function ensureEmissionAuthorization(page) {
+  return page.evaluate(async ({ provider, tipoDte }) => {
+    const params = new URLSearchParams({ provider });
+    const statusResponse = await fetch(`/api/emision/authorizations?${params.toString()}`, { cache: "no-store" });
+    const statusBody = await statusResponse.json().catch(() => null);
+    if (statusResponse.ok && statusBody?.ok === true && statusBody?.authorized === true) {
+      return { status: statusResponse.status, ok: true, created: false, body: statusBody };
+    }
+
+    const response = await fetch("/api/emision/authorizations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        tipo_dte: tipoDte,
+        ui_context: "audit_lock",
+      }),
+    });
+    const body = await response.json().catch(() => null);
+    return { status: response.status, ok: response.ok && body?.ok === true && body?.authorized === true, created: true, body };
+  }, { provider: PROVIDER, tipoDte: TIPO_DTE }).catch((error) => ({ status: 0, ok: false, created: false, body: { error: sanitizeText(error.message) } }));
+}
+
 async function patchJob(page, jobId) {
   return page.evaluate(async ({ jobId }) => {
     const response = await fetch("/api/emision/jobs", {
@@ -339,7 +372,7 @@ async function deleteJob(page, jobId) {
 }
 
 function isCreateBlocked(result) {
-  return [400, 401, 402, 403, 409, 422].includes(result.status);
+  return [400, 401, 402, 403, 409, 422, 428].includes(result.status);
 }
 
 async function classifyFindings() {

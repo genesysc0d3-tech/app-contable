@@ -12,6 +12,7 @@ type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica"
 
 // Etiquetas exactas del select "Elija método de pago" del portal e-Boleta SII.
 const FORMAS_PAGO: FormaPago[] = ["Efectivo", "Pago Electrónico", "Transferencia Electrónica", "Cheque", "Otro"];
+const DRAFT_STORAGE_TTL_MS = 12 * 60 * 60 * 1000;
 
 interface EmitirResponse {
   ok: boolean;
@@ -45,6 +46,7 @@ interface BoletaDraft {
 interface DraftStorageState {
   drafts: BoletaDraft[];
   nextDraftSeq: number;
+  savedAt?: number;
 }
 
 interface DuplicateCandidate {
@@ -117,6 +119,14 @@ interface EmissionJobStartResponse {
   error?: string;
   detalle?: string;
   bloqueo?: EmissionLockInfo | null;
+}
+
+interface EmissionAuthorizationResponse {
+  ok?: boolean;
+  authorized?: boolean;
+  legal_version?: string;
+  error?: string;
+  detalle?: string;
 }
 
 function fmt(n: number): string {
@@ -272,7 +282,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const router = useRouter();
   const { toast } = useToast();
   const tipoInicial: TipoDte = empresaTipo === "exento" ? 41 : 39;
-  const storageKey = `v5-emision-directa-drafts:${empresaId ?? "default"}`;
+  const storageKey = `v5-emision-directa-session-drafts:${empresaId ?? "default"}`;
   const [drafts, setDrafts] = useState<BoletaDraft[]>(() => [newDraft(tipoInicial)]);
   const [nextDraftSeq, setNextDraftSeq] = useState(2);
   const [activeDraftId, setActiveDraftId] = useState<string>(() => drafts[0]?.id ?? "");
@@ -340,9 +350,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(storageKey);
+      const saved = window.sessionStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved) as BoletaDraft[] | DraftStorageState;
+        const expired = !Array.isArray(parsed) && typeof parsed.savedAt === "number" && Date.now() - parsed.savedAt > DRAFT_STORAGE_TTL_MS;
+        if (expired) {
+          window.sessionStorage.removeItem(storageKey);
+          return;
+        }
         const savedDrafts = Array.isArray(parsed) ? parsed : parsed.drafts;
         const validDrafts = (savedDrafts ?? []).filter((draft) => draft?.id).slice(0, 3).map((draft, index) => ({
           ...draft,
@@ -361,7 +376,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         }
       }
     } catch {
-      window.localStorage.removeItem(storageKey);
+      window.sessionStorage.removeItem(storageKey);
     } finally {
       setHydrated(true);
     }
@@ -369,7 +384,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ drafts: drafts.slice(0, 3), nextDraftSeq }));
+    window.sessionStorage.setItem(storageKey, JSON.stringify({ drafts: drafts.slice(0, 3), nextDraftSeq, savedAt: Date.now() }));
   }, [drafts, hydrated, nextDraftSeq, storageKey]);
 
   useEffect(() => {
@@ -412,8 +427,53 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     });
   }, []);
 
+  async function ensureEmissionAuthorization(provider: "sii_local" | "simpleapi"): Promise<boolean> {
+    const providerLabel = provider === "sii_local" ? "SII local asistido" : "SimpleAPI";
+    try {
+      const params = new URLSearchParams({ provider });
+      const statusRes = await fetch(`/api/emision/authorizations?${params.toString()}`);
+      const statusJson = (await statusRes.json().catch(() => ({}))) as EmissionAuthorizationResponse;
+      if (statusRes.ok && statusJson.ok && statusJson.authorized) return true;
+      if (!statusRes.ok && statusJson.error !== "EMISSION_AUTHORIZATION_REQUIRED") {
+        toast(statusJson.detalle ?? statusJson.error ?? "No se pudo revisar la autorización de emisión.", "error");
+        return false;
+      }
+
+      const accepted = window.confirm(
+        [
+          `Confirmo que autorizo a MassDTE a preparar esta emisión con ${providerLabel}.`,
+          "Entiendo que debo revisar los datos antes de enviar y que la responsabilidad tributaria final es del usuario/emisor.",
+          "Esta aceptación queda registrada con versión legal, usuario, empresa, fecha y proveedor.",
+        ].join("\n\n"),
+      );
+      if (!accepted) return false;
+
+      const res = await fetch("/api/emision/authorizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          tipo_dte: tipoDte,
+          ui_context: "emision_directa",
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as EmissionAuthorizationResponse;
+      if (!res.ok || !json.ok || !json.authorized) {
+        toast(json.detalle ?? json.error ?? "No se pudo registrar la autorización de emisión.", "error");
+        return false;
+      }
+      return true;
+    } catch {
+      toast("Error de red al validar la autorización de emisión", "error");
+      return false;
+    }
+  }
+
   async function startEmissionJob(provider: "sii_local" | "simpleapi"): Promise<EmissionJobStartResponse | null> {
     try {
+      const authorized = await ensureEmissionAuthorization(provider);
+      if (!authorized) return null;
+
       const res = await fetch("/api/emision/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -426,7 +486,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       });
       const json = (await res.json()) as EmissionJobStartResponse;
       if (!res.ok || !json.ok || !json.job_id || !json.expires_at) {
-        const message = json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
+        const message = json.error === "EMISSION_AUTHORIZATION_REQUIRED"
+          ? "Debes autorizar la emisión antes de continuar."
+          : json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
         if (json.error === "EMISION_BLOQUEADA") {
           setEmissionLock({
             ok: true,
@@ -715,9 +777,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   function handleClose() {
     const nonEmptyDrafts = drafts.filter(draftHasContent).slice(0, 3);
     if (nonEmptyDrafts.length > 0) {
-      window.localStorage.setItem(storageKey, JSON.stringify({ drafts: nonEmptyDrafts, nextDraftSeq }));
+      window.sessionStorage.setItem(storageKey, JSON.stringify({ drafts: nonEmptyDrafts, nextDraftSeq, savedAt: Date.now() }));
     } else {
-      window.localStorage.removeItem(storageKey);
+      window.sessionStorage.removeItem(storageKey);
     }
     onClose?.(nonEmptyDrafts.length > 0);
   }

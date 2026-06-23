@@ -41,7 +41,7 @@ export async function handleSiiVaultMessage(message) {
   }
 
   if (message?.type === "APP_CONTABLE_SII_VAULT_UNLOCK") {
-    const result = await unlockSiiVault(message.pin);
+    const result = await unlockSiiVault(message.passphrase ?? message.pin);
     return { type: "APP_CONTABLE_SII_VAULT_UNLOCK_RESULT", ...result, status: await siiVaultStatus() };
   }
 
@@ -65,6 +65,7 @@ export function getUnlockedSiiCredentials() {
 async function saveSiiVault(payload) {
   const validationError = validatePayload(payload);
   if (validationError) return { ok: false, error: validationError };
+  const passphrase = payload.passphrase ?? payload.pin;
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -73,7 +74,7 @@ async function saveSiiVault(payload) {
     rut: String(payload.rut).trim(),
     clave: payload.clave,
     saved_at: now,
-  }, payload.pin, salt, iv);
+  }, passphrase, salt, iv);
 
   const secrets = {
     rut: String(payload.rut).trim(),
@@ -105,7 +106,7 @@ async function saveSiiVault(payload) {
   return { ok: true };
 }
 
-// Freno a fuerza bruta de PIN vía mensajes: 5 fallos seguidos bloquean el
+// Freno a fuerza bruta de passphrase vía mensajes: 5 fallos seguidos bloquean el
 // desbloqueo por 5 minutos. Persistido en storage para sobrevivir al sleep
 // del service worker MV3.
 async function getUnlockLock() {
@@ -124,8 +125,8 @@ async function registerFailedUnlock() {
   }
 }
 
-async function unlockSiiVault(pin) {
-  if (!isValidPin(pin)) return { ok: false, error: "PIN_INVALID" };
+async function unlockSiiVault(passphrase) {
+  if (!isValidPassphrase(passphrase)) return { ok: false, error: "SII_PASSPHRASE_INVALID" };
   const lock = await getUnlockLock();
   if (lock.until > Date.now()) return { ok: false, error: "VAULT_LOCKED_RETRY_LATER" };
   const stored = await chrome.storage.local.get(STORAGE_KEY);
@@ -134,7 +135,7 @@ async function unlockSiiVault(pin) {
 
   try {
     unlockedVault = {
-      secrets: await decryptPayload(vault, pin),
+      secrets: await decryptPayload(vault, passphrase),
       expiresAt: Date.now() + UNLOCK_TTL_MS,
     };
     setTimeout(() => {
@@ -145,7 +146,7 @@ async function unlockSiiVault(pin) {
   } catch {
     unlockedVault = null;
     await registerFailedUnlock();
-    return { ok: false, error: "PIN_INVALID" };
+    return { ok: false, error: "SII_PASSPHRASE_INVALID" };
   }
 }
 
@@ -153,12 +154,12 @@ function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "PAYLOAD_INVALID";
   if (typeof payload.rut !== "string" || !payload.rut.trim()) return "RUT_REQUIRED";
   if (typeof payload.clave !== "string" || !payload.clave) return "CLAVE_REQUIRED";
-  if (!isValidPin(payload.pin)) return "PIN_INVALID";
+  if (!isValidPassphrase(payload.passphrase ?? payload.pin)) return "SII_PASSPHRASE_INVALID";
   return null;
 }
 
-function isValidPin(value) {
-  return typeof value === "string" && /^\d{4,8}$/.test(value);
+function isValidPassphrase(value) {
+  return typeof value === "string" && value.length >= 12 && !/^\d+$/.test(value);
 }
 
 async function encryptCleartext(cleartextPayload, passphrase, salt, iv) {

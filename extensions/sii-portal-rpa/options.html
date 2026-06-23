@@ -43,8 +43,8 @@
               <input type="password" id="sii-clave" autocomplete="current-password" placeholder="Clave SII">
             </label>
             <label>
-              <span>PIN local</span>
-              <input type="password" id="sii-pin" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="4 a 8 números">
+              <span>Passphrase local</span>
+              <input type="password" id="sii-pin" autocomplete="new-password" placeholder="Mínimo 12 caracteres">
             </label>
           </form>
 
@@ -70,10 +70,10 @@
           <div class="actions">
             <button type="button" id="refresh-status">Actualizar estado</button>
             <button type="submit" form="sii-vault-form" id="save-sii-vault">Guardar clave cifrada</button>
-            <button type="button" id="unlock-sii-vault">Desbloquear con PIN</button>
+            <button type="button" id="unlock-sii-vault">Desbloquear bóveda</button>
             <button type="button" class="secondary" id="clear-sii-vault">Eliminar bóveda SII</button>
           </div>
-          <p class="muted" id="sii-diagnostic">La clave SII se cifra en este navegador con un PIN local de 4 a 8 números (más largo = más seguro). Si autologin falla, se abrirá SII para inicio manual.</p>
+          <p class="muted" id="sii-diagnostic">La clave SII se cifra en este navegador con una passphrase local de al menos 12 caracteres. Si autologin falla, se abrirá SII para inicio manual.</p>
         </article>
 
         <article class="card card-simpleapi">

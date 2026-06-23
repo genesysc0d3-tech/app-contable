@@ -31,7 +31,7 @@ export default function BoletasMensualesView({ boletas, month, year }: {
 
   const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-  // Global search across ALL boletas
+  // Busca dentro del mes cargado por el visor RCV.
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;

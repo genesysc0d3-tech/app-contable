@@ -398,6 +398,76 @@ export type Database = {
           },
         ]
       }
+      emission_authorizations: {
+        Row: {
+          accepted_at: string
+          created_at: string
+          cuenta_id: string
+          empresa_id: string
+          expires_at: string | null
+          id: string
+          legal_version: string
+          metadata: Json
+          provider: string
+          revoked_at: string | null
+          source: string
+          updated_at: string
+          usuario_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          created_at?: string
+          cuenta_id: string
+          empresa_id: string
+          expires_at?: string | null
+          id?: string
+          legal_version: string
+          metadata?: Json
+          provider: string
+          revoked_at?: string | null
+          source?: string
+          updated_at?: string
+          usuario_id: string
+        }
+        Update: {
+          accepted_at?: string
+          created_at?: string
+          cuenta_id?: string
+          empresa_id?: string
+          expires_at?: string | null
+          id?: string
+          legal_version?: string
+          metadata?: Json
+          provider?: string
+          revoked_at?: string | null
+          source?: string
+          updated_at?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emission_authorizations_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emission_authorizations_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emission_authorizations_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cuenta_audit_events: {
         Row: {
           accion: string

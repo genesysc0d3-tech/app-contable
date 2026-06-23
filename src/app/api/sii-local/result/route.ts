@@ -61,16 +61,45 @@ const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 type ServiceDb = SupabaseClient<Database>;
 
 function resultForLog(result: unknown) {
-  if (!result || typeof result !== "object") return result;
-  const copy = { ...(result as Record<string, unknown>) };
-  if (copy.pdf && typeof copy.pdf === "object") {
-    const pdf = copy.pdf as Record<string, unknown>;
-    copy.pdf = {
-      ...pdf,
-      base64: pdf.base64 ? `[redacted:${String(pdf.base64).length}]` : null,
-    };
+  return sanitizeResultForLog(result);
+}
+
+function sanitizeResultForLog(value: unknown, depth = 0, key = ""): unknown {
+  if (value === null || value === undefined) return null;
+  if (depth > 6) return "[truncated]";
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (/base64|xml|html|cookie|token|clave|password|authorization|certificate|certificado|pfx|caf/i.test(key)) {
+      return value ? `[redacted:${value.length}]` : "";
+    }
+    if (/url|href|source_url/i.test(key)) return sanitizeResultUrl(value);
+    return value.length > 500 ? `${value.slice(0, 500)}...[truncated:${value.length}]` : value;
   }
-  return copy;
+  if (Array.isArray(value)) return value.slice(0, 40).map((item) => sanitizeResultForLog(item, depth + 1, key));
+  if (typeof value !== "object") return null;
+
+  const output: Record<string, unknown> = {};
+  for (const [entryKey, entryValue] of Object.entries(value).slice(0, 80)) {
+    if (/base64|xml|html|cookie|token|clave|password|authorization|certificate|certificado|pfx|caf/i.test(entryKey)) {
+      output[entryKey] = typeof entryValue === "string" ? `[redacted:${entryValue.length}]` : "[redacted]";
+      continue;
+    }
+    if (entryKey === "excerpt" || entryKey === "body_excerpt") {
+      output[entryKey] = typeof entryValue === "string" ? `[redacted:${entryValue.length}]` : "[redacted]";
+      continue;
+    }
+    output[entryKey] = sanitizeResultForLog(entryValue, depth + 1, entryKey);
+  }
+  return output;
+}
+
+function sanitizeResultUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.slice(0, 500);
+  } catch {
+    return value.length > 500 ? `${value.slice(0, 500)}...[truncated:${value.length}]` : value;
+  }
 }
 
 function safeJson(value: unknown): Json {
