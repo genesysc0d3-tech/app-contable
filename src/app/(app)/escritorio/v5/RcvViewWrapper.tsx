@@ -22,37 +22,35 @@ export default function RcvViewWrapper({ boletas, initialYear, initialMonth }: {
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [monthCache, setMonthCache] = useState<Record<string, BoletaRow[]>>(() => ({ [initialKey]: boletas }));
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorsByMonth, setErrorsByMonth] = useState<Record<string, string | null>>({});
   const currentKey = monthKey(year, month);
   const currentBoletas = useMemo(() => monthCache[currentKey] ?? [], [currentKey, monthCache]);
+  const error = errorsByMonth[currentKey] ?? null;
+  const loading = !monthCache[currentKey] && !error;
 
   useEffect(() => {
-    if (monthCache[currentKey]) {
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    if (monthCache[currentKey]) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     const params = new URLSearchParams({ year: String(year), month: String(month) });
     fetch(`/api/boletas/rcv?${params.toString()}`, { cache: "no-store" })
       .then((response) => response.json().catch(() => ({ ok: false, error: "BAD_JSON" })))
       .then((json: RcvMonthResponse) => {
         if (cancelled) return;
         if (!json.ok) {
-          setError(json.detalle ?? json.error ?? "No se pudo cargar el RCV.");
+          setErrorsByMonth((current) => ({
+            ...current,
+            [currentKey]: json.detalle ?? json.error ?? "No se pudo cargar el RCV.",
+          }));
           return;
         }
+        setErrorsByMonth((current) => ({ ...current, [currentKey]: null }));
         setMonthCache((current) => ({ ...current, [currentKey]: json.boletas ?? [] }));
       })
       .catch(() => {
-        if (!cancelled) setError("No se pudo cargar el RCV.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setErrorsByMonth((current) => ({ ...current, [currentKey]: "No se pudo cargar el RCV." }));
+        }
       });
 
     return () => {
