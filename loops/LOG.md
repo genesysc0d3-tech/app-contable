@@ -24,6 +24,11 @@ Refs: `src/app/api/emision/authorizations/route.ts`,
 `supabase/migrations/20260623100000_emission_authorizations.sql`,
 `extensions/sii-portal-rpa/manifest.prod.json`, `docs/MEMORIA.md`.
 
+Follow-up: migration applied remotely and production redeployed as
+`dpl_DNdgdoUDKHmwSCDQfYo5bWgcwq5y` on `https://app-contable-five.vercel.app`.
+Post-deploy `audit:roles`, `audit:app` and `audit:locks` passed with 0
+findings. Reports are in `artifacts/runs/2026-06-23-*`.
+
 ## 2026-06-22 - Plan preauditoria 9.3 conciliado - #compliance #security #performance #extension
 
 What: Preserved the pre-audit 9.3+ plan after three analysis passes

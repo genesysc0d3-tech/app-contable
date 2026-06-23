@@ -105,11 +105,29 @@ sin decision explicita.
   autorizacion de emision antes de crear el job temporal del audit de locks.
 
 **Pendiente de esta linea de trabajo:**
-- Aplicar migracion remota cuando se decida desplegar.
+- La migracion `20260623100000_emission_authorizations.sql` fue aplicada en
+  Supabase remoto el 2026-06-23. `migration list` confirmo local/remoto
+  alineados hasta `20260623100000`; `db push --dry-run` y `db lint --linked`
+  posteriores quedaron bloqueados por `ECIRCUITBREAKER`/auth temporal del
+  pooler, no por SQL.
+- Produccion quedo redeployada en Vercel con deployment
+  `dpl_DNdgdoUDKHmwSCDQfYo5bWgcwq5y`; alias
+  `https://app-contable-five.vercel.app`.
+- `npm run build`: OK local antes del deploy y OK en Vercel.
+- `audit:roles` produccion 2026-06-23: OK, 0 hallazgos.
+  Reporte: `artifacts/runs/2026-06-23-massdte-role-matrix-audit.md`.
+- `audit:app` produccion 2026-06-23: OK, 0 hallazgos despues de clasificar
+  aborts de logo de empresa como cancelacion esperada de navegacion.
+  Reporte: `artifacts/runs/2026-06-23-massdte-dev-audit-2026-06-23T05-55-21-300Z.md`.
+- `audit:locks` produccion 2026-06-23: OK, 0 hallazgos; registro
+  autorizacion de emision, creo lock temporal, hizo heartbeat, valido UI y
+  limpio el job. Reporte:
+  `artifacts/runs/2026-06-23-massdte-emission-lock-audit.md`.
+
+**Pendiente de esta linea de trabajo:**
 - Probar en navegador con extension recargada, passphrase nueva y emision real
   controlada.
-- Ejecutar auditoria `audit:app`, `audit:roles`, `audit:locks` y Lighthouse
-  autenticado despues de build/deploy.
+- Lighthouse autenticado post-deploy.
 
 ### Sesion 2026-06-21 - Cola durable OCR/IA y compliance 8 beta
 
