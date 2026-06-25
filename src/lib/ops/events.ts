@@ -18,7 +18,8 @@ export type OpsSource =
   | "telegram"
   | "ops/cron"
   | "dev-support"
-  | "auth";
+  | "auth"
+  | "derechos";
 
 type Sb = SupabaseClient<Database>;
 

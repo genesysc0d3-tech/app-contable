@@ -8,8 +8,8 @@
 
 | Marco | Score | ✅ | ⚠️ | ❌ |
 |---|---|---|---|---|
-| **Ley 21.719** (datos personales, vigencia dic-2026) | **0.56** | 8 | 14 | 5 |
-| **Ley 21.595** (delitos económicos, vigente) | **0.43** | 3 | 6 | 5 |
+| **Ley 21.719** (datos personales, vigencia dic-2026) | **0.69** | 11 | 15 | 1 |
+| **Ley 21.595** (delitos económicos, vigente) | **0.57** | 3 | 10 | 1 |
 
 Lectura: **seguridad técnica fuerte; gobernanza y documentos en proceso.**
 
@@ -25,9 +25,9 @@ Lectura: **seguridad técnica fuerte; gobernanza y documentos en proceso.**
 
 ## Brechas priorizadas (lo que falta)
 
-**Código (accionable, recetas en la skill):**
-1. **Derechos ARCO** ❌ — endpoints para **exportar y borrar** datos del titular.
-2. **MFA admin** ❌ — habilitar 2FA en accesos de operador (Supabase lo soporta).
+**Código:**
+1. **Derechos ARCO** ✅ — endpoints `/api/derechos/exportar` y `/api/derechos/borrar` (anonimiza PII, conserva DTE 6 años).
+2. **MFA admin** ❌ — habilitar 2FA en accesos de operador. *Última remediación de código self-service.*
 3. **Activar backup** ⚠️ — tooling listo (`scripts/backup/`); encender en la Mini.
 4. **Activar alertas** ⚠️ — código listo; setear `OPS_TG_*` en Vercel.
 
@@ -58,5 +58,6 @@ tengas (empresa en formación). El resto está rellenado.
 
 ## Próximo paso
 
-Generar los **14 documentos** rellenados en `.compliance/docs/` (próxima tanda) y,
-en paralelo, las remediaciones de código de mayor impacto (**ARCO + MFA**).
+Documentos (14/14) ✅ y ARCO ✅ hechos. Queda **MFA** (última remediación de código
+self-service) y luego todo es insumo humano: completar `[COMPLETAR]` (RUT,
+domicilio, correo, nombre), firmar DPA, activar backup/alertas, y validación legal.
