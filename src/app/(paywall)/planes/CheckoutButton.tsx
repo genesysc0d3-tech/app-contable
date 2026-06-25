@@ -12,11 +12,13 @@ export default function CheckoutButton({
   plan,
   actual = false,
   label,
+  recommended = false,
 }: {
   tipo: "plan" | "refill" | "persona_adicional";
   plan?: string;
   actual?: boolean;
   label?: string;
+  recommended?: boolean;
 }) {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -77,16 +79,16 @@ export default function CheckoutButton({
         disabled={cargando}
         style={{
           width: "100%",
-          padding: "9px 12px",
-          borderRadius: 9,
-          border: "1px solid rgba(232,85,62,.45)",
-          background: "rgba(232,85,62,.10)",
-          color: "#E8553E",
-          fontSize: 11,
+          padding: "11px 12px",
+          borderRadius: 11,
+          border: recommended ? "1px solid #E8553E" : "1px solid rgba(232,85,62,.45)",
+          background: recommended ? "#E8553E" : "rgba(232,85,62,.10)",
+          color: recommended ? "#fff" : "#E8553E",
+          fontSize: 13,
           fontWeight: 700,
           cursor: cargando ? "default" : "pointer",
           opacity: cargando ? 0.6 : 1,
-          transition: "background .2s, border-color .2s",
+          transition: "background .2s, border-color .2s, opacity .2s",
         }}
       >
         {cargando ? "Abriendo Mercado Pago…" : label ?? (tipo === "plan" ? "Contratar con Mercado Pago" : "Comprar extra")}
