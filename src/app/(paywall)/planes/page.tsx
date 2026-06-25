@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
@@ -124,17 +125,16 @@ export default async function PlanesPage() {
     >
       <div style={{ width: "100%", maxWidth: 900 }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              letterSpacing: ".1em",
-              textTransform: "uppercase",
-              color: "var(--muted-light)",
-            }}
-          >
-            massDTE
-          </div>
+          <style>{`.massdte-logo{filter:none}.dark .massdte-logo{filter:invert(1)}`}</style>
+          <Image
+            src="/massdte-logo.png"
+            alt="massDTE"
+            width={160}
+            height={24}
+            priority
+            className="massdte-logo"
+            style={{ margin: "0 auto 6px", display: "block" }}
+          />
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>Planes</h1>
           <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
             Boletas desde tus cartolas, boletas manuales cuando las necesites y comprobantes por Telegram según tu plan. Precios en UF + IVA, cobrados en pesos al valor del día
