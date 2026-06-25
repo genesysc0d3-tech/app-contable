@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd job: run the MassDTE backup every 6 hours.
+  1) Replace the two /REEMPLAZA/RUTA paths below with real absolute paths.
+  2) cp this file to ~/Library/LaunchAgents/
+  3) launchctl load ~/Library/LaunchAgents/cl.massdte.backup.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cl.massdte.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/REEMPLAZA/RUTA/app-contable/scripts/backup/backup-db.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/REEMPLAZA/RUTA/massdte-backups/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/REEMPLAZA/RUTA/massdte-backups/launchd.err.log</string>
+</dict>
+</plist>
