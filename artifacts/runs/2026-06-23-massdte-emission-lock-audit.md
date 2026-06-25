@@ -18,7 +18,7 @@ Auditoria controlada de lock remoto de emision. Puede crear un job temporal y lo
 - Provider requested: sii_local
 - Tipo DTE: 39
 - Screenshots: /tmp/massdte-lock-audit-2026-06-23T05-54-11-638Z
-- Report: /Users/take/Desktop/app-contable/artifacts/runs/2026-06-23-massdte-emission-lock-audit.md
+- Report: <repo>/artifacts/runs/2026-06-23-massdte-emission-lock-audit.md
 - Base status: 307
 
 ## Summary

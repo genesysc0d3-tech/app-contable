@@ -16,26 +16,60 @@ function serviceClient() {
   return createServiceClient<Database>(url, key);
 }
 
-async function sendAlert(snapshot: Awaited<ReturnType<typeof collectOpsSnapshot>>) {
-  const webhookUrl = process.env.OPS_ALERT_WEBHOOK_URL?.trim();
-  if (!webhookUrl || snapshot.findings.every((finding) => finding.severity !== "critical")) return false;
+type OpsSnapshot = Awaited<ReturnType<typeof collectOpsSnapshot>>;
 
-  const response = await fetch(webhookUrl, {
+function formatAlertText(snapshot: OpsSnapshot) {
+  const critical = snapshot.findings.filter((finding) => finding.severity === "critical");
+  const lines = critical.map((finding) => `• ${finding.eventName}: ${finding.summary}`);
+  return [
+    `🔴 MassDTE — ${critical.length} alerta(s) crítica(s)`,
+    `estado: ${snapshot.status}`,
+    ...lines,
+  ].join("\n");
+}
+
+// Bot de alertas DEDICADO (separado del bot de comprobantes TELEGRAM_BOT_TOKEN).
+// Las alertas son resúmenes ya sanitizados; no llevan datos crudos.
+async function sendTelegramAlert(text: string): Promise<boolean> {
+  const token = process.env.OPS_TG_BOT_TOKEN?.trim();
+  const chatId = process.env.OPS_TG_CHAT_ID?.trim();
+  if (!token || !chatId) return false;
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      source: "app-contable",
-      status: snapshot.status,
-      checked_at: snapshot.checkedAt,
-      metrics: snapshot.metrics,
-      findings: snapshot.findings.map((finding) => ({
-        severity: finding.severity,
-        event_name: finding.eventName,
-        summary: finding.summary,
-      })),
-    }),
+    body: JSON.stringify({ chat_id: chatId, text }),
   });
-  return response.ok;
+  return res.ok;
+}
+
+async function sendAlert(snapshot: OpsSnapshot) {
+  if (snapshot.findings.every((finding) => finding.severity !== "critical")) return false;
+
+  let sent = false;
+
+  const webhookUrl = process.env.OPS_ALERT_WEBHOOK_URL?.trim();
+  if (webhookUrl) {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "app-contable",
+        status: snapshot.status,
+        checked_at: snapshot.checkedAt,
+        metrics: snapshot.metrics,
+        findings: snapshot.findings.map((finding) => ({
+          severity: finding.severity,
+          event_name: finding.eventName,
+          summary: finding.summary,
+        })),
+      }),
+    });
+    if (response.ok) sent = true;
+  }
+
+  if (await sendTelegramAlert(formatAlertText(snapshot))) sent = true;
+
+  return sent;
 }
 
 export async function GET(request: Request) {

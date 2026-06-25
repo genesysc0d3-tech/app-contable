@@ -9,6 +9,8 @@
  * a OpenCode responde 1010 sin firma de navegador → se manda User-Agent.
  */
 
+import { requirePaidModel } from "./model-guard";
+
 const OPENCODE_BASE = "https://opencode.ai/zen/go/v1";
 const OCR_MODEL = process.env.OPENCODE_OCR_MODEL || "minimax-m3";
 const GROUP_MODEL = process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash";
@@ -37,6 +39,7 @@ async function openCodeChat(
 ): Promise<{ text: string; tokens_input: number; tokens_output: number }> {
   const apiKey = process.env.OPENCODE_GO_API_KEY;
   if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
+  requirePaidModel(model, "ocr");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);

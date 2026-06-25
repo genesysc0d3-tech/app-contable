@@ -8,6 +8,10 @@
 --
 -- ORDEN FK-safe: se elimina en orden inverso a las dependencias.
 --
+-- POR DEFECTO ES DRY-RUN: corre dentro de una transaccion y termina en
+--     ROLLBACK (no borra nada). Para aplicar, cambia el ROLLBACK final por
+--     COMMIT despues de revisar los conteos.
+--
 -- TABLAS QUE SE PRESERVAN:
 --   empresas, usuarios, clientes, proveedores
 --   clasificacion_reglas, parser_adapters
@@ -57,9 +61,10 @@ DELETE FROM public.boletas_caf_mock;
 DELETE FROM public.creditos_uso;
 DELETE FROM public.periodos_contables;
 
-COMMIT;
+-- DRY-RUN por defecto: la verificacion corre DENTRO de la transaccion y al
+-- final se hace ROLLBACK, asi no se borra nada hasta que tu lo decidas.
 
--- ═══ Verificación post-reset ═══
+-- ═══ Verificación (estado que QUEDARÍA tras el reset) ═══
 SELECT 'items_documento' AS tabla, count(*) FROM public.items_documento
 UNION ALL SELECT 'boletas_emitidas', count(*) FROM public.boletas_emitidas
 UNION ALL SELECT 'gastos', count(*) FROM public.gastos
@@ -81,3 +86,10 @@ UNION ALL SELECT 'proveedores', count(*) FROM public.proveedores
 UNION ALL SELECT 'clasificacion_reglas', count(*) FROM public.clasificacion_reglas
 UNION ALL SELECT 'parser_adapters', count(*) FROM public.parser_adapters
 ORDER BY 1;
+
+-- DRY-RUN: no aplica cambios.
+ROLLBACK;
+
+-- Para ejecutar de verdad:
+--   1. Revisa los conteos de arriba (las tablas borradas deberian ir a 0).
+--   2. Cambia este ROLLBACK por COMMIT y vuelve a correr el script completo.
