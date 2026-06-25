@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "generated_at": "2026-06-25T07:29:22Z",
+  "git_commit": "f5338af",
+  "company": {
+    "razon_social": "AlphaCode SpA",
+    "rut": "[COMPLETAR]",
+    "domicilio": "[COMPLETAR]",
+    "contacto": "[COMPLETAR]",
+    "representacion_legal": "2 fundadores 50/50",
+    "responsable_datos": "fundador (declarado)",
+    "tamano": "micro"
+  },
+  "active_packs": ["ley-21595", "ley-21719"],
+  "notas": "Sin clientes aún. IA vía OpenCode Go (EE.UU./UE/Singapur, zero-retention, sin entrenamiento): MiniMax M3 + DeepSeek V4 Flash. Disclaimer: borradores, no asesoría legal.",
+  "controls": {
+    "gov-responsable": { "status": "partial", "evidence": "declarado: fundador", "remediation": "Designar formalmente (acta) responsable de datos + encargado de prevención." },
+    "gov-registro": { "status": "partial", "evidence": "RAT en generación", "remediation": "Completar RAT (21.719) y matriz de riesgos (21.595)." },
+    "gov-politicas": { "status": "partial", "evidence": "src/app/legal/privacidad", "remediation": "Publicar política de privacidad completa + código de ética." },
+    "gov-capacitacion": { "status": "fail", "evidence": "", "remediation": "Capacitación al personal (obligatoria para 21.595)." },
+    "gov-auditoria": { "status": "partial", "evidence": "audit:app/roles/locks", "remediation": "Definir revisión de cumplimiento periódica (re-correr esta skill)." },
+    "gov-disciplinario": { "status": "fail", "evidence": "", "remediation": "Régimen disciplinario interno (parte del MPD)." },
+    "gov-denuncias": { "status": "fail", "evidence": "src/app/legal (contacto básico)", "remediation": "Canal de denuncias 21.595 + canal de derechos 21.719." },
+    "data-licitud": { "status": "partial", "evidence": "emission_authorizations (consentimiento versionado de emisión)", "remediation": "Base de licitud + consentimiento opt-in para el tratamiento general." },
+    "data-derechos": { "status": "fail", "evidence": "", "remediation": "Endpoints ARCO: exportar + borrar datos del titular (30 días)." },
+    "data-info": { "status": "partial", "evidence": "src/app/legal/privacidad", "remediation": "Aviso de privacidad completo (Art. 14)." },
+    "data-minimizacion": { "status": "pass", "evidence": "no se retiene PDF/XML/base64 crudo; sanitización ops; retención DTE 6 años", "remediation": "" },
+    "data-dpa": { "status": "fail", "evidence": "", "remediation": "DPA con Supabase, Vercel, OpenCode, Telegram, Mercado Pago (firmar/aceptar)." },
+    "data-transfer": { "status": "partial", "evidence": "OpenCode US/UE/SG zero-retention; Supabase BR; Vercel US", "remediation": "Anexo de transferencias + cláusulas modelo." },
+    "data-consent-text": { "status": "partial", "evidence": "en generación", "remediation": "Texto de consentimiento opt-in + revocación." },
+    "data-rights-channel": { "status": "fail", "evidence": "", "remediation": "Canal/formulario para ejercer derechos (Art. 14 ter)." },
+    "data-eipd": { "status": "partial", "evidence": "OCR/IA sobre datos financieros (OpenCode)", "remediation": "Aplicar test EIPD; recomendable por IA sobre datos financieros." },
+    "data-privacy-by-design": { "status": "pass", "evidence": "RLS deny-by-default; privacy by default; minimización", "remediation": "" },
+    "data-pseudonym": { "status": "partial", "evidence": "masking de RUT/email en logs (sanitize)", "remediation": "Extender seudonimización donde aplique." },
+    "sec-tls": { "status": "pass", "evidence": "HTTPS + HSTS (next.config.ts)", "remediation": "" },
+    "sec-rest": { "status": "pass", "evidence": "cifrado en reposo gestionado por Supabase", "remediation": "" },
+    "sec-passwords": { "status": "pass", "evidence": "Supabase Auth (bcrypt)", "remediation": "" },
+    "sec-mfa": { "status": "fail", "evidence": "", "remediation": "Habilitar MFA en accesos admin/dev (Supabase Auth lo soporta)." },
+    "sec-logs": { "status": "pass", "evidence": "cuenta_audit_events, ops_events, audit_chunks", "remediation": "" },
+    "sec-tenant": { "status": "pass", "evidence": "RLS por cuenta/empresa; PROBADO (src/lib/security/rls-isolation.test.ts)", "remediation": "" },
+    "sec-secrets": { "status": "pass", "evidence": "tokens aislados + gitignored; gate audit:secrets", "remediation": "" },
+    "sec-backups": { "status": "partial", "evidence": "scripts/backup/ (tooling listo)", "remediation": "Activar backup en la Mac Mini antes del primer cliente." },
+    "inc-brechas": { "status": "partial", "evidence": "artifacts/docs/compliance/breach-procedure.md", "remediation": "Formalizar canal + plan de respuesta a brechas (Art. 14 sexies)." },
+    "ctrl-interno": { "status": "partial", "evidence": "DEV_SUPPORT_READ_ONLY; separación de roles", "remediation": "Formalizar segregación de funciones (21.595)." },
+    "sec-monitoring": { "status": "partial", "evidence": "ops_events + /dev/diagnostico + bot de alertas (código)", "remediation": "Activar alertas (OPS_TG_BOT_TOKEN/OPS_TG_CHAT_ID en Vercel)." }
+  },
+  "frameworks": {
+    "ley-21719": { "score": 0.56, "controls_required": 27, "pass": 8, "partial": 14, "fail": 5 },
+    "ley-21595": { "score": 0.43, "controls_required": 14, "pass": 3, "partial": 6, "fail": 5 }
+  }
+}
