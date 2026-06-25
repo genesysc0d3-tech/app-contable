@@ -134,12 +134,17 @@ export default function UsageCountersPanel({ resumen }: { resumen: ResumenCupos 
     return () => clearTimeout(t);
   }, [open, target]);
 
+  // Carga perezosa de la facturación cuando se abre la cara del plan (en
+  // efecto, nunca dentro del render ni del updater de setState).
+  useEffect(() => {
+    if (!open || fact) return;
+    let alive = true;
+    obtenerFacturacion().then((r) => { if (alive && r.ok) setFact(r.data); });
+    return () => { alive = false; };
+  }, [open, fact]);
+
   function toggle() {
-    setOpen((o) => {
-      const next = !o;
-      if (next && !fact) obtenerFacturacion().then((r) => { if (r.ok) setFact(r.data); });
-      return next;
-    });
+    setOpen((o) => !o);
   }
   function onMove(e: MouseEvent<HTMLDivElement>) {
     const el = ref.current;
