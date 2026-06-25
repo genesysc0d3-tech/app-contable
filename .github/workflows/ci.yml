@@ -34,6 +34,12 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Audit secrets (tracked files)
+        run: npm run audit:secrets
+
+      - name: Audit MassDTE safety patterns
+        run: npm run audit:safety
+
       - name: Build
         run: npm run build
 
