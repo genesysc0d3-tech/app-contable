@@ -101,6 +101,19 @@ export default async function EmpresaPage() {
 
       <MiembrosPanel miembros={miembros ?? []} invitaciones={invitaciones ?? []} />
 
+      <section className="p-4 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10">
+        <h2 className="text-sm font-semibold mb-1">Seguridad</h2>
+        <p className="text-xs text-[#888] dark:text-white/60 mb-3">
+          Autenticación en dos pasos (MFA) para proteger tu acceso.
+        </p>
+        <a
+          href="/seguridad"
+          className="inline-block rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2 text-sm font-medium hover:bg-black/10 dark:hover:bg-white/15 transition-colors"
+        >
+          Configurar →
+        </a>
+      </section>
+
       <TelegramConfig />
     </main>
     </div>
