@@ -40,10 +40,35 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
+  if (user) {
+    // MFA opt-in (Supabase Auth). FAIL-OPEN: si el chequeo falla, NO bloquea
+    // (no dejar a nadie fuera del login). Solo afecta a quien YA enroló un
+    // factor verificado y está en aal1: debe completar el challenge.
+    let needsMfa = false;
+    try {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      needsMfa = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
+    } catch {
+      needsMfa = false;
+    }
+
+    if (needsMfa) {
+      // Rutas protegidas → al challenge. Cualquier /auth/* (challenge, logout,
+      // callback) queda permitido, para no encerrar al usuario.
+      if (!isAuthRoute) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/auth/mfa";
+        return NextResponse.redirect(url);
+      }
+      return supabaseResponse;
+    }
+
+    // Sin MFA pendiente: comportamiento previo (logueado en /auth/* → "/").
+    if (isAuthRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

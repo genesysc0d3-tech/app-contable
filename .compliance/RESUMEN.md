@@ -8,8 +8,8 @@
 
 | Marco | Score | ✅ | ⚠️ | ❌ |
 |---|---|---|---|---|
-| **Ley 21.719** (datos personales, vigencia dic-2026) | **0.69** | 11 | 15 | 1 |
-| **Ley 21.595** (delitos económicos, vigente) | **0.57** | 3 | 10 | 1 |
+| **Ley 21.719** (datos personales, vigencia dic-2026) | **0.72** | 12 | 15 | 0 |
+| **Ley 21.595** (delitos económicos, vigente) | **0.64** | 4 | 10 | 0 |
 
 Lectura: **seguridad técnica fuerte; gobernanza y documentos en proceso.**
 
@@ -27,7 +27,7 @@ Lectura: **seguridad técnica fuerte; gobernanza y documentos en proceso.**
 
 **Código:**
 1. **Derechos ARCO** ✅ — endpoints `/api/derechos/exportar` y `/api/derechos/borrar` (anonimiza PII, conserva DTE 6 años).
-2. **MFA admin** ❌ — habilitar 2FA en accesos de operador. *Última remediación de código self-service.*
+2. **MFA admin** ✅ — Supabase Auth nativo: enrolar en `/seguridad`, challenge en `/auth/mfa`, enforcement AAL2 (opt-in, fail-open). *El operador debe enrolar su TOTP.*
 3. **Activar backup** ⚠️ — tooling listo (`scripts/backup/`); encender en la Mini.
 4. **Activar alertas** ⚠️ — código listo; setear `OPS_TG_*` en Vercel.
 

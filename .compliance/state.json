@@ -35,7 +35,7 @@
     "sec-tls": { "status": "pass", "evidence": "HTTPS + HSTS (next.config.ts)", "remediation": "" },
     "sec-rest": { "status": "pass", "evidence": "cifrado en reposo (Supabase)", "remediation": "" },
     "sec-passwords": { "status": "pass", "evidence": "Supabase Auth (bcrypt)", "remediation": "" },
-    "sec-mfa": { "status": "fail", "evidence": "", "remediation": "Habilitar MFA (TOTP) en accesos de operador — última remediación de código self-service." },
+    "sec-mfa": { "status": "pass", "evidence": "Supabase Auth MFA: /seguridad (enrolar TOTP) + /auth/mfa (challenge) + enforcement AAL2 en proxy (fail-open)", "remediation": "El operador debe enrolar su TOTP en /seguridad." },
     "sec-logs": { "status": "pass", "evidence": "cuenta_audit_events, ops_events, audit_chunks", "remediation": "" },
     "sec-tenant": { "status": "pass", "evidence": "RLS por cuenta/empresa; PROBADO (rls-isolation.test.ts)", "remediation": "" },
     "sec-secrets": { "status": "pass", "evidence": "tokens aislados + gitignored; gate audit:secrets", "remediation": "" },
@@ -45,7 +45,7 @@
     "sec-monitoring": { "status": "partial", "evidence": "ops_events + /dev/diagnostico + bot de alertas (código)", "remediation": "Activar alertas (env Vercel) — insumo del usuario." }
   },
   "frameworks": {
-    "ley-21719": { "score": 0.69, "controls_required": 27, "pass": 11, "partial": 15, "fail": 1 },
-    "ley-21595": { "score": 0.57, "controls_required": 14, "pass": 3, "partial": 10, "fail": 1 }
+    "ley-21719": { "score": 0.72, "controls_required": 27, "pass": 12, "partial": 15, "fail": 0 },
+    "ley-21595": { "score": 0.64, "controls_required": 14, "pass": 4, "partial": 10, "fail": 0 }
   }
 }
