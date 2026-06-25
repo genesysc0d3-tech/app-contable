@@ -13,8 +13,39 @@ async function main() {
     })
   );
 
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL || "";
+
+  // ── Guardia de producción ───────────────────────────────────────────────
+  // Este script borra 13 tablas (incl. boletas_emitidas = DTEs reales) con el
+  // service role, que se salta RLS. Se niega a correr contra el proyecto de
+  // producción salvo override explícito del operador. Esto es lo que impide que
+  // un agente (o un `npm run cb4w` despistado) destruya datos de clientes.
+  const PROD_REF = "aluuuyecwifaakehvcam"; // ref del proyecto Supabase de prod
+  const targetingProd = supabaseUrl.includes(PROD_REF);
+  console.log("Target Supabase:", supabaseUrl || "(falta NEXT_PUBLIC_SUPABASE_URL)");
+  if (targetingProd && process.env.MASSDTE_ALLOW_PROD_WIPE !== "1") {
+    console.error(
+      "\nME NIEGO: el target es el proyecto de PRODUCCIÓN (" + PROD_REF + ").\n" +
+        "reset-db.js borra 13 tablas, incluida boletas_emitidas (DTEs reales).\n" +
+        "Si de verdad quieres limpiar datos de prueba en producción, re-ejecuta con:\n" +
+        "  MASSDTE_ALLOW_PROD_WIPE=1 npm run cb4w\n"
+    );
+    process.exit(1);
+  }
+  if (targetingProd && process.stdin.isTTY) {
+    const readline = await import("node:readline/promises");
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await rl.question('Escribe "WIPE PROD" para confirmar el borrado en producción: ');
+    rl.close();
+    if (answer.trim() !== "WIPE PROD") {
+      console.error("abortado");
+      process.exit(1);
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   const supabase = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseUrl,
     env.SUPABASE_SERVICE_ROLE_KEY
   );
 
