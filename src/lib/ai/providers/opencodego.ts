@@ -11,6 +11,7 @@ import {
   buildClassifyUserPrompt,
   getClassifyOnlySystemPrompt,
 } from "../prompt";
+import { requirePaidModel } from "../model-guard";
 
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 
@@ -42,7 +43,7 @@ export class OpenCodeGoProvider implements AIProvider {
     const apiKey = process.env.OPENCODE_GO_API_KEY;
     if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
     this.apiKey = apiKey;
-    this.model = process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash";
+    this.model = requirePaidModel(process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash", "opencodego");
   }
 
   private async fetchChat(
