@@ -17,7 +17,7 @@ Auditoria real de app con Playwright como reproductor verificable y Chrome DevTo
 - Auth source: storage-state
 - Storage state path: /tmp/e2e-state.json
 - Screenshots: /tmp/massdte-audit-2026-06-21T03-18-04-680Z
-- Report: /Users/take/Desktop/app-contable/artifacts/runs/2026-06-20-massdte-dev-audit.md
+- Report: <repo>/artifacts/runs/2026-06-20-massdte-dev-audit.md
 - Base status: 307
 
 ## Summary

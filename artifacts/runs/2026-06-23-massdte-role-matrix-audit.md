@@ -17,7 +17,7 @@ Auditoria enfocada en matriz Start/Pro/Business usando sesion Genesys y modo sop
 - Genesys state path: /tmp/e2e-state-vercel.json
 - Non-dev state: /tmp/e2e-state-nondev.json
 - Screenshots: /tmp/massdte-role-audit-2026-06-23T05-48-49-126Z
-- Report: /Users/take/Desktop/app-contable/artifacts/runs/2026-06-23-massdte-role-matrix-audit.md
+- Report: <repo>/artifacts/runs/2026-06-23-massdte-role-matrix-audit.md
 
 ## Summary
 
