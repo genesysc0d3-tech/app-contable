@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Gear, DeviceMobile, Monitor, Check, PaperPlaneTilt, ShieldCheck } from "@phosphor-icons/react";
+import { Gear, DeviceMobile, Monitor, Check, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
 type Modo = "mobile" | "escritorio";
@@ -128,23 +128,6 @@ export default function SettingsMenu() {
               Abrir Telegram →
             </a>
           )}
-          <div className="px-3 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
-            Cuenta
-          </div>
-          <button
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              router.push("/seguridad");
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface)] text-[var(--foreground)]"
-          >
-            <ShieldCheck size={22} weight="regular" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Seguridad</p>
-              <p className="text-[11px] text-[var(--muted-light)]">Autenticación en dos pasos</p>
-            </div>
-          </button>
         </div>
       )}
     </div>
