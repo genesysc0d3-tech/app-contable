@@ -8,6 +8,7 @@ import TelegramConfig from "../../empresa/TelegramConfig";
 import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
+import FacturacionUsoPanel from "./FacturacionUsoPanel";
 
 export default function EmpresaPopup({
   inicial,
@@ -663,6 +664,12 @@ export default function EmpresaPopup({
                 title: "Bot de Telegram",
                 sub: "Sube fotos por chat",
               },
+              {
+                n: 6,
+                icon: "M3 7h18v10H3zM3 11h18",
+                title: "Facturación y uso",
+                sub: "Plan, uso y pagos",
+              },
             ].map((s, i) => (
               <div
                 key={i}
@@ -743,6 +750,7 @@ export default function EmpresaPopup({
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={emisionConfig.boletasProveedor} /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} /> },
                   { key: "telegram", content: <TelegramConfig /> },
+                  { key: "facturacion", content: <FacturacionUsoPanel /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}

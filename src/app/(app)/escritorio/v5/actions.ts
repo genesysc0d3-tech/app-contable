@@ -5,9 +5,11 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { empresasActivasDeCuenta, contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
-import { chileMonthUtcRange, estadoCuota, periodoActual } from "@/lib/pagos/metering";
+import { chileMonthUtcRange, clpConIva, estadoCuota, periodoActual } from "@/lib/pagos/metering";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { createClient } from "@/lib/supabase/server";
+import { getUfClp } from "@/lib/sii/uf";
+import { mpConfigurado } from "@/lib/pagos/mercadopago";
 
 type EmpresaSelectorRow = {
   id: string;
@@ -456,5 +458,110 @@ export async function listarResumenCupos(): Promise<ResumenCuposResult> {
     };
   } catch (error) {
     return { ok: false, error: "RESUMEN_CUPOS_FAILED", detalle: error instanceof Error ? error.message : undefined };
+  }
+}
+
+export type PagoHistorial = {
+  id: string;
+  fecha: string;
+  tipo: string;
+  estado: string;
+  montoClp: number | null;
+  proveedor: string;
+};
+
+export type FacturacionData = {
+  uf: number;
+  plan: { codigo: string; nombre: string; ufMensual: number; clpMensualConIva: number } | null;
+  suscripcion: { estado: string; proximoCobro: string | null; ultimoCobroClp: number | null } | null;
+  trial: { activo: boolean; inicio: boolean; diasRestantes: number; boletasUsadas: number; boletasMax: number } | null;
+  mpConfigurado: boolean;
+  pagos: PagoHistorial[];
+};
+
+type FacturacionResult =
+  | { ok: true; data: FacturacionData }
+  | { ok: false; error: string; detalle?: string };
+
+/**
+ * Datos de la sección "Facturación y uso" del popup de Empresa: plan vigente,
+ * estado de la suscripción, período de prueba e historial de pagos de la cuenta.
+ * Solo lectura — el cobro/checkout vive en /planes. Reutiliza estadoCuota.
+ */
+export async function obtenerFacturacion(): Promise<FacturacionResult> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return ctx;
+
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: acceso.codigo };
+
+    const [uf, cuota] = await Promise.all([
+      getUfClp(),
+      estadoCuota(ctx.sb, ctx.empresaId),
+    ]);
+
+    let plan: FacturacionData["plan"] = null;
+    if (cuota.plan) {
+      const { data: planRow } = await ctx.sb
+        .from("planes_config")
+        .select("codigo, nombre, uf_mensual")
+        .eq("codigo", cuota.plan)
+        .maybeSingle();
+      if (planRow) {
+        plan = {
+          codigo: planRow.codigo,
+          nombre: planRow.nombre,
+          ufMensual: planRow.uf_mensual,
+          clpMensualConIva: clpConIva(planRow.uf_mensual, uf),
+        };
+      }
+    }
+
+    const { data: subRow } = await ctx.sb
+      .from("suscripciones")
+      .select("estado, periodo_hasta, clp_ultimo_cobro")
+      .eq("cuenta_id", acceso.cuentaId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: pagosRows } = await ctx.sb
+      .from("pagos")
+      .select("id, created_at, tipo, estado, monto_clp, proveedor")
+      .eq("cuenta_id", acceso.cuentaId)
+      .order("created_at", { ascending: false })
+      .limit(12);
+
+    return {
+      ok: true,
+      data: {
+        uf,
+        plan,
+        suscripcion: subRow
+          ? { estado: subRow.estado, proximoCobro: subRow.periodo_hasta, ultimoCobroClp: subRow.clp_ultimo_cobro }
+          : null,
+        trial: cuota.trial
+          ? {
+              activo: cuota.trial.activo,
+              inicio: Boolean(cuota.trial.inicio),
+              diasRestantes: cuota.trial.diasRestantes,
+              boletasUsadas: cuota.trial.boletasUsadas,
+              boletasMax: cuota.trial.boletasMax,
+            }
+          : null,
+        mpConfigurado: mpConfigurado(),
+        pagos: (pagosRows ?? []).map((p) => ({
+          id: p.id,
+          fecha: p.created_at,
+          tipo: p.tipo,
+          estado: p.estado,
+          montoClp: p.monto_clp,
+          proveedor: p.proveedor,
+        })),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: "FACTURACION_FAILED", detalle: error instanceof Error ? error.message : undefined };
   }
 }
