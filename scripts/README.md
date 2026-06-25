@@ -20,6 +20,13 @@ hardcodeados ni impresos.
 `scripts/backup/` — respaldo cifrado de la base (pg_dump → cifrado → offsite),
 para correr en la Mac Mini. Ver `scripts/backup/README.md`.
 
+## Alertas operacionales
+
+El cron `/api/ops/cron` avisa cuando hay un hallazgo **crítico**. Manda a un
+webhook (`OPS_ALERT_WEBHOOK_URL`) y/o a un **bot de alertas dedicado de Telegram**
+(`OPS_TG_BOT_TOKEN` + `OPS_TG_CHAT_ID`, separado del bot de comprobantes).
+`ops-telegram-chatid.mjs` ayuda a obtener el `chat_id` del grupo.
+
 ## Limpieza de datos (¡con guardia!)
 
 | Script | Comportamiento |
