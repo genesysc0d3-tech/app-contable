@@ -620,7 +620,6 @@ body{font-family:'DM Sans',sans-serif}
 
             {/* RCV CARD */}
             <RCVSummaryCard mes={mes} esRcvExento={esRcvExento} docs={rcvTotal.docs} neto={fmt(rcvTotal.neto)} iva={fmt(rcvTotal.iva)} total={fmt(rcvTotal.total)} />
-            {resumenCupos.ok && <UsageCountersPanel resumen={resumenCupos.resumen} />}
 
             {/* EMITIR PANEL */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
@@ -655,6 +654,9 @@ body{font-family:'DM Sans',sans-serif}
                 personas={equipoBusiness.personas}
               />
             )}
+
+            {/* USO DEL MES — al final, debajo de todas las cards */}
+            {resumenCupos.ok && <UsageCountersPanel resumen={resumenCupos.resumen} />}
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}

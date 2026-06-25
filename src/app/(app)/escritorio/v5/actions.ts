@@ -501,12 +501,14 @@ export async function obtenerFacturacion(): Promise<FacturacionResult> {
       estadoCuota(ctx.sb, ctx.empresaId),
     ]);
 
+    const cuentaCtx = await contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId);
+    const planCodigo = cuentaCtx?.plan ?? cuota.plan;
     let plan: FacturacionData["plan"] = null;
-    if (cuota.plan) {
+    if (planCodigo) {
       const { data: planRow } = await ctx.sb
         .from("planes_config")
         .select("codigo, nombre, uf_mensual")
-        .eq("codigo", cuota.plan)
+        .eq("codigo", planCodigo)
         .maybeSingle();
       if (planRow) {
         plan = {
