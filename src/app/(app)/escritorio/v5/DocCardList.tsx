@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type CSSProperties } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -66,11 +66,12 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day" }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
   docProgress?: Record<string, DocProg>;
+  periodoMode?: "day" | "week" | "month";
 }) {
   const router = useRouter();
   const [docs, setDocs] = useState(initialDocs);
@@ -83,22 +84,12 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   // dos canales, dos dimensiones. La info detallada va en el VISOR (arriba),
   // no dentro de cada cuadrado.
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
-  const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
     try { const v = localStorage.getItem("agregados-view"); if (v === "grid" || v === "list") setViewMode(v); } catch { /* noop */ }
   }, []);
   const setView = (v: "list" | "grid") => { setViewMode(v); try { localStorage.setItem("agregados-view", v); } catch { /* noop */ } };
 
   const isBoletaTipo = (t: string) => (t ?? "").startsWith("boleta_");
-  const tileId = (doc: DocRaw): string => {
-    const f = doc.nombre_archivo.match(/#\s*(\d+)/);
-    if (f) return `#${f[1]}`;
-    return doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : doc.nombre_archivo.slice(0, 7);
-  };
-  const fmtFecha = (s: string): string => {
-    return formatDisplayDateEsCl(s, { day: "2-digit", month: "short", year: "numeric" }, "");
-  };
-  const tipoEtiqueta = (doc: DocRaw): string => isBoletaTipo(doc.tipo) ? "Boleta única" : "Masivo";
 
   useEffect(() => { setDocs(initialDocs); }, [initialDocs]);
 
@@ -144,10 +135,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
         <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>
         <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
           {(["grid","list"] as const).map((v) => (
-            <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista cuadrícula (escanear rápido)" : "Vista lista (detalle)"}
+            <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista por origen (escanear rápido)" : "Vista lista (detalle)"}
               style={{display:"grid",placeItems:"center",width:27,height:20,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "#E8553E" : "var(--text2)",transition:"all .15s ease"}}>
               {v === "grid"
-                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.6"/></svg>
+                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="9" height="3" rx="1.2"/><rect x="6" y="10" width="15" height="2.6" rx="1.2"/><rect x="6" y="15" width="15" height="2.6" rx="1.2"/></svg>
                 : <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="4" rx="1.6"/><rect x="3" y="13" width="18" height="4" rx="1.6"/></svg>}
             </button>
           ))}
@@ -332,112 +323,83 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           );
         })}
         {viewMode === "grid" && (() => {
-          const sd = selected ? docs.find(d => d.id === selected) : null;
-          // Barra = progreso de emisión (emitida/boleteable). Boleta = 100%.
-          const pct = (doc: DocRaw): number => {
-            if (isBoletaTipo(doc.tipo)) return 1;
-            const p = docProgress?.[doc.id];
-            if (p) { const b = p.total - p.noAplica; return b > 0 ? Math.min(1, p.emitida / b) : 0; }
-            return 0;
+          // Vista "por origen" (estilo Finder): agrupa por DE DÓNDE vino el doc
+          // —MassDTE (cartolas), Telegram (comprobantes), Boleta única— y la marca
+          // de tiempo escala con el calendario maestro: día→hora, semana→día+hora,
+          // mes→semana+día+hora. Estado = punto de color a la izquierda. Sin líneas
+          // conectoras (jerarquía falsa); encabezado de sección estilo Finder.
+          const origenDe = (d: DocRaw): "massdte" | "telegram" | "boleta" =>
+            isBoletaTipo(d.tipo) ? "boleta" : (d.nombre_archivo ?? "").startsWith("Telegram ") ? "telegram" : "massdte";
+          const grupos: { key: "massdte" | "telegram" | "boleta"; label: string; sub: string; icon: ReactNode }[] = [
+            { key: "massdte", label: "MassDTE", sub: "cartolas",
+              icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg> },
+            { key: "telegram", label: "Telegram", sub: "comprobantes",
+              icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-11 11"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg> },
+            { key: "boleta", label: "Boleta única", sub: "emisión directa",
+              icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M9 8h6"/><path d="M9 11.5h5"/></svg> },
+          ];
+          const byOrigen: Record<string, DocRaw[]> = { massdte: [], telegram: [], boleta: [] };
+          for (const d of docs) byOrigen[origenDe(d)].push(d);
+          for (const k of Object.keys(byOrigen)) byOrigen[k].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          // Marca de tiempo escalada al modo del calendario maestro.
+          const tsDe = (s: string): string => {
+            const hh = formatDisplayDateEsCl(s, { hour: "2-digit", minute: "2-digit", hour12: false }, "");
+            if (periodoMode === "day") return hh;
+            const dd = formatDisplayDateEsCl(s, { day: "2-digit", month: "short" }, "");
+            if (periodoMode === "week") return `${dd} · ${hh}`;
+            const dayNum = Number(formatDisplayDateEsCl(s, { day: "numeric" }, "0")) || 1;
+            return `S${Math.max(1, Math.ceil(dayNum / 7))} · ${dd} · ${hh}`;
           };
           return (
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div>
               <style>{`
-                .agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,124px));gap:10px;justify-content:start}
-                .agg-card{position:relative;aspect-ratio:1.14;border-radius:16px;cursor:pointer;overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));border:1px solid var(--c-bd);box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 10px 24px -10px rgba(0,0,0,.42);transition:border-color .22s ease,box-shadow .22s ease}
-                .agg-card:hover{border-color:var(--c);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 16px 36px -12px rgba(0,0,0,.5)}
-                .agg-card.sel{border-color:var(--c);box-shadow:0 0 0 1.5px var(--c)}
-                @keyframes aggVisorFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-                .agg-visor-fade{animation:aggVisorFade .3s cubic-bezier(.16,1,.3,1)}
-                .agg-wm{position:absolute;inset:0;z-index:0;display:grid;place-items:center;pointer-events:none;opacity:.14;transition:opacity .22s ease,transform .26s ease}
-                .agg-wm svg{width:58px;height:58px;color:rgba(255,255,255,.26);filter:blur(1.8px);transform:translateY(3px)}
-                .agg-card:hover .agg-wm{opacity:.05;transform:scale(.95)}
-                .agg-title{position:absolute;z-index:1;top:10px;left:0;right:0;text-align:center;font-size:9.5px;font-weight:850;color:var(--c);white-space:nowrap;opacity:0;transform:translateY(-5px);transition:opacity .18s ease,transform .22s ease}
-                .agg-card:hover .agg-title{opacity:1;transform:translateY(0)}
-                .agg-num{position:absolute;z-index:1;left:8px;right:8px;top:50%;transform:translateY(-58%);font-size:24px;font-weight:850;letter-spacing:-.04em;line-height:1;color:var(--text);text-align:center;white-space:nowrap;transition:font-size .24s ease}
-                .agg-card:hover .agg-num{font-size:16px}
-                .agg-num .p,.agg-num .a{display:block;transition:opacity .18s ease,transform .22s ease}
-                .agg-num .a{position:absolute;inset:0;opacity:0;transform:translateY(6px)}
-                .agg-card:hover .agg-num .p{opacity:0;transform:translateY(-6px)}
-                .agg-card:hover .agg-num .a{opacity:1;transform:translateY(0)}
-                .agg-sub{position:absolute;z-index:1;left:0;right:0;top:calc(50% + 14px);text-align:center;color:var(--text2);font-size:9.5px;font-weight:700;white-space:nowrap;opacity:1;transform:translateY(0);transition:opacity .16s ease,transform .2s ease}
-                .agg-card:hover .agg-sub{opacity:0;transform:translateY(-5px)}
-                .agg-info{position:absolute;z-index:1;left:0;right:0;top:calc(50% + 11px);display:flex;flex-direction:column;align-items:center;gap:2px;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .2s ease .04s,transform .24s ease .04s}
-                .agg-card:hover .agg-info{opacity:1;transform:translateY(0)}
-                .agg-info .s{font-size:10px;font-weight:850;color:var(--c);line-height:1.1}
-                .agg-info .d{font-size:9px;color:var(--text2);font-weight:650;line-height:1.15}
-                .agg-bar{position:absolute;left:12px;right:12px;bottom:9px;z-index:1;height:3px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
-                .agg-bar i{display:block;height:100%;border-radius:999px;background:var(--c);width:var(--p);transition:width .6s cubic-bezier(.16,1,.3,1)}
+                .agg-fgrp{margin-bottom:10px}
+                .agg-fgrp:last-child{margin-bottom:0}
+                .agg-fh{display:flex;align-items:center;gap:7px;padding:5px 2px;border-bottom:1px solid var(--bg-muted);margin-bottom:3px;color:var(--text2)}
+                .agg-fh .lbl{font-size:10px;font-weight:800;letter-spacing:.02em;color:var(--text)}
+                .agg-fh .sub{font-size:9px;color:var(--text3);font-weight:600}
+                .agg-fh .cnt{margin-left:auto;font-size:9px;color:var(--text3);font-weight:700;font-variant-numeric:tabular-nums}
+                .agg-fr{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;cursor:pointer;padding:6px 8px;border-radius:8px;text-align:left;color:inherit;transition:background .14s ease}
+                .agg-fr:hover{background:rgba(255,255,255,.045)}
+                .agg-fr .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+                .agg-fr .nm{flex:1;min-width:0;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+                .agg-fr .meta{font-size:9.5px;flex-shrink:0;font-variant-numeric:tabular-nums}
+                .agg-fr .ts{font-size:9px;color:var(--text3);flex-shrink:0;text-align:right;font-variant-numeric:tabular-nums}
+                @keyframes aggDotPulse{0%,100%{opacity:1}50%{opacity:.3}}
+                .agg-fr .dot.pulse{animation:aggDotPulse 1.4s ease-in-out infinite}
               `}</style>
-              {/* VISOR: el doc fijado (click) se ve IGUAL que en modo fila (mismas clases) */}
-              <div key={selected ?? "empty"} className="agg-visor-fade">
-              {sd ? (
-                <div className="doc-card" style={isBoletaTipo(sd.tipo) ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
-                  <div className="dh" style={isBoletaTipo(sd.tipo) ? { padding: "6px 8px", gap: 5 } : undefined}>
-                    {isBoletaTipo(sd.tipo) && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"#E8553E",fontSize:7,fontWeight:900,flexShrink:0}}>B1</span>}
-                    <span className={`dt ${lm[sd.estado] ?? "gn"}`} style={{background:st[sd.estado]??"var(--text2)",boxShadow:`0 0 5px ${st[sd.estado]??"var(--text2)"}40`}} />
-                    <span className="nm">{sd.nombre_archivo}</span>
-                    {isBoletaTipo(sd.tipo) && <span style={{fontSize:6,padding:"1px 4px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
-                    <span className={`st ${lm[sd.estado] ?? "ls"}`}>{sl[sd.estado] ?? sd.estado}</span>
-                    <span className="mt">{sd.movimientos_detectados ? `${sd.movimientos_detectados} mov` : "—"}</span>
+              {grupos.filter((g) => byOrigen[g.key].length > 0).map((g) => (
+                <div key={g.key} className="agg-fgrp">
+                  <div className="agg-fh">
+                    {g.icon}
+                    <span className="lbl">{g.label}</span>
+                    <span className="sub">{g.sub}</span>
+                    <span className="cnt">{byOrigen[g.key].length}</span>
                   </div>
-                  <div className="da">
-                    {isBoletaTipo(sd.tipo)
-                      ? <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e"}}><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>Emitida · en Boletas</span>
-                      : <button type="button" className="mp" onClick={() => setViewDocId(sd.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>}
-                  </div>
+                  {byOrigen[g.key].map((doc) => {
+                    const c = st[doc.estado] ?? "#9ca3af";
+                    const hollow = doc.estado === "subido";
+                    const pulse = doc.estado === "procesando";
+                    const meta = doc.estado === "error" ? "Error"
+                      : doc.estado === "procesando" ? "procesando"
+                      : isBoletaTipo(doc.tipo) ? "emitida"
+                      : doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "";
+                    const metaColor = doc.estado === "error" ? "#ef4444"
+                      : doc.estado === "procesando" ? "#5b9cf6"
+                      : (doc.estado === "procesado" && isBoletaTipo(doc.tipo)) ? "#22c55e"
+                      : "var(--text2)";
+                    return (
+                      <button key={doc.id} type="button" className="agg-fr" title={doc.nombre_archivo}
+                        onClick={() => { if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
+                        <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
+                        <span className="nm">{doc.nombre_archivo}</span>
+                        {meta && <span className="meta" style={{ color: metaColor }}>{meta}</span>}
+                        <span className="ts">{tsDe(doc.created_at)}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              ) : (
-                <div style={{display:"flex",alignItems:"center",gap:11,color:"var(--text2)",borderRadius:14,border:"1px dashed rgba(255,255,255,.12)",padding:"12px 14px"}}>
-                  <div style={{width:34,height:34,borderRadius:10,display:"grid",placeItems:"center",border:"1.5px dashed rgba(255,255,255,.14)",flexShrink:0}}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
-                  </div>
-                  <span style={{fontSize:11,lineHeight:1.4}}>Haz <b style={{color:"var(--text)"}}>click</b> en un cuadrado para fijarlo aquí como fila.</span>
-                </div>
-              )}
-              </div>
-              {/* Leyenda PERSISTENTE (siempre): color = estado, letra = tipo. No cambia al fijar */}
-              <div style={{padding:"0 2px",display:"flex",flexWrap:"wrap",alignItems:"center",gap:9,fontSize:9.5,minHeight:16}}>
-                <span style={{color:"var(--text2)",fontWeight:800}}>Estado:</span>
-                {([["procesado","Listo"],["procesando","Procesando"],["error","Error"],["subido","Pendiente"]] as const).map(([k,l]) => (
-                  <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><span style={{width:8,height:8,borderRadius:3,background:st[k]}} />{l}</span>
-                ))}
-                <span style={{width:1,height:12,background:"rgba(255,255,255,.1)",margin:"0 3px"}} />
-                <span style={{color:"var(--text2)",fontWeight:800}}>Tipo:</span>
-                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M9 8h6"/><path d="M9 11.5h5"/></svg>Boleta</span>
-                <span style={{display:"inline-flex",alignItems:"center",gap:4,color:"var(--text2)"}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg>Masivo</span>
-              </div>
-              {/* GRILLA de cuadrados: color=estado, letra=tipo. Hover revela info; click lo fija en el visor */}
-              <div className="agg-grid">
-                {docs.map((doc) => {
-                  const c = st[doc.estado] ?? "#9ca3af";
-                  const boleta = isBoletaTipo(doc.tipo);
-                  const folio = tileId(doc).replace(/^#\s*/, "");
-                  const big = boleta ? `N°${folio}` : (doc.movimientos_detectados ? `${doc.movimientos_detectados}` : "—");
-                  const bigActive = boleta ? `Folio N°${folio}` : (doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—");
-                  return (
-                    <button key={doc.id} type="button" className={`agg-card${selected === doc.id ? " sel" : ""}`}
-                      style={{ "--c": c, "--c-bd": `${c}9c` } as CSSProperties}
-                      onClick={() => setSelected(s => s === doc.id ? null : doc.id)} title={doc.nombre_archivo}>
-                      {/* watermark blanco difuminado: forma = tipo */}
-                      <div className="agg-wm" aria-hidden>
-                        {boleta
-                          ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M9 8h6"/><path d="M9 11.5h5"/><path d="M9 15h3.5"/></svg>
-                          : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg>}
-                      </div>
-                      <div className="agg-title">{tipoEtiqueta(doc)}</div>
-                      <div className="agg-num"><span className="p">{big}</span><span className="a">{bigActive}</span></div>
-                      <div className="agg-sub">{tipoEtiqueta(doc)}</div>
-                      <div className="agg-info">
-                        <span className="s">{boleta ? "Emitida" : (sl[doc.estado] ?? doc.estado)}</span>
-                        {boleta && <span className="d">en Boletas</span>}
-                        <span className="d">{fmtFecha(doc.created_at)}</span>
-                      </div>
-                      {!boleta && <div className="agg-bar"><i style={{ "--p": `${Math.round(pct(doc) * 100)}%` } as CSSProperties} /></div>}
-                    </button>
-                  );
-                })}
-              </div>
+              ))}
             </div>
           );
         })()}

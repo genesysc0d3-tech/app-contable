@@ -10,6 +10,7 @@ import { recordCuentaAudit } from "@/lib/audit/account";
 import { createClient } from "@/lib/supabase/server";
 import { getUfClp } from "@/lib/sii/uf";
 import { mpConfigurado } from "@/lib/pagos/mercadopago";
+import { fetchMesaDateDependent, type MesaParams, type MesaDateDependent } from "./mesa-data";
 
 type EmpresaSelectorRow = {
   id: string;
@@ -565,5 +566,36 @@ export async function obtenerFacturacion(): Promise<FacturacionResult> {
     };
   } catch (error) {
     return { ok: false, error: "FACTURACION_FAILED", detalle: error instanceof Error ? error.message : undefined };
+  }
+}
+
+export type CargarMesaResult =
+  | { ok: true; mesa: MesaDateDependent }
+  | { ok: false; error: string };
+
+/**
+ * Datos date-dependientes de la mesa para un rango (día/semana/mes) — lo que
+ * pide el calendario client-side al togglear, SIN navegar ni re-renderizar la
+ * página completa. La empresa sale del registro del usuario (no del cliente),
+ * así que `params` solo trae date/month/view (no se puede pedir otra empresa).
+ */
+export async function cargarMesa(params: MesaParams): Promise<CargarMesaResult> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    const { data: empresa } = await ctx.sb
+      .from("empresas")
+      .select("giro, razon_social, tipo_contribuyente")
+      .eq("id", ctx.empresaId)
+      .maybeSingle();
+    if (!empresa) return { ok: false, error: "EMPRESA_NO_ENCONTRADA" };
+    const mesa = await fetchMesaDateDependent(ctx.sb, ctx.empresaId, {
+      giro: empresa.giro,
+      razon_social: empresa.razon_social ?? "",
+      tipo_contribuyente: empresa.tipo_contribuyente,
+    }, params);
+    return { ok: true, mesa };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "CARGAR_MESA_FAILED" };
   }
 }
