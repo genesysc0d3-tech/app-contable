@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
 import DocCardList from "./DocCardList";
 import VisualizarArchivo from "./VisualizarArchivo";
@@ -10,7 +10,7 @@ import GlosaComunControl from "./GlosaComunControl";
 import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import VeredictoCard from "./VeredictoCard";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
-import { useMesaReload } from "./mesa-reload";
+import { useMesaReload, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
@@ -35,6 +35,29 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
 
   const docs = mesa.docsAgregados as DocRow[];
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
+
+  // Tx que llega desde Emitir (Por revisar/Bloqueadas): se abre cuando aparece
+  // en la mesa. Suscripción a eventos (setState en callback, no en el cuerpo del
+  // effect); docsRef mantiene la lista actual sin re-suscribir. "mesa-updated"
+  // cubre el caso de otro mes (tras navegar el calendario).
+  const docsRef = useRef(docs);
+  useEffect(() => { docsRef.current = docs; }, [docs]);
+  useEffect(() => {
+    // defer a microtarea: lee la lista YA commiteada (cubre el cambio de mes).
+    const tryOpen = () => window.setTimeout(() => {
+      const id = pendingOpenDoc.id;
+      if (id && docsRef.current.some((d) => d.id === id)) {
+        pendingOpenDoc.id = null;
+        setSelDocId(id);
+      }
+    }, 0);
+    window.addEventListener("mesa-updated", tryOpen);
+    window.addEventListener("massdte:try-open", tryOpen);
+    return () => {
+      window.removeEventListener("mesa-updated", tryOpen);
+      window.removeEventListener("massdte:try-open", tryOpen);
+    };
+  }, []);
 
   // Propuestas agrupadas por documento (ya vienen en memoria — sin fetch extra).
   const propsByDoc = useMemo(() => {

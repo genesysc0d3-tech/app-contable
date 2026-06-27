@@ -21,6 +21,8 @@ interface Item {
   sugerencia: string | null;
   confianza_clasif: number;
   razones: string[];
+  documento_id: string | null;
+  documento_created_at: string | null;
 }
 
 interface PendientesResponse {
@@ -62,6 +64,16 @@ function errorAmable(code?: string, msg?: string): string {
     case "AFECTA_IVA_CERO": return "Boleta afecta con IVA $0 — revisa el monto.";
     default: return msg || "No se pudo emitir.";
   }
+}
+
+// Salta a Check de agregados y abre la tx (navega el mes si es de otro periodo).
+// docsAgregados se filtra por el created_at del DOCUMENTO (cuándo se subió), no
+// por la fecha del movimiento — por eso el mes a navegar sale de ahí.
+function goToCheck(item: { documento_id: string | null; documento_created_at: string | null; fecha: string }) {
+  if (!item.documento_id) return;
+  const src = item.documento_created_at ?? item.fecha;
+  const month = src && src.length >= 7 ? `${src.slice(0, 4)}-${Number(src.slice(5, 7)) - 1}` : undefined; // mes 0-11 (formato calendario)
+  window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: { documentoId: item.documento_id, month } }));
 }
 
 function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; otrosTipos?: Record<string, number> }) {
@@ -300,7 +312,8 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                   onClick={() => !isDisabled && toggleItem(item.id)}
                   style={isDisabled ? {} : {cursor:"pointer"}}
                 >{isSelected ? "✓" : ""}</div>
-                <div className="inf">
+                <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); }}
+                  style={item.balde !== "listas" && item.documento_id ? { cursor: "pointer" } : undefined}>
                   <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
                   <div className="sub">
                     {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
@@ -311,6 +324,9 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                       {" "}{item.motivo_no_listo}
                       {nextActionLabel(item.motivo_code) && <><br />{nextActionLabel(item.motivo_code)}</>}
                     </div>
+                  )}
+                  {item.balde !== "listas" && item.documento_id && (
+                    <div className="sub" style={{ color: "#E8553E", fontWeight: 700, marginTop: 2 }}>Resolver en Check →</div>
                   )}
                   {!isDisabled && item.confianza_clasif < 0.7 && (
                     <div className="sub rn">

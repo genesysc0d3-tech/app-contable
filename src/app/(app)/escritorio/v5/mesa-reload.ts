@@ -11,3 +11,9 @@ export const MesaReloadContext = createContext<(() => void) | null>(null);
 export function useMesaReload(): (() => void) | null {
   return useContext(MesaReloadContext);
 }
+
+// "Doc pendiente de abrir": cuando desde Emitir se aprieta una tx en Por
+// revisar/Bloqueadas, se deja acá el id del documento; MesaController cambia a
+// Check (y navega el mes si hace falta) y MesaTab lo selecciona al aparecer en
+// la mesa. Singleton simple porque los tabs no comparten árbol React.
+export const pendingOpenDoc: { id: string | null } = { id: null };

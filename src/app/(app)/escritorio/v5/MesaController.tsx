@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import RightColumnView from "./RightColumnView";
 import Mesa, { type MesaProps } from "./Mesa";
 import CalendarStrip, { type NavParams } from "./CalendarStrip";
 import { cargarMesa } from "./actions";
-import { MesaReloadContext } from "./mesa-reload";
+import { MesaReloadContext, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 
@@ -82,6 +82,24 @@ export default function MesaController({
       }
     });
   }, [mesa]);
+
+  // Desde Emitir: abrir una tx en Check. Deja el doc pendiente, cambia a la
+  // pestaña Check y, si la tx es de otro mes, navega el calendario para que
+  // aparezca en la mesa (MesaTab la selecciona al verla).
+  useEffect(() => {
+    const onOpenDoc = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { documentoId?: string; month?: string } | undefined;
+      if (detail?.documentoId) pendingOpenDoc.id = detail.documentoId;
+      window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" }));
+      const cur = `${mesa.calendar.y}-${mesa.calendar.m}`;
+      if (detail?.month && detail.month !== cur) navigate({ view: "month", month: detail.month });
+      // Caso mismo-mes: el doc ya está en la mesa; empuja a MesaTab a abrirlo
+      // (el caso de otro mes llega por "mesa-updated" tras cargar el calendario).
+      window.setTimeout(() => window.dispatchEvent(new Event("massdte:try-open")), 80);
+    };
+    window.addEventListener("massdte:open-doc", onOpenDoc);
+    return () => window.removeEventListener("massdte:open-doc", onOpenDoc);
+  }, [navigate, mesa]);
 
   return (
     <>
