@@ -13,6 +13,7 @@ interface Item {
   receptor_nombre: string | null;
   receptor_rut: string | null;
   monto_total: number;
+  balde: "listas" | "por_revisar" | "bloqueadas";
   listo_emitir: boolean;
   motivo_no_listo: string | null;
   motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null;
@@ -28,6 +29,7 @@ interface PendientesResponse {
   totales: {
     total_pendientes: number;
     listas_emitir: number;
+    por_revisar: number;
     bloqueadas: number;
     monto_total: number;
     monto_listo: number;
@@ -81,7 +83,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   const [loading, setLoading] = useState(!initial);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dteOverrides, setDteOverrides] = useState<Record<string, number>>({});
-  const [statusFilter, setStatusFilter] = useState<"listas" | "bloqueadas" | "todas">("listas");
+  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,14 +121,16 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   const itemsList = useMemo(() => {
     if (!data) return [];
     let filtered = data.items;
-    if (statusFilter === "listas") filtered = filtered.filter(i => i.listo_emitir);
-    else if (statusFilter === "bloqueadas") filtered = filtered.filter(i => !i.listo_emitir);
+    if (statusFilter === "listas") filtered = filtered.filter(i => i.balde === "listas");
+    else if (statusFilter === "por_revisar") filtered = filtered.filter(i => i.balde === "por_revisar");
+    else if (statusFilter === "bloqueadas") filtered = filtered.filter(i => i.balde === "bloqueadas");
     if (typeFilter === "afecta") filtered = filtered.filter(i => (dteOverrides[i.id] ?? i.tipo_sugerido) === 39);
     else if (typeFilter === "exenta") filtered = filtered.filter(i => (dteOverrides[i.id] ?? i.tipo_sugerido) === 41);
     return filtered;
   }, [data, statusFilter, typeFilter, dteOverrides]);
 
   const listasCount = data?.totales.listas_emitir ?? 0;
+  const porRevisarCount = data?.totales.por_revisar ?? 0;
   const bloqueadasCount = data?.totales.bloqueadas ?? 0;
   const totalCount = data?.totales.total_pendientes ?? 0;
 
@@ -244,6 +248,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
         {/* Pills */}
         <div className="em-pills">
           <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
+          <button className={`pl ${statusFilter === "por_revisar" ? "act" : "ina"}`} onClick={() => setStatusFilter("por_revisar")}>Por revisar ({porRevisarCount})</button>
           <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
           <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
           <span style={{fontSize:8,color:"var(--text2)",margin:"0 4px"}}>|</span>

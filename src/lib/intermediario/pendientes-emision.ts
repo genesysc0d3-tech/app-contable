@@ -1,6 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
-import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import { evaluarEmision } from "@/lib/intermediario/emision-decision";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contribuyente: string | null };
@@ -9,7 +10,7 @@ export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contr
  * Tipos de propuesta IA que representan INGRESOS boletificables. Facturas,
  * gastos, no comerciales y honorarios quedan fuera.
  */
-export const TIPOS_EMITIBLES = ["boleta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
+export const TIPOS_EMITIBLES = ["boleta", "exenta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
 
 /**
  * Lista propuestas tipo boleta aprobadas/editadas que aún NO están emitidas,
@@ -79,28 +80,32 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
     const receptor_nombre = p.receptor_nombre ?? cliente?.nombre ?? null;
     const recId = cliente?.id ?? p.receptor_nombre ?? "sin-receptor";
 
-    const clasif = clasificarBoleta(
-      { descripcion: mov?.descripcion ?? "", monto: total, fecha, receptor_nombre },
-      empresaCtx,
+    // Motor de reglas: única fuente de verdad (misma función para cola, backend y carril real).
+    const verdict = evaluarEmision(
       {
-        cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,
-        cantidad_mes_mismo_receptor: (patronMes.get(`${recId}|${fecha.slice(0, 7)}`) ?? 1),
+        estado: p.estado,
+        yaEmitida: false, // `visibles` ya excluyó las emitidas
+        total,
+        descripcion: mov?.descripcion ?? "",
+        fecha,
+        receptorRut: receptor_rut,
+        receptorNombre: receptor_nombre,
+        docHint,
+        patron: {
+          cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,
+          cantidad_mes_mismo_receptor: (patronMes.get(`${recId}|${fecha.slice(0, 7)}`) ?? 1),
+        },
       },
-      docHint,
+      { empresa: empresaCtx, umbralIdentificacionClp },
     );
 
-    const requiereReceptor = total > umbralIdentificacionClp;
-    const tieneReceptor = !!receptor_rut && !!receptor_nombre;
-    const esEmitible = clasif.sugerencia !== "no_boletar";
-    const listo_emitir = esEmitible && total > 0 && (!requiereReceptor || tieneReceptor);
-
-    const motivo_no_listo = !listo_emitir
-      ? !esEmitible ? `No se boletea: ${clasif.razones[0] ?? "movimiento no comercial"}`
-        : total <= 0 ? "Monto inválido" : "Falta identificar al comprador (operación sobre 135 UF — Res. Ex. SII 44/2025)"
-      : null;
-    const motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null = !listo_emitir
-      ? !esEmitible ? "no_boletar" : total <= 0 ? "monto_invalido" : "falta_receptor"
-      : null;
+    const primer = verdict.bloqueos[0] ?? verdict.advertencias[0] ?? null;
+    const code0 = verdict.bloqueos[0]?.code;
+    const motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null =
+      code0 === "NO_BOLETAR" ? "no_boletar"
+        : code0 === "MONTO_TOTAL_INVALIDO" || code0 === "AFECTA_IVA_CERO" ? "monto_invalido"
+          : (code0 === "RECEPTOR_RUT_OBLIGATORIO" || code0 === "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA" || code0 === "MEDIO_PAGO_OBLIGATORIO") ? "falta_receptor"
+            : null;
 
     return {
       id: p.id,
@@ -109,13 +114,16 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
       receptor_rut,
       receptor_nombre,
       monto_total: total,
-      listo_emitir,
-      motivo_no_listo,
+      balde: verdict.balde,
+      listo_emitir: verdict.puedeEmitir,
+      bloqueos: verdict.bloqueos,
+      advertencias: verdict.advertencias,
+      motivo_no_listo: verdict.balde !== "listas" ? (primer?.msg ?? null) : null,
       motivo_code,
-      tipo_sugerido: clasif.tipo_dte,
-      sugerencia: clasif.sugerencia,
-      confianza_clasif: Math.round(clasif.confianza * 100) / 100,
-      razones: clasif.razones,
+      tipo_sugerido: verdict.tipoDte,
+      sugerencia: verdict.sugerencia,
+      confianza_clasif: Math.round(verdict.confianzaTipo * 100) / 100,
+      razones: verdict.razones,
       documento_id: docArr?.id ?? null,
       documento_nombre: docArr?.nombre_archivo ?? null,
       documento_created_at: docArr?.created_at ?? null,
@@ -124,10 +132,11 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
 
   const totales = {
     total_pendientes: items.length,
-    listas_emitir: items.filter((i) => i.listo_emitir).length,
-    bloqueadas: items.filter((i) => !i.listo_emitir).length,
+    listas_emitir: items.filter((i) => i.balde === "listas").length,
+    por_revisar: items.filter((i) => i.balde === "por_revisar").length,
+    bloqueadas: items.filter((i) => i.balde === "bloqueadas").length,
     monto_total: items.reduce((s, i) => s + i.monto_total, 0),
-    monto_listo: items.filter((i) => i.listo_emitir).reduce((s, i) => s + i.monto_total, 0),
+    monto_listo: items.filter((i) => i.balde === "listas").reduce((s, i) => s + i.monto_total, 0),
   };
 
   let aprobadas_otros_tipos: Record<string, number> = {};
