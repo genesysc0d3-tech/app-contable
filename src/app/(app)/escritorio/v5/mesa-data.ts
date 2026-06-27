@@ -101,7 +101,7 @@ export async function fetchMesaDateDependent(
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "pendiente").gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["aprobado", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado,detalles").eq("empresa_id", empresaId).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(100),
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(100),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", workStartDay).lt("fecha_emision", workEndDay),
   ]);

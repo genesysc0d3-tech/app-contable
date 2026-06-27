@@ -1,25 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import type { ComponentProps } from "react";
 import TabsV5 from "./TabsV5";
-import RevisarTabContent from "./RevisarTabContent";
 import EmitirTabContent from "./EmitirTabContent";
-import DocCardList from "./DocCardList";
+import MesaTab from "./MesaTab";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
 import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import { formatShortDateEsCl } from "@/lib/display-date";
+import type { ClienteResumen } from "./revisar-shared";
 import type { MesaDateDependent } from "./mesa-data";
-
-type RevisarProps = ComponentProps<typeof RevisarTabContent>;
-type DocCardListProps = ComponentProps<typeof DocCardList>;
 
 const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 
 function compactEmpty(kind: "subidos" | "boletas") {
   const isSubidos = kind === "subidos";
   return (
-    <div className="r-scroll" style={{ display: "grid", placeItems: "center", minHeight: 320, padding: "42px 18px", textAlign: "center", color: "var(--text2)" }}>
+    <div className="r-scroll" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 320, padding: "42px 18px", textAlign: "center", color: "var(--text2)" }}>
       <style>{`@keyframes emptySonar{0%{transform:scale(.72);opacity:.45}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emptyDraw{0%{stroke-dashoffset:54;opacity:.28}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.48}}`}</style>
       <div>
         <div style={{ position: "relative", width: 104, height: 104, margin: "0 auto 16px" }}>
@@ -39,7 +35,7 @@ function compactEmpty(kind: "subidos" | "boletas") {
 
 export type MesaProps = {
   mesa: MesaDateDependent;
-  clientes: RevisarProps["clientes"];
+  clientes: ClienteResumen[];
   empresaId: string;
   empresaGiro: string | null;
   empresaRazon: string;
@@ -54,25 +50,11 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
       nombreEmpresa={empresaRazon}
       fecha={mesa.calendar.selectedDateLabel}
       subidosContent={
-        mesa.docsAgregados.length > 0 ? (
-          <div className="r-scroll">
-            <div className="sec" style={{ paddingTop: 6 }}>
-              <DocCardList docs={mesa.docsAgregados as DocCardListProps["docs"]} empresaId={empresaId} tipoEmpresa={empresaTipo} tipoMix={mesa.docTipoMix} docProgress={mesa.docProgress} periodoMode={mesa.workMode} />
-            </div>
-          </div>
+        mesa.docsAgregados.length > 0 || mesa.propuestas.length > 0 ? (
+          <MesaTab mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaTipo={empresaTipo} />
         ) : (
           compactEmpty("subidos")
         )
-      }
-      revisarContent={
-        <RevisarTabContent
-          propuestas={mesa.propuestas as RevisarProps["propuestas"]}
-          clientes={clientes}
-          empresaId={empresaId}
-          empresaGiro={empresaGiro}
-          empresaRazonSocial={empresaRazon}
-          empresaTipoContribuyente={empresaTipo}
-        />
       }
       emitirContent={<EmitirTabContent initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
       boletasContent={

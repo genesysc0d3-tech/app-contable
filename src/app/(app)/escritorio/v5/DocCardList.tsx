@@ -11,10 +11,14 @@ import GlosaComunControl from "./GlosaComunControl";
 import TermHint from "@/components/ui/TermHint";
 import VisualizarArchivo from "./VisualizarArchivo";
 import { formatDisplayDateEsCl } from "@/lib/display-date";
+import { useMesaReload } from "./mesa-reload";
 
 const st: Record<string, string> = {procesado:"#22c55e",procesando:"#5b9cf6",error:"#ef4444",subido:"#f59e0b"};
 const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",error:"Error",subido:"Pendiente"};
 const lm: Record<string, string> = {procesado:"ls",procesando:"pc",error:"er",subido:"pd"};
+// Mes corto fijo: Intl "month:short" difiere server ("jun") vs navegador ("jun.")
+// → hydration mismatch. Lo construimos determinístico desde el número de mes.
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 function fmtCLP(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
 
@@ -66,14 +70,20 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day" }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
   docProgress?: Record<string, DocProg>;
   periodoMode?: "day" | "week" | "month";
+  // Modo "mesa fusionada": el árbol reporta la selección hacia arriba (visor) en
+  // vez de abrir el modal, fuerza vista árbol y resalta la fila activa.
+  onSelectDoc?: (doc: DocRaw) => void;
+  selectedDocId?: string | null;
+  forceTree?: boolean;
 }) {
   const router = useRouter();
+  const ctxReload = useMesaReload();
   const [docs, setDocs] = useState(initialDocs);
   const [mappingDocId, setMappingDocId] = useState<string | null>(null);
   const [viewDocId, setViewDocId] = useState<string | null>(null);
@@ -83,19 +93,22 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   // letra=tipo, para escanear estados rápido). Color = estado, letra = tipo:
   // dos canales, dos dimensiones. La info detallada va en el VISOR (arriba),
   // no dentro de cada cuadrado.
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid">(forceTree ? "grid" : "list");
   useEffect(() => {
+    if (forceTree) return;
     try { const v = localStorage.getItem("agregados-view"); if (v === "grid" || v === "list") setViewMode(v); } catch { /* noop */ }
-  }, []);
+  }, [forceTree]);
   const setView = (v: "list" | "grid") => { setViewMode(v); try { localStorage.setItem("agregados-view", v); } catch { /* noop */ } };
+  // En modo mesa fusionada el árbol es la única vista (las configs viven en el visor).
+  const mode: "list" | "grid" = forceTree ? "grid" : viewMode;
 
   const isBoletaTipo = (t: string) => (t ?? "").startsWith("boleta_");
 
   useEffect(() => { setDocs(initialDocs); }, [initialDocs]);
 
   const fetchDocs = useCallback(async () => {
-    router.refresh();
-  }, [router]);
+    if (ctxReload) ctxReload(); else router.refresh();
+  }, [ctxReload, router]);
 
   // Realtime updates
   useEffect(() => {
@@ -133,17 +146,19 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
     <>
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
         <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>
-        <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
-          {(["grid","list"] as const).map((v) => (
-            <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista por origen (escanear rápido)" : "Vista lista (detalle)"}
-              style={{display:"grid",placeItems:"center",width:27,height:20,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "#E8553E" : "var(--text2)",transition:"all .15s ease"}}>
-              {v === "grid"
-                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="9" height="3" rx="1.2"/><rect x="6" y="10" width="15" height="2.6" rx="1.2"/><rect x="6" y="15" width="15" height="2.6" rx="1.2"/></svg>
-                : <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="4" rx="1.6"/><rect x="3" y="13" width="18" height="4" rx="1.6"/></svg>}
-            </button>
-          ))}
-        </div>
-        {viewMode === "list" && docs.map((doc) => {
+        {!forceTree && (
+          <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
+            {(["grid","list"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista por origen (escanear rápido)" : "Vista lista (detalle)"}
+                style={{display:"grid",placeItems:"center",width:27,height:20,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "#E8553E" : "var(--text2)",transition:"all .15s ease"}}>
+                {v === "grid"
+                  ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="9" height="3" rx="1.2"/><rect x="6" y="10" width="15" height="2.6" rx="1.2"/><rect x="6" y="15" width="15" height="2.6" rx="1.2"/></svg>
+                  : <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="4" rx="1.6"/><rect x="3" y="13" width="18" height="4" rx="1.6"/></svg>}
+              </button>
+            ))}
+          </div>
+        )}
+        {mode === "list" && docs.map((doc) => {
           // Registro de una boleta YA emitida (boleta_unica / boleta_sii_local /
           // boleta_baseapi, etc.): es solo el comprobante, no una cartola
           // procesable. Read-only — sin reprocesar/deshacer/mapear (ya está en
@@ -322,7 +337,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
             </div>
           );
         })}
-        {viewMode === "grid" && (() => {
+        {mode === "grid" && (() => {
           // Vista "por origen" (estilo Finder): agrupa por DE DÓNDE vino el doc
           // —MassDTE (cartolas), Telegram (comprobantes), Boleta única— y la marca
           // de tiempo escala con el calendario maestro: día→hora, semana→día+hora,
@@ -345,7 +360,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           const tsDe = (s: string): string => {
             const hh = formatDisplayDateEsCl(s, { hour: "2-digit", minute: "2-digit", hour12: false }, "");
             if (periodoMode === "day") return hh;
-            const dd = formatDisplayDateEsCl(s, { day: "2-digit", month: "short" }, "");
+            const dia = formatDisplayDateEsCl(s, { day: "2-digit" }, "");
+            const mesIdx = (Number(formatDisplayDateEsCl(s, { month: "numeric" }, "0")) || 1) - 1;
+            const dd = `${dia}-${MESES_CORTOS[mesIdx] ?? ""}`;
             if (periodoMode === "week") return `${dd} · ${hh}`;
             const dayNum = Number(formatDisplayDateEsCl(s, { day: "numeric" }, "0")) || 1;
             return `S${Math.max(1, Math.ceil(dayNum / 7))} · ${dd} · ${hh}`;
@@ -361,6 +378,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 .agg-fh .cnt{margin-left:auto;font-size:9px;color:var(--text3);font-weight:700;font-variant-numeric:tabular-nums}
                 .agg-fr{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;cursor:pointer;padding:6px 8px;border-radius:8px;text-align:left;color:inherit;transition:background .14s ease}
                 .agg-fr:hover{background:rgba(255,255,255,.045)}
+                .agg-fr.sel{background:rgba(232,85,62,.1)}
+                .agg-fr.sel:hover{background:rgba(232,85,62,.14)}
                 .agg-fr .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
                 .agg-fr .nm{flex:1;min-width:0;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
                 .agg-fr .meta{font-size:9.5px;flex-shrink:0;font-variant-numeric:tabular-nums}
@@ -389,8 +408,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       : (doc.estado === "procesado" && isBoletaTipo(doc.tipo)) ? "#22c55e"
                       : "var(--text2)";
                     return (
-                      <button key={doc.id} type="button" className="agg-fr" title={doc.nombre_archivo}
-                        onClick={() => { if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
+                      <button key={doc.id} type="button" className={`agg-fr${selectedDocId === doc.id ? " sel" : ""}`} title={doc.nombre_archivo}
+                        onClick={() => { if (onSelectDoc) { onSelectDoc(doc); return; } if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
                         <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
                         <span className="nm">{doc.nombre_archivo}</span>
                         {meta && <span className="meta" style={{ color: metaColor }}>{meta}</span>}

@@ -5,10 +5,19 @@ import RightColumnView from "./RightColumnView";
 import Mesa, { type MesaProps } from "./Mesa";
 import CalendarStrip, { type NavParams } from "./CalendarStrip";
 import { cargarMesa } from "./actions";
+import { MesaReloadContext } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 
 const keyOf = (view: string, date: string, month: string) => `${view}|${date}|${month}`;
+
+// Avisa a los slots estáticos (card de Registros) los nuevos números del rango,
+// para que Ventas/Actividad sigan al calendario maestro.
+function broadcastMesa(m: MesaDateDependent) {
+  window.dispatchEvent(new CustomEvent("mesa-updated", {
+    detail: { ventasDocs: m.ventasDocs, ventasTotal: m.ventasTotal, actividadCount: m.actividadItems.length, actividadUltimo: m.actividadItems[0]?.descripcion ?? null, periodo: m.calendar.selectedDateLabel, calYear: m.calendar.y, calMonth: m.calendar.m },
+  }));
+}
 
 /**
  * Orquesta calendario + mesa SIN navegar: al togglear día/semana/mes o elegir
@@ -52,16 +61,25 @@ export default function MesaController({
     // URL sigue siendo la verdad (para refresh/compartir) — sin navegar.
     window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}`);
     const key = keyOf(params.view, params.date, params.month);
-    // Avisar a la card de Registros (slot estático en la izquierda) los nuevos
-    // números del rango, para que Ventas/Actividad sigan al calendario maestro.
-    const broadcast = (m: MesaDateDependent) => window.dispatchEvent(new CustomEvent("mesa-updated", {
-      detail: { ventasDocs: m.ventasDocs, ventasTotal: m.ventasTotal, actividadCount: m.actividadItems.length, actividadUltimo: m.actividadItems[0]?.descripcion ?? null, periodo: m.calendar.selectedDateLabel, calYear: m.calendar.y, calMonth: m.calendar.m },
-    }));
     const cached = cacheRef.current.get(key);
-    if (cached) { setMesa(cached); broadcast(cached); return; }
+    if (cached) { setMesa(cached); broadcastMesa(cached); return; }
     startTransition(async () => {
       const res = await cargarMesa(params);
-      if (res.ok) { cacheRef.current.set(key, res.mesa); setMesa(res.mesa); broadcast(res.mesa); }
+      if (res.ok) { cacheRef.current.set(key, res.mesa); setMesa(res.mesa); broadcastMesa(res.mesa); }
+    });
+  }, [mesa]);
+
+  // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
+  // diferencia de navigate, ignora la cache (los datos cambiaron) y la reescribe.
+  const reloadMesa = useCallback(() => {
+    const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode };
+    startTransition(async () => {
+      const res = await cargarMesa(params);
+      if (res.ok) {
+        cacheRef.current.set(keyOf(params.view, params.date, params.month), res.mesa);
+        setMesa(res.mesa);
+        broadcastMesa(res.mesa);
+      }
     });
   }, [mesa]);
 
@@ -81,9 +99,11 @@ export default function MesaController({
           empresaNombre={empresaNombre}
           empresaLogoUrl={empresaLogoUrl}
           defaultContent={
-            <div style={{ height: "100%", opacity: isPending ? 0.55 : 1, transition: "opacity .18s ease" }}>
-              <Mesa mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaRazon={empresaRazon} empresaTipo={empresaTipo} />
-            </div>
+            <MesaReloadContext.Provider value={reloadMesa}>
+              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, opacity: isPending ? 0.55 : 1, transition: "opacity .18s ease" }}>
+                <Mesa mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaRazon={empresaRazon} empresaTipo={empresaTipo} />
+              </div>
+            </MesaReloadContext.Provider>
           }
         />
       </div>
