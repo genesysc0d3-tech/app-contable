@@ -41,10 +41,27 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
 }
 
-function providerLabel(proveedor: string | null | undefined): string {
-  if (proveedor === "sii_local") return "SII local";
-  if (proveedor === "simpleapi") return "SimpleAPI";
-  return "modo de prueba";
+interface BatchItem {
+  propuesta_id: string;
+  ok: boolean;
+  folio?: number;
+  monto_total?: number;
+  error_code?: string;
+  error_message?: string;
+}
+type EmitirResult = { ok: boolean; exitos: number; fallos: number; monto_emitido: number; proveedor: string; sandbox: boolean; resultados: BatchItem[] };
+
+function errorAmable(code?: string, msg?: string): string {
+  switch (code) {
+    case "YA_EMITIDA": return "Ya tenía una boleta emitida.";
+    case "RECEPTOR_RUT_OBLIGATORIO":
+    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA":
+    case "MEDIO_PAGO_OBLIGATORIO": return "Falta identificar al comprador (sobre 135 UF).";
+    case "NO_BOLETAR": return "No corresponde boletear (no es una venta).";
+    case "SIN_FOLIOS_DISPONIBLES": return "No quedan folios disponibles.";
+    case "AFECTA_IVA_CERO": return "Boleta afecta con IVA $0 — revisa el monto.";
+    default: return msg || "No se pudo emitir.";
+  }
 }
 
 function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; otrosTipos?: Record<string, number> }) {
@@ -86,6 +103,8 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [lastResult, setLastResult] = useState<EmitirResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
 
@@ -169,6 +188,8 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   );
   const selectedTotal = selectedItems.reduce((s, i) => s + i.monto_total, 0);
   const selectedCount = selectedItems.length;
+  const selAfecta = selectedItems.filter((i) => (dteOverrides[i.id] ?? i.tipo_sugerido ?? 39) === 39).length;
+  const selExenta = selectedCount - selAfecta;
 
   if (loading) {
     return <EmitirEmpty loading />;
@@ -208,11 +229,8 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
       });
       const json = await res.json();
       if (json.ok) {
-        const provider = providerLabel(json.proveedor);
-        const exitos = json.exitos ?? 0;
-        const suffix = json.proveedor === "mock" ? ". No se informaron al SII." : "";
-        toast(`${exitos} boletas ${json.proveedor === "mock" ? "simuladas" : "emitidas"} por $${Math.round(json.monto_emitido ?? 0).toLocaleString("es-CL")} (${provider})${suffix}`, exitos > 0 ? undefined : "error");
-        if (exitos > 0) {
+        setLastResult(json as EmitirResult); // el recibo se muestra en el modal
+        if ((json.exitos ?? 0) > 0) {
           setSelected(new Set());
           setDteOverrides({});
           fetchData();
@@ -220,6 +238,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
         }
       } else {
         toast(json.error ?? "Error al emitir", "error");
+        setConfirmOpen(false);
       }
     } catch { toast("Error al emitir lote", "error"); }
     setEmitiendo(false);
@@ -329,7 +348,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
             </div>
           )}
           <div className="r">
-            <button className="emit" onClick={handleEmitir} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
+            <button className="emit" onClick={() => setConfirmOpen(true)} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (
@@ -337,6 +356,81 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
               )}
               {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : `Emitir ${selectedCount}`}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* F1 — confirmar (pre-vuelo) · emitiendo · recibo, en una sola superficie */}
+      {confirmOpen && (
+        <div onClick={() => { if (!emitiendo) { setConfirmOpen(false); setLastResult(null); } }}
+          style={{ position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(440px, 94vw)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", padding: "20px 22px" }}>
+            {lastResult ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-.02em" }}>{lastResult.exitos > 0 ? "Emisión lista" : "No se pudo emitir"}</span>
+                  {lastResult.sandbox && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#f59e0b", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● PRUEBA</span>}
+                </div>
+                {lastResult.exitos > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+                      <span style={{ fontSize: 30, fontWeight: 800, color: "#22c55e", letterSpacing: "-.03em" }}>{lastResult.exitos}</span>
+                      <span style={{ fontSize: 13, color: "var(--text2)" }}>{lastResult.exitos === 1 ? "boleta emitida" : "boletas emitidas"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 4 }}>
+                      Folios: {lastResult.resultados.filter((r) => r.ok && r.folio).map((r) => `#${r.folio}`).join(", ") || "—"}
+                    </div>
+                  </div>
+                )}
+                {lastResult.fallos > 0 && (
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>No se pudieron ({lastResult.fallos})</div>
+                    {lastResult.resultados.filter((r) => !r.ok).map((r) => (
+                      <div key={r.propuesta_id} style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.5 }}>· {errorAmable(r.error_code, r.error_message)}</div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))}
+                    style={{ flex: 1, border: 0, borderRadius: 10, padding: "10px 14px", background: "#E8553E", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Ver en Boletas →</button>
+                  <button onClick={() => { setConfirmOpen(false); setLastResult(null); }}
+                    style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", background: "transparent", color: "var(--text2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cerrar</button>
+                </div>
+              </>
+            ) : emitiendo ? (
+              <div style={{ display: "grid", placeItems: "center", padding: "26px 0", gap: 12 }}>
+                <span className="sp" style={{ display: "inline-block" }} />
+                <span style={{ fontSize: 12, color: "var(--text2)" }}>Emitiendo {selectedCount}…</span>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text3)" }}>Vas a emitir</span>
+                  <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#f59e0b", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 38, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em" }}>{selectedCount}</span>
+                  <span style={{ fontSize: 14, color: "var(--text2)" }}>{selectedCount === 1 ? "boleta" : "boletas"}</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, margin: "10px 0" }}>
+                  {selAfecta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,.13)", padding: "4px 10px", borderRadius: 8 }}>{selAfecta} con IVA</span>}
+                  {selExenta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#5b9cf6", background: "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{selExenta} sin IVA</span>}
+                </div>
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 12, color: "var(--text2)" }}>
+                  Total <b style={{ color: "var(--text)" }}>{fmt(selectedTotal)}</b>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: "var(--text3)", lineHeight: 1.5 }}>
+                  Modo de prueba: se simula, no se informa al SII. Una boleta real solo se corrige con Nota de Crédito.
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+                  <button onClick={() => setConfirmOpen(false)}
+                    style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", background: "transparent", color: "var(--text2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+                  <button onClick={handleEmitir}
+                    style={{ flex: 1, border: 0, borderRadius: 10, padding: "11px 14px", background: "#E8553E", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Emitir {selectedCount} →</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
