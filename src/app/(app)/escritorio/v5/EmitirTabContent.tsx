@@ -111,7 +111,6 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   const [data, setData] = useState<PendientesResponse | null>(initial);
   const [loading, setLoading] = useState(!initial);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [dteOverrides, setDteOverrides] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
@@ -155,10 +154,10 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
     if (statusFilter === "listas") filtered = filtered.filter(i => i.balde === "listas");
     else if (statusFilter === "por_revisar") filtered = filtered.filter(i => i.balde === "por_revisar");
     else if (statusFilter === "bloqueadas") filtered = filtered.filter(i => i.balde === "bloqueadas");
-    if (typeFilter === "afecta") filtered = filtered.filter(i => (dteOverrides[i.id] ?? i.tipo_sugerido) === 39);
-    else if (typeFilter === "exenta") filtered = filtered.filter(i => (dteOverrides[i.id] ?? i.tipo_sugerido) === 41);
+    if (typeFilter === "afecta") filtered = filtered.filter(i => i.tipo_sugerido === 39);
+    else if (typeFilter === "exenta") filtered = filtered.filter(i => i.tipo_sugerido === 41);
     return filtered;
-  }, [data, statusFilter, typeFilter, dteOverrides]);
+  }, [data, statusFilter, typeFilter]);
 
   const listasCount = data?.totales.listas_emitir ?? 0;
   const porRevisarCount = data?.totales.por_revisar ?? 0;
@@ -181,26 +180,13 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
     else setSelected(new Set(selectableItems.map(i => i.id)));
   }
 
-  function toggleTipo(id: string, tipo: number) {
-    setDteOverrides(prev => ({ ...prev, [id]: tipo }));
-    if (!selected.has(id)) setSelected(prev => new Set(prev).add(id));
-  }
-
-  function removeOverride(id: string) {
-    setDteOverrides(prev => {
-      const n = { ...prev };
-      delete n[id];
-      return n;
-    });
-  }
-
   const selectedItems = useMemo(() =>
     data?.items.filter(i => selected.has(i.id)) ?? [],
     [data, selected]
   );
   const selectedTotal = selectedItems.reduce((s, i) => s + i.monto_total, 0);
   const selectedCount = selectedItems.length;
-  const selAfecta = selectedItems.filter((i) => (dteOverrides[i.id] ?? i.tipo_sugerido ?? 39) === 39).length;
+  const selAfecta = selectedItems.filter((i) => (i.tipo_sugerido ?? 39) === 39).length;
   const selExenta = selectedCount - selAfecta;
 
   if (loading) {
@@ -233,7 +219,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
     }
     setEmitiendo(true);
     try {
-      const body = { items: selectedItems.map(i => ({ id: i.id, tipo_dte: dteOverrides[i.id] ?? i.tipo_sugerido ?? 39 })) };
+      const body = { items: selectedItems.map(i => ({ id: i.id, tipo_dte: i.tipo_sugerido ?? 39 })) };
       const res = await fetch("/api/intermediaria/emitir-lote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -244,7 +230,6 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
         setLastResult(json as EmitirResult); // el recibo se muestra en el modal
         if ((json.exitos ?? 0) > 0) {
           setSelected(new Set());
-          setDteOverrides({});
           fetchData();
           router.refresh();
         }
@@ -257,7 +242,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   }
 
   function activeTipo(item: Item): number {
-    return dteOverrides[item.id] ?? item.tipo_sugerido ?? 39;
+    return item.tipo_sugerido ?? 39;
   }
 
   return (
@@ -301,10 +286,8 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
           itemsList.map(item => {
             const isDisabled = !item.listo_emitir;
             const isSelected = selected.has(item.id);
-            const isAuto = dteOverrides[item.id] === undefined;
             const tipo = activeTipo(item);
             const isAfecta = tipo === 39;
-            const isExenta = tipo === 41;
 
             return (
               <div key={item.id} className={`em-item ${isDisabled ? "dis" : ""}`}>
@@ -328,21 +311,12 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                   {item.balde !== "listas" && item.documento_id && (
                     <div className="sub" style={{ color: "#E8553E", fontWeight: 700, marginTop: 2 }}>Resolver en Check →</div>
                   )}
-                  {!isDisabled && item.confianza_clasif < 0.7 && (
-                    <div className="sub rn">
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                      {" "}Clasificado como {isAfecta ? "AFE" : "EXE"} automáticamente · Revisa antes de emitir
-                    </div>
-                  )}
                 </div>
-                <div className="tp">
-                  <button className={isAuto ? "au" : "ina"} onClick={() => !isDisabled && removeOverride(item.id)} title="Programa decide">AUTO</button>
-                  <button className={!isAuto && isAfecta ? "af" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 39)}>AFE</button>
-                  <button className={!isAuto && isExenta ? "ex" : "ina"} onClick={() => !isDisabled && toggleTipo(item.id, 41)}>EXE</button>
-                  {isAuto && (
-                    <span style={{fontSize:8,color:"var(--text2)",marginLeft:2}}>
-                      {isAfecta ? "→ AFE" : "→ EXE"}
-                    </span>
+                <div className="tp" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 7, whiteSpace: "nowrap", color: isAfecta ? "#22c55e" : "#5b9cf6", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+                  {item.balde === "listas" && item.documento_id && (
+                    <button onClick={() => goToCheck(item)} title="Corregir el tipo en Check"
+                      style={{ fontSize: 8, fontWeight: 600, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>Corregir en Check →</button>
                   )}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
