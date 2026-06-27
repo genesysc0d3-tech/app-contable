@@ -198,16 +198,23 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
     setOv({ tipo: c.tipo_propuesto, neto: c.monto_neto, iva: c.iva, total: c.total });
   };
 
-  const commit = async (action: () => Promise<unknown>, okMsg: string) => {
+  // tipoDte: la decisión humana del tipo (Paso P) — se guarda al aprobar para
+  // que la cola de Emitir la lea en vez de re-adivinarla.
+  const commit = async (action: () => Promise<unknown>, okMsg: string, tipoDte?: 39 | 41 | null) => {
     setBusy(true);
-    if (ov) await editarPropuesta(propuesta.id, { tipo_propuesto: ov.tipo, monto_neto: ov.neto, iva: ov.iva, total: ov.total });
+    if (ov || tipoDte !== undefined) {
+      await editarPropuesta(propuesta.id, {
+        ...(ov ? { tipo_propuesto: ov.tipo, monto_neto: ov.neto, iva: ov.iva, total: ov.total } : {}),
+        ...(tipoDte !== undefined ? { tipo_dte: tipoDte } : {}),
+      });
+    }
     const r = (await action()) as { error?: string } | undefined;
     if (r && r.error) toast(r.error, "error"); else toast(okMsg);
     onAction();
     setBusy(false);
   };
-  const aprobar = () => commit(() => aprobarPropuesta(propuesta.id, selClienteId || null), "Aprobada");
-  const registrar = () => commit(() => aprobarPropuesta(propuesta.id, null), "Registrada");
+  const aprobar = () => commit(() => aprobarPropuesta(propuesta.id, selClienteId || null), "Aprobada", isAfecta ? 39 : 41);
+  const registrar = () => commit(() => aprobarPropuesta(propuesta.id, null), "Registrada", null);
 
   const dotColor = conflicto ? "#f59e0b" : pct >= 85 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
 

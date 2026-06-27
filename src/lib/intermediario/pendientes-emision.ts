@@ -47,6 +47,24 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
     /* tabla aún no existe — todas son pendientes */
   }
 
+  // Paso P: decisión humana del tipo (degradado si la columna tipo_dte no está migrada).
+  const tipoDteById = new Map<string, 39 | 41>();
+  try {
+    const { data: tdRows, error: tdErr } = await supabase
+      .from("propuestas_ia")
+      .select("id, tipo_dte")
+      .eq("empresa_id", empresaId)
+      .in("estado", ["aprobado", "editado"])
+      .not("tipo_dte", "is", null);
+    // Cast vía unknown: la columna existe tras la migración, pero aún no está en
+    // los tipos generados de Supabase. El runtime ya degrada si no existe (tdErr).
+    if (!tdErr && tdRows) {
+      for (const r of tdRows as unknown as Array<{ id: string; tipo_dte: number | null }>) {
+        if (r.tipo_dte === 39 || r.tipo_dte === 41) tipoDteById.set(r.id, r.tipo_dte);
+      }
+    }
+  } catch { /* columna tipo_dte aún no migrada */ }
+
   type PropuestaRaw = NonNullable<typeof propuestas>[number];
   const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id));
 
@@ -90,6 +108,7 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
         fecha,
         receptorRut: receptor_rut,
         receptorNombre: receptor_nombre,
+        tipoDtePersistido: tipoDteById.get(p.id) ?? null,
         docHint,
         patron: {
           cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,
