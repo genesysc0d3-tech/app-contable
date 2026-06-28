@@ -38,7 +38,7 @@ function Feat({ t, ok = true, strong = false }: { t: string; ok?: boolean; stron
   );
 }
 
-export default async function PlanesPage() {
+export default async function PlanesPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
   const usuario = await getUsuario();
   if (!usuario) redirect("/onboarding");
 
@@ -53,6 +53,11 @@ export default async function PlanesPage() {
   const planes = (planesRes.data ?? []).slice().sort((a, b) => a.uf_mensual - b.uf_mensual);
   const planActual = planes.find((p) => p.codigo === cuota.plan) ?? null;
   const trial = cuota.trial;
+
+  // Plan que el usuario eligió en el landing (?plan=): se resalta ese; si no, "pro".
+  const sp = await searchParams;
+  const planPedido = typeof sp.plan === "string" ? sp.plan.toLowerCase() : null;
+  const recomendadoCodigo = planPedido && planes.some((p) => p.codigo === planPedido) ? planPedido : "pro";
 
   let aviso: string | null = null;
   if (cuota.suscripcionEstado === "morosa") aviso = "Tu suscripción está morosa — regulariza el pago para reactivar la emisión.";
@@ -84,7 +89,7 @@ export default async function PlanesPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
           {planes.map((plan) => {
             const esActual = cuota.suscripcionActiva && cuota.plan === plan.codigo;
-            const recommended = plan.codigo === "pro";
+            const recommended = plan.codigo === recomendadoCodigo;
             const neto = Math.round(plan.uf_mensual * uf);
             const iva = Math.round(neto * 0.19);
             const total = neto + iva;

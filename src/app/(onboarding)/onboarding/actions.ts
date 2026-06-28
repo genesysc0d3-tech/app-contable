@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -105,5 +106,10 @@ export async function crearEmpresa(formData: FormData) {
     return { error: membershipError.message };
   }
 
-  redirect("/planes");
+  // Si el usuario eligió un plan en el landing (?plan= → cookie en registro), lo
+  // llevamos a /planes con ese plan resaltado y limpiamos la cookie.
+  const jar = await cookies();
+  const planElegido = (jar.get("massdte_plan")?.value ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+  if (planElegido) jar.delete("massdte_plan");
+  redirect(planElegido ? `/planes?plan=${planElegido}` : "/planes");
 }
