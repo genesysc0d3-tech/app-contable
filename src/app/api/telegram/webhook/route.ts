@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
-import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
 import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
 import { subirDocumentoR2 } from "@/lib/storage";
 import {
@@ -102,6 +102,10 @@ const MSG = {
   soloFotos:
     "📸 Solo proceso <b>fotos de comprobantes</b>.\n" +
     "Mándame la foto y la dejo en Agregados, lista para boletear.",
+  noEnPlan:
+    "🔒 <b>Telegram es parte del plan Pro.</b>\n" +
+    "Tu plan actual no incluye comprobantes por Telegram.\n" +
+    "Actívalo en massDTE → Empresa → Plan y volvé a mandarme la foto.",
 };
 
 type Svc = ReturnType<typeof getServiceClient>;
@@ -902,6 +906,8 @@ async function guardarYProcesarComprobanteTelegram(args: {
 async function recibirAlbumFoto(chatId: number, empresaId: string, foto: TelegramPhotoSize, mediaGroupId: string) {
   const svc = getServiceClient();
 
+  if (!(await telegramHabilitadoEmpresa(svc, empresaId))) { await say(chatId, MSG.noEnPlan); return; }
+
   let foto64: { base64: string; mime: string; size: number };
   try { foto64 = await getFileBase64(foto.file_id); } catch { return; }
   if (foto64.size > MAX_FOTO_BYTES) return;
@@ -976,6 +982,13 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], r
     .maybeSingle();
   if (!chat?.activo) {
     await say(chatId, MSG.noVinculado);
+    return;
+  }
+
+  // Gate de plan: Start no incluye Telegram. Único choke point (cubre foto suelta,
+  // álbum y multiempresa) y corta el costo de OCR/storage antes de trabajar.
+  if (!(await telegramHabilitadoEmpresa(svc, chat.empresa_id))) {
+    await say(chatId, MSG.noEnPlan);
     return;
   }
 

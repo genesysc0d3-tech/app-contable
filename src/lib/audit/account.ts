@@ -16,7 +16,8 @@ export type CuentaAuditAction =
   | "boleta_emitida"
   | "emision_fallida"
   | "modo_soporte_entrado"
-  | "modo_soporte_salido";
+  | "modo_soporte_salido"
+  | "plan_cambiado_dev";
 
 export async function recordCuentaAudit(args: {
   sb: Sb;

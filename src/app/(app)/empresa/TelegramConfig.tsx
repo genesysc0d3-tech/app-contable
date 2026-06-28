@@ -16,6 +16,7 @@ export default function TelegramConfig() {
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [enPlan, setEnPlan] = useState(true);
 
   useEffect(() => {
     let cancel = false;
@@ -27,6 +28,7 @@ export default function TelegramConfig() {
           const v = Boolean(d.vinculado);
           setVinculado(v);
           setBotConfigured(d.botConfigured !== false);
+          setEnPlan(d.enPlan !== false);
           if (v) setLink(null); // ya conectado: no dejar el botón "Abrir Telegram"
         })
         .catch(() => { if (!cancel) setVinculado(false); })
@@ -57,6 +59,9 @@ export default function TelegramConfig() {
       } else if (res.status === 503) {
         setBotConfigured(false);
         toast("Telegram próximamente", "error");
+      } else if (res.status === 403) {
+        setEnPlan(false);
+        toast("Disponible en el plan Pro", "error");
       } else {
         toast("No se pudo generar el link de Telegram", "error");
       }
@@ -99,11 +104,11 @@ export default function TelegramConfig() {
                 <span style={{
                   display: "inline-block", borderRadius: 9999,
                   padding: "2px 10px", fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${conectado ? "rgba(52,211,153,0.25)" : "rgba(251,113,133,0.20)"}`,
-                  background: conectado ? "rgba(52,211,153,0.12)" : "rgba(251,113,133,0.14)",
-                  color: conectado ? "#6ee7b7" : "#FDA4AF",
+                  border: `1px solid ${!enPlan ? "rgba(251,191,36,0.30)" : conectado ? "rgba(52,211,153,0.25)" : "rgba(251,113,133,0.20)"}`,
+                  background: !enPlan ? "rgba(251,191,36,0.12)" : conectado ? "rgba(52,211,153,0.12)" : "rgba(251,113,133,0.14)",
+                  color: !enPlan ? "#FCD34D" : conectado ? "#6ee7b7" : "#FDA4AF",
                 }}>
-                  {conectado ? "Conectado" : "Sin conectar"}
+                  {!enPlan ? "Pro" : conectado ? "Conectado" : "Sin conectar"}
                 </span>
               )}
             </div>
@@ -135,13 +140,30 @@ export default function TelegramConfig() {
                 ? "Cargando…"
                 : !botConfigured
                 ? "Disponible próximamente"
+                : !enPlan
+                ? "Disponible en el plan Pro"
                 : conectado
                 ? "Telegram conectado — mándale fotos al bot"
                 : "Conecta tu Telegram para mandar comprobantes"}
             </div>
           </div>
 
-          {!loading && botConfigured && (
+          {!loading && botConfigured && !enPlan && (
+            <a
+              href="/planes"
+              style={{
+                height: 36, borderRadius: 10, border: "1px solid rgba(251,191,36,0.35)",
+                background: "rgba(251,191,36,0.12)", color: "#FCD34D",
+                padding: "0 14px", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              Ver planes →
+            </a>
+          )}
+
+          {!loading && botConfigured && enPlan && (
             link ? (
               <a
                 href={link}

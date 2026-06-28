@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { telegramHabilitadoEmpresa } from "@/lib/entitlements";
 
 /**
  * Estado de vinculación del Telegram de la empresa del usuario autenticado.
@@ -22,13 +23,15 @@ export async function GET() {
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
-    return NextResponse.json({ botConfigured, vinculado: false });
+    return NextResponse.json({ botConfigured, vinculado: false, enPlan: false });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return NextResponse.json({ botConfigured, vinculado: false });
+  if (!url || !key) return NextResponse.json({ botConfigured, vinculado: false, enPlan: false });
   const svc = createServiceClient<Database>(url, key);
+
+  const enPlan = await telegramHabilitadoEmpresa(svc, usuario.empresa_id);
 
   const { data: chat } = await svc
     .from("telegram_chats")
@@ -37,7 +40,7 @@ export async function GET() {
     .eq("activo", true)
     .maybeSingle();
 
-  return NextResponse.json({ botConfigured, vinculado: Boolean(chat) });
+  return NextResponse.json({ botConfigured, vinculado: Boolean(chat), enPlan });
 }
 
 /**
@@ -72,6 +75,10 @@ export async function POST() {
     return NextResponse.json({ error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   }
   const svc = createServiceClient<Database>(url, key);
+
+  if (!(await telegramHabilitadoEmpresa(svc, usuario.empresa_id))) {
+    return NextResponse.json({ error: "TELEGRAM_NO_EN_PLAN" }, { status: 403 });
+  }
 
   const token = randomBytes(16).toString("hex");
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
