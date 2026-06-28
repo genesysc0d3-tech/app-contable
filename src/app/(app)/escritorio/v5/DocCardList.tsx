@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -124,29 +124,41 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
 
   useEffect(() => { setDocs(initialDocs); }, [initialDocs]);
 
-  const fetchDocs = useCallback(async () => {
+  const fetchDocs = useCallback(() => {
     if (ctxReload) ctxReload(); else router.refresh();
   }, [ctxReload, router]);
+
+  // Auto-refresh de fondo (realtime/poll): SILENCIOSO (no atenúa la mesa) + debounce
+  // para coalescer la ráfaga de updates de un mismo lote. Solo refresca la mesa, no
+  // recarga el escritorio.
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchDocsAuto = useCallback(() => {
+    if (autoTimer.current) clearTimeout(autoTimer.current);
+    autoTimer.current = setTimeout(() => {
+      if (ctxReload) ctxReload({ silent: true }); else router.refresh();
+    }, 700);
+  }, [ctxReload, router]);
+  useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); }, []);
 
   // Realtime updates
   useEffect(() => {
     const channel = supabase
-      .channel("v5-docs")
+      .channel(`v5-docs-${empresaId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
-        () => { fetchDocs(); })
+        () => { fetchDocsAuto(); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
-        () => { fetchDocs(); })
+        () => { fetchDocsAuto(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDocs, empresaId]);
+  }, [fetchDocsAuto, empresaId]);
 
   // Polling while processing
   const hasProcessing = docs.some(d => d.estado === "procesando" || d.estado === "subido");
   useEffect(() => {
     if (!hasProcessing) return;
-    const interval = setInterval(() => fetchDocs(), 4000);
+    const interval = setInterval(() => fetchDocsAuto(), 5000);
     return () => clearInterval(interval);
-  }, [hasProcessing, fetchDocs]);
+  }, [hasProcessing, fetchDocsAuto]);
 
   async function callApi(path: string, docId: string) {
     try {

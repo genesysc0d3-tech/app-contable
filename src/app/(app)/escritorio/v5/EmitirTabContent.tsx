@@ -219,7 +219,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
               {" "}{bloqueadasCount} bloqueadas
             </span>
           )}
-          <button className="rf" onClick={reload}>↻</button>
+          <button className="rf" onClick={() => reload?.()}>↻</button>
         </div>
 
         {/* Pills */}

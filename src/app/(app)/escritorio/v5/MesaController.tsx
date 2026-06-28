@@ -71,16 +71,20 @@ export default function MesaController({
 
   // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
   // diferencia de navigate, ignora la cache (los datos cambiaron) y la reescribe.
-  const reloadMesa = useCallback(() => {
+  const reloadMesa = useCallback((opts?: { silent?: boolean }) => {
     const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode };
-    startTransition(async () => {
+    const run = async () => {
       const res = await cargarMesa(params);
       if (res.ok) {
         cacheRef.current.set(keyOf(params.view, params.date, params.month), res.mesa);
         setMesa(res.mesa);
         broadcastMesa(res.mesa);
       }
-    });
+    };
+    // silent = refresh de fondo (realtime/poll): sin startTransition → NO atenúa la
+    // mesa (sin parpadeo). El refresh por acción del usuario sí usa la transición.
+    if (opts?.silent) void run();
+    else startTransition(run);
   }, [mesa]);
 
   // Desde Emitir: abrir una tx en Check. Deja el doc pendiente, cambia a la
