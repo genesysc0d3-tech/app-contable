@@ -79,7 +79,7 @@ function ComprobanteThumb({ documentoId, onZoom }: { documentoId: string; onZoom
   const btnRef = useRef<HTMLButtonElement>(null);
   const [origin, setOrigin] = useState<DOMRect | null>(null);
   useEffect(() => {
-    let cancelled = false; let created: string | null = null;
+    let cancelled = false;
     (async () => {
       try {
         const { data: doc } = await supabase.from("documentos_subidos").select("storage_path, nombre_archivo").eq("id", documentoId).single();
@@ -87,14 +87,11 @@ function ComprobanteThumb({ documentoId, onZoom }: { documentoId: string; onZoom
         if (!path) { if (!cancelled) setState("none"); return; }
         const ext = (doc?.nombre_archivo ?? path).split(".").pop()?.toLowerCase() ?? "";
         if (!IMG_EXT.includes(ext)) { if (!cancelled) setState("none"); return; }
-        const { data: file } = await supabase.storage.from("documentos").download(path);
-        if (!file) { if (!cancelled) setState("none"); return; }
-        created = URL.createObjectURL(file);
-        if (cancelled) { URL.revokeObjectURL(created); return; }
-        setUrl(created); setState("image");
+        // Bytes vía la ruta de servido (provider-aware).
+        if (!cancelled) { setUrl(`/api/archivo/${documentoId}`); setState("image"); }
       } catch { if (!cancelled) setState("none"); }
     })();
-    return () => { cancelled = true; if (created) URL.revokeObjectURL(created); };
+    return () => { cancelled = true; };
   }, [documentoId]);
 
   const open = () => {

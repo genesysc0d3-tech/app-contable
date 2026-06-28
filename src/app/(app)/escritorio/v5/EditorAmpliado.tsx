@@ -54,21 +54,18 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [imgState, setImgState] = useState<"loading" | "image" | "none">("loading");
   useEffect(() => {
-    let cancelled = false; let created: string | null = null;
+    let cancelled = false;
     (async () => {
       try {
         const { data: doc } = await supabase.from("documentos_subidos").select("storage_path, nombre_archivo").eq("id", documentoId).single();
         const path = doc?.storage_path;
         const ext = (doc?.nombre_archivo ?? path ?? "").split(".").pop()?.toLowerCase() ?? "";
         if (!path || !IMG_EXT.includes(ext)) { if (!cancelled) setImgState("none"); return; }
-        const { data: file } = await supabase.storage.from("documentos").download(path);
-        if (!file) { if (!cancelled) setImgState("none"); return; }
-        created = URL.createObjectURL(file);
-        if (cancelled) { URL.revokeObjectURL(created); return; }
-        setImgUrl(created); setImgState("image");
+        // Bytes vía la ruta de servido (provider-aware: Supabase hoy, R2 cuando migre).
+        if (!cancelled) { setImgUrl(`/api/archivo/${documentoId}`); setImgState("image"); }
       } catch { if (!cancelled) setImgState("none"); }
     })();
-    return () => { cancelled = true; if (created) URL.revokeObjectURL(created); };
+    return () => { cancelled = true; };
   }, [documentoId]);
 
   // Zoom/pan de la imagen
