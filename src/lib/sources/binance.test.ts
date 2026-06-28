@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { normalizarOrdenesC2C, fechaHoraChile, type BinanceC2COrder } from "./binance";
+import { normalizarOrdenesC2C, fechaHoraChile, binanceAdapter, type BinanceC2COrder } from "./binance";
+import { getSourceAdapter, listSourceAdapters } from "./index";
 
 const order = (over: Partial<BinanceC2COrder> = {}): BinanceC2COrder => ({
   orderNumber: "O1",
@@ -42,5 +43,26 @@ describe("normalizarOrdenesC2C", () => {
 describe("fechaHoraChile", () => {
   it("convierte UTC → día de Chile cruzando el límite de día (UTC-4 en junio)", () => {
     expect(fechaHoraChile(Date.parse("2026-06-15T02:00:00Z"))).toEqual({ fecha: "2026-06-14", hora: "22:00" });
+  });
+});
+
+describe("binanceAdapter (contrato SourceAdapter)", () => {
+  it("expone id/nombre/credencialesRequeridas", () => {
+    expect(binanceAdapter.id).toBe("binance");
+    expect(binanceAdapter.nombre).toBe("Binance P2P");
+    expect(binanceAdapter.credencialesRequeridas).toEqual(["apiKey", "apiSecret"]);
+  });
+  it("fetchMovimientos sin credenciales falla (no llama a la API)", async () => {
+    await expect(binanceAdapter.fetchMovimientos({}, { desdeMs: 0, hastaMs: 1 })).rejects.toThrow(/CREDENCIALES/);
+  });
+});
+
+describe("registro de fuentes", () => {
+  it("getSourceAdapter resuelve binance y null para desconocidas", () => {
+    expect(getSourceAdapter("binance")).toBe(binanceAdapter);
+    expect(getSourceAdapter("no-existe")).toBeNull();
+  });
+  it("listSourceAdapters incluye binance", () => {
+    expect(listSourceAdapters().map((a) => a.id)).toContain("binance");
   });
 });

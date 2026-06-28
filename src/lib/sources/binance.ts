@@ -15,6 +15,7 @@
  */
 import { createHmac } from "node:crypto";
 import type { MovimientoCorrelacionable } from "@/lib/intermediario/correlacion";
+import type { SourceAdapter, CredencialesFuente, RangoConsulta } from "./types";
 
 const BASE_URL = "https://api.binance.com";
 const C2C_PATH = "/sapi/v1/c2c/orderMatch/listUserOrderHistory";
@@ -107,3 +108,54 @@ export async function fetchC2COrders(
   const json = (await res.json()) as { data?: BinanceC2COrder[] };
   return Array.isArray(json.data) ? json.data : [];
 }
+
+const VENTANA_MS = 30 * 24 * 60 * 60 * 1000; // Binance: máx 30 días por consulta
+const SEIS_MESES_MS = 182 * 24 * 60 * 60 * 1000; // Binance: solo 6 meses de historia
+
+/**
+ * Trae TODO el historial de una ventana respetando los límites de Binance: chunkea
+ * en ventanas de ≤30 días, pagina cada una (rows 100) y deduplica por orderNumber.
+ * ⚠️ NO verificado contra Binance (necesita key real del cliente).
+ */
+export async function fetchC2CHistorial(
+  apiKey: string,
+  apiSecret: string,
+  opts: { desdeMs: number; hastaMs: number; tradeType?: "BUY" | "SELL" },
+): Promise<BinanceC2COrder[]> {
+  const ahora = Date.now();
+  const desde = Math.max(opts.desdeMs, ahora - SEIS_MESES_MS);
+  const hasta = Math.min(opts.hastaMs, ahora);
+  const vistos = new Set<string>();
+  const todas: BinanceC2COrder[] = [];
+  for (let ini = desde; ini < hasta; ini += VENTANA_MS) {
+    const fin = Math.min(ini + VENTANA_MS, hasta);
+    for (let page = 1; page <= 50; page++) {
+      const lote = await fetchC2COrders(apiKey, apiSecret, { tradeType: opts.tradeType ?? "SELL", startMs: ini, endMs: fin, page, rows: 100 });
+      for (const o of lote) {
+        if (!vistos.has(o.orderNumber)) { vistos.add(o.orderNumber); todas.push(o); }
+      }
+      if (lote.length < 100) break; // última página de la ventana
+    }
+  }
+  return todas;
+}
+
+/**
+ * Adaptador de fuente Binance P2P — implementación de REFERENCIA de SourceAdapter
+ * (ver sources/types.ts). El cliente entrega su key read-only; trae las ventas P2P y
+ * las normaliza para el motor de cruce. Para sumar otra API, copiar este molde.
+ */
+export const binanceAdapter: SourceAdapter = {
+  id: "binance",
+  nombre: "Binance P2P",
+  credencialesRequeridas: ["apiKey", "apiSecret"],
+  async fetchMovimientos(cred: CredencialesFuente, rango: RangoConsulta): Promise<MovimientoCorrelacionable[]> {
+    if (!cred.apiKey || !cred.apiSecret) throw new Error("BINANCE_CREDENCIALES_FALTAN");
+    const orders = await fetchC2CHistorial(cred.apiKey, cred.apiSecret, {
+      desdeMs: rango.desdeMs,
+      hastaMs: rango.hastaMs,
+      tradeType: "SELL",
+    });
+    return normalizarOrdenesC2C(orders);
+  },
+};
