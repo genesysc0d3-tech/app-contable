@@ -23,6 +23,9 @@ export interface TelegramMessage {
   text?: string;
   caption?: string;
   photo?: TelegramPhotoSize[];
+  // Telegram marca con el mismo media_group_id las fotos de un álbum (mandadas
+  // juntas). Llegan en updates separados → se agrupan en UNA venta.
+  media_group_id?: string;
 }
 
 export interface TelegramCallbackQuery {
