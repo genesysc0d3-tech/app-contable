@@ -12,6 +12,7 @@ import {
   getClassifyOnlySystemPrompt,
 } from "../prompt";
 import { requirePaidModel } from "../model-guard";
+import { assertApprovedDataProcessor } from "../egress";
 
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 
@@ -44,6 +45,9 @@ export class OpenCodeGoProvider implements AIProvider {
     if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
     this.apiKey = apiKey;
     this.model = requirePaidModel(process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash", "opencodego");
+    // Gate fail-closed (Ley 21.719): solo modelos en la allowlist de encargados
+    // con retención cero pueden recibir datos personales.
+    assertApprovedDataProcessor("opencodego", this.model);
   }
 
   private async fetchChat(

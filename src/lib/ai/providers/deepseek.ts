@@ -11,6 +11,7 @@ import {
   buildClassifyUserPrompt,
   getClassifyOnlySystemPrompt,
 } from "../prompt";
+import { assertApprovedDataProcessor } from "../egress";
 
 const DEEPSEEK_BASE = "https://api.deepseek.com/v1";
 
@@ -40,12 +41,15 @@ export class DeepSeekProvider implements AIProvider {
   private model: string;
 
   constructor() {
+    this.model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+    // Gate fail-closed (Ley 21.719): DeepSeek directo NO está aprobado como
+    // encargado con retención cero (la IA aprobada va vía opencodego).
+    assertApprovedDataProcessor("deepseek", this.model);
     const envKey = process.env.DEEPSEEK_API_KEY;
     if (envKey) {
       this.apiKey = envKey;
       this.resolved = true;
     }
-    this.model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
   }
 
   private async ensureApiKey(): Promise<string> {

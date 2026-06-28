@@ -12,6 +12,7 @@ import {
   buildClassifyUserPrompt,
   getClassifyOnlySystemPrompt,
 } from "../prompt";
+import { assertApprovedDataProcessor } from "../egress";
 
 const COST_PER_MILLION_INPUT = 0.2;
 const COST_PER_MILLION_OUTPUT = 0.6;
@@ -21,10 +22,14 @@ export class MistralProvider implements AIProvider {
   private model: string;
 
   constructor() {
+    this.model = process.env.MISTRAL_MODEL || "mistral-small-latest";
+    // Gate fail-closed (Ley 21.719): Mistral NO está en la allowlist de encargados
+    // con retención cero → no puede recibir datos personales. La IA aprobada va
+    // vía opencodego. Falla ANTES de pedir credenciales.
+    assertApprovedDataProcessor("mistral", this.model);
     const apiKey = process.env.MISTRAL_API_KEY;
     if (!apiKey) throw new Error("MISTRAL_API_KEY no configurada");
     this.client = new Mistral({ apiKey });
-    this.model = process.env.MISTRAL_MODEL || "mistral-small-latest";
   }
 
   async extractMovimientos(

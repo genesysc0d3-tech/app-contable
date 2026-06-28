@@ -10,6 +10,7 @@
  */
 
 import { requirePaidModel } from "./model-guard";
+import { assertApprovedDataProcessor } from "./egress";
 
 const OPENCODE_BASE = "https://opencode.ai/zen/go/v1";
 const OCR_MODEL = process.env.OPENCODE_OCR_MODEL || "minimax-m3";
@@ -40,6 +41,9 @@ async function openCodeChat(
   const apiKey = process.env.OPENCODE_GO_API_KEY;
   if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
   requirePaidModel(model, "ocr");
+  // Gate fail-closed (Ley 21.719): la imagen/datos de terceros solo van a un
+  // procesador aprobado con retención cero.
+  assertApprovedDataProcessor("opencodego", model);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);

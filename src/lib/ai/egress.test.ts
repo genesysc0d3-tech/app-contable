@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { redactForAI, clienteToken, assertApprovedDataProcessor, payloadSeguroParaIA } from "./egress";
+import { MistralProvider } from "./providers/mistral";
+import { DeepSeekProvider } from "./providers/deepseek";
+import { OpenCodeGoProvider } from "./providers/opencodego";
 
 describe("redactForAI — minimización", () => {
   it("enmascara RUT (con y sin puntos)", () => {
@@ -42,6 +45,27 @@ describe("assertApprovedDataProcessor — gate fail-closed", () => {
   it("rechaza DeepSeek directo y desconocidos (fail-closed)", () => {
     expect(() => assertApprovedDataProcessor("deepseek", "deepseek-chat")).toThrow(/NO_APROBADO/);
     expect(() => assertApprovedDataProcessor("openai", "gpt-x")).toThrow(/NO_APROBADO/);
+  });
+});
+
+describe("gate cableado en los providers (fail-closed, no solo el test)", () => {
+  it("Mistral NO es procesador aprobado → no se puede ni construir", () => {
+    expect(() => new MistralProvider()).toThrow(/NO_APROBADO/);
+  });
+  it("DeepSeek directo NO es procesador aprobado → no se puede ni construir", () => {
+    expect(() => new DeepSeekProvider()).toThrow(/NO_APROBADO/);
+  });
+  it("OpenCode Go con modelo aprobado SÍ se construye", () => {
+    const prevKey = process.env.OPENCODE_GO_API_KEY;
+    const prevModel = process.env.OPENCODE_GO_MODEL;
+    process.env.OPENCODE_GO_API_KEY = "test-key";
+    process.env.OPENCODE_GO_MODEL = "deepseek-v4-flash";
+    try {
+      expect(() => new OpenCodeGoProvider()).not.toThrow();
+    } finally {
+      process.env.OPENCODE_GO_API_KEY = prevKey;
+      process.env.OPENCODE_GO_MODEL = prevModel;
+    }
   });
 });
 
