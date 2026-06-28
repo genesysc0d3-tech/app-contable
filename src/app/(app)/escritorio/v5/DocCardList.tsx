@@ -373,8 +373,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           // de tiempo escala con el calendario maestro: día→hora, semana→día+hora,
           // mes→semana+día+hora. Estado = punto de color a la izquierda. Sin líneas
           // conectoras (jerarquía falsa); encabezado de sección estilo Finder.
+          const esTelegramNombre = (n: string) => n.startsWith("Telegram ") || n.startsWith("Álbum ");
           const origenDe = (d: DocRaw): "massdte" | "telegram" | "boleta" =>
-            isBoletaTipo(d.tipo) ? "boleta" : (d.nombre_archivo ?? "").startsWith("Telegram ") ? "telegram" : "massdte";
+            isBoletaTipo(d.tipo) ? "boleta" : esTelegramNombre(d.nombre_archivo ?? "") ? "telegram" : "massdte";
           const grupos: { key: "massdte" | "telegram" | "boleta"; label: string; sub: string; icon: ReactNode }[] = [
             { key: "massdte", label: "MassDTE", sub: "cartolas",
               icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg> },

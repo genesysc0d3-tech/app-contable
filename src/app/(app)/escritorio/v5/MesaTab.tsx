@@ -104,9 +104,10 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   const media = pend.filter((p) => classifyConfianza(p) === "media");
   const baja = pend.filter((p) => classifyConfianza(p) === "baja");
 
+  const tipoNombre = (selDoc?.nombre_archivo ?? "");
   const tipo = selDoc
     ? ((selDoc.tipo ?? "").startsWith("boleta_") ? "boleta"
-      : (selDoc.nombre_archivo ?? "").startsWith("Telegram ") ? "telegram"
+      : (tipoNombre.startsWith("Telegram ") || tipoNombre.startsWith("Álbum ")) ? "telegram"
         : "massdte")
     : null;
 
