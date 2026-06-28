@@ -245,7 +245,9 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
       });
     }
     if (images.length === 0) throw new Error("No se pudieron descargar las imagenes agrupadas");
-    const { groupedText } = await ocrAndGroupImages(images);
+    // Telegram = 1 venta: salta la 2ª pasada IA de agrupado y acorta el timeout OCR.
+    const esTelegram = metadata.origen === "telegram";
+    const { groupedText } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000 } : undefined);
     return { contenido: groupedText, preExtracted: null };
   }
 

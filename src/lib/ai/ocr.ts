@@ -79,11 +79,11 @@ async function openCodeChat(
 }
 
 /** Extrae texto de una imagen con MiniMax M3 (multimodal). */
-export async function ocrImage(imageBase64: string, mimeType: string): Promise<OcrResult> {
+export async function ocrImage(imageBase64: string, mimeType: string, timeoutMs = 120_000): Promise<OcrResult> {
   return openCodeChat(OCR_MODEL, [
     { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
     { type: "text", text: OCR_PROMPT },
-  ]);
+  ], timeoutMs);
 }
 
 /**
@@ -91,7 +91,8 @@ export async function ocrImage(imageBase64: string, mimeType: string): Promise<O
  * Devuelve el texto agrupado listo para el pipeline de clasificación.
  */
 export async function ocrAndGroupImages(
-  images: { base64: string; mimeType: string; fileName: string }[]
+  images: { base64: string; mimeType: string; fileName: string }[],
+  opts?: { skipGrouping?: boolean; ocrTimeoutMs?: number },
 ): Promise<{
   groupedText: string;
   totalTokensInput: number;
@@ -99,7 +100,7 @@ export async function ocrAndGroupImages(
 }> {
   const ocrResults = await Promise.all(
     images.map(async (img) => {
-      const result = await ocrImage(img.base64, img.mimeType);
+      const result = await ocrImage(img.base64, img.mimeType, opts?.ocrTimeoutMs ?? 120_000);
       return { fileName: img.fileName, ...result };
     })
   );
@@ -109,6 +110,12 @@ export async function ocrAndGroupImages(
 
   if (images.length <= 1) {
     return { groupedText: ocrResults[0]?.text ?? "", totalTokensInput, totalTokensOutput };
+  }
+
+  // Telegram/álbum = 1 venta: saltar la 2ª pasada IA de agrupado (DeepSeek) —
+  // concatenar alcanza y ahorra un round-trip de modelo (más rápido).
+  if (opts?.skipGrouping) {
+    return { groupedText: ocrResults.map((r) => r.text).join("\n\n"), totalTokensInput, totalTokensOutput };
   }
 
   // Agrupar imágenes de la misma operación con un modelo de texto (DeepSeek).
