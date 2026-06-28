@@ -908,18 +908,30 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
 
   if (!(await telegramHabilitadoEmpresa(svc, empresaId))) { await say(chatId, MSG.noEnPlan); return; }
 
-  let foto64: { base64: string; mime: string; size: number };
-  try { foto64 = await getFileBase64(foto.file_id); } catch { return; }
-  if (foto64.size > MAX_FOTO_BYTES) return;
-
   const nombre = nombreComprobanteTelegram();
-  let key: string;
+  // 1. REGISTRAR la foto en el buffer ANTES de descargar/subir: la fila se inserta al
+  //    instante (placeholder), así TODAS las fotos del álbum quedan registradas en ~el
+  //    tiempo de entrega de Telegram y la ventana no pierde hermanas por el escalón del
+  //    upload. El path se completa cuando termina la subida.
+  const { data: bufRow, error: bufErr } = await svc
+    .from("telegram_album_buffer")
+    .insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { pending: true } as Json })
+    .select("id")
+    .single();
+  if (bufErr || !bufRow) return;
+
+  // 2. Descargar + subir a R2; recién ahí completar la fila del buffer con el path.
+  let key = "";
   try {
+    const foto64 = await getFileBase64(foto.file_id);
+    if (foto64.size > MAX_FOTO_BYTES) { await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id); return; }
     const up = await subirDocumentoR2(empresaId, `album_${mediaGroupId}_${nombre}`, Buffer.from(foto64.base64, "base64"), foto64.mime);
     key = up.key;
-  } catch { return; }
-
-  await svc.from("telegram_album_buffer").insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { path: key, mime: foto64.mime, name: nombre } as Json });
+    await svc.from("telegram_album_buffer").update({ image: { path: key, mime: foto64.mime, name: nombre } as Json }).eq("id", bufRow.id);
+  } catch {
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    return;
+  }
 
   // Intentar ser el creador (índice único por empresa+media_group_id).
   const { data: doc, error: insErr } = await svc
@@ -952,7 +964,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     const svc2 = getServiceClient();
     // Ventana DESLIZANTE: en vez de esperar fijo 4s desde la 1ª foto (que pierde
     // hermanas que llegan tarde), re-leemos el buffer hasta que dejan de llegar fotos.
-    const SETTLE_MS = 2500, MAX_WAIT_MS = 30000, POLL_MS = 750;
+    const SETTLE_MS = 3000, MAX_WAIT_MS = 45000, POLL_MS = 750;
     const inicio = Date.now();
     let filas: Array<{ id: string; image: Json; created_at: string }> = [];
     for (;;) {
@@ -964,11 +976,13 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
         .eq("media_group_id", mediaGroupId);
       filas = (data ?? []) as Array<{ id: string; image: Json; created_at: string }>;
       if (filas.length === 0) return;
+      const conPath = (img: Json) => Boolean(img && typeof img === "object" && !Array.isArray(img) && (img as Record<string, unknown>).path);
+      const todasSubidas = filas.every((f) => conPath(f.image));
       const ultima = Math.max(...filas.map((f) => new Date(f.created_at).getTime()));
-      if (Date.now() - ultima >= SETTLE_MS) break;   // se asentó: no llegan más
-      if (Date.now() - inicio >= MAX_WAIT_MS) break;  // tope de seguridad
+      if (todasSubidas && Date.now() - ultima >= SETTLE_MS) break; // todas registradas + subidas + asentado
+      if (Date.now() - inicio >= MAX_WAIT_MS) break;               // tope de seguridad
     }
-    const grouped = filas.map((f) => f.image).filter(Boolean);
+    const grouped = filas.map((f) => f.image).filter((img) => img && typeof img === "object" && !Array.isArray(img) && (img as Record<string, unknown>).path);
     if (grouped.length === 0) return;
     try {
       const job = await enqueueDocumentProcessingJob(svc2, {
