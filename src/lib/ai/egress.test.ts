@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { redactForAI, clienteToken, assertApprovedDataProcessor, payloadSeguroParaIA } from "./egress";
-import { MistralProvider } from "./providers/mistral";
-import { DeepSeekProvider } from "./providers/deepseek";
 import { OpenCodeGoProvider } from "./providers/opencodego";
 
 describe("redactForAI — minimización", () => {
@@ -48,13 +46,7 @@ describe("assertApprovedDataProcessor — gate fail-closed", () => {
   });
 });
 
-describe("gate cableado en los providers (fail-closed, no solo el test)", () => {
-  it("Mistral NO es procesador aprobado → no se puede ni construir", () => {
-    expect(() => new MistralProvider()).toThrow(/NO_APROBADO/);
-  });
-  it("DeepSeek directo NO es procesador aprobado → no se puede ni construir", () => {
-    expect(() => new DeepSeekProvider()).toThrow(/NO_APROBADO/);
-  });
+describe("gate cableado en el provider (fail-closed, no solo el test)", () => {
   it("OpenCode Go con modelo aprobado SÍ se construye", () => {
     const prevKey = process.env.OPENCODE_GO_API_KEY;
     const prevModel = process.env.OPENCODE_GO_MODEL;

@@ -4,7 +4,7 @@
  *
  * `parseComprobanteTexto` es una función PURA sobre el texto OCR: heurísticas
  * deterministas, sin red ni IA adicional — por eso es testeable bit a bit.
- * `extraerComprobante` (solo server) encadena Mistral OCR + el parser.
+ * `extraerComprobante` (solo server) encadena el OCR (OpenCode/MiniMax) + el parser.
  *
  * Principio del producto: esto solo PRE-LLENA el formulario de boleta.
  * La emisión SIEMPRE la revisa y aprueba el usuario.
@@ -276,7 +276,7 @@ export function parseComprobanteTexto(texto: string, opciones?: { hoy?: Date }):
 }
 
 /**
- * OCR (Mistral) + parser. Solo server: requiere MISTRAL_API_KEY.
+ * OCR (OpenCode/MiniMax) + parser. Solo server: requiere OPENCODE_GO_API_KEY.
  */
 export async function extraerComprobante(imageBase64: string, mimeType: string): Promise<ComprobanteExtraccion> {
   const ocr = await ocrImage(imageBase64, mimeType);

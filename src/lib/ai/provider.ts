@@ -1,21 +1,16 @@
 import type { AIProvider } from "./types";
-import { MistralProvider } from "./providers/mistral";
-import { DeepSeekProvider } from "./providers/deepseek";
 import { OpenCodeGoProvider } from "./providers/opencodego";
 
-type ProviderName = "mistral" | "deepseek" | "opencodego";
-
-const providers: Record<ProviderName, () => AIProvider> = {
-  mistral: () => new MistralProvider(),
-  deepseek: () => new DeepSeekProvider(),
-  opencodego: () => new OpenCodeGoProvider(),
-};
-
+// IA = SOLO OpenCode Go. Mistral y DeepSeek directos se eliminaron del todo: no
+// son procesadores aprobados (sin DPA / retención cero verificada, Ley 21.719).
+// Los modelos aprobados (deepseek-v4-flash, minimax-m3) se sirven VÍA opencodego.
+// Si AI_PROVIDER apunta a otra cosa, falla fail-closed.
 export function getAIProvider(): AIProvider {
-  const name = (process.env.AI_PROVIDER || "opencodego") as ProviderName;
-  const factory = providers[name];
-  if (!factory) {
-    throw new Error(`Proveedor IA no soportado: ${name}. Disponibles: ${Object.keys(providers).join(", ")}`);
+  const name = process.env.AI_PROVIDER || "opencodego";
+  if (name !== "opencodego") {
+    throw new Error(
+      `Proveedor IA no soportado: "${name}". El único proveedor aprobado es "opencodego" (Ley 21.719).`,
+    );
   }
-  return factory();
+  return new OpenCodeGoProvider();
 }
