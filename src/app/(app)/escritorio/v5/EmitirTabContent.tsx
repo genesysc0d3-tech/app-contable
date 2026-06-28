@@ -112,7 +112,9 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   // periodo y es reactivo a la navegación del calendario. Refrescar = reloadMesa.
   const data = initial;
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">("listas");
+  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">(
+    () => initial && initial.totales.listas_emitir === 0 && (initial.totales.por_revisar ?? 0) > 0 ? "por_revisar" : "listas",
+  );
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -206,8 +208,11 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
       <div className="sec" style={{flex:1}}>
         {/* Header */}
         <div className="em-header">
-          <span className="big">{listasCount}</span>
-          <span className="lbl">listas para emitir</span>
+          {listasCount === 0 && porRevisarCount > 0 ? (
+            <><span className="big" style={{ color: "#f59e0b" }}>{porRevisarCount}</span><span className="lbl">por revisar antes de emitir</span></>
+          ) : (
+            <><span className="big">{listasCount}</span><span className="lbl">listas para emitir</span></>
+          )}
           {bloqueadasCount > 0 && (
             <span className="blk">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>

@@ -18,7 +18,7 @@ const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",er
 const lm: Record<string, string> = {procesado:"ls",procesando:"pc",error:"er",subido:"pd"};
 // Mes corto fijo: Intl "month:short" difiere server ("jun") vs navegador ("jun.")
 // → hydration mismatch. Lo construimos determinístico desde el número de mes.
-const DIAS_LETRA = ["d", "l", "m", "m", "j", "v", "s"]; // dom..sáb — el número del día desambigua (v13)
+const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 
 // Alias de banco para ordenar las cartolas (el nombre real queda en el hover/title).
 const BANCOS: [string, string][] = [
@@ -381,9 +381,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
             const mn = Number(formatDisplayDateEsCl(s, { month: "numeric" }, "1")) || 1;
             const yn = Number(formatDisplayDateEsCl(s, { year: "numeric" }, "2026")) || 2026;
             const dow = new Date(Date.UTC(yn, mn - 1, dn)).getUTCDay(); // weekday determinístico (sin Intl → sin hidratación)
-            const vd = `${DIAS_LETRA[dow]}${dn}`;
-            if (periodoMode === "week") return `${vd} ${hh}`;
-            return `S${Math.max(1, Math.ceil(dn / 7))} ${vd} ${hh}`;
+            return `${DIAS_CORTOS[dow]} ${dn} ${hh}`; // "sáb 13 22:18" (semana y mes — el día desambigua)
           };
           return (
             <div>

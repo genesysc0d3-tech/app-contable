@@ -228,7 +228,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, marginBottom: "0.5em" }}>
-          <span style={{ fontSize: "1.65em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em", lineHeight: 1 }}>{noBoletea ? "Movimiento" : "Boleta propuesta"}</span>
+          <span style={{ fontSize: "1.5em", fontWeight: 600, color: "var(--text2)", letterSpacing: "-.02em", lineHeight: 1 }}>{noBoletea ? "Movimiento" : "Boleta propuesta"}</span>
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: dotColor }}>
             <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: dotColor }} />{pct}%
           </span>
