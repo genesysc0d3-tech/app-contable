@@ -40,42 +40,30 @@ export default function VisualizarArchivo({
 
   useEffect(() => {
     let cancelled = false;
-    let createdUrl: string | null = null;
     (async () => {
       try {
         const { data: doc, error: docErr } = await supabase
           .from("documentos_subidos")
-          .select("storage_path, nombre_archivo")
+          .select("nombre_archivo")
           .eq("id", documentoId)
           .single();
-
-        if (docErr || !doc?.storage_path) {
-          throw new Error("Archivo no encontrado");
-        }
+        if (docErr || !doc) throw new Error("Archivo no encontrado");
         if (cancelled) return;
-        setFileName(doc.nombre_archivo ?? "Documento");
+        const nombre = doc.nombre_archivo ?? "Documento";
+        setFileName(nombre);
 
-        const { data: file, error: dlErr } = await supabase.storage
-          .from("documentos")
-          .download(doc.storage_path);
-
-        if (dlErr || !file) {
-          throw new Error("No se pudo descargar el archivo");
-        }
-        if (cancelled) return;
-
-        const fk = fileKindOf(doc.nombre_archivo ?? doc.storage_path, file.type);
+        // Kind por extensión (sin bajar el blob). Bytes vía la ruta de servido
+        // provider-aware (Supabase hoy, R2 cuando migre).
+        const fk = fileKindOf(nombre, "");
         setKind(fk);
+        const url = `/api/archivo/${documentoId}`;
 
         if (fk === "image" || fk === "pdf") {
-          createdUrl = URL.createObjectURL(file);
-          if (cancelled) {
-            URL.revokeObjectURL(createdUrl);
-            return;
-          }
-          setObjectUrl(createdUrl);
+          if (!cancelled) setObjectUrl(url);
         } else {
-          const buffer = await file.arrayBuffer();
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("No se pudo descargar el archivo");
+          const buffer = await res.arrayBuffer();
           if (cancelled) return;
           const workbook = XLSX.read(buffer, { type: "array" });
           setSheets(workbookToPreviewSheets(workbook));
@@ -86,10 +74,7 @@ export default function VisualizarArchivo({
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
+    return () => { cancelled = true; };
   }, [documentoId]);
 
   const subtitle =
