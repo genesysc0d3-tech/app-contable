@@ -418,9 +418,9 @@ export function nombreComprobanteTelegram(now = new Date()): string {
 
 /**
  * Cuenta los comprobantes que esta empresa ya subió HOY vía Telegram.
- * Se filtra por el prefijo del nombre_archivo ("Telegram ...") porque el
- * pipeline reescribe progreso_ia completo durante el procesamiento y el
- * marcador `origen` desaparece hasta que se reinyecta al final.
+ * Filtra por `fuente_datos = 'telegram'` (marcador estable a nivel documento que
+ * el pipeline NO reescribe): cubre tanto la foto suelta ("Telegram ...") como el
+ * álbum ("Álbum ..."), que antes se escapaba del tope por filtrar por el nombre.
  */
 export async function contarComprobantesTelegramHoy(empresaId: string): Promise<number> {
   const svc = getServiceClient();
@@ -428,7 +428,7 @@ export async function contarComprobantesTelegramHoy(empresaId: string): Promise<
     .from("documentos_subidos")
     .select("id", { count: "exact", head: true })
     .eq("empresa_id", empresaId)
-    .like("nombre_archivo", "Telegram %")
+    .eq("fuente_datos", "telegram")
     .gte("created_at", chileDayStartUtc());
   return count ?? 0;
 }
