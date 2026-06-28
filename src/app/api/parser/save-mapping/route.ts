@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
+import { descargarDocumento } from "@/lib/storage";
 
 function isValidConfig(cfg: unknown): cfg is AdapterConfig {
   if (!cfg || typeof cfg !== "object") return false;
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
   const { data: documento } = await supabase
     .from("documentos_subidos")
-    .select("id, storage_path, tipo")
+    .select("*")
     .eq("id", documento_id)
     .eq("empresa_id", usuario.empresa_id)
     .single();
@@ -51,11 +52,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Mapeo solo para Excel" }, { status: 400 });
   }
 
-  const { data: file } = await supabase.storage.from("documentos").download(documento.storage_path);
-  if (!file) return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 });
-
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
+  const provider = documento.storage_provider === "r2" ? "r2" : "supabase";
+  const bajar = async (path: string): Promise<Buffer> => {
+    const { data, error } = await supabase.storage.from("documentos").download(path);
+    if (error || !data) throw new Error("no file");
+    return Buffer.from(await data.arrayBuffer());
+  };
+  let fileBuf: Buffer;
+  try { fileBuf = await descargarDocumento(provider, documento.storage_path, bajar); }
+  catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
+  const ab = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
+  const workbook = XLSX.read(ab, { type: "array" });
   const firstSheet = workbook.SheetNames.find((n) => {
     const rows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" });
     return rows.length > 0;

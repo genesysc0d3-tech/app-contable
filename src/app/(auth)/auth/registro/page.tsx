@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signUp, signInWithGoogle } from "../actions";
@@ -18,6 +18,15 @@ function RegistroContent() {
   const next = safeNextPath(searchParams.get("next"));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // El landing manda ?plan= acá; el flujo de auth (callback → onboarding) no
+  // preserva query params, así que lo guardamos en cookie. crearEmpresa la lee al
+  // terminar el onboarding y manda a /planes con ese plan resaltado.
+  const planParam = searchParams.get("plan");
+  useEffect(() => {
+    const safe = (planParam ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+    if (safe) document.cookie = `massdte_plan=${safe}; path=/; max-age=3600; samesite=lax`;
+  }, [planParam]);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);

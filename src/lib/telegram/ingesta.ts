@@ -11,6 +11,7 @@
 
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { defaultStorageProvider, subirDocumentoR2 } from "@/lib/storage";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { sendMessage } from "@/lib/telegram/api";
 import { enviarResumenPropuestas, mensajeLeiEsto, registrarMensajeTelegram } from "@/lib/telegram/propuestas";
@@ -417,9 +418,9 @@ export function nombreComprobanteTelegram(now = new Date()): string {
 
 /**
  * Cuenta los comprobantes que esta empresa ya subió HOY vía Telegram.
- * Se filtra por el prefijo del nombre_archivo ("Telegram ...") porque el
- * pipeline reescribe progreso_ia completo durante el procesamiento y el
- * marcador `origen` desaparece hasta que se reinyecta al final.
+ * Filtra por `fuente_datos = 'telegram'` (marcador estable a nivel documento que
+ * el pipeline NO reescribe): cubre tanto la foto suelta ("Telegram ...") como el
+ * álbum ("Álbum ..."), que antes se escapaba del tope por filtrar por el nombre.
  */
 export async function contarComprobantesTelegramHoy(empresaId: string): Promise<number> {
   const svc = getServiceClient();
@@ -427,7 +428,7 @@ export async function contarComprobantesTelegramHoy(empresaId: string): Promise<
     .from("documentos_subidos")
     .select("id", { count: "exact", head: true })
     .eq("empresa_id", empresaId)
-    .like("nombre_archivo", "Telegram %")
+    .eq("fuente_datos", "telegram")
     .gte("created_at", chileDayStartUtc());
   return count ?? 0;
 }
@@ -461,15 +462,28 @@ export async function crearDocumentoTelegram(args: {
     .single();
   if (docError || !doc) return { ok: false, error: docError?.message ?? "DB_ERROR" };
 
-  // Mismo layout de Storage que el panel: empresa/documento/nombre.
-  // El nombre lleva espacios y ":" -> se sanitiza el segmento (patrón de lib/upload.ts).
-  const safeName = args.nombreArchivo.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = `${args.empresaId}/${doc.id}/${safeName}`;
-  const { error: storageError } = await svc.storage
-    .from("documentos")
-    .upload(storagePath, buffer, { contentType: args.mime, upsert: true });
-  if (!storageError) {
-    await svc.from("documentos_subidos").update({ storage_path: storagePath }).eq("id", doc.id);
+  // Archivo → R2 si está configurado (no quema Supabase), si no fallback Supabase.
+  let storagePath = "";
+  let storageProvider: "r2" | "supabase" = "supabase";
+  if (defaultStorageProvider() === "r2") {
+    storageProvider = "r2";
+    try {
+      const up = await subirDocumentoR2(args.empresaId, `${doc.id}__${args.nombreArchivo}`, buffer, args.mime);
+      storagePath = up.key;
+    } catch { storagePath = ""; }
+  } else {
+    // El nombre lleva espacios y ":" -> se sanitiza el segmento (patrón de lib/upload.ts).
+    const safeName = args.nombreArchivo.replace(/[^a-zA-Z0-9._-]/g, "_");
+    storagePath = `${args.empresaId}/${doc.id}/${safeName}`;
+    const { error: storageError } = await svc.storage
+      .from("documentos")
+      .upload(storagePath, buffer, { contentType: args.mime, upsert: true });
+    if (storageError) storagePath = "";
+  }
+  if (storagePath) {
+    await svc.from("documentos_subidos")
+      .update({ storage_path: storagePath, storage_provider: storageProvider, fuente_datos: "telegram" })
+      .eq("id", doc.id);
   }
 
   await svc.from("documentos_subidos").update({ estado: "procesando" }).eq("id", doc.id);

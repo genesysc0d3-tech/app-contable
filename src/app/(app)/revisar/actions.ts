@@ -167,8 +167,12 @@ export async function editarPropuesta(
   propuestaId: string,
   campos: {
     tipo_propuesto?: string;
+    tipo_dte?: number | null;
     receptor_nombre?: string | null;
     receptor_rut?: string | null;
+    receptor_direccion?: string | null;
+    receptor_comuna?: string | null;
+    medio_pago?: string | null;
     monto_neto?: number;
     iva?: number;
     total?: number;
@@ -190,8 +194,12 @@ export async function editarPropuesta(
     return Number.isFinite(n) ? n : null;
   };
   if (campos.tipo_propuesto !== undefined) update.tipo_propuesto = String(campos.tipo_propuesto);
+  if (campos.tipo_dte !== undefined) update.tipo_dte = campos.tipo_dte === null ? null : numField(campos.tipo_dte);
   if (campos.receptor_nombre !== undefined) update.receptor_nombre = strField(campos.receptor_nombre);
   if (campos.receptor_rut !== undefined) update.receptor_rut = strField(campos.receptor_rut);
+  if (campos.receptor_direccion !== undefined) update.receptor_direccion = strField(campos.receptor_direccion);
+  if (campos.receptor_comuna !== undefined) update.receptor_comuna = strField(campos.receptor_comuna);
+  if (campos.medio_pago !== undefined) update.medio_pago = strField(campos.medio_pago);
   if (campos.notas !== undefined) update.notas = strField(campos.notas);
   if (campos.moneda_origen !== undefined) update.moneda_origen = strField(campos.moneda_origen);
   if (campos.monto_neto !== undefined) {
@@ -213,11 +221,17 @@ export async function editarPropuesta(
     update.monto_moneda_origen = campos.monto_moneda_origen === null ? null : numField(campos.monto_moneda_origen);
   }
 
-  const { error, count } = await ctx.sb
+  const doUpdate = () => ctx.sb
     .from("propuestas_ia")
     .update(update, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
+  let { error, count } = await doUpdate();
+  if (error && "tipo_dte" in update) {
+    // La columna tipo_dte puede no estar migrada aún (Paso P) — reintentar sin ella.
+    delete update.tipo_dte;
+    ({ error, count } = await doUpdate());
+  }
   if (error) return { error: error.message };
   if (!count) return { error: "No se pudo editar" };
   revalidatePath("/revisar");

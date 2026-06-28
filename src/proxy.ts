@@ -35,6 +35,6 @@ export const config = {
     // NO pasan por el check de sesión: llegan sin cookie de usuario y tienen
     // su propia autenticación (secret header / Bearer). Sin esto el middleware
     // los redirige a /auth/login y nunca se ejecutan.
-    "/((?!_next/static|_next/image|favicon.ico|legal(?:/.*)?$|api/empresa/upload-logo|api/empresa/logo/|api/sii-local/|api/telegram/|api/pagos/webhook|api/pagos/cron|api/ops/cron|api/document-processing/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|legal(?:/.*)?$|api/empresa/upload-logo|api/empresa/logo/|api/archivo/|api/sii-local/|api/telegram/|api/pagos/webhook|api/pagos/cron|api/ops/cron|api/document-processing/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
+import { chileDateString } from "./chile-date";
 
 type Sb = SupabaseClient<Database>;
 
@@ -152,4 +153,26 @@ export async function contextoCuentaPorEmpresa(sb: Sb, empresaId: string): Promi
     empresasActivas: empresasRes.count ?? 0,
     personasActivas: usuariosRes.count ?? 0,
   };
+}
+
+/**
+ * ¿La cuenta de esta empresa tiene Telegram en su plan? = (cupo base del plan +
+ * addons 'telegram' activos) > 0. Mismo criterio que listarResumenCupos
+ * (telegram.habilitado). NO importa metering (ciclo): el período se arma con
+ * chileDateString, igual que periodoActual().
+ */
+export async function telegramHabilitadoEmpresa(sb: Sb, empresaId: string): Promise<boolean> {
+  const ctx = await contextoCuentaPorEmpresa(sb, empresaId);
+  if (!ctx) return false;
+  const periodo = chileDateString().slice(0, 7);
+  const { data, error } = await sb
+    .from("cuenta_addons")
+    .select("cantidad")
+    .eq("cuenta_id", ctx.cuentaId)
+    .eq("tipo", "telegram")
+    .eq("estado", "activo")
+    .or(`periodo.is.null,periodo.eq.${periodo}`);
+  if (error) throw new Error(`No se pudieron leer addons telegram: ${error.message}`);
+  const extras = (data ?? []).reduce((s, r) => s + Math.max(0, Number(r.cantidad ?? 0)), 0);
+  return ctx.telegramComprobantes + extras > 0;
 }

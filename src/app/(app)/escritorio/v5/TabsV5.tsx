@@ -3,9 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
 const tabs = [
-  { id: "subidos", label: "Agregados",
-    icon: "M12 5v14m-7-7l7-7 7 7" },
-  { id: "revisar", label: "Revisar",
+  { id: "subidos", label: "Check de agregados",
     icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   { id: "emitir", label: "Emitir",
     icon: "M13 10V3L4 14h7v7l9-11h-7z" },
@@ -15,15 +13,14 @@ const tabs = [
 
 export default function TabsV5({
   pendCount, aprobCount, fecha,
-  subidosContent, revisarContent, emitirContent, boletasContent,
+  subidosContent, emitirContent, boletasContent,
 }: {
   pendCount: number; aprobCount: number; nombreEmpresa: string; fecha: string;
   subidosContent?: React.ReactNode;
-  revisarContent: React.ReactNode;
   emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
 }) {
-  const [tab, setTab] = useState("revisar");
+  const [tab, setTab] = useState("subidos");
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -62,11 +59,9 @@ export default function TabsV5({
 
   const activeContent = tab === "subidos"
     ? subidosContent
-    : tab === "revisar"
-      ? revisarContent
-      : tab === "emitir"
-        ? emitirContent
-        : boletasContent;
+    : tab === "emitir"
+      ? emitirContent
+      : boletasContent;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>

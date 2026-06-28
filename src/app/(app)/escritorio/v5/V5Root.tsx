@@ -38,10 +38,6 @@ export default function V5Root({
   empresaInicial, empresaCafs, empresaId, empresaEmisionConfig, devMode = false,
 }: {
   dashboardContent: React.ReactNode;
-  subidosContent: React.ReactNode;
-  revisarContent: React.ReactNode;
-  emitirContent: React.ReactNode;
-  boletasContent: React.ReactNode;
   empresaInicial: DatosEmisor;
   empresaCafs: CAFRow[];
   empresaId: string;

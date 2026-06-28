@@ -1,7 +1,9 @@
 import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
-import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
+import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
+import { subirDocumentoR2 } from "@/lib/storage";
 import {
   sendMessage,
   editMessageText,
@@ -100,6 +102,10 @@ const MSG = {
   soloFotos:
     "📸 Solo proceso <b>fotos de comprobantes</b>.\n" +
     "Mándame la foto y la dejo en Agregados, lista para boletear.",
+  noEnPlan:
+    "🔒 <b>Telegram es parte del plan Pro.</b>\n" +
+    "Tu plan actual no incluye comprobantes por Telegram.\n" +
+    "Actívalo en massDTE → Empresa → Plan y volvé a mandarme la foto.",
 };
 
 type Svc = ReturnType<typeof getServiceClient>;
@@ -270,7 +276,7 @@ async function handleMessage(msg: TelegramMessage) {
   }
 
   if (msg.photo?.length) {
-    await recibirComprobante(chatId, msg.photo, msg.date);
+    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id);
     return;
   }
 
@@ -894,7 +900,77 @@ async function guardarYProcesarComprobanteTelegram(args: {
   }
 }
 
-async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number) {
+// Una foto de un álbum (v1: chats de una empresa). Sube a R2, deja su imagen en el
+// buffer e intenta ser el "creador" (único por empresa+media_group_id). El creador
+// espera un debounce a que lleguen las hermanas y encola UN job multi-imagen = 1 venta.
+async function recibirAlbumFoto(chatId: number, empresaId: string, foto: TelegramPhotoSize, mediaGroupId: string) {
+  const svc = getServiceClient();
+
+  if (!(await telegramHabilitadoEmpresa(svc, empresaId))) { await say(chatId, MSG.noEnPlan); return; }
+
+  let foto64: { base64: string; mime: string; size: number };
+  try { foto64 = await getFileBase64(foto.file_id); } catch { return; }
+  if (foto64.size > MAX_FOTO_BYTES) return;
+
+  const nombre = nombreComprobanteTelegram();
+  let key: string;
+  try {
+    const up = await subirDocumentoR2(empresaId, `album_${mediaGroupId}_${nombre}`, Buffer.from(foto64.base64, "base64"), foto64.mime);
+    key = up.key;
+  } catch { return; }
+
+  await svc.from("telegram_album_buffer").insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { path: key, mime: foto64.mime, name: nombre } as Json });
+
+  // Intentar ser el creador (índice único por empresa+media_group_id).
+  const { data: doc, error: insErr } = await svc
+    .from("documentos_subidos")
+    .insert({
+      empresa_id: empresaId,
+      nombre_archivo: `Álbum ${nombre}`,
+      tipo: "imagen",
+      storage_path: key,
+      storage_provider: "r2",
+      estado: "subido",
+      media_group_id: mediaGroupId,
+      fuente_datos: "telegram",
+      progreso_ia: { origen: "telegram", album: true } as Json,
+    })
+    .select("id")
+    .single();
+  if (insErr || !doc) return; // conflicto (foto hermana) o error → solo quedó la imagen en el buffer
+
+  // Soy el creador. Tope diario (un álbum cuenta como 1 comprobante).
+  if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
+    await svc.from("documentos_subidos").delete().eq("id", doc.id);
+    await svc.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
+    await say(chatId, MSG.topeDiario);
+    return;
+  }
+  await say(chatId, "📸 Álbum recibido — junto las fotos y queda como una venta.");
+
+  after(async () => {
+    await new Promise((r) => setTimeout(r, 4000)); // debounce: esperar a las fotos hermanas
+    const svc2 = getServiceClient();
+    const { data: imgs } = await svc2.from("telegram_album_buffer").select("image").eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
+    const grouped = (imgs ?? []).map((r) => r.image).filter(Boolean);
+    if (grouped.length === 0) return;
+    try {
+      const job = await enqueueDocumentProcessingJob(svc2, {
+        documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: key,
+        metadata: { grouped_images: grouped, origen: "telegram", album: true },
+      });
+      await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json }).eq("id", doc.id);
+      await svc2.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
+      processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
+      await say(chatId, `✅ Álbum de ${grouped.length} foto${grouped.length === 1 ? "" : "s"} en proceso — queda como una venta en la mesa.`);
+    } catch {
+      await svc2.from("documentos_subidos").update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar el álbum" } as Json }).eq("id", doc.id);
+      await say(chatId, MSG.errorGuardar);
+    }
+  });
+}
+
+async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number, mediaGroupId?: string) {
   const svc = getServiceClient();
 
   // Chat no vinculado = CERO procesamiento (ni OCR ni storage): el costo
@@ -909,6 +985,13 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], r
     return;
   }
 
+  // Gate de plan: Start no incluye Telegram. Único choke point (cubre foto suelta,
+  // álbum y multiempresa) y corta el costo de OCR/storage antes de trabajar.
+  if (!(await telegramHabilitadoEmpresa(svc, chat.empresa_id))) {
+    await say(chatId, MSG.noEnPlan);
+    return;
+  }
+
   // Telegram manda los tamaños de menor a mayor: el último es la mejor resolución.
   const foto = photos[photos.length - 1];
   if ((foto.file_size ?? 0) > MAX_FOTO_BYTES) {
@@ -920,6 +1003,14 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], r
     console.error("[telegram-webhook] selector multiempresa fallo:", error);
     return null;
   });
+
+  // Álbum (v1: solo chats de UNA empresa). Las fotos del set se agrupan en UNA venta.
+  // Multiempresa + álbum → cae al flujo normal (foto suelta), no soportado en v1.
+  if (mediaGroupId && !multiempresa) {
+    await recibirAlbumFoto(chatId, chat.empresa_id, foto, mediaGroupId);
+    return;
+  }
+
   if (multiempresa) {
     const token = pendingToken();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { entrarModoClienteDev } from "../actions";
+import { entrarModoClienteDev, setCuentaPlan } from "../actions";
 
 const C = {
   border: "rgba(255,255,255,.08)",
@@ -84,5 +84,63 @@ export function DevLinkButton({
     >
       {children}
     </a>
+  );
+}
+
+export function PlanToggle({
+  cuentaId,
+  planCodigo,
+  planActivo,
+}: {
+  cuentaId: string;
+  planCodigo: string | null;
+  planActivo: boolean;
+}) {
+  const router = useRouter();
+  const [plan, setPlan] = useState(planCodigo ?? "start");
+  const [activo, setActivo] = useState(planActivo);
+  const [estado, setEstado] = useState<"idle" | "loading" | "error" | "ok">("idle");
+
+  async function guardar() {
+    if (estado === "loading") return;
+    setEstado("loading");
+    const res = await setCuentaPlan(cuentaId, plan, activo);
+    setEstado("error" in res ? "error" : "ok");
+    if (!("error" in res)) router.refresh();
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <select
+        value={plan}
+        onChange={(e) => { setPlan(e.target.value); setEstado("idle"); }}
+        style={{
+          border: `1px solid ${C.border}`, background: C.muted, color: C.text,
+          borderRadius: 7, padding: "7px 10px", fontSize: 12, fontWeight: 700,
+        }}
+      >
+        <option value="start">Start</option>
+        <option value="pro">Pro</option>
+        <option value="business">Business</option>
+      </select>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.text2, fontWeight: 700 }}>
+        <input type="checkbox" checked={activo} onChange={(e) => { setActivo(e.target.checked); setEstado("idle"); }} />
+        activo
+      </label>
+      <button
+        type="button"
+        onClick={guardar}
+        disabled={estado === "loading"}
+        style={{
+          border: "1px solid rgba(232,85,62,.45)",
+          background: estado === "error" ? "rgba(232,85,62,.08)" : C.accentSoft,
+          color: estado === "error" ? C.accent : C.text,
+          borderRadius: 7, padding: "7px 12px", fontSize: 11, fontWeight: 700,
+          cursor: estado === "loading" ? "default" : "pointer",
+        }}
+      >
+        {estado === "loading" ? "Guardando..." : estado === "ok" ? "Guardado ✓" : estado === "error" ? "Error" : "Guardar plan"}
+      </button>
+    </div>
   );
 }

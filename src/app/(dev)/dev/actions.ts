@@ -361,3 +361,45 @@ export async function salirModoClienteDev(): Promise<{ ok: true } | { error: str
   revalidatePath("/escritorio/v5");
   return { ok: true };
 }
+
+const PLAN_CODES = ["start", "pro", "business"] as const;
+
+/**
+ * Fija el plan de una cuenta a mano (control de operador): test de tiers y ops
+ * cuando la pasarela falla o alguien baja de plan (bajarlo y que deje de estar
+ * activo). UPDATE de cuentas.plan_codigo + plan_activo con allowlist de planes.
+ * OJO: si la cuenta tiene suscripción activa, su plan_codigo manda sobre esto
+ * (ver entitlements.contextoCuentaPorEmpresa) — usar en cuentas sin suscripción.
+ */
+export async function setCuentaPlan(
+  cuentaId: string,
+  planCodigo: string,
+  planActivo: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof cuentaId !== "string" || !UUID_RE.test(cuentaId)) return { error: "Cuenta inválida" };
+  if (!PLAN_CODES.includes(planCodigo as (typeof PLAN_CODES)[number])) return { error: "Plan inválido" };
+  if (typeof planActivo !== "boolean") return { error: "Valor inválido" };
+
+  const { error, count } = await gate.sb
+    .from("cuentas")
+    .update({ plan_codigo: planCodigo, plan_activo: planActivo }, { count: "exact" })
+    .eq("id", cuentaId);
+  if (error) return { error: error.message };
+  if (!count) return { error: "Cuenta no encontrada" };
+
+  await recordCuentaAudit({
+    sb: gate.sb,
+    cuentaId,
+    empresaId: null,
+    usuarioId: gate.userId,
+    accion: "plan_cambiado_dev",
+    recursoTipo: "cuenta",
+    recursoId: cuentaId,
+    resumen: `Operador dev fijó plan ${planCodigo} (${planActivo ? "activo" : "inactivo"})`,
+  }).catch(() => {});
+
+  revalidatePath(`/dev/cuentas/${cuentaId}`);
+  return { ok: true };
+}

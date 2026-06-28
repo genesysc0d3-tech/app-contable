@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, type DevCuentaDetalle } from "@/lib/dev/account-360";
-import { DevLinkButton, VerComoClienteButton } from "../DevCuentaActions";
+import { DevLinkButton, VerComoClienteButton, PlanToggle } from "../DevCuentaActions";
 
 const C = {
   bg: "#0f1014",
@@ -561,6 +561,13 @@ export default async function DevCuentaDetallePage({
               sub="pendientes / listas"
               tone={detalle.uso.propuestasPendientes > 0 ? "warning" : "muted"}
             />
+          </div>
+        </Section>
+
+        <Section title="Plan (control dev)">
+          <PlanToggle cuentaId={cuentaId} planCodigo={cuenta.planCodigo} planActivo={cuenta.planActivo} />
+          <div style={{ marginTop: 8, fontSize: 11, color: C.text2 }}>
+            Cambia plan/estado a mano (test de tiers y ops: si la pasarela falla o hay downgrade). Si la cuenta tiene suscripción activa, su plan manda sobre esto.
           </div>
         </Section>
 
