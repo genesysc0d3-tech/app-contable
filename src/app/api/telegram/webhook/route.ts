@@ -937,6 +937,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
       storage_provider: "r2",
       estado: "subido",
       media_group_id: mediaGroupId,
+      fuente_datos: "telegram",
       progreso_ia: { origen: "telegram", album: true } as Json,
     } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Insert"])
     .select("id")

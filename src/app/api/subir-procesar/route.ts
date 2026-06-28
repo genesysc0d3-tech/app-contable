@@ -100,7 +100,7 @@ export async function POST(request: Request) {
 
   if (!storageFailed) {
     await svc.from("documentos_subidos")
-      .update({ storage_path: storagePath, storage_provider: storageProvider } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"])
+      .update({ storage_path: storagePath, storage_provider: storageProvider, fuente_datos: "panel" } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"])
       .eq("id", doc.id);
   } else {
     await svc.from("documentos_subidos").update({
