@@ -896,17 +896,6 @@ async function guardarYProcesarComprobanteTelegram(args: {
   }
 }
 
-// Cliente acotado para la tabla nueva telegram_album_buffer (types sin regenerar).
-function albumBuffer(svc: ReturnType<typeof getServiceClient>) {
-  return (svc as unknown as {
-    from: (t: string) => {
-      insert: (v: { empresa_id: string; media_group_id: string; image: Json }) => PromiseLike<{ error: { message: string } | null }>;
-      select: (c: string) => { eq: (c: string, v: string) => { eq: (c: string, v: string) => PromiseLike<{ data: { image: Json }[] | null }> } };
-      delete: () => { eq: (c: string, v: string) => { eq: (c: string, v: string) => PromiseLike<unknown> } };
-    };
-  }).from("telegram_album_buffer");
-}
-
 // Una foto de un álbum (v1: chats de una empresa). Sube a R2, deja su imagen en el
 // buffer e intenta ser el "creador" (único por empresa+media_group_id). El creador
 // espera un debounce a que lleguen las hermanas y encola UN job multi-imagen = 1 venta.
@@ -924,7 +913,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     key = up.key;
   } catch { return; }
 
-  await albumBuffer(svc).insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { path: key, mime: foto64.mime, name: nombre } as Json });
+  await svc.from("telegram_album_buffer").insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { path: key, mime: foto64.mime, name: nombre } as Json });
 
   // Intentar ser el creador (índice único por empresa+media_group_id).
   const { data: doc, error: insErr } = await svc
@@ -939,7 +928,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
       media_group_id: mediaGroupId,
       fuente_datos: "telegram",
       progreso_ia: { origen: "telegram", album: true } as Json,
-    } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Insert"])
+    })
     .select("id")
     .single();
   if (insErr || !doc) return; // conflicto (foto hermana) o error → solo quedó la imagen en el buffer
@@ -947,7 +936,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   // Soy el creador. Tope diario (un álbum cuenta como 1 comprobante).
   if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
     await svc.from("documentos_subidos").delete().eq("id", doc.id);
-    await albumBuffer(svc).delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
+    await svc.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
     await say(chatId, MSG.topeDiario);
     return;
   }
@@ -956,7 +945,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   after(async () => {
     await new Promise((r) => setTimeout(r, 4000)); // debounce: esperar a las fotos hermanas
     const svc2 = getServiceClient();
-    const { data: imgs } = await albumBuffer(svc2).select("image").eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
+    const { data: imgs } = await svc2.from("telegram_album_buffer").select("image").eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
     const grouped = (imgs ?? []).map((r) => r.image).filter(Boolean);
     if (grouped.length === 0) return;
     try {
@@ -965,7 +954,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
         metadata: { grouped_images: grouped, origen: "telegram", album: true },
       });
       await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json }).eq("id", doc.id);
-      await albumBuffer(svc2).delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
+      await svc2.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
       processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
       await say(chatId, `✅ Álbum de ${grouped.length} foto${grouped.length === 1 ? "" : "s"} en proceso — queda como una venta en la mesa.`);
     } catch {

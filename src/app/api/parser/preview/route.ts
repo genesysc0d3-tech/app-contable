@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Solo Excel soporta mapeo visual" }, { status: 400 });
   }
 
-  const provider = (documento as unknown as { storage_provider?: string }).storage_provider === "r2" ? "r2" : "supabase";
+  const provider = documento.storage_provider === "r2" ? "r2" : "supabase";
   const bajar = async (path: string): Promise<Buffer> => {
     const { data, error } = await supabase.storage.from("documentos").download(path);
     if (error || !data) throw new Error("no file");

@@ -58,10 +58,10 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
       .eq("empresa_id", empresaId)
       .in("estado", ["aprobado", "editado"])
       .not("tipo_dte", "is", null);
-    // Cast vía unknown: la columna existe tras la migración, pero aún no está en
-    // los tipos generados de Supabase. El runtime ya degrada si no existe (tdErr).
+    // tipo_dte ya está en los tipos generados; el runtime degrada si la consulta
+    // falla (tdErr).
     if (!tdErr && tdRows) {
-      for (const r of tdRows as unknown as Array<{ id: string; tipo_dte: number | null }>) {
+      for (const r of tdRows) {
         if (r.tipo_dte === 39 || r.tipo_dte === 41) tipoDteById.set(r.id, r.tipo_dte);
       }
     }

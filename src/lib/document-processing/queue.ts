@@ -221,7 +221,7 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
 
   // Provider del archivo (r2 | supabase) según el documento → descarga provider-aware.
   const { data: docRow } = await sb.from("documentos_subidos").select("storage_provider").eq("id", job.documento_id).maybeSingle();
-  const provider = (docRow as unknown as { storage_provider?: string } | null)?.storage_provider === "r2" ? "r2" : "supabase";
+  const provider = docRow?.storage_provider === "r2" ? "r2" : "supabase";
   const bajar = async (p: string): Promise<Buffer> => {
     const { data, error } = await sb.storage.from("documentos").download(p);
     if (error || !data) throw new Error(`Error descargando archivo: ${error?.message ?? "sin archivo"}`);
