@@ -274,7 +274,12 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                   )}
                 </div>
                 <div className="tp" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 7, whiteSpace: "nowrap", color: isAfecta ? "#22c55e" : "#5b9cf6", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+                  {item.balde === "por_revisar" ? (
+                    // Sin decisión humana aún → no afirmar un tipo (evita contradecir a Check).
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 7, whiteSpace: "nowrap", color: "var(--text3)", background: "var(--bg-muted)" }}>IVA pendiente</span>
+                  ) : (
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 7, whiteSpace: "nowrap", color: isAfecta ? "#22c55e" : "#5b9cf6", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+                  )}
                   {item.balde === "listas" && item.documento_id && (
                     <button onClick={() => goToCheck(item)} title="Corregir el tipo en Check"
                       style={{ fontSize: 8, fontWeight: 600, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>Corregir en Check →</button>
