@@ -11,6 +11,7 @@
 
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { defaultStorageProvider, subirDocumentoR2 } from "@/lib/storage";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { sendMessage } from "@/lib/telegram/api";
 import { enviarResumenPropuestas, mensajeLeiEsto, registrarMensajeTelegram } from "@/lib/telegram/propuestas";
@@ -461,15 +462,28 @@ export async function crearDocumentoTelegram(args: {
     .single();
   if (docError || !doc) return { ok: false, error: docError?.message ?? "DB_ERROR" };
 
-  // Mismo layout de Storage que el panel: empresa/documento/nombre.
-  // El nombre lleva espacios y ":" -> se sanitiza el segmento (patrón de lib/upload.ts).
-  const safeName = args.nombreArchivo.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = `${args.empresaId}/${doc.id}/${safeName}`;
-  const { error: storageError } = await svc.storage
-    .from("documentos")
-    .upload(storagePath, buffer, { contentType: args.mime, upsert: true });
-  if (!storageError) {
-    await svc.from("documentos_subidos").update({ storage_path: storagePath }).eq("id", doc.id);
+  // Archivo → R2 si está configurado (no quema Supabase), si no fallback Supabase.
+  let storagePath = "";
+  let storageProvider: "r2" | "supabase" = "supabase";
+  if (defaultStorageProvider() === "r2") {
+    storageProvider = "r2";
+    try {
+      const up = await subirDocumentoR2(args.empresaId, `${doc.id}__${args.nombreArchivo}`, buffer, args.mime);
+      storagePath = up.key;
+    } catch { storagePath = ""; }
+  } else {
+    // El nombre lleva espacios y ":" -> se sanitiza el segmento (patrón de lib/upload.ts).
+    const safeName = args.nombreArchivo.replace(/[^a-zA-Z0-9._-]/g, "_");
+    storagePath = `${args.empresaId}/${doc.id}/${safeName}`;
+    const { error: storageError } = await svc.storage
+      .from("documentos")
+      .upload(storagePath, buffer, { contentType: args.mime, upsert: true });
+    if (storageError) storagePath = "";
+  }
+  if (storagePath) {
+    await svc.from("documentos_subidos")
+      .update({ storage_path: storagePath, storage_provider: storageProvider } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"])
+      .eq("id", doc.id);
   }
 
   await svc.from("documentos_subidos").update({ estado: "procesando" }).eq("id", doc.id);
