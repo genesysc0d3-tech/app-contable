@@ -512,7 +512,7 @@ export async function procesarComprobanteTelegram(args: {
     const { ocrAndGroupImages } = await import("@/lib/ai/ocr");
     const { groupedText } = await ocrAndGroupImages([
       { base64: args.base64, mimeType: args.mime, fileName: args.nombreArchivo },
-    ]);
+    ], { ocrTimeoutMs: 60_000 });
     if (!groupedText.trim()) {
       // OCR sin texto = imagen ilegible. Aviso reactivo: pedir screenshot
       // justo cuando pasó, y marcar el registro como error (no queda colgado).
@@ -527,69 +527,13 @@ export async function procesarComprobanteTelegram(args: {
       return;
     }
 
-    const fechaFallback = chileDateString(args.receivedAt ? new Date(args.receivedAt * 1000) : new Date());
-    const parsed = await parseComprobanteTelegramDeterministico(svc, args.empresaId, groupedText, fechaFallback);
-    if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed)) {
-      if (args.chatId) {
-        await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, groupedText);
-      }
-      return;
-    }
-    if (parsed.kind === "ambiguous") {
-      await marcarComprobanteAmbiguo(svc, args.documentoId, args.empresaId, parsed.motivo, parsed.diagnostico);
-      if (args.chatId) {
-        const msg = await sendMessage(
-          args.chatId,
-          mensajeLeiEsto(groupedText, {
-            resultado: "Requiere revisión",
-            motivo: parsed.motivo === "monto_conflictivo" ? "Monto conflictivo" : "Datos insuficientes",
-          }) +
-            "\n\nNo creé boleta automática. Revisalo desde massDTE o mandá un screenshot más claro.",
-          { html: true },
-        );
-        await registrarMensajeTelegram({
-          chatId: args.chatId,
-          empresaId: args.empresaId,
-          messageId: msg?.message_id,
-          documentoId: args.documentoId,
-          kind: "estado",
-          estado: "requiere_revision",
-        });
-      }
-      return;
-    }
-
-    const result = await procesarDocumento(args.documentoId, args.empresaId, groupedText);
-    if (result.error) {
-      console.error(`[telegram] ${args.documentoId} error pipeline:`, result.error);
-    }
-
-    await normalizarMovimientosTelegram(svc, args.documentoId, args.empresaId, groupedText, fechaFallback);
-
-    // Garantía determinística: cada movimiento de ENTRADA (venta) debe tener
-    // propuesta. El modelo a veces extrae bien el movimiento pero no genera la
-    // propuesta; la creamos nosotros según la config de la empresa, sin depender
-    // de que la IA obedezca.
-    await asegurarPropuestasDeVenta(svc, args.documentoId, args.empresaId);
-
-    const { data: row } = await svc
-      .from("documentos_subidos")
-      .select("progreso_ia")
-      .eq("id", args.documentoId)
-      .single();
-    const progreso =
-      row?.progreso_ia && typeof row.progreso_ia === "object" && !Array.isArray(row.progreso_ia)
-        ? row.progreso_ia
-        : {};
-    await svc
-      .from("documentos_subidos")
-      .update({ progreso_ia: { ...progreso, origen: "telegram" } as Json })
-      .eq("id", args.documentoId);
-
-    // Resumen interactivo: "📄 Leí esto" + "🧾 Boleta" con botones por operación.
-    if (args.chatId) {
-      await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, groupedText);
-    }
+    await clasificarComprobanteTelegram({
+      documentoId: args.documentoId,
+      empresaId: args.empresaId,
+      groupedText,
+      chatId: args.chatId,
+      receivedAt: args.receivedAt,
+    });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[telegram] ${args.documentoId} error fatal:`, errorMsg);
@@ -616,4 +560,59 @@ export async function procesarComprobanteTelegram(args: {
       console.error(`[telegram] ${args.documentoId} fallo al marcar error:`, e);
     }
   }
+}
+
+/**
+ * Clasifica el texto OCR de un comprobante Telegram: DETERMINÍSTICO primero, IA solo si
+ * el determinístico no resuelve. Lo reusan la foto suelta (procesarComprobanteTelegram)
+ * y el álbum (cola → processOneJob) → mismo camino rápido/determinístico + boleta al chat.
+ * NO atrapa errores: el caller (try/catch propio o markJobFailedOrRetryable de la cola)
+ * los maneja.
+ */
+export async function clasificarComprobanteTelegram(args: {
+  documentoId: string;
+  empresaId: string;
+  groupedText: string;
+  chatId?: number;
+  receivedAt?: number;
+}): Promise<{ movimientos_total: number }> {
+  const svc = getServiceClient();
+  const fechaFallback = chileDateString(args.receivedAt ? new Date(args.receivedAt * 1000) : new Date());
+  const parsed = await parseComprobanteTelegramDeterministico(svc, args.empresaId, args.groupedText, fechaFallback);
+  if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed)) {
+    if (args.chatId) await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, args.groupedText);
+    return { movimientos_total: 1 };
+  }
+  if (parsed.kind === "ambiguous") {
+    await marcarComprobanteAmbiguo(svc, args.documentoId, args.empresaId, parsed.motivo, parsed.diagnostico);
+    if (args.chatId) {
+      const msg = await sendMessage(
+        args.chatId,
+        mensajeLeiEsto(args.groupedText, {
+          resultado: "Requiere revisión",
+          motivo: parsed.motivo === "monto_conflictivo" ? "Monto conflictivo" : "Datos insuficientes",
+        }) + "\n\nNo creé boleta automática. Revisalo desde massDTE o mandá un screenshot más claro.",
+        { html: true },
+      );
+      await registrarMensajeTelegram({
+        chatId: args.chatId, empresaId: args.empresaId, messageId: msg?.message_id,
+        documentoId: args.documentoId, kind: "estado", estado: "requiere_revision",
+      });
+    }
+    return { movimientos_total: 0 };
+  }
+
+  // Fallback IA (clasificador general).
+  const result = await procesarDocumento(args.documentoId, args.empresaId, args.groupedText);
+  if (result.error) console.error(`[telegram] ${args.documentoId} error pipeline:`, result.error);
+  await normalizarMovimientosTelegram(svc, args.documentoId, args.empresaId, args.groupedText, fechaFallback);
+  await asegurarPropuestasDeVenta(svc, args.documentoId, args.empresaId);
+  // Reinyectar origen telegram (el pipeline reescribe progreso_ia) + estamparlo en los
+  // movimientos para que cuenten en el medidor (contarComprobantesTelegramUtiles).
+  const { data: row } = await svc.from("documentos_subidos").select("progreso_ia").eq("id", args.documentoId).single();
+  const progreso = row?.progreso_ia && typeof row.progreso_ia === "object" && !Array.isArray(row.progreso_ia) ? row.progreso_ia : {};
+  await svc.from("documentos_subidos").update({ progreso_ia: { ...progreso, origen: "telegram" } as Json }).eq("id", args.documentoId);
+  await svc.from("movimientos_raw").update({ origen: "telegram" }).eq("documento_id", args.documentoId).eq("empresa_id", args.empresaId);
+  if (args.chatId) await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, args.groupedText);
+  return { movimientos_total: result.movimientos_total ?? 0 };
 }
