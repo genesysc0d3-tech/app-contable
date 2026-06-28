@@ -86,6 +86,18 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     return m;
   }, [propsByDoc]);
 
+  // Documentos con tx "atascadas en Emitir" (por revisar / bloqueadas), para
+  // avisar en el árbol de Check sin salir de la pestaña.
+  const stuckByDoc = useMemo(() => {
+    const m: Record<string, { porRevisar: number; bloqueadas: number }> = {};
+    for (const it of (mesa.pendientes.items as Array<{ documento_id: string | null; balde: string }>)) {
+      if (!it.documento_id) continue;
+      if (it.balde === "por_revisar") (m[it.documento_id] ??= { porRevisar: 0, bloqueadas: 0 }).porRevisar++;
+      else if (it.balde === "bloqueadas") (m[it.documento_id] ??= { porRevisar: 0, bloqueadas: 0 }).bloqueadas++;
+    }
+    return m;
+  }, [mesa.pendientes]);
+
   const selProps = (selDoc ? propsByDoc.get(selDoc.id) : undefined) ?? [];
   const pend = selProps.filter((p) => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado");
   const alta = pend.filter((p) => classifyConfianza(p) === "alta");
@@ -192,6 +204,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
           docProgress={mesa.docProgress}
           periodoMode={mesa.workMode}
           infoByDoc={infoByDoc}
+          stuckByDoc={stuckByDoc}
           forceTree
           selectedDocId={selDocId}
           onSelectDoc={(d) => setSelDocId(d.id)}

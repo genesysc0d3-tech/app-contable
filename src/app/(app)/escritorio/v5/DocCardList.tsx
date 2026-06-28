@@ -86,13 +86,14 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
   docProgress?: Record<string, DocProg>;
   periodoMode?: "day" | "week" | "month";
   infoByDoc?: Record<string, { nombre: string; monto: number | null }>;
+  stuckByDoc?: Record<string, { porRevisar: number; bloqueadas: number }>;
   // Modo "mesa fusionada": el árbol reporta la selección hacia arriba (visor) en
   // vez de abrir el modal, fuerza vista árbol y resalta la fila activa.
   onSelectDoc?: (doc: DocRaw) => void;
@@ -399,6 +400,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 .agg-fr .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
                 .agg-fr .nm{flex:1;min-width:0;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
                 .agg-fr .meta{font-size:9.5px;flex-shrink:0;font-variant-numeric:tabular-nums}
+                .agg-fr .stuck{font-size:9px;font-weight:800;flex-shrink:0;font-variant-numeric:tabular-nums}
                 .agg-fr .ts{font-size:9px;color:var(--text3);flex-shrink:0;text-align:right;font-variant-numeric:tabular-nums}
                 @keyframes aggDotPulse{0%,100%{opacity:1}50%{opacity:.3}}
                 .agg-fr .dot.pulse{animation:aggDotPulse 1.4s ease-in-out infinite}
@@ -417,6 +419,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                     const pulse = doc.estado === "procesando";
                     const prog = doc.progreso_ia as { folio?: number; receptor?: string; monto_total?: number } | null;
                     const info = infoByDoc?.[doc.id];
+                    const stuck = stuckByDoc?.[doc.id];
+                    const stuckN = (stuck?.porRevisar ?? 0) + (stuck?.bloqueadas ?? 0);
                     // Nombre + meta según el origen del documento.
                     let nm = doc.nombre_archivo;
                     let metaNorm = "";
@@ -442,6 +446,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                         onClick={() => { if (onSelectDoc) { onSelectDoc(doc); return; } if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
                         <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
                         <span className="nm">{nm}</span>
+                        {stuckN > 0 && (
+                          <span className="stuck" style={{ color: (stuck?.bloqueadas ?? 0) > 0 ? "#ef4444" : "#f59e0b" }}
+                            title={`${stuckN} en Emitir — ${stuck?.bloqueadas ?? 0} bloqueada(s), ${stuck?.porRevisar ?? 0} por revisar`}>{stuckN}</span>
+                        )}
                         {meta && <span className="meta" style={{ color: metaColor }}>{meta}</span>}
                         <span className="ts">{tsDe(doc.created_at)}</span>
                       </button>
