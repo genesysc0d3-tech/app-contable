@@ -34,16 +34,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .single();
   if (error || !doc) return new NextResponse("No encontrado", { status: 404 });
 
-  // storage_provider es columna nueva (puede no estar en los tipos) → defensivo.
-  const row = doc as unknown as { storage_path: string | null; nombre_archivo: string | null; storage_provider?: string };
-  if (!row.storage_path) return new NextResponse("No encontrado", { status: 404 });
+  const row = doc as unknown as {
+    storage_path: string | null; nombre_archivo: string | null; storage_provider?: string;
+    album_imagenes?: Array<{ path?: string; mime?: string; name?: string }> | null;
+  };
+
+  // ?i = índice de imagen del álbum (galería del visor/editor). Sin i → archivo principal.
+  // Por ÍNDICE (nunca ruta cruda): resuelve contra el album_imagenes del propio doc ya
+  // autorizado por RLS → sin superficie de path traversal / cross-tenant.
+  let storagePath = row.storage_path;
+  let contentType = mimeFor(row.nombre_archivo ?? row.storage_path ?? "");
+  const iRaw = new URL(_req.url).searchParams.get("i");
+  if (iRaw !== null && Array.isArray(row.album_imagenes)) {
+    const idx = Number(iRaw);
+    const img = Number.isInteger(idx) && idx >= 0 ? row.album_imagenes[idx] : undefined;
+    if (img?.path) { storagePath = img.path; contentType = img.mime ?? mimeFor(img.name ?? img.path); }
+  }
+  if (!storagePath) return new NextResponse("No encontrado", { status: 404 });
   const provider = row.storage_provider === "r2" ? "r2" : "supabase";
-  const contentType = mimeFor(row.nombre_archivo ?? row.storage_path);
 
   let body: Buffer | Blob;
   if (provider === "r2") {
     try {
-      body = await getFileR2(row.storage_path);
+      body = await getFileR2(storagePath);
     } catch {
       return new NextResponse("Error leyendo archivo", { status: 502 });
     }
@@ -52,7 +65,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) return new NextResponse("Backend mal configurado", { status: 500 });
     const sb = createClient(url, key);
-    const { data: file, error: dlErr } = await sb.storage.from("documentos").download(row.storage_path);
+    const { data: file, error: dlErr } = await sb.storage.from("documentos").download(storagePath);
     if (dlErr || !file) return new NextResponse("No encontrado", { status: 404 });
     body = file;
   }

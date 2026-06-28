@@ -753,6 +753,7 @@ export type Database = {
       }
       documentos_subidos: {
         Row: {
+          album_imagenes: Json | null
           created_at: string
           empresa_id: string
           estado: string
@@ -770,6 +771,7 @@ export type Database = {
           tipo_operacion_hint: string | null
         }
         Insert: {
+          album_imagenes?: Json | null
           created_at?: string
           empresa_id: string
           estado?: string
@@ -787,6 +789,7 @@ export type Database = {
           tipo_operacion_hint?: string | null
         }
         Update: {
+          album_imagenes?: Json | null
           created_at?: string
           empresa_id?: string
           estado?: string
@@ -2905,3 +2908,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

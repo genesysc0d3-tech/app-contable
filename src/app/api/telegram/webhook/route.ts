@@ -998,7 +998,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
         documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: (grouped[0] as Record<string, unknown>).path as string,
         metadata: { grouped_images: grouped, origen: "telegram", album: true, chat_id: chatId },
       });
-      await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json }).eq("id", doc.id);
+      await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json, album_imagenes: grouped as Json }).eq("id", doc.id);
       // delete-by-id (no por grupo): una foto que llegue entre la lectura y el borrado sobrevive en el buffer (la rescata el reaper).
       await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
       await say(chatId, `✅ Álbum de ${grouped.length} foto${grouped.length === 1 ? "" : "s"} en proceso — queda como una venta en la mesa.`);

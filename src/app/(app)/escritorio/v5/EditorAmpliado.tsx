@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { editarPropuesta } from "../../revisar/actions";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { fmt, type Propuesta } from "./revisar-shared";
+import GaleriaComprobante from "./GaleriaComprobante";
 
 const IMG_EXT = ["png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "bmp", "tiff"];
 const PAGOS = ["Efectivo", "Transferencia electrónica", "Débito", "Crédito", "Otro"];
@@ -50,31 +51,30 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());
   const bloqueado = total <= 0 || conflicto || !rutValido || !receptorOk || !detalle.trim();
 
-  // ── Imagen del comprobante ──
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  // ── Imagen(es) del comprobante ── foto suelta o álbum de Telegram. El zoom/pan
+  // y las flechas viven en GaleriaComprobante (un solo lugar para visor y editor).
+  const [imgs, setImgs] = useState<string[]>([]);
   const [imgState, setImgState] = useState<"loading" | "image" | "none">("loading");
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data: doc } = await supabase.from("documentos_subidos").select("storage_path, nombre_archivo").eq("id", documentoId).single();
+        const { data: doc } = await supabase.from("documentos_subidos").select("storage_path, nombre_archivo, album_imagenes").eq("id", documentoId).single();
         const path = doc?.storage_path;
+        const album = Array.isArray(doc?.album_imagenes) ? (doc.album_imagenes as unknown[]) : null;
         const ext = (doc?.nombre_archivo ?? path ?? "").split(".").pop()?.toLowerCase() ?? "";
-        if (!path || !IMG_EXT.includes(ext)) { if (!cancelled) setImgState("none"); return; }
         // Bytes vía la ruta de servido (provider-aware: Supabase hoy, R2 cuando migre).
-        if (!cancelled) { setImgUrl(`/api/archivo/${documentoId}`); setImgState("image"); }
+        if (album && album.length) {
+          if (!cancelled) { setImgs(album.map((_, i) => `/api/archivo/${documentoId}?i=${i}`)); setImgState("image"); }
+        } else if (path && IMG_EXT.includes(ext)) {
+          if (!cancelled) { setImgs([`/api/archivo/${documentoId}`]); setImgState("image"); }
+        } else if (!cancelled) {
+          setImgState("none");
+        }
       } catch { if (!cancelled) setImgState("none"); }
     })();
     return () => { cancelled = true; };
   }, [documentoId]);
-
-  // Zoom/pan de la imagen
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const onZoom = (d: number) => setZoom((z) => Math.min(4, Math.max(1, Math.round((z + d) * 10) / 10)));
-  const resetZoom = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   // ── FLIP: expandir desde el rect del visor hasta un modal grande centrado ──
   // (no pantalla completa: deja respiro alrededor, tope ~1180×820).
@@ -166,22 +166,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           {/* IZQUIERDA — comprobante en zoom */}
           <div style={{ flex: "1.25 1 0", minWidth: 0, background: "var(--bg-muted)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {imgState === "image" && imgUrl ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imgUrl} alt="comprobante" draggable={false}
-                  onDoubleClick={resetZoom}
-                  onMouseDown={(e) => { dragRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }; setDragging(true); }}
-                  onMouseMove={(e) => { if (dragRef.current && zoom > 1) setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y }); }}
-                  onMouseUp={() => { dragRef.current = null; setDragging(false); }}
-                  onMouseLeave={() => { dragRef.current = null; setDragging(false); }}
-                  style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? "grab" : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
-                <div style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, background: "rgba(20,20,26,.65)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 600, color: "var(--text2)" }}>
-                  <button onClick={() => onZoom(-0.3)} style={{ width: 22, height: 22, border: "none", background: "transparent", color: "var(--text2)", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>−</button>
-                  <span style={{ minWidth: 34, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom * 100)}%</span>
-                  <button onClick={() => onZoom(0.3)} style={{ width: 22, height: 22, border: "none", background: "transparent", color: "var(--text2)", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>+</button>
-                </div>
-              </>
+            {imgState === "image" && imgs.length ? (
+              <GaleriaComprobante images={imgs} alt="comprobante" />
             ) : (
               <div style={{ color: "var(--text3)", fontSize: 12, textAlign: "center", padding: 24 }}>
                 {imgState === "loading" ? "Cargando comprobante…" : "Sin imagen de comprobante"}

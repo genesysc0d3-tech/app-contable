@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { workbookToPreviewSheets, type ExcelPreviewSheet } from "@/lib/excel/preview";
 import * as XLSX from "xlsx";
+import GaleriaComprobante from "./GaleriaComprobante";
 
 type FileKind = "sheet" | "image" | "pdf";
 
@@ -29,6 +30,7 @@ export default function VisualizarArchivo({
   const [fileName, setFileName] = useState("");
   const [kind, setKind] = useState<FileKind>("sheet");
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [albumImgs, setAlbumImgs] = useState<string[]>([]);
 
   useEffect(() => {
     function handleEsc(e: KeyboardEvent) {
@@ -44,7 +46,7 @@ export default function VisualizarArchivo({
       try {
         const { data: doc, error: docErr } = await supabase
           .from("documentos_subidos")
-          .select("nombre_archivo")
+          .select("nombre_archivo, album_imagenes")
           .eq("id", documentoId)
           .single();
         if (docErr || !doc) throw new Error("Archivo no encontrado");
@@ -58,7 +60,12 @@ export default function VisualizarArchivo({
         setKind(fk);
         const url = `/api/archivo/${documentoId}`;
 
-        if (fk === "image" || fk === "pdf") {
+        if (fk === "image") {
+          // Foto suelta o álbum de Telegram → galería (zoom + flechas si hay varias).
+          const album = Array.isArray(doc.album_imagenes) ? (doc.album_imagenes as unknown[]) : null;
+          const imgs = album && album.length ? album.map((_, i) => `/api/archivo/${documentoId}?i=${i}`) : [url];
+          if (!cancelled) setAlbumImgs(imgs);
+        } else if (fk === "pdf") {
           if (!cancelled) setObjectUrl(url);
         } else {
           const res = await fetch(url);
@@ -82,7 +89,7 @@ export default function VisualizarArchivo({
 
   // Imagen → lightbox: zoom in, contenido (no full-screen), fondo SOLO desenfocado
   // (sin oscurecer) y botón "Cerrar" abajo (frosted + fade).
-  const esImagen = kind === "image" && !!objectUrl && !loading && !error;
+  const esImagen = kind === "image" && albumImgs.length > 0 && !loading && !error;
 
   return createPortal(
     <div
@@ -121,11 +128,12 @@ export default function VisualizarArchivo({
           {error}
         </div>
       ) : esImagen ? (
-        /* ── Imagen → lightbox: zoom, contenida, fondo solo desenfocado ── */
+        /* ── Imagen/álbum → lightbox: galería con zoom (+ flechas si es álbum), fondo solo desenfocado ── */
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img onClick={(e) => e.stopPropagation()} src={objectUrl ?? ""} alt={fileName}
-            style={{ maxWidth: "74vw", maxHeight: "78vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 30px 90px rgba(0,0,0,.5)", display: "block", animation: "lbZoom .28s cubic-bezier(.22,1,.36,1)" }} />
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(82vw, 1100px)", height: "80vh", position: "relative", animation: "lbZoom .28s cubic-bezier(.22,1,.36,1)" }}>
+            <GaleriaComprobante images={albumImgs} alt={fileName} />
+          </div>
           <button onClick={onClose}
             style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid rgba(255,255,255,.16)", background: "rgba(28,28,34,.4)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", animation: "lbFade .32s ease .08s both" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>
