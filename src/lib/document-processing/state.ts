@@ -3,7 +3,9 @@ import type { Tables } from "@/lib/database.types";
 export const DOCUMENT_PIPELINE_VERSION = "document-processing:v1";
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const DEFAULT_QUEUE_LIMIT = 3;
-export const STALE_RUNNING_MS = 15 * 60 * 1000;
+// Reaper de jobs "running" colgados. DEBE quedar > maxDuration (300s) + skew, si no
+// el reaper re-encola un job que aún corre → doble worker → movimientos duplicados.
+export const STALE_RUNNING_MS = 7 * 60 * 1000;
 
 export type DocumentProcessingJob = Tables<"document_processing_jobs">;
 export type DocumentJobStatus = "queued" | "running" | "retryable" | "completed" | "failed" | "cancelled";

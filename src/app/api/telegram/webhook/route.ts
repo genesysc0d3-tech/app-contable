@@ -949,20 +949,38 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   await say(chatId, "📸 Álbum recibido — junto las fotos y queda como una venta.");
 
   after(async () => {
-    await new Promise((r) => setTimeout(r, 4000)); // debounce: esperar a las fotos hermanas
     const svc2 = getServiceClient();
-    const { data: imgs } = await svc2.from("telegram_album_buffer").select("image").eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
-    const grouped = (imgs ?? []).map((r) => r.image).filter(Boolean);
+    // Ventana DESLIZANTE: en vez de esperar fijo 4s desde la 1ª foto (que pierde
+    // hermanas que llegan tarde), re-leemos el buffer hasta que dejan de llegar fotos.
+    const SETTLE_MS = 2500, MAX_WAIT_MS = 30000, POLL_MS = 750;
+    const inicio = Date.now();
+    let filas: Array<{ id: string; image: Json; created_at: string }> = [];
+    for (;;) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      const { data } = await svc2
+        .from("telegram_album_buffer")
+        .select("id, image, created_at")
+        .eq("empresa_id", empresaId)
+        .eq("media_group_id", mediaGroupId);
+      filas = (data ?? []) as Array<{ id: string; image: Json; created_at: string }>;
+      if (filas.length === 0) return;
+      const ultima = Math.max(...filas.map((f) => new Date(f.created_at).getTime()));
+      if (Date.now() - ultima >= SETTLE_MS) break;   // se asentó: no llegan más
+      if (Date.now() - inicio >= MAX_WAIT_MS) break;  // tope de seguridad
+    }
+    const grouped = filas.map((f) => f.image).filter(Boolean);
     if (grouped.length === 0) return;
     try {
       const job = await enqueueDocumentProcessingJob(svc2, {
         documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: key,
-        metadata: { grouped_images: grouped, origen: "telegram", album: true },
+        metadata: { grouped_images: grouped, origen: "telegram", album: true, chat_id: chatId },
       });
       await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json }).eq("id", doc.id);
-      await svc2.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
-      processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
+      // delete-by-id (no por grupo): una foto que llegue entre la lectura y el borrado sobrevive en el buffer (la rescata el reaper).
+      await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
       await say(chatId, `✅ Álbum de ${grouped.length} foto${grouped.length === 1 ? "" : "s"} en proceso — queda como una venta en la mesa.`);
+      // AWAIT (no fire-and-forget): si no, el worker se desengancha y el job queda colgado en "running".
+      await processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
     } catch {
       await svc2.from("documentos_subidos").update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar el álbum" } as Json }).eq("id", doc.id);
       await say(chatId, MSG.errorGuardar);
