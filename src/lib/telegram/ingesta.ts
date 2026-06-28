@@ -575,34 +575,41 @@ export async function clasificarComprobanteTelegram(args: {
   groupedText: string;
   chatId?: number;
   receivedAt?: number;
+  soloIA?: boolean;
 }): Promise<{ movimientos_total: number }> {
   const svc = getServiceClient();
   const fechaFallback = chileDateString(args.receivedAt ? new Date(args.receivedAt * 1000) : new Date());
-  const parsed = await parseComprobanteTelegramDeterministico(svc, args.empresaId, args.groupedText, fechaFallback);
-  if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed)) {
-    if (args.chatId) await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, args.groupedText);
-    return { movimientos_total: 1 };
-  }
-  if (parsed.kind === "ambiguous") {
-    await marcarComprobanteAmbiguo(svc, args.documentoId, args.empresaId, parsed.motivo, parsed.diagnostico);
-    if (args.chatId) {
-      const msg = await sendMessage(
-        args.chatId,
-        mensajeLeiEsto(args.groupedText, {
-          resultado: "Requiere revisión",
-          motivo: parsed.motivo === "monto_conflictivo" ? "Monto conflictivo" : "Datos insuficientes",
-        }) + "\n\nNo creé boleta automática. Revisalo desde massDTE o mandá un screenshot más claro.",
-        { html: true },
-      );
-      await registrarMensajeTelegram({
-        chatId: args.chatId, empresaId: args.empresaId, messageId: msg?.message_id,
-        documentoId: args.documentoId, kind: "estado", estado: "requiere_revision",
-      });
+  // El parser determinístico es para UN comprobante (foto suelta). Un álbum = varias
+  // imágenes (1 venta, OCR concatenado con varios montos) → lo confunde y da "ambiguo".
+  // Por eso el álbum entra con soloIA: salta el determinístico y deja que la IA razone
+  // el conjunto como una sola operación.
+  if (!args.soloIA) {
+    const parsed = await parseComprobanteTelegramDeterministico(svc, args.empresaId, args.groupedText, fechaFallback);
+    if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed)) {
+      if (args.chatId) await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, args.groupedText);
+      return { movimientos_total: 1 };
     }
-    return { movimientos_total: 0 };
+    if (parsed.kind === "ambiguous") {
+      await marcarComprobanteAmbiguo(svc, args.documentoId, args.empresaId, parsed.motivo, parsed.diagnostico);
+      if (args.chatId) {
+        const msg = await sendMessage(
+          args.chatId,
+          mensajeLeiEsto(args.groupedText, {
+            resultado: "Requiere revisión",
+            motivo: parsed.motivo === "monto_conflictivo" ? "Monto conflictivo" : "Datos insuficientes",
+          }) + "\n\nNo creé boleta automática. Revisalo desde massDTE o mandá un screenshot más claro.",
+          { html: true },
+        );
+        await registrarMensajeTelegram({
+          chatId: args.chatId, empresaId: args.empresaId, messageId: msg?.message_id,
+          documentoId: args.documentoId, kind: "estado", estado: "requiere_revision",
+        });
+      }
+      return { movimientos_total: 0 };
+    }
   }
 
-  // Fallback IA (clasificador general).
+  // IA (clasificador general): álbumes siempre; foto suelta solo si el determinístico no reconoció.
   const result = await procesarDocumento(args.documentoId, args.empresaId, args.groupedText);
   if (result.error) console.error(`[telegram] ${args.documentoId} error pipeline:`, result.error);
   await normalizarMovimientosTelegram(svc, args.documentoId, args.empresaId, args.groupedText, fechaFallback);

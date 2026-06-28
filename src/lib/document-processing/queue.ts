@@ -352,7 +352,10 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       // Telegram (álbum o foto suelta vía cola): determinístico-primero + boleta al chat.
       const { clasificarComprobanteTelegram } = await import("@/lib/telegram/ingesta");
       const chatId = typeof meta.chat_id === "number" ? meta.chat_id : undefined;
-      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId });
+      // Álbum (multi-imagen) → IA (el parser determinístico es de 1 comprobante y se
+      // confunde con varios montos). Foto suelta vía cola → determinístico-primero.
+      const esAlbum = Array.isArray(meta.grouped_images) && meta.grouped_images.length > 1;
+      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum });
       movimientosTotal = r.movimientos_total;
     } else {
       const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined);
