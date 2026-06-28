@@ -18,7 +18,23 @@ const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",er
 const lm: Record<string, string> = {procesado:"ls",procesando:"pc",error:"er",subido:"pd"};
 // Mes corto fijo: Intl "month:short" difiere server ("jun") vs navegador ("jun.")
 // → hydration mismatch. Lo construimos determinístico desde el número de mes.
-const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DIAS_LETRA = ["d", "l", "m", "m", "j", "v", "s"]; // dom..sáb — el número del día desambigua (v13)
+
+// Alias de banco para ordenar las cartolas (el nombre real queda en el hover/title).
+const BANCOS: [string, string][] = [
+  ["santander", "Santander"], ["bci", "BCI"], ["scotiabank", "Scotiabank"], ["itau", "Itaú"],
+  ["falabella", "Falabella"], ["bancoestado", "BancoEstado"], ["bancodechile", "Banco de Chile"],
+  ["bancochile", "Banco de Chile"], ["security", "Security"], ["bice", "BICE"], ["ripley", "Ripley"],
+  ["coopeuch", "Coopeuch"], ["tenpo", "Tenpo"], ["mercadopago", "Mercado Pago"], ["global66", "Global66"],
+];
+function aliasBanco(nombreArchivo: string): string {
+  const norm = (nombreArchivo || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const [tok, disp] of BANCOS) if (norm.includes(tok)) return `Cartola ${disp}`;
+  return (nombreArchivo || "Cartola").replace(/\.[^.]+$/, "");
+}
+function fmtMonto(n: number | null | undefined): string {
+  return n == null ? "" : `$${Math.round(n).toLocaleString("es-CL")}`;
+}
 
 function fmtCLP(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
 
@@ -70,12 +86,13 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
   docProgress?: Record<string, DocProg>;
   periodoMode?: "day" | "week" | "month";
+  infoByDoc?: Record<string, { nombre: string; monto: number | null }>;
   // Modo "mesa fusionada": el árbol reporta la selección hacia arriba (visor) en
   // vez de abrir el modal, fuerza vista árbol y resalta la fila activa.
   onSelectDoc?: (doc: DocRaw) => void;
@@ -360,12 +377,13 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           const tsDe = (s: string): string => {
             const hh = formatDisplayDateEsCl(s, { hour: "2-digit", minute: "2-digit", hour12: false }, "");
             if (periodoMode === "day") return hh;
-            const dia = formatDisplayDateEsCl(s, { day: "2-digit" }, "");
-            const mesIdx = (Number(formatDisplayDateEsCl(s, { month: "numeric" }, "0")) || 1) - 1;
-            const dd = `${dia}-${MESES_CORTOS[mesIdx] ?? ""}`;
-            if (periodoMode === "week") return `${dd} · ${hh}`;
-            const dayNum = Number(formatDisplayDateEsCl(s, { day: "numeric" }, "0")) || 1;
-            return `S${Math.max(1, Math.ceil(dayNum / 7))} · ${dd} · ${hh}`;
+            const dn = Number(formatDisplayDateEsCl(s, { day: "numeric" }, "0")) || 1;
+            const mn = Number(formatDisplayDateEsCl(s, { month: "numeric" }, "1")) || 1;
+            const yn = Number(formatDisplayDateEsCl(s, { year: "numeric" }, "2026")) || 2026;
+            const dow = new Date(Date.UTC(yn, mn - 1, dn)).getUTCDay(); // weekday determinístico (sin Intl → sin hidratación)
+            const vd = `${DIAS_LETRA[dow]}${dn}`;
+            if (periodoMode === "week") return `${vd} ${hh}`;
+            return `S${Math.max(1, Math.ceil(dn / 7))} ${vd} ${hh}`;
           };
           return (
             <div>
@@ -399,10 +417,24 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                     const c = st[doc.estado] ?? "#9ca3af";
                     const hollow = doc.estado === "subido";
                     const pulse = doc.estado === "procesando";
+                    const prog = doc.progreso_ia as { folio?: number; receptor?: string; monto_total?: number } | null;
+                    const info = infoByDoc?.[doc.id];
+                    // Nombre + meta según el origen del documento.
+                    let nm = doc.nombre_archivo;
+                    let metaNorm = "";
+                    if (g.key === "telegram") {
+                      nm = info?.nombre || "Comprobante";
+                      metaNorm = fmtMonto(info?.monto);
+                    } else if (g.key === "boleta") {
+                      nm = prog?.folio ? `Boleta #${prog.folio}${prog.receptor ? ` · ${prog.receptor}` : ""}` : doc.nombre_archivo;
+                      metaNorm = fmtMonto(prog?.monto_total) || "emitida";
+                    } else {
+                      nm = aliasBanco(doc.nombre_archivo); // alias de banco; el nombre real queda en el hover (title)
+                      metaNorm = doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "";
+                    }
                     const meta = doc.estado === "error" ? "Error"
                       : doc.estado === "procesando" ? "procesando"
-                      : isBoletaTipo(doc.tipo) ? "emitida"
-                      : doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "";
+                      : metaNorm;
                     const metaColor = doc.estado === "error" ? "#ef4444"
                       : doc.estado === "procesando" ? "#5b9cf6"
                       : (doc.estado === "procesado" && isBoletaTipo(doc.tipo)) ? "#22c55e"
@@ -411,7 +443,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       <button key={doc.id} type="button" className={`agg-fr${selectedDocId === doc.id ? " sel" : ""}`} title={doc.nombre_archivo}
                         onClick={() => { if (onSelectDoc) { onSelectDoc(doc); return; } if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
                         <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
-                        <span className="nm">{doc.nombre_archivo}</span>
+                        <span className="nm">{nm}</span>
                         {meta && <span className="meta" style={{ color: metaColor }}>{meta}</span>}
                         <span className="ts">{tsDe(doc.created_at)}</span>
                       </button>

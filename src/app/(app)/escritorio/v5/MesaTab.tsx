@@ -71,6 +71,21 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     return m;
   }, [mesa.propuestas]);
 
+  // Nombre + monto por documento para las filas del árbol (Telegram muestra
+  // receptor·monto en vez del nombre de archivo). Toma la 1ª propuesta del doc.
+  const infoByDoc = useMemo(() => {
+    const m: Record<string, { nombre: string; monto: number | null }> = {};
+    propsByDoc.forEach((arr, id) => {
+      const p = arr[0];
+      if (!p) return;
+      const desc = p.movimientos_raw?.descripcion ?? "";
+      // Si no hay receptor explícito, saca el nombre de la glosa ("...a/de NOMBRE por $...").
+      const nombre = p.receptor_nombre || desc.match(/(?:\ba\b|\bde\b)\s+(.+?)\s+por\s+\$/i)?.[1] || desc || "Comprobante";
+      m[id] = { nombre, monto: p.total ?? p.movimientos_raw?.monto ?? null };
+    });
+    return m;
+  }, [propsByDoc]);
+
   const selProps = (selDoc ? propsByDoc.get(selDoc.id) : undefined) ?? [];
   const pend = selProps.filter((p) => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado");
   const alta = pend.filter((p) => classifyConfianza(p) === "alta");
@@ -176,6 +191,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
           tipoMix={mesa.docTipoMix}
           docProgress={mesa.docProgress}
           periodoMode={mesa.workMode}
+          infoByDoc={infoByDoc}
           forceTree
           selectedDocId={selDocId}
           onSelectDoc={(d) => setSelDocId(d.id)}
