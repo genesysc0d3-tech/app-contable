@@ -7,6 +7,7 @@ import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-valid
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
+import { defaultStorageProvider, subirDocumentoR2 } from "@/lib/storage";
 
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
@@ -73,18 +74,34 @@ export async function POST(request: Request) {
   const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const svc = createServiceClient<Database>(svcUrl, svcKey);
 
-  // Guardar archivo en Storage para FieldMapper y otros usos
-  const storagePath = `${usuario.empresa_id}/${doc.id}/${validated.nombre}`;
+  // Guardar archivo: R2 si está configurado (no quema storage/egress de Supabase),
+  // si no fallback a Supabase Storage. La key/provider quedan en el documento.
   const contentType = validated.contentType;
-  const { error: storageError } = await svc.storage
-    .from("documentos")
-    .upload(storagePath, buffer, {
-      contentType,
-      upsert: true,
-    });
+  let storagePath: string;
+  let storageProvider: "r2" | "supabase";
+  let storageFailed: string | null = null;
+  if (defaultStorageProvider() === "r2") {
+    storageProvider = "r2";
+    try {
+      const up = await subirDocumentoR2(usuario.empresa_id, `${doc.id}__${validated.nombre}`, buffer, contentType);
+      storagePath = up.key;
+    } catch (e) {
+      storagePath = "";
+      storageFailed = e instanceof Error ? e.message : "R2_UPLOAD_FAILED";
+    }
+  } else {
+    storageProvider = "supabase";
+    storagePath = `${usuario.empresa_id}/${doc.id}/${validated.nombre}`;
+    const { error: storageError } = await svc.storage
+      .from("documentos")
+      .upload(storagePath, buffer, { contentType, upsert: true });
+    if (storageError) storageFailed = storageError.message;
+  }
 
-  if (!storageError) {
-    await svc.from("documentos_subidos").update({ storage_path: storagePath }).eq("id", doc.id);
+  if (!storageFailed) {
+    await svc.from("documentos_subidos")
+      .update({ storage_path: storagePath, storage_provider: storageProvider } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"])
+      .eq("id", doc.id);
   } else {
     await svc.from("documentos_subidos").update({
       estado: "error",
@@ -100,7 +117,7 @@ export async function POST(request: Request) {
       usuarioId: user.id,
       resourceType: "documento_subido",
       resourceId: doc.id,
-      metadata: { storage_error: storageError.message, tipo: validated.tipo, mime: contentType },
+      metadata: { storage_error: storageFailed, tipo: validated.tipo, mime: contentType },
     });
     return NextResponse.json({ ok: false, error: "STORAGE_UPLOAD_FAILED" }, { status: 502 });
   }

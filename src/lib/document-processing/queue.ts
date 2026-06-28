@@ -4,6 +4,7 @@ import { createClient as createServiceClient, type SupabaseClient } from "@supab
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
+import { descargarDocumento } from "@/lib/storage";
 import { procesarDocumento } from "@/lib/ai/processor";
 import { sanitizeOpsMetadata } from "@/lib/ops/sanitize";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
@@ -218,6 +219,15 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
     ? job.metadata as Record<string, Json>
     : {};
 
+  // Provider del archivo (r2 | supabase) según el documento → descarga provider-aware.
+  const { data: docRow } = await sb.from("documentos_subidos").select("storage_provider").eq("id", job.documento_id).maybeSingle();
+  const provider = (docRow as unknown as { storage_provider?: string } | null)?.storage_provider === "r2" ? "r2" : "supabase";
+  const bajar = async (p: string): Promise<Buffer> => {
+    const { data, error } = await sb.storage.from("documentos").download(p);
+    if (error || !data) throw new Error(`Error descargando archivo: ${error?.message ?? "sin archivo"}`);
+    return Buffer.from(await data.arrayBuffer());
+  };
+
   const groupedImages = Array.isArray(metadata.grouped_images) ? metadata.grouped_images : null;
   if (groupedImages?.length) {
     const images: { base64: string; mimeType: string; fileName: string }[] = [];
@@ -226,9 +236,8 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
       const record = item as Record<string, Json>;
       const path = typeof record.path === "string" ? record.path : null;
       if (!path) continue;
-      const { data: fileData } = await sb.storage.from("documentos").download(path);
-      if (!fileData) continue;
-      const buffer = Buffer.from(await fileData.arrayBuffer());
+      let buffer: Buffer;
+      try { buffer = await descargarDocumento(provider, path, bajar); } catch { continue; }
       images.push({
         base64: buffer.toString("base64"),
         mimeType: typeof record.mime === "string" ? record.mime : "image/jpeg",
@@ -240,31 +249,30 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
     return { contenido: groupedText, preExtracted: null };
   }
 
-  const { data: fileData, error: downloadError } = await sb.storage.from("documentos").download(job.storage_path);
-  if (downloadError || !fileData) throw new Error(`Error descargando archivo desde almacenamiento: ${downloadError?.message ?? "sin archivo"}`);
+  const fileBuffer = await descargarDocumento(provider, job.storage_path, bajar);
 
   let contenido: string;
   let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
 
   if (job.tipo === "excel") {
-    const parsed = await parseExcel(await fileData.arrayBuffer(), { documento_id: job.documento_id });
+    const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer;
+    const parsed = await parseExcel(ab, { documento_id: job.documento_id });
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
   } else if (job.tipo === "pdf") {
     const { PDFParse } = await import("pdf-parse");
-    const pdfParser = new PDFParse(new Uint8Array(await fileData.arrayBuffer()));
+    const pdfParser = new PDFParse(new Uint8Array(fileBuffer));
     const pdfData = await pdfParser.getText();
     contenido = pdfData.text;
   } else if (job.tipo === "imagen") {
-    const buffer = Buffer.from(await fileData.arrayBuffer());
     const { groupedText } = await ocrAndGroupImages([{
-      base64: buffer.toString("base64"),
+      base64: fileBuffer.toString("base64"),
       mimeType: typeof metadata.mime === "string" ? metadata.mime : "image/jpeg",
       fileName: job.storage_path.split("/").pop() || "imagen",
     }]);
     contenido = groupedText;
   } else {
-    contenido = await fileData.text();
+    contenido = fileBuffer.toString("utf-8");
   }
 
   return { contenido, preExtracted };

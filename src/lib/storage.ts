@@ -56,3 +56,32 @@ export async function getFileR2(key: string): Promise<Buffer> {
 export async function signedUrlR2(key: string, expiresInSeconds = 3600): Promise<string> {
   return r2SignedGetUrl(key, expiresInSeconds);
 }
+
+/**
+ * Sube un documento (cartola/comprobante) a R2 y devuelve la key + provider para
+ * guardar en la DB. Solo R2 (server). Si no hay R2 configurado, el caller usa su
+ * fallback de Supabase Storage.
+ */
+export async function subirDocumentoR2(
+  empresaId: string,
+  nombreArchivo: string,
+  body: Buffer | Uint8Array,
+  contentType?: string,
+): Promise<{ provider: StorageProvider; key: string }> {
+  const key = buildStorageKey(empresaId, "documento", nombreArchivo);
+  await putFileR2(key, body, contentType);
+  return { provider: "r2", key };
+}
+
+/**
+ * Descarga bytes de un documento según su provider. Para 'supabase' (legacy) usa
+ * el downloader que provee el caller (que tiene el cliente Supabase).
+ */
+export async function descargarDocumento(
+  provider: StorageProvider,
+  path: string,
+  supabaseDownload: (p: string) => Promise<Buffer>,
+): Promise<Buffer> {
+  if (provider === "r2") return getFileR2(path);
+  return supabaseDownload(path);
+}
