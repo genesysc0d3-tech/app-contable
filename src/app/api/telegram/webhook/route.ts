@@ -949,7 +949,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
       await say(chatId, MSG.topeDiario);
       return;
     }
-    await say(chatId, "📸 Álbum recibido — junto las fotos y queda como una venta.");
+    await say(chatId, "📸 Álbum recibido — leo las fotos y te muestro la boleta en unos segundos.");
   }
 
   after(async () => {
@@ -1001,8 +1001,9 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
       await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json, album_imagenes: grouped as Json }).eq("id", doc.id);
       // delete-by-id (no por grupo): una foto que llegue entre la lectura y el borrado sobrevive en el buffer (la rescata el reaper).
       await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
-      await say(chatId, `✅ Álbum de ${grouped.length} foto${grouped.length === 1 ? "" : "s"} en proceso — queda como una venta en la mesa.`);
-      // AWAIT (no fire-and-forget): si no, el worker se desengancha y el job queda colgado en "running".
+      // AWAIT (no fire-and-forget): si no, el worker se desengancha y el job queda colgado.
+      // La boleta se la manda el worker al chat (clasificarComprobanteTelegram con chat_id) →
+      // así el flujo del álbum queda en 2 pasos: "📸 Álbum recibido" + la boleta.
       await processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
     } catch {
       await svc2.from("documentos_subidos").update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar el álbum" } as Json }).eq("id", doc.id);

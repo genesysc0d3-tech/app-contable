@@ -78,23 +78,31 @@ function ComprobanteThumb({ documentoId, onZoom }: { documentoId: string; onZoom
   const [state, setState] = useState<"loading" | "image" | "none">("loading");
   const btnRef = useRef<HTMLButtonElement>(null);
   const [origin, setOrigin] = useState<DOMRect | null>(null);
+  const [multi, setMulti] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data: doc } = await supabase.from("documentos_subidos").select("storage_path, nombre_archivo").eq("id", documentoId).single();
+        const { data: doc } = await supabase.from("documentos_subidos").select("storage_path, nombre_archivo, album_imagenes").eq("id", documentoId).single();
         const path = doc?.storage_path;
         if (!path) { if (!cancelled) setState("none"); return; }
         const ext = (doc?.nombre_archivo ?? path).split(".").pop()?.toLowerCase() ?? "";
         if (!IMG_EXT.includes(ext)) { if (!cancelled) setState("none"); return; }
         // Bytes vía la ruta de servido (provider-aware).
-        if (!cancelled) { setUrl(`/api/archivo/${documentoId}`); setState("image"); }
+        if (!cancelled) {
+          setMulti(Array.isArray(doc?.album_imagenes) && doc.album_imagenes.length > 1);
+          setUrl(`/api/archivo/${documentoId}`);
+          setState("image");
+        }
       } catch { if (!cancelled) setState("none"); }
     })();
     return () => { cancelled = true; };
   }, [documentoId]);
 
   const open = () => {
+    // Álbum (varias fotos) → visor con galería completa (zoom + flechas). Foto suelta →
+    // lightbox inline con el zoom FLIP desde el thumbnail.
+    if (state === "image" && multi) { onZoom(); return; }
     if (state === "image" && url && btnRef.current) setOrigin(btnRef.current.getBoundingClientRect());
     else onZoom();
   };
