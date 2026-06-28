@@ -1,5 +1,4 @@
 import { getAppEmpresaContext } from "@/lib/dal";
-import BottomNav from "@/components/layout/BottomNav";
 import DevSupportBanner from "./escritorio/v5/DevSupportBanner";
 
 export default async function AppLayout({
@@ -7,12 +6,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { empresaId, empresa, supabase, supportMode } = await getAppEmpresaContext();
-  const { count } = await supabase
-    .from("propuestas_ia")
-    .select("id", { count: "exact", head: true })
-    .eq("empresa_id", empresaId)
-    .eq("estado", "pendiente");
+  const { empresa, supportMode } = await getAppEmpresaContext();
 
   return (
     <>
@@ -22,7 +16,6 @@ export default async function AppLayout({
         </div>
       )}
       {children}
-      <BottomNav initialPendientes={count ?? 0} />
     </>
   );
 }
