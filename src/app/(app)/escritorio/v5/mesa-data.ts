@@ -184,7 +184,7 @@ export async function fetchMesaDateDependent(
   // ── Pendientes de emisión (cola del tab Emitir) — depende de empresa, no del rango ──
   const pendientes = await getPendientesEmision(supabase, empresaId, {
     giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente,
-  }).catch(() => ({
+  }, { start: workStart, end: workEnd }).catch(() => ({
     items: [] as Awaited<ReturnType<typeof getPendientesEmision>>["items"],
     totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, monto_total: 0, monto_listo: 0 },
     aprobadas_otros_tipos: {} as Record<string, number>,

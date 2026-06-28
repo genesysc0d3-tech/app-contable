@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo } from "react";
 import { useToast } from "@/components/Toast";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
+import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
 
 interface Item {
@@ -106,47 +106,18 @@ function nextActionLabel(code: Item["motivo_code"]): string | null {
 }
 
 export default function EmitirTabContent({ initial = null }: { initial?: PendientesResponse | null }) {
-  const router = useRouter();
   const { toast } = useToast();
-  const [data, setData] = useState<PendientesResponse | null>(initial);
-  const [loading, setLoading] = useState(!initial);
+  const reload = useMesaReload() ?? (() => {});
+  // La mesa (calendario maestro) es la fuente: `initial` ya viene filtrado por
+  // periodo y es reactivo a la navegación del calendario. Refrescar = reloadMesa.
+  const data = initial;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">("listas");
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<EmitirResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
-
-  const fetchData = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await fetch("/api/intermediaria/pendientes-emision");
-      const json = await res.json();
-      if (json.ok) {
-        setData(json);
-      } else {
-        const message = json.error ?? "No se pudieron cargar los pendientes";
-        setData(null);
-        setError(message);
-        toast(message, "error");
-      }
-    } catch {
-      setData(null);
-      setError("Error al cargar pendientes");
-      toast("Error al cargar pendientes", "error");
-    }
-    setLoading(false);
-  }, [toast]);
-
-  useEffect(() => {
-    // Con datos del server (initial), no re-fetch al montar: evita el flash de
-    // carga al cambiar de pestaña. Solo fetch si no vinieron datos del server.
-    if (initial) return;
-    const timer = window.setTimeout(() => { void fetchData(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [fetchData, initial]);
 
   const itemsList = useMemo(() => {
     if (!data) return [];
@@ -189,25 +160,11 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   const selAfecta = selectedItems.filter((i) => (i.tipo_sugerido ?? 39) === 39).length;
   const selExenta = selectedCount - selAfecta;
 
-  if (loading) {
+  if (!data) {
     return <EmitirEmpty loading />;
   }
 
-  if (error) {
-    return (
-      <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
-        <div style={{maxWidth:300}}>
-          <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>No se pudo cargar Emitir</div>
-          <div style={{marginTop:6,fontSize:11,lineHeight:1.45}}>{error}</div>
-          <button type="button" onClick={fetchData} style={{marginTop:14,border:0,borderRadius:999,padding:"9px 14px",background:"#E8553E",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!loading && totalCount === 0) {
+  if (totalCount === 0) {
     return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} />;
   }
 
@@ -230,8 +187,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
         setLastResult(json as EmitirResult); // el recibo se muestra en el modal
         if ((json.exitos ?? 0) > 0) {
           setSelected(new Set());
-          fetchData();
-          router.refresh();
+          reload();
         }
       } else {
         toast(json.error ?? "Error al emitir", "error");
@@ -258,7 +214,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
               {" "}{bloqueadasCount} bloqueadas
             </span>
           )}
-          <button className="rf" onClick={fetchData}>↻</button>
+          <button className="rf" onClick={reload}>↻</button>
         </div>
 
         {/* Pills */}

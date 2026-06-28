@@ -19,8 +19,8 @@ export const TIPOS_EMITIBLES = ["boleta", "exenta", "transferencia_p2p", "compra
  * mesa (page.tsx), para que la pestaña Emitir venga con datos del server como
  * el resto de las pestañas (sin fetch al cliente que recargue cada vez).
  */
-export async function getPendientesEmision(supabase: Supa, empresaId: string, empresaCtx: EmpresaCtx) {
-  const { data: propuestas, error: pErr } = await supabase
+export async function getPendientesEmision(supabase: Supa, empresaId: string, empresaCtx: EmpresaCtx, range?: { start: string; end: string }) {
+  let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
       id, tipo_propuesto, receptor_nombre, receptor_rut, monto_neto, iva, total, estado, created_at, cliente_id,
@@ -29,8 +29,10 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
     `)
     .eq("empresa_id", empresaId)
     .in("estado", ["aprobado", "editado"])
-    .in("tipo_propuesto", TIPOS_EMITIBLES)
-    .order("created_at", { ascending: false });
+    .in("tipo_propuesto", TIPOS_EMITIBLES);
+  // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
+  if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);
+  const { data: propuestas, error: pErr } = await propsQuery.order("created_at", { ascending: false });
 
   if (pErr) throw new Error(pErr.message);
 
