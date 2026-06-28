@@ -909,10 +909,12 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   if (!(await telegramHabilitadoEmpresa(svc, empresaId))) { await say(chatId, MSG.noEnPlan); return; }
 
   const nombre = nombreComprobanteTelegram();
-  // 1. REGISTRAR la foto en el buffer ANTES de descargar/subir: la fila se inserta al
-  //    instante (placeholder), así TODAS las fotos del álbum quedan registradas en ~el
-  //    tiempo de entrega de Telegram y la ventana no pierde hermanas por el escalón del
-  //    upload. El path se completa cuando termina la subida.
+  // Parte SÍNCRONA mínima (para responder 200 RÁPIDO): registrar la foto en el buffer
+  // + intentar crear el doc creador. La descarga+subida pesada va a after().
+  // Por qué importa: Telegram entrega el álbum EN ORDEN y espera el 200 de cada foto
+  // antes de mandar la siguiente; si el handler tarda (download+upload ~3s), escalona
+  // las fotos varios segundos y la ventana se asienta en el hueco → pierde fotos.
+  // 200 rápido ⇒ todas las fotos llegan casi juntas ⇒ la ventana las junta.
   const { data: bufRow, error: bufErr } = await svc
     .from("telegram_album_buffer")
     .insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { pending: true } as Json })
@@ -920,27 +922,15 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     .single();
   if (bufErr || !bufRow) return;
 
-  // 2. Descargar + subir a R2; recién ahí completar la fila del buffer con el path.
-  let key = "";
-  try {
-    const foto64 = await getFileBase64(foto.file_id);
-    if (foto64.size > MAX_FOTO_BYTES) { await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id); return; }
-    const up = await subirDocumentoR2(empresaId, `album_${mediaGroupId}_${nombre}`, Buffer.from(foto64.base64, "base64"), foto64.mime);
-    key = up.key;
-    await svc.from("telegram_album_buffer").update({ image: { path: key, mime: foto64.mime, name: nombre } as Json }).eq("id", bufRow.id);
-  } catch {
-    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
-    return;
-  }
-
-  // Intentar ser el creador (índice único por empresa+media_group_id).
-  const { data: doc, error: insErr } = await svc
+  // Intentar ser el creador (índice único por empresa+media_group_id). Instantáneo;
+  // el storage_path real se completa tras la subida en after().
+  const { data: doc } = await svc
     .from("documentos_subidos")
     .insert({
       empresa_id: empresaId,
       nombre_archivo: `Álbum ${nombre}`,
       tipo: "imagen",
-      storage_path: key,
+      storage_path: "album",
       storage_provider: "r2",
       estado: "subido",
       media_group_id: mediaGroupId,
@@ -949,22 +939,41 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     })
     .select("id")
     .single();
-  if (insErr || !doc) return; // conflicto (foto hermana) o error → solo quedó la imagen en el buffer
+  const esCreador = Boolean(doc);
 
-  // Soy el creador. Tope diario (un álbum cuenta como 1 comprobante).
-  if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
-    await svc.from("documentos_subidos").delete().eq("id", doc.id);
-    await svc.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
-    await say(chatId, MSG.topeDiario);
-    return;
+  if (esCreador && doc) {
+    // Tope diario (un álbum cuenta como 1 comprobante).
+    if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
+      await svc.from("documentos_subidos").delete().eq("id", doc.id);
+      await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      await say(chatId, MSG.topeDiario);
+      return;
+    }
+    await say(chatId, "📸 Álbum recibido — junto las fotos y queda como una venta.");
   }
-  await say(chatId, "📸 Álbum recibido — junto las fotos y queda como una venta.");
 
   after(async () => {
     const svc2 = getServiceClient();
-    // Ventana DESLIZANTE: en vez de esperar fijo 4s desde la 1ª foto (que pierde
-    // hermanas que llegan tarde), re-leemos el buffer hasta que dejan de llegar fotos.
-    const SETTLE_MS = 3000, MAX_WAIT_MS = 45000, POLL_MS = 750;
+
+    // (TODAS las fotos) descargar + subir ESTA foto a R2 y completar su fila del buffer.
+    try {
+      const foto64 = await getFileBase64(foto.file_id);
+      if (foto64.size > MAX_FOTO_BYTES) {
+        await svc2.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      } else {
+        const up = await subirDocumentoR2(empresaId, `album_${mediaGroupId}_${nombre}`, Buffer.from(foto64.base64, "base64"), foto64.mime);
+        await svc2.from("telegram_album_buffer").update({ image: { path: up.key, mime: foto64.mime, name: nombre } as Json }).eq("id", bufRow.id);
+        if (esCreador && doc) await svc2.from("documentos_subidos").update({ storage_path: up.key }).eq("id", doc.id);
+      }
+    } catch {
+      await svc2.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    }
+
+    if (!esCreador || !doc) return; // los no-creadores solo suben su foto
+
+    // Creador: ventana — esperar a que lleguen TODAS las fotos y terminen de subir
+    // (image.path), y recién ahí encolar UN job con todas = 1 venta.
+    const SETTLE_MS = 3000, MAX_WAIT_MS = 60000, POLL_MS = 750;
     const inicio = Date.now();
     let filas: Array<{ id: string; image: Json; created_at: string }> = [];
     for (;;) {
@@ -986,7 +995,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     if (grouped.length === 0) return;
     try {
       const job = await enqueueDocumentProcessingJob(svc2, {
-        documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: key,
+        documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: (grouped[0] as Record<string, unknown>).path as string,
         metadata: { grouped_images: grouped, origen: "telegram", album: true, chat_id: chatId },
       });
       await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json }).eq("id", doc.id);
