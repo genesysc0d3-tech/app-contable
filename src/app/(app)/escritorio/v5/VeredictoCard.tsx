@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { aprobarPropuesta, editarPropuesta } from "../../revisar/actions";
 import { fmt, fmtShort, type Propuesta, type ClienteResumen } from "./revisar-shared";
+import EditorAmpliado from "./EditorAmpliado";
 
 const IMG_EXT = ["png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "bmp", "tiff"];
 
@@ -141,11 +142,6 @@ const CB_CSS = `
 .vc-pencil{transition:background .15s,color .15s,border-color .15s;}
 .vc-pencil:hover:not(:disabled){background:var(--surface);color:var(--text);border-color:var(--text3);}
 .vc-pencil:disabled{opacity:.5;cursor:default;}
-.vc-tick{transition:filter .15s;}
-.vc-tick:hover:not(:disabled){filter:brightness(1.08);}
-.vc-tick:disabled{opacity:.5;cursor:default;}
-.vc-monto-input::-webkit-outer-spin-button,.vc-monto-input::-webkit-inner-spin-button{opacity:1;cursor:pointer;}
-.vc-monto-input{caret-color:var(--accent);}
 `;
 
 function CreativeButton({ label, baseIcon, onClick, disabled, bg, color, border, fontSize }: {
@@ -163,15 +159,16 @@ function CreativeButton({ label, baseIcon, onClick, disabled, bg, color, border,
 // Visor de 1 transacción como VEREDICTO editable (3 columnas: comprobante · datos ·
 // acciones). El tipo afecta/exenta y el monto son ediciones LOCALES instantáneas
 // (cero servidor, cero recarga); se persisten una sola vez al Aprobar/Registrar.
-export default function VeredictoCard({ propuesta, clientes, empresaId: _empresaId, empresaTipo: _empresaTipo, onAction, onClose, documentoId, onViewImage }: {
+export default function VeredictoCard({ propuesta, clientes, empresaId: _empresaId, empresaTipo, onAction, onClose, documentoId, onViewImage }: {
   propuesta: Propuesta; clientes: ClienteResumen[]; empresaId: string; empresaTipo: string | null;
   onAction: () => void; onClose: () => void; documentoId: string; onViewImage: () => void;
 }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [selClienteId, setSelClienteId] = useState(propuesta.cliente_id ?? "");
-  const [editMonto, setEditMonto] = useState(false);
-  const [montoInput, setMontoInput] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOrigin, setEditorOrigin] = useState<DOMRect | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [ov, setOv] = useState<{ tipo: string; neto: number; iva: number; total: number } | null>(null);
 
   const tipo = ov?.tipo ?? propuesta.tipo_propuesto;
@@ -190,13 +187,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
 
   const setTipo = (t: "boleta" | "exenta") => { const c = camposPara(t, total); setOv({ tipo: c.tipo_propuesto, neto: c.monto_neto, iva: c.iva, total: c.total }); };
   const marcarNoVenta = () => setOv({ tipo: "no_comercial", neto, iva, total });
-  const saveMonto = () => {
-    setEditMonto(false);
-    const n = Math.round(Number(montoInput));
-    if (!Number.isFinite(n) || n <= 0 || n === total) return;
-    const c = camposPara(isAfecta ? "boleta" : "exenta", n);
-    setOv({ tipo: c.tipo_propuesto, neto: c.monto_neto, iva: c.iva, total: c.total });
-  };
+  const openEditor = () => { if (rootRef.current) setEditorOrigin(rootRef.current.getBoundingClientRect()); setEditorOpen(true); };
 
   // tipoDte: la decisión humana del tipo (Paso P) — se guarda al aprobar para
   // que la cola de Emitir la lea en vez de re-adivinarla.
@@ -219,8 +210,17 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   const dotColor = conflicto ? "#f59e0b" : pct >= 85 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
 
   return (
-    <div style={{ display: "flex", gap: "1.4em", alignItems: "stretch", padding: "0.85em 18px", fontSize: "clamp(9px, 1.3vh, 12.5px)", height: "100%" }}>
+    <div ref={rootRef} style={{ display: "flex", gap: "1.4em", alignItems: "stretch", padding: "0.85em 18px", fontSize: "clamp(9px, 1.3vh, 12.5px)", height: "100%" }}>
       <style>{CB_CSS}</style>
+      {editorOpen && (
+        <EditorAmpliado
+          propuesta={propuesta}
+          documentoId={documentoId}
+          empresaTipo={empresaTipo}
+          originRect={editorOrigin}
+          onClose={(saved) => { setEditorOpen(false); if (saved) onAction(); }}
+        />
+      )}
       {/* IZQUIERDA: comprobante (ocupa toda la altura de la tarjeta) */}
       <ComprobanteThumb documentoId={documentoId} onZoom={onViewImage} />
 
@@ -282,28 +282,13 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
                     Afecta lleva IVA 19%. Si no corresponde, marca <b style={{ margin: "0 3px" }}>Exenta</b>.
                   </div>
                 )}
-                {/* Altura fija en ambos estados → editar nunca empuja la card. Botón a la izquierda. */}
+                {/* Lápiz = ampliar con superpoderes (editor full-screen). Altura fija evita saltos. */}
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5em", height: "3.3em" }}>
-                  {editMonto ? (
-                    <>
-                      <button className="vc-tick" onMouseDown={(e) => e.preventDefault()} onClick={saveMonto} disabled={busy} title="Guardar monto"
-                        style={{ flexShrink: 0, width: "2.4em", height: "2.4em", borderRadius: 9, border: "none", background: "#E8553E", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6"><polyline points="20 6 9 17 4 12" /></svg>
-                      </button>
-                      <input type="number" value={montoInput} autoFocus className="vc-monto-input"
-                        onChange={(e) => setMontoInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveMonto(); if (e.key === "Escape") setEditMonto(false); }}
-                        style={{ boxSizing: "border-box", height: "100%", fontSize: "2.7em", fontWeight: 800, width: "6em", background: "var(--bg-muted)", border: "1px solid var(--accent)", borderRadius: 10, color: "var(--text)", padding: "0 0.3em", letterSpacing: "-.04em", lineHeight: 1 }} />
-                    </>
-                  ) : (
-                    <>
-                      <button className="vc-pencil" onClick={() => { setMontoInput(String(total)); setEditMonto(true); }} disabled={busy} title="Editar monto"
-                        style={{ flexShrink: 0, width: "2.4em", height: "2.4em", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                      </button>
-                      <span style={{ fontSize: "3em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.04em", lineHeight: 1 }}>{fmt(total)}</span>
-                    </>
-                  )}
+                  <button className="vc-pencil" onClick={openEditor} disabled={busy} title="Ampliar y editar"
+                    style={{ flexShrink: 0, width: "2.4em", height: "2.4em", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                  </button>
+                  <span style={{ fontSize: "3em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.04em", lineHeight: 1 }}>{fmt(total)}</span>
                 </div>
                 <div style={divider} />
                 <div style={{ display: "flex", alignItems: "baseline", gap: 12, fontSize: "1.24em" }}>

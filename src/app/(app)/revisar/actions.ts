@@ -170,6 +170,9 @@ export async function editarPropuesta(
     tipo_dte?: number | null;
     receptor_nombre?: string | null;
     receptor_rut?: string | null;
+    receptor_direccion?: string | null;
+    receptor_comuna?: string | null;
+    medio_pago?: string | null;
     monto_neto?: number;
     iva?: number;
     total?: number;
@@ -194,6 +197,9 @@ export async function editarPropuesta(
   if (campos.tipo_dte !== undefined) update.tipo_dte = campos.tipo_dte === null ? null : numField(campos.tipo_dte);
   if (campos.receptor_nombre !== undefined) update.receptor_nombre = strField(campos.receptor_nombre);
   if (campos.receptor_rut !== undefined) update.receptor_rut = strField(campos.receptor_rut);
+  if (campos.receptor_direccion !== undefined) update.receptor_direccion = strField(campos.receptor_direccion);
+  if (campos.receptor_comuna !== undefined) update.receptor_comuna = strField(campos.receptor_comuna);
+  if (campos.medio_pago !== undefined) update.medio_pago = strField(campos.medio_pago);
   if (campos.notas !== undefined) update.notas = strField(campos.notas);
   if (campos.moneda_origen !== undefined) update.moneda_origen = strField(campos.moneda_origen);
   if (campos.monto_neto !== undefined) {
