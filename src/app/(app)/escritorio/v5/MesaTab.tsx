@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
 import DocCardList from "./DocCardList";
+import DocPanelsBoard from "./DocPanelsBoard";
 import VisualizarArchivo from "./VisualizarArchivo";
 import FieldMapper from "@/components/upload/FieldMapper";
 import HintSelector from "@/components/upload/HintSelector";
@@ -35,6 +36,19 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
 
   const docs = mesa.docsAgregados as DocRow[];
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
+
+  // Documentos agrupados por FUENTE para el tablero de 3 paneles del Check
+  // (Telegram / massDTE / boleta única). Misma clasificación que el `tipo` del visor.
+  const grupos = useMemo(() => {
+    const telegram: DocRow[] = [], massdte: DocRow[] = [], boleta: DocRow[] = [];
+    for (const d of docs) {
+      const n = d.nombre_archivo ?? "";
+      if ((d.tipo ?? "").startsWith("boleta_")) boleta.push(d);
+      else if (n.startsWith("Telegram ") || n.startsWith("Álbum ")) telegram.push(d);
+      else massdte.push(d);
+    }
+    return { telegram, massdte, boleta };
+  }, [docs]);
 
   // Tx que llega desde Emitir (Por revisar/Bloqueadas): se abre cuando aparece
   // en la mesa. Suscripción a eventos (setState en callback, no en el cuerpo del
@@ -117,6 +131,23 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     ? ((mesa.boletasView as unknown as BoletaEmitida[]).find((b) => b.id === selBoletaId) ?? null)
     : null;
 
+  // Un DocCardList (árbol) por panel, con la lista de su fuente; selección compartida.
+  const renderArbol = (list: DocRow[]) => (
+    <DocCardList
+      docs={list}
+      empresaId={empresaId}
+      tipoEmpresa={empresaTipo}
+      tipoMix={mesa.docTipoMix}
+      docProgress={mesa.docProgress}
+      periodoMode={mesa.workMode}
+      infoByDoc={infoByDoc}
+      stuckByDoc={stuckByDoc}
+      forceTree
+      selectedDocId={selDocId}
+      onSelectDoc={(d) => setSelDocId(d.id)}
+    />
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {/* ── VISOR (permanente, altura fija) ── */}
@@ -195,22 +226,14 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         )}
       </div>
 
-      {/* ── ÁRBOL ── */}
-      <div className="r-scroll" style={{ flex: 1, minHeight: 0 }}>
-        <DocCardList
-          docs={docs}
-          empresaId={empresaId}
-          tipoEmpresa={empresaTipo}
-          tipoMix={mesa.docTipoMix}
-          docProgress={mesa.docProgress}
-          periodoMode={mesa.workMode}
-          infoByDoc={infoByDoc}
-          stuckByDoc={stuckByDoc}
-          forceTree
-          selectedDocId={selDocId}
-          onSelectDoc={(d) => setSelDocId(d.id)}
-        />
-      </div>
+      {/* ── DOCUMENTOS: 3 paneles arrastrables (izq 1 + der 2 apilados), scroll c/u ── */}
+      <DocPanelsBoard
+        panels={[
+          { id: "telegram", titulo: "Telegram", count: grupos.telegram.length, render: () => renderArbol(grupos.telegram) },
+          { id: "massdte", titulo: "massDTE", count: grupos.massdte.length, render: () => renderArbol(grupos.massdte) },
+          { id: "boleta", titulo: "Boleta única", count: grupos.boleta.length, render: () => renderArbol(grupos.boleta) },
+        ]}
+      />
 
       {mappingDocId && typeof document !== "undefined" && createPortal(
         <FieldMapper documentoId={mappingDocId} onClose={() => setMappingDocId(null)} onSaved={() => { setMappingDocId(null); reload(); }} />,
