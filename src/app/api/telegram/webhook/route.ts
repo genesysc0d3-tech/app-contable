@@ -221,15 +221,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "NO_AUTORIZADO" }, { status: 401 });
   }
 
-  // Pasado el control de seguridad, SIEMPRE 200: si Telegram no recibe ok
-  // reintenta el update infinito y duplicaría comprobantes.
+  // Responder 200 AL INSTANTE y procesar en after() (post-respuesta). Telegram entrega
+  // el álbum EN ORDEN y espera el 200 de CADA foto antes de mandar la siguiente; si
+  // tardáramos en responder (plan + inserts + OCR), escalonaría las fotos varios
+  // segundos y la ventana del álbum se asentaría en el hueco → perdería fotos. Con el
+  // 200 inmediato las fotos llegan casi juntas y el creador las junta bien.
+  // SIEMPRE 200 (si Telegram no recibe ok reintenta el update infinito → duplicaría).
+  let update: TelegramUpdate | null = null;
   try {
-    const update = (await request.json()) as TelegramUpdate;
-    if (update?.message) await handleMessage(update.message);
-    else if (update?.callback_query) await handleCallback(update.callback_query);
+    update = (await request.json()) as TelegramUpdate;
   } catch (error) {
-    console.error("[telegram-webhook] error:", error);
+    console.error("[telegram-webhook] parse error:", error);
+    return NextResponse.json({ ok: true });
   }
+  const upd = update;
+  after(async () => {
+    try {
+      if (upd?.message) await handleMessage(upd.message);
+      else if (upd?.callback_query) await handleCallback(upd.callback_query);
+    } catch (error) {
+      console.error("[telegram-webhook] error:", error);
+    }
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -606,17 +619,16 @@ async function handleEmpresaComprobanteCallback(
   if (messageId) await editMessageText(chatId, messageId, text, { html: true });
   await answerCallbackQuery(callbackId, "Empresa confirmada.");
 
-  after(() =>
-    guardarYProcesarComprobanteTelegram({
-      chatId,
-      empresaId: selected.id,
-      fileId: pending.file_id,
-      fileSize: pending.file_size,
-      receivedAt: pending.received_at ?? undefined,
-      pendingToken: token,
-      sendReceivedMessage: false,
-    }),
-  );
+  // Ya estamos dentro del after() del POST → trabajo pesado directo (sin anidar after()).
+  await guardarYProcesarComprobanteTelegram({
+    chatId,
+    empresaId: selected.id,
+    fileId: pending.file_id,
+    fileSize: pending.file_size,
+    receivedAt: pending.received_at ?? undefined,
+    pendingToken: token,
+    sendReceivedMessage: false,
+  });
 }
 
 /** Aplica el valor que el usuario escribió para el campo en edición. */
@@ -886,8 +898,8 @@ async function guardarYProcesarComprobanteTelegram(args: {
       }
     };
 
-    if (args.pendingToken) await run();
-    else after(run);
+    // Dentro del after() del POST → corremos el OCR directo (sin anidar after()).
+    await run();
   } catch (error) {
     console.error("[telegram-webhook] procesar comprobante fallo:", error);
     if (args.pendingToken) {
@@ -952,7 +964,9 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     await say(chatId, "📸 Álbum recibido — leo las fotos y te muestro la boleta en unos segundos.");
   }
 
-  after(async () => {
+  // Ya corremos dentro del after() del POST (el 200 ya salió). Trabajo pesado directo
+  // (IIFE awaited): subir esta foto y, si soy el creador, esperar a las hermanas.
+  await (async () => {
     const svc2 = getServiceClient();
 
     // (TODAS las fotos) descargar + subir ESTA foto a R2 y completar su fila del buffer.
@@ -1009,7 +1023,7 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
       await svc2.from("documentos_subidos").update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar el álbum" } as Json }).eq("id", doc.id);
       await say(chatId, MSG.errorGuardar);
     }
-  });
+  })();
 }
 
 async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number, mediaGroupId?: string) {
