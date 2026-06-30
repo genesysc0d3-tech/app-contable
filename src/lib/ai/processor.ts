@@ -17,6 +17,7 @@ import {
   incrementRuleUsage,
   type ClasificacionRegla,
 } from "./classifier";
+import { recordOpsEvent } from "../ops/events";
 
 /** Extended propuesta with SII traceability fields used internally. */
 type EnrichedPropuesta = PropuestaExtraida & {
@@ -712,9 +713,10 @@ export async function procesarDocumento(
     const batchLooseSeen = new Map<string, { firstIndex: number; count: number }>();
     const personDayKey = new Map<string, number[]>();
 
-    const indicesToKeep: number[] = [];
-    let duplicadosSaltados = 0;
-    const duplicadosDetalle: DuplicadoDetalle[] = [];
+    // indicesToKeep / duplicadosSaltados / duplicadosDetalle se declaran en el scope
+    // EXTERNO (~líneas 622-624); acá se MUTAN (push/++), NO se re-declaran. Antes había
+    // shadowing: el conteo de dedup quedaba en variables internas y nunca llegaba al
+    // progreso_ia final (siempre 0) ni a la reconciliación → pérdida silenciosa.
     const looseOnlyDupCounts = new Map<string, number>();
 
     // Cartola filtrada solo abonos: cuando el cliente ya filtró el extracto
@@ -1012,6 +1014,30 @@ export async function procesarDocumento(
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);
+
+    // Reconciliación: si el dedup descartó una fracción ALTA de los movimientos válidos,
+    // emítelo a ops_events (antes la pérdida era silenciosa). Re-subir el mismo archivo
+    // cae acá legítimamente (todo deduplicado) — es informativo (warn), no un error.
+    const validosFinal = validMovimientos.length;
+    const perdidosDedup = validosFinal - insertados;
+    if (validosFinal > 0 && perdidosDedup > 0 && (insertados === 0 || perdidosDedup / validosFinal >= 0.5)) {
+      await recordOpsEvent({
+        sb: supabase,
+        severity: "warn",
+        source: "ia",
+        eventName: "reconciliacion_dedup",
+        summary: `Dedup alto: de ${validosFinal} movimientos validos se guardaron ${insertados} (${perdidosDedup} omitidos).`,
+        empresaId,
+        resourceType: "documento",
+        resourceId: documentoId,
+        metadata: {
+          extraidos: allMovimientos.length,
+          validos: validosFinal,
+          guardados: insertados,
+          duplicados: duplicadosSaltados,
+        },
+      });
+    }
 
     return { movimientos_total: insertados };
   } catch (err) {
