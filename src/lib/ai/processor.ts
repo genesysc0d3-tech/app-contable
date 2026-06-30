@@ -275,8 +275,8 @@ export async function procesarDocumento(
       (emp.giro ? ` | Giro: ${emp.giro}` : "") +
       ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
       (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +
-      "- Es quien VENDE y RECIBE los pagos: sus montos son INGRESOS (entrada). Si el dinero va HACIA él (PARA/destino/receptor = su razón social, RUT o cualquiera de esos nombres/cuentas) → entrada. Marca salida SOLO si el comprobante dice explícitamente que él pagó/envió.\n" +
-      "- Cada pago recibido (entrada) es una VENTA a boletear: genera SIEMPRE una propuesta (boleta_honorarios / factura_afecta / factura_exenta / compraventa_crypto / transferencia_p2p / operacion_forex según corresponda). NUNCA uses 'no_comercial' para un pago recibido por el contribuyente."
+      "- Identifica al contribuyente por su razón social, RUT o esos nombres/cuentas: dinero HACIA él (PARA/destino) = entrada; dinero DESDE él (él pagó/envió) = salida. Decide la dirección por la EVIDENCIA del comprobante (ver PASO 0), NO por defecto.\n" +
+      "- Un pago recibido (entrada) NORMALMENTE es una venta a boletear: clasifícalo (compraventa_crypto / factura_afecta / factura_exenta / operacion_forex / transferencia_p2p según corresponda). EXCEPCIÓN — usa 'no_comercial' SOLO con señales CLARAS de no-venta: reembolso/devolución, préstamo/mutuo, transferencia entre cuentas PROPIAS del usuario, aporte de capital, o venta de bien personal usado (Art. 17 N°8 LIR). Una SALIDA (él pagó) es compra/gasto y NO genera boleta."
     : "";
 
   await supabase

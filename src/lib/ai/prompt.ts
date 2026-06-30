@@ -11,7 +11,8 @@ Con eso, decide la DIRECCIÓN por EVIDENCIA (NUNCA por defecto):
 - Si la evidencia es genuinamente ambigua, NO asumas que es venta: pon confianza ≤0.5 y deja que el humano decida.
 
 PASO 1 — ¿COMPRA O VENTA? (define si hay boleta)
-- VENTA (plata ENTRA al usuario) → genera boleta. Crypto/forex = EXENTA (DTE 41). Servicio profesional = boleta_honorarios afecta (DTE 39).
+- VENTA (plata ENTRA al usuario) → genera boleta. Crypto/forex/P2P = EXENTA / NO afecta a IVA (DTE 41). Venta o servicio AFECTO a IVA (comercio) = boleta afecta (DTE 39).
+- Honorarios (servicio profesional independiente) = boleta_honorarios, pero se emite por BHE en sii.cl: SIN IVA, con RETENCIÓN (Ley 21.133). NO es DTE 39 ni lleva IVA; queda FUERA de la emisión DTE de la app.
 - COMPRA o GASTO (plata SALE del usuario) → es COSTO, NO genera boleta de venta. Crypto comprado = compraventa_crypto; gasto = gasto_egreso.
 - Una boleta SOLO nace de una VENTA (entrada). JAMÁS de una compra o gasto.
 
@@ -43,7 +44,7 @@ RAZONA paso a paso ANTES de responder (para eso te tomas tu tiempo): (1) ¿cuál
 EJEMPLOS:
 - "Comprar USDT" + "se depositaron 540 USDT en TU cuenta" + "transferencia ENVIADA $500.000 a Ikigai Spa" → COMPRA: el usuario pagó fiat y recibió crypto. movimiento tipo_flujo="salida"; propuesta compraventa_crypto, total 500000, iva 0, contraparte="Ikigai Spa", notas "Compra de USDT: el usuario PAGÓ $500.000 → costo, NO genera boleta. Crypto exento (SII 963-2018)", confianza 0.95.
 - "Vender USDT" / "recibiste $500.000 de Juan" por venta de crypto → VENTA: tipo_flujo="entrada"; compraventa_crypto, boleta EXENTA, contraparte="Juan", notas "Venta de crypto, exenta (SII 963-2018)".
-- "BOLETA HONORARIOS ABOGADO | abono 250000" → VENTA de servicio: boleta_honorarios, afecta IVA 19%, neto 210084, iva 39916.
+- "BOLETA HONORARIOS ABOGADO | abono 250000" → boleta_honorarios: va por BHE (sii.cl), SIN IVA, con retención (Ley 21.133); NO DTE 39, NO IVA → total 250000, monto_neto 250000, iva 0.
 
 FORMATO JSON ESTRICTO (devuelve SOLO el JSON, sin texto alrededor):
 {"movimientos":[{"fecha":"YYYY-MM-DD","descripcion":"qué pasó, con la contraparte","monto":500000,"tipo_flujo":"entrada|salida","origen":"otro","n_documento":null}],"propuestas":[{"movimiento_index":0,"tipo_propuesto":"compraventa_crypto","receptor_nombre":"contraparte o null","receptor_rut":"RUT o null","monto_neto":500000,"iva":0,"total":500000,"confianza":0.9,"notas":"di si es COMPRA o VENTA y por qué, con la norma","spread_compra":null,"spread_venta":null,"spread_ganancia":null}]}
