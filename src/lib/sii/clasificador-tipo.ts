@@ -268,9 +268,14 @@ export function clasificarBoleta(
     if (r.veredicto !== "neutral") votos[r.veredicto] += r.peso;
   }
 
-  // Empresa default: peso alto para que la configuración de la empresa domine.
-  // Con 0.9, solo múltiples keywords en contra pueden superarlo.
-  if (empresa.tipo_contribuyente === "afecto") {
+  // Empresa default: peso de desempate; la config declarada domina los casos comunes.
+  // EXCEPCIÓN (asimétrica): un default "afecto" NO puede tapar una EXENCIÓN POR LEY
+  // (cripto Of. 963/2018, educación/salud/transporte ≥0.80) — son hechos tributarios,
+  // no una preferencia de config (evita boletear cripto como afecta por misconfig).
+  // Al revés sí aplica: un "exento" legítimamente domina una señal "afecta" por
+  // naturaleza (servicio/venta), que es el caso base, no una exención especial.
+  const exencionPorLey = glosa.veredicto === "exenta" && glosa.peso >= 0.8;
+  if (empresa.tipo_contribuyente === "afecto" && !exencionPorLey) {
     votos.afecta += 0.9;
   } else if (empresa.tipo_contribuyente === "exento") {
     votos.exenta += 0.9;

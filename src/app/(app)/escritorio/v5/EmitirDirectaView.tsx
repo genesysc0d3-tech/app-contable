@@ -1302,6 +1302,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               </div>
             </div>
 
+            <div style={{ padding: 11, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text2)", fontSize: 9.5, lineHeight: 1.5 }}>
+              <span className="ed-label">Importante</span>
+              <div style={{ marginTop: 4 }}>
+                La boleta documenta tu <strong style={{ color: "var(--text)" }}>ingreso</strong> ante el SII. <strong style={{ color: "var(--text)" }}>No</strong> es tu declaración de renta: ese impuesto se declara aparte (F22) y se paga sobre la <strong style={{ color: "var(--text)" }}>ganancia</strong> (precio de venta − costo), no sobre el total.
+              </div>
+            </div>
+
             {lockBlocksEmission && activeEmissionLock && (usesSiiLocal || usesSimpleApi) && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 10, lineHeight: 1.45 }}>
                 <span className="ed-label" style={{ color: "#f59e0b" }}>{emissionLock?.business_mode ? "Equipo" : "Emisión en curso"}</span><br />
