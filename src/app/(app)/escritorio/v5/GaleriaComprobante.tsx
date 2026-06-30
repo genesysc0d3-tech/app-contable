@@ -81,7 +81,7 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
     border: "1px solid rgba(255,255,255,.08)", color: "var(--text2)",
   } as const;
   const arrow = {
-    position: "absolute", top: "50%", transform: "translateY(-50%)", width: 38, height: 38,
+    flexShrink: 0, width: 38, height: 38,
     borderRadius: 999, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
     zIndex: 2, ...frost,
   } as const;
@@ -91,7 +91,14 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
 
   return (
     <div ref={rootRef} onClick={(e) => e.stopPropagation()}
-      style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, overflow: "hidden" }}>
+      {/* Flecha anterior: FLANQUEA la imagen (flex), no el borde del stage → queda cerca
+          aunque el comprobante sea vertical y angosto (capturas de celular). */}
+      {multi && (
+        <button onClick={(e) => { e.stopPropagation(); go(-1); }} title="Anterior" aria-label="Imagen anterior" style={arrow}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} draggable={false}
         onDoubleClick={resetZoom}
@@ -99,21 +106,18 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
         onMouseMove={(e) => { if (dragRef.current && zoom > 1) setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y }); }}
         onMouseUp={() => { dragRef.current = null; setDragging(false); }}
         onMouseLeave={() => { dragRef.current = null; setDragging(false); }}
-        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 8, boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
-
-      {/* Contador + flechas: SOLO si es álbum (foto suelta = sin chrome de navegación). */}
+        style={{ maxWidth: multi ? "calc(92% - 100px)" : "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 8, boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
       {multi && (
-        <>
-          <div style={{ position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 2, ...frost, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: ".02em" }}>
-            {cur + 1} / {images.length}
-          </div>
-          <button onClick={(e) => { e.stopPropagation(); go(-1); }} title="Anterior" aria-label="Imagen anterior" style={{ ...arrow, left: 12 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); go(1); }} title="Siguiente" aria-label="Imagen siguiente" style={{ ...arrow, right: 12 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
-          </button>
-        </>
+        <button onClick={(e) => { e.stopPropagation(); go(1); }} title="Siguiente" aria-label="Imagen siguiente" style={arrow}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      )}
+
+      {/* Contador (arriba, centrado) — solo álbum */}
+      {multi && (
+        <div style={{ position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 2, ...frost, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: ".02em" }}>
+          {cur + 1} / {images.length}
+        </div>
       )}
 
       {/* Pill de zoom (siempre): − % + */}
