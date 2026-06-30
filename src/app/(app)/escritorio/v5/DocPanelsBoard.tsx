@@ -60,6 +60,15 @@ export default function DocPanelsBoard({ panels }: { panels: DocPanel[] }) {
 
   const panelFor = (slot: number): DocPanel | undefined => panels.find((p) => p.id === orden[slot]);
 
+  // Tinte de fondo sutil por ORIGEN, para distinguir los paneles de un vistazo (sigue al
+  // panel aunque se reordene). Telegram azul · massDTE verde · Boleta única rojo.
+  const TINTS: Record<string, string> = {
+    telegram: "rgba(91,156,246,0.06)",
+    massdte: "rgba(34,197,94,0.06)",
+    boleta: "rgba(232,85,62,0.06)",
+  };
+  const tintFor = (slot: number): string => TINTS[panelFor(slot)?.id ?? ""] ?? "transparent";
+
   // Contenido de una zona: título mínimo arrastrable (separación fina abajo) + árbol con scroll.
   const renderSlot = (slot: number): ReactNode => {
     const p = panelFor(slot);
@@ -96,15 +105,15 @@ export default function DocPanelsBoard({ panels }: { panels: DocPanel[] }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
       {/* IZQUIERDA: 1 zona, separación fina a la derecha */}
-      <div ref={(el) => { slotRefs.current[0] = el; }} style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)" }}>
+      <div ref={(el) => { slotRefs.current[0] = el; }} style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)", background: tintFor(0) }}>
         {renderSlot(0)}
       </div>
       {/* DERECHA: 2 zonas apiladas, separación fina entre ellas */}
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <div ref={(el) => { slotRefs.current[1] = el; }} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", borderBottom: "1px solid var(--border)" }}>
+        <div ref={(el) => { slotRefs.current[1] = el; }} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", borderBottom: "1px solid var(--border)", background: tintFor(1) }}>
           {renderSlot(1)}
         </div>
-        <div ref={(el) => { slotRefs.current[2] = el; }} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div ref={(el) => { slotRefs.current[2] = el; }} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: tintFor(2) }}>
           {renderSlot(2)}
         </div>
       </div>

@@ -188,7 +188,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7" /></svg>
                     Emitida · en Boletas
                   </span>
-                  <div style={{ marginTop: 8, fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>Esta boleta se emitió directo al SII. Para corregir o anular, emite una Nota de Crédito.</div>
+                  <div style={{ marginTop: 8, fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>Esta boleta se emitió directo al SII. Para corregir o anular, escríbenos a soporte.</div>
                   <button onClick={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))}
                     style={{ marginTop: 10, fontSize: 10, fontWeight: 600, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>Ver en Boletas →</button>
                 </div>
