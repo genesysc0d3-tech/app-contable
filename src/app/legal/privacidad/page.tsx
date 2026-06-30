@@ -1,66 +1,90 @@
 import { LegalSection, LegalShell } from "../LegalShell";
+import { POLICY_VERSION } from "@/lib/legal/version";
 
 export default function PrivacidadPage() {
   return (
     <LegalShell title="Politica de privacidad">
-      <LegalSection title="Que datos tratamos">
+      <p style={{ marginTop: 0, fontSize: 13, fontWeight: 700 }}>Ultima actualizacion: {POLICY_VERSION}</p>
+
+      <LegalSection title="1. Responsable del tratamiento">
         <p>
-          MassDTE trata datos de cuenta, empresa, clientes, documentos subidos,
-          movimientos, comprobantes, configuracion tributaria, pagos, eventos de
-          soporte y eventos operacionales necesarios para prestar el servicio.
+          AlphaCode SpA es responsable del tratamiento de tus datos personales. Durante la beta
+          controlada, el contacto para asuntos de datos personales es el canal de soporte de
+          MassDTE; los datos de identificacion societaria (RUT y domicilio) se publican aqui al
+          completarse la constitucion de la empresa.
         </p>
       </LegalSection>
 
-      <LegalSection title="Para que los usamos">
+      <LegalSection title="2. Que datos tratamos">
         <p>
-          Usamos los datos para operar la cuenta SaaS, procesar cartolas y
-          comprobantes, generar propuestas, emitir o registrar documentos cuando
-          el usuario lo solicita, controlar planes/cupos, cobrar, dar soporte,
-          prevenir abusos y cumplir obligaciones legales o tributarias.
+          Nombre, correo electronico, RUT, y datos bancarios/tributarios que cargas o que se
+          extraen de tus cartolas y comprobantes (movimientos, montos, nombres de contraparte,
+          folios), ademas de datos de uso de la aplicacion. No tratamos datos sensibles (salud,
+          biometricos) ni datos de ninos, ninas y adolescentes de forma intencionada.
         </p>
       </LegalSection>
 
-      <LegalSection title="IA y OCR">
+      <LegalSection title="3. Finalidad y base de licitud">
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          <li>Prestacion del servicio y gestion de tu cuenta &mdash; ejecucion de contrato.</li>
+          <li>Procesar cartolas/comprobantes y proponer documentos tributarios &mdash; ejecucion de contrato.</li>
+          <li>Emision de documentos tributarios electronicos (DTE) &mdash; obligacion legal (DL 825 / Codigo Tributario).</li>
+          <li>Cobro de la suscripcion &mdash; ejecucion de contrato.</li>
+          <li>Seguridad, prevencion de fraude y soporte &mdash; interes legitimo.</li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="4. Con quien compartimos los datos">
         <p>
-          Algunas funciones usan proveedores de OCR/IA para leer documentos y
-          proponer clasificaciones. Enviamos solo el contenido necesario para la
-          tarea y no usamos estos canales para almacenar claves, certificados,
-          cookies, tokens ni documentos crudos en logs operacionales.
+          Usamos proveedores que actuan como encargados: Supabase (base de datos y
+          almacenamiento), Vercel (hosting), OpenCode (lectura por IA de cartolas/comprobantes),
+          Telegram (recepcion de comprobantes) y Mercado Pago (pagos). Algunos procesan datos
+          fuera de Chile (EE.UU., UE, Singapur, Brasil); la transferencia se ampara en las
+          clausulas contractuales modelo aprobadas por el Ministerio de Economia. La lectura por
+          IA se hace con proveedores de retencion cero que no usan tus datos para entrenar
+          modelos. No vendemos datos personales.
         </p>
       </LegalSection>
 
-      <LegalSection title="Proveedores">
+      <LegalSection title="5. Por cuanto tiempo">
         <p>
-          El servicio puede usar Supabase, Vercel, proveedores IA/OCR, Telegram,
-          Mercado Pago y GitHub/CI. Cada proveedor se usa para una finalidad
-          tecnica o contractual especifica. La lista puede cambiar si el
-          producto evoluciona.
+          Conservamos los datos mientras dure la relacion contractual. Los documentos
+          tributarios y la informacion contable se conservan 6 anos (Codigo Tributario). Luego
+          se eliminan o anonimizan.
         </p>
       </LegalSection>
 
-      <LegalSection title="Soporte">
+      <LegalSection title="6. Tus derechos">
         <p>
-          El modo soporte de Genesys es de solo lectura, queda auditado y no debe
-          usarse para modificar documentos, pagos, empresas, usuarios ni
-          emisiones del cliente.
+          Puedes ejercer acceso, rectificacion, supresion, oposicion, portabilidad y bloqueo, y
+          retirar tu consentimiento cuando quieras, a traves del canal de soporte de MassDTE.
+          Respondemos en 30 dias corridos (prorrogables una sola vez por 30 dias mas). La
+          rectificacion, supresion y oposicion son siempre gratuitas; el acceso es gratuito al
+          menos una vez por trimestre.
         </p>
       </LegalSection>
 
-      <LegalSection title="Derechos de titulares">
+      <LegalSection title="7. Decisiones automatizadas (IA y OCR)">
         <p>
-          Puedes solicitar acceso, rectificacion, supresion, oposicion,
-          portabilidad o bloqueo cuando corresponda. Algunas solicitudes pueden
-          limitarse si existen obligaciones tributarias, contables, contractuales,
-          de seguridad o auditoria que obliguen a conservar informacion.
+          Usamos tratamientos automatizados (OCR e IA) para leer y clasificar tus cartolas y
+          comprobantes y proponer documentos. Las propuestas no se ejecutan solas: tu (o un
+          usuario autorizado) revisas y apruebas antes de emitir. Tienes derecho a una
+          explicacion, a intervencion humana y a oponerte.
         </p>
       </LegalSection>
 
-      <LegalSection title="Contacto">
+      <LegalSection title="8. Seguridad">
         <p>
-          Para solicitudes de privacidad o incidentes, usa el canal de soporte
-          acordado con MassDTE durante la beta controlada. Registraremos la
-          solicitud, verificaremos identidad y responderemos con el alcance que
-          permita la ley aplicable.
+          Aplicamos medidas tecnicas y organizativas: TLS/HSTS, cifrado en reposo, hashing de
+          contrasenas, aislamiento por cuenta (RLS) verificado con pruebas, logs de auditoria,
+          secretos fuera del codigo y minimizacion de datos.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="9. Cambios y reclamos">
+        <p>
+          Podemos actualizar esta politica; publicaremos la version vigente con su fecha. Puedes
+          reclamar ante la Agencia de Proteccion de Datos Personales de Chile.
         </p>
       </LegalSection>
     </LegalShell>
