@@ -131,7 +131,7 @@ export default function VisualizarArchivo({
         /* ── Imagen/álbum → lightbox: galería con zoom (+ flechas si es álbum), fondo solo desenfocado ── */
         <>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ width: "min(82vw, 1100px)", height: "80vh", position: "relative", animation: "lbZoom .28s cubic-bezier(.22,1,.36,1)" }}>
+            style={{ width: "min(92vw, 560px)", height: "84vh", position: "relative", animation: "lbZoom .28s cubic-bezier(.22,1,.36,1)" }}>
             <GaleriaComprobante images={albumImgs} alt={fileName} />
           </div>
           <button onClick={onClose}
