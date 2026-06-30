@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useId, useState, useCallback, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -143,17 +143,20 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   }, [ctxReload, router]);
   useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); }, []);
 
-  // Realtime updates
+  // Realtime updates. Canal ÚNICO por instancia: en el Check hay varios DocCardList montados
+  // a la vez (un panel por origen), y Supabase falla si dos comparten el mismo nombre de canal
+  // ("cannot add postgres_changes callbacks after subscribe()").
+  const channelId = useId().replace(/:/g, "");
   useEffect(() => {
     const channel = supabase
-      .channel(`v5-docs-${empresaId}`)
+      .channel(`v5-docs-${empresaId}-${channelId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
         () => { fetchDocsAuto(); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
         () => { fetchDocsAuto(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDocsAuto, empresaId]);
+  }, [fetchDocsAuto, empresaId, channelId]);
 
   // Polling while processing
   const hasProcessing = docs.some(d => d.estado === "procesando" || d.estado === "subido");
