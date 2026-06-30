@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 /**
  * Mock SII: solicitud de Código de Autorización de Folios (CAF).
@@ -30,11 +31,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
   }
 
-  const { empresa_id, tipo_dte, cantidad } = body;
+  const { tipo_dte, cantidad } = body;
 
-  if (!empresa_id || typeof empresa_id !== "string") {
-    return NextResponse.json({ ok: false, error: "EMPRESA_ID_REQUERIDO" }, { status: 400 });
-  }
+  // Auth: el empresa_id se DERIVA del usuario autenticado (no se confía en el body),
+  // para que nadie mintee folios para una empresa ajena.
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  const empresa_id = usuario?.empresa_id ?? null;
+  if (!empresa_id) return NextResponse.json({ ok: false, error: "SIN_EMPRESA" }, { status: 403 });
+
   if (typeof tipo_dte !== "number" || !TIPOS_VALIDOS.includes(tipo_dte as 39 | 41 | 61)) {
     return NextResponse.json(
       { ok: false, error: "TIPO_DTE_INVALIDO", detalle: `Solo se permite ${TIPOS_VALIDOS.join(", ")}` },
