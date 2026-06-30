@@ -229,21 +229,15 @@ export type GateEmision =
   | { ok: true }
   | { ok: false; codigo: "SIN_PLAN" | "TRIAL_TERMINADO" | "CUOTA_AGOTADA"; detalle: string; disponible: number };
 
-/**
- * Gate de la emisión masiva: ¿puede esta empresa emitir `cantidad` boletas
- * masivas ahora? Si el trial no ha partido, la primera emisión lo activa
- * (setea empresas.trial_inicio) y se permite.
- */
-export async function verificarEmisionMasiva(
-  sb: Sb,
-  empresaId: string,
-  cantidad: number,
-  opts?: { devBypass?: boolean; ahora?: Date },
-): Promise<GateEmision> {
-  if (opts?.devBypass) return { ok: true };
-  const ahora = opts?.ahora ?? new Date();
-  const estado = await estadoCuota(sb, empresaId, ahora);
+export type GateDecision = GateEmision | { ok: "activar_trial" };
 
+/**
+ * Lógica PURA del gate de emisión masiva: dado el estado de cuota y la cantidad,
+ * decide permitir, rechazar (con código/detalle) o ACTIVAR el trial (primera emisión
+ * masiva sin trial iniciado). El efecto secundario de activar el trial vive en
+ * verificarEmisionMasiva; acá NO se toca la DB → es testeable a fondo.
+ */
+export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision {
   if (estado.suscripcionActiva) {
     if (cantidad <= estado.disponible) return { ok: true };
     return {
@@ -285,19 +279,7 @@ export async function verificarEmisionMasiva(
         disponible: trial.boletasMax,
       };
     }
-    const { error } = await sb
-      .from("empresas")
-      .update({ trial_inicio: ahora.toISOString() })
-      .eq("id", empresaId);
-    if (error) {
-      return {
-        ok: false,
-        codigo: "SIN_PLAN",
-        detalle: "No se pudo iniciar el período de prueba — intenta de nuevo.",
-        disponible: 0,
-      };
-    }
-    return { ok: true };
+    return { ok: "activar_trial" };
   }
 
   if (!trial.activo) {
@@ -316,4 +298,39 @@ export async function verificarEmisionMasiva(
     detalle: `Te quedan ${estado.disponible} boletas del período de prueba — contrata un plan para ampliar tu cupo.`,
     disponible: estado.disponible,
   };
+}
+
+/**
+ * Gate de la emisión masiva: ¿puede esta empresa emitir `cantidad` boletas
+ * masivas ahora? Si el trial no ha partido, la primera emisión lo activa
+ * (setea empresas.trial_inicio) y se permite.
+ */
+export async function verificarEmisionMasiva(
+  sb: Sb,
+  empresaId: string,
+  cantidad: number,
+  opts?: { devBypass?: boolean; ahora?: Date },
+): Promise<GateEmision> {
+  if (opts?.devBypass) return { ok: true };
+  const ahora = opts?.ahora ?? new Date();
+  const estado = await estadoCuota(sb, empresaId, ahora);
+  const decision = decidirGate(estado, cantidad);
+
+  if (decision.ok === "activar_trial") {
+    const { error } = await sb
+      .from("empresas")
+      .update({ trial_inicio: ahora.toISOString() })
+      .eq("id", empresaId);
+    if (error) {
+      return {
+        ok: false,
+        codigo: "SIN_PLAN",
+        detalle: "No se pudo iniciar el período de prueba — intenta de nuevo.",
+        disponible: 0,
+      };
+    }
+    return { ok: true };
+  }
+
+  return decision;
 }
