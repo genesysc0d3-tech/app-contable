@@ -99,7 +99,7 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
         onMouseMove={(e) => { if (dragRef.current && zoom > 1) setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y }); }}
         onMouseUp={() => { dragRef.current = null; setDragging(false); }}
         onMouseLeave={() => { dragRef.current = null; setDragging(false); }}
-        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 8, boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
+        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 18, border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
 
       {/* Contador + flechas (posición FIJA en los bordes del cuadro → no se mueven al
           cambiar de foto). El cuadro lo achica VisualizarArchivo para que queden cerca. */}
