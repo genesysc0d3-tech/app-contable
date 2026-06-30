@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   destinoDesdeTextoTelegram,
   fechaDesdeTextoTelegram,
+  lineasOcrTelegram,
   origenDesdeTextoTelegram,
   resolverDireccionTelegram,
   resolverMontoTelegram,
@@ -219,4 +220,15 @@ describe("robustez determinística — contraparte por etiquetas amplias", () =>
   for (const [linea, esperado] of receptores) {
     it(`destino (receptor) "${linea}"`, () => expect(destinoDesdeTextoTelegram([linea])).toBe(esperado));
   }
+});
+
+describe("robustez determinística — limpieza de markdown del OCR", () => {
+  it("quita negrita ** / __ y backticks de las líneas (no se cuelan en los campos)", () => {
+    const lines = lineasOcrTelegram("**Recibiste $500.000**\nComprador: __Juan Pérez__\n`RUT 12.345.678-9`");
+    expect(lines).toEqual(["Recibiste $500.000", "Comprador: Juan Pérez", "RUT 12.345.678-9"]);
+  });
+  it("la contraparte queda limpia tras la limpieza de markdown", () => {
+    const [, segunda] = lineasOcrTelegram("Pago recibido\n**Comprador: Carlos Mena Rojas**");
+    expect(origenDesdeTextoTelegram([segunda])).toBe("Carlos Mena Rojas");
+  });
 });

@@ -86,7 +86,13 @@ export function normalizeForTelegramMatch(value: string): string {
 }
 
 export function lineasOcrTelegram(text: string): string[] {
-  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  // El OCR a veces devuelve markdown (negrita **texto** / __texto__, backticks) que se
+  // cuela en los campos extraídos (nombres, montos). Lo quitamos para que las regex de
+  // contraparte/monto/RUT queden limpias.
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\*\*|__/g, "").replace(/`/g, "").trim())
+    .filter(Boolean);
 }
 
 export function contieneIdentidadTelegram(text: string, identidades: string[]): boolean {
