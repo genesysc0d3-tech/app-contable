@@ -176,7 +176,12 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   const rootRef = useRef<HTMLDivElement>(null);
   const [ov, setOv] = useState<{ tipo: string; neto: number; iva: number; total: number } | null>(null);
 
-  const tipo = ov?.tipo ?? propuesta.tipo_propuesto;
+  // Una "boleta"/"factura" con IVA 0 es, de hecho, EXENTA: la mostramos como exenta por
+  // defecto en vez de bloquear pidiendo "elige el tipo" (eso hacía DESAPARECER el botón
+  // Aprobar al (re)seleccionar el doc). El usuario puede cambiar a afecta si corresponde.
+  const tipoBase = propuesta.tipo_propuesto;
+  const defaultTipo = (tipoBase === "boleta" || tipoBase === "factura") && Number(propuesta.iva ?? 0) === 0 ? "exenta" : tipoBase;
+  const tipo = ov?.tipo ?? defaultTipo;
   const isAfecta = tipo === "boleta" || tipo === "factura" || tipo === "factura_afecta";
   const noBoletea = tipo === "gasto_egreso" || tipo === "no_comercial";
   const neto = ov?.neto ?? propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
