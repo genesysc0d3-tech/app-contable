@@ -61,11 +61,11 @@ export default function DocPanelsBoard({ panels }: { panels: DocPanel[] }) {
   const panelFor = (slot: number): DocPanel | undefined => panels.find((p) => p.id === orden[slot]);
 
   // Tinte de fondo sutil por ORIGEN, para distinguir los paneles de un vistazo (sigue al
-  // panel aunque se reordene). Telegram azul · massDTE verde · Boleta única rojo.
+  // panel aunque se reordene). Telegram azul · massDTE rojo · Boleta única verde.
   const TINTS: Record<string, string> = {
-    telegram: "rgba(91,156,246,0.06)",
-    massdte: "rgba(34,197,94,0.06)",
-    boleta: "rgba(232,85,62,0.06)",
+    telegram: "rgba(91,156,246,0.035)",
+    massdte: "rgba(232,85,62,0.035)",
+    boleta: "rgba(34,197,94,0.035)",
   };
   const tintFor = (slot: number): string => TINTS[panelFor(slot)?.id ?? ""] ?? "transparent";
 
