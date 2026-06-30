@@ -143,6 +143,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       infoByDoc={infoByDoc}
       stuckByDoc={stuckByDoc}
       forceTree
+      bare
       selectedDocId={selDocId}
       onSelectDoc={(d) => setSelDocId(d.id)}
     />
@@ -229,9 +230,9 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       {/* ── DOCUMENTOS: 3 paneles arrastrables (izq 1 + der 2 apilados), scroll c/u ── */}
       <DocPanelsBoard
         panels={[
-          { id: "telegram", titulo: "Telegram", count: grupos.telegram.length, render: () => renderArbol(grupos.telegram) },
-          { id: "massdte", titulo: "massDTE", count: grupos.massdte.length, render: () => renderArbol(grupos.massdte) },
-          { id: "boleta", titulo: "Boleta única", count: grupos.boleta.length, render: () => renderArbol(grupos.boleta) },
+          { id: "telegram", titulo: "Telegram", sub: "comprobantes", count: grupos.telegram.length, render: () => renderArbol(grupos.telegram) },
+          { id: "massdte", titulo: "massDTE", sub: "cartolas", count: grupos.massdte.length, render: () => renderArbol(grupos.massdte) },
+          { id: "boleta", titulo: "Boleta única", sub: "emisión directa", count: grupos.boleta.length, render: () => renderArbol(grupos.boleta) },
         ]}
       />
 

@@ -86,7 +86,7 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc, bare }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
@@ -99,6 +99,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   onSelectDoc?: (doc: DocRaw) => void;
   selectedDocId?: string | null;
   forceTree?: boolean;
+  // Modo panel del tablero del Check: cada panel ya rotula su origen, así que se omiten
+  // el "Agregados recientes" y el encabezado de grupo por origen (redundantes).
+  bare?: boolean;
 }) {
   const router = useRouter();
   const ctxReload = useMesaReload();
@@ -175,7 +178,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   return (
     <>
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
-        <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>
+        {!bare && <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>}
         {!forceTree && (
           <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
             {(["grid","list"] as const).map((v) => (
@@ -420,12 +423,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
               `}</style>
               {grupos.filter((g) => byOrigen[g.key].length > 0).map((g) => (
                 <div key={g.key} className="agg-fgrp">
-                  <div className="agg-fh">
-                    {g.icon}
-                    <span className="lbl">{g.label}</span>
-                    <span className="sub">{g.sub}</span>
-                    <span className="cnt">{byOrigen[g.key].length}</span>
-                  </div>
+                  {!bare && (
+                    <div className="agg-fh">
+                      {g.icon}
+                      <span className="lbl">{g.label}</span>
+                      <span className="sub">{g.sub}</span>
+                      <span className="cnt">{byOrigen[g.key].length}</span>
+                    </div>
+                  )}
                   {byOrigen[g.key].map((doc) => {
                     const c = st[doc.estado] ?? "#9ca3af";
                     const hollow = doc.estado === "subido";

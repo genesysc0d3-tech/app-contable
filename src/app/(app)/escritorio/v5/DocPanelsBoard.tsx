@@ -12,6 +12,7 @@ import { motion } from "motion/react";
 export interface DocPanel {
   id: string;
   titulo: string;
+  sub?: string;
   count: number;
   render: () => ReactNode;
 }
@@ -79,8 +80,9 @@ export default function DocPanelsBoard({ panels }: { panels: DocPanel[] }) {
             <circle cx="2" cy="5.5" r="1" /><circle cx="6" cy="5.5" r="1" />
             <circle cx="2" cy="9" r="1" /><circle cx="6" cy="9" r="1" />
           </svg>
-          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text3)" }}>{p?.titulo ?? "—"}</span>
-          <span style={{ fontSize: 9, color: "var(--text3)" }}>· {p?.count ?? 0}</span>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".02em", color: "var(--text)" }}>{p?.titulo ?? "—"}</span>
+          {p?.sub && <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600 }}>{p.sub}</span>}
+          <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text3)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{p?.count ?? 0}</span>
         </motion.div>
         <div className="r-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
           {p && p.count > 0
