@@ -24,6 +24,8 @@ import {
   origenDesdeTextoTelegram,
   resolverDireccionTelegram,
   resolverMontoTelegram,
+  rutDesdeTextoTelegram,
+  tipoVentaDesdeTextoTelegram,
 } from "@/lib/telegram/deterministico";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
@@ -105,6 +107,9 @@ type ParsedComprobanteTelegram = {
   fechaVisible: boolean;
   monto: number;
   tipo_flujo: "entrada" | "salida";
+  contraparte_nombre: string | null;
+  contraparte_rut: string | null;
+  tipo_venta: "compraventa_crypto" | "operacion_forex" | null;
   descripcion: string;
   n_documento: string | null;
   diagnostico: Record<string, Json>;
@@ -175,9 +180,16 @@ async function parseComprobanteTelegramDeterministico(
   }
 
   const fecha = fechaDesdeTextoTelegram(lines, fechaFallback);
-  const contraparte = direccion.tipo_flujo === "entrada"
-    ? nombreContraparteTelegram(origen || "cliente")
-    : nombreContraparteTelegram(destino || "destinatario");
+  const fuenteContraparte = direccion.tipo_flujo === "entrada" ? origen : destino;
+  const contraparte = nombreContraparteTelegram(fuenteContraparte || (direccion.tipo_flujo === "entrada" ? "cliente" : "destinatario"));
+  // Contraparte REAL = nombre extraído de una etiqueta (no el fallback genérico ni un número).
+  const contraparteReal = fuenteContraparte && contraparte && !/^(cliente|destinatario)$/i.test(contraparte) && /[a-záéíóúñ]/i.test(contraparte) ? contraparte : null;
+  // RUT de la contraparte, descartando el de la propia empresa.
+  const rutCrudo = rutDesdeTextoTelegram(text);
+  const rutContraparte = rutCrudo && !identidades.some((id) => id.replace(/[.\-\s]/g, "") === rutCrudo.replace(/[.\-\s]/g, "")) ? rutCrudo : null;
+  // Tipo de venta (crypto/forex = exenta por ley) solo para entradas (ventas).
+  const tipoVenta = direccion.tipo_flujo === "entrada" ? tipoVentaDesdeTextoTelegram(text) : null;
+  const etiqueta = tipoVenta === "compraventa_crypto" ? "Venta de cripto" : tipoVenta === "operacion_forex" ? "Venta de divisa" : "Transferencia recibida";
   return {
     kind: "parsed",
     parsed: {
@@ -185,8 +197,11 @@ async function parseComprobanteTelegramDeterministico(
       fechaVisible: fecha.visible,
       monto: monto.decision.monto,
       tipo_flujo: direccion.tipo_flujo,
+      contraparte_nombre: contraparteReal,
+      contraparte_rut: rutContraparte,
+      tipo_venta: tipoVenta,
       descripcion: direccion.tipo_flujo === "entrada"
-        ? `Transferencia recibida de ${contraparte} por $${monto.decision.monto.toLocaleString("es-CL")}`
+        ? `${etiqueta} de ${contraparte} por $${monto.decision.monto.toLocaleString("es-CL")}`
         : `Transferencia a ${contraparte} por $${monto.decision.monto.toLocaleString("es-CL")}`,
       n_documento: extraerCodigoTransaccion(text),
       diagnostico: {
@@ -283,18 +298,27 @@ async function procesarComprobanteDeterministico(
       .select("tipo_contribuyente")
       .eq("id", empresaId)
       .maybeSingle();
-    const exento = emp?.tipo_contribuyente === "exento";
+    // Crypto/forex = EXENTA por ley (Of. 963/2018), aunque la empresa sea afecta.
+    const exentoPorLey = parsed.tipo_venta === "compraventa_crypto" || parsed.tipo_venta === "operacion_forex";
+    const exento = exentoPorLey || emp?.tipo_contribuyente === "exento";
     const neto = exento ? parsed.monto : Math.round(parsed.monto / 1.19);
+    const notaTipo = parsed.tipo_venta === "compraventa_crypto"
+      ? "Venta de cripto (exenta, Of. 963/2018)"
+      : parsed.tipo_venta === "operacion_forex"
+      ? "Venta de divisa (exenta)"
+      : "Venta";
     const { error: propError } = await svc.from("propuestas_ia").insert({
       empresa_id: empresaId,
       movimiento_id: mov.id,
       estado: "pendiente",
-      tipo_propuesto: "boleta",
+      tipo_propuesto: parsed.tipo_venta ?? "boleta",
+      receptor_nombre: parsed.contraparte_nombre,
+      receptor_rut: parsed.contraparte_rut,
       total: parsed.monto,
       monto_neto: neto,
       iva: exento ? 0 : parsed.monto - neto,
       confianza: 0.92,
-      notas: "Venta detectada por parser determinístico de Telegram",
+      notas: `${notaTipo} detectada por parser determinístico de Telegram${parsed.contraparte_nombre ? ` · contraparte ${parsed.contraparte_nombre}` : ""}`,
       fuente_clasificacion: "telegram_deterministico",
     });
     if (propError) {

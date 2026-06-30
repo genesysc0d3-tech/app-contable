@@ -426,18 +426,41 @@ function bloqueDespuesDe(lines: string[], label: RegExp): string {
 
 export function destinoDesdeTextoTelegram(lines: string[]): string {
   for (const line of lines) {
-    const inline = line.match(/^(?:para|destinatario|beneficiario|a la cuenta|cuenta destino)\s*:?[\s-]*(.+)$/i);
+    const inline = line.match(/^(?:para|destinatario|beneficiario|vendedor|proveedor|acreditad[oa] a|abonad[oa] a|hacia|recibe)\s*:?[\s-]*(.+)$/i);
     if (inline?.[1] && !MONTO_LABEL_RE.test(inline[1])) return inline[1].trim();
   }
-  return bloqueDespuesDe(lines, /^(?:para|destinatario|beneficiario|a la cuenta|cuenta destino)$/i);
+  return bloqueDespuesDe(lines, /^(?:para|destinatario|beneficiario|vendedor|proveedor|a la cuenta|cuenta destino)$/i);
 }
 
 export function origenDesdeTextoTelegram(lines: string[]): string {
+  // El "origen" en una venta (entrada) es quien PAGA: en comprobantes P2P viene como
+  // Comprador / Cliente / Pagador, no solo De / Remitente.
   for (const line of lines) {
-    const inline = line.match(/^(?:de|desde|origen|remitente|titular)\s*:?[\s-]*(.+)$/i);
+    const inline = line.match(/^(?:de|desde|origen|remitente|titular|comprador|cliente|pagador)\s*:?[\s-]*(.+)$/i);
     if (inline?.[1] && !/transferenc/i.test(inline[1])) return inline[1].trim();
   }
-  return bloqueDespuesDe(lines, /^(?:de|desde|origen|remitente|titular)$/i);
+  return bloqueDespuesDe(lines, /^(?:de|desde|origen|remitente|titular|comprador|cliente|pagador)$/i);
+}
+
+/** Primer RUT chileno presente en el texto (12.345.678-9 o 12345678-9). */
+export function rutDesdeTextoTelegram(text: string): string | null {
+  const m = text.match(/\b(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])\b/);
+  return m ? m[1] : null;
+}
+
+// Keywords AMPLIOS (monedas, exchanges, P2P) para detectar tipo de venta sin IA.
+// \b para evitar falsos positivos (p.ej. no matchear "usdt" dentro de otra palabra).
+const CRYPTO_RE = /\b(usdt|usdc|busd|tusd|dai|btc|xbt|bitcoin|satoshi|eth|ethereum|weth|bnb|solana|cardano|xrp|ripple|ltc|litecoin|doge|dogecoin|matic|polygon|polkadot|trx|tron|avax|shib|tether|stablecoin|cripto(?:moneda|monedas|activo|activos)?|crypto(?:currency)?|p2p|binance|buda|orionx|cryptomkt|crypto\s?market|okx|kucoin|bybit|coinbase|kraken|bitget|mexc|huobi|htx|lemon(?:cash)?|fiwind|belo|airtm|paxful|bitso|vita\s?wallet)\b/i;
+const FOREX_RE = /\b(usd|us\$|u\$s|eur|gbp|d[oó]lar(?:es)?|euros?|libras?\s+esterlinas?|divisas?|forex|moneda\s+extranjera|cambio\s+de\s+divisas?)\b/i;
+
+/**
+ * Tipo de venta por keywords del comprobante (determinístico, sin IA).
+ * crypto/forex son EXENTAS por ley (Of. 963/2018); null = boleta genérica.
+ */
+export function tipoVentaDesdeTextoTelegram(text: string): "compraventa_crypto" | "operacion_forex" | null {
+  if (CRYPTO_RE.test(text)) return "compraventa_crypto";
+  if (FOREX_RE.test(text)) return "operacion_forex";
+  return null;
 }
 
 export function nombreContraparteTelegram(text: string): string {
