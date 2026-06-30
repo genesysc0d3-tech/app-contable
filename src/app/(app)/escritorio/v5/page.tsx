@@ -171,7 +171,7 @@ body{font-family:'DM Sans',sans-serif}
 :root{--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--muted-light:#888}
 .ep-glow-card{transition:box-shadow 600ms cubic-bezier(0.22,1,0.36,1)}
 .ep-glow-card:hover{box-shadow:0 0 40px -8px rgba(232,85,62,0.40)!important}
-.app{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,7.9fr);max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
+.app{display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,7.7fr);max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
 /* Móvil/tablet: una sola columna apilada con scroll vertical; el panel de
    trabajo (tabs) conserva una altura útil propia. */
 @media (max-width: 900px){
