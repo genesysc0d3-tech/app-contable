@@ -177,7 +177,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   const [ov, setOv] = useState<{ tipo: string; neto: number; iva: number; total: number } | null>(null);
 
   const tipo = ov?.tipo ?? propuesta.tipo_propuesto;
-  const isAfecta = tipo === "boleta" || tipo === "factura";
+  const isAfecta = tipo === "boleta" || tipo === "factura" || tipo === "factura_afecta";
   const noBoletea = tipo === "gasto_egreso" || tipo === "no_comercial";
   const neto = ov?.neto ?? propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
   const iva = ov?.iva ?? propuesta.iva ?? Math.round(neto * 0.19);

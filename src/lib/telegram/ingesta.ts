@@ -311,7 +311,7 @@ async function procesarComprobanteDeterministico(
       empresa_id: empresaId,
       movimiento_id: mov.id,
       estado: "pendiente",
-      tipo_propuesto: parsed.tipo_venta ?? "boleta",
+      tipo_propuesto: parsed.tipo_venta ?? (exento ? "exenta" : "boleta"),
       receptor_nombre: parsed.contraparte_nombre,
       receptor_rut: parsed.contraparte_rut,
       total: parsed.monto,
