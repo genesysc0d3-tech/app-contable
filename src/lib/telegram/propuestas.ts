@@ -518,12 +518,12 @@ export function mensajeMovimientoSinBoleta(m: MovimientoBot): { text: string; ke
   if (m.tipo_flujo === "salida") {
     return {
       text:
-        "↪️ <b>Detecté una transferencia enviada.</b>\n" +
+        "🛒 <b>Esto parece una COMPRA</b> (plata que enviaste), no una venta.\n" +
         `• Monto: <b>${CLP(m.monto)}</b>\n` +
         `• Fecha: ${esc(m.fecha)}\n` +
         `• Detalle: ${esc(m.descripcion)}\n\n` +
-        "No genero boleta porque no parece un pago recibido por tu empresa.\n\n" +
-        "Si no corresponde a una venta, toca <b>No es ingreso</b>. Si realmente fue un pago recibido, toca <b>Revisar como ingreso</b>.",
+        "massDTE es <b>solo de ventas</b>: una compra no genera boleta.\n" +
+        "¿Esto es un <b>ingreso (venta)</b> tuyo, o una <b>compra</b>?",
       keyboard: kbMovimientoSinBoleta(m.id),
     };
   }
@@ -533,6 +533,30 @@ export function mensajeMovimientoSinBoleta(m: MovimientoBot): { text: string; ke
       `• Monto: <b>${CLP(m.monto)}</b>\n` +
       `• Fecha: ${esc(m.fecha)}\n` +
       `• Detalle: ${esc(m.descripcion)}`,
+  };
+}
+
+// Confirmación "¿seguro que es venta?" mostrando el PORQUÉ (la descripción leída),
+// antes de convertir una salida en boleta. Sales-only: pensar dos veces antes de emitir.
+export function mensajeConfirmarIngreso(m: MovimientoBot): { text: string; keyboard: InlineKeyboardMarkup } {
+  return {
+    text:
+      "⚠️ <b>¿Seguro que es una VENTA?</b>\n\n" +
+      "Lo leí como <b>compra</b> (plata que enviaste):\n" +
+      `<i>${esc(m.descripcion)}</i>\n\n` +
+      "Seguí solo si de verdad fue un <b>pago que recibiste</b> por una venta. Ahí te creo la boleta.",
+    keyboard: kbConfirmarIngreso(m.id),
+  };
+}
+
+// Confirmación "¿seguro que es compra?" antes de descartarla (no emite boleta).
+export function mensajeConfirmarCompra(m: MovimientoBot): { text: string; keyboard: InlineKeyboardMarkup } {
+  return {
+    text:
+      "🛒 <b>¿Seguro que es una compra?</b>\n\n" +
+      `<i>${esc(m.descripcion)}</i>\n\n` +
+      "Si es compra la <b>descarto</b> del flujo — massDTE es solo de ventas, no emite boleta.",
+    keyboard: kbConfirmarCompra(m.id),
   };
 }
 
@@ -578,17 +602,27 @@ export function kbCampos(propId: string): InlineKeyboardMarkup {
   ] };
 }
 
+// Ask inicial sobre una salida: ¿ingreso (venta) o compra? (sales-only).
 export function kbMovimientoSinBoleta(movId: string): InlineKeyboardMarkup {
   return { inline_keyboard: [
-    [{ text: "🔎 Revisar como ingreso", callback_data: `mv:${movId}:i1` }],
-    [{ text: "🚫 No es ingreso", callback_data: `mv:${movId}:d` }],
+    [{ text: "💰 Es ingreso (venta)", callback_data: `mv:${movId}:i1` }],
+    [{ text: "🛒 Es compra", callback_data: `mv:${movId}:c1` }],
   ] };
 }
 
+// Override a ingreso → doble confirmación (muestra el porqué antes de emitir).
 export function kbConfirmarIngreso(movId: string): InlineKeyboardMarkup {
   return { inline_keyboard: [
-    [{ text: "Sí, crear boleta pendiente", callback_data: `mv:${movId}:i2` }],
-    [{ text: "No, ignorar", callback_data: `mv:${movId}:d` }],
+    [{ text: "✅ Sí, es venta — emitir boleta", callback_data: `mv:${movId}:i2` }],
+    [{ text: "↩︎ No, volver", callback_data: `mv:${movId}:bk` }],
+  ] };
+}
+
+// Confirmar compra → doble confirmación antes de descartar.
+export function kbConfirmarCompra(movId: string): InlineKeyboardMarkup {
+  return { inline_keyboard: [
+    [{ text: "✓ Sí, es compra — descartar", callback_data: `mv:${movId}:c2` }],
+    [{ text: "↩︎ No, volver", callback_data: `mv:${movId}:bk` }],
   ] };
 }
 

@@ -30,7 +30,8 @@ import {
   mensajeMovimientoSinBoleta,
   mensajeDuplicado,
   kbCampos,
-  kbConfirmarIngreso,
+  mensajeConfirmarIngreso,
+  mensajeConfirmarCompra,
   kbConfirmarDuplicado,
   labelCampo,
   valorActual,
@@ -419,25 +420,30 @@ async function handleMovimientoCallback(
     return;
   }
 
-  if (accion === "d") {
+  if (accion === "d" || accion === "c2") {
     const status = await ignorarMovimientoSalidaBot(movId, empresaId, chatId);
     const text = status === "con_propuesta"
       ? "⚠️ Esta operación ya tiene una propuesta asociada. Revisala en Agregados."
-      : "🚫 <b>No es ingreso.</b>\nNo generé boleta y quité esta transferencia del flujo contable.";
+      : "🛒 <b>Marcada como compra.</b>\nNo emití boleta y la quité del flujo (massDTE es solo de ventas).";
     const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true }) : false;
     if (!edited) await sendMessage(chatId, text, { html: true });
     await markMensajeEstado(chatId, messageId, "descartado");
-    await answerCallbackQuery(callbackId, status === "ignorado" ? "Ignorado" : "Ya estaba resuelto");
+    await answerCallbackQuery(callbackId, status === "ignorado" ? "Descartada" : "Ya estaba resuelto");
     return;
   }
 
   if (accion === "i1") {
-    const text =
-      "⚠️ <b>Confirmá esto antes de crear la boleta.</b>\n\n" +
-      "Este comprobante parece una transferencia enviada. Por defecto no genera boleta.\n\n" +
-      "Solo seguí si realmente fue un pago recibido por tu empresa. ¿Confirmás?";
-    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbConfirmarIngreso(movId) }) : false;
-    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbConfirmarIngreso(movId) });
+    const { text, keyboard } = mensajeConfirmarIngreso(mov);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "c1") {
+    const { text, keyboard } = mensajeConfirmarCompra(mov);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
     await answerCallbackQuery(callbackId);
     return;
   }
