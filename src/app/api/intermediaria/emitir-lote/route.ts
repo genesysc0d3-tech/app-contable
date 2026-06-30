@@ -261,8 +261,9 @@ export async function POST(request: Request) {
       monto: total,
     }];
 
-    // Tipo DTE: 39 (afecta) por default, 41 (exenta) si la UI lo override
-    const tipoDte = (tipoPorId.get(pid) ?? 39) as 39 | 41;
+    // Tipo DTE: lo decide la CLASIFICACIÓN (clasif.tipo_dte → 41 exenta cripto/forex,
+    // 39 afecta), salvo override explícito de la UI. Fallback 39 solo si no hay nada.
+    const tipoDte = (tipoPorId.get(pid) ?? clasif.tipo_dte ?? 39) as 39 | 41;
     const proveedorEfectivo = providerForTipoDte(emisionConfig, tipoDte);
 
     const validation = validarBoleta({
