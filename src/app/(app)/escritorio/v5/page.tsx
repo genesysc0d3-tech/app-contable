@@ -343,12 +343,25 @@ body{font-family:'DM Sans',sans-serif}
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:2}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} size={38} maxWidth={180} /></div>}
-          actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:132,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2}}><HeaderActionsRow /></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} size={38} maxWidth={180} /></span></div>}
+          actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:132,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
 
-            {/* EMITIR PANEL */}
+            {/* REGISTROS — arriba de TODAS las cards (actividad + ventas) */}
+            <RegistrosToggleCard
+              esRcvExento={esRcvExento}
+              ventasDocs={mesaInicial.ventasDocs}
+              ventasTotal={mesaInicial.ventasTotal}
+              actividadCount={mesaInicial.actividadItems.length}
+              actividadUltimo={mesaInicial.actividadItems[0]?.descripcion}
+              periodo={mesaInicial.calendar.selectedDateLabel}
+            />
+
+            {/* EMITIR PANEL — massDTE arriba de boleta única */}
+             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
+            </div></GlowWrap>
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction
                 empresaTipo={usuario.empresas.tipo_contribuyente}
@@ -363,19 +376,6 @@ body{font-family:'DM Sans',sans-serif}
                 readOnlyReason={supportReadOnlyReason}
               />
             </div></GlowWrap>
-             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
-            </div></GlowWrap>
-
-            {/* REGISTROS — card única con toggle Ventas / Actividad (2/3 ↔ 1/3) */}
-            <RegistrosToggleCard
-              esRcvExento={esRcvExento}
-              ventasDocs={mesaInicial.ventasDocs}
-              ventasTotal={mesaInicial.ventasTotal}
-              actividadCount={mesaInicial.actividadItems.length}
-              actividadUltimo={mesaInicial.actividadItems[0]?.descripcion}
-              periodo={mesaInicial.calendar.selectedDateLabel}
-            />
             <div style={{display:"none"}}><RCVButton /></div>
             {equipoBusiness.ok && equipoBusiness.equipo && (
               <TeamBusinessPanel

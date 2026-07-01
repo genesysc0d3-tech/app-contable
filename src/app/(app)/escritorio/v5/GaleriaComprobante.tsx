@@ -26,7 +26,12 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
   const zoomRef = useRef(1);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [loaded, setLoaded] = useState(false); // "Cargando imagen…" hasta que la imagen carga
   const rootRef = useRef<HTMLDivElement>(null);
+  // Reset del "Cargando…" al cambiar de foto: ajuste de estado EN RENDER comparando con el
+  // valor previo (patrón React), no en un efecto — evita el cascading-render que marca el linter.
+  const [prevCur, setPrevCur] = useState(cur);
+  if (prevCur !== cur) { setPrevCur(cur); setLoaded(false); }
 
   // Fija el zoom (clamp 1→4) y recentra al volver a 1×. Siempre desde un handler
   // (click/rueda/doble-click/navegación), nunca desde un efecto.
@@ -75,6 +80,8 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
     return () => el.removeEventListener("wheel", onWheel);
   }, [onZoom]);
 
+  // (El reset de "Cargando…" al cambiar de foto se hace en render, más arriba — sin efecto.)
+
   // Estética frosted, alineada con el pill de zoom del editor y el botón Cerrar del visor.
   const frost = {
     background: "rgba(20,20,26,.65)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
@@ -94,12 +101,13 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
       style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} draggable={false}
+        onLoad={() => setLoaded(true)}
         onDoubleClick={resetZoom}
         onMouseDown={(e) => { dragRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }; setDragging(true); }}
         onMouseMove={(e) => { if (dragRef.current && zoom > 1) setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y }); }}
         onMouseUp={() => { dragRef.current = null; setDragging(false); }}
         onMouseLeave={() => { dragRef.current = null; setDragging(false); }}
-        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 20, border: "2px solid rgba(255,255,255,.35)", boxShadow: "0 0 0 1px rgba(0,0,0,.4), 0 18px 50px rgba(0,0,0,.55)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
+        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 18, border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
 
       {/* Contador + flechas (posición FIJA en los bordes del cuadro → no se mueven al
           cambiar de foto). El cuadro lo achica VisualizarArchivo para que queden cerca. */}
@@ -123,6 +131,13 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
         <span style={{ minWidth: 34, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom * 100)}%</span>
         <button onClick={(e) => { e.stopPropagation(); onZoom(0.3); }} aria-label="Acercar" style={{ width: 22, height: 22, border: "none", background: "transparent", color: "var(--text2)", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>+</button>
       </div>
+
+      {/* "Cargando imagen…" tapa el área hasta que la imagen carga (sin salto/pop-in). */}
+      {!loaded && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 4, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", color: "var(--text2)", fontSize: 12, fontWeight: 600 }}>
+          Cargando imagen…
+        </div>
+      )}
     </div>
   );
 }
