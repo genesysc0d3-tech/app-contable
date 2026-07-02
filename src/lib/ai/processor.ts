@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
+import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
 import { validarRut, formatRut } from "../rut";
 import {
   loadReglas,
@@ -32,6 +33,13 @@ const MAX_RETRIES = 3;
 const MAX_CONCURRENT = 7;
 const DB_BATCH_SIZE = 100;
 const MIN_CONFIANZA = 0.6;
+// Pre-stageo: una tx nace "listo" (staged, NO emitido) solo si supera este umbral Y
+// viene de una regla REAL (regla_id presente). El clasificador IA (OpenCode) está
+// capado en MISTRAL_MAX_CONFIANZA (0.75, nombre legacy) y el atajo "template" (asume boleta @0.95 sin match)
+// NO lleva regla_id → ninguno de esos auto-stagea: quedan "pendiente" para que el
+// usuario los prepare con un gesto de bulk deliberado. El Aprobar atómico
+// (aprobarCartola) sigue siendo el único gatillo hacia Emitir. Banda ALTA=0.85 del visor.
+const AUTO_STAGE_THRESHOLD = 0.85;
 
 /** Sanitize a value that should be numeric but Mistral may return as "null" string */
 function toNum(val: unknown): number | null {
@@ -42,7 +50,7 @@ function toNum(val: unknown): number | null {
 
 /** Normalize tipo_propuesto to valid check constraint values */
 const VALID_TIPOS = new Set([
-  "boleta", "factura", "gasto", "registro_crypto", "ignorar",
+  "boleta", "factura", "exenta", "gasto", "registro_crypto", "ignorar",
   "boleta_honorarios", "factura_afecta", "factura_exenta", "compraventa_crypto",
   "transferencia_p2p", "operacion_forex", "gasto_egreso", "no_comercial",
   "impuesto", "cotizacion_previsional", "remuneracion", "arriendo",
@@ -345,7 +353,11 @@ export async function procesarDocumento(
             iva: 0,
             total: nc.movimiento.monto,
             confianza: 0.95,
-            notas: "Plantilla boleta — clasificación automática",
+            // notas = detalle/glosa EDITABLE por el humano (máxima precedencia en la
+            // boleta). NO meter marcadores internos acá: "clasificación automática"
+            // ya vive en __fuente="regla_global". Sin edición, la glosa cae a la
+            // glosa común de la cartola o a la del banco (ver armar-boleta.ts).
+            notas: null,
             spread_compra: null,
             spread_venta: null,
             spread_ganancia: null,
@@ -949,23 +961,36 @@ export async function procesarDocumento(
           const tipoContrib = getClienteTipo(clienteCache, clienteId);
           const esExento = tipoContrib === "exento";
           const confianza = toNum(p.confianza);
-          const confianzaLow = confianza != null && confianza < MIN_CONFIANZA;
           const enriched = p as EnrichedPropuesta;
           const total = toNum(p.total);
+          // Empresa exenta: un contribuyente exento no emite DTE afecto → se normaliza
+          // la venta afecta (boleta/factura) a su equivalente exento (+ iva 0,
+          // monto_neto = total). Punto único que corrige los 3 carriles (atajo template
+          // + IA/OpenCode + reglas). No toca gasto/no_comercial ni los ya exentos.
+          const tipoBase = normTipo(p.tipo_propuesto);
+          const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp?.tipo_contribuyente);
+          const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp?.tipo_contribuyente);
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
-            tipo_propuesto: normTipo(p.tipo_propuesto),
+            tipo_propuesto: tipoNorm,
             receptor_nombre: p.receptor_nombre || null,
             receptor_rut: p.receptor_rut || null,
-            monto_neto: esExento ? total : toNum(p.monto_neto),
-            iva: esExento ? 0 : toNum(p.iva),
+            monto_neto: exentoFinal ? total : toNum(p.monto_neto),
+            iva: exentoFinal ? 0 : toNum(p.iva),
             total,
             confianza,
-            notas: confianzaLow
-              ? `[REVISION MANUAL - confianza ${Math.round((confianza ?? 0) * 100)}%] ${p.notas || ""}`.trim()
-              : p.notas || null,
-            estado: "pendiente" as const,
+            // notas = detalle/glosa del humano; NO marcadores internos (se filtran a la
+            // glosa de la boleta vía armar-boleta.ts). La baja confianza ya vive en la
+            // columna `confianza` — la UI la marca desde ahí, no desde notas.
+            notas: p.notas || null,
+            // Auto-stage a "listo" SOLO con clasificación real por regla (regla_id).
+            // El atajo template (boleta @0.95 sin match) nace "pendiente": el usuario
+            // hace un gesto de bulk antes de que quede a un click del SII.
+            estado:
+              confianza != null && confianza >= AUTO_STAGE_THRESHOLD && enriched.__regla_id != null
+                ? ("listo" as const)
+                : ("pendiente" as const),
             spread_compra: toNum(p.spread_compra),
             spread_venta: toNum(p.spread_venta),
             spread_ganancia: toNum(p.spread_ganancia),

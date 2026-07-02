@@ -53,6 +53,9 @@ export async function getAdapterByFingerprint(
 
 export async function upsertManualAdapter(args: {
   fingerprint: string;
+  /** Empresa que crea/edita el adapter. Anti-poison cross-tenant: solo la empresa
+   *  dueña puede sobrescribir un adapter existente (first-owner-wins). */
+  empresaId: string;
   nombre?: string;
   tipo_doc?: string;
   config: AdapterConfig;
@@ -62,11 +65,16 @@ export async function upsertManualAdapter(args: {
     if (!sb) return null;
     const existing = await sb
       .from("parser_adapters")
-      .select("id")
+      .select("id, creado_por_empresa_id")
       .eq("fingerprint", args.fingerprint)
       .maybeSingle();
 
     if (existing.data?.id) {
+      // Un adapter de OTRA empresa (o heurístico/global, dueño null) NO se sobrescribe
+      // — se conserva el compartido. Solo el dueño puede editar el suyo (auditoría #2/#12).
+      if (existing.data.creado_por_empresa_id !== args.empresaId) {
+        return existing.data.id as string;
+      }
       await sb
         .from("parser_adapters")
         .update({
@@ -94,6 +102,7 @@ export async function upsertManualAdapter(args: {
         usage_count: 0,
         success_count: 0,
         last_used_at: new Date().toISOString(),
+        creado_por_empresa_id: args.empresaId,
       })
       .select("id")
       .single();

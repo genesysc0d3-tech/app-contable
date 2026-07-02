@@ -74,6 +74,7 @@ export async function POST(request: Request) {
 
   const adapterId = await upsertManualAdapter({
     fingerprint,
+    empresaId: usuario.empresa_id,
     nombre: nombre ?? `Manual (${firstSheet})`,
     config,
   });

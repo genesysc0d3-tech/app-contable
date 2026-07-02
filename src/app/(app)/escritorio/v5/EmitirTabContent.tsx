@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useId } from "react";
 import { useToast } from "@/components/Toast";
+import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
@@ -80,14 +81,12 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
   const otros = Object.values(otrosTipos).reduce((s, n) => s + n, 0);
   return (
     <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
-      <style>{`@keyframes emitirSonar{0%{transform:scale(.72);opacity:.46}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emitirTrace{0%{stroke-dashoffset:52;opacity:.12}35%{opacity:1}100%{stroke-dashoffset:0;opacity:.32}}@keyframes emitirSparkle{0%,100%{opacity:.18}35%{opacity:1}}`}</style>
       <div>
-        <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
-          <div style={{position:"absolute",inset:8,borderRadius:"50%",border:"1px solid rgba(180,240,39,.26)",animation:"emitirSonar 2.8s ease-out infinite"}} />
-          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#b4f027"}}><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" fill="rgba(180,240,39,.16)" stroke="currentColor" strokeWidth="4.5" strokeLinejoin="round"/><path d="M56 11 25 53h22l-6 32 31-47H50l6-27Z" stroke="rgba(255,255,255,.7)" strokeWidth="2" strokeLinejoin="round" strokeDasharray="52" style={{animation:"emitirTrace 2.35s ease-in-out infinite"}}/><circle cx="70" cy="27" r="2.4" fill="currentColor" style={{animation:"emitirSparkle 2.4s ease-in-out .2s infinite"}}/><circle cx="27" cy="67" r="1.8" fill="currentColor" style={{animation:"emitirSparkle 2.4s ease-in-out .8s infinite"}}/></svg>
+        <div style={{width:56,height:56,margin:"0 auto 14px",borderRadius:14,background:"var(--surface2)",border:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text3)"}}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
         </div>
-        <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
-        <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión..." : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
+        <div style={{fontSize:14,fontWeight:600,color:"var(--text)",letterSpacing:"-.02em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
+        <div style={{marginTop:5,fontSize:12,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión…" : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
         {!loading && otros > 0 && (
           <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"#f59e0b",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
             {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Revisar.
@@ -105,9 +104,10 @@ function nextActionLabel(code: Item["motivo_code"]): string | null {
   return null;
 }
 
-export default function EmitirTabContent({ initial = null }: { initial?: PendientesResponse | null }) {
+export default function EmitirTabContent({ initial = null, empresaId }: { initial?: PendientesResponse | null; empresaId?: string }) {
   const { toast } = useToast();
-  const reload = useMesaReload() ?? (() => {});
+  const reloadCtx = useMesaReload();
+  const reload = useMemo(() => reloadCtx ?? (() => {}), [reloadCtx]);
   // La mesa (calendario maestro) es la fuente: `initial` ya viene filtrado por
   // periodo y es reactivo a la navegación del calendario. Refrescar = reloadMesa.
   const data = initial;
@@ -116,10 +116,33 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
     () => initial && initial.totales.listas_emitir === 0 && (initial.totales.por_revisar ?? 0) > 0 ? "por_revisar" : "listas",
   );
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
+  const [cols, setCols] = useState<1 | 2>(() => {
+    if (typeof window === "undefined") return 1;
+    try { return localStorage.getItem("emitir-cols") === "2" ? 2 : 1; } catch { return 1; }
+  });
+  const setColumns = (n: 1 | 2) => { setCols(n); try { localStorage.setItem("emitir-cols", String(n)); } catch { /* noop */ } };
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<EmitirResult | null>(null);
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
+
+  // Auto-refresh SILENCIOSO: la cola sigue al dato nuevo sin botón manual y sin que el
+  // ojo lo note (reload silent = no atenúa la mesa). Canal único por instancia (mismo
+  // patrón que DocCardList) + debounce para coalescer ráfagas. reloadRef evita re-suscribir.
+  const channelId = useId().replace(/:/g, "");
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadRef = useRef(reload);
+  useEffect(() => { reloadRef.current = reload; }, [reload]);
+  useEffect(() => {
+    if (!empresaId) return;
+    const bump = () => { if (autoTimer.current) clearTimeout(autoTimer.current); autoTimer.current = setTimeout(() => reloadRef.current({ silent: true }), 500); };
+    const ch = supabase
+      .channel(`v5-emitir-${empresaId}-${channelId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "propuestas_ia", filter: `empresa_id=eq.${empresaId}` }, bump)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "boletas_emitidas", filter: `empresa_id=eq.${empresaId}` }, bump)
+      .subscribe();
+    return () => { if (autoTimer.current) clearTimeout(autoTimer.current); supabase.removeChannel(ch); };
+  }, [empresaId, channelId]);
 
   const itemsList = useMemo(() => {
     if (!data) return [];
@@ -206,58 +229,56 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
-        {/* Header */}
-        <div className="em-header">
-          {listasCount === 0 && porRevisarCount > 0 ? (
-            <><span className="big" style={{ color: "#f59e0b" }}>{porRevisarCount}</span><span className="lbl">por revisar antes de emitir</span></>
-          ) : (
-            <><span className="big">{listasCount}</span><span className="lbl">listas para emitir</span></>
-          )}
-          {bloqueadasCount > 0 && (
-            <span className="blk">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              {" "}{bloqueadasCount} bloqueadas
-            </span>
-          )}
-          <button className="rf" onClick={() => reload?.()}>↻</button>
-        </div>
-
         {/* Pills */}
         <div className="em-pills">
           <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
           <button className={`pl ${statusFilter === "por_revisar" ? "act" : "ina"}`} onClick={() => setStatusFilter("por_revisar")}>Por revisar ({porRevisarCount})</button>
           <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
           <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
-          <span style={{fontSize:8,color:"var(--text2)",margin:"0 4px"}}>|</span>
+          <span style={{fontSize:10,color:"var(--text3)",margin:"0 4px"}}>|</span>
           <button className={`pl ${typeFilter === "todos" ? "act" : "ina"}`} onClick={() => setTypeFilter("todos")}>Todos</button>
           <button className={`pl ${typeFilter === "afecta" ? "act" : "ina"}`} onClick={() => setTypeFilter("afecta")}>Afecta</button>
           <button className={`pl ${typeFilter === "exenta" ? "act" : "ina"}`} onClick={() => setTypeFilter("exenta")}>Exenta</button>
-          {selectableItems.length > 0 && (
-            <label className="sc">
-              <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{accentColor:"#E8553E"}} />
-              {" "}Seleccionar todas ({selectableItems.length})
-            </label>
-          )}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            {selectableItems.length > 0 && (
+              <label className="sc" style={{ marginLeft: 0 }}>
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{accentColor:"#E8553E"}} />
+                {" "}Seleccionar todas ({selectableItems.length})
+              </label>
+            )}
+            <div title="Columnas" style={{ display: "flex", gap: 2, padding: 2, borderRadius: 8, background: "var(--bg-muted)", border: "1px solid var(--border)", flexShrink: 0 }}>
+              {([1, 2] as const).map((n) => (
+                <button key={n} type="button" onClick={() => setColumns(n)} title={n === 1 ? "Una columna" : "Dos columnas"}
+                  style={{ display: "grid", placeItems: "center", width: 24, height: 18, borderRadius: 6, border: "none", cursor: "pointer", background: cols === n ? "rgba(232,85,62,.16)" : "transparent", color: cols === n ? "#E8553E" : "var(--text2)", transition: "all .15s ease" }}>
+                  {n === 1 ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="7" height="16" rx="1.5"/><rect x="13" y="4" width="7" height="16" rx="1.5"/></svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Items */}
         {itemsList.length === 0 ? (
           <EmitirEmpty />
         ) : (
-          itemsList.map(item => {
+          <div className={`em-grid ${cols === 2 ? "cols2" : ""}`}>{itemsList.map(item => {
             const isDisabled = !item.listo_emitir;
             const isSelected = selected.has(item.id);
             const tipo = activeTipo(item);
             const isAfecta = tipo === 39;
 
             return (
-              <div key={item.id} className={`em-item ${isDisabled ? "dis" : ""}`}>
+              <div key={item.id} className={`em-item ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}>
                 <div className={`cb ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}
                   onClick={() => !isDisabled && toggleItem(item.id)}
                   style={isDisabled ? {} : {cursor:"pointer"}}
                 >{isSelected ? "✓" : ""}</div>
-                <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); }}
-                  style={item.balde !== "listas" && item.documento_id ? { cursor: "pointer" } : undefined}>
+                <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); else if (!isDisabled) toggleItem(item.id); }}
+                  style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !isDisabled)) ? { cursor: "pointer" } : undefined}>
                   <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
                   <div className="sub">
                     {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
@@ -270,25 +291,25 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                     </div>
                   )}
                   {item.balde !== "listas" && item.documento_id && (
-                    <div className="sub" style={{ color: "#E8553E", fontWeight: 700, marginTop: 2 }}>Resolver en Check →</div>
-                  )}
-                </div>
-                <div className="tp" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                  {item.balde === "por_revisar" ? (
-                    // Sin decisión humana aún → no afirmar un tipo (evita contradecir a Check).
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 7, whiteSpace: "nowrap", color: "var(--text3)", background: "var(--bg-muted)" }}>IVA pendiente</span>
-                  ) : (
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 7, whiteSpace: "nowrap", color: isAfecta ? "#22c55e" : "#5b9cf6", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+                    <div className="sub" style={{ color: "#E8553E", fontWeight: 600, marginTop: 2 }}>Resolver en Check →</div>
                   )}
                   {item.balde === "listas" && item.documento_id && (
-                    <button onClick={() => goToCheck(item)} title="Corregir el tipo en Check"
-                      style={{ fontSize: 8, fontWeight: 600, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>Corregir en Check →</button>
+                    <button onClick={(e) => { e.stopPropagation(); goToCheck(item); }} title="Corregir el tipo en Check"
+                      style={{ fontSize: 10, fontWeight: 500, color: "var(--text2)", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 2, textAlign: "left", display: "block" }}>Corregir en Check →</button>
+                  )}
+                </div>
+                <div className="tp" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                  {item.balde === "por_revisar" ? (
+                    // Sin decisión humana aún → no afirmar un tipo (evita contradecir a Check).
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: "#f59e0b", background: "rgba(245,158,11,.12)" }}>Falta tipo</span>
+                  ) : (
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "#22c55e" : "#5b9cf6", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
                   )}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
               </div>
             );
-          })
+          })}</div>
         )}
       </div>
 
@@ -296,7 +317,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
       {data && (
         <div className="em-bar">
           <div className="l">
-            <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
+            <span className="b">{listasCount}</span> {listasCount === 1 ? "lista" : "listas"} para emitir · <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
           </div>
           {lockedByOther && (
             <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -362,7 +383,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
             ) : (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text3)" }}>Vas a emitir</span>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text2)" }}>Vas a emitir</span>
                   <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#f59e0b", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -376,7 +397,7 @@ export default function EmitirTabContent({ initial = null }: { initial?: Pendien
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 12, color: "var(--text2)" }}>
                   Total <b style={{ color: "var(--text)" }}>{fmt(selectedTotal)}</b>
                 </div>
-                <div style={{ marginTop: 8, fontSize: 11, color: "var(--text3)", lineHeight: 1.5 }}>
+                <div style={{ marginTop: 8, fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
                   Modo de prueba: se simula, no se informa al SII. Una boleta real solo se corrige con Nota de Crédito.
                 </div>
                 <div style={{ display: "flex", gap: 10, marginTop: 18 }}>

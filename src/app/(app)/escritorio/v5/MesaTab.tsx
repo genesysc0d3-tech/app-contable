@@ -5,11 +5,15 @@ import { createPortal } from "react-dom";
 import DocCardList from "./DocCardList";
 import DocPanelsBoard from "./DocPanelsBoard";
 import VisualizarArchivo from "./VisualizarArchivo";
-import FieldMapper from "@/components/upload/FieldMapper";
+import FieldMapper, { FieldMapperBody, prefetchPreview } from "@/components/upload/FieldMapper";
 import HintSelector from "@/components/upload/HintSelector";
 import GlosaComunControl from "./GlosaComunControl";
 import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import VeredictoCard from "./VeredictoCard";
+import VeredictoCartola from "./VeredictoCartola";
+import CartolaEditor from "./CartolaEditor";
+import { aprobarCartola } from "../../revisar/actions";
+import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
 import { useMesaReload, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
@@ -33,6 +37,13 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   const [selDocId, setSelDocId] = useState<string | null>(null);
   const [viewImgDocId, setViewImgDocId] = useState<string | null>(null);
   const [mappingDocId, setMappingDocId] = useState<string | null>(null);
+  const [editarCartolaId, setEditarCartolaId] = useState<string | null>(null);
+  // Pantalla activa DENTRO del popup Editar: la grilla de edición o el mapeo de
+  // columnas. "Mapear" es otra pantalla del MISMO popup (no un modal apilado que
+  // quedaba detrás por z-index).
+  const [editarScreen, setEditarScreen] = useState<"editar" | "mapear">("editar");
+  const [aprobandoCartola, setAprobandoCartola] = useState(false);
+  const { toast } = useToast();
 
   const docs = mesa.docsAgregados as DocRow[];
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
@@ -113,10 +124,20 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   }, [mesa.pendientes]);
 
   const selProps = (selDoc ? propsByDoc.get(selDoc.id) : undefined) ?? [];
-  const pend = selProps.filter((p) => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado");
+  const pend = selProps.filter((p) => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado" || p.estado === "listo");
   const alta = pend.filter((p) => classifyConfianza(p) === "alta");
   const media = pend.filter((p) => classifyConfianza(p) === "media");
   const baja = pend.filter((p) => classifyConfianza(p) === "baja");
+
+  // "Aprobar" de la cartola (atómico): promueve las 'listo' → 'aprobado' (a Emitir).
+  const handleAprobarCartola = async () => {
+    if (!selDoc) return;
+    setAprobandoCartola(true);
+    const r = await aprobarCartola(selDoc.id);
+    if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir`);
+    reload();
+    setAprobandoCartola(false);
+  };
 
   const tipoNombre = (selDoc?.nombre_archivo ?? "");
   const tipo = selDoc
@@ -165,6 +186,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
           <VeredictoCard key={pend[0].id} propuesta={pend[0]} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} onClose={() => setSelDocId(null)} documentoId={selDoc.id} onViewImage={() => setViewImgDocId(selDoc.id)} />
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
+        ) : tipo === "massdte" && selDoc.estado === "procesado" && pend.length > 0 ? (
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
@@ -202,6 +225,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "0 16px 6px" }}>
                     <button onClick={() => setMappingDocId(selDoc.id)}
+                      onMouseEnter={() => prefetchPreview(selDoc.id)} onFocus={() => prefetchPreview(selDoc.id)}
                       style={{ fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>↔ Mapear</button>
                     {selDoc.estado === "procesado" && <HintSelector documentoId={selDoc.id} current={selDoc.tipo_operacion_hint ?? null} />}
                     <span style={{ fontSize: 9, color: "var(--text3)", marginLeft: "auto" }}>{selDoc.movimientos_detectados ?? 0} mov</span>
@@ -242,6 +266,58 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       )}
       {viewImgDocId && typeof document !== "undefined" && createPortal(
         <VisualizarArchivo documentoId={viewImgDocId} onClose={() => setViewImgDocId(null)} />,
+        document.body,
+      )}
+
+      {/* Popup "Editar" de cartola. Dos PANTALLAS del mismo popup: la grilla de
+          edición y el mapeo de columnas (antes un modal aparte que quedaba detrás). */}
+      {editarCartolaId && typeof document !== "undefined" && createPortal(
+        <div onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "min(1040px, 96vw)", maxHeight: "86vh", display: "flex", flexDirection: "column", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+              {editarScreen === "mapear" ? (
+                <>
+                  <button onClick={() => setEditarScreen("editar")} title="Volver a editar" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 8, padding: "5px 11px 5px 8px", cursor: "pointer" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M15 18l-6-6 6-6" /></svg>
+                    Volver
+                  </button>
+                  <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text3)" }}>Mapear columnas</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text3)" }}>Editar</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
+                  <button onClick={() => setEditarScreen("mapear")} onMouseEnter={() => prefetchPreview(editarCartolaId)} onFocus={() => prefetchPreview(editarCartolaId)} style={{ fontSize: 10, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 7, padding: "5px 10px", cursor: "pointer" }}>↔ Mapear columnas</button>
+                </>
+              )}
+              <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} title="Cerrar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+            {editarScreen === "mapear" ? (
+              <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "#f6f7fb", fontFamily: "'DM Sans','Inter',sans-serif" }}>
+                <FieldMapperBody
+                  documentoId={editarCartolaId}
+                  variant="embedded"
+                  onClose={() => setEditarScreen("editar")}
+                  onSaved={() => { setEditarScreen("editar"); reload(); }}
+                />
+              </div>
+            ) : (
+              <>
+                {selDoc?.estado === "procesado" && (
+                  <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+                    <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
+                    <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} />
+                  </div>
+                )}
+                <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} />
+                <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+                  <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "#E8553E", border: "none", borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}>Cerrar</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
         document.body,
       )}
     </div>

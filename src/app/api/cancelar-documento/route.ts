@@ -8,10 +8,13 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return NextResponse.json({ error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+    return NextResponse.json({ error: "ROL_SIN_PERMISO" }, { status: 403 });
+  }
 
   let body: { documento_id?: string };
   try {

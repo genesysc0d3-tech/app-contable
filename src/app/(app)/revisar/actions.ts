@@ -27,10 +27,18 @@ async function getEmpresaAndService() {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" } as const;
+
+  // TODAS las acciones de este archivo MUTAN (aprobar/editar/rechazar/poner listo/
+  // crear cliente). Aprobar/editar propuestas es un acto tributario: 'viewer' queda
+  // fuera, igual que en las rutas de emisión (ROLES_EMISION). Gate único acá.
+  const ROLES_ESCRITURA = new Set(["owner", "admin", "contador"]);
+  if (!ROLES_ESCRITURA.has(String(usuario.rol))) {
+    return { error: "Tu rol no permite esta acción" } as const;
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -290,6 +298,79 @@ export async function aprobarTodas(
   });
 
   revalidatePath("/revisar");
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: aprobadas };
+}
+
+// "Poner listo" (staged): marca propuestas como preparadas SIN mandarlas a Emitir.
+// El pipeline de Emitir filtra por estado in (aprobado, editado), así que 'listo'
+// queda fuera hasta que `aprobarCartola` las promueve. Es el lote atómico.
+export async function ponerListo(
+  propuestaIds: string[],
+  clienteId?: string | null
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  // clienteId indefinido => no se toca (caso bulk desde bloque/todas). Definido
+  // (incluso null) => se asigna, para el detalle expandido que elige cliente.
+  const patch: { estado: string; cliente_id?: string | null } =
+    clienteId === undefined ? { estado: "listo" } : { estado: "listo", cliente_id: clienteId };
+  let listas = 0;
+  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
+    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+    const { error, count } = await ctx.sb
+      .from("propuestas_ia")
+      .update(patch, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch)
+      // Guard de estado (auditoría #25/#29): solo se stagea desde estados PRE-emisión.
+      // Nunca degradar una 'aprobado' (ya en la cola de Emitir) ni resucitar una
+      // 'rechazado'/emitida a 'listo'.
+      .in("estado", ["pendiente", "editado", "listo"]);
+    if (error) return { error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`, count: listas };
+    listas += count ?? 0;
+  }
+  if (listas === 0 && propuestaIds.length > 0) return { error: "No se marcó ninguna propuesta como lista", count: 0 };
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: listas };
+}
+
+// Aprobar cartola (atómico): promueve a Emitir TODAS las propuestas del documento
+// que quedaron en "listo" (estado 'listo' → 'aprobado'). Es el único gatillo hacia
+// Emitir para una cartola: nada cae en la cola hasta apretar esto.
+export async function aprobarCartola(
+  documentoId: string
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const { data: props, error: qErr } = await ctx.sb
+    .from("propuestas_ia")
+    .select("id, movimientos_raw!inner(documento_id)")
+    .eq("empresa_id", ctx.empresaId)
+    .eq("estado", "listo")
+    .eq("movimientos_raw.documento_id", documentoId);
+  if (qErr) return { error: qErr.message, count: 0 };
+  const ids = (props ?? []).map((p) => p.id);
+  if (ids.length === 0) return { ok: true, count: 0 };
+  let aprobadas = 0;
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const { error, count } = await ctx.sb
+      .from("propuestas_ia")
+      .update({ estado: "aprobado" }, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch);
+    if (error) return { error: error.message, count: aprobadas };
+    aprobadas += count ?? 0;
+  }
+  await recordCuentaAudit({
+    sb: ctx.sb, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+    accion: "propuestas_aprobadas", recursoTipo: "documento_subido", recursoId: documentoId,
+    resumen: `${aprobadas} propuestas de cartola enviadas a emitir`, metadata: { cantidad: aprobadas, documentoId },
+  });
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   return { ok: true, count: aprobadas };

@@ -150,9 +150,14 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
 
   function handleUploaded() {
     closeWithSavedPulse("Archivo subido a Agregados");
+    // Asegura estar en massdte (por si se subió desde otra vista). El refresco REAL de
+    // la mesa lo hace MesaController al recibir "massdte:uploaded": router.refresh() no
+    // re-sembraba el estado de la mesa, así que el doc no aparecía hasta un F5.
     router.push(`/massdte?date=${todayStr()}&view=day`);
-    router.refresh();
-    window.setTimeout(() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" })), 80);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("massdte:uploaded", { detail: { date: todayStr() } }));
+      window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" }));
+    }, 80);
   }
 
   return (

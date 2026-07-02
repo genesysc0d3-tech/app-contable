@@ -1666,6 +1666,7 @@ export type Database = {
         Row: {
           confianza: number
           config: Json
+          creado_por_empresa_id: string | null
           created_at: string
           disabled_until: string | null
           failure_count: number
@@ -1682,6 +1683,7 @@ export type Database = {
         Insert: {
           confianza?: number
           config: Json
+          creado_por_empresa_id?: string | null
           created_at?: string
           disabled_until?: string | null
           failure_count?: number
@@ -1698,6 +1700,7 @@ export type Database = {
         Update: {
           confianza?: number
           config?: Json
+          creado_por_empresa_id?: string | null
           created_at?: string
           disabled_until?: string | null
           failure_count?: number
