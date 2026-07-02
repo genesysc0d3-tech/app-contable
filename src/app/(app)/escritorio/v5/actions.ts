@@ -8,7 +8,7 @@ import { empresasActivasDeCuenta, contextoCuentaPorEmpresa, validarAccesoCuenta 
 import { chileMonthUtcRange, clpConIva, estadoCuota, periodoActual } from "@/lib/pagos/metering";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { createClient } from "@/lib/supabase/server";
-import { getUfClp } from "@/lib/sii/uf";
+import { getUfClp, getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { mpConfigurado } from "@/lib/pagos/mercadopago";
 import { fetchMesaDateDependent, type MesaParams, type MesaDateDependent } from "./mesa-data";
 
@@ -194,6 +194,16 @@ async function planPermiteMultiempresa(sb: ReturnType<typeof getServiceClient>, 
     .maybeSingle();
   if (error) throw new Error(`PLAN_QUERY_FAILED:${error.message}`);
   return data?.multiempresa === true;
+}
+
+/**
+ * Umbral de identificación del receptor (135 UF) en CLP con la UF VIVA (auditoría
+ * #10). El editor inline lo consulta para que su gate de "receptor obligatorio"
+ * coincida con la validación del server al emitir (lo que ves = lo que se emite),
+ * en vez de usar la constante referencial congelada.
+ */
+export async function obtenerUmbralReceptorClp(): Promise<number> {
+  return getUmbralIdentificacionClp();
 }
 
 export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> {

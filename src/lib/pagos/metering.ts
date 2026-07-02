@@ -31,6 +31,21 @@ export function periodoActual(ahora: Date = new Date()): string {
   return chileDateString(ahora).slice(0, 7);
 }
 
+/**
+ * Período (YYYY-MM, calendario Chile) al que se ACREDITA un pago, derivado de la
+ * fecha real de aprobación de MP — NO del checkout (auditoría #22): un refill cuyo
+ * pago aprueba tras el cambio de mes debe caer en el mes en que se aprobó, que es
+ * justo el mes que `estadoCuota` cuenta. Cae a date_created y luego a "ahora".
+ */
+export function periodoDePago(recurso: Record<string, unknown>): string {
+  const aprobado = recurso.date_approved ?? recurso.date_created;
+  if (typeof aprobado === "string") {
+    const d = new Date(aprobado);
+    if (!Number.isNaN(d.getTime())) return periodoActual(d);
+  }
+  return periodoActual();
+}
+
 /** Monto CLP total (con IVA) para un precio en UF al valor UF del día. */
 export function clpConIva(ufMensual: number, ufClp: number): number {
   return Math.round(ufMensual * ufClp * IVA);

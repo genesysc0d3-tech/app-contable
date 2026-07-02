@@ -233,7 +233,11 @@ export async function editarPropuesta(
     .from("propuestas_ia")
     .update(update, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
-    .eq("id", propuestaId);
+    .eq("id", propuestaId)
+    // Guard de estado (auditoría #21): NO editar una 'aprobado' (ya comprometida a
+    // Emitir) — editarla la degradaría a 'editado' y burlaría el guard de ponerListo.
+    // Ni resucitar 'rechazado'/emitidas. Coherente con el allowlist de ponerListo.
+    .in("estado", ["pendiente", "editado", "listo"]);
   let { error, count } = await doUpdate();
   if (error && "tipo_dte" in update) {
     // La columna tipo_dte puede no estar migrada aún (Paso P) — reintentar sin ella.
@@ -241,7 +245,7 @@ export async function editarPropuesta(
     ({ error, count } = await doUpdate());
   }
   if (error) return { error: error.message };
-  if (!count) return { error: "No se pudo editar" };
+  if (!count) return { error: "No se pudo editar (¿ya está en emisión?)" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");

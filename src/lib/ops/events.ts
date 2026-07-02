@@ -17,6 +17,7 @@ export type OpsSource =
   | "simpleapi"
   | "telegram"
   | "ops/cron"
+  | "audit/cron"
   | "dev-support"
   | "auth"
   | "derechos";

@@ -11,6 +11,10 @@
     {
       "path": "/api/document-processing/cron",
       "schedule": "45 12 * * *"
+    },
+    {
+      "path": "/api/audit/cron",
+      "schedule": "0 3 * * *"
     }
   ]
 }

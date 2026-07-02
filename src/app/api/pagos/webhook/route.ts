@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { obtenerRecurso } from "@/lib/pagos/mercadopago";
-import { addOneMonth, periodoActual } from "@/lib/pagos/metering";
+import { addOneMonth, periodoDePago } from "@/lib/pagos/metering";
 import { chileDateString } from "@/lib/chile-date";
 import { empresaPrincipalDeCuenta, empresasActivasDeCuenta } from "@/lib/entitlements";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
@@ -262,7 +262,9 @@ async function procesarPayment(sb: Sb, paymentId: string) {
       : { data: null };
     const boletas = plan?.refill_boletas ?? 0;
     if (boletas > 0) {
-      const periodo = /^\d{4}-\d{2}$/.test(ref.valor) ? ref.valor : periodoActual();
+      // El período se deriva de la fecha real de aprobación de MP (recurso), no del
+      // external_reference congelado en el checkout, que puede cruzar de mes (#22).
+      const periodo = periodoDePago(recurso);
       const { error: refillError } = await sb.from("refills").insert({
         cuenta_id: target.cuentaId,
         empresa_id: target.empresaId ?? ref.sujetoId,

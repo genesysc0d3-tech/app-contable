@@ -3,7 +3,8 @@ import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { recordOpsEvent } from "@/lib/ops/events";
 
 // Derecho de SUPRESIÓN (Ley 21.719, Art. 14). Conservador y seguro:
-// - Anonimiza la PII del propio perfil (nombre → placeholder; es NOT NULL).
+// - Anonimiza la PII del propio perfil (nombre y email → placeholders; son NOT NULL).
+//   El login usa auth.users, no este espejo, así que anonimizar el email es seguro.
 // - Registra la solicitud (auditoría), sin contenido.
 // - NO borra documentos tributarios (DTE): se conservan 6 años (Código Tributario).
 // - NO toca la empresa, datos compartidos ni el usuario de Auth (eso afecta el
@@ -27,7 +28,10 @@ export async function POST(request: Request) {
 
   const { error } = await guard.service
     .from("usuarios")
-    .update({ nombre: "[titular eliminado]" })
+    .update({
+      nombre: "[titular eliminado]",
+      email: `deleted-${guard.userId}@anonimizado.local`,
+    })
     .eq("id", guard.userId);
 
   if (error) {
