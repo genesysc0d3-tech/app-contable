@@ -99,7 +99,7 @@ export async function fetchMesaDateDependent(
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
-    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "pendiente").gte("created_at", workStart).lt("created_at", workEnd),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["pendiente", "listo"]).gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["aprobado", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(100),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
@@ -114,7 +114,9 @@ export async function fetchMesaDateDependent(
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const byDay: Record<number, { p: number; a: number; d: number }> = {};
   for (let d = 1; d <= daysInMonth; d++) byDay[d] = { p: 0, a: 0, d: 0 };
-  for (const p of calProps.data ?? []) { const inf = byDay[chileDayOfMonth(new Date(p.created_at))]; if (!inf) continue; if (p.estado === "pendiente") inf.p++; else if (["aprobado", "editado"].includes(p.estado)) inf.a++; }
+  // Pre-stageo: 'listo' (staged, aún no aprobado) cuenta como pendiente en el calendario —
+  // la cartola sigue sin emitirse hasta el Aprobar atómico, así que el día conserva su punto.
+  for (const p of calProps.data ?? []) { const inf = byDay[chileDayOfMonth(new Date(p.created_at))]; if (!inf) continue; if (p.estado === "pendiente" || p.estado === "listo") inf.p++; else if (["aprobado", "editado"].includes(p.estado)) inf.a++; }
   for (const d of calDocs.data ?? []) { const inf = byDay[chileDayOfMonth(new Date(d.created_at))]; if (inf) inf.d++; }
 
   const today = curDay;
@@ -165,14 +167,17 @@ export async function fetchMesaDateDependent(
   // ── Composición por documento (afectas/exentas/gastos) ──
   const docTipoMix: Record<string, { afectas: number; exentas: number; gastos: number }> = {};
   for (const p of propsData.data ?? []) {
-    if (p.estado !== "pendiente" && p.estado !== "aprobado" && p.estado !== "editado") continue;
+    if (p.estado !== "pendiente" && p.estado !== "listo" && p.estado !== "aprobado" && p.estado !== "editado") continue;
     const docId = p.movimientos_raw?.documentos_subidos?.id;
     if (!docId) continue;
     const t = p.tipo_propuesto;
     const mix = (docTipoMix[docId] ??= { afectas: 0, exentas: 0, gastos: 0 });
-    if (t === "gasto_egreso" || t === "no_comercial") mix.gastos++;
-    else if (t === "boleta" || t === "factura") mix.afectas++;
-    else mix.exentas++;
+    // Solo ventas EXENTAS reales cuentan como exentas; los demás tipos que no son
+    // venta afecta (impuesto, remuneración, arriendo, cotización, etc.) NO son ventas
+    // boletables → van al balde "gastos/no-venta", no inflan exentas (auditoría #33).
+    if (t === "boleta" || t === "factura" || t === "factura_afecta") mix.afectas++;
+    else if (t === "exenta" || t === "factura_exenta" || t === "compraventa_crypto" || t === "transferencia_p2p" || t === "operacion_forex") mix.exentas++;
+    else mix.gastos++;
   }
 
   // ── Avance del pipeline por documento ──

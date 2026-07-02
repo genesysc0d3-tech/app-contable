@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   destinoDesdeTextoTelegram,
   fechaDesdeTextoTelegram,
+  lineasOcrTelegram,
   origenDesdeTextoTelegram,
   resolverDireccionTelegram,
   resolverMontoTelegram,
+  rutDesdeTextoTelegram,
+  tipoVentaDesdeTextoTelegram,
 } from "./deterministico";
 import { mensajeLeiEsto } from "./propuestas";
 
@@ -160,5 +163,72 @@ describe("parser deterministico Telegram", () => {
     expect(mensaje).not.toContain("• Monto");
     expect(mensaje).not.toContain("OCR");
     expect(mensaje).not.toContain("$61.725.277");
+  });
+});
+
+describe("robustez determinística — tipo de venta (crypto/forex): amplio y preciso", () => {
+  const crypto = [
+    "Vendiste 540 USDT", "compra de 0.01 BTC", "Bitcoin", "ethereum", "ETH", "Binance P2P",
+    "USDC", "OrionX", "Buda.com", "KuCoin", "Bybit", "Coinbase", "Kraken", "criptomoneda",
+    "Tether", "vendí en Binance", "operación P2P", "DOGE", "Solana", "stablecoin", "Bitso", "Lemon Cash",
+  ];
+  for (const t of crypto) it(`crypto ✓: "${t}"`, () => expect(tipoVentaDesdeTextoTelegram(t)).toBe("compraventa_crypto"));
+
+  const forex = ["Venta de USD 600", "cambio de divisas", "dólares", "EUR 200", "euros", "moneda extranjera", "U$S 300", "forex", "dólar"];
+  for (const t of forex) it(`forex ✓: "${t}"`, () => expect(tipoVentaDesdeTextoTelegram(t)).toBe("operacion_forex"));
+
+  const generico = [
+    "Transferencia recibida $50.000", "pago de arriendo", "venta de muebles usados",
+    "servicio de diseño gráfico", "abono de cliente", "honorarios", "producto importado",
+  ];
+  for (const t of generico) it(`genérico (null): "${t}"`, () => expect(tipoVentaDesdeTextoTelegram(t)).toBeNull());
+
+  it("PRECISIÓN: no matchea keywords embebidas en otras palabras ni tokens cortos removidos", () => {
+    expect(tipoVentaDesdeTextoTelegram("ajusdte el monto")).toBeNull(); // 'usdt' embebido
+    expect(tipoVentaDesdeTextoTelegram("methods de pago")).toBeNull();   // 'eth' embebido
+    expect(tipoVentaDesdeTextoTelegram("tomé sol en la playa")).toBeNull(); // 'sol' fuera de la lista
+    expect(tipoVentaDesdeTextoTelegram("link de pago")).toBeNull();      // 'link' fuera de la lista
+  });
+});
+
+describe("robustez determinística — RUT de la contraparte", () => {
+  it("con puntos", () => expect(rutDesdeTextoTelegram("RUT 12.345.678-9")).toBe("12.345.678-9"));
+  it("sin puntos", () => expect(rutDesdeTextoTelegram("rut: 12345678-9")).toBe("12345678-9"));
+  it("con dígito verificador K", () => expect(rutDesdeTextoTelegram("9.876.543-K")).toBe("9.876.543-K"));
+  it("RUT de 7 dígitos", () => expect(rutDesdeTextoTelegram("1.234.567-8")).toBe("1.234.567-8"));
+  it("null si no hay RUT", () => expect(rutDesdeTextoTelegram("Comprador: Juan Pérez")).toBeNull());
+});
+
+describe("robustez determinística — contraparte por etiquetas amplias", () => {
+  const pagadores: [string, string][] = [
+    ["Comprador: Juan Pérez Soto", "Juan Pérez Soto"],
+    ["Cliente: María González", "María González"],
+    ["Pagador: Pedro Ramírez", "Pedro Ramírez"],
+    ["De: Ana Torres", "Ana Torres"],
+    ["Remitente: Luis Díaz", "Luis Díaz"],
+    ["Titular: Sofía Muñoz", "Sofía Muñoz"],
+  ];
+  for (const [linea, esperado] of pagadores) {
+    it(`origen (pagador) "${linea}"`, () => expect(origenDesdeTextoTelegram([linea])).toBe(esperado));
+  }
+  const receptores: [string, string][] = [
+    ["Para: Carlos Soto", "Carlos Soto"],
+    ["Beneficiario: Empresa SpA", "Empresa SpA"],
+    ["Vendedor: Tienda XYZ", "Tienda XYZ"],
+    ["Proveedor: Distribuidora ABC", "Distribuidora ABC"],
+  ];
+  for (const [linea, esperado] of receptores) {
+    it(`destino (receptor) "${linea}"`, () => expect(destinoDesdeTextoTelegram([linea])).toBe(esperado));
+  }
+});
+
+describe("robustez determinística — limpieza de markdown del OCR", () => {
+  it("quita negrita ** / __ y backticks de las líneas (no se cuelan en los campos)", () => {
+    const lines = lineasOcrTelegram("**Recibiste $500.000**\nComprador: __Juan Pérez__\n`RUT 12.345.678-9`");
+    expect(lines).toEqual(["Recibiste $500.000", "Comprador: Juan Pérez", "RUT 12.345.678-9"]);
+  });
+  it("la contraparte queda limpia tras la limpieza de markdown", () => {
+    const [, segunda] = lineasOcrTelegram("Pago recibido\n**Comprador: Carlos Mena Rojas**");
+    expect(origenDesdeTextoTelegram([segunda])).toBe("Carlos Mena Rojas");
   });
 });

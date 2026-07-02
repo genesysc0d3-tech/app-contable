@@ -16,12 +16,16 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
 
   if (!usuario) {
     return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+  }
+  // Deshacer borra propuestas/movimientos (destructivo): 'viewer' queda fuera.
+  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+    return NextResponse.json({ error: "Tu rol no permite deshacer documentos" }, { status: 403 });
   }
 
   const body = await request.json();

@@ -67,4 +67,15 @@ describe("clasificarBoleta — ángulos heurísticos", () => {
     const r2 = clasificarBoleta(mov("zzz qqq"), { ...empresaAuto, tipo_contribuyente: "afecto" });
     expect(r2.tipo_dte).toBe(39);
   });
+
+  it("una exención POR LEY (cripto) gana aunque la empresa esté mal configurada como afecto", () => {
+    // Caso del contador: trader P2P registrado por error como "afecto". La glosa cripto
+    // (exenta 0.85, Of. 963/2018) NO debe quedar tapada por el default afecto → DTE 41.
+    const r = clasificarBoleta(mov("venta USDT Binance P2P"), { ...empresaAuto, tipo_contribuyente: "afecto" });
+    expect(r.tipo_dte).toBe(41);
+
+    // Pero una glosa afecta-por-naturaleza (servicio) con empresa afecta sí queda afecta.
+    const r2 = clasificarBoleta(mov("servicio de asesoría"), { ...empresaAuto, tipo_contribuyente: "afecto" });
+    expect(r2.tipo_dte).toBe(39);
+  });
 });

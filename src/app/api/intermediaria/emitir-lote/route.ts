@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
+import type { Database, Json } from "@/lib/database.types";
 import { validarBoleta } from "@/lib/sii/validation";
 import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import { armarBoletaPayload } from "@/lib/intermediario/armar-boleta";
 import { issueMockBoleta } from "@/lib/emission/mock";
 import { batchBlockedResult } from "@/lib/emission/provider-guards";
 import { verificarEmisionMasiva } from "@/lib/pagos/metering";
@@ -105,10 +106,11 @@ export async function POST(request: Request) {
   const { data: propuestas, error: pErr } = await supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, receptor_nombre, receptor_rut, monto_neto, iva, total, estado,
+      id, tipo_propuesto, tipo_dte, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
+      medio_pago, notas, monto_neto, iva, total, estado,
       cliente_id,
       clientes(id, nombre, rut),
-      movimientos_raw(fecha, descripcion, monto, documentos_subidos(tipo_operacion_hint))
+      movimientos_raw(fecha, descripcion, monto, documentos_subidos(tipo_operacion_hint, glosa_comun, glosa_activa))
     `)
     .eq("empresa_id", usuario.empresa_id)
     .in("id", ids);
@@ -214,7 +216,9 @@ export async function POST(request: Request) {
       results.push({ propuesta_id: pid, ok: false, error_code: "ESTADO_INVALIDO", error_message: `La propuesta está ${p.estado}, no aprobada` });
       continue;
     }
-    const TIPOS_EMITIBLES = ["boleta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
+    // "exenta" incluida (ya estaba en pendientes-emision): un contribuyente exento
+    // emite DTE 41; el tipo_dte real lo decide clasificarBoleta abajo, no este tipo.
+    const TIPOS_EMITIBLES = ["boleta", "exenta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
     if (!TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
       results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como boleta` });
       continue;
@@ -222,14 +226,16 @@ export async function POST(request: Request) {
 
     const cliente = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as
       { id: string; nombre: string; rut: string | null } | null;
+    type DocNode = { tipo_operacion_hint: string | null; glosa_comun: string | null; glosa_activa: boolean | null };
     const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as
-      { fecha: string; descripcion: string; monto: number; documentos_subidos?: { tipo_operacion_hint: string | null } | { tipo_operacion_hint: string | null }[] | null } | null;
+      { fecha: string; descripcion: string; monto: number; documentos_subidos?: DocNode | DocNode[] | null } | null;
     const receptor_rut = p.receptor_rut ?? cliente?.rut ?? undefined;
     const receptor_razon_social = p.receptor_nombre ?? cliente?.nombre ?? undefined;
     const total = Math.round(Number(p.total ?? mov?.monto ?? 0));
     const fechaMovimiento = (mov?.fecha ?? new Date().toISOString()).slice(0, 10);
     const docNested = mov?.documentos_subidos;
-    const docHintRaw = (Array.isArray(docNested) ? docNested[0] : docNested)?.tipo_operacion_hint ?? null;
+    const docNode = (Array.isArray(docNested) ? docNested[0] : docNested) ?? null;
+    const docHintRaw = docNode?.tipo_operacion_hint ?? null;
     const clasif = clasificarBoleta(
       {
         descripcion: mov?.descripcion ?? "",
@@ -256,23 +262,32 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const detalles = [{
-      nombre: (mov?.descripcion ?? "Servicio").slice(0, 80),
-      monto: total,
-    }];
-
-    // Tipo DTE: 39 (afecta) por default, 41 (exenta) si la UI lo override
-    const tipoDte = (tipoPorId.get(pid) ?? 39) as 39 | 41;
+    // Tipo DTE por precedencia: override explícito de la UI (tipoPorId) → decisión
+    // humana persistida (p.tipo_dte, Paso P) → clasificación → 39. Antes ignoraba
+    // p.tipo_dte y coercía a 39 AFECTA una propuesta con 41 ya persistido (auditoría #7).
+    const tipoPersistido = p.tipo_dte === 39 || p.tipo_dte === 41 ? (p.tipo_dte as 39 | 41) : undefined;
+    const tipoDte = (tipoPorId.get(pid) ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
     const proveedorEfectivo = providerForTipoDte(emisionConfig, tipoDte);
 
-    const validation = validarBoleta({
-      tipo_dte: tipoDte,
-      receptor_rut,
-      receptor_razon_social,
-      medio_pago: MEDIO_PAGO_LOTE,
-      detalles,
-      monto_total: total,
-    }, { umbralIdentificacionClp });
+    // Payload canónico (glosa/receptor/medio) vía el armador único — MISMA regla
+    // que boleta única. Glosa: detalle editado (notas) › glosa común de la cartola
+    // (si activa) › glosa del banco. Medio: el de la propuesta o el default del carril.
+    const payload = armarBoletaPayload({
+      tipoDte,
+      total,
+      notas: p.notas,
+      glosaBanco: mov?.descripcion,
+      glosaComun: docNode?.glosa_comun,
+      glosaComunActiva: docNode?.glosa_activa,
+      receptorRut: receptor_rut,
+      receptorNombre: receptor_razon_social,
+      receptorDireccion: p.receptor_direccion,
+      receptorComuna: p.receptor_comuna,
+      medioPago: p.medio_pago,
+    }, { medioPagoDefault: MEDIO_PAGO_LOTE });
+    const detalles = payload.detalles;
+
+    const validation = validarBoleta(payload, { umbralIdentificacionClp });
 
     if (!validation.ok || !validation.totales) {
       const firstErr = validation.errors[0];
@@ -281,6 +296,18 @@ export async function POST(request: Request) {
         ok: false,
         error_code: firstErr?.code ?? "VALIDACION_FALLIDA",
         error_message: firstErr?.message ?? "No pasó las validaciones del SII",
+      });
+      continue;
+    }
+    // R4 (Art. 14 DL 825): una boleta afecta (39) con IVA $0 la rechaza el SII.
+    // validarBoleta no lo cubre; lo aplicamos acá igual que evaluarEmision (que este
+    // carril no invoca todavía — ver auditoría #8).
+    if (tipoDte === 39 && validation.totales.iva === 0) {
+      results.push({
+        propuesta_id: pid,
+        ok: false,
+        error_code: "AFECTA_IVA_CERO",
+        error_message: "Una boleta afecta no puede tener IVA $0. Revisá el monto o emitila exenta.",
       });
       continue;
     }
@@ -311,8 +338,8 @@ export async function POST(request: Request) {
       empresa,
       body: {
         tipo_dte: tipoDte,
-        receptor_rut,
-        receptor_razon_social,
+        receptor_rut: payload.receptor_rut,
+        receptor_razon_social: payload.receptor_razon_social,
         detalles,
       },
       totales: validation.totales,
@@ -342,14 +369,16 @@ export async function POST(request: Request) {
         emisor_giro: empresa.giro,
         emisor_direccion: empresa.direccion,
         emisor_comuna: empresa.comuna,
-        receptor_rut: receptor_rut ?? null,
-        receptor_razon_social: receptor_razon_social ?? null,
-        medio_pago: MEDIO_PAGO_LOTE,
+        receptor_rut: payload.receptor_rut ?? null,
+        receptor_razon_social: payload.receptor_razon_social ?? null,
+        receptor_direccion: payload.receptor_direccion ?? null,
+        receptor_comuna: payload.receptor_comuna ?? null,
+        medio_pago: payload.medio_pago ?? MEDIO_PAGO_LOTE,
         monto_neto: validation.totales.neto,
         monto_exento: validation.totales.exento,
         iva: validation.totales.iva,
         monto_total: validation.totales.total,
-        detalles: detalles,
+        detalles: detalles as unknown as Json,
         xml_dte: mockIssue.xmlDte,
         ted: mockIssue.ted,
         track_id: mockIssue.trackId,

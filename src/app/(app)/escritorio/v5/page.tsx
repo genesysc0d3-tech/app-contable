@@ -171,7 +171,7 @@ body{font-family:'DM Sans',sans-serif}
 :root{--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--muted-light:#888}
 .ep-glow-card{transition:box-shadow 600ms cubic-bezier(0.22,1,0.36,1)}
 .ep-glow-card:hover{box-shadow:0 0 40px -8px rgba(232,85,62,0.40)!important}
-.app{display:grid;grid-template-columns:2.55fr 7.45fr;max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
+.app{display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,7.7fr);max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
 /* Móvil/tablet: una sola columna apilada con scroll vertical; el panel de
    trabajo (tabs) conserva una altura útil propia. */
 @media (max-width: 900px){
@@ -280,44 +280,39 @@ body{font-family:'DM Sans',sans-serif}
 .r-scroll .sec{padding:6px 16px}
 .r-scroll .sec:first-child{padding-top:10px}
 .r-scroll .sec:last-child{padding-bottom:10px}
-.em-header{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--bg-muted)}
-.em-header .big{font-size:20px;font-weight:300}
-.em-header .lbl{font-size:10px;color:var(--text2)}
-.em-header .blk{font-size:9px;padding:2px 8px;border-radius:12px;background:rgba(245,158,11,.1);color:#f59e0b;display:flex;align-items:center;gap:3px}
-.em-header .rf{width:24px;height:24px;border-radius:6px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--bg-muted);color:var(--text2);font-size:12px;margin-left:auto}
-.em-header .rf:hover{background:rgba(255,255,255,.08);color:var(--text)}
-.em-pills{display:flex;align-items:center;gap:4px;margin-top:8px;flex-wrap:wrap}
-.em-pills .pl{font-size:9px;padding:3px 8px;border-radius:12px;border:none;cursor:pointer;font-weight:500;transition:all .15s}
-.em-pills .pl.act{background:var(--accent-light);color:#E8553E}
+.em-header{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.em-header .big{font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--text)}
+.em-header .lbl{font-size:11px;color:var(--text2)}
+.em-header .blk{font-size:10px;padding:2px 8px;border-radius:12px;background:rgba(245,158,11,.1);color:#f59e0b;display:flex;align-items:center;gap:3px}
+.em-header .rf{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--bg-muted);color:var(--text2);font-size:13px;margin-left:auto}
+.em-header .rf:hover{background:var(--surface2);color:var(--text)}
+.em-pills{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.em-pills .pl{font-size:10px;height:24px;padding:0 12px 2px;border-radius:999px;border:1px solid transparent;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;box-sizing:border-box;transition:all .15s}
+.em-pills .pl.act{background:var(--surface2);color:var(--text);border-color:var(--border)}
 .em-pills .pl.ina{background:transparent;color:var(--text2)}
 .em-pills .pl.ina:hover{background:var(--bg-muted);color:var(--text)}
-.em-pills .sc{font-size:9px;color:var(--text2);display:flex;align-items:center;gap:4px;margin-left:auto;padding:3px 6px;border-radius:4px;cursor:pointer}
+.em-pills .sc{font-size:10px;color:var(--text2);display:flex;align-items:center;gap:5px;margin-left:auto;padding:4px 8px;border-radius:7px;cursor:pointer}
 .em-pills .sc:hover{background:var(--bg-muted)}
-.em-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--bg-muted);margin-bottom:4px;transition:all .15s}
+.em-grid{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.em-grid.cols2{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
+.em-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg-muted);transition:border-color .15s,background .15s}
 .em-item:hover{border-color:var(--text3)}
-.em-item.dis{opacity:.6;border-color:rgba(245,158,11,.2);background:rgba(245,158,11,.03);cursor:not-allowed}
-.em-item .cb{width:14px;height:14px;border-radius:3px;border:1.5px solid var(--border);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:transparent;transition:all .15s}
-.em-item .cb.sel{background:#E8553E;border-color:#E8553E}
+.em-item.sel{border-color:var(--accent);background:var(--accent-light)}
+.em-item.dis{opacity:.7;border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.04);cursor:not-allowed}
+.em-item .cb{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--text2);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:#fff;font-size:11px;transition:all .15s}
+.em-item .cb.sel{background:var(--accent);border-color:var(--accent)}
 .em-item .cb.dis{cursor:not-allowed;opacity:.3}
 .em-item .inf{flex:1;min-width:0}
-.em-item .inf .tt{font-size:10px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.em-item .inf .sub{font-size:9px;color:var(--text2);margin-top:1px}
-.em-item .inf .sub .rn{color:#f59e0b;font-size:8px;display:flex;align-items:center;gap:2px;margin-top:2px}
-.em-item .inf .rz{font-size:8px;color:var(--text3);margin-top:1px}
-.em-item .inf .rz .lb{font-size:8px}
-.em-item .tp{display:flex;gap:2px;flex-shrink:0}
-.em-item .tp button{font-size:8px;padding:2px 6px;border-radius:4px;border:none;cursor:pointer;font-weight:700;transition:all .15s}
-.em-item .tp .af{background:var(--accent-light);color:#E8553E}
-.em-item .tp .ex{background:rgba(59,130,246,.1);color:#5b9cf6}
-.em-item .tp .au{background:rgba(167,139,250,.15);color:#a78bfa}
-.em-item .tp .ina{background:var(--bg-muted);color:var(--text3)}
-.em-item .mo{font-size:11px;font-weight:600;text-align:right;min-width:56px;font-variant-numeric:tabular-nums}
-.em-bar{position:sticky;bottom:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--bg-muted);display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:2}
-.em-bar .l{font-size:10px;color:var(--text2)}
+.em-item .inf .tt{font-size:11px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.em-item .inf .sub{font-size:10px;color:var(--text2);margin-top:2px}
+.em-item .inf .sub.rn{color:#f59e0b;font-size:9px;font-weight:500;display:flex;align-items:center;gap:4px;margin-top:4px}
+.em-item .mo{font-size:12px;font-weight:600;color:var(--text);text-align:right;min-width:84px;font-variant-numeric:tabular-nums}
+.em-bar{position:sticky;bottom:0;padding:12px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:2;box-shadow:0 -8px 24px var(--shadow)}
+.em-bar .l{font-size:11px;color:var(--text2)}
 .em-bar .l .b{font-weight:600;color:var(--text)}
-.em-bar .r button{font-size:10px;padding:7px 14px;border-radius:8px;border:none;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:4px;transition:all .15s}
-.em-bar .r .emit{background:#E8553E;color:#fff}
-.em-bar .r .emit:hover{filter:brightness(1.1)}
+.em-bar .r button{font-size:13px;padding:10px 20px;border-radius:10px;border:none;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:6px;min-height:38px;transition:all .15s}
+.em-bar .r .emit{background:var(--accent);color:#fff}
+.em-bar .r .emit:hover{filter:brightness(1.08)}
 .em-bar .r .emit:disabled{opacity:.4;cursor:not-allowed}
 .em-bar .r .emit .sp{width:12px;height:12px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:sp .5s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -343,12 +338,25 @@ body{font-family:'DM Sans',sans-serif}
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:2}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} size={38} maxWidth={180} /></div>}
-          actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:132,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2}}><HeaderActionsRow /></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} size={38} maxWidth={180} /></span></div>}
+          actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:132,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
 
-            {/* EMITIR PANEL */}
+            {/* REGISTROS — arriba de TODAS las cards (actividad + ventas) */}
+            <RegistrosToggleCard
+              esRcvExento={esRcvExento}
+              ventasDocs={mesaInicial.ventasDocs}
+              ventasTotal={mesaInicial.ventasTotal}
+              actividadCount={mesaInicial.actividadItems.length}
+              actividadUltimo={mesaInicial.actividadItems[0]?.descripcion}
+              periodo={mesaInicial.calendar.selectedDateLabel}
+            />
+
+            {/* EMITIR PANEL — massDTE arriba de boleta única */}
+             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
+            </div></GlowWrap>
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction
                 empresaTipo={usuario.empresas.tipo_contribuyente}
@@ -363,19 +371,6 @@ body{font-family:'DM Sans',sans-serif}
                 readOnlyReason={supportReadOnlyReason}
               />
             </div></GlowWrap>
-             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
-            </div></GlowWrap>
-
-            {/* REGISTROS — card única con toggle Ventas / Actividad (2/3 ↔ 1/3) */}
-            <RegistrosToggleCard
-              esRcvExento={esRcvExento}
-              ventasDocs={mesaInicial.ventasDocs}
-              ventasTotal={mesaInicial.ventasTotal}
-              actividadCount={mesaInicial.actividadItems.length}
-              actividadUltimo={mesaInicial.actividadItems[0]?.descripcion}
-              periodo={mesaInicial.calendar.selectedDateLabel}
-            />
             <div style={{display:"none"}}><RCVButton /></div>
             {equipoBusiness.ok && equipoBusiness.equipo && (
               <TeamBusinessPanel

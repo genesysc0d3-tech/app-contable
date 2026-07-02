@@ -7,6 +7,13 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+
   let body: { fingerprint?: string; nombre?: string; roles?: string[]; headerRow?: string[]; txStart?: number };
   try {
     body = await request.json();
@@ -45,23 +52,41 @@ export async function POST(request: Request) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const sb = createServiceClient(url, serviceKey);
 
-  // Save to parser_adapters
-  const { error: upsertError } = await sb
+  // Anti-poison cross-tenant (auditoría #2): first-owner-wins. Si ya hay un adapter
+  // para este fingerprint que NO es de esta empresa (o es heurístico/global, dueño
+  // null), NO se sobrescribe — se conserva el compartido. Solo el dueño edita el suyo.
+  const { data: existing } = await sb
     .from("parser_adapters")
-    .upsert({
+    .select("id, creado_por_empresa_id")
+    .eq("fingerprint", body.fingerprint)
+    .maybeSingle();
+
+  if (existing?.id) {
+    if (existing.creado_por_empresa_id !== usuario.empresa_id) {
+      return NextResponse.json({ ok: true, fingerprint: body.fingerprint, compartido: true });
+    }
+    const { error: updErr } = await sb
+      .from("parser_adapters")
+      .update({ source: "manual", nombre: body.nombre || "Formato manual", config, confianza: 1.0 })
+      .eq("id", existing.id);
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+    return NextResponse.json({ ok: true, fingerprint: body.fingerprint });
+  }
+
+  const { error: insErr } = await sb
+    .from("parser_adapters")
+    .insert({
       fingerprint: body.fingerprint,
       source: "manual",
-      nombre: body.nombre || `Formato manual`,
+      nombre: body.nombre || "Formato manual",
       config,
       confianza: 1.0,
       usage_count: 0,
       success_count: 0,
       failure_count: 0,
-    }, { onConflict: "fingerprint" });
-
-  if (upsertError) {
-    return NextResponse.json({ error: upsertError.message }, { status: 500 });
-  }
+      creado_por_empresa_id: usuario.empresa_id,
+    });
+  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, fingerprint: body.fingerprint });
 }

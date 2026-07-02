@@ -6,9 +6,9 @@ import { createContext, useContext } from "react";
 // mesa SIN navegar: el MesaController provee `reloadMesa` (re-pide solo los
 // datos date-dependientes y hace setMesa). Fuera de la mesa (p.ej. la ruta
 // /revisar) el contexto es null y los componentes caen a router.refresh().
-export const MesaReloadContext = createContext<(() => void) | null>(null);
+export const MesaReloadContext = createContext<((opts?: { silent?: boolean }) => void) | null>(null);
 
-export function useMesaReload(): (() => void) | null {
+export function useMesaReload(): ((opts?: { silent?: boolean }) => void) | null {
   return useContext(MesaReloadContext);
 }
 

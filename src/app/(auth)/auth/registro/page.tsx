@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signUp, signInWithGoogle } from "../actions";
+import { POLICY_VERSION } from "@/lib/legal/version";
 
 export default function RegistroPage() {
   return (
@@ -18,6 +19,7 @@ function RegistroContent() {
   const next = safeNextPath(searchParams.get("next"));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   // El landing manda ?plan= acá; el flujo de auth (callback → onboarding) no
   // preserva query params, así que lo guardamos en cookie. crearEmpresa la lee al
@@ -41,6 +43,9 @@ function RegistroContent() {
   async function handleGoogle() {
     setLoading(true);
     setError(null);
+    // OAuth no pasa por signUp: dejamos la prueba de consentimiento en cookie para que el
+    // callback la registre (el botón ya exige el checkbox marcado).
+    document.cookie = `massdte_consent=${POLICY_VERSION}; path=/; max-age=600; samesite=lax`;
     const result = await signInWithGoogle(next);
     if (result?.error) {
       setError(result.error);
@@ -110,6 +115,22 @@ function RegistroContent() {
                 placeholder="Minimo 6 caracteres"
               />
             </div>
+            <label className="flex items-start gap-2 text-xs text-white/50 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="consentimiento"
+                required
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#e8553e]"
+              />
+              <span>
+                Acepto la{" "}
+                <Link href="/legal/privacidad" target="_blank" className="text-[#e8553e] hover:text-[#e8553e]/80 underline">Politica de Privacidad</Link>
+                {" "}y los{" "}
+                <Link href="/legal/terminos" target="_blank" className="text-[#e8553e] hover:text-[#e8553e]/80 underline">Terminos</Link>.
+              </span>
+            </label>
             <button
               type="submit"
               disabled={loading}
@@ -130,7 +151,8 @@ function RegistroContent() {
 
           <button
             onClick={handleGoogle}
-            disabled={loading}
+            disabled={loading || !consent}
+            title={!consent ? "Primero acepta la Politica de Privacidad y los Terminos" : undefined}
             className="w-full rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 border border-white/10 px-4 py-3 text-sm font-medium text-white/90 transition-colors"
           >
             Continuar con Google

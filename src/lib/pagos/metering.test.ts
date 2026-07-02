@@ -6,6 +6,8 @@ import {
   chileMonthUtcRange,
   addDaysStr,
   addOneMonth,
+  decidirGate,
+  type EstadoCuota,
 } from "./metering";
 
 describe("periodoActual — período mensual en zona Chile", () => {
@@ -118,5 +120,73 @@ describe("helpers de fecha calendario", () => {
     expect(addOneMonth("2024-01-31")).toBe("2024-02-29"); // bisiesto
     expect(addOneMonth("2026-12-15")).toBe("2027-01-15");
     expect(addOneMonth("2026-06-12")).toBe("2026-07-12");
+  });
+});
+
+describe("decidirGate — gate puro de emisión masiva (todas las ramas)", () => {
+  const base = (over: Partial<EstadoCuota> = {}): EstadoCuota => ({
+    plan: null, cuota: 0, refills: 0, uso: 0, disponible: 0,
+    trial: null, suscripcionActiva: false, suscripcionEstado: null, ...over,
+  });
+  const trial = (over: Partial<NonNullable<EstadoCuota["trial"]>> = {}) => ({
+    activo: true, inicio: "2026-06-10T12:00:00Z", diasRestantes: 2, boletasUsadas: 0, boletasMax: 100, ...over,
+  });
+
+  it("suscripción activa con cupo suficiente → permite", () => {
+    expect(decidirGate(base({ suscripcionActiva: true, disponible: 50 }), 30)).toEqual({ ok: true });
+  });
+
+  it("suscripción activa, borde exacto (cantidad == disponible) → permite", () => {
+    expect(decidirGate(base({ suscripcionActiva: true, disponible: 10 }), 10)).toEqual({ ok: true });
+  });
+
+  it("suscripción activa sin cupo → CUOTA_AGOTADA (fail-closed)", () => {
+    const r = decidirGate(base({ suscripcionActiva: true, disponible: 5 }), 10);
+    expect(r.ok).toBe(false);
+    if (r.ok === false) { expect(r.codigo).toBe("CUOTA_AGOTADA"); expect(r.disponible).toBe(5); }
+  });
+
+  it("suscripción morosa (no activa, estado ≠ pendiente) → SIN_PLAN, no vuelve al trial", () => {
+    const r = decidirGate(base({ suscripcionEstado: "morosa", trial: trial() }), 1);
+    expect(r.ok).toBe(false);
+    if (r.ok === false) expect(r.codigo).toBe("SIN_PLAN");
+  });
+
+  it("suscripción pendiente → cae al trial (no bloquea por la puerta de atrás)", () => {
+    expect(decidirGate(base({ suscripcionEstado: "pendiente", trial: trial({ inicio: null }) }), 5))
+      .toEqual({ ok: "activar_trial" });
+  });
+
+  it("sin trial y sin suscripción → SIN_PLAN", () => {
+    const r = decidirGate(base({ trial: null }), 1);
+    expect(r.ok).toBe(false);
+    if (r.ok === false) expect(r.codigo).toBe("SIN_PLAN");
+  });
+
+  it("trial sin iniciar y cabe (incluso al tope) → señal activar_trial", () => {
+    expect(decidirGate(base({ trial: trial({ inicio: null, boletasMax: 100 }) }), 100))
+      .toEqual({ ok: "activar_trial" });
+  });
+
+  it("trial sin iniciar pero excede el cupo → CUOTA_AGOTADA (no activa el reloj)", () => {
+    const r = decidirGate(base({ trial: trial({ inicio: null, boletasMax: 100 }) }), 101);
+    expect(r.ok).toBe(false);
+    if (r.ok === false) { expect(r.codigo).toBe("CUOTA_AGOTADA"); expect(r.disponible).toBe(100); }
+  });
+
+  it("trial terminado → TRIAL_TERMINADO", () => {
+    const r = decidirGate(base({ trial: trial({ activo: false }) }), 1);
+    expect(r.ok).toBe(false);
+    if (r.ok === false) expect(r.codigo).toBe("TRIAL_TERMINADO");
+  });
+
+  it("trial activo con cupo → permite", () => {
+    expect(decidirGate(base({ disponible: 20, trial: trial({ activo: true }) }), 15)).toEqual({ ok: true });
+  });
+
+  it("trial activo sin cupo suficiente → CUOTA_AGOTADA", () => {
+    const r = decidirGate(base({ disponible: 3, trial: trial({ activo: true }) }), 10);
+    expect(r.ok).toBe(false);
+    if (r.ok === false) { expect(r.codigo).toBe("CUOTA_AGOTADA"); expect(r.disponible).toBe(3); }
   });
 });

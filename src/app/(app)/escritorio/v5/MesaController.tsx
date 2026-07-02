@@ -71,16 +71,20 @@ export default function MesaController({
 
   // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
   // diferencia de navigate, ignora la cache (los datos cambiaron) y la reescribe.
-  const reloadMesa = useCallback(() => {
+  const reloadMesa = useCallback((opts?: { silent?: boolean }) => {
     const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode };
-    startTransition(async () => {
+    const run = async () => {
       const res = await cargarMesa(params);
       if (res.ok) {
         cacheRef.current.set(keyOf(params.view, params.date, params.month), res.mesa);
         setMesa(res.mesa);
         broadcastMesa(res.mesa);
       }
-    });
+    };
+    // silent = refresh de fondo (realtime/poll): sin startTransition → NO atenúa la
+    // mesa (sin parpadeo). El refresh por acción del usuario sí usa la transición.
+    if (opts?.silent) void run();
+    else startTransition(run);
   }, [mesa]);
 
   // Desde Emitir: abrir una tx en Check. Deja el doc pendiente, cambia a la
@@ -100,6 +104,30 @@ export default function MesaController({
     window.addEventListener("massdte:open-doc", onOpenDoc);
     return () => window.removeEventListener("massdte:open-doc", onOpenDoc);
   }, [navigate, mesa]);
+
+  // Tras subir algo (el uploader vive FUERA del provider → llega por evento): ir a
+  // ese día (vista día) con datos FRESCOS. Se invalida la cache del rango porque los
+  // datos recién entraron. Esto reemplaza el router.refresh() del uploader, que no
+  // actualizaba la mesa (el estado no se re-siembra de initialMesa sin remount/F5).
+  useEffect(() => {
+    const onUploaded = (e: Event) => {
+      const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesa.selDate;
+      const [yy, mm] = date.split("-");
+      const month = `${yy}-${Number(mm) - 1}`; // calendar.m es 0-indexed
+      const key = keyOf("day", date, month);
+      cacheRef.current.delete(key); // datos nuevos → forzar re-fetch
+      // SILENCIOSO (sin startTransition) → NO atenúa la mesa (era el "gris" que se
+      // quedaba pegado mientras el procesamiento de fondo competía). subir-procesar
+      // deja el doc en "procesando"; entra al toque y el poll de DocCardList lo lleva
+      // a "procesado" sin volver a atenuar.
+      void (async () => {
+        const res = await cargarMesa({ date, month, view: "day" });
+        if (res.ok) { cacheRef.current.set(key, res.mesa); setMesa(res.mesa); broadcastMesa(res.mesa); }
+      })();
+    };
+    window.addEventListener("massdte:uploaded", onUploaded);
+    return () => window.removeEventListener("massdte:uploaded", onUploaded);
+  }, [mesa]);
 
   return (
     <>

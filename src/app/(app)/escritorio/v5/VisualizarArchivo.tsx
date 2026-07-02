@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { workbookToPreviewSheets, type ExcelPreviewSheet } from "@/lib/excel/preview";
 import * as XLSX from "xlsx";
+import GaleriaComprobante from "./GaleriaComprobante";
 
 type FileKind = "sheet" | "image" | "pdf";
 
@@ -29,6 +30,7 @@ export default function VisualizarArchivo({
   const [fileName, setFileName] = useState("");
   const [kind, setKind] = useState<FileKind>("sheet");
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [albumImgs, setAlbumImgs] = useState<string[]>([]);
 
   useEffect(() => {
     function handleEsc(e: KeyboardEvent) {
@@ -44,7 +46,7 @@ export default function VisualizarArchivo({
       try {
         const { data: doc, error: docErr } = await supabase
           .from("documentos_subidos")
-          .select("nombre_archivo")
+          .select("nombre_archivo, album_imagenes")
           .eq("id", documentoId)
           .single();
         if (docErr || !doc) throw new Error("Archivo no encontrado");
@@ -58,7 +60,12 @@ export default function VisualizarArchivo({
         setKind(fk);
         const url = `/api/archivo/${documentoId}`;
 
-        if (fk === "image" || fk === "pdf") {
+        if (fk === "image") {
+          // Foto suelta o álbum de Telegram → galería (zoom + flechas si hay varias).
+          const album = Array.isArray(doc.album_imagenes) ? (doc.album_imagenes as unknown[]) : null;
+          const imgs = album && album.length ? album.map((_, i) => `/api/archivo/${documentoId}?i=${i}`) : [url];
+          if (!cancelled) setAlbumImgs(imgs);
+        } else if (fk === "pdf") {
           if (!cancelled) setObjectUrl(url);
         } else {
           const res = await fetch(url);
@@ -82,14 +89,14 @@ export default function VisualizarArchivo({
 
   // Imagen → lightbox: zoom in, contenido (no full-screen), fondo SOLO desenfocado
   // (sin oscurecer) y botón "Cerrar" abajo (frosted + fade).
-  const esImagen = kind === "image" && !!objectUrl && !loading && !error;
+  const esImagen = kind === "image" && albumImgs.length > 0 && !loading && !error;
 
   return createPortal(
     <div
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center", padding: 28,
-        background: esImagen ? "transparent" : "rgba(0,0,0,.62)",
+        background: "rgba(0,0,0,.5)",
         backdropFilter: esImagen ? "none" : "blur(13px)", WebkitBackdropFilter: esImagen ? "none" : "blur(13px)",
       }}
     >
@@ -104,28 +111,31 @@ export default function VisualizarArchivo({
         .vx-table tr:hover { background: rgba(232,85,62,.04); }
       `}</style>
 
-      {/* Cerrar flotante arriba (solo para card/pdf/planilla) */}
-      {!esImagen && (
+      {/* Cerrar flotante arriba: solo para la tarjeta pdf/planilla (la imagen usa el de abajo) */}
+      {!esImagen && !loading && !error && (
         <button onClick={onClose} title="Cerrar"
           style={{ position: "fixed", top: 18, right: 22, zIndex: 2, width: 34, height: 34, borderRadius: 9, border: "1px solid var(--border)", background: "rgba(20,20,24,.72)", color: "var(--text2)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>×</button>
       )}
 
-      {loading ? (
-        <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", color: "var(--text2)", fontSize: 12 }}>
-          <div style={{ width: 180, height: 11, borderRadius: 6, background: "var(--bg-muted)", margin: "0 auto 12px", animation: "vx-pulse 1.2s ease infinite" }} />
-          Cargando…
-        </div>
-      ) : error ? (
+      {error ? (
         <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", color: "#ef4444", fontSize: 12 }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ margin: "0 auto 8px" }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           {error}
         </div>
-      ) : esImagen ? (
-        /* ── Imagen → lightbox: zoom, contenida, fondo solo desenfocado ── */
+      ) : (loading || esImagen) ? (
+        /* ── Pop-up de imagen/álbum: la CAJA aparece YA; adentro "Cargando imagen…" hasta que está lista. ── */
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img onClick={(e) => e.stopPropagation()} src={objectUrl ?? ""} alt={fileName}
-            style={{ maxWidth: "74vw", maxHeight: "78vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 30px 90px rgba(0,0,0,.5)", display: "block", animation: "lbZoom .28s cubic-bezier(.22,1,.36,1)" }} />
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(88vw, 760px)", height: "80vh", position: "relative", background: "var(--surface2)", borderRadius: 16, border: "1px solid var(--border)", overflow: "hidden", animation: "lbZoom .28s cubic-bezier(.22,1,.36,1)" }}>
+            {esImagen ? (
+              <GaleriaComprobante images={albumImgs} alt={fileName} />
+            ) : (
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 9, color: "var(--text2)", fontSize: 12 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--text3)", animation: "vx-pulse 1.2s ease infinite" }} />
+                Cargando imagen…
+              </div>
+            )}
+          </div>
           <button onClick={onClose}
             style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid rgba(255,255,255,.16)", background: "rgba(28,28,34,.4)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", animation: "lbFade .32s ease .08s both" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>

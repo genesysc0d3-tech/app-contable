@@ -245,7 +245,9 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
       });
     }
     if (images.length === 0) throw new Error("No se pudieron descargar las imagenes agrupadas");
-    const { groupedText } = await ocrAndGroupImages(images);
+    // Telegram = 1 venta: salta la 2ª pasada IA de agrupado y acorta el timeout OCR.
+    const esTelegram = metadata.origen === "telegram";
+    const { groupedText } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000 } : undefined);
     return { contenido: groupedText, preExtracted: null };
   }
 
@@ -342,8 +344,24 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
     const { contenido, preExtracted } = await extractContentFromJob(sb, job);
     if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
 
-    const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined);
-    if (result.error) throw new Error(result.error);
+    const meta = job.metadata && typeof job.metadata === "object" && !Array.isArray(job.metadata)
+      ? job.metadata as Record<string, Json>
+      : {};
+    let movimientosTotal: number;
+    if (meta.origen === "telegram") {
+      // Telegram (álbum o foto suelta vía cola): determinístico-primero + boleta al chat.
+      const { clasificarComprobanteTelegram } = await import("@/lib/telegram/ingesta");
+      const chatId = typeof meta.chat_id === "number" ? meta.chat_id : undefined;
+      // Álbum (multi-imagen) → IA (el parser determinístico es de 1 comprobante y se
+      // confunde con varios montos). Foto suelta vía cola → determinístico-primero.
+      const esAlbum = Array.isArray(meta.grouped_images) && meta.grouped_images.length > 1;
+      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum });
+      movimientosTotal = r.movimientos_total;
+    } else {
+      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined);
+      if (result.error) throw new Error(result.error);
+      movimientosTotal = result.movimientos_total;
+    }
 
     const completedAt = new Date().toISOString();
     const { error } = await sb
@@ -359,7 +377,7 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       .eq("id", job.id);
     if (error) throw new Error(`JOB_COMPLETE_UPDATE_FAILED:${error.message}`);
 
-    return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: result.movimientos_total };
+    return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: movimientosTotal };
   } catch (error) {
     await markJobFailedOrRetryable(sb, job, error, now);
     return { ok: false as const, jobId: job.id, documentoId: job.documento_id, error: safeJobError(error) };

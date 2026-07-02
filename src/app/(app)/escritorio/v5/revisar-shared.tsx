@@ -5,13 +5,14 @@
 // (ConfianzaGroupSection) en el visor de la mesa unificada y en el popup MassDTE,
 // sin duplicar código. Comportamiento idéntico al original.
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { aprobarPropuesta, rechazarPropuesta, aprobarTodas, crearClienteDesdeRevisar } from "../../revisar/actions";
+import { rechazarPropuesta, aprobarTodas, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import type { Tables } from "@/lib/database.types";
 import { formatShortDateEsCl } from "@/lib/display-date";
+import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { useMesaReload } from "./mesa-reload";
 
 export type Propuesta = Tables<"propuestas_ia"> & {
@@ -127,12 +128,10 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
             <svg width="12" height="12" viewBox="0 0 24 24" fill={color}><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span className="lbl" style={{fontSize:10,fontWeight:600,flex:1,color}}>{label}</span>
             <span className="cnt" style={{fontSize:9,color:"var(--text2)"}}>{propuestas.length}</span>
-            {tipo === "alta" && (
-              <div className="act" style={{display:"flex",gap:4}} onClick={e => e.stopPropagation()}>
-                <BlockApproveBtn ids={visible.map(p => p.id)} label={`Aprobar bloque ${curBlock + 1}`} />
-                <ApproveAllBtn ids={propuestas.map(p => p.id)} />
-              </div>
-            )}
+            <div className="act" style={{display:"flex",gap:4}} onClick={e => e.stopPropagation()}>
+              {useBlocks && <BlockApproveBtn ids={visible.map(p => p.id)} label="Poner página lista" />}
+              <ApproveAllBtn ids={propuestas.map(p => p.id)} />
+            </div>
           </div>
 
           {/* Body */}
@@ -178,8 +177,9 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       <span className={`cf ${(p.confianza ?? 0) >= ALTA ? "hi" : (p.confianza ?? 0) >= MEDIA ? "me" : "ba"}`}
                         style={{fontSize:9,fontWeight:600,textAlign:"right",minWidth:30,color:(p.confianza??0)>=ALTA?"#22c55e":(p.confianza??0)>=MEDIA?"#f59e0b":"var(--text2)"}}
                       >{Math.round((p.confianza??0)*100)}%</span>
+                      {p.estado === "listo" && <span style={{fontSize:8,fontWeight:800,color:"#22c55e",flexShrink:0,letterSpacing:".05em"}}>LISTO</span>}
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
-                        <RowActionBtn type="aprove" onClick={async () => {const r=await aprobarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Aprobada");onAction();}} icon="✓" />
+                        <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />
                         <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />
                         <RowActionBtn type="reject" onClick={async () => {const r=await rechazarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Rechazada");onAction();}} icon="✕" />
                       </div>
@@ -203,7 +203,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
 }
 
 /* ─── Row Action Button ─── */
-function RowActionBtn({ onClick, icon, type }: { onClick: () => void; icon: string; type: "aprove"|"edit"|"reject" }) {
+export function RowActionBtn({ onClick, icon, type }: { onClick: () => void; icon: string; type: "aprove"|"edit"|"reject" }) {
   const bg = type === "aprove" ? "rgba(34,197,94,.1)" : type === "edit" ? "rgba(245,158,11,.1)" : "rgba(239,68,68,.1)";
   const cl = type === "aprove" ? "#22c55e" : type === "edit" ? "#f59e0b" : "#ef4444";
   return (
@@ -223,14 +223,14 @@ function BlockApproveBtn({ ids, label }: { ids: string[]; label: string }) {
     e.stopPropagation();
     if (ids.length === 0) return;
     setLoading(true);
-    const r = await aprobarTodas(ids);
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} aprobadas en bloque`);
+    const r = await ponerListo(ids);
+    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }
   return (
     <button onClick={handle} disabled={loading}
-      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(232,85,62,.3)",cursor:"pointer",fontWeight:600,background:"transparent",color:"#E8553E",opacity:loading?0.5:1}}
+      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(34,197,94,.35)",cursor:"pointer",fontWeight:600,background:"transparent",color:"#22c55e",opacity:loading?0.5:1}}
     >{loading ? "..." : label}</button>
   );
 }
@@ -245,52 +245,112 @@ function ApproveAllBtn({ ids }: { ids: string[] }) {
     e.stopPropagation();
     if (ids.length === 0) return;
     setLoading(true);
-    const r = await aprobarTodas(ids);
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} aprobadas`);
+    const r = await ponerListo(ids);
+    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }
   return (
     <button onClick={handle} disabled={loading}
-      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",opacity:loading?0.5:1}}
-    >{loading ? "..." : `Aprobar todas`}</button>
+      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"none",cursor:"pointer",fontWeight:600,background:"#22c55e",color:"#08240f",opacity:loading?0.5:1}}
+    >{loading ? "..." : `Poner todas listas`}</button>
   );
 }
 
-/* ─── Expanded Detail (tarjeta de propuesta reusable) ─── */
+const PAGOS_INLINE = ["Efectivo", "Transferencia electrónica", "Débito", "Crédito", "Otro"];
+
+/* ─── Expanded Detail: el desplegable ES el editor. Mismos campos que el editor
+   completo (tipo, detalle, monto, receptor, forma de pago) inline — sin popup
+   aparte. "Poner listo" persiste los edits y stagea (lo que ves = lo que se emite). ─── */
 export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, empresaTipoContribuyente, compact = false }: {
   propuesta: Propuesta; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; onClose: () => void;
   empresaTipoContribuyente?: string | null; compact?: boolean;
 }) {
   const { toast } = useToast();
+  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; medio_pago?: string | null };
+
+  // Cliente
   const [selClienteId, setSelClienteId] = useState(propuesta.cliente_id ?? "");
   const [newClienteNombre, setNewClienteNombre] = useState("");
   const [newClienteRut, setNewClienteRut] = useState("");
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [busy, setBusy] = useState(false);
-  const isAfecta = propuesta.tipo_propuesto === "boleta" || propuesta.tipo_propuesto === "factura";
-  // Gastos y movimientos no comerciales se registran pero no generan boleta;
-  // el badge debe decirlo (antes caían al else y mostraban "Boleta · exenta").
+
   const isGasto = propuesta.tipo_propuesto === "gasto_egreso";
   const isNoComercial = propuesta.tipo_propuesto === "no_comercial";
   const noBoletea = isGasto || isNoComercial;
-  const tipoBadge = tipoMeta(propuesta.tipo_propuesto);
-  const empresaSugiereExenta = empresaTipoContribuyente === "exento";
-  const empresaSugiereAfecta = empresaTipoContribuyente === "afecto";
 
-  const neto = propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
-  const iva = propuesta.iva ?? Math.round(neto * 0.19);
-  const total = propuesta.total ?? neto + iva;
+  // Campos editables (editable, sin lock). El tipo lo decide PRIMERO la clasificación
+  // de la propuesta (tipo_dte persistido → tipo_propuesto), y SOLO como desempate la
+  // sugerencia de la empresa. Un default de empresa 'afecto'/'auto' NUNCA puede pisar
+  // una exención POR LEY (cripto/forex/P2P, Of. SII 963/2018): eso fabricaría IVA
+  // inexistente sobre una venta exenta (el footgun que el clasificador ya prohíbe).
+  const EXENTOS_POR_TIPO = ["exenta", "factura_exenta", "compraventa_crypto", "transferencia_p2p", "operacion_forex"];
+  const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
+  const tipoInicial: "afecta" | "exenta" =
+    propuesta.tipo_dte === 41 ? "exenta"
+      : propuesta.tipo_dte === 39 ? "afecta"
+        : EXENTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "exenta"
+          : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
+            : empresaTipoContribuyente === "exento" ? "exenta"
+              : empresaTipoContribuyente === "afecto" ? "afecta"
+                : "exenta"; // default seguro: nunca fabricar IVA sobre algo sin clasificar
+  const [tipo, setTipo] = useState<"afecta" | "exenta">(tipoInicial);
+  const [total, setTotal] = useState<number>(Math.round(propuesta.total ?? propuesta.movimientos_raw?.monto ?? 0));
+  // Detalle = SOLO el detalle editado por el humano (notas). NO se prellena con la glosa
+  // bancaria: si se prellenara y "Poner listo" lo persistiera sin tocar, notas (máxima
+  // precedencia en armar-boleta) pisaría la glosa común de la cartola. Vacío → la glosa
+  // cae a glosa común o a la del banco (ver resolverGlosa). La glosa bancaria se ve en el
+  // header como referencia y como placeholder.
+  const [detalle, setDetalle] = useState<string>(propuesta.notas?.trim() ?? "");
+  const [rut, setRut] = useState<string>(propuesta.receptor_rut ?? "");
+  const [razon, setRazon] = useState<string>(propuesta.receptor_nombre ?? "");
+  const [direccion, setDireccion] = useState<string>(extra.receptor_direccion ?? "");
+  const [comuna, setComuna] = useState<string>(extra.receptor_comuna ?? "");
+  const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
+  // Progresivos (gobernados por 135 UF): bajo el umbral el receptor va escondido tras
+  // un link; dirección/comuna detrás de "más datos" (nunca obligatorias). Se abren si
+  // ya traen dato o si el usuario los despliega.
+  const [showReceptorManual, setShowReceptorManual] = useState(false);
+  const [showMasDatos, setShowMasDatos] = useState<boolean>(!!(extra.receptor_direccion || extra.receptor_comuna));
+
+  const isAfecta = tipo === "afecta";
+  const neto = isAfecta ? Math.round(total / 1.19) : total;
+  const iva = isAfecta ? total - neto : 0;
+  const conflicto = isAfecta && total > 0 && iva === 0; // afecta con IVA $0 → el SII la rechaza
+  const requiereReceptor = total > RECEPTOR_OBLIGATORIO_DESDE; // 135 UF
+  const rutTrim = rut.trim();
+  const rutValido = !rutTrim || validarRut(rutTrim);
+  const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());
+  // Sobre 135 UF el medio de pago es tan obligatorio como el RUT (Res. Ex. SII 44/2025).
+  const medioOk = !requiereReceptor || !!medioPago.trim();
+  const puedeStagear = noBoletea || (total > 0 && !conflicto && rutValido && receptorOk && medioOk && !!detalle.trim());
+  const tieneReceptorData = !!rutTrim || !!razon.trim() || !!medioPago.trim() || !!direccion.trim() || !!comuna.trim();
+  const receptorAbierto = requiereReceptor || showReceptorManual || tieneReceptorData;
 
   async function handleAprobar() {
+    if (!puedeStagear || busy) return;
     setBusy(true);
     let cid = selClienteId;
     if (showNewCliente && newClienteNombre.trim()) {
       const res = await crearClienteDesdeRevisar({empresa_id: empresaId, nombre: newClienteNombre.trim(), rut: newClienteRut.trim() || undefined});
       if ("cliente" in res && res.cliente) cid = res.cliente.id;
     }
-    const r = await aprobarPropuesta(propuesta.id, cid || null);
-    if (r.error) toast(r.error, "error"); else toast("Aprobada");
+    // Persistir los edits ANTES de stagear: lo que ves = lo que se emite.
+    const patch = noBoletea
+      ? { notas: detalle.trim() || null }
+      : {
+          tipo_propuesto: isAfecta ? "boleta" : "exenta",
+          tipo_dte: isAfecta ? 39 : 41,
+          total: Math.round(total), monto_neto: neto, iva,
+          receptor_rut: rutTrim || null, receptor_nombre: razon.trim() || null,
+          receptor_direccion: direccion.trim() || null, receptor_comuna: comuna.trim() || null,
+          medio_pago: medioPago.trim() || null, notas: detalle.trim() || null,
+        };
+    const e = await editarPropuesta(propuesta.id, patch);
+    if (e?.error) { toast(e.error, "error"); setBusy(false); return; }
+    const r = await ponerListo([propuesta.id], cid || null);
+    if (r.error) toast(r.error, "error"); else toast("Lista");
     onAction();
     setBusy(false);
     onClose();
@@ -305,86 +365,117 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     onClose();
   }
 
+  const lbl: CSSProperties = { fontSize: 8, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 3 };
+  const inp: CSSProperties = { width: "100%", fontSize: 11, padding: "6px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" };
+  const linkBtn: CSSProperties = { background: "none", border: "none", padding: "3px 0", cursor: "pointer", fontSize: 9, fontWeight: 600, color: "var(--text3)", textAlign: "left" };
+  const conf = Math.round((propuesta.confianza ?? 0) * 100);
+  const confCol = (propuesta.confianza ?? 0) >= ALTA ? "#22c55e" : (propuesta.confianza ?? 0) >= MEDIA ? "#f59e0b" : "var(--text2)";
+
   return (
-    <div className="pc op" style={{padding:"0 16px 8px"}}>
-      <div className="col" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-        <span className={`tag ${isAfecta ? "af" : "ex"}`}
-          style={{fontSize:8,padding:"2px 7px",borderRadius:10,fontWeight:600,
-            background: tipoBadge.bg,
-            color: tipoBadge.color,
-          }}
-        >{tipoBadge.label}</span>
-        {!compact && noBoletea && (
-          <TermHint width={250}>
-            Este movimiento se registra en tus cuentas, pero no genera boleta ante el SII{isGasto ? " porque es plata que salió (gasto)" : ""}. Si en realidad fue una venta tuya, cámbialo con Editar.
-          </TermHint>
-        )}
-        <span className="cf" style={{color: (propuesta.confianza??0) >= ALTA ? "#22c55e" : (propuesta.confianza??0) >= MEDIA ? "#f59e0b" : "var(--text2)", fontSize:12,fontWeight:700}}>
-          {Math.round((propuesta.confianza ?? 0) * 100)}%
-        </span>
-        {!compact && (
-          <TermHint width={250}>
-            Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada antes de aprobar.
-          </TermHint>
-        )}
-        {empresaSugiereAfecta && !isAfecta && (
-          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(232,85,62,.1)",color:"#E8553E",marginLeft:4}}>Default empresa: AFE</span>
-        )}
-        {empresaSugiereExenta && isAfecta && (
-          <span style={{fontSize:7,padding:"1px 5px",borderRadius:8,fontWeight:600,background:"rgba(91,156,246,.1)",color:"#5b9cf6",marginLeft:4}}>Default empresa: EXE</span>
-        )}
+    <div className="pc op" style={{padding:"2px 16px 12px"}}>
+      {/* Header: confianza + glosa bancaria de referencia (el tipo vive en el toggle, no repetido) */}
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+        <span style={{color:confCol,fontSize:11,fontWeight:700}}>{conf}%</span>
+        {!compact && <TermHint width={250}>Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada.</TermHint>}
+        <span style={{marginLeft:"auto",fontSize:8,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"46%"}} title={propuesta.movimientos_raw.descripcion}>banco: {propuesta.movimientos_raw.descripcion}</span>
       </div>
-      <div className="desc" style={{fontSize:11,fontWeight:500,color:"var(--text)",marginBottom:4}}>{propuesta.movimientos_raw.descripcion}</div>
-      <div className="sub" style={{fontSize:9,color:"var(--text2)",marginBottom:6}}>
-        {compact ? null : <>{fmt(total)} · </>}{fmtShort(propuesta.movimientos_raw.fecha)} · {propuesta.receptor_nombre ?? "Sin receptor"}
-      </div>
-      <div className="fin" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:6}}>
-        <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>Neto</div>
-          <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(neto)}</div>
-        </div>
-        <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>IVA</div>
-          <div className="vl" style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{fmt(iva)}</div>
-        </div>
-        <div className="it" style={{padding:6,borderRadius:6,background:"rgba(255,255,255,.03)",textAlign:"center"}}>
-          <div className="lb" style={{fontSize:8,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".07em",fontWeight:700}}>Total</div>
-          <div className="vl ht" style={{fontSize:11,fontWeight:700,color:"#b4f027"}}>{fmt(total)}</div>
-        </div>
-      </div>
-      <div className="cliente" style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:9,color:"var(--text2)"}}>
-        <span>Cliente:</span>
-        <select value={selClienteId} onChange={e => {const v=e.target.value;if(v==="__new__"){setShowNewCliente(true);setSelClienteId("")}else{setShowNewCliente(false);setSelClienteId(v)}}
-          } style={{flex:1,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"var(--text)",fontSize:9,padding:"3px 6px"}}>
+
+      {noBoletea ? (
+        <>
+          <div style={{fontSize:10,color:"var(--text2)",marginBottom:8,lineHeight:1.4}}>
+            Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si fue una venta tuya, cambiá el tipo en Emitir.
+          </div>
+          <div style={{marginBottom:8}}>
+            <label style={lbl}>Detalle</label>
+            <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} style={inp} />
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Detalle — única fila full-width: es la glosa que se imprime (máx 80 chars) */}
+          <div style={{marginBottom:8}}>
+            <label style={{...lbl,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+              <span>Detalle</span>
+              <span style={{fontWeight:600,color:detalle.length>=80?"#ef4444":"var(--text3)"}}>{detalle.length}/80</span>
+            </label>
+            <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} placeholder="Qué se vendió o prestó (se imprime en la boleta)" style={inp} />
+          </div>
+
+          {/* Fila resumen: Tipo + Monto + neto/IVA vivo — todo en un renglón denso */}
+          <div style={{display:"grid",gridTemplateColumns:"auto 150px 1fr",gap:12,alignItems:"end",marginBottom:8}}>
+            <div>
+              <label style={lbl}>Tipo</label>
+              <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
+                {([["exenta","Exenta · 41","#5b9cf6"],["afecta","Afecta · 39","#22c55e"]] as const).map(([k,l,c])=>{
+                  const active = tipo===k;
+                  return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:9,fontWeight:700,padding:"6px 12px",border:"none",cursor:active?"default":"pointer",background:active?`${c}33`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
+                })}
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Monto</label>
+              <input type="number" value={total} onChange={e=>setTotal(Math.round(Number(e.target.value)||0))} style={{...inp,fontWeight:700,fontSize:13,textAlign:"right"}} />
+            </div>
+            <div style={{fontSize:9,fontWeight:600,color:conflicto?"#f59e0b":"var(--text3)",paddingBottom:8,textAlign:"right",whiteSpace:"nowrap"}}>
+              {conflicto ? "⚠ afecta con IVA $0" : isAfecta ? <>neto {fmt(neto)} · IVA {fmt(iva)}</> : "exenta · sin IVA"}
+            </div>
+          </div>
+
+          {/* Comprador + forma de pago: progresivo por 135 UF (el 95% de las tx no lo necesita) */}
+          {receptorAbierto ? (
+            <div style={{marginBottom:8}}>
+              <label style={lbl}>Comprador{requiereReceptor && <span style={{color:"#f59e0b",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:6}}>
+                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" style={{...inp,borderColor:!rutValido?"#ef4444":requiereReceptor&&!rutTrim?"#f59e0b":"var(--border)"}} />
+                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" style={inp} />
+                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"#f59e0b":"var(--border)"}}>
+                  <option value="">Medio de pago…</option>
+                  {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              {!rutValido && <div style={{fontSize:8,color:"#ef4444",marginTop:2}}>RUT no válido</div>}
+              {showMasDatos ? (
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
+                  <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />
+                  <input value={comuna} onChange={e=>setComuna(e.target.value)} placeholder="Comuna (opcional)" style={inp} />
+                </div>
+              ) : (
+                <button onClick={()=>setShowMasDatos(true)} style={{...linkBtn,marginTop:4}}>+ dirección y comuna</button>
+              )}
+            </div>
+          ) : (
+            <button onClick={()=>setShowReceptorManual(true)} style={{...linkBtn,marginBottom:8}}>+ identificar comprador (opcional)</button>
+          )}
+        </>
+      )}
+
+      {/* Pie denso: Cliente (izq, opcional, no imprime) + acciones (der) */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2}}>
+        <span style={{fontSize:9,color:"var(--text3)",flexShrink:0}}>Cliente</span>
+        <select value={selClienteId} onChange={e => {const v=e.target.value;if(v==="__new__"){setShowNewCliente(true);setSelClienteId("")}else{setShowNewCliente(false);setSelClienteId(v)}}}
+          style={{width:200,background:"var(--bg-muted)",border:"1px solid var(--border)",borderRadius:7,color:"var(--text)",fontSize:10,padding:"6px 8px",cursor:"pointer"}}>
           <option value="">Sin cliente asignado</option>
           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>)}
-          <option value="__new__" style={{borderTop:"1px solid rgba(255,255,255,.06)"}}>+ Crear cliente nuevo</option>
+          <option value="__new__">+ Crear cliente nuevo</option>
         </select>
-      </div>
-      {showNewCliente && (
-        <div style={{display:"flex",gap:4,marginBottom:6}}>
-          <input placeholder="Nombre" value={newClienteNombre} onChange={e => setNewClienteNombre(e.target.value)}
-            style={{flex:1,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"var(--text)",fontSize:9,padding:"3px 6px"}} />
-          <input placeholder="RUT" value={newClienteRut} onChange={e => setNewClienteRut(e.target.value)}
-            style={{width:100,background:"var(--bg-muted)",border:"1px solid rgba(255,255,255,.06)",borderRadius:5,color:"var(--text)",fontSize:9,padding:"3px 6px"}} />
-        </div>
-      )}
-      <div className="notas" style={{fontSize:9,color:"var(--text2)",fontStyle:"italic",marginBottom:6}}>{propuesta.notas ?? ""}</div>
-      <div className="actions" style={{display:"flex",gap:4}}>
-        <button onClick={handleAprobar} disabled={busy}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"#E8553E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+        <div style={{flex:1}} />
+        <button onClick={handleAprobar} disabled={busy || !puedeStagear}
+          title={!puedeStagear ? "Completá el detalle, el monto y —sobre 135 UF— RUT, nombre y medio de pago" : undefined}
+          style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"#22c55e",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          {busy ? "..." : noBoletea ? (isGasto ? "Aprobar como gasto" : "Aprobar registro") : "Aprobar"}
-        </button>
-        <button onClick={() => onClose()}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(245,158,11,.1)",color:"var(--amber)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-          ✏️ Editar
+          {busy ? "..." : "Poner listo"}
         </button>
         <button onClick={handleRechazar} disabled={busy}
-          style={{flex:1,fontSize:10,padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontWeight:600,background:"rgba(239,68,68,.1)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:4,opacity:busy?0.5:1}}>
+          style={{fontSize:10,padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,background:"rgba(239,68,68,.08)",color:"var(--accent)",opacity:busy?0.5:1}}>
           ✕ {busy ? "..." : "Rechazar"}
         </button>
       </div>
+      {showNewCliente && (
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <input placeholder="Nombre" value={newClienteNombre} onChange={e => setNewClienteNombre(e.target.value)} style={{...inp,flex:1}} />
+          <input placeholder="RUT" value={newClienteRut} onChange={e => setNewClienteRut(e.target.value)} style={{...inp,width:120}} />
+        </div>
+      )}
     </div>
   );
 }

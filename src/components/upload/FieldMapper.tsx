@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle, Warning } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
@@ -16,6 +16,7 @@ interface Preview {
 }
 
 interface FieldMapperProps { documentoId: string; onClose: () => void; onSaved?: () => void; }
+type FieldMapperVariant = "modal" | "embedded";
 
 const ROLES: Record<Role, { label: string; hint: string }> = {
   ignorar:      { label: "Ignorar",      hint: "Esta columna no se usa." },
@@ -34,51 +35,119 @@ const ROLE_HEX: Record<Role, string> = {
   cargo: "#ff7365", abono: "#34d46e", monto: "#f59e0b", tipo_flujo: "#8b5cf6", saldo: "#f47b45",
 };
 
-export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapperProps) {
+// ── Caché de previews (vive por sesión SPA, se limpia con F5) ────────────────
+// El preview de un Excel (filas crudas + formato detectado) es DETERMINÍSTICO por
+// documento: el archivo no cambia. Sin caché, cada apertura de "Mapear" volvía a
+// descargar + parsear el workbook entero (~700ms-1s) — de ahí el "cargando a cada
+// rato". Cacheamos por documentoId y deduplicamos el fetch en vuelo (cubre el
+// doble-montaje de StrictMode en dev y el prefetch por hover).
+type Mapping = { roles: Role[]; headerRow: number; firstDataRow: number; dateFormat: DateFmt; layout: Layout; defaultFlujo: "entrada" | "salida" };
+type CacheEntry = { preview: Preview; mapping: Mapping };
+const previewCache = new Map<string, CacheEntry>();
+const inflightPreview = new Map<string, Promise<Preview>>();
+
+// Deriva el mapeo inicial (roles + ajustes) del formato sugerido por el detector.
+function deriveMapping(data: Preview): Mapping {
+  const roles = new Array<Role>(data.cols).fill("ignorar");
+  let headerRow = 0, firstDataRow = 1;
+  let dateFormat: DateFmt = "dd/mm/yyyy";
+  let layout: Layout = "two_cols";
+  let defaultFlujo: "entrada" | "salida" = "entrada";
+  if (data.suggested) {
+    const s = data.suggested;
+    headerRow = s.header_row; firstDataRow = s.skip_rows_before_data;
+    dateFormat = s.date_format; layout = (s.layout ?? "two_cols") as Layout;
+    if (s.default_tipo_flujo) defaultFlujo = s.default_tipo_flujo;
+    const assign = (idx: number | undefined, role: Role) => { if (typeof idx === "number" && idx >= 0 && idx < data.cols) roles[idx] = role; };
+    assign(s.columns.fecha, "fecha"); assign(s.columns.descripcion, "descripcion");
+    assign(s.columns.n_documento, "n_documento"); assign(s.columns.cargo, "cargo");
+    assign(s.columns.abono, "abono"); assign(s.columns.saldo, "saldo");
+    assign(s.columns.monto, "monto"); assign(s.columns.tipo_flujo_col, "tipo_flujo");
+  }
+  return { roles, headerRow, firstDataRow, dateFormat, layout, defaultFlujo };
+}
+
+async function fetchPreviewRaw(documentoId: string): Promise<Preview> {
+  const res = await fetch("/api/parser/preview", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ documento_id: documentoId }),
+  });
+  if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "No se pudo cargar preview"); }
+  return res.json() as Promise<Preview>;
+}
+
+// Devuelve el preview desde caché, desde el fetch en vuelo, o iniciando uno nuevo.
+// Los errores NO se cachean (el próximo intento reintenta).
+function loadPreview(documentoId: string): Promise<Preview> {
+  const cached = previewCache.get(documentoId);
+  if (cached) return Promise.resolve(cached.preview);
+  const existing = inflightPreview.get(documentoId);
+  if (existing) return existing;
+  const p = fetchPreviewRaw(documentoId)
+    .then((data) => { previewCache.set(documentoId, { preview: data, mapping: deriveMapping(data) }); return data; })
+    .finally(() => { inflightPreview.delete(documentoId); });
+  inflightPreview.set(documentoId, p);
+  return p;
+}
+
+// Calienta la caché sin bloquear la UI (hover/focus del botón "Mapear"), para que
+// la primera apertura ya salga tibia. Silencioso: los errores se ignoran acá y se
+// vuelven a mostrar cuando el usuario abre el mapeador de verdad.
+export function prefetchPreview(documentoId: string | null | undefined) {
+  if (!documentoId) return;
+  void loadPreview(documentoId).catch(() => {});
+}
+
+export function FieldMapperBody({ documentoId, onClose, onSaved, variant = "modal" }: FieldMapperProps & { variant?: FieldMapperVariant }) {
   const { toast } = useToast();
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Semilla desde caché: si este doc ya se mapeó/prefetcheó, arranca con el preview
+  // listo y sin spinner (initializers perezosos, corren solo al montar).
+  const [preview, setPreview] = useState<Preview | null>(() => previewCache.get(documentoId)?.preview ?? null);
+  const [loading, setLoading] = useState(() => !previewCache.has(documentoId));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [ignoredOpen, setIgnoredOpen] = useState(false);
 
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [columnLabels, setColumnLabels] = useState<string[]>([]);
-  const [headerRow, setHeaderRow] = useState(0);
-  const [firstDataRow, setFirstDataRow] = useState(1);
-  const [dateFormat, setDateFormat] = useState<DateFmt>("dd/mm/yyyy");
-  const [layout, setLayout] = useState<Layout>("two_cols");
-  const [defaultFlujo, setDefaultFlujo] = useState<"entrada" | "salida">("entrada");
+  const [roles, setRoles] = useState<Role[]>(() => previewCache.get(documentoId)?.mapping.roles ?? []);
+  const [columnLabels, setColumnLabels] = useState<string[]>(() => {
+    const c = previewCache.get(documentoId);
+    if (!c) return [];
+    const vals = c.preview.rows[c.mapping.headerRow] ?? [];
+    return Array.from({ length: c.preview.cols }, (_, i) => String(vals[i] ?? ""));
+  });
+  const [headerRow, setHeaderRow] = useState(() => previewCache.get(documentoId)?.mapping.headerRow ?? 0);
+  const [firstDataRow, setFirstDataRow] = useState(() => previewCache.get(documentoId)?.mapping.firstDataRow ?? 1);
+  const [dateFormat, setDateFormat] = useState<DateFmt>(() => previewCache.get(documentoId)?.mapping.dateFormat ?? "dd/mm/yyyy");
+  const [layout, setLayout] = useState<Layout>(() => previewCache.get(documentoId)?.mapping.layout ?? "two_cols");
+  const [defaultFlujo, setDefaultFlujo] = useState<"entrada" | "salida">(() => previewCache.get(documentoId)?.mapping.defaultFlujo ?? "entrada");
+
+  const applyMapping = useCallback((m: Mapping) => {
+    setRoles(m.roles); setHeaderRow(m.headerRow); setFirstDataRow(m.firstDataRow);
+    setDateFormat(m.dateFormat); setLayout(m.layout); setDefaultFlujo(m.defaultFlujo);
+  }, []);
 
   useEffect(() => {
-    fetch("/api/parser/preview", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ documento_id: documentoId }),
-    })
-      .then(async (res) => {
-        if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "No se pudo cargar preview"); }
-        return res.json() as Promise<Preview>;
-      })
+    let ignore = false;
+    const cached = previewCache.get(documentoId);
+    if (cached) {
+      // Ya en memoria: pintar al toque, sin spinner. (Los initializers ya sembraron
+      // en el montaje; esto además cubre re-uso del componente con otro documentoId.)
+      setPreview(cached.preview); applyMapping(cached.mapping); setError(null); setLoading(false);
+      return;
+    }
+    setLoading(true); setError(null);
+    loadPreview(documentoId)
       .then((data) => {
+        if (ignore) return;
+        const entry = previewCache.get(documentoId);
         setPreview(data);
-        const initialRoles = new Array<Role>(data.cols).fill("ignorar");
-        if (data.suggested) {
-          const s = data.suggested;
-          setHeaderRow(s.header_row); setFirstDataRow(s.skip_rows_before_data);
-          setDateFormat(s.date_format); setLayout((s.layout ?? "two_cols") as Layout);
-          if (s.default_tipo_flujo) setDefaultFlujo(s.default_tipo_flujo);
-          const assign = (idx: number | undefined, role: Role) => { if (typeof idx === "number" && idx >= 0 && idx < data.cols) initialRoles[idx] = role; };
-          assign(s.columns.fecha, "fecha"); assign(s.columns.descripcion, "descripcion");
-          assign(s.columns.n_documento, "n_documento"); assign(s.columns.cargo, "cargo");
-          assign(s.columns.abono, "abono"); assign(s.columns.saldo, "saldo");
-          assign(s.columns.monto, "monto"); assign(s.columns.tipo_flujo_col, "tipo_flujo");
-        }
-        setRoles(initialRoles);
+        applyMapping(entry?.mapping ?? deriveMapping(data));
       })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [documentoId]);
+      .catch((err: unknown) => { if (!ignore) setError(err instanceof Error ? err.message : "No se pudo cargar preview"); })
+      .finally(() => { if (!ignore) setLoading(false); });
+    return () => { ignore = true; };
+  }, [documentoId, applyMapping]);
 
   useEffect(() => {
     if (!preview) return;
@@ -141,6 +210,88 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
 
   const disabled = saving || loading || !preview || !!validationErr;
 
+  // Línea de estado del formato (compartida por ambas variantes).
+  const statusNode = preview ? (
+    <div style={{ fontSize: 11, color: "var(--text2)", display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+      {detected
+        ? <><CheckCircle size={12} weight="fill" style={{ color: "#34d46e" }} /> Detectamos el formato — revisa que cada columna tenga su rol.</>
+        : <><Warning size={12} weight="fill" style={{ color: "#f59e0b" }} /> No reconocimos el formato — asigna el rol de cada columna.</>}
+      <span style={{ color: "var(--text3)" }}>· Hoja {preview.sheetName} · {preview.totalRows.toLocaleString("es-CL")} filas</span>
+    </div>
+  ) : null;
+
+  // Fragmento de 3 secciones (header / content / footer). El contenedor grid
+  // (con las filas auto/1fr/auto) lo pone el wrapper: el modal `FieldMapper` o el
+  // popup Editar cuando se embebe. En `embedded` el header propio se reduce a la
+  // línea de estado — la barra de título + Volver + × las provee el popup padre.
+  return (
+    <>
+      {/* HEADER */}
+      {variant === "modal" ? (
+        <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--border)" }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8, display: "grid", placeItems: "center",
+            background: "rgba(232,85,62,.12)", color: "#E8553E", flexShrink: 0,
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="currentColor" strokeWidth="1.4" opacity=".9"/></svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1, color: "var(--text)" }}>Mapear campos</div>
+            {statusNode && <div style={{ marginTop: 4 }}>{statusNode}</div>}
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+      ) : statusNode ? (
+        <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)" }}>{statusNode}</div>
+      ) : (
+        <div />
+      )}
+
+      {/* CONTENT */}
+      <div style={{ overflow: "auto", padding: "14px 20px", scrollbarWidth: "thin" }}>
+        {loading && <div style={{ padding: 80, textAlign: "center", color: "#a4adba" }}><div style={{ height: 20, width: 200, margin: "0 auto 12px", borderRadius: 8, background: "rgba(255,255,255,.06)" }} /><p>Cargando...</p></div>}
+        {error && <div style={{ padding: 80, textAlign: "center", color: "#ff7365" }}><Warning size={32} weight="fill" /><p>{error}</p></div>}
+        {preview && <GridContent preview={preview} roles={roles} setRole={setRole} headerRow={headerRow}
+          firstDataRow={firstDataRow} layout={layout} columnLabels={columnLabels}
+          dateFormat={dateFormat} setDateFormat={setDateFormat} setLayout={setLayout}
+          defaultFlujo={defaultFlujo} setDefaultFlujo={setDefaultFlujo}
+          advancedOpen={advancedOpen} setAdvancedOpen={setAdvancedOpen}
+          ignoredOpen={ignoredOpen} setIgnoredOpen={setIgnoredOpen} />}
+      </div>
+
+      {/* FOOTER — siempre visible */}
+      <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", background: "rgba(255,255,255,.025)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 220, display: "flex", alignItems: "center", gap: 10 }}>
+          {validationErr ? (
+            <><span style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(255,115,101,.65)", color: "#ff7365", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>!</span>
+            <div style={{ color: "#ff7365", fontSize: 12, fontWeight: 650 }}>{validationErr}</div></>
+          ) : preview ? (
+            <><span style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(52,212,110,.65)", color: "#34d46e", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>✓</span>
+            <div>
+              <div style={{ color: "#9df2b6", fontSize: 12, fontWeight: 650 }}>Listo para procesar</div>
+              <div style={{ color: "var(--text2)", fontSize: 10 }}>{totalMapped} campos asignados · {realRows.toLocaleString("es-CL")} movimientos se van a importar</div>
+            </div></>
+          ) : null}
+        </div>
+        <div style={{ display: "flex", gap: 9 }}>
+          <button onClick={onClose} style={{ height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{variant === "embedded" ? "Volver" : "Cancelar"}</button>
+          <button onClick={() => save(false)} disabled={disabled}
+            style={{ height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 700, fontSize: 12, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .4 : 1 }}>
+            Guardar sin procesar
+          </button>
+          <button onClick={() => save(true)} disabled={disabled}
+            style={{ height: 38, padding: "0 18px", borderRadius: 10, border: "none", background: "#E8553E", color: "#fff", fontWeight: 800, fontSize: 12, cursor: disabled ? "not-allowed" : "pointer", boxShadow: disabled ? "none" : "0 10px 26px rgba(232,85,62,.28)", opacity: disabled ? .4 : 1 }}>
+            {saving ? "Procesando..." : "Procesar movimientos →"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Modal standalone (usado por el visor y por DocCardList): overlay + caja + el
+// cuerpo embebible dentro. La caja aporta el grid de 3 filas y el chrome visual.
+export default function FieldMapper(props: FieldMapperProps) {
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center",
@@ -154,64 +305,7 @@ export default function FieldMapper({ documentoId, onClose, onSaved }: FieldMapp
         display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "#f6f7fb",
         fontFamily: "'DM Sans','Inter',sans-serif",
       }}>
-        {/* HEADER */}
-        <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--border)" }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8, display: "grid", placeItems: "center",
-            background: "rgba(232,85,62,.12)", color: "#E8553E", flexShrink: 0,
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8"/><path d="M4 9h16M9 4v16M14.5 4v16M4 14h16" stroke="currentColor" strokeWidth="1.4" opacity=".9"/></svg>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1, color: "var(--text)" }}>Mapear campos</div>
-            {preview && <div style={{ marginTop: 4, fontSize: 11, color: "var(--text2)", display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
-              {detected
-                ? <><CheckCircle size={12} weight="fill" style={{ color: "#34d46e" }} /> Detectamos el formato — revisa que cada columna tenga su rol.</>
-                : <><Warning size={12} weight="fill" style={{ color: "#f59e0b" }} /> No reconocimos el formato — asigna el rol de cada columna.</>}
-              <span style={{ color: "var(--text3)" }}>· Hoja {preview.sheetName} · {preview.totalRows.toLocaleString("es-CL")} filas</span>
-            </div>}
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-        </div>
-
-        {/* CONTENT */}
-        <div style={{ overflow: "auto", padding: "14px 20px", scrollbarWidth: "thin" }}>
-          {loading && <div style={{ padding: 80, textAlign: "center", color: "#a4adba" }}><div style={{ height: 20, width: 200, margin: "0 auto 12px", borderRadius: 8, background: "rgba(255,255,255,.06)" }} /><p>Cargando...</p></div>}
-          {error && <div style={{ padding: 80, textAlign: "center", color: "#ff7365" }}><Warning size={32} weight="fill" /><p>{error}</p></div>}
-          {preview && <GridContent preview={preview} roles={roles} setRole={setRole} headerRow={headerRow}
-            firstDataRow={firstDataRow} layout={layout} columnLabels={columnLabels}
-            dateFormat={dateFormat} setDateFormat={setDateFormat} setLayout={setLayout}
-            defaultFlujo={defaultFlujo} setDefaultFlujo={setDefaultFlujo}
-            advancedOpen={advancedOpen} setAdvancedOpen={setAdvancedOpen}
-            ignoredOpen={ignoredOpen} setIgnoredOpen={setIgnoredOpen} />}
-        </div>
-
-        {/* FOOTER — siempre visible */}
-        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", background: "rgba(255,255,255,.025)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 220, display: "flex", alignItems: "center", gap: 10 }}>
-            {validationErr ? (
-              <><span style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(255,115,101,.65)", color: "#ff7365", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>!</span>
-              <div style={{ color: "#ff7365", fontSize: 12, fontWeight: 650 }}>{validationErr}</div></>
-            ) : preview ? (
-              <><span style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(52,212,110,.65)", color: "#34d46e", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>✓</span>
-              <div>
-                <div style={{ color: "#9df2b6", fontSize: 12, fontWeight: 650 }}>Listo para procesar</div>
-                <div style={{ color: "var(--text2)", fontSize: 10 }}>{totalMapped} campos asignados · {realRows.toLocaleString("es-CL")} movimientos se van a importar</div>
-              </div></>
-            ) : null}
-          </div>
-          <div style={{ display: "flex", gap: 9 }}>
-            <button onClick={onClose} style={{ height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Cancelar</button>
-            <button onClick={() => save(false)} disabled={disabled}
-              style={{ height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.055)", color: "#f3f6fb", fontWeight: 700, fontSize: 12, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .4 : 1 }}>
-              Guardar sin procesar
-            </button>
-            <button onClick={() => save(true)} disabled={disabled}
-              style={{ height: 38, padding: "0 18px", borderRadius: 10, border: "none", background: "#E8553E", color: "#fff", fontWeight: 800, fontSize: 12, cursor: disabled ? "not-allowed" : "pointer", boxShadow: disabled ? "none" : "0 10px 26px rgba(232,85,62,.28)", opacity: disabled ? .4 : 1 }}>
-              {saving ? "Procesando..." : "Procesar movimientos →"}
-            </button>
-          </div>
-        </div>
+        <FieldMapperBody {...props} variant="modal" />
       </div>
     </div>
   );

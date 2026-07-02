@@ -30,7 +30,8 @@ import {
   mensajeMovimientoSinBoleta,
   mensajeDuplicado,
   kbCampos,
-  kbConfirmarIngreso,
+  mensajeConfirmarIngreso,
+  mensajeConfirmarCompra,
   kbConfirmarDuplicado,
   labelCampo,
   valorActual,
@@ -221,15 +222,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "NO_AUTORIZADO" }, { status: 401 });
   }
 
-  // Pasado el control de seguridad, SIEMPRE 200: si Telegram no recibe ok
-  // reintenta el update infinito y duplicaría comprobantes.
+  // Responder 200 AL INSTANTE y procesar en after() (post-respuesta). Telegram entrega
+  // el álbum EN ORDEN y espera el 200 de CADA foto antes de mandar la siguiente; si
+  // tardáramos en responder (plan + inserts + OCR), escalonaría las fotos varios
+  // segundos y la ventana del álbum se asentaría en el hueco → perdería fotos. Con el
+  // 200 inmediato las fotos llegan casi juntas y el creador las junta bien.
+  // SIEMPRE 200 (si Telegram no recibe ok reintenta el update infinito → duplicaría).
+  let update: TelegramUpdate | null = null;
   try {
-    const update = (await request.json()) as TelegramUpdate;
-    if (update?.message) await handleMessage(update.message);
-    else if (update?.callback_query) await handleCallback(update.callback_query);
+    update = (await request.json()) as TelegramUpdate;
   } catch (error) {
-    console.error("[telegram-webhook] error:", error);
+    console.error("[telegram-webhook] parse error:", error);
+    return NextResponse.json({ ok: true });
   }
+  const upd = update;
+  after(async () => {
+    try {
+      if (upd?.message) await handleMessage(upd.message);
+      else if (upd?.callback_query) await handleCallback(upd.callback_query);
+    } catch (error) {
+      console.error("[telegram-webhook] error:", error);
+    }
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -406,25 +420,30 @@ async function handleMovimientoCallback(
     return;
   }
 
-  if (accion === "d") {
+  if (accion === "d" || accion === "c2") {
     const status = await ignorarMovimientoSalidaBot(movId, empresaId, chatId);
     const text = status === "con_propuesta"
       ? "⚠️ Esta operación ya tiene una propuesta asociada. Revisala en Agregados."
-      : "🚫 <b>No es ingreso.</b>\nNo generé boleta y quité esta transferencia del flujo contable.";
+      : "🛒 <b>Marcada como compra.</b>\nNo emití boleta y la quité del flujo (massDTE es solo de ventas).";
     const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true }) : false;
     if (!edited) await sendMessage(chatId, text, { html: true });
     await markMensajeEstado(chatId, messageId, "descartado");
-    await answerCallbackQuery(callbackId, status === "ignorado" ? "Ignorado" : "Ya estaba resuelto");
+    await answerCallbackQuery(callbackId, status === "ignorado" ? "Descartada" : "Ya estaba resuelto");
     return;
   }
 
   if (accion === "i1") {
-    const text =
-      "⚠️ <b>Confirmá esto antes de crear la boleta.</b>\n\n" +
-      "Este comprobante parece una transferencia enviada. Por defecto no genera boleta.\n\n" +
-      "Solo seguí si realmente fue un pago recibido por tu empresa. ¿Confirmás?";
-    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbConfirmarIngreso(movId) }) : false;
-    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbConfirmarIngreso(movId) });
+    const { text, keyboard } = mensajeConfirmarIngreso(mov);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "c1") {
+    const { text, keyboard } = mensajeConfirmarCompra(mov);
+    const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: keyboard }) : false;
+    if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
     await answerCallbackQuery(callbackId);
     return;
   }
@@ -606,17 +625,16 @@ async function handleEmpresaComprobanteCallback(
   if (messageId) await editMessageText(chatId, messageId, text, { html: true });
   await answerCallbackQuery(callbackId, "Empresa confirmada.");
 
-  after(() =>
-    guardarYProcesarComprobanteTelegram({
-      chatId,
-      empresaId: selected.id,
-      fileId: pending.file_id,
-      fileSize: pending.file_size,
-      receivedAt: pending.received_at ?? undefined,
-      pendingToken: token,
-      sendReceivedMessage: false,
-    }),
-  );
+  // Ya estamos dentro del after() del POST → trabajo pesado directo (sin anidar after()).
+  await guardarYProcesarComprobanteTelegram({
+    chatId,
+    empresaId: selected.id,
+    fileId: pending.file_id,
+    fileSize: pending.file_size,
+    receivedAt: pending.received_at ?? undefined,
+    pendingToken: token,
+    sendReceivedMessage: false,
+  });
 }
 
 /** Aplica el valor que el usuario escribió para el campo en edición. */
@@ -886,8 +904,8 @@ async function guardarYProcesarComprobanteTelegram(args: {
       }
     };
 
-    if (args.pendingToken) await run();
-    else after(run);
+    // Dentro del after() del POST → corremos el OCR directo (sin anidar after()).
+    await run();
   } catch (error) {
     console.error("[telegram-webhook] procesar comprobante fallo:", error);
     if (args.pendingToken) {
@@ -908,27 +926,29 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
 
   if (!(await telegramHabilitadoEmpresa(svc, empresaId))) { await say(chatId, MSG.noEnPlan); return; }
 
-  let foto64: { base64: string; mime: string; size: number };
-  try { foto64 = await getFileBase64(foto.file_id); } catch { return; }
-  if (foto64.size > MAX_FOTO_BYTES) return;
-
   const nombre = nombreComprobanteTelegram();
-  let key: string;
-  try {
-    const up = await subirDocumentoR2(empresaId, `album_${mediaGroupId}_${nombre}`, Buffer.from(foto64.base64, "base64"), foto64.mime);
-    key = up.key;
-  } catch { return; }
+  // Parte SÍNCRONA mínima (para responder 200 RÁPIDO): registrar la foto en el buffer
+  // + intentar crear el doc creador. La descarga+subida pesada va a after().
+  // Por qué importa: Telegram entrega el álbum EN ORDEN y espera el 200 de cada foto
+  // antes de mandar la siguiente; si el handler tarda (download+upload ~3s), escalona
+  // las fotos varios segundos y la ventana se asienta en el hueco → pierde fotos.
+  // 200 rápido ⇒ todas las fotos llegan casi juntas ⇒ la ventana las junta.
+  const { data: bufRow, error: bufErr } = await svc
+    .from("telegram_album_buffer")
+    .insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { pending: true } as Json })
+    .select("id")
+    .single();
+  if (bufErr || !bufRow) return;
 
-  await svc.from("telegram_album_buffer").insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { path: key, mime: foto64.mime, name: nombre } as Json });
-
-  // Intentar ser el creador (índice único por empresa+media_group_id).
-  const { data: doc, error: insErr } = await svc
+  // Intentar ser el creador (índice único por empresa+media_group_id). Instantáneo;
+  // el storage_path real se completa tras la subida en after().
+  const { data: doc } = await svc
     .from("documentos_subidos")
     .insert({
       empresa_id: empresaId,
       nombre_archivo: `Álbum ${nombre}`,
       tipo: "imagen",
-      storage_path: key,
+      storage_path: "album",
       storage_provider: "r2",
       estado: "subido",
       media_group_id: mediaGroupId,
@@ -937,37 +957,79 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
     })
     .select("id")
     .single();
-  if (insErr || !doc) return; // conflicto (foto hermana) o error → solo quedó la imagen en el buffer
+  const esCreador = Boolean(doc);
 
-  // Soy el creador. Tope diario (un álbum cuenta como 1 comprobante).
-  if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
-    await svc.from("documentos_subidos").delete().eq("id", doc.id);
-    await svc.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
-    await say(chatId, MSG.topeDiario);
-    return;
+  if (esCreador && doc) {
+    // Tope diario (un álbum cuenta como 1 comprobante).
+    if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
+      await svc.from("documentos_subidos").delete().eq("id", doc.id);
+      await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      await say(chatId, MSG.topeDiario);
+      return;
+    }
+    await say(chatId, "📸 Álbum recibido — leo las fotos y te muestro la boleta en unos segundos.");
   }
-  await say(chatId, "📸 Álbum recibido — junto las fotos y queda como una venta.");
 
-  after(async () => {
-    await new Promise((r) => setTimeout(r, 4000)); // debounce: esperar a las fotos hermanas
+  // Ya corremos dentro del after() del POST (el 200 ya salió). Trabajo pesado directo
+  // (IIFE awaited): subir esta foto y, si soy el creador, esperar a las hermanas.
+  await (async () => {
     const svc2 = getServiceClient();
-    const { data: imgs } = await svc2.from("telegram_album_buffer").select("image").eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
-    const grouped = (imgs ?? []).map((r) => r.image).filter(Boolean);
+
+    // (TODAS las fotos) descargar + subir ESTA foto a R2 y completar su fila del buffer.
+    try {
+      const foto64 = await getFileBase64(foto.file_id);
+      if (foto64.size > MAX_FOTO_BYTES) {
+        await svc2.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      } else {
+        const up = await subirDocumentoR2(empresaId, `album_${mediaGroupId}_${nombre}`, Buffer.from(foto64.base64, "base64"), foto64.mime);
+        await svc2.from("telegram_album_buffer").update({ image: { path: up.key, mime: foto64.mime, name: nombre } as Json }).eq("id", bufRow.id);
+        if (esCreador && doc) await svc2.from("documentos_subidos").update({ storage_path: up.key }).eq("id", doc.id);
+      }
+    } catch {
+      await svc2.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    }
+
+    if (!esCreador || !doc) return; // los no-creadores solo suben su foto
+
+    // Creador: ventana — esperar a que lleguen TODAS las fotos y terminen de subir
+    // (image.path), y recién ahí encolar UN job con todas = 1 venta.
+    const SETTLE_MS = 3000, MAX_WAIT_MS = 60000, POLL_MS = 750;
+    const inicio = Date.now();
+    let filas: Array<{ id: string; image: Json; created_at: string }> = [];
+    for (;;) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      const { data } = await svc2
+        .from("telegram_album_buffer")
+        .select("id, image, created_at")
+        .eq("empresa_id", empresaId)
+        .eq("media_group_id", mediaGroupId);
+      filas = (data ?? []) as Array<{ id: string; image: Json; created_at: string }>;
+      if (filas.length === 0) return;
+      const conPath = (img: Json) => Boolean(img && typeof img === "object" && !Array.isArray(img) && (img as Record<string, unknown>).path);
+      const todasSubidas = filas.every((f) => conPath(f.image));
+      const ultima = Math.max(...filas.map((f) => new Date(f.created_at).getTime()));
+      if (todasSubidas && Date.now() - ultima >= SETTLE_MS) break; // todas registradas + subidas + asentado
+      if (Date.now() - inicio >= MAX_WAIT_MS) break;               // tope de seguridad
+    }
+    const grouped = filas.map((f) => f.image).filter((img) => img && typeof img === "object" && !Array.isArray(img) && (img as Record<string, unknown>).path);
     if (grouped.length === 0) return;
     try {
       const job = await enqueueDocumentProcessingJob(svc2, {
-        documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: key,
-        metadata: { grouped_images: grouped, origen: "telegram", album: true },
+        documentoId: doc.id, empresaId, usuarioId: null, tipo: "imagen", storagePath: (grouped[0] as Record<string, unknown>).path as string,
+        metadata: { grouped_images: grouped, origen: "telegram", album: true, chat_id: chatId },
       });
-      await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json }).eq("id", doc.id);
-      await svc2.from("telegram_album_buffer").delete().eq("empresa_id", empresaId).eq("media_group_id", mediaGroupId);
-      processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
-      await say(chatId, `✅ Álbum de ${grouped.length} foto${grouped.length === 1 ? "" : "s"} en proceso — queda como una venta en la mesa.`);
+      await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json, album_imagenes: grouped as Json }).eq("id", doc.id);
+      // delete-by-id (no por grupo): una foto que llegue entre la lectura y el borrado sobrevive en el buffer (la rescata el reaper).
+      await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
+      // AWAIT (no fire-and-forget): si no, el worker se desengancha y el job queda colgado.
+      // La boleta se la manda el worker al chat (clasificarComprobanteTelegram con chat_id) →
+      // así el flujo del álbum queda en 2 pasos: "📸 Álbum recibido" + la boleta.
+      await processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
     } catch {
       await svc2.from("documentos_subidos").update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar el álbum" } as Json }).eq("id", doc.id);
       await say(chatId, MSG.errorGuardar);
     }
-  });
+  })();
 }
 
 async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number, mediaGroupId?: string) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useId, useState, useCallback, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -86,7 +86,7 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc, bare }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
@@ -99,6 +99,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   onSelectDoc?: (doc: DocRaw) => void;
   selectedDocId?: string | null;
   forceTree?: boolean;
+  // Modo panel del tablero del Check: cada panel ya rotula su origen, así que se omiten
+  // el "Agregados recientes" y el encabezado de grupo por origen (redundantes).
+  bare?: boolean;
 }) {
   const router = useRouter();
   const ctxReload = useMesaReload();
@@ -124,29 +127,44 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
 
   useEffect(() => { setDocs(initialDocs); }, [initialDocs]);
 
-  const fetchDocs = useCallback(async () => {
+  const fetchDocs = useCallback(() => {
     if (ctxReload) ctxReload(); else router.refresh();
   }, [ctxReload, router]);
 
-  // Realtime updates
+  // Auto-refresh de fondo (realtime/poll): SILENCIOSO (no atenúa la mesa) + debounce
+  // para coalescer la ráfaga de updates de un mismo lote. Solo refresca la mesa, no
+  // recarga el escritorio.
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchDocsAuto = useCallback(() => {
+    if (autoTimer.current) clearTimeout(autoTimer.current);
+    autoTimer.current = setTimeout(() => {
+      if (ctxReload) ctxReload({ silent: true }); else router.refresh();
+    }, 700);
+  }, [ctxReload, router]);
+  useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); }, []);
+
+  // Realtime updates. Canal ÚNICO por instancia: en el Check hay varios DocCardList montados
+  // a la vez (un panel por origen), y Supabase falla si dos comparten el mismo nombre de canal
+  // ("cannot add postgres_changes callbacks after subscribe()").
+  const channelId = useId().replace(/:/g, "");
   useEffect(() => {
     const channel = supabase
-      .channel("v5-docs")
+      .channel(`v5-docs-${empresaId}-${channelId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
-        () => { fetchDocs(); })
+        () => { fetchDocsAuto(); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
-        () => { fetchDocs(); })
+        () => { fetchDocsAuto(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDocs, empresaId]);
+  }, [fetchDocsAuto, empresaId, channelId]);
 
   // Polling while processing
   const hasProcessing = docs.some(d => d.estado === "procesando" || d.estado === "subido");
   useEffect(() => {
     if (!hasProcessing) return;
-    const interval = setInterval(() => fetchDocs(), 4000);
+    const interval = setInterval(() => fetchDocsAuto(), 5000);
     return () => clearInterval(interval);
-  }, [hasProcessing, fetchDocs]);
+  }, [hasProcessing, fetchDocsAuto]);
 
   async function callApi(path: string, docId: string) {
     try {
@@ -163,7 +181,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   return (
     <>
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
-        <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>
+        {!bare && <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>}
         {!forceTree && (
           <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
             {(["grid","list"] as const).map((v) => (
@@ -361,8 +379,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           // de tiempo escala con el calendario maestro: día→hora, semana→día+hora,
           // mes→semana+día+hora. Estado = punto de color a la izquierda. Sin líneas
           // conectoras (jerarquía falsa); encabezado de sección estilo Finder.
+          const esTelegramNombre = (n: string) => n.startsWith("Telegram ") || n.startsWith("Álbum ");
           const origenDe = (d: DocRaw): "massdte" | "telegram" | "boleta" =>
-            isBoletaTipo(d.tipo) ? "boleta" : (d.nombre_archivo ?? "").startsWith("Telegram ") ? "telegram" : "massdte";
+            isBoletaTipo(d.tipo) ? "boleta" : esTelegramNombre(d.nombre_archivo ?? "") ? "telegram" : "massdte";
           const grupos: { key: "massdte" | "telegram" | "boleta"; label: string; sub: string; icon: ReactNode }[] = [
             { key: "massdte", label: "MassDTE", sub: "cartolas",
               icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg> },
@@ -407,12 +426,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
               `}</style>
               {grupos.filter((g) => byOrigen[g.key].length > 0).map((g) => (
                 <div key={g.key} className="agg-fgrp">
-                  <div className="agg-fh">
-                    {g.icon}
-                    <span className="lbl">{g.label}</span>
-                    <span className="sub">{g.sub}</span>
-                    <span className="cnt">{byOrigen[g.key].length}</span>
-                  </div>
+                  {!bare && (
+                    <div className="agg-fh">
+                      {g.icon}
+                      <span className="lbl">{g.label}</span>
+                      <span className="sub">{g.sub}</span>
+                      <span className="cnt">{byOrigen[g.key].length}</span>
+                    </div>
+                  )}
                   {byOrigen[g.key].map((doc) => {
                     const c = st[doc.estado] ?? "#9ca3af";
                     const hollow = doc.estado === "subido";

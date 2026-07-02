@@ -26,6 +26,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
+    "@tanstack/react-virtual": "^3.14.5",
     "chart.js": "^4.5.1",
     "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",

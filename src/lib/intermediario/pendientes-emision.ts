@@ -23,7 +23,7 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
   let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, receptor_nombre, receptor_rut, monto_neto, iva, total, estado, created_at, cliente_id,
+      id, tipo_propuesto, receptor_nombre, receptor_rut, medio_pago, monto_neto, iva, total, estado, created_at, cliente_id,
       clientes(id, nombre, rut),
       movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at))
     `)
@@ -110,6 +110,7 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
         fecha,
         receptorRut: receptor_rut,
         receptorNombre: receptor_nombre,
+        medioPago: p.medio_pago ?? null,
         tipoDtePersistido: tipoDteById.get(p.id) ?? null,
         docHint,
         patron: {
