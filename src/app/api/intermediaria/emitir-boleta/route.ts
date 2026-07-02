@@ -9,6 +9,7 @@ import { chileDateString } from "@/lib/chile-date";
 import { issueMockBoleta } from "@/lib/emission/mock";
 import { blockUnsupportedBackendProvider } from "@/lib/emission/provider-guards";
 import { validarAccesoCuenta } from "@/lib/entitlements";
+import { puedeEmitir } from "@/lib/pagos/metering";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
@@ -98,7 +99,9 @@ async function handlePost(request: Request) {
   if (!acceso.ok) {
     return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
   }
-  if (!acceso.planActivo) {
+  // Acceso a emisión = plan activo o trial disponible/vigente (auditoría #4). La boleta
+  // única no consume cupo masivo, pero un trial terminado sin plan sí queda bloqueado.
+  if (!(await puedeEmitir(sb, usuario.empresa_id))) {
     return NextResponse.json({ ok: false, error: "PLAN_INACTIVO", detalle: "Tu plan no está activo." }, { status: 402 });
   }
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id).catch(() => null);

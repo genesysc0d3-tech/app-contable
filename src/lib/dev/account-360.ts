@@ -79,6 +79,7 @@ export type DevCuentaRow = {
   planCodigo: string | null;
   planNombre: string;
   planActivo: boolean;
+  trialCortesia: boolean;
   suscripcionEstado: string | null;
   ultimoPagoEstado: string | null;
   ultimoPagoMontoClp: number | null;
@@ -259,6 +260,7 @@ function buildCuentaRow(args: {
     planCodigo: args.planCodigo,
     planNombre: fmtPlan(args.plan, args.planCodigo),
     planActivo,
+    trialCortesia: args.cuenta.trial_cortesia === true,
     suscripcionEstado: args.activeSub?.estado ?? args.latestSub?.estado ?? null,
     ultimoPagoEstado: args.latestPago?.estado ?? null,
     ultimoPagoMontoClp: args.latestPago?.monto_clp ?? null,
@@ -348,7 +350,7 @@ export async function listarDevCuentas(options: { query?: string | null } = {}):
   try {
     const { data: cuentas, error } = await gate.sb
       .from("cuentas")
-      .select("id, nombre, owner_usuario_id, plan_codigo, plan_activo, created_at, updated_at")
+      .select("id, nombre, owner_usuario_id, plan_codigo, plan_activo, trial_cortesia, created_at, updated_at")
       .order("updated_at", { ascending: false })
       .limit(200);
     if (error) return { ok: false, status: 500, error: "CUENTAS_QUERY_FAILED", detalle: error.message };
@@ -418,7 +420,7 @@ export async function obtenerDevCuentaDetalle(cuentaId: string): Promise<DevAcco
   try {
     const { data: cuenta, error } = await gate.sb
       .from("cuentas")
-      .select("id, nombre, owner_usuario_id, plan_codigo, plan_activo, created_at, updated_at")
+      .select("id, nombre, owner_usuario_id, plan_codigo, plan_activo, trial_cortesia, created_at, updated_at")
       .eq("id", cuentaId)
       .maybeSingle();
     if (error) return { ok: false, status: 500, error: "CUENTA_QUERY_FAILED", detalle: error.message };

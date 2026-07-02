@@ -615,6 +615,24 @@ export type Database = {
           },
         ]
       }
+      config_global: {
+        Row: {
+          clave: string
+          valor: Json
+          updated_at: string
+        }
+        Insert: {
+          clave: string
+          valor: Json
+          updated_at?: string
+        }
+        Update: {
+          clave?: string
+          valor?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cuentas: {
         Row: {
           created_at: string
@@ -623,6 +641,7 @@ export type Database = {
           owner_usuario_id: string | null
           plan_activo: boolean
           plan_codigo: string | null
+          trial_cortesia: boolean
           updated_at: string
         }
         Insert: {
@@ -632,6 +651,7 @@ export type Database = {
           owner_usuario_id?: string | null
           plan_activo?: boolean
           plan_codigo?: string | null
+          trial_cortesia?: boolean
           updated_at?: string
         }
         Update: {
@@ -641,6 +661,7 @@ export type Database = {
           owner_usuario_id?: string | null
           plan_activo?: boolean
           plan_codigo?: string | null
+          trial_cortesia?: boolean
           updated_at?: string
         }
         Relationships: [

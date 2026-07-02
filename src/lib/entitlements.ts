@@ -18,6 +18,31 @@ export interface CuentaContexto {
   multiempresa: boolean;
   empresasActivas: number;
   personasActivas: number;
+  trialCortesia: boolean;
+}
+
+/**
+ * ¿El trial está ofrecido GLOBALMENTE? (config_global['trial_habilitado'], operado
+ * desde /dev). Sin PII → lectura permitida a autenticados. NO importa metering (ciclo).
+ */
+export async function trialGlobalHabilitado(sb: Sb): Promise<boolean> {
+  const { data, error } = await sb
+    .from("config_global")
+    .select("valor")
+    .eq("clave", "trial_habilitado")
+    .maybeSingle();
+  if (error) return false; // fail-closed: ante duda, no se ofrece trial
+  return data?.valor === true;
+}
+
+/**
+ * ¿Esta cuenta tiene trial disponible? = global ON, o cortesía puntual de la cuenta
+ * (cuentas.trial_cortesia, para "amistades" con el global apagado).
+ */
+export async function trialDisponibleCuenta(sb: Sb, cuentaId: string): Promise<boolean> {
+  if (await trialGlobalHabilitado(sb)) return true;
+  const { data } = await sb.from("cuentas").select("trial_cortesia").eq("id", cuentaId).maybeSingle();
+  return data?.trial_cortesia === true;
 }
 
 export type AccesoCuenta =
@@ -99,7 +124,7 @@ export async function contextoCuentaPorEmpresa(sb: Sb, empresaId: string): Promi
   if (!cuentaId) return null;
 
   const [cuentaRes, suscripcionRes, empresasRes, usuariosRes] = await Promise.all([
-    sb.from("cuentas").select("plan_codigo, plan_activo").eq("id", cuentaId).maybeSingle(),
+    sb.from("cuentas").select("plan_codigo, plan_activo, trial_cortesia").eq("id", cuentaId).maybeSingle(),
     sb
       .from("suscripciones")
       .select("plan_codigo, estado")
@@ -152,6 +177,7 @@ export async function contextoCuentaPorEmpresa(sb: Sb, empresaId: string): Promi
     multiempresa: planRes.data?.multiempresa ?? false,
     empresasActivas: empresasRes.count ?? 0,
     personasActivas: usuariosRes.count ?? 0,
+    trialCortesia: cuenta?.trial_cortesia === true,
   };
 }
 

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/server";
 import type { Database, Tables } from "./database.types";
-import { validarAccesoCuenta } from "./entitlements";
+import { validarAccesoCuenta, trialDisponibleCuenta } from "./entitlements";
 import { getDevSupportMode, type DevSupportMode } from "./dev/support-mode";
 
 export type Usuario = Tables<"usuarios">;
@@ -95,8 +95,10 @@ export async function requireActiveEmpresa(): Promise<UsuarioConEmpresa> {
   }
 
   // Con cuenta pagadora creada, la cuenta es la autoridad. empresas.plan_activo
-  // solo se conserva para filas pre-backfill detectadas arriba.
-  if (!acceso.planActivo) {
+  // solo se conserva para filas pre-backfill detectadas arriba. Sin plan, se deja
+  // entrar si la cuenta tiene trial disponible (global o cortesía, auditoría #4): el
+  // gate de emisión decide al emitir. Sin plan ni trial → a Planes (comportamiento previo).
+  if (!acceso.planActivo && !(await trialDisponibleCuenta(accesoClient, acceso.cuentaId))) {
     redirect("/planes");
   }
 

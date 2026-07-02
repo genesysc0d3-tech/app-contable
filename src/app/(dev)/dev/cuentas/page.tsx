@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { listarDevCuentas, type DevCuentaRow } from "@/lib/dev/account-360";
-import { DevLinkButton, VerComoClienteButton } from "./DevCuentaActions";
+import { DevLinkButton, VerComoClienteButton, TrialGlobalToggle } from "./DevCuentaActions";
+import { obtenerTrialGlobal } from "../actions";
 
 const C = {
   bg: "#0f1014",
@@ -271,6 +272,7 @@ export default async function DevCuentasPage({
   const totalBloqueadas = cuentasBase.filter((cuenta) => !cuenta.planActivo).length;
   const totalSinPago = cuentasBase.filter(sinPago).length;
   const totalSobreCupo = cuentasBase.filter(sobreCupo).length;
+  const trialGlobalOn = await obtenerTrialGlobal();
 
   return (
     <main
@@ -290,7 +292,10 @@ export default async function DevCuentasPage({
             </div>
             <h1 style={{ margin: "2px 0 0", fontSize: 22, lineHeight: 1.1 }}>Cuentas</h1>
           </div>
-          <DevLinkButton href="/dev/diagnostico">Diagnostico</DevLinkButton>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <TrialGlobalToggle habilitado={trialGlobalOn} />
+            <DevLinkButton href="/dev/diagnostico">Diagnostico</DevLinkButton>
+          </div>
         </header>
 
         <section

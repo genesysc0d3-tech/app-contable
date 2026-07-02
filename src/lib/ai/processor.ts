@@ -11,6 +11,7 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import {
   loadReglas,
@@ -285,7 +286,7 @@ export async function procesarDocumento(
   const aliasList = (identidades ?? []).map((i) => i.valor).filter(Boolean);
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
-      `- Razón social: «${emp.razon_social}» | RUT: ${emp.rut}` +
+      `- Razón social: «${emp.razon_social}» | RUT: ${redactPiiHabilitado() ? maskRut(emp.rut) : emp.rut}` +
       (emp.giro ? ` | Giro: ${emp.giro}` : "") +
       ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
       (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +
