@@ -198,7 +198,9 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
       : { tipo_propuesto: "boleta", monto_neto: Math.round(monto / 1.19), iva: monto - Math.round(monto / 1.19), total: monto };
 
   const setTipo = (t: "boleta" | "exenta") => { const c = camposPara(t, total); setOv({ tipo: c.tipo_propuesto, neto: c.monto_neto, iva: c.iva, total: c.total }); };
-  const marcarNoVenta = () => setOv({ tipo: "no_comercial", neto, iva, total });
+  // "No es venta" manual eliminado (decisión founder 2026-07-03): un comprobante
+  // que no es venta ahora se ELIMINA de la mesa; el estado no-venta clasificado
+  // por la IA se mantiene (con su salida "Es venta").
   const openEditor = () => { if (rootRef.current) setEditorOrigin(rootRef.current.getBoundingClientRect()); setEditorOpen(true); };
 
   // tipoDte: la decisión humana del tipo (Paso P) — se guarda al aprobar para
@@ -246,12 +248,6 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: dotColor }}>
             <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: dotColor }} />{pct}%
           </span>
-          {onEliminar && (
-            <button onClick={onEliminar} title="Elimina el comprobante completo de la mesa: archivo y propuesta. Solo posible si no tiene boletas emitidas."
-              style={{ height: "2.15em", borderRadius: 10, border: "1px solid color-mix(in srgb, var(--red) 35%, transparent)", background: eliminarArmado ? "color-mix(in srgb, var(--red) 12%, transparent)" : "transparent", color: "var(--red)", cursor: "pointer", padding: "0 0.75em", fontSize: "0.82em", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
-              {eliminarArmado ? "¿Seguro? Eliminar todo" : "🗑 Eliminar"}
-            </button>
-          )}
           <button onClick={onClose} title="Cerrar" style={{ width: "2.15em", height: "2.15em", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
@@ -278,6 +274,11 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
                   baseIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>} />
                 <CreativeButton label="Registrar" onClick={registrar} disabled={busy}
                   bg="var(--accent)" color="#fff" />
+                {onEliminar && (
+                  <CreativeButton label={eliminarArmado ? "¿Seguro? Eliminar" : "Eliminar"} onClick={onEliminar} disabled={busy}
+                    bg={eliminarArmado ? "color-mix(in srgb, var(--red) 18%, transparent)" : "color-mix(in srgb, var(--red) 9%, transparent)"} color="var(--red)"
+                    baseIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>} />
+                )}
               </div>
             </>
           ) : (
@@ -330,9 +331,11 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
 
               {/* ACCIONES: afecta/exenta */}
               <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "1.1em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
-                <CreativeButton label="No es venta" onClick={marcarNoVenta} disabled={busy}
-                  bg="var(--bg-muted)" color="var(--text)"
-                  baseIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.59 13.41 11 3.82A2 2 0 0 0 9.59 3H4a1 1 0 0 0-1 1v5.59A2 2 0 0 0 3.59 11l9.59 9.59a2 2 0 0 0 2.82 0l4.59-4.59a2 2 0 0 0 0-2.59Z" /><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" /></svg>} />
+                {onEliminar && (
+                  <CreativeButton label={eliminarArmado ? "¿Seguro? Eliminar" : "Eliminar"} onClick={onEliminar} disabled={busy}
+                    bg={eliminarArmado ? "color-mix(in srgb, var(--red) 18%, transparent)" : "color-mix(in srgb, var(--red) 9%, transparent)"} color="var(--red)"
+                    baseIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>} />
+                )}
                 {conflicto ? (
                   <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Elige el tipo arriba para aprobar</div>
                 ) : (

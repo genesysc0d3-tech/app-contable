@@ -90,12 +90,6 @@ export default function VeredictoCartola({
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: dotColor }}>
             <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: dotColor }} />{listas}/{count} listas
           </span>
-          {onEliminar && (
-            <button onClick={onEliminar} title="Elimina la cartola completa de la mesa: archivo, movimientos y propuestas. Solo posible si no tiene boletas emitidas."
-              style={{ height: "2.15em", borderRadius: 10, border: "1px solid color-mix(in srgb, var(--red) 35%, transparent)", background: eliminarArmado ? "color-mix(in srgb, var(--red) 12%, transparent)" : "transparent", color: "var(--red)", cursor: "pointer", padding: "0 0.75em", fontSize: "0.82em", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
-              {eliminarArmado ? "¿Seguro? Eliminar todo" : "🗑 Eliminar"}
-            </button>
-          )}
           <button onClick={onClose} title="Cerrar" style={{ width: "2.15em", height: "2.15em", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
@@ -126,29 +120,42 @@ export default function VeredictoCartola({
         <button className="vcart-cb" onClick={onEditar} disabled={busy} style={{ background: "var(--bg-muted)", color: "var(--text)", fontSize: "1.12em" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Editar
         </button>
-        {puedeAprobar ? (
-          confirming ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.55em" }}>
-              <div style={{ fontSize: "0.82em", color: "var(--text2)", lineHeight: 1.45, textAlign: "center" }}>
-                Vas a emitir <b style={{ color: "var(--text)" }}>{listas}</b>
-                {afectasListas > 0 && <> · afecta {afectasListas}</>}
-                {exentasListas > 0 && <> · exenta {exentasListas}</>}
-                <br />total <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
-              </div>
-              <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Confirmar emisión
-              </button>
-              <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
+        {confirming && puedeAprobar ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.55em" }}>
+            <div style={{ fontSize: "0.82em", color: "var(--text2)", lineHeight: 1.45, textAlign: "center" }}>
+              Vas a emitir <b style={{ color: "var(--text)" }}>{listas}</b>
+              {afectasListas > 0 && <> · afecta {afectasListas}</>}
+              {exentasListas > 0 && <> · exenta {exentasListas}</>}
+              <br />total <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
             </div>
-          ) : (
-            <button className="vcart-cb" onClick={() => setConfirming(true)} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.12em" }}>
+            <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Confirmar emisión
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
+          </div>
+        ) : (
+          <>
+            {/* Aprobar SIEMPRE visible: poner las tx listas en el popup Editar es la
+                palanca que lo habilita — esa es la barrera hacia Emitir. */}
+            <button className="vcart-cb" onClick={() => setConfirming(true)} disabled={busy || !puedeAprobar}
+              title={!puedeAprobar ? (pendientes > 0 ? `Deja listas las ${pendientes} pendientes en Editar para habilitar Aprobar` : "No hay transacciones listas para aprobar") : undefined}
+              style={{ background: "var(--accent)", color: "#fff", fontSize: "1.12em" }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar {listas}
             </button>
-          )
-        ) : pendientes > 0 ? (
-          <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Deja listas las {pendientes} en <b>Editar</b> para aprobar</div>
-        ) : (
-          <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Todo enviado a Emitir</div>
+            {!puedeAprobar && (
+              <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, marginTop: "-0.4em" }}>
+                {pendientes > 0 ? <>Deja listas las {pendientes} en <b>Editar</b> para aprobar</> : <>Todo enviado a Emitir</>}
+              </div>
+            )}
+          </>
+        )}
+        {onEliminar && (
+          <button className="vcart-cb" onClick={onEliminar} disabled={busy}
+            title="Elimina la cartola completa de la mesa: archivo, movimientos y propuestas. Solo posible si no tiene boletas emitidas."
+            style={{ background: eliminarArmado ? "color-mix(in srgb, var(--red) 18%, transparent)" : "color-mix(in srgb, var(--red) 9%, transparent)", color: "var(--red)", fontSize: "1.02em" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+            {eliminarArmado ? "¿Seguro? Eliminar todo" : "Eliminar"}
+          </button>
         )}
       </div>
     </div>
