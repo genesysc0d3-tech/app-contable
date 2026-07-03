@@ -27,18 +27,31 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const { toast } = useToast();
   const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; medio_pago?: string | null };
 
-  // Tipo: la empresa lo sugiere, pero en el editor SIEMPRE es editable (sin lock).
+  // Tipo: lo decide PRIMERO la clasificación de la propuesta (tipo_dte persistido →
+  // tipo_propuesto) y SOLO como desempate la sugerencia de la empresa. Un default de
+  // empresa 'afecto' NUNCA puede pisar una exención POR LEY (cripto/forex/P2P,
+  // Of. SII 963/2018): eso fabricaría IVA inexistente sobre una venta exenta.
+  // Misma derivación que ExpandedDetail (revisar-shared). Siempre editable (sin lock).
+  const EXENTOS_POR_TIPO = ["exenta", "factura_exenta", "compraventa_crypto", "transferencia_p2p", "operacion_forex"];
+  const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
-    empresaTipo === "afecto" ? "afecta" : empresaTipo === "exento" ? "exenta"
-      : propuesta.tipo_propuesto === "exenta" ? "exenta" : "afecta";
+    propuesta.tipo_dte === 41 ? "exenta"
+      : propuesta.tipo_dte === 39 ? "afecta"
+        : EXENTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "exenta"
+          : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
+            : empresaTipo === "exento" ? "exenta"
+              : empresaTipo === "afecto" ? "afecta"
+                : "exenta"; // default seguro: nunca fabricar IVA sobre algo sin clasificar
   const [tipo, setTipo] = useState<"afecta" | "exenta">(tipoInicial);
   const [total, setTotal] = useState<number>(Math.round(propuesta.total ?? propuesta.movimientos_raw?.monto ?? 0));
-  const [detalle, setDetalle] = useState<string>(propuesta.notas?.trim() || propuesta.movimientos_raw?.descripcion || "");
+  // Detalle = SOLO lo editado por el humano (notas), sin fallback a la glosa bancaria:
+  // si se prellenara y se guardara sin tocar, notas pisaría la glosa común de la cartola.
+  const [detalle, setDetalle] = useState<string>(propuesta.notas?.trim() ?? "");
   const [rut, setRut] = useState<string>(propuesta.receptor_rut ?? "");
   const [razon, setRazon] = useState<string>(propuesta.receptor_nombre ?? "");
   const [direccion, setDireccion] = useState<string>(extra.receptor_direccion ?? "");
   const [comuna, setComuna] = useState<string>(extra.receptor_comuna ?? "");
-  const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "Efectivo");
+  const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
   const [busy, setBusy] = useState(false);
 
   const isAfecta = tipo === "afecta";
@@ -194,6 +207,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
             <div>
               <label style={label}>Detalle</label>
               <textarea value={detalle} onChange={(e) => setDetalle(e.target.value)} rows={2}
+                placeholder="Qué se vendió o prestó (se imprime en la boleta)"
                 style={{ ...field, resize: "none", lineHeight: 1.5 }} />
               <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 10 }}>
                 <span style={{ fontSize: 26, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em" }}>$</span>
@@ -201,7 +215,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
                   style={{ flex: 1, fontSize: 26, fontWeight: 800, letterSpacing: "-.03em", border: "1px solid var(--border)", borderRadius: 10, padding: "4px 10px", background: "var(--bg-muted)", color: "var(--text)", outline: "none", caretColor: "var(--accent)" }} />
               </div>
               {isAfecta && !conflicto && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>neto {fmt(neto)} · IVA {fmt(iva)} (19%)</div>}
-              {conflicto && <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 5 }}>⚠ Afecta lleva IVA — con $0 el SII la rechaza. Subí el monto o emitila exenta.</div>}
+              {conflicto && <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 5 }}>⚠ Afecta lleva IVA — con $0 el SII la rechaza. Sube el monto o emítela exenta.</div>}
               {total <= 0 && <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 5 }}>⚠ El monto debe ser mayor a $0.</div>}
             </div>
 
@@ -227,6 +241,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
             <div>
               <label style={label}>Forma de pago</label>
               <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} style={{ ...field, cursor: "pointer" }}>
+                <option value="">Medio de pago…</option>
                 {PAGOS.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>

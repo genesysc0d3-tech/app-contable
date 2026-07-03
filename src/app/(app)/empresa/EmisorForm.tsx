@@ -61,6 +61,9 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
       });
       if (r.error) { toast(r.error, "error"); return; }
       toast("Datos del emisor guardados");
+      // Éxito real: avisa al v5 (pulse "Empresa guardada"); antes lo disparaba
+      // el popup a ciegas aunque la validación fallara.
+      window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Empresa guardada" } }));
     } catch { toast("Error al guardar", "error"); }
     finally { setPending(false); }
   }

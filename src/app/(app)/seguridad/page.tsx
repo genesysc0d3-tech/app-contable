@@ -15,6 +15,8 @@ export default function SeguridadPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Confirmación de dos pasos para "Quitar": id del factor en confirmación (expira sola).
+  const [confirmingRemove, setConfirmingRemove] = useState<string | null>(null);
 
   const loadFactors = useCallback(async () => {
     const supabase = createClient();
@@ -120,8 +122,21 @@ export default function SeguridadPage() {
               .map((f) => (
                 <li key={f.id} className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2">
                   <span className="text-sm">{f.friendly_name || "TOTP"}</span>
-                  <button onClick={() => removeFactor(f.id)} className="text-sm text-red-600 underline">
-                    Quitar
+                  <button
+                    onClick={() => {
+                      if (confirmingRemove === f.id) {
+                        setConfirmingRemove(null);
+                        removeFactor(f.id);
+                        return;
+                      }
+                      setConfirmingRemove(f.id);
+                      window.setTimeout(() => {
+                        setConfirmingRemove((cur) => (cur === f.id ? null : cur));
+                      }, 4000);
+                    }}
+                    className={`text-sm underline ${confirmingRemove === f.id ? "font-semibold text-red-700" : "text-red-600"}`}
+                  >
+                    {confirmingRemove === f.id ? "¿Seguro? Quitar MFA" : "Quitar"}
                   </button>
                 </li>
               ))}

@@ -178,6 +178,22 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
     } catch { toast("Error de red", "error"); }
   }
 
+  // Confirmación inline de dos pasos para acciones destructivas (sin window.confirm):
+  // el primer click "arma" el botón (~4s), el segundo ejecuta.
+  const [armado, setArmado] = useState<{ docId: string; accion: "reprocesar" | "deshacer" } | null>(null);
+  const armadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (armadoTimer.current) clearTimeout(armadoTimer.current); }, []);
+  function confirmarDosPasos(docId: string, accion: "reprocesar" | "deshacer", path: string) {
+    if (armadoTimer.current) clearTimeout(armadoTimer.current);
+    if (armado?.docId === docId && armado.accion === accion) {
+      setArmado(null);
+      callApi(path, docId);
+      return;
+    }
+    setArmado({ docId, accion });
+    armadoTimer.current = setTimeout(() => setArmado(null), 4000);
+  }
+
   return (
     <>
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
@@ -198,13 +214,13 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           // Registro de una boleta YA emitida (boleta_unica / boleta_sii_local /
           // boleta_baseapi, etc.): es solo el comprobante, no una cartola
           // procesable. Read-only — sin reprocesar/deshacer/mapear (ya está en
-          // Boletas; para corregir, Nota de Crédito). Los uploads son tipo
+          // Boletas; para corregir, soporte). Los uploads son tipo
           // "excel"/"pdf", nunca "boleta_*", así que no hay colisión.
           const isBoletaUnica = (doc.tipo ?? "").startsWith("boleta_");
           const prog = docProgress?.[doc.id];
           // Documento congelado: ya tiene ≥1 boleta emitida en el SII. No se
-          // puede re-mapear ni deshacer (folio real; se corrige vía Nota de
-          // Crédito). Solo aplica a documentos con propuestas (no boleta única).
+          // puede re-mapear ni deshacer (folio real; se corrige vía soporte).
+          // Solo aplica a documentos con propuestas (no boleta única).
           const frozen = (prog?.emitida ?? 0) > 0;
           const progreso = doc.progreso_ia as {
             estado?:string; lote_actual?:number; total_lotes?:number;
@@ -224,10 +240,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           return (
             <div key={doc.id} className="doc-card" style={isBoletaUnica ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
               <div className="dh" style={isBoletaUnica ? { padding: "6px 8px", gap: 5 } : undefined}>
-                {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"#E8553E",fontSize:7,fontWeight:900,flexShrink:0}}>B1</span>}
+                {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"#E8553E",fontSize:9,fontWeight:900,flexShrink:0}}>B1</span>}
                 <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px ${st[doc.estado]??"var(--text2)"}40`}} />
                 <span className="nm">{doc.nombre_archivo}</span>
-                {isBoletaUnica && <span style={{fontSize:6,padding:"1px 4px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
+                {isBoletaUnica && <span style={{fontSize:9,padding:"1px 5px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
                 {(() => {
@@ -243,7 +259,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   return (
                     <span style={{display:"inline-flex",gap:4,flexShrink:0}}>
                       {chips.map(c => (
-                        <span key={c.sigla} style={{fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:`${c.color}1a`,color:c.color,whiteSpace:"nowrap"}}>
+                        <span key={c.sigla} style={{fontSize:9,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:`${c.color}1a`,color:c.color,whiteSpace:"nowrap"}}>
                           {c.n} {c.sigla}
                         </span>
                       ))}
@@ -255,7 +271,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 {doc.estado === "procesado" && hasWarning && (
                   <div className="warn">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    Esta cartola tiene transferencias del mismo monto. Verifica.
+                    Esta cartola tiene transferencias del mismo monto. Revisa “Ver omitidos” aquí abajo — si son cobros reales repetidos, puedes recuperarlos.
                   </div>
                 )}
                 {doc.estado === "procesado" && (dupDetalle.length > 0 || dupCount > 0) && (
@@ -301,16 +317,20 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 <div className="da">
                   {/* Documento congelado: tiene boletas emitidas → bloqueado */}
                   {frozen && (
-                    <span title="Documento con boletas emitidas en el SII. Para corregir o anular, emite una Nota de Crédito — no se puede re-mapear ni deshacer." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e",whiteSpace:"nowrap"}}>
+                    <span title="Documento con boletas emitidas en el SII. Para corregir o anular, escríbenos a soporte — no se puede re-mapear ni deshacer." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e",whiteSpace:"nowrap"}}>
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
                       Listo · {prog!.emitida} emitida{prog!.emitida !== 1 ? "s" : ""}
                     </span>
                   )}
                   {!isBoletaUnica && !frozen && (doc.estado === "procesado" || doc.estado === "subido") && (
-                    <button className="ht" onClick={() => callApi("/api/procesar-documento", doc.id)}>↻ Reprocesar</button>
+                    <button className="ht" onClick={() => confirmarDosPasos(doc.id, "reprocesar", "/api/procesar-documento")}>
+                      {armado?.docId === doc.id && armado.accion === "reprocesar" ? "¿Seguro? Reprocesar" : "↻ Reprocesar"}
+                    </button>
                   )}
                   {!isBoletaUnica && !frozen && (doc.estado === "procesado" || doc.estado === "error") && (
-                    <button className="ud" onClick={() => callApi("/api/deshacer-documento", doc.id)}>↩ Deshacer</button>
+                    <button className="ud" onClick={() => confirmarDosPasos(doc.id, "deshacer", "/api/deshacer-documento")}>
+                      {armado?.docId === doc.id && armado.accion === "deshacer" ? "¿Seguro? Deshacer" : "↩ Deshacer"}
+                    </button>
                   )}
                   {doc.estado === "procesando" && (
                     <button className="cl" onClick={() => callApi("/api/cancelar-documento", doc.id)}>✕ Cancelar</button>
@@ -362,7 +382,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                           : `${conflicto.n} movimiento${conflicto.n !== 1 ? "s" : ""} clasificado${conflicto.n !== 1 ? "s" : ""} como ${conflicto.clasif}, y tu empresa está configurada ${conflicto.cfg}`}
                       </span>
                       <TermHint width={262} align="right">
-                        La app los procesa igual y puedes corregir cada uno en Revisar antes de aprobar.
+                        La app los procesa igual y puedes corregir cada uno en Check antes de aprobar.
                         Para evitar este aviso, sube cartolas solo con los movimientos que quieres boletear,
                         o ajusta el <strong>Tipo</strong> del documento (el selector de la derecha) para guiar al clasificador.
                       </TermHint>

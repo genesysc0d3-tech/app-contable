@@ -53,7 +53,9 @@ export default function VeredictoCartola({
   const totalListas = listasProps.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
   const afectasListas = listasProps.filter((p) => !esExenta(p)).length;
   const exentasListas = listasProps.filter(esExenta).length;
-  const pendientes = propuestas.filter((p) => p.estado === "pendiente").length;
+  // 'editado' es borrador (no emitible): cuenta como pendiente para que el
+  // Aprobar atómico no lo deje atrás en silencio.
+  const pendientes = propuestas.filter((p) => p.estado === "pendiente" || p.estado === "editado").length;
   const todasListas = count > 0 && pendientes === 0;
   // Solo se puede aprobar si de verdad hay algo staged (evita 'Aprobar 0' cuando la
   // cartola ya fue enviada entera a Emitir: pendientes===0 pero listas===0).
@@ -135,7 +137,7 @@ export default function VeredictoCartola({
             </button>
           )
         ) : pendientes > 0 ? (
-          <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Poné listas las {pendientes} en <b>Editar</b> para aprobar</div>
+          <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Deja listas las {pendientes} en <b>Editar</b> para aprobar</div>
         ) : (
           <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Todo enviado a Emitir</div>
         )}

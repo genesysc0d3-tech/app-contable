@@ -17,7 +17,7 @@ export default function BloqueadoPage() {
           <p className="text-sm text-white/70">
             Escribe a{" "}
             <span className="text-blue-400">soporte@appcontable.cl</span> para
-            resolver tu situacion.
+            resolver tu situación.
           </p>
         </div>
 
@@ -26,7 +26,7 @@ export default function BloqueadoPage() {
             type="submit"
             className="text-sm text-white/40 hover:text-white/70 transition-colors"
           >
-            Cerrar sesion
+            Cerrar sesión
           </button>
         </form>
       </div>

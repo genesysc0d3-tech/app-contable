@@ -88,7 +88,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="sparkle-title">EMITIR BOLETA ÚNICA</span>
-              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOther ? "Emisión bloqueada" : "DTE manual individual")}</span>
+              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOther ? "Emisión bloqueada" : "Boleta manual, una a la vez")}</span>
             </span>
             <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
               <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
@@ -216,7 +216,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="mass-title">EMITIR MASSDTE</span>
+              <span className="mass-title">SUBIR CARTOLAS</span>
               <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? "Subida masiva de cartolas"}</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
@@ -287,7 +287,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Carga masiva</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>Excel · PDF · CSV</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>Excel · PDF · CSV · Fotos</span>
                 </div>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>MassDTE</h2>
                 <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Sube cartolas bancarias y documentos para procesamiento masivo.</p>
@@ -300,7 +300,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
             </div>
             <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "var(--surface)" }}>
               <div style={{ fontSize: 10, color: "var(--text2)" }}>
-                Descargá la plantilla para preparar tus datos.
+                Descarga la plantilla para preparar tus datos.
               </div>
               <a href="/api/generar-template" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "#E8553E", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
@@ -402,6 +402,22 @@ export function HeaderActionsRow() {
     };
   }, []);
 
+  useEffect(() => {
+    // ⌘K / Ctrl+K abre el buscador fullscreen del historial
+    function handleShortcut(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        document.documentElement.classList.add("v5-dashboard-fullscreen");
+        // Mismo evento/forma que toggleDashboardFullscreen: lo escuchan
+        // RightColumnView y el handleFullscreen de este componente
+        window.dispatchEvent(new CustomEvent("toggle-dashboard-fullscreen", { detail: { open: true } }));
+        window.setTimeout(() => searchRef.current?.focus(), 80);
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
   function updateSearchQuery(value: string) {
     setSearchQuery(value);
     window.dispatchEvent(new CustomEvent("search-history-query-change", { detail: { query: value } }));
@@ -431,7 +447,7 @@ export function HeaderActionsRow() {
           {searchQuery && <button onClick={() => updateSearchQuery("")} aria-label="Limpiar búsqueda" style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",width:23,height:23,borderRadius:8,border:"1px solid var(--border)",background:"var(--bg-muted)",color:"var(--text2)",display:"grid",placeItems:"center",cursor:"pointer",padding:0}}>×</button>}
         </div>
       )}
-      <button onClick={toggleDashboardFullscreen} aria-pressed={dashboardOpen} aria-label={dashboardOpen ? "Volver al dashboard" : "Expandir dashboard"}
+      <button onClick={toggleDashboardFullscreen} aria-pressed={dashboardOpen} aria-label={dashboardOpen ? "Volver al dashboard" : "Buscar en historial (⌘K)"} title={dashboardOpen ? undefined : "Buscar en historial (⌘K)"}
         className={dashboardOpen ? "" : "ha-btn"}
         style={dashboardOpen ? {width:176,height:38,borderRadius:12,border:"1px solid rgba(232,85,62,.28)",cursor:"pointer",background:"rgba(232,85,62,.12)",color:"#E8553E",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"0 14px",boxShadow:"0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border)",transition:"width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,box-shadow .2s",fontSize:16,overflow:"hidden",whiteSpace:"nowrap"} : undefined}>
         {dashboardOpen ? (

@@ -66,6 +66,11 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
   else if (trial && trial.activo && !trial.inicio) aviso = `Prueba gratis: tu primera emisión masiva activa ${trial.diasRestantes} días o ${trial.boletasMax} boletas, lo que ocurra primero.`;
   else if (trial && !trial.activo) aviso = "Tu período de prueba terminó — contrata un plan para seguir emitiendo boletas.";
 
+  // El trial (disponible o corriendo) también da acceso al escritorio: quien está
+  // probando no debe quedar atrapado en el paywall.
+  const tienePlan = cuota.suscripcionActiva || Boolean(usuario.empresas?.plan_activo);
+  const puedeVolver = tienePlan || Boolean(trial?.activo);
+
   return (
     <div className="dark" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 20px", background: "#0a0a0a", color: "#fff", fontFamily: "'DM Sans','Inter',sans-serif" }}>
       <style>{`.massdte-logo{filter:invert(1)}`}</style>
@@ -187,9 +192,20 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
           </div>
         )}
 
+        {!tienePlan && trial?.activo && (
+          <div style={{ textAlign: "center", marginTop: 26 }}>
+            <Link
+              href="/massdte"
+              style={{ display: "inline-block", borderRadius: 11, border: "1px solid rgba(232,85,62,.45)", background: "rgba(232,85,62,.10)", color: RED, padding: "11px 22px", fontSize: 13, fontWeight: 700 }}
+            >
+              Empezar gratis →
+            </Link>
+          </div>
+        )}
+
         <p style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.4)", marginTop: 24 }}>
           Pagos procesados por Mercado Pago · cancela cuando quieras.
-          {(cuota.suscripcionActiva || usuario.empresas?.plan_activo) && (
+          {puedeVolver && (
             <>
               {" · "}
               <Link href="/massdte" style={{ color: "rgba(255,255,255,.6)", textDecoration: "underline" }}>Volver al escritorio</Link>

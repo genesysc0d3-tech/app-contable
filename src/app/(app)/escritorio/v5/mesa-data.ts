@@ -99,8 +99,8 @@ export async function fetchMesaDateDependent(
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
-    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["pendiente", "listo"]).gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["aprobado", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(100),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", workStartDay).lt("fecha_emision", workEndDay),
@@ -114,9 +114,10 @@ export async function fetchMesaDateDependent(
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const byDay: Record<number, { p: number; a: number; d: number }> = {};
   for (let d = 1; d <= daysInMonth; d++) byDay[d] = { p: 0, a: 0, d: 0 };
-  // Pre-stageo: 'listo' (staged, aún no aprobado) cuenta como pendiente en el calendario —
-  // la cartola sigue sin emitirse hasta el Aprobar atómico, así que el día conserva su punto.
-  for (const p of calProps.data ?? []) { const inf = byDay[chileDayOfMonth(new Date(p.created_at))]; if (!inf) continue; if (p.estado === "pendiente" || p.estado === "listo") inf.p++; else if (["aprobado", "editado"].includes(p.estado)) inf.a++; }
+  // Pre-stageo: 'listo' (staged) y 'editado' (borrador, aún sin re-aprobar) cuentan como
+  // pendientes en el calendario — la cartola sigue sin emitirse hasta el Aprobar atómico,
+  // así que el día conserva su punto.
+  for (const p of calProps.data ?? []) { const inf = byDay[chileDayOfMonth(new Date(p.created_at))]; if (!inf) continue; if (p.estado === "pendiente" || p.estado === "listo" || p.estado === "editado") inf.p++; else if (p.estado === "aprobado") inf.a++; }
   for (const d of calDocs.data ?? []) { const inf = byDay[chileDayOfMonth(new Date(d.created_at))]; if (inf) inf.d++; }
 
   const today = curDay;
@@ -195,6 +196,23 @@ export async function fetchMesaDateDependent(
     aprobadas_otros_tipos: {} as Record<string, number>,
   }));
 
+  // 'editado' = borrador (editar la degrada, perdió el Aprobar): sigue visible en
+  // la cola de Emitir pero cae en "por revisar" y nunca es emitible — coherente
+  // con el gate del server (emitir-lote solo acepta 'aprobado'). propsData cubre
+  // el mismo rango, así que el estado sale de ahí sin otra consulta.
+  const editadoIds = new Set((propsData.data ?? []).filter((p) => p.estado === "editado").map((p) => p.id as string));
+  const pendItems = pendientes.items.map((i) =>
+    editadoIds.has(i.id) && i.balde === "listas"
+      ? { ...i, balde: "por_revisar" as const, listo_emitir: false, motivo_no_listo: "Editada sin aprobar", motivo_code: "editado_sin_aprobar" as const }
+      : i,
+  );
+  const pendTotales = {
+    ...pendientes.totales,
+    listas_emitir: pendItems.filter((i) => i.balde === "listas").length,
+    por_revisar: pendItems.filter((i) => i.balde === "por_revisar").length,
+    monto_listo: pendItems.filter((i) => i.balde === "listas").reduce((s, i) => s + i.monto_total, 0),
+  };
+
   return {
     selDate, workMode,
     propuestas: propsData.data ?? [],
@@ -208,7 +226,7 @@ export async function fetchMesaDateDependent(
     actividadItems,
     pendCount: pendCountData.count ?? 0,
     aprobCount: aprobCountData.count ?? 0,
-    pendientes,
+    pendientes: { ...pendientes, items: pendItems, totales: pendTotales },
     calendar: {
       y, m, monthName: MONTH_NAMES[m], daysInMonth, byDay, today, isThisMonth, selDay,
       weekRange, prevMonthParam, nextMonthParam, selectedDateLabel, workMode, selDate,

@@ -213,8 +213,10 @@ export async function POST(request: Request) {
       results.push({ propuesta_id: pid, ok: false, error_code: "YA_EMITIDA", error_message: "Esta propuesta ya tiene una boleta vigente" });
       continue;
     }
-    if (p.estado !== "aprobado" && p.estado !== "editado") {
-      results.push({ propuesta_id: pid, ok: false, error_code: "ESTADO_INVALIDO", error_message: `La propuesta está ${p.estado}, no aprobada` });
+    // Única puerta a emisión: 'aprobado' (el Aprobar atómico de Check).
+    // 'editado' es borrador — debe re-aprobarse antes de emitir.
+    if (p.estado !== "aprobado") {
+      results.push({ propuesta_id: pid, ok: false, error_code: "ESTADO_INVALIDO", error_message: `La propuesta está ${p.estado} — apruébala en Check antes de emitir` });
       continue;
     }
     // "exenta" incluida (ya estaba en pendientes-emision): un contribuyente exento

@@ -17,7 +17,7 @@ interface Item {
   balde: "listas" | "por_revisar" | "bloqueadas";
   listo_emitir: boolean;
   motivo_no_listo: string | null;
-  motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | null;
+  motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | "editado_sin_aprobar" | null;
   tipo_sugerido: number | null;
   sugerencia: string | null;
   confianza_clasif: number;
@@ -58,8 +58,10 @@ function errorAmable(code?: string, msg?: string): string {
   switch (code) {
     case "YA_EMITIDA": return "Ya tenía una boleta emitida.";
     case "RECEPTOR_RUT_OBLIGATORIO":
-    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA":
-    case "MEDIO_PAGO_OBLIGATORIO": return "Falta identificar al comprador (sobre 135 UF).";
+    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA": return "Falta identificar al comprador (sobre 135 UF).";
+    case "MEDIO_PAGO_OBLIGATORIO": return "Falta el medio de pago.";
+    case "ESTADO_INVALIDO": return "Apruébala en Check antes de emitir.";
+    case "PROVEEDOR_NO_IMPLEMENTADO": return "La emisión masiva aún no está disponible para tu proveedor. Usa Boleta única por ahora.";
     case "NO_BOLETAR": return "No corresponde boletear (no es una venta).";
     case "SIN_FOLIOS_DISPONIBLES": return "No quedan folios disponibles.";
     case "AFECTA_IVA_CERO": return "Boleta afecta con IVA $0 — revisa el monto.";
@@ -89,7 +91,7 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
         <div style={{marginTop:5,fontSize:12,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión…" : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
         {!loading && otros > 0 && (
           <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"#f59e0b",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
-            {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Revisar.
+            {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Check.
           </div>
         )}
       </div>
@@ -98,9 +100,10 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
 }
 
 function nextActionLabel(code: Item["motivo_code"]): string | null {
-  if (code === "falta_receptor") return "Completa receptor en Revisar";
-  if (code === "monto_invalido") return "Corrige el monto en Revisar";
-  if (code === "no_boletar") return "Revisa la clasificacion antes de emitir";
+  if (code === "falta_receptor") return "Completa receptor en Check";
+  if (code === "monto_invalido") return "Corrige el monto en Check";
+  if (code === "no_boletar") return "Revisa la clasificación antes de emitir";
+  if (code === "editado_sin_aprobar") return "Apruébala en Check antes de emitir";
   return null;
 }
 
@@ -124,6 +127,9 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<EmitirResult | null>(null);
+  // Foto receptor/monto de lo enviado: el recibo de fallos la necesita aunque
+  // la cola ya se haya recargado (reload() saca los items de `data`).
+  const [emitSnapshot, setEmitSnapshot] = useState<Record<string, { receptor: string; monto: number }>>({});
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
 
   // Auto-refresh SILENCIOSO: la cola sigue al dato nuevo sin botón manual y sin que el
@@ -143,6 +149,16 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
       .subscribe();
     return () => { if (autoTimer.current) clearTimeout(autoTimer.current); supabase.removeChannel(ch); };
   }, [empresaId, channelId]);
+
+  // Escape cierra el modal de confirmación (nunca a mitad de una emisión).
+  useEffect(() => {
+    if (!confirmOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !emitiendo) { setConfirmOpen(false); setLastResult(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmOpen, emitiendo]);
 
   const itemsList = useMemo(() => {
     if (!data) return [];
@@ -200,6 +216,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
       return;
     }
     setEmitiendo(true);
+    setEmitSnapshot(Object.fromEntries(selectedItems.map((i) => [i.id, { receptor: i.receptor_nombre || i.descripcion || "Sin nombre", monto: i.monto_total }])));
     try {
       const body = { items: selectedItems.map(i => ({ id: i.id, tipo_dte: i.tipo_sugerido ?? 39 })) };
       const res = await fetch("/api/intermediaria/emitir-lote", {
@@ -215,7 +232,8 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
           reload();
         }
       } else {
-        toast(json.error ?? "Error al emitir", "error");
+        // 'detalle' trae el copy humano del server (p.ej. metering); 'error' es el código.
+        toast(json.detalle ?? json.error ?? "Error al emitir", "error");
         setConfirmOpen(false);
       }
     } catch { toast("Error al emitir lote", "error"); }
@@ -331,7 +349,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : `Emitir ${selectedCount}`}
+              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? "Selecciona boletas" : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>
@@ -363,9 +381,14 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                 {lastResult.fallos > 0 && (
                   <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>No se pudieron ({lastResult.fallos})</div>
-                    {lastResult.resultados.filter((r) => !r.ok).map((r) => (
-                      <div key={r.propuesta_id} style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.5 }}>· {errorAmable(r.error_code, r.error_message)}</div>
-                    ))}
+                    {lastResult.resultados.filter((r) => !r.ok).map((r) => {
+                      const it = emitSnapshot[r.propuesta_id];
+                      return (
+                        <div key={r.propuesta_id} style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.5 }}>
+                          · {it && <span style={{ color: "var(--text2)" }}>{it.receptor} · {fmt(it.monto)} — </span>}{errorAmable(r.error_code, r.error_message)}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
@@ -398,7 +421,10 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                   Total <b style={{ color: "var(--text)" }}>{fmt(selectedTotal)}</b>
                 </div>
                 <div style={{ marginTop: 8, fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
-                  Modo de prueba: se simula, no se informa al SII. Una boleta real solo se corrige con Nota de Crédito.
+                  Modo de prueba: se simula, no se informa al SII. Una boleta real no se puede deshacer. Si algo sale mal, escríbenos a soporte.
+                </div>
+                <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text3)", lineHeight: 1.5 }}>
+                  La boleta documenta el ingreso; el impuesto a la renta se declara aparte (F22) sobre la ganancia, no sobre el total.
                 </div>
                 <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
                   <button onClick={() => setConfirmOpen(false)}

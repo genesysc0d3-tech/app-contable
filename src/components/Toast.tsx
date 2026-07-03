@@ -23,15 +23,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((message: string, type: "success" | "error" = "success") => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
+    // Los errores necesitan más tiempo de lectura que las confirmaciones
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2000);
+    }, type === "error" ? 6000 : 2000);
   }, []);
 
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-20 left-0 right-0 z-[60] flex flex-col items-center gap-2 pointer-events-none">
+      <div role="status" aria-live="polite" className="fixed bottom-6 left-0 right-0 z-[60] flex flex-col items-center gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}

@@ -22,6 +22,16 @@ async function getRequestOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+// Supabase Auth responde en inglés; el usuario final debe ver el error en español.
+function traducirErrorAuth(message: string): string {
+  const msg = message.toLowerCase();
+  if (msg.includes("invalid login credentials")) return "Email o contraseña incorrectos";
+  if (msg.includes("user already registered")) return "Ese email ya tiene una cuenta — inicia sesión";
+  if (msg.includes("password should be at least")) return "La contraseña debe tener al menos 6 caracteres";
+  if (msg.includes("rate limit")) return "Demasiados intentos — espera un momento";
+  return "No se pudo completar. Intenta de nuevo.";
+}
+
 export async function signIn(formData: FormData) {
   const supabase = await createClient();
   const next = safeNextPath(formData.get("next"));
@@ -32,10 +42,25 @@ export async function signIn(formData: FormData) {
   });
 
   if (error) {
-    return { error: error.message };
+    return { error: traducirErrorAuth(error.message) };
   }
 
   redirect(next ?? "/");
+}
+
+export async function solicitarRecuperacion(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { ok: true };
+
+  const supabase = await createClient();
+  const origin = await getRequestOrigin();
+
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/auth/nueva-clave")}`,
+  });
+
+  // Respuesta SIEMPRE neutra (exista o no la cuenta): evita enumerar emails.
+  return { ok: true };
 }
 
 /**
@@ -91,7 +116,7 @@ export async function signUp(formData: FormData) {
   });
 
   if (error) {
-    return { error: error.message };
+    return { error: traducirErrorAuth(error.message) };
   }
 
   if (data.user) {

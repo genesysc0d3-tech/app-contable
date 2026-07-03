@@ -245,7 +245,7 @@ export async function editarPropuesta(
     ({ error, count } = await doUpdate());
   }
   if (error) return { error: error.message };
-  if (!count) return { error: "No se pudo editar (¿ya está en emisión?)" };
+  if (!count) return { error: "No se pudo editar — el estado de la propuesta no lo permite" };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
@@ -285,7 +285,7 @@ export async function aprobarTodas(
   // UI can roll back instead of silently lying to the user.
   if (aprobadas === 0 && propuestaIds.length > 0) {
     return {
-      error: "No se actualizó ninguna propuesta — verificá permisos o que las propuestas existan",
+      error: "No se actualizó ninguna propuesta — verifica permisos o que las propuestas existan",
       count: 0,
     };
   }
