@@ -79,12 +79,22 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
 
   return (
     <div className="v5-calendar-wrap" style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)", height: 38, display: "flex", justifyContent: "center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
+      {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
+      <style>{`
+        .cal-mode-btn{transition:transform .24s cubic-bezier(.34,1.56,.64,1);}
+        .cal-mode-btn:hover{transform:scale(1.07);}
+        .cal-mode-btn:active{transform:scale(.98);}
+        @media (prefers-reduced-motion: reduce){
+          .cal-mode-btn{transition:none;}
+          .cal-mode-btn:hover{transform:none;}
+        }
+      `}</style>
       <div style={{ background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
         <div style={{ padding: "0 6px", display: "flex", alignItems: "center", gap: 2 }}>
           <button type="button" onClick={() => navigate({ month: prevMonthParam, date: firstOfMonthParam(prevMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>‹</button>
           <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", flexShrink: 0, width: 100, textAlign: "center" }}>{monthName} {y}</span>
           <button type="button" onClick={() => navigate({ month: nextMonthParam, date: firstOfMonthParam(nextMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>›</button>
-          <button type="button" onClick={() => navigate({ date: selDate, month: `${y}-${m}`, view: nextView })} style={{ ...btnReset, fontSize: 9, fontWeight: 700, color: "var(--lime)", padding: "2px 4px", margin: "0 4px", borderRadius: 4, border: workMode !== "day" ? "1px dashed var(--lime)" : "1px solid transparent", background: "transparent", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flexShrink: 0, height: 28, width: 98, justifyContent: "center", lineHeight: 1.05 }}>
+          <button type="button" className="cal-mode-btn" onClick={() => navigate({ date: selDate, month: `${y}-${m}`, view: nextView })} style={{ ...btnReset, fontSize: 9, fontWeight: 700, color: "var(--lime)", padding: "2px 4px", margin: "0 4px", borderRadius: 4, border: workMode !== "day" ? "1px dashed var(--lime)" : "1px solid transparent", background: "transparent", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flexShrink: 0, height: 28, width: 98, justifyContent: "center", lineHeight: 1.05 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", lineHeight: 1.05, textAlign: "left", fontSize: 9, fontWeight: 700 }}>
               <span>Mesa de trabajo</span>
