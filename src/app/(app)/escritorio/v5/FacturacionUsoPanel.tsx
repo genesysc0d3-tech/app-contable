@@ -103,17 +103,27 @@ export default function FacturacionUsoPanel() {
   const [resumen, setResumen] = useState<ResumenCupos | null>(null);
   const [estado, setEstado] = useState<"cargando" | "ok" | "error">("cargando");
 
-  const cargar = useCallback(async () => {
-    setEstado("cargando");
-    const [fact, res] = await Promise.all([obtenerFacturacion(), listarResumenCupos()]);
-    if (fact.ok) setData(fact.data);
-    if (res.ok) setResumen(res.resumen);
-    setEstado(fact.ok ? "ok" : "error");
-  }, []);
+  // setState solo dentro del .then (callback async): llamarlo síncrono en el
+  // efecto dispara react-hooks/set-state-in-effect. El estado inicial ya es
+  // "cargando", así que el efecto no necesita resetearlo.
+  const cargar = useCallback(
+    () =>
+      Promise.all([obtenerFacturacion(), listarResumenCupos()]).then(([fact, res]) => {
+        if (fact.ok) setData(fact.data);
+        if (res.ok) setResumen(res.resumen);
+        setEstado(fact.ok ? "ok" : "error");
+      }),
+    []
+  );
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  const reintentar = () => {
+    setEstado("cargando");
+    void cargar();
+  };
 
   if (estado === "cargando") {
     return <div style={{ padding: 20, color: "var(--text2)", fontSize: 12 }}>Cargando facturación…</div>;
@@ -124,7 +134,7 @@ export default function FacturacionUsoPanel() {
         <div style={{ color: "var(--text2)", fontSize: 12 }}>No se pudo cargar la facturación.</div>
         <button
           type="button"
-          onClick={() => void cargar()}
+          onClick={reintentar}
           style={{ height: 30, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.5)", background: "rgba(232,85,62,.1)", color: "#E8553E", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
         >
           Reintentar
