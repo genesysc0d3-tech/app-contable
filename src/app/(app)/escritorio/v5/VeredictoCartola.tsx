@@ -15,9 +15,51 @@ const CB_CSS = `
 .vcart-cb:hover:not(:disabled){filter:brightness(1.07);}
 .vcart-cb:active:not(:disabled){box-shadow:inset 4px 4px 11px rgba(0,0,0,.5),inset -3px -3px 9px rgba(255,255,255,.04);filter:brightness(.92);transform:translateY(1px);}
 .vcart-cb:disabled{opacity:.5;cursor:default;}
+/* Icono del archivo: lift sutil al hover del chip (mismo spring del dock), sin loops idle. */
+.vcart-file .fi-wrap{position:relative;display:grid;place-items:center;padding-bottom:7px;transition:transform .26s cubic-bezier(.34,1.56,.64,1);}
+.vcart-file:hover .fi-wrap{transform:translateY(-3px) scale(1.06);}
+.vcart-file .fi-badge{position:absolute;bottom:-3px;left:50%;transform:translateX(-50%);font-size:7.5px;font-weight:800;letter-spacing:.06em;padding:1.5px 6px;border-radius:6px;line-height:1.3;white-space:nowrap;transition:transform .26s cubic-bezier(.34,1.56,.64,1);}
+.vcart-file:hover .fi-badge{transform:translateX(-50%) scale(1.1);}
+@media (prefers-reduced-motion: reduce){
+  .vcart-file .fi-wrap,.vcart-file .fi-badge{transition:none;}
+  .vcart-file:hover .fi-wrap{transform:none;}
+  .vcart-file:hover .fi-badge{transform:translateX(-50%);}
+}
 `;
 
 const divider = { borderTop: "1px solid var(--border)", margin: "0.7em 0" } as const;
+
+// Tipo de archivo por extensión → glifo + color semántico + badge. Reconocimiento
+// al tiro de QUÉ subió el usuario (Excel/PDF/CSV/foto) sin leer el nombre.
+type FileExt = "xlsx" | "pdf" | "csv" | "img" | "doc";
+function extDe(nombre: string): FileExt {
+  const n = (nombre ?? "").toLowerCase();
+  if (/\.(xlsx?|xlsm)$/.test(n)) return "xlsx";
+  if (n.endsWith(".pdf")) return "pdf";
+  if (n.endsWith(".csv")) return "csv";
+  if (/\.(png|jpe?g|webp|heic)$/.test(n)) return "img";
+  return "doc";
+}
+const FILE_META: Record<FileExt, { label: string; color: string }> = {
+  xlsx: { label: "XLSX", color: "var(--green)" },
+  pdf: { label: "PDF", color: "var(--red)" },
+  csv: { label: "CSV", color: "var(--blue)" },
+  img: { label: "FOTO", color: "var(--amber)" },
+  doc: { label: "DOC", color: "var(--text2)" },
+};
+function FileGlyph({ ext, color }: { ext: FileExt; color: string }) {
+  return (
+    <svg width="36" height="44" viewBox="0 0 32 40" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .92 }}>
+      <path d="M8 2h11l7.5 7.5V36a2.5 2.5 0 0 1-2.5 2.5H8A2.5 2.5 0 0 1 5.5 36V4.5A2.5 2.5 0 0 1 8 2Z" />
+      <path d="M19 2v7.5h7.5" />
+      {ext === "xlsx" && <path d="M10.5 17.5h11M10.5 22.5h11M10.5 27.5h11M16 17.5v10" />}
+      {ext === "pdf" && <path d="M10.5 18h11M10.5 22.5h11M10.5 27h7" />}
+      {ext === "csv" && <path d="M12.5 17.5v10M19.5 17.5v10M10.5 22.5h11" />}
+      {ext === "img" && <><circle cx="13" cy="19.5" r="2.1" /><path d="M9.5 30.5l5-6 3.8 4.3 2.7-3 4 4.7" /></>}
+      {ext === "doc" && <path d="M10.5 18h11M10.5 22.5h8" />}
+    </svg>
+  );
+}
 
 export default function VeredictoCartola({
   doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false,
@@ -73,9 +115,18 @@ export default function VeredictoCartola({
       <style>{CB_CSS}</style>
 
       {/* IZQUIERDA: el archivo (chip; Stage 4 = mini-preview del Excel). Click = Editar. */}
-      <button onClick={onEditar} title="Editar transacciones"
+      <button className="vcart-file" onClick={onEditar} title="Editar transacciones"
         style={{ width: "clamp(120px, 17vh, 190px)", flexShrink: 0, alignSelf: "stretch", minHeight: "8em", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-muted)", cursor: "pointer", padding: "0.9em", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.55em", position: "relative", color: "var(--text2)" }}>
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: .85 }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M8 13h8M8 17h5" /></svg>
+        {(() => {
+          const ext = extDe(doc.nombre_archivo);
+          const meta = FILE_META[ext];
+          return (
+            <span className="fi-wrap">
+              <FileGlyph ext={ext} color={meta.color} />
+              <span className="fi-badge" style={{ background: `color-mix(in srgb, ${meta.color} 14%, transparent)`, color: meta.color, border: `1px solid color-mix(in srgb, ${meta.color} 32%, transparent)` }}>{meta.label}</span>
+            </span>
+          );
+        })()}
         <div style={{ fontSize: "0.82em", fontWeight: 700, color: "var(--text)", textAlign: "center", lineHeight: 1.25, maxWidth: "100%", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{doc.nombre_archivo}</div>
         <div style={{ fontSize: "0.72em", color: "var(--text3)" }}>{count} movimientos</div>
         <span style={{ position: "absolute", right: 6, bottom: 6, fontSize: "0.62em", fontWeight: 700, color: "#fff", background: "rgba(0,0,0,.55)", borderRadius: 5, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3 }}>
