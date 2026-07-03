@@ -172,7 +172,7 @@ export default async function DevDiagnosticoPage() {
         minHeight: "100dvh",
         background: C.bg,
         color: C.text,
-        fontFamily: "'DM Sans','Inter',sans-serif",
+        fontFamily: "var(--font-geist-sans), sans-serif",
         padding: 18,
       }}
     >

@@ -167,7 +167,6 @@ export default async function V5Page({ searchParams }: {
     <>
       <style>{`
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',sans-serif}
 .ep-glow-card{transition:box-shadow 600ms cubic-bezier(0.22,1,0.36,1)}
 .ep-glow-card:hover{box-shadow:0 0 40px -8px rgba(232,85,62,0.40)!important}
 .app{display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,7.7fr);max-width:1400px;margin:0 auto;gap:20px;height:calc(100vh - 94px);padding:0 0;position:relative;background:transparent;min-height:0;overflow:visible}
@@ -328,7 +327,7 @@ body{font-family:'DM Sans',sans-serif}
 .em-empty .wrn{margin-top:8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.08);font-size:9px;color:var(--amber);text-align:left;line-height:1.4}
 `}</style>
 
-      <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", color: "var(--text)", minHeight: "100vh", padding: "20px 20px 20px" }}>
+      <div style={{ fontFamily: "var(--font-geist-sans), sans-serif", color: "var(--text)", minHeight: "100vh", padding: "20px 20px 20px" }}>
 
         {/* MESA: calendario (toggle sin navegar) + columnas izquierda/derecha */}
         <MesaController

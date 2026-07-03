@@ -4,7 +4,7 @@
 // prefetch de la ruta (Next precarga este shell, sin tocar la DB).
 export default function MesaLoading() {
   return (
-    <div style={{ minHeight: "100vh", background: "#0f1014", color: "#e8eaf0", padding: "14px 16px", fontFamily: "'DM Sans','Inter',sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0f1014", color: "#e8eaf0", padding: "14px 16px", fontFamily: "var(--font-geist-sans), sans-serif" }}>
       <style>{`@keyframes mesaSk{0%,100%{opacity:.5}50%{opacity:.85}} .mesa-sk{background:#16181d;border:1px solid rgba(255,255,255,.06);border-radius:14px;animation:mesaSk 1.15s ease-in-out infinite}`}</style>
 
       {/* Tira de calendario (header) */}

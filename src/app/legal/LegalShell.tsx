@@ -11,7 +11,7 @@ const C = {
 
 export function LegalShell({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <main style={{ minHeight: "100dvh", background: C.bg, color: C.text, fontFamily: "'DM Sans','Inter',sans-serif" }}>
+    <main style={{ minHeight: "100dvh", background: C.bg, color: C.text, fontFamily: "var(--font-geist-sans), sans-serif" }}>
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "28px 18px 56px" }}>
         <nav style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13, marginBottom: 28 }}>
           <Link href="/auth/login" style={{ color: C.accent, fontWeight: 800, textDecoration: "none" }}>MassDTE</Link>

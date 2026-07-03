@@ -72,7 +72,7 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
   const puedeVolver = tienePlan || Boolean(trial?.activo);
 
   return (
-    <div className="dark" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 20px", background: "#0a0a0a", color: "#fff", fontFamily: "'DM Sans','Inter',sans-serif" }}>
+    <div className="dark" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 20px", background: "#0a0a0a", color: "#fff", fontFamily: "var(--font-geist-sans), sans-serif" }}>
       <style>{`.massdte-logo{filter:invert(1)}`}</style>
       <div style={{ width: "100%", maxWidth: 1120 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>

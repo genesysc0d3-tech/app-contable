@@ -144,7 +144,7 @@ export default function CartolaMapperDragDrop({ onClose, onSaved, previewData }:
         background: "linear-gradient(145deg, rgba(22,24,29,.96), rgba(15,16,20,.98))",
         boxShadow: "0 40px 120px rgba(0,0,0,.55)",
         display: "grid", gridTemplateRows: "auto 1fr auto", color: "#f6f7fb",
-        fontFamily: "'DM Sans','Inter',sans-serif",
+        fontFamily: "var(--font-geist-sans), sans-serif",
       }}>
         {/* ── HEADER ── */}
         <div style={{ padding: "14px 24px 12px", display: "flex", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
