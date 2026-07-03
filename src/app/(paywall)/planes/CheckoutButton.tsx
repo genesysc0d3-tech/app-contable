@@ -60,15 +60,8 @@ export default function CheckoutButton({
         return; // mantiene "Abriendo…" mientras navega
       }
       if (res.status === 503 || data?.error === "MP_NO_CONFIGURADO") {
-        setMensaje(
-          <>
-            Pagos próximamente —{" "}
-            <a href="mailto:soporte@appcontable.cl" style={{ color: "inherit", textDecoration: "underline" }}>
-              escríbenos
-            </a>{" "}
-            y activamos tu plan.
-          </>
-        );
+        // TODO: cablear correo de soporte cuando exista la casilla (AlphaCode SpA).
+        setMensaje("Pagos próximamente — te contactaremos para activar tu plan.");
       } else if (res.status === 403) {
         setMensaje("Tu cuenta no puede contratar este plan desde este acceso.");
       } else {

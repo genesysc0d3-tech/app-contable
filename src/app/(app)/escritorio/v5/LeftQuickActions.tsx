@@ -39,9 +39,9 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
         .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
         @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
         .sp{position:relative;z-index:0;width:100%;overflow:hidden}
-        .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:#b4f027;cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
+        .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:var(--lime);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
         .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:#2f5a0d;outline:none}
-        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:#f59e0b;cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
+        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:var(--amber);cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
         .sparkle-button:active{filter:brightness(.96);transition:.3s}
         .sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .22);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
         .spark{position:absolute;inset:0;border-radius:inherit;rotate:0deg;overflow:hidden;mask:linear-gradient(white,transparent 50%);animation:flip calc(var(--spark) * 2) infinite steps(2,end);pointer-events:none}
@@ -54,7 +54,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
         .sparkle-title{font-size:12px;font-weight:700;color:currentColor;transition:color var(--transition)}
         .sparkle-subtitle{font-size:9px;color:var(--text2);margin-top:1px;transition:color var(--transition)}
         .sparkle-button:is(:hover,:focus-visible) .sparkle-subtitle{color:rgba(47,90,13,.72)}
-        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:#f59e0b}
+        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:var(--amber)}
         .receipt-sparkle{inline-size:1.38em;translate:-8% -3%;flex-shrink:0;position:relative;z-index:1;color:currentColor;overflow:visible}
         .receipt-sparkle .receipt-paper{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;filter:drop-shadow(0 0 calc(var(--active) * 8px) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .7));transform-box:fill-box;transform-origin:center;transition:stroke var(--transition),filter var(--transition)}
         .receipt-sparkle .receipt-line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;opacity:.7;transform-origin:left;transition:opacity var(--transition)}
@@ -122,7 +122,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       </div>
 
       {(lockedByOther || readOnlyReason) && (
-        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "#f59e0b", fontSize: 9, lineHeight: 1.35 }}>
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "var(--amber)", fontSize: 9, lineHeight: 1.35 }}>
           <strong style={{ display: "block", marginBottom: 2, fontSize: 9, textTransform: "uppercase", letterSpacing: ".05em" }}>{readOnlyReason ? "Solo lectura" : businessMode ? "Equipo" : "Emisión en curso"}</strong>
           {readOnlyReason ?? lockMessage}
         </div>
@@ -166,7 +166,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
         .md-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
         .md-panel{width:min(720px,94vw);border-radius:20px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
         .mass-sp{position:relative;z-index:0;width:100%;overflow:hidden}
-        .mass-sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:9;--accent-s:79%;--accent-l:58%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 79%) 68% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 79%) 58% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 34%) + 18%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid rgba(232,85,62,.10);border-radius:0;background:rgba(232,85,62,.06);color:#E8553E;cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .24),inset 0 0 0 1px rgba(232,85,62,.04),0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc(var(--active) * 58%));transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
+        .mass-sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:9;--accent-s:79%;--accent-l:58%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 79%) 68% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 79%) 58% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 34%) + 18%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid rgba(232,85,62,.10);border-radius:0;background:rgba(232,85,62,.06);color:var(--accent);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .24),inset 0 0 0 1px rgba(232,85,62,.04),0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc(var(--active) * 58%));transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
         .mass-sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:white;outline:none}
         .mass-sparkle-button:active{filter:brightness(.96);transition:.3s}
         .mass-sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .2);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
@@ -273,7 +273,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
         </span>
       </div>
       {readOnlyReason && (
-        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "#f59e0b", fontSize: 9, lineHeight: 1.35 }}>
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "var(--amber)", fontSize: 9, lineHeight: 1.35 }}>
           <strong style={{ display: "block", marginBottom: 2, fontSize: 9, textTransform: "uppercase", letterSpacing: ".05em" }}>Solo lectura</strong>
           {readOnlyReason}
         </div>
@@ -302,7 +302,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <div style={{ fontSize: 10, color: "var(--text2)" }}>
                 Descarga la plantilla para preparar tus datos.
               </div>
-              <a href="/api/generar-template" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "#E8553E", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
+              <a href="/api/generar-template" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "var(--accent)", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
                 Plantilla Excel
               </a>
@@ -337,7 +337,7 @@ export function RCVButton() {
     <button onClick={() => window.dispatchEvent(new CustomEvent("switch-view", { detail: "rcv" }))}
       style={{width:"100%",border:"none",background:"none",cursor:"pointer",padding:0,textAlign:"left"}}>
       <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,padding:"9px 14px",border:"1px solid var(--border)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",display:"flex",alignItems:"center",gap:10,overflow:"hidden"}}>
-        <div style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(232,85,62,.1)",color:"#E8553E",flexShrink:0}}>
+        <div style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(232,85,62,.1)",color:"var(--accent)",flexShrink:0}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
         <div style={{flex:1,minWidth:0}}>
@@ -371,7 +371,26 @@ export function ActivityButton() {
 export function HeaderActionsRow() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isDark, setIsDark] = useState(true); // default de marca: oscuro
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Sincroniza el ícono con la clase .dark real de <html> (la pone el script
+    // inline de ThemeInitializer antes del paint). rAF para no hacer setState
+    // síncrono dentro del effect (regla react-hooks/set-state-in-effect).
+    window.requestAnimationFrame(() => setIsDark(document.documentElement.classList.contains("dark")));
+  }, []);
+
+  function toggleTheme() {
+    const next = !document.documentElement.classList.contains("dark");
+    document.documentElement.classList.toggle("dark", next);
+    try {
+      window.localStorage.setItem("theme", next ? "dark" : "light");
+    } catch {
+      // Sin localStorage (modo privado) el tema igual cambia, solo no persiste.
+    }
+    setIsDark(next);
+  }
 
   useEffect(() => {
     return () => document.documentElement.classList.remove("v5-dashboard-fullscreen");
@@ -436,7 +455,7 @@ export function HeaderActionsRow() {
     <style>{`
       .ha-btn{position:relative;width:38px;height:38px;border-radius:12px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--text2);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow);transition:all .2s;font-size:16px}
       .ha-btn:hover{border-color:rgba(232,85,62,.35);background:rgba(232,85,62,.08);box-shadow:0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
-      .ha-btn:hover svg{filter:drop-shadow(0 0 8px rgba(232,85,62,.5));color:#E8553E;transition:filter .25s,color .25s}
+      .ha-btn:hover svg{filter:drop-shadow(0 0 8px rgba(232,85,62,.5));color:var(--accent);transition:filter .25s,color .25s}
     `}</style>
     <div style={{display:"flex",flexDirection:"row",gap:8,alignItems:"center"}}>
       {dashboardOpen && (
@@ -449,7 +468,7 @@ export function HeaderActionsRow() {
       )}
       <button onClick={toggleDashboardFullscreen} aria-pressed={dashboardOpen} aria-label={dashboardOpen ? "Volver al dashboard" : "Buscar en historial (⌘K)"} title={dashboardOpen ? undefined : "Buscar en historial (⌘K)"}
         className={dashboardOpen ? "" : "ha-btn"}
-        style={dashboardOpen ? {width:176,height:38,borderRadius:12,border:"1px solid rgba(232,85,62,.28)",cursor:"pointer",background:"rgba(232,85,62,.12)",color:"#E8553E",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"0 14px",boxShadow:"0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border)",transition:"width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,box-shadow .2s",fontSize:16,overflow:"hidden",whiteSpace:"nowrap"} : undefined}>
+        style={dashboardOpen ? {width:176,height:38,borderRadius:12,border:"1px solid rgba(232,85,62,.28)",cursor:"pointer",background:"rgba(232,85,62,.12)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"0 14px",boxShadow:"0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border)",transition:"width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,box-shadow .2s",fontSize:16,overflow:"hidden",whiteSpace:"nowrap"} : undefined}>
         {dashboardOpen ? (
           <>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
@@ -466,9 +485,12 @@ export function HeaderActionsRow() {
         
         <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor"><path d="M240,204H228V96a20,20,0,0,0-20-20H172V32a20,20,0,0,0-28.45-18.12l-104,48.54A20.06,20.06,0,0,0,28,80.55V204H16a12,12,0,0,0,0,24H240a12,12,0,0,0,0-24ZM204,100V204H172V100ZM52,83.09,148,38.3V204H52ZM132,112v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm-40,0v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm0,52v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Zm40,0v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Z"/></svg>
       </button>
-      <button onClick={() => { const next = document.documentElement.dataset.theme === "light" ? "dark" : "light"; document.documentElement.dataset.theme = next; }} className="ha-btn">
-        
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <button onClick={toggleTheme} className="ha-btn" aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}>
+        {isDark ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        )}
       </button>
     </div>
     </>

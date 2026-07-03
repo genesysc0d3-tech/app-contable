@@ -13,7 +13,7 @@ import VisualizarArchivo from "./VisualizarArchivo";
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import { useMesaReload } from "./mesa-reload";
 
-const st: Record<string, string> = {procesado:"#22c55e",procesando:"#5b9cf6",error:"#ef4444",subido:"#f59e0b"};
+const st: Record<string, string> = {procesado:"var(--green)",procesando:"var(--blue)",error:"var(--red)",subido:"var(--amber)"};
 const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",error:"Error",subido:"Pendiente"};
 const lm: Record<string, string> = {procesado:"ls",procesando:"pc",error:"er",subido:"pd"};
 // Mes corto fijo: Intl "month:short" difiere server ("jun") vs navegador ("jun.")
@@ -55,9 +55,9 @@ function DocProgressBar({ p }: { p: DocProg }) {
   const boleteable = p.total - p.noAplica;
   const seg = (n: number) => (boleteable > 0 ? `${(n / boleteable) * 100}%` : "0%");
   const parts = [
-    { n: p.emitida, label: "emitidas", color: "#22c55e" },
-    { n: p.lista, label: "listas", color: "#5b9cf6" },
-    { n: p.porRevisar, label: "por revisar", color: "#f59e0b" },
+    { n: p.emitida, label: "emitidas", color: "var(--green)" },
+    { n: p.lista, label: "listas", color: "var(--blue)" },
+    { n: p.porRevisar, label: "por revisar", color: "var(--amber)" },
   ];
   return (
     <div style={{ marginTop: 7, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -199,10 +199,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
       <div className="sec" style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
         {!bare && <span style={{fontSize:9,color:"var(--text2)",fontWeight:500}}>Agregados recientes</span>}
         {!forceTree && (
-          <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"rgba(20,20,24,.7)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(8px)"}}>
+          <div style={{position:"absolute",top:-4,right:0,zIndex:4,display:"flex",gap:2,padding:2,borderRadius:9,background:"color-mix(in srgb, var(--bg) 70%, transparent)",border:"1px solid var(--border)",backdropFilter:"blur(8px)"}}>
             {(["grid","list"] as const).map((v) => (
               <button key={v} type="button" onClick={() => setView(v)} title={v === "grid" ? "Vista por origen (escanear rápido)" : "Vista lista (detalle)"}
-                style={{display:"grid",placeItems:"center",width:27,height:20,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "#E8553E" : "var(--text2)",transition:"all .15s ease"}}>
+                style={{display:"grid",placeItems:"center",width:27,height:20,borderRadius:7,border:"none",cursor:"pointer",background: viewMode === v ? "rgba(232,85,62,.16)" : "transparent",color: viewMode === v ? "var(--accent)" : "var(--text2)",transition:"all .15s ease"}}>
                 {v === "grid"
                   ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="9" height="3" rx="1.2"/><rect x="6" y="10" width="15" height="2.6" rx="1.2"/><rect x="6" y="15" width="15" height="2.6" rx="1.2"/></svg>
                   : <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="18" height="4" rx="1.6"/><rect x="3" y="13" width="18" height="4" rx="1.6"/></svg>}
@@ -240,10 +240,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           return (
             <div key={doc.id} className="doc-card" style={isBoletaUnica ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
               <div className="dh" style={isBoletaUnica ? { padding: "6px 8px", gap: 5 } : undefined}>
-                {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"#E8553E",fontSize:9,fontWeight:900,flexShrink:0}}>B1</span>}
-                <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px ${st[doc.estado]??"var(--text2)"}40`}} />
+                {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"var(--accent)",fontSize:9,fontWeight:900,flexShrink:0}}>B1</span>}
+                <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px color-mix(in srgb, ${st[doc.estado]??"var(--text2)"} 25%, transparent)`}} />
                 <span className="nm">{doc.nombre_archivo}</span>
-                {isBoletaUnica && <span style={{fontSize:9,padding:"1px 5px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"#E8553E",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
+                {isBoletaUnica && <span style={{fontSize:9,padding:"1px 5px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"var(--accent)",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
                 {(() => {
@@ -251,15 +251,15 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   const mix = tipoMix?.[doc.id];
                   if (isBoletaUnica || doc.estado !== "procesado" || !mix) return null;
                   const chips: { n: number; sigla: string; color: string }[] = [
-                    { n: mix.afectas, sigla: "AFE", color: "#b4f027" },
-                    { n: mix.exentas, sigla: "EXE", color: "#5b9cf6" },
-                    { n: mix.gastos, sigla: "GASTO", color: "#f59e0b" },
+                    { n: mix.afectas, sigla: "AFE", color: "var(--lime)" },
+                    { n: mix.exentas, sigla: "EXE", color: "var(--blue)" },
+                    { n: mix.gastos, sigla: "GASTO", color: "var(--amber)" },
                   ].filter(c => c.n > 0);
                   if (chips.length === 0) return null;
                   return (
                     <span style={{display:"inline-flex",gap:4,flexShrink:0}}>
                       {chips.map(c => (
-                        <span key={c.sigla} style={{fontSize:9,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:`${c.color}1a`,color:c.color,whiteSpace:"nowrap"}}>
+                        <span key={c.sigla} style={{fontSize:9,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:`color-mix(in srgb, ${c.color} 10%, transparent)`,color:c.color,whiteSpace:"nowrap"}}>
                           {c.n} {c.sigla}
                         </span>
                       ))}
@@ -317,7 +317,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 <div className="da">
                   {/* Documento congelado: tiene boletas emitidas → bloqueado */}
                   {frozen && (
-                    <span title="Documento con boletas emitidas en el SII. Para corregir o anular, escríbenos a soporte — no se puede re-mapear ni deshacer." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e",whiteSpace:"nowrap"}}>
+                    <span title="Documento con boletas emitidas en el SII. Para corregir o anular, escríbenos a soporte — no se puede re-mapear ni deshacer." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"var(--green)",whiteSpace:"nowrap"}}>
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
                       Listo · {prog!.emitida} emitida{prog!.emitida !== 1 ? "s" : ""}
                     </span>
@@ -336,14 +336,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                     <button className="cl" onClick={() => callApi("/api/cancelar-documento", doc.id)}>✕ Cancelar</button>
                   )}
                   {!isBoletaUnica && !frozen && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>}
-                  {!isBoletaUnica && <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"#5b9cf6"}}>Visualizar</button>}
+                  {!isBoletaUnica && <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"var(--blue)"}}>Visualizar</button>}
                   {!isBoletaUnica && doc.estado === "procesado" && (
                     <span style={{marginLeft:"auto"}}>
                       <HintSelector documentoId={doc.id} current={doc.tipo_operacion_hint ?? null} />
                     </span>
                   )}
                   {isBoletaUnica && (
-                    <span title="Esta boleta ya fue emitida en el SII. La ves en la pestaña Boletas." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"#22c55e",whiteSpace:"nowrap"}}>
+                    <span title="Esta boleta ya fue emitida en el SII. La ves en la pestaña Boletas." style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:8.5,fontWeight:800,padding:"3px 7px",borderRadius:8,background:"rgba(34,197,94,.12)",color:"var(--green)",whiteSpace:"nowrap"}}>
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
                       Emitida · en Boletas
                     </span>
@@ -374,7 +374,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   if (!conflicto) return null;
                   const esMixta = mix.afectas > 0 && mix.exentas > 0;
                   return (
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,padding:"5px 9px",borderRadius:8,background:"rgba(245,158,11,.07)",border:"1px solid rgba(245,158,11,.18)",color:"#f59e0b",fontSize:9,fontWeight:600,lineHeight:1.4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,padding:"5px 9px",borderRadius:8,background:"rgba(245,158,11,.07)",border:"1px solid rgba(245,158,11,.18)",color:"var(--amber)",fontSize:9,fontWeight:600,lineHeight:1.4}}>
                       <span style={{flexShrink:0}}>△</span>
                       <span style={{minWidth:0}}>
                         {esMixta
@@ -433,7 +433,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 .agg-fh .sub{font-size:9px;color:var(--text3);font-weight:600}
                 .agg-fh .cnt{margin-left:auto;font-size:9px;color:var(--text3);font-weight:700;font-variant-numeric:tabular-nums}
                 .agg-fr{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;cursor:pointer;padding:6px 8px;border-radius:8px;text-align:left;color:inherit;transition:background .14s ease}
-                .agg-fr:hover{background:rgba(255,255,255,.045)}
+                .agg-fr:hover{background:color-mix(in srgb, var(--text) 4.5%, transparent)}
                 .agg-fr.sel{background:rgba(232,85,62,.1)}
                 .agg-fr.sel:hover{background:rgba(232,85,62,.14)}
                 .agg-fr .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -478,9 +478,9 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                     const meta = doc.estado === "error" ? "Error"
                       : doc.estado === "procesando" ? "procesando"
                       : metaNorm;
-                    const metaColor = doc.estado === "error" ? "#ef4444"
-                      : doc.estado === "procesando" ? "#5b9cf6"
-                      : (doc.estado === "procesado" && isBoletaTipo(doc.tipo)) ? "#22c55e"
+                    const metaColor = doc.estado === "error" ? "var(--red)"
+                      : doc.estado === "procesando" ? "var(--blue)"
+                      : (doc.estado === "procesado" && isBoletaTipo(doc.tipo)) ? "var(--green)"
                       : "var(--text2)";
                     return (
                       <button key={doc.id} type="button" className={`agg-fr${selectedDocId === doc.id ? " sel" : ""}`} title={doc.nombre_archivo}
@@ -488,7 +488,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                         <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
                         <span className="nm">{nm}</span>
                         {stuckN > 0 && (
-                          <span className="stuck" style={{ color: (stuck?.bloqueadas ?? 0) > 0 ? "#ef4444" : "#f59e0b" }}
+                          <span className="stuck" style={{ color: (stuck?.bloqueadas ?? 0) > 0 ? "var(--red)" : "var(--amber)" }}
                             title={`${stuckN} en Emitir — ${stuck?.bloqueadas ?? 0} bloqueada(s), ${stuck?.porRevisar ?? 0} por revisar`}>{stuckN}</span>
                         )}
                         {meta && <span className="meta" style={{ color: metaColor }}>{meta}</span>}

@@ -115,18 +115,18 @@ export default function EmpresaBrand({
                 disabled={pending}
                 style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: empresa.activaActual ? "1px solid rgba(232,85,62,.22)" : "1px solid transparent", background: empresa.activaActual ? "rgba(232,85,62,.09)" : "transparent", color: "var(--text)", cursor: pending ? "wait" : empresa.activaActual ? "default" : "pointer", textAlign: "left" }}
               >
-                <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: empresa.activaActual ? "rgba(232,85,62,.14)" : "var(--bg-muted)", color: empresa.activaActual ? "#E8553E" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
+                <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: empresa.activaActual ? "rgba(232,85,62,.14)" : "var(--bg-muted)", color: empresa.activaActual ? "var(--accent)" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
                   {empresa.nombre.slice(0, 2).toUpperCase()}
                 </span>
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.nombre}</span>
                   <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.rut ?? "Empresa"}</span>
                 </span>
-                {empresa.activaActual && <span style={{ fontSize: 9, fontWeight: 850, color: "#E8553E" }}>Actual</span>}
+                {empresa.activaActual && <span style={{ fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>}
               </button>
             ))}
           </div>
-          {error && <div style={{ margin: "8px 8px 2px", color: "#ef4444", fontSize: 9, lineHeight: 1.35 }}>{error}</div>}
+          {error && <div style={{ margin: "8px 8px 2px", color: "var(--red)", fontSize: 9, lineHeight: 1.35 }}>{error}</div>}
         </div>
       )}
     </span>

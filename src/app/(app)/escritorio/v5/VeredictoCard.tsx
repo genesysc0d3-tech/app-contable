@@ -63,7 +63,7 @@ function ComprobanteLightbox({ url, origin, onClose }: { url: string; origin: DO
       <img ref={imgRef} onClick={(e) => e.stopPropagation()} src={url} alt="comprobante"
         style={{ maxWidth: "74vw", maxHeight: "78vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 30px 90px rgba(0,0,0,.5)", display: "block", willChange: "transform" }} />
       <button onClick={handleClose}
-        style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid rgba(255,255,255,.16)", background: "rgba(28,28,34,.4)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", ...(closing ? { animation: "none", opacity: 0, transition: "opacity .2s ease", pointerEvents: "none" } : { animation: "lbCerrar .32s ease .06s both" }) }}>
+        style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid color-mix(in srgb, var(--text) 16%, transparent)", background: "color-mix(in srgb, var(--bg) 40%, transparent)", color: "var(--text)", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", ...(closing ? { animation: "none", opacity: 0, transition: "opacity .2s ease", pointerEvents: "none" } : { animation: "lbCerrar .32s ease .06s both" }) }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>Cerrar
       </button>
     </div>,
@@ -116,7 +116,7 @@ function ComprobanteThumb({ documentoId, onZoom }: { documentoId: string; onZoom
           /* eslint-disable-next-line @next/next/no-img-element */
           <img src={url} alt="comprobante" style={{ width: "100%", height: "100%", objectFit: "contain", opacity: .92, display: "block" }} />
         ) : state === "loading" ? (
-          <div style={{ width: "55%", height: "0.8em", borderRadius: 6, background: "rgba(255,255,255,.08)", animation: "vcPulse 1.2s ease infinite" }} />
+          <div style={{ width: "55%", height: "0.8em", borderRadius: 6, background: "color-mix(in srgb, var(--text) 8%, transparent)", animation: "vcPulse 1.2s ease infinite" }} />
         ) : (
           <div style={{ textAlign: "center", color: "var(--text3)", fontSize: "0.8em", lineHeight: 1.4, padding: 8 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" style={{ margin: "0 auto 4px", opacity: .6 }}><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 15l5-5 4 4 3-3 6 6" /></svg>
@@ -217,7 +217,9 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   const aprobar = () => commit(() => aprobarPropuesta(propuesta.id, selClienteId || null), "Aprobada", isAfecta ? 39 : 41);
   const registrar = () => commit(() => aprobarPropuesta(propuesta.id, null), "Registrada", null);
 
-  const dotColor = conflicto ? "#f59e0b" : pct >= 85 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+  // Baja confianza = gris (mismo criterio que las listas de revisar/CartolaEditor):
+  // rojo implicaba error; "falta información" no es un error.
+  const dotColor = conflicto ? "var(--amber)" : pct >= 85 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--text2)";
 
   return (
     <div ref={rootRef} style={{ display: "flex", gap: "1.4em", alignItems: "stretch", padding: "0.85em 18px", fontSize: "clamp(9px, 1.3vh, 12.5px)", height: "100%" }}>
@@ -267,7 +269,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
                   bg="var(--bg-muted)" color="var(--text)"
                   baseIcon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>} />
                 <CreativeButton label="Registrar" onClick={registrar} disabled={busy}
-                  bg="#E8553E" color="#fff" />
+                  bg="var(--accent)" color="#fff" />
               </div>
             </>
           ) : (
@@ -276,18 +278,18 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: "0.7em" }}>
                   <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
-                    {([["exenta", "Exenta · sin IVA · 41", "#5b9cf6"], ["boleta", "Afecta · con IVA · 39", "#22c55e"]] as const).map(([k, lbl, c]) => {
+                    {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["boleta", "Afecta · con IVA · 39", "var(--green)"]] as const).map(([k, lbl, c]) => {
                       const active = k === "boleta" ? isAfecta : !isAfecta;
                       return (
                         <button key={k} onClick={() => { if (!active || conflicto) setTipo(k); }} disabled={busy}
-                          style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.55em 1.15em", border: "none", cursor: (active && !conflicto) ? "default" : "pointer", background: active ? `${c}40` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
+                          style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.55em 1.15em", border: "none", cursor: (active && !conflicto) ? "default" : "pointer", background: active ? `color-mix(in srgb, ${c} 25%, transparent)` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
                       );
                     })}
                   </div>
                   {isAfecta && <span style={{ flexShrink: 0, color: "var(--text2)", fontSize: "1.18em" }}>neto {fmt(neto)} · IVA {fmt(iva)} <span style={{ color: "var(--text3)" }}>(19%)</span></span>}
                 </div>
                 {conflicto && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.82em", color: "#f59e0b", fontWeight: 600, marginBottom: "0.4em" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.82em", color: "var(--amber)", fontWeight: 600, marginBottom: "0.4em" }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M12 9v4m0 4h.01M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0Z" /></svg>
                     Afecta lleva IVA 19%. Si no corresponde, marca <b style={{ margin: "0 3px" }}>Exenta</b>.
                   </div>
@@ -327,7 +329,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
                   <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4 }}>Elige el tipo arriba para aprobar</div>
                 ) : (
                   <CreativeButton label="Aprobar" onClick={aprobar} disabled={busy}
-                    bg="#E8553E" color="#fff"
+                    bg="var(--accent)" color="#fff"
                     baseIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>} />
                 )}
               </div>

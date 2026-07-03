@@ -122,9 +122,9 @@ export default function EmissionProviderConfig({
   return (
     <div style={{
       borderRadius: 22,
-      border: "1px solid rgba(255,255,255,0.08)",
-      background: "rgba(255,255,255,0.025)",
-      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+      border: "1px solid var(--border, rgba(255,255,255,.06))",
+      background: "color-mix(in srgb, var(--text, #e8eaf0) 3%, transparent)",
+      boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
     }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 36px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24 }}>
@@ -132,9 +132,9 @@ export default function EmissionProviderConfig({
             width: 48, height: 48, flexShrink: 0,
             display: "flex", alignItems: "center", justifyContent: "center",
             borderRadius: 16,
-            border: "1px solid rgba(91,156,246,0.25)",
-            background: "rgba(91,156,246,0.12)",
-            color: "#93C5FD",
+            border: "1px solid color-mix(in srgb, var(--blue, #5b9cf6) 25%, transparent)",
+            background: "color-mix(in srgb, var(--blue, #5b9cf6) 12%, transparent)",
+            color: "var(--blue, #5b9cf6)",
           }}>
             <svg viewBox="0 0 24 24" fill="none" width={21} height={21}>
               <path d="M4 7h16M7 4v16M17 4v16M4 17h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -143,21 +143,21 @@ export default function EmissionProviderConfig({
           </div>
           <div style={{ minWidth: 0, paddingTop: 4, flex: 1 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "#ffffff" }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "var(--text, #e8eaf0)" }}>
                 Proveedor de emision
               </h3>
               <span style={{
                 display: "inline-block", borderRadius: 9999,
-                border: `1px solid ${combinedMode ? "rgba(232,85,62,0.28)" : "rgba(52,211,153,0.20)"}`,
-                background: combinedMode ? "rgba(232,85,62,0.12)" : "rgba(52,211,153,0.15)",
+                border: `1px solid ${combinedMode ? "rgba(232,85,62,0.28)" : "color-mix(in srgb, var(--green, #22c55e) 20%, transparent)"}`,
+                background: combinedMode ? "rgba(232,85,62,0.12)" : "color-mix(in srgb, var(--green, #22c55e) 15%, transparent)",
                 padding: "4px 10px", fontSize: 11, fontWeight: 700,
-                color: combinedMode ? "#FCA5A5" : "#86EFAC",
+                color: combinedMode ? "var(--accent, #E8553E)" : "var(--green, #22c55e)",
               }}>
                 {combinedMode ? "Modo combinado" : "Rutas separadas"}
               </span>
-              {devMode && <span style={{ display: "inline-block", borderRadius: 9999, border: "1px solid rgba(180,240,39,.28)", background: "rgba(180,240,39,.1)", padding: "4px 9px", fontSize: 10, fontWeight: 800, color: "#b4f027" }}>DEV</span>}
+              {devMode && <span style={{ display: "inline-block", borderRadius: 9999, border: "1px solid color-mix(in srgb, var(--lime, #b4f027) 28%, transparent)", background: "color-mix(in srgb, var(--lime, #b4f027) 10%, transparent)", padding: "4px 9px", fontSize: 10, fontWeight: 800, color: "var(--lime, #b4f027)" }}>DEV</span>}
             </div>
-            <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
+            <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "var(--text3, #697080)" }}>
               Define que motor usa cada tipo de documento. Boletas y facturas pueden ir por carriles distintos.
             </p>
           </div>
@@ -219,16 +219,16 @@ export default function EmissionProviderConfig({
         <div style={{
           marginTop: 12,
           borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: combinedMode ? "rgba(232,85,62,0.055)" : "rgba(255,255,255,0.03)",
+          border: "1px solid var(--border, rgba(255,255,255,.06))",
+          background: combinedMode ? "rgba(232,85,62,0.055)" : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
           padding: "14px 16px",
           display: "block",
         }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 760, color: "#eaf0f8" }}>
+            <div style={{ fontSize: 13, fontWeight: 760, color: "var(--text, #e8eaf0)" }}>
               {combinedMode ? "Modo combinado recomendado" : "Configuracion por documento"}
             </div>
-            <div style={{ marginTop: 3, fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.45 }}>
+            <div style={{ marginTop: 3, fontSize: 11, color: "var(--text3, #697080)", lineHeight: 1.45 }}>
               Boletas: {providerLabel(state.boletasProveedor)}. Facturas: {providerLabel(state.facturasProveedor)}. SimpleAPI usara la misma extension como boveda local cifrada; el proxy efimero ya existe, falta conectarlo desde la extension.
             </div>
           </div>
@@ -254,26 +254,26 @@ function LocalMotorPanel({
   const ready = status === "ready";
   const vaultReady = Boolean(vault?.configured && vault.encrypted && vault.has_pfx && vault.has_caf);
   const label = status === "checking" ? "Buscando extension" : ready ? "Motor local conectado" : "Extension no detectada";
-  const labelColor = ready ? "#86EFAC" : status === "checking" ? "#FCD34D" : "#FCA5A5";
-  const labelBg = ready ? "rgba(52,211,153,0.12)" : status === "checking" ? "rgba(252,211,77,0.10)" : "rgba(248,113,113,0.10)";
+  const labelColor = ready ? "var(--green, #22c55e)" : status === "checking" ? "var(--amber, #f59e0b)" : "var(--red, #ef4444)";
+  const labelBg = ready ? "color-mix(in srgb, var(--green, #22c55e) 12%, transparent)" : status === "checking" ? "color-mix(in srgb, var(--amber, #f59e0b) 10%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 10%, transparent)";
 
   return (
     <section style={{
       marginBottom: 16,
       borderRadius: 18,
-      border: "1px solid rgba(255,255,255,0.09)",
-      background: "linear-gradient(135deg, rgba(255,255,255,0.055), rgba(232,85,62,0.055))",
+      border: "1px solid var(--border, rgba(255,255,255,.06))",
+      background: "linear-gradient(135deg, color-mix(in srgb, var(--text, #e8eaf0) 5%, transparent), rgba(232,85,62,0.055))",
       padding: 16,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 13, color: "#eef3fa" }}>App Contable Motor Local</strong>
-            <span style={{ borderRadius: 999, border: "1px solid rgba(255,255,255,0.10)", background: labelBg, color: labelColor, padding: "4px 9px", fontSize: 10, fontWeight: 850 }}>
+            <strong style={{ fontSize: 13, color: "var(--text, #e8eaf0)" }}>App Contable Motor Local</strong>
+            <span style={{ borderRadius: 999, border: "1px solid var(--border, rgba(255,255,255,.06))", background: labelBg, color: labelColor, padding: "4px 9px", fontSize: 10, fontWeight: 850 }}>
               {label}
             </span>
           </div>
-          <p style={{ margin: "6px 0 0", fontSize: 11, lineHeight: 1.45, color: "rgba(255,255,255,0.48)" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 11, lineHeight: 1.45, color: "var(--text2, #8b92a3)" }}>
             Una sola extension local maneja SII Local para boletas y la boveda SimpleAPI para facturas. PFX, CAF y password se configuran dentro de la extension, no en esta web.
           </p>
         </div>
@@ -298,13 +298,13 @@ function LocalMotorPanel({
 
 function MotorStatusCard({ title, status, detail, active }: { title: string; status: string; detail: string; active: boolean }) {
   return (
-    <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.035)", padding: 12 }}>
+    <div style={{ borderRadius: 14, border: "1px solid var(--border, rgba(255,255,255,.06))", background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 850, color: "#eef3fa" }}>{title}</span>
-        <span style={{ width: 8, height: 8, borderRadius: 999, background: active ? "#34D399" : "#F59E0B" }} />
+        <span style={{ fontSize: 11, fontWeight: 850, color: "var(--text, #e8eaf0)" }}>{title}</span>
+        <span style={{ width: 8, height: 8, borderRadius: 999, background: active ? "var(--green, #22c55e)" : "var(--amber, #f59e0b)" }} />
       </div>
-      <div style={{ marginTop: 7, fontSize: 12, fontWeight: 820, color: active ? "#86EFAC" : "#FCD34D" }}>{status}</div>
-      <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.35, color: "rgba(255,255,255,0.42)" }}>{detail}</div>
+      <div style={{ marginTop: 7, fontSize: 12, fontWeight: 820, color: active ? "var(--green, #22c55e)" : "var(--amber, #f59e0b)" }}>{status}</div>
+      <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.35, color: "var(--text3, #697080)" }}>{detail}</div>
     </div>
   );
 }
@@ -320,10 +320,10 @@ function vaultDetail(vault: SimpleApiVaultStatus | null) {
 
 function smallButtonStyle(disabled: boolean, primary: boolean): CSSProperties {
   return {
-    border: primary ? "0" : "1px solid rgba(255,255,255,0.10)",
+    border: primary ? "0" : "1px solid var(--border, rgba(255,255,255,.06))",
     borderRadius: 999,
-    background: primary ? "#E8553E" : "rgba(255,255,255,0.05)",
-    color: "#fff",
+    background: primary ? "var(--accent, #E8553E)" : "color-mix(in srgb, var(--text, #e8eaf0) 5%, transparent)",
+    color: primary ? "#fff" : "var(--text, #e8eaf0)",
     padding: "8px 11px",
     fontSize: 11,
     fontWeight: 850,
@@ -342,8 +342,8 @@ function ProviderGroup({ title, subtitle, children }: { title: string; subtitle:
   return (
     <section style={{ marginTop: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 850, color: "#eaf0f8" }}>{title}</div>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.42)", textAlign: "right" }}>{subtitle}</div>
+        <div style={{ fontSize: 12, fontWeight: 850, color: "var(--text, #e8eaf0)" }}>{title}</div>
+        <div style={{ fontSize: 10, color: "var(--text3, #697080)", textAlign: "right" }}>{subtitle}</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>
         {children}
@@ -367,21 +367,21 @@ function ProviderButton({ active, title, description, disabled, onClick }: {
       style={{
         textAlign: "left",
         borderRadius: 14,
-        border: `1px solid ${active ? "rgba(232,85,62,0.42)" : "rgba(255,255,255,0.08)"}`,
-        background: active ? "rgba(232,85,62,0.10)" : "rgba(255,255,255,0.03)",
+        border: `1px solid ${active ? "rgba(232,85,62,0.42)" : "var(--border, rgba(255,255,255,.06))"}`,
+        background: active ? "rgba(232,85,62,0.10)" : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
         padding: "14px 16px",
-        color: "#eff3fa",
+        color: "var(--text, #e8eaf0)",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.68 : 1,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
         <strong style={{ fontSize: 13 }}>{title}</strong>
-        <span style={{ width: 18, height: 18, borderRadius: "50%", display: "grid", placeItems: "center", border: `1px solid ${active ? "#E8553E" : "rgba(255,255,255,0.16)"}`, color: active ? "#E8553E" : "transparent", fontSize: 11, fontWeight: 900 }}>
+        <span style={{ width: 18, height: 18, borderRadius: "50%", display: "grid", placeItems: "center", border: `1px solid ${active ? "var(--accent, #E8553E)" : "color-mix(in srgb, var(--text, #e8eaf0) 25%, transparent)"}`, color: active ? "var(--accent, #E8553E)" : "transparent", fontSize: 11, fontWeight: 900 }}>
           {active ? "✓" : ""}
         </span>
       </div>
-      <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
+      <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.4, color: "var(--text3, #697080)" }}>
         {description}
       </div>
     </button>

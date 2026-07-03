@@ -40,9 +40,9 @@ type MovRaw = {
 
 const TYPE_MAP: Record<SearchItem["type"], TypeMeta> = {
   boleta: { label: "Boleta", color: "#3B82F6", bg: "rgba(59,130,246,.1)", glyph: "B" },
-  documento: { label: "Documento", color: "#f59e0b", bg: "rgba(245,158,11,.12)", glyph: "D" },
+  documento: { label: "Documento", color: "var(--amber)", bg: "rgba(245,158,11,.12)", glyph: "D" },
   propuesta: { label: "Propuesta", color: "#8b5cf6", bg: "rgba(139,92,246,.12)", glyph: "P" },
-  actividad: { label: "Actividad", color: "#22c55e", bg: "rgba(34,197,94,.12)", glyph: "A" },
+  actividad: { label: "Actividad", color: "var(--green)", bg: "rgba(34,197,94,.12)", glyph: "A" },
 };
 
 const FILTERS: { key: FilterType; label: string }[] = [
@@ -61,19 +61,19 @@ const RANGE_FILTERS: { key: Exclude<DatePreset, "all" | "day">; label: string }[
 ];
 
 const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
-  39: { label: "AFE", color: "#E8553E", bg: "rgba(232,85,62,.12)" },
+  39: { label: "AFE", color: "var(--accent)", bg: "rgba(232,85,62,.12)" },
   41: { label: "EXE", color: "#3B82F6", bg: "rgba(59,130,246,.12)" },
   61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.12)" },
 };
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  activo: { label: "Activo", color: "#22c55e", bg: "rgba(34,197,94,.12)" },
-  emitido: { label: "Emitido", color: "#22c55e", bg: "rgba(34,197,94,.12)" },
-  anulada: { label: "Anulada", color: "#ef4444", bg: "rgba(239,68,68,.12)" },
-  subido: { label: "Pendiente", color: "#f59e0b", bg: "rgba(245,158,11,.12)" },
-  procesando: { label: "Procesando", color: "#5b9cf6", bg: "rgba(91,156,246,.12)" },
-  procesado: { label: "Procesado", color: "#22c55e", bg: "rgba(34,197,94,.12)" },
-  error: { label: "Error", color: "#ef4444", bg: "rgba(239,68,68,.12)" },
+  activo: { label: "Activo", color: "var(--green)", bg: "rgba(34,197,94,.12)" },
+  emitido: { label: "Emitido", color: "var(--green)", bg: "rgba(34,197,94,.12)" },
+  anulada: { label: "Anulada", color: "var(--red)", bg: "rgba(239,68,68,.12)" },
+  subido: { label: "Pendiente", color: "var(--amber)", bg: "rgba(245,158,11,.12)" },
+  procesando: { label: "Procesando", color: "var(--blue)", bg: "rgba(91,156,246,.12)" },
+  procesado: { label: "Procesado", color: "var(--green)", bg: "rgba(34,197,94,.12)" },
+  error: { label: "Error", color: "var(--red)", bg: "rgba(239,68,68,.12)" },
 };
 
 function fmtMoney(n?: number | null) {
@@ -379,14 +379,14 @@ function SegmentedControl({ value, onChange }: { value: DateMode; onChange: (mod
     <div style={{ display: "flex", padding: 3, borderRadius: 13, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.06)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.05)" }}>
       {([{ key: "emision", label: "Emisión SII" }, { key: "edicion", label: "Edición/Subida" }] as const).map((mode) => {
         const active = value === mode.key;
-        return <button key={mode.key} onClick={() => onChange(mode.key)} style={{ minWidth: 104, padding: "7px 11px", borderRadius: 10, border: "none", cursor: "pointer", background: active ? "#E8553E" : "transparent", color: active ? "white" : "var(--text2)", fontSize: 10, fontWeight: 900, boxShadow: active ? "0 9px 24px -14px rgba(232,85,62,.8)" : "none" }}>{mode.label}</button>;
+        return <button key={mode.key} onClick={() => onChange(mode.key)} style={{ minWidth: 104, padding: "7px 11px", borderRadius: 10, border: "none", cursor: "pointer", background: active ? "var(--accent)" : "transparent", color: active ? "white" : "var(--text2)", fontSize: 10, fontWeight: 900, boxShadow: active ? "0 9px 24px -14px rgba(232,85,62,.8)" : "none" }}>{mode.label}</button>;
       })}
     </div>
   );
 }
 
 function DatePill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button onClick={onClick} style={{ padding: "5px 9px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "#E8553E" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer" }}>{children}</button>;
+  return <button onClick={onClick} style={{ padding: "5px 9px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer" }}>{children}</button>;
 }
 
 function ExplorerSidebar({ collapsed, onToggleCollapsed, months, filter, selectedDate, collapsedMonths, libraryCollapsed, datesCollapsed, onToggleLibrary, onToggleDates, onToggleMonth, onAll, onType, onDate, onDateType }: { collapsed: boolean; onToggleCollapsed: () => void; months: { key: string; label: string; count: number; dates: [string, { label: string; count: number; types: Record<SearchItem["type"], number> }][] }[]; filter: FilterType; selectedDate: string | null; collapsedMonths: Set<string>; libraryCollapsed: boolean; datesCollapsed: boolean; onToggleLibrary: () => void; onToggleDates: () => void; onToggleMonth: (key: string) => void; onAll: () => void; onType: (type: SearchItem["type"]) => void; onDate: (key: string) => void; onDateType: (key: string, type: SearchItem["type"]) => void }) {
@@ -394,7 +394,7 @@ function ExplorerSidebar({ collapsed, onToggleCollapsed, months, filter, selecte
   const types = FILTERS.filter((f): f is { key: SearchItem["type"]; label: string } => f.key !== "todo");
   return (
     <aside style={{ position: "relative", minHeight: 0, overflow: collapsed ? "hidden" : "auto", borderRight: "1px solid var(--border)", background: "color-mix(in srgb, var(--bg-muted) 88%, var(--surface))", padding: collapsed ? "10px 4px" : "6px 9px 12px", transition: "padding .24s cubic-bezier(.22,1,.36,1)" }}>
-      <button onClick={onToggleCollapsed} title={collapsed ? "Mostrar panel" : "Ocultar panel"} aria-label={collapsed ? "Mostrar panel lateral" : "Ocultar panel lateral"} style={{ position: "relative", zIndex: 2, width: collapsed ? 22 : 22, height: collapsed ? 22 : 20, margin: collapsed ? "0 auto" : "0 0 2px auto", borderRadius: collapsed ? 7 : 7, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.08)", color: "#E8553E", display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)", transition: "all .18s ease" }}>
+      <button onClick={onToggleCollapsed} title={collapsed ? "Mostrar panel" : "Ocultar panel"} aria-label={collapsed ? "Mostrar panel lateral" : "Ocultar panel lateral"} style={{ position: "relative", zIndex: 2, width: collapsed ? 22 : 22, height: collapsed ? 22 : 20, margin: collapsed ? "0 auto" : "0 0 2px auto", borderRadius: collapsed ? 7 : 7, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.08)", color: "var(--accent)", display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)", transition: "all .18s ease" }}>
         <span style={{ fontSize: collapsed ? 12 : 12, fontWeight: 900, lineHeight: 1 }}>{collapsed ? "›" : "‹"}</span>
       </button>
       {collapsed ? (
@@ -414,12 +414,12 @@ function ExplorerSidebar({ collapsed, onToggleCollapsed, months, filter, selecte
         const isNoDate = month.key === "sin-fecha";
         return (
           <div key={month.key} style={{ marginBottom: 5 }}>
-            <button onClick={() => onToggleMonth(month.key)} style={{ width: "100%", display: "grid", gridTemplateColumns: "14px 1fr auto", gap: 6, alignItems: "center", border: "none", background: "transparent", color: isNoDate ? "#f59e0b" : "var(--text2)", cursor: "pointer", padding: "5px 7px", fontSize: 10, fontWeight: 900, textAlign: "left" }}>
+            <button onClick={() => onToggleMonth(month.key)} style={{ width: "100%", display: "grid", gridTemplateColumns: "14px 1fr auto", gap: 6, alignItems: "center", border: "none", background: "transparent", color: isNoDate ? "var(--amber)" : "var(--text2)", cursor: "pointer", padding: "5px 7px", fontSize: 10, fontWeight: 900, textAlign: "left" }}>
               <span>{collapsed ? "▸" : "▾"}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{month.label}</span><span style={{ fontSize: 8 }}>{month.count}</span>
             </button>
             {!collapsed && <div style={{ marginLeft: 10, borderLeft: "1px solid var(--border)", paddingLeft: 6 }}>
               {month.dates.map(([key, date]) => <div key={key}>
-                <ExplorerButton small active={selectedDate === key && filter === "todo"} label={date.label.replace(/ de /g, " ")} count={date.count} color={isNoDate ? "#f59e0b" : "#E8553E"} onClick={() => onDate(key)} />
+                <ExplorerButton small active={selectedDate === key && filter === "todo"} label={date.label.replace(/ de /g, " ")} count={date.count} color={isNoDate ? "var(--amber)" : "var(--accent)"} onClick={() => onDate(key)} />
                 <div style={{ marginLeft: 12 }}>
                   {types.filter((t) => date.types[t.key] > 0).map((t) => <ExplorerButton key={t.key} tiny active={selectedDate === key && filter === t.key} label={t.label} count={date.types[t.key]} color={TYPE_MAP[t.key].color} onClick={() => onDateType(key, t.key)} />)}
                 </div>
@@ -437,15 +437,15 @@ function SectionToggle({ label, collapsed, onClick, style }: { label: string; co
   return <button onClick={onClick} style={{ width: "100%", display: "grid", gridTemplateColumns: "14px 1fr", gap: 6, alignItems: "center", margin: "0 0 6px", padding: "0 8px", border: "none", background: "transparent", color: "var(--text3)", cursor: "pointer", textAlign: "left", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".1em", ...style }}><span style={{ fontSize: 10, lineHeight: 1 }}>{collapsed ? "▸" : "▾"}</span><span>{label}</span></button>;
 }
 
-function ExplorerButton({ active, label, count, color = "#E8553E", small, tiny, onClick }: { active: boolean; label: string; count: number; color?: string; small?: boolean; tiny?: boolean; onClick: () => void }) {
-  return <button onClick={onClick} style={{ width: "100%", display: "grid", gridTemplateColumns: "12px 1fr auto", gap: 6, alignItems: "center", border: active ? `1px solid ${color}42` : "1px solid transparent", background: active ? `${color}14` : "transparent", color: active ? "var(--text)" : "var(--text2)", borderRadius: 8, padding: tiny ? "3px 6px" : small ? "4px 6px" : "5px 7px", cursor: "pointer", textAlign: "left", fontSize: tiny ? 8 : small ? 9 : 10, fontWeight: active ? 850 : 650 }}><span style={{ width: tiny ? 5 : 7, height: tiny ? 5 : 7, borderRadius: 2, background: color, opacity: active ? 1 : .55 }} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span><span style={{ fontSize: 8, color: active ? color : "var(--text3)" }}>{count}</span></button>;
+function ExplorerButton({ active, label, count, color = "var(--accent)", small, tiny, onClick }: { active: boolean; label: string; count: number; color?: string; small?: boolean; tiny?: boolean; onClick: () => void }) {
+  return <button onClick={onClick} style={{ width: "100%", display: "grid", gridTemplateColumns: "12px 1fr auto", gap: 6, alignItems: "center", border: active ? `1px solid color-mix(in srgb, ${color} 26%, transparent)` : "1px solid transparent", background: active ? `color-mix(in srgb, ${color} 8%, transparent)` : "transparent", color: active ? "var(--text)" : "var(--text2)", borderRadius: 8, padding: tiny ? "3px 6px" : small ? "4px 6px" : "5px 7px", cursor: "pointer", textAlign: "left", fontSize: tiny ? 8 : small ? 9 : 10, fontWeight: active ? 850 : 650 }}><span style={{ width: tiny ? 5 : 7, height: tiny ? 5 : 7, borderRadius: 2, background: color, opacity: active ? 1 : .55 }} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span><span style={{ fontSize: 8, color: active ? color : "var(--text3)" }}>{count}</span></button>;
 }
 
 function FinderTable({ grouped, selectedId, dateMode, query, onSelect }: { grouped: [string, NormalizedItem[]][]; selectedId: string | null; dateMode: DateMode; query: string; onSelect: (id: string) => void }) {
   const columns = "76px minmax(240px,1fr) 92px 96px 100px 104px";
   return <div style={{ minWidth: 820 }}>
     <div style={{ position: "sticky", top: 0, zIndex: 5, display: "grid", gridTemplateColumns: columns, gap: 10, alignItems: "center", padding: "9px 14px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 82%, transparent)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".09em" }}>
-      <span>Tipo</span><span>Nombre</span><span style={{ textAlign: "right" }}>Monto</span><span>Estado</span><span style={{ color: dateMode === "emision" ? "#E8553E" : "var(--text2)" }}>Emisión SII</span><span style={{ color: dateMode === "edicion" ? "#E8553E" : "var(--text2)" }}>Edición/Subida</span>
+      <span>Tipo</span><span>Nombre</span><span style={{ textAlign: "right" }}>Monto</span><span>Estado</span><span style={{ color: dateMode === "emision" ? "var(--accent)" : "var(--text2)" }}>Emisión SII</span><span style={{ color: dateMode === "edicion" ? "var(--accent)" : "var(--text2)" }}>Edición/Subida</span>
     </div>
     {grouped.map(([label, items]) => <section key={label}>
       <div style={{ position: "sticky", top: 33, zIndex: 4, padding: "7px 14px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 90%, transparent)", backdropFilter: "blur(12px)", color: "var(--text2)", fontSize: 10, fontWeight: 850 }}>{label}</div>
@@ -456,7 +456,7 @@ function FinderTable({ grouped, selectedId, dateMode, query, onSelect }: { group
 
 function FinderRow({ item, selected, columns, dateMode, query, onSelect }: { item: NormalizedItem; selected: boolean; columns: string; dateMode: DateMode; query: string; onSelect: () => void }) {
   const statusMeta = Object.values(STATUS_META).find((s) => s.label === item.statusLabel) ?? { label: item.statusLabel, color: "var(--text2)", bg: "var(--bg-muted)" };
-  return <button onClick={onSelect} style={{ position: "relative", width: "100%", minHeight: 46, display: "grid", gridTemplateColumns: columns, gap: 10, alignItems: "center", padding: "6px 14px", border: "none", borderBottom: "1px solid color-mix(in srgb, var(--border) 62%, transparent)", cursor: "pointer", textAlign: "left", background: selected ? `linear-gradient(90deg, ${item.typeMeta.bg}, transparent 78%)` : "transparent", color: "inherit", boxShadow: selected ? `inset 2px 0 0 ${item.typeMeta.color}, inset 0 0 0 1px ${item.typeMeta.color}24` : "none" }}>
+  return <button onClick={onSelect} style={{ position: "relative", width: "100%", minHeight: 46, display: "grid", gridTemplateColumns: columns, gap: 10, alignItems: "center", padding: "6px 14px", border: "none", borderBottom: "1px solid color-mix(in srgb, var(--border) 62%, transparent)", cursor: "pointer", textAlign: "left", background: selected ? `linear-gradient(90deg, ${item.typeMeta.bg}, transparent 78%)` : "transparent", color: "inherit", boxShadow: selected ? `inset 2px 0 0 ${item.typeMeta.color}, inset 0 0 0 1px color-mix(in srgb, ${item.typeMeta.color} 14%, transparent)` : "none" }}>
     <span style={{ display: "flex", alignItems: "center", gap: 7 }}><span style={{ width: 20, height: 20, borderRadius: 6, display: "grid", placeItems: "center", background: item.typeMeta.bg, color: item.typeMeta.color, fontSize: 9, fontWeight: 900 }}>{item.typeMeta.glyph}</span><span style={{ fontSize: 9, color: item.typeMeta.color, fontWeight: 850 }}>{item.typeMeta.label}</span></span>
     <span style={{ minWidth: 0 }}><span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ fontSize: 11, fontWeight: 820, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{highlightText(item.label, query)}</span>{item.deferred && <DeferredBadge item={item} compact />}</span><span style={{ marginTop: 2, display: "block", fontSize: 9, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{highlightText(item.subtitle, query)}</span></span>
     <span style={{ textAlign: "right", fontSize: 11, color: item.amount ? "var(--text)" : "var(--text3)", fontWeight: 850, fontVariantNumeric: "tabular-nums lining-nums" }}>{item.amountLabel}</span>
@@ -471,7 +471,7 @@ function ActiveDateRail() {
 }
 
 function DeferredBadge({ item, compact }: { item: NormalizedItem; compact?: boolean }) {
-  return <span title={`Emisión ${fmtDate(item.emissionDate)} · Subida ${fmtDate(item.editDate)}`} style={{ display: "inline-flex", flexDirection: compact ? "row" : "column", gap: compact ? 4 : 1, alignItems: compact ? "center" : "flex-start", fontSize: compact ? 8 : 9, color: "#E8553E", fontWeight: 900, background: "rgba(232,85,62,.11)", border: "1px solid rgba(232,85,62,.18)", padding: compact ? "1px 5px" : "5px 7px", borderRadius: compact ? 999 : 9 }}><span>Diferida</span>{!compact && <span style={{ fontWeight: 700, color: "var(--text2)" }}>Emisión {fmtDate(item.emissionDate)} · Subida {fmtDate(item.editDate)}</span>}</span>;
+  return <span title={`Emisión ${fmtDate(item.emissionDate)} · Subida ${fmtDate(item.editDate)}`} style={{ display: "inline-flex", flexDirection: compact ? "row" : "column", gap: compact ? 4 : 1, alignItems: compact ? "center" : "flex-start", fontSize: compact ? 8 : 9, color: "var(--accent)", fontWeight: 900, background: "rgba(232,85,62,.11)", border: "1px solid rgba(232,85,62,.18)", padding: compact ? "1px 5px" : "5px 7px", borderRadius: compact ? 999 : 9 }}><span>Diferida</span>{!compact && <span style={{ fontWeight: 700, color: "var(--text2)" }}>Emisión {fmtDate(item.emissionDate)} · Subida {fmtDate(item.editDate)}</span>}</span>;
 }
 
 function StatusBadge({ meta }: { meta: { label: string; color: string; bg: string } }) {
@@ -486,7 +486,7 @@ function ItemDetail({ item, onViewDocument }: { item: NormalizedItem; onViewDocu
     <HeroBlock item={item} />
     {item.deferred && <DeferredBadge item={item} />}
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 12, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)" }}><TypeFields item={item} /></div>
-    <div style={{ padding: 12, borderRadius: 14, background: item.typeMeta.bg, border: `1px solid ${item.typeMeta.color}24` }}><div style={{ fontSize: 9, fontWeight: 900, color: item.typeMeta.color, textTransform: "uppercase", letterSpacing: ".09em" }}>Acciones</div><div style={{ marginTop: 9, display: "flex", flexWrap: "wrap", gap: 7 }}><ActionButtons item={item} onViewDocument={onViewDocument} /></div></div>
+    <div style={{ padding: 12, borderRadius: 14, background: item.typeMeta.bg, border: `1px solid color-mix(in srgb, ${item.typeMeta.color} 14%, transparent)` }}><div style={{ fontSize: 9, fontWeight: 900, color: item.typeMeta.color, textTransform: "uppercase", letterSpacing: ".09em" }}>Acciones</div><div style={{ marginTop: 9, display: "flex", flexWrap: "wrap", gap: 7 }}><ActionButtons item={item} onViewDocument={onViewDocument} /></div></div>
   </div>;
 }
 
@@ -498,7 +498,7 @@ function HeroBlock({ item }: { item: NormalizedItem }) {
 }
 
 function Hero({ value, label, color }: { value: string; label: string; color: string }) {
-  return <div style={{ padding: "16px 14px", borderRadius: 16, background: `linear-gradient(135deg, ${color}18, var(--surface))`, border: `1px solid ${color}24` }}><div style={{ fontSize: 24, lineHeight: 1, fontWeight: 900, color: "var(--text)", letterSpacing: "-.04em", fontVariantNumeric: "tabular-nums lining-nums" }}>{value}</div><div style={{ marginTop: 5, color: "var(--text2)", fontSize: 10, fontWeight: 760 }}>{label}</div></div>;
+  return <div style={{ padding: "16px 14px", borderRadius: 16, background: `linear-gradient(135deg, color-mix(in srgb, ${color} 9%, transparent), var(--surface))`, border: `1px solid color-mix(in srgb, ${color} 14%, transparent)` }}><div style={{ fontSize: 24, lineHeight: 1, fontWeight: 900, color: "var(--text)", letterSpacing: "-.04em", fontVariantNumeric: "tabular-nums lining-nums" }}>{value}</div><div style={{ marginTop: 5, color: "var(--text2)", fontSize: 10, fontWeight: 760 }}>{label}</div></div>;
 }
 
 function TypeFields({ item }: { item: NormalizedItem }) {
@@ -519,7 +519,7 @@ function ActionButtons({ item, onViewDocument }: { item: NormalizedItem; onViewD
 }
 
 function PrimaryAction({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return <button onClick={onClick} style={{ border: "none", borderRadius: 10, background: "#E8553E", color: "white", padding: "8px 11px", fontSize: 10, fontWeight: 900, cursor: "pointer", boxShadow: "0 12px 28px -18px rgba(232,85,62,.8)" }}>{children}</button>;
+  return <button onClick={onClick} style={{ border: "none", borderRadius: 10, background: "var(--accent)", color: "white", padding: "8px 11px", fontSize: 10, fontWeight: 900, cursor: "pointer", boxShadow: "0 12px 28px -18px rgba(232,85,62,.8)" }}>{children}</button>;
 }
 
 function SecondaryAction({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
@@ -551,7 +551,7 @@ function highlightText(text: string, query: string) {
 function EmptyState({ query, filtered }: { query: string; filtered: boolean }) {
   const title = !filtered ? "Sin historial reciente" : query ? `Sin resultados para "${query}"` : "Sin resultados con estos filtros";
   const message = query ? "Prueba buscar por folio, RUT, monto, receptor o nombre de archivo." : "Ajusta el tipo, rango de fechas o modo de fecha para ampliar los resultados.";
-  return <div style={{ minHeight: "100%", display: "grid", placeItems: "center", padding: 36, textAlign: "center" }}><div><div style={{ width: 54, height: 54, borderRadius: 18, margin: "0 auto 12px", display: "grid", placeItems: "center", background: "rgba(232,85,62,.1)", color: "#E8553E" }}><Search size={21} /></div><div style={{ fontSize: 13, fontWeight: 850, color: "var(--text)" }}>{title}</div><div style={{ marginTop: 6, fontSize: 11, color: "var(--text2)", maxWidth: 300, lineHeight: 1.45 }}>{message}</div></div></div>;
+  return <div style={{ minHeight: "100%", display: "grid", placeItems: "center", padding: 36, textAlign: "center" }}><div><div style={{ width: 54, height: 54, borderRadius: 18, margin: "0 auto 12px", display: "grid", placeItems: "center", background: "rgba(232,85,62,.1)", color: "var(--accent)" }}><Search size={21} /></div><div style={{ fontSize: 13, fontWeight: 850, color: "var(--text)" }}>{title}</div><div style={{ marginTop: 6, fontSize: 11, color: "var(--text2)", maxWidth: 300, lineHeight: 1.45 }}>{message}</div></div></div>;
 }
 
 function DetailPlaceholder() {

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
+import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
+import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
 
 type TipoDte = 33 | 34 | 39 | 41;
@@ -204,8 +206,8 @@ function pingLocalSiiExtension(onResult: (message: ExtensionPageMessage | null) 
 
 const DRAFT_COLORS = [
   { fg: "#E8553E", bg: "rgba(232,85,62,.12)", border: "rgba(232,85,62,.46)", dot: "#E8553E" },
-  { fg: "#f59e0b", bg: "rgba(245,158,11,.12)", border: "rgba(245,158,11,.44)", dot: "#f59e0b" },
-  { fg: "#b4f027", bg: "rgba(180,240,39,.10)", border: "rgba(180,240,39,.38)", dot: "#b4f027" },
+  { fg: "var(--amber)", bg: "rgba(245,158,11,.12)", border: "rgba(245,158,11,.44)", dot: "var(--amber)" },
+  { fg: "var(--lime)", bg: "rgba(180,240,39,.10)", border: "rgba(180,240,39,.38)", dot: "var(--lime)" },
 ] as const;
 
 function normalizeSeq(seq: number) {
@@ -300,6 +302,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const [manualSiiFolio, setManualSiiFolio] = useState("");
   const [leyendoComprobante, setLeyendoComprobante] = useState(false);
   const comprobanteInputRef = useRef<HTMLInputElement>(null);
+  // Pre-vuelo (confirmación SIEMPRE) + autorización legal en modal propio.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [legalPrompt, setLegalPrompt] = useState<{ providerLabel: string } | null>(null);
+  const legalResolverRef = useRef<((accepted: boolean) => void) | null>(null);
+  // Umbral 135 UF con la UF VIVA (mismo patrón que revisar-shared): arranca en la
+  // constante referencial y se re-ancla al valor del server. Si el fetch falla,
+  // queda el fallback referencial — nunca bloquear por error de red.
+  const [umbralReceptor, setUmbralReceptor] = useState<number>(RECEPTOR_OBLIGATORIO_DESDE);
 
   const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? drafts[0] ?? newDraft(tipoInicial);
   const tipoDte = activeDraft.tipoDte;
@@ -334,7 +344,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
   // un dígito verificador malo termina en rechazo SII.
   const rutReceptorInvalido = receptorRut.trim().length > 0 && !validarRut(receptorRut);
-  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !emitiendo;
+  // Res. Ex. SII 44/2025: sobre ~135 UF la boleta debe identificar al comprador.
+  const receptorObligatorioPendiente = total > umbralReceptor && (!receptorRut.trim() || !receptorRazonSocial.trim());
+  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorObligatorioPendiente && !emitiendo;
   const canOpenLocalWorker = canSubmit && !localWorkerLoading && !lockBlocksEmission;
   const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : usesSimpleApi ? !canSubmit || lockBlocksEmission : !canSubmit;
   const primaryLabel = lockBlocksEmission && (usesSiiLocal || usesSimpleApi)
@@ -346,7 +358,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const isFactura = tipoDte === 33 || tipoDte === 34;
   const documentKindLabel = isFactura ? "Factura" : "Boleta";
   const typeLabel = tipoDte === 33 || tipoDte === 39 ? "Afecta" : "Exenta";
-  const typeColor = tipoDte === 33 || tipoDte === 39 ? "#E8553E" : "#5b9cf6";
+  const typeColor = tipoDte === 33 || tipoDte === 39 ? "#E8553E" : "var(--blue)";
+  const emitBusy = emitiendo || localWorkerLoading;
+  // Carril real vs simulado — gobierna el badge del pre-vuelo.
+  const emisionEsReal = isFactura ? facturasProveedor !== "mock" : emisionProveedor !== "mock";
+  const tipoHumano = `${documentKindLabel} ${typeLabel.toLowerCase()} · ${tipoDte === 33 || tipoDte === 39 ? "con IVA 19%" : "sin IVA"}`;
+  const receptorResumen = receptorRazonSocial.trim() || receptorRut.trim()
+    ? [receptorRazonSocial.trim(), receptorRut.trim()].filter(Boolean).join(" · ")
+    : "Consumidor final";
 
   useEffect(() => {
     try {
@@ -427,6 +446,54 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     });
   }, []);
 
+  useEffect(() => {
+    let vivo = true;
+    obtenerUmbralReceptorClp()
+      .then((u) => { if (vivo && u > 0) setUmbralReceptor(u); })
+      .catch(() => { /* fallback referencial: nunca bloquear por error de red */ });
+    return () => { vivo = false; };
+  }, []);
+
+  // Escape cierra el pre-vuelo (nunca a mitad de una emisión).
+  useEffect(() => {
+    if (!confirmOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !emitBusy) setConfirmOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmOpen, emitBusy]);
+
+  // Escape cancela la autorización legal pendiente (resuelve la promesa en false).
+  useEffect(() => {
+    if (!legalPrompt) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setLegalPrompt(null);
+      const resolve = legalResolverRef.current;
+      legalResolverRef.current = null;
+      resolve?.(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [legalPrompt]);
+
+  // Autorización legal en modal propio (reemplaza el window.confirm): promesa
+  // pendiente que se resuelve con el click del usuario. Solo cambia la
+  // presentación — el registro (versión legal, persistencia) queda igual.
+  function requestLegalAcceptance(providerLabel: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      legalResolverRef.current?.(false);
+      legalResolverRef.current = resolve;
+      setLegalPrompt({ providerLabel });
+    });
+  }
+
+  function resolveLegalPrompt(accepted: boolean) {
+    setLegalPrompt(null);
+    const resolve = legalResolverRef.current;
+    legalResolverRef.current = null;
+    resolve?.(accepted);
+  }
+
   async function ensureEmissionAuthorization(provider: "sii_local" | "simpleapi"): Promise<boolean> {
     const providerLabel = provider === "sii_local" ? "SII local asistido" : "SimpleAPI";
     try {
@@ -439,13 +506,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         return false;
       }
 
-      const accepted = window.confirm(
-        [
-          `Confirmo que autorizo a MassDTE a preparar esta emisión con ${providerLabel}.`,
-          "Entiendo que debo revisar los datos antes de enviar y que la responsabilidad tributaria final es del usuario/emisor.",
-          "Esta aceptación queda registrada con versión legal, usuario, empresa, fecha y proveedor.",
-        ].join("\n\n"),
-      );
+      const accepted = await requestLegalAcceptance(providerLabel);
       if (!accepted) return false;
 
       const res = await fetch("/api/emision/authorizations", {
@@ -591,7 +652,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       setEmissionLock(null);
       router.refresh();
     } catch {
-      const message = "DTE aceptado, pero fallo la persistencia en App Contable.";
+      const message = "DTE aceptado, pero falló la persistencia en App Contable.";
       setErrors([message]);
       setLastResult({ ok: false, error: message, proveedor: "simpleapi", estado: "aceptado_sin_persistir", track_id: String(data.trackId ?? "--"), folio: data.dte?.folio, monto_total: data.dte?.total ?? total });
       void closeEmissionJob(jobId, "failed");
@@ -611,7 +672,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         const folio = data.result?.folio ? ` Folio #${data.result.folio}.` : "";
         const persisted = data.result?.persisted;
         const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && persisted?.ok === true);
-        const persistenceError = persisted?.ok === false ? ` No se guardo en la app: ${persisted.detalle ?? persisted.error ?? "error desconocido"}.` : "";
+        const persistenceError = persisted?.ok === false ? ` No se guardó en la app: ${persisted.detalle ?? persisted.error ?? "error desconocido"}.` : "";
         setLocalWorker({
           jobId: data.job_id ?? null,
           status: emitted ? "emitted" : "result_needs_review",
@@ -620,7 +681,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             : `${data.message ?? "Resultado SII recibido, pero falta guardar respaldo. No se marca como emitida."}${folio}${persistenceError}`,
         });
         setLocalWorkerLoading(false);
-        toast(emitted ? `Boleta emitida y guardada.${folio}` : "Boleta SII no quedo guardada en la app", emitted ? "success" : "error");
+        toast(emitted ? `Boleta emitida y guardada.${folio}` : "Boleta SII no quedó guardada en la app", emitted ? "success" : "error");
         router.refresh();
         return;
       }
@@ -914,7 +975,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
   async function sendLocalSiiJob() {
     setLocalWorkerLoading(true);
-    setLocalWorker({ jobId: null, status: "opening_sii", message: "Preparando bloqueo de emision..." });
+    setLocalWorker({ jobId: null, status: "opening_sii", message: "Preparando bloqueo de emisión..." });
     const job = await startEmissionJob("sii_local");
     if (!job?.job_id || !job.expires_at) {
       setLocalWorkerLoading(false);
@@ -1086,16 +1147,30 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     });
   }
 
-  function handlePrimaryEmit() {
+  // Confirmación SIEMPRE antes de emitir: primera vez modal legal → pre-vuelo;
+  // después, solo pre-vuelo. La mecánica posterior (jobs RPA, locks, folios)
+  // no cambia: al confirmar se despacha por el mismo carril de siempre.
+  async function handlePrimaryEmit() {
+    if (primaryDisabled || confirmOpen) return;
+    if (usesSimpleApi && extensionStatus !== "ready") {
+      toast("Instala o recarga la extensión App Contable Motor Local", "error");
+      return;
+    }
+    if (usesSiiLocal || usesSimpleApi) {
+      const authorized = await ensureEmissionAuthorization(usesSiiLocal ? "sii_local" : "simpleapi");
+      if (!authorized) return;
+    }
+    setConfirmOpen(true);
+  }
+
+  function confirmPrimaryEmit() {
+    if (emitBusy) return;
+    setConfirmOpen(false);
     if (usesSiiLocal) {
       openLocalSiiWorker();
       return;
     }
     if (usesSimpleApi) {
-      if (extensionStatus !== "ready") {
-        toast("Instala o recarga la extensión App Contable Motor Local", "error");
-        return;
-      }
       void sendSimpleApiGenerar();
       return;
     }
@@ -1113,16 +1188,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         .ed-label{font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
         .ed-chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;border:1px solid var(--border);padding:4px 7px;font-size:9px;font-weight:700;color:var(--text2);background:var(--bg-muted)}
         .ed-draft-tabs{position:absolute;left:-42px;top:96px;bottom:12px;width:42px;display:flex;flex-direction:column;align-items:center;gap:74px;padding-top:8px;pointer-events:none;z-index:6}
-        .ed-draft-tab{width:92px;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;padding:5px 8px;border-radius:10px 10px 0 0;border:1px solid var(--border);border-bottom-color:rgba(255,255,255,.03);background:rgba(22,24,29,.96);color:var(--text2);font-size:9px;font-weight:800;cursor:pointer;white-space:nowrap;transform:rotate(-90deg);transform-origin:center;box-shadow:-8px 10px 24px rgba(0,0,0,.24);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);pointer-events:auto}
+        .ed-draft-tab{width:92px;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;padding:5px 8px;border-radius:10px 10px 0 0;border:1px solid var(--border);border-bottom-color:transparent;background:var(--surface);color:var(--text2);font-size:9px;font-weight:800;cursor:pointer;white-space:nowrap;transform:rotate(-90deg);transform-origin:center;box-shadow:-8px 10px 24px rgba(0,0,0,.24);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);pointer-events:auto}
         .ed-draft-tab.active{border-color:rgba(232,85,62,.45);background:rgba(232,85,62,.11);color:#E8553E}
-        .ed-draft-close{width:16px;height:16px;border-radius:999px;border:none;background:rgba(255,255,255,.06);color:currentColor;display:grid;place-items:center;cursor:pointer;font-size:11px;line-height:1}
-        .ed-dup-item{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-radius:9px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.16);color:#f59e0b;font-size:9px;cursor:help}
-        .ed-dup-tip{position:absolute;right:0;bottom:calc(100% + 8px);width:230px;padding:10px;border-radius:11px;background:rgba(15,16,20,.96);border:1px solid rgba(245,158,11,.24);box-shadow:0 18px 46px rgba(0,0,0,.38);color:rgba(255,255,255,.88);opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:5}
+        .ed-draft-close{width:16px;height:16px;border-radius:999px;border:none;background:var(--border);color:currentColor;display:grid;place-items:center;cursor:pointer;font-size:11px;line-height:1}
+        .ed-dup-item{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-radius:9px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.16);color:var(--amber);font-size:9px;cursor:help}
+        .ed-dup-tip{position:absolute;right:0;bottom:calc(100% + 8px);width:230px;padding:10px;border-radius:11px;background:var(--surface);border:1px solid rgba(245,158,11,.24);box-shadow:0 18px 46px rgba(0,0,0,.38);color:var(--text);opacity:0;transform:translateY(4px);pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:5}
         .ed-dup-item:hover .ed-dup-tip{opacity:1;transform:translateY(0)}
         .ed-type-button{min-height:44px;padding:8px;border-radius:10px;border:1px solid var(--border);cursor:pointer;text-align:left;transition:border-color .18s ease,background .18s ease,opacity .18s ease}
         .ed-type-button:disabled{cursor:not-allowed}
         .ed-sidebar{display:flex;flex-direction:column;gap:8px;min-height:0}
-        @media (max-width: 720px){.ed-draft-tabs{position:static;width:auto;display:flex;flex-direction:row;gap:5px;padding:8px 18px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.015);overflow-x:auto}.ed-draft-tab{transform:none;width:auto}.ed-shell{grid-template-columns:1fr;height:auto}.ed-grid-2,.ed-grid-detail{grid-template-columns:1fr}.ed-sidebar{order:-1}.ed-body{overflow:auto!important}}
+        @media (max-width: 720px){.ed-draft-tabs{position:static;width:auto;display:flex;flex-direction:row;gap:5px;padding:8px 18px;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto}.ed-draft-tab{transform:none;width:auto}.ed-shell{grid-template-columns:1fr;height:auto}.ed-grid-2,.ed-grid-detail{grid-template-columns:1fr}.ed-sidebar{order:-1}.ed-body{overflow:auto!important}}
       `}</style>
 
       <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -1156,7 +1231,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               onClick={() => { setActiveDraftId(draft.id); setErrors([]); setLastResult(null); }}
               style={{
                 borderColor: active ? draftColor.border : "var(--border)",
-                background: active ? draftColor.bg : "rgba(22,24,29,.96)",
+                background: active ? draftColor.bg : "var(--surface)",
                 color: active ? draftColor.fg : "var(--text2)",
                 boxShadow: active ? `-8px 10px 24px rgba(0,0,0,.24), inset 0 0 0 1px ${draftColor.border}` : undefined,
               }}
@@ -1193,7 +1268,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 {hasEmpresaLock && (
                   <button
                     onClick={() => setTipoDesbloqueado((v) => !v)}
-                    style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)", background: tipoDesbloqueado ? "rgba(245,158,11,.1)" : "var(--surface)", color: tipoDesbloqueado ? "#f59e0b" : "var(--text2)", cursor: "pointer", fontSize: 9, fontWeight: 700 }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)", background: tipoDesbloqueado ? "rgba(245,158,11,.1)" : "var(--surface)", color: tipoDesbloqueado ? "var(--amber)" : "var(--text2)", cursor: "pointer", fontSize: 9, fontWeight: 700 }}
                     title={tipoDesbloqueado ? "Volver a bloquear tipo por empresa" : "Desbloquear selección manual de tipo DTE"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -1209,7 +1284,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   <div style={{ fontSize: 12, fontWeight: 800 }}>Boleta afecta</div>
                   <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 39 · IVA incluido</div>
                 </button>
-                <button className="ed-type-button" onClick={() => setTipo(41)} disabled={tipoLocked} style={{ borderColor: tipoDte === 41 ? "rgba(91,156,246,.45)" : "var(--border)", background: tipoDte === 41 ? "rgba(91,156,246,.12)" : "var(--surface)", color: tipoDte === 41 ? "#5b9cf6" : "var(--text2)", opacity: tipoLocked && tipoDte !== 41 ? 0.45 : 1 }}>
+                <button className="ed-type-button" onClick={() => setTipo(41)} disabled={tipoLocked} style={{ borderColor: tipoDte === 41 ? "rgba(91,156,246,.45)" : "var(--border)", background: tipoDte === 41 ? "rgba(91,156,246,.12)" : "var(--surface)", color: tipoDte === 41 ? "var(--blue)" : "var(--text2)", opacity: tipoLocked && tipoDte !== 41 ? 0.45 : 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 800 }}>Boleta exenta</div>
                   <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 41 · Sin IVA</div>
                 </button>
@@ -1219,7 +1294,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                       <div style={{ fontSize: 12, fontWeight: 800 }}>Factura afecta</div>
                       <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 33 · Generar con SimpleAPI</div>
                     </button>
-                    <button className="ed-type-button" onClick={() => setTipo(34)} disabled={tipoLocked} style={{ borderColor: tipoDte === 34 ? "rgba(91,156,246,.45)" : "var(--border)", background: tipoDte === 34 ? "rgba(91,156,246,.12)" : "var(--surface)", color: tipoDte === 34 ? "#5b9cf6" : "var(--text2)", opacity: tipoLocked && tipoDte !== 34 ? 0.45 : 1 }}>
+                    <button className="ed-type-button" onClick={() => setTipo(34)} disabled={tipoLocked} style={{ borderColor: tipoDte === 34 ? "rgba(91,156,246,.45)" : "var(--border)", background: tipoDte === 34 ? "rgba(91,156,246,.12)" : "var(--surface)", color: tipoDte === 34 ? "var(--blue)" : "var(--text2)", opacity: tipoLocked && tipoDte !== 34 ? 0.45 : 1 }}>
                       <div style={{ fontSize: 12, fontWeight: 800 }}>Factura exenta</div>
                       <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 34 · Generar con SimpleAPI</div>
                     </button>
@@ -1266,9 +1341,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <Field label="Comuna" value={receptorComuna} onChange={(value) => updateActiveDraft({ receptorComuna: value })} placeholder="Opcional" />
               </div>
               {rutReceptorInvalido && (
-                <p style={{ fontSize: 9, color: "#ef4444", marginTop: 7 }}>
+                <p style={{ fontSize: 9, color: "var(--red)", marginTop: 7 }}>
                   El RUT del receptor no es válido — revisa el dígito verificador o déjalo vacío.
                 </p>
+              )}
+              {receptorObligatorioPendiente && (
+                <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.45 }}>
+                  Sobre ~{fmt(umbralReceptor)} necesitas identificar al comprador (RUT y razón social) — Res. 44/2025.
+                </div>
               )}
             </section>
 
@@ -1310,8 +1390,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
 
             {lockBlocksEmission && activeEmissionLock && (usesSiiLocal || usesSimpleApi) && (
-              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 10, lineHeight: 1.45 }}>
-                <span className="ed-label" style={{ color: "#f59e0b" }}>{emissionLock?.business_mode ? "Equipo" : "Emisión en curso"}</span><br />
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45 }}>
+                <span className="ed-label" style={{ color: "var(--amber)" }}>{emissionLock?.business_mode ? "Equipo" : "Emisión en curso"}</span><br />
                 {activeEmissionLock.mensaje ?? "Hay una emisión en curso para esta cuenta. Intenta nuevamente cuando termine."}
               </div>
             )}
@@ -1328,12 +1408,12 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   </div>
                 )}
                 {extensionStatus === "missing" && (
-                  <div style={{ fontSize: 9, color: "#ef4444", lineHeight: 1.35 }}>No encuentro la extensión local. Recárgala en Chrome y vuelve a intentar.</div>
+                  <div style={{ fontSize: 9, color: "var(--red)", lineHeight: 1.35 }}>No encuentro la extensión local. Recárgala en Chrome y vuelve a intentar.</div>
                 )}
                 {total > 0 && (
                   <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <summary style={{ cursor: "pointer", fontSize: 9, fontWeight: 800, color: "var(--text)" }}>
-                      Recuperar emision SII
+                      Recuperar emisión SII
                     </summary>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 7 }}>
                     <button
@@ -1370,12 +1450,12 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
             {usesSimpleApi && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(91,156,246,.08)", border: "1px solid rgba(91,156,246,.18)", color: "var(--text2)", fontSize: 9, lineHeight: 1.4 }}>
-                <span className="ed-label" style={{ color: "#93C5FD" }}>SimpleAPI</span><br />Emite con bóveda local desbloqueada. Se marca como emitido sólo si hay aceptación SII, PDF y guardado en App Contable.
+                <span className="ed-label" style={{ color: "var(--blue)" }}>SimpleAPI</span><br />Emite con bóveda local desbloqueada. Se marca como emitido sólo si hay aceptación SII, PDF y guardado en App Contable.
               </div>
             )}
 
             {tipoDiferenteEmpresa && (
-              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 10, lineHeight: 1.45 }}>
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45 }}>
                 Estás emitiendo un DTE distinto al tipo configurado para la empresa. Úsalo solo si la operación corresponde tributariamente.
               </div>
             )}
@@ -1383,21 +1463,21 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             {(duplicateLoading || duplicateCandidates.length > 0) && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.16)", display: "flex", flexDirection: "column", gap: 7 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span className="ed-label" style={{ color: "#f59e0b" }}>Posible duplicado</span>
-                  <span style={{ fontSize: 9, color: "#f59e0b", fontWeight: 800 }}>{duplicateLoading ? "Buscando..." : `${duplicateCandidates.length} opción${duplicateCandidates.length !== 1 ? "es" : ""}`}</span>
+                  <span className="ed-label" style={{ color: "var(--amber)" }}>Posible duplicado</span>
+                  <span style={{ fontSize: 9, color: "var(--amber)", fontWeight: 800 }}>{duplicateLoading ? "Buscando..." : `${duplicateCandidates.length} opción${duplicateCandidates.length !== 1 ? "es" : ""}`}</span>
                 </div>
                 {duplicateCandidates.map((candidate) => (
                   <div key={candidate.id} className="ed-dup-item">
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>#{candidate.folio ?? "--"} · {fmt(candidate.monto_total)}</span>
                     <span style={{ fontWeight: 900 }}>Ver</span>
                     <div className="ed-dup-tip">
-                      <div style={{ fontSize: 11, fontWeight: 900, color: "#fff", marginBottom: 6 }}>Boleta #{candidate.folio ?? "--"}</div>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: "var(--text)", marginBottom: 6 }}>Boleta #{candidate.folio ?? "--"}</div>
                       <DupRow label="Fecha" value={candidate.fecha_emision} />
                       <DupRow label="Tipo" value={candidate.tipo_dte === 39 ? "Afecta" : "Exenta"} />
                       <DupRow label="Receptor" value={candidate.receptor_razon_social ?? candidate.receptor_rut ?? "Sin receptor"} />
                       <DupRow label="Monto" value={fmt(candidate.monto_total)} />
                       <DupRow label="Detalle" value={candidate.detalle || "Sin detalle"} />
-                      <div style={{ marginTop: 6, color: "#f59e0b", fontSize: 9, lineHeight: 1.35 }}>{candidate.motivos.join(" · ")}</div>
+                      <div style={{ marginTop: 6, color: "var(--amber)", fontSize: 9, lineHeight: 1.35 }}>{candidate.motivos.join(" · ")}</div>
                     </div>
                   </div>
                 ))}
@@ -1405,13 +1485,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             )}
 
             {errors.length > 0 && (
-              <div style={{ padding: 11, borderRadius: 12, background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.18)", color: "#ef4444", fontSize: 10, lineHeight: 1.5 }}>
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.18)", color: "var(--red)", fontSize: 10, lineHeight: 1.5 }}>
                 {errors.map((error) => <div key={error}>{error}</div>)}
               </div>
             )}
 
             {lastResult && (
-              <div style={{ padding: 11, borderRadius: 12, background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.18)", color: "#22c55e", fontSize: 10, lineHeight: 1.5 }}>
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.18)", color: "var(--green)", fontSize: 10, lineHeight: 1.5 }}>
                 {lastResult.proveedor === "simpleapi" ? lastResult.ok ? "Emitido y guardado" : "Aceptado sin guardar" : lastResult.proveedor === "mock" ? "Simulado" : "Emitido"} folio #{lastResult.folio ?? "--"}<br />Track {lastResult.track_id ?? "--"}
                 {lastResult.proveedor === "mock" && <><br />Documento de prueba, sin validez tributaria real.</>}
                 {lastResult.proveedor === "simpleapi" && lastResult.ok && <><br />Aceptación SII, PDF oficial y respaldo guardados.</>}
@@ -1425,15 +1505,85 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
             <div style={{ marginTop: "auto", paddingTop: 2 }}>
               <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
-                {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : "Ingresa detalle y monto."}
+                {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y razón social)." : "Ingresa detalle y monto."}
               </div>
-              <button onClick={handlePrimaryEmit} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
+              <button onClick={() => { void handlePrimaryEmit(); }} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
                 {primaryLabel}
               </button>
             </div>
           </aside>
         </div>
       </div>
+
+      {/* Pre-vuelo: confirmación SIEMPRE antes de emitir (patrón modal de EmitirTabContent). */}
+      {confirmOpen && (
+        <div onClick={() => { if (!emitBusy) setConfirmOpen(false); }}
+          style={{ position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(440px, 94vw)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", padding: "20px 22px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text2)" }}>Vas a emitir</span>
+              {emisionEsReal ? (
+                <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "var(--red)", background: "rgba(239,68,68,.14)", padding: "3px 8px", borderRadius: 7 }}>● EMISIÓN REAL</span>
+              ) : (
+                <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "var(--amber)", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
+              )}
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: tipoDte === 33 || tipoDte === 39 ? "var(--green)" : "var(--blue)", background: tipoDte === 33 || tipoDte === 39 ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{tipoHumano}</span>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text2)" }}>
+              Receptor <b style={{ color: "var(--text)" }}>{receptorResumen}</b>
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 8 }}>
+              <span style={{ fontSize: 34, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em", fontVariantNumeric: "tabular-nums" }}>{fmt(total)}</span>
+              <span style={{ fontSize: 12, color: "var(--text2)" }}>total</span>
+            </div>
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 10, fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
+              {emisionEsReal
+                ? "Emisión real: no se puede deshacer. Si algo sale mal, escríbenos a soporte."
+                : "Modo de prueba: se simula, no llega al SII."}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button onClick={() => setConfirmOpen(false)} disabled={emitBusy}
+                style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", background: "transparent", color: "var(--text2)", fontSize: 12, fontWeight: 600, cursor: emitBusy ? "not-allowed" : "pointer", opacity: emitBusy ? .55 : 1 }}>Cancelar</button>
+              <button onClick={confirmPrimaryEmit} disabled={emitBusy}
+                style={{ flex: 1, border: 0, borderRadius: 10, padding: "11px 14px", background: "#E8553E", color: "#fff", fontSize: 13, fontWeight: 800, cursor: emitBusy ? "not-allowed" : "pointer", opacity: emitBusy ? .55 : 1 }}>Emitir →</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Autorización legal (primera emisión real por proveedor) — mismo lenguaje visual. */}
+      {legalPrompt && (
+        <div onClick={() => resolveLegalPrompt(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 210, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(440px, 94vw)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", padding: "20px 22px" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-.02em", marginBottom: 12 }}>Autorización de emisión</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text3)", marginBottom: 3 }}>Qué autorizas</div>
+                <div style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.5 }}>Autorizo a MassDTE a preparar esta emisión con {legalPrompt.providerLabel}.</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text3)", marginBottom: 3 }}>Tu responsabilidad</div>
+                <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.5 }}>Entiendo que debo revisar los datos antes de enviar y que la responsabilidad tributaria final es del usuario emisor.</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text3)", marginBottom: 3 }}>Registro</div>
+                <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.5 }}>Esta aceptación queda registrada con versión legal, usuario, empresa, fecha y proveedor.</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button onClick={() => resolveLegalPrompt(false)}
+                style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", background: "transparent", color: "var(--text2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={() => resolveLegalPrompt(true)}
+                style={{ flex: 1, border: 0, borderRadius: 10, padding: "11px 14px", background: "#E8553E", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Acepto y autorizo</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -1472,8 +1622,8 @@ function Field({
 function DupRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 9, lineHeight: 1.35, marginTop: 3 }}>
-      <span style={{ color: "rgba(255,255,255,.45)" }}>{label}</span>
-      <span style={{ color: "rgba(255,255,255,.88)", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
+      <span style={{ color: "var(--text3)" }}>{label}</span>
+      <span style={{ color: "var(--text)", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
     </div>
   );
 }

@@ -169,7 +169,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
           <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexShrink: 0 }}>
             <button onClick={() => cerrar(false)} style={{ fontSize: 13, fontWeight: 600, color: "var(--text3)", background: "transparent", border: "none", cursor: "pointer", padding: "7px 12px" }}>Cancelar</button>
             <button onClick={guardar} disabled={bloqueado || busy}
-              style={{ fontSize: 13, fontWeight: 700, color: "#fff", background: "#E8553E", border: "none", borderRadius: 9, padding: "7px 20px", cursor: bloqueado || busy ? "default" : "pointer", opacity: bloqueado || busy ? 0.45 : 1 }}>
+              style={{ fontSize: 13, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 9, padding: "7px 20px", cursor: bloqueado || busy ? "default" : "pointer", opacity: bloqueado || busy ? 0.45 : 1 }}>
               {busy ? "Guardando…" : "Guardar"}
             </button>
           </div>
@@ -193,11 +193,11 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
             {/* Tipo (editable — sin lock) */}
             <div>
               <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
-                {([["exenta", "Exenta · sin IVA · 41", "#5b9cf6"], ["afecta", "Afecta · con IVA · 39", "#22c55e"]] as const).map(([k, lbl, c]) => {
+                {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["afecta", "Afecta · con IVA · 39", "var(--green)"]] as const).map(([k, lbl, c]) => {
                   const active = tipo === k;
                   return (
                     <button key={k} onClick={() => setTipo(k)}
-                      style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", border: "none", cursor: active ? "default" : "pointer", background: active ? `${c}33` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
+                      style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", border: "none", cursor: active ? "default" : "pointer", background: active ? `color-mix(in srgb, ${c} 20%, transparent)` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
                   );
                 })}
               </div>
@@ -215,21 +215,21 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
                   style={{ flex: 1, fontSize: 26, fontWeight: 800, letterSpacing: "-.03em", border: "1px solid var(--border)", borderRadius: 10, padding: "4px 10px", background: "var(--bg-muted)", color: "var(--text)", outline: "none", caretColor: "var(--accent)" }} />
               </div>
               {isAfecta && !conflicto && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 5 }}>neto {fmt(neto)} · IVA {fmt(iva)} (19%)</div>}
-              {conflicto && <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 5 }}>⚠ Afecta lleva IVA — con $0 el SII la rechaza. Sube el monto o emítela exenta.</div>}
-              {total <= 0 && <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginTop: 5 }}>⚠ El monto debe ser mayor a $0.</div>}
+              {conflicto && <div style={{ fontSize: 11, color: "var(--amber)", fontWeight: 600, marginTop: 5 }}>⚠ Afecta lleva IVA — con $0 el SII la rechaza. Sube el monto o emítela exenta.</div>}
+              {total <= 0 && <div style={{ fontSize: 11, color: "var(--amber)", fontWeight: 600, marginTop: 5 }}>⚠ El monto debe ser mayor a $0.</div>}
             </div>
 
             {/* Receptor (siempre visible) */}
             <div>
-              <label style={label}>Receptor{requiereReceptor && <span style={{ color: "#f59e0b" }}> · obligatorio</span>}</label>
+              <label style={label}>Receptor{requiereReceptor && <span style={{ color: "var(--amber)" }}> · obligatorio</span>}</label>
               {requiereReceptor && (
-                <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600, marginBottom: 8 }}>⚠ Sobre 135 UF — RUT y nombre obligatorios (Res. 44/2025)</div>
+                <div style={{ fontSize: 11, color: "var(--amber)", fontWeight: 600, marginBottom: 8 }}>⚠ Sobre 135 UF — RUT y nombre obligatorios (Res. 44/2025)</div>
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 8 }}>
                 <div>
                   <input value={rut} onChange={(e) => setRut(e.target.value)} placeholder="RUT"
-                    style={{ ...field, borderColor: !rutValido ? "#ef4444" : requiereReceptor && !rutTrim ? "#f59e0b" : "var(--border)" }} />
-                  {!rutValido && <div style={{ fontSize: 10, color: "#ef4444", marginTop: 3 }}>RUT no válido</div>}
+                    style={{ ...field, borderColor: !rutValido ? "var(--red)" : requiereReceptor && !rutTrim ? "var(--amber)" : "var(--border)" }} />
+                  {!rutValido && <div style={{ fontSize: 10, color: "var(--red)", marginTop: 3 }}>RUT no válido</div>}
                 </div>
                 <input value={razon} onChange={(e) => setRazon(e.target.value)} placeholder="Razón social / nombre" style={field} />
                 <input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={field} />

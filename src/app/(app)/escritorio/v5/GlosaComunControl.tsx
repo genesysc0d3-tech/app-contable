@@ -65,7 +65,7 @@ export default function GlosaComunControl({
         title="Activa o desactiva la glosa para todas las boletas de este documento"
         style={{
           display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
-          background: "transparent", color: activa ? "#22c55e" : "var(--text3)", fontSize: 9, fontWeight: 800,
+          background: "transparent", color: activa ? "var(--green)" : "var(--text3)", fontSize: 9, fontWeight: 800,
         }}
       >
         <span style={{
@@ -73,7 +73,7 @@ export default function GlosaComunControl({
           border: "1px solid var(--border)", display: "inline-flex", alignItems: "center",
           justifyContent: activa ? "flex-end" : "flex-start", transition: "all .15s",
         }}>
-          <span style={{ width: 11, height: 11, borderRadius: "50%", background: activa ? "#22c55e" : "var(--text3)" }} />
+          <span style={{ width: 11, height: 11, borderRadius: "50%", background: activa ? "var(--green)" : "var(--text3)" }} />
         </span>
         Glosa
       </button>

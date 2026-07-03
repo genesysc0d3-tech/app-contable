@@ -29,19 +29,19 @@ function fmtFecha(iso: string): string {
 }
 
 const ESTADO_PAGO: Record<string, { label: string; color: string }> = {
-  aprobado: { label: "Aprobado", color: "#22c55e" },
-  approved: { label: "Aprobado", color: "#22c55e" },
-  pendiente: { label: "Pendiente", color: "#f59e0b" },
-  pending: { label: "Pendiente", color: "#f59e0b" },
-  rechazado: { label: "Rechazado", color: "#ef4444" },
-  rejected: { label: "Rechazado", color: "#ef4444" },
+  aprobado: { label: "Aprobado", color: "var(--green)" },
+  approved: { label: "Aprobado", color: "var(--green)" },
+  pendiente: { label: "Pendiente", color: "var(--amber)" },
+  pending: { label: "Pendiente", color: "var(--amber)" },
+  rechazado: { label: "Rechazado", color: "var(--red)" },
+  rejected: { label: "Rechazado", color: "var(--red)" },
 };
 
 const ESTADO_SUB: Record<string, { label: string; color: string }> = {
-  activa: { label: "Activa", color: "#22c55e" },
-  pendiente: { label: "Pendiente de pago", color: "#f59e0b" },
-  morosa: { label: "Morosa", color: "#ef4444" },
-  pausada: { label: "Pausada", color: "#f59e0b" },
+  activa: { label: "Activa", color: "var(--green)" },
+  pendiente: { label: "Pendiente de pago", color: "var(--amber)" },
+  morosa: { label: "Morosa", color: "var(--red)" },
+  pausada: { label: "Pausada", color: "var(--amber)" },
   cancelada: { label: "Cancelada", color: "var(--text3)" },
 };
 
@@ -67,7 +67,7 @@ const iconBox: CSSProperties = {
   display: "grid",
   placeItems: "center",
   flexShrink: 0,
-  color: "#E8553E",
+  color: "var(--accent)",
   background: "rgba(232,85,62,.1)",
   border: "1px solid var(--border)",
 };
@@ -91,7 +91,7 @@ const primaryBtn: CSSProperties = {
   height: 34,
   borderRadius: 10,
   border: "1px solid rgba(232,85,62,.5)",
-  background: "linear-gradient(135deg,#E8553E,#cd5832)",
+  background: "linear-gradient(135deg,var(--accent),#cd5832)",
   color: "#fff",
   fontSize: 12,
   fontWeight: 800,
@@ -135,7 +135,7 @@ export default function FacturacionUsoPanel() {
         <button
           type="button"
           onClick={reintentar}
-          style={{ height: 30, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.5)", background: "rgba(232,85,62,.1)", color: "#E8553E", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+          style={{ height: 30, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.5)", background: "rgba(232,85,62,.1)", color: "var(--accent)", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
         >
           Reintentar
         </button>
@@ -169,11 +169,11 @@ export default function FacturacionUsoPanel() {
             </div>
           </div>
           {subEstado ? (
-            <span style={{ ...badge, color: subEstado.color, borderColor: `${subEstado.color}55` }}>
+            <span style={{ ...badge, color: subEstado.color, borderColor: `color-mix(in srgb, ${subEstado.color} 33%, transparent)` }}>
               {subEstado.label}
             </span>
           ) : enTrial ? (
-            <span style={{ ...badge, color: "#f59e0b", borderColor: "#f59e0b55" }}>Prueba</span>
+            <span style={{ ...badge, color: "var(--amber)", borderColor: "color-mix(in srgb, var(--amber) 33%, transparent)" }}>Prueba</span>
           ) : null}
         </div>
 

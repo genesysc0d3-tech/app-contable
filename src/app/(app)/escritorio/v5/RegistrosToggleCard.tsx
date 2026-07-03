@@ -50,7 +50,7 @@ export default function RegistrosCard({
     : `${per} · sin movimientos`;
 
   const reg = {
-    ventas: { accent: "#E8553E", accentSoft: "rgba(232,85,62,.15)", icon: ICON_VENTAS, label: "Ventas", title: "REGISTRO DE VENTAS", sub: ventasSub, count: vDocs, view: "rcv" },
+    ventas: { accent: "var(--accent)", accentSoft: "rgba(232,85,62,.15)", icon: ICON_VENTAS, label: "Ventas", title: "REGISTRO DE VENTAS", sub: ventasSub, count: vDocs, view: "rcv" },
     actividad: { accent: "#A9B2C0", accentSoft: "rgba(169,178,192,.16)", icon: ICON_ACT, label: "Actividad", title: "REGISTRO DE ACTIVIDAD", sub: actSub, count: aCount, view: "actividad" },
   } as const;
   const otherKey = active === "ventas" ? "actividad" : "ventas";

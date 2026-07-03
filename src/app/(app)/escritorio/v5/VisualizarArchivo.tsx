@@ -114,11 +114,11 @@ export default function VisualizarArchivo({
       {/* Cerrar flotante arriba: solo para la tarjeta pdf/planilla (la imagen usa el de abajo) */}
       {!esImagen && !loading && !error && (
         <button onClick={onClose} title="Cerrar"
-          style={{ position: "fixed", top: 18, right: 22, zIndex: 2, width: 34, height: 34, borderRadius: 9, border: "1px solid var(--border)", background: "rgba(20,20,24,.72)", color: "var(--text2)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>×</button>
+          style={{ position: "fixed", top: 18, right: 22, zIndex: 2, width: 34, height: 34, borderRadius: 9, border: "1px solid var(--border)", background: "color-mix(in srgb, var(--bg) 72%, transparent)", color: "var(--text2)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>×</button>
       )}
 
       {error ? (
-        <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", color: "#ef4444", fontSize: 12 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", color: "var(--red)", fontSize: 12 }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ margin: "0 auto 8px" }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           {error}
         </div>
@@ -137,7 +137,7 @@ export default function VisualizarArchivo({
             )}
           </div>
           <button onClick={onClose}
-            style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid rgba(255,255,255,.16)", background: "rgba(28,28,34,.4)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", animation: "lbFade .32s ease .08s both" }}>
+            style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid color-mix(in srgb, var(--text) 16%, transparent)", background: "color-mix(in srgb, var(--bg) 40%, transparent)", color: "var(--text)", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", animation: "lbFade .32s ease .08s both" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>
             Cerrar
           </button>
@@ -147,7 +147,7 @@ export default function VisualizarArchivo({
         <div onClick={(e) => e.stopPropagation()}
           style={{ width: "min(1280px, 96vw)", maxHeight: "88vh", overflow: "hidden", borderRadius: 20, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.45), inset 0 1px 0 var(--border)", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, display: "grid", placeItems: "center", background: "rgba(232,85,62,.12)", color: "#E8553E", flexShrink: 0 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, display: "grid", placeItems: "center", background: "rgba(232,85,62,.12)", color: "var(--accent)", flexShrink: 0 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -158,7 +158,7 @@ export default function VisualizarArchivo({
               <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                 {sheets.map((s, i) => (
                   <button key={s.name} onClick={() => setActiveSheet(i)}
-                    style={{ padding: "5px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", border: activeSheet === i ? "1px solid rgba(232,85,62,.3)" : "1px solid var(--border)", background: activeSheet === i ? "rgba(232,85,62,.1)" : "var(--bg-muted)", color: activeSheet === i ? "#E8553E" : "var(--text2)", transition: "all .15s" }}>{s.name}</button>
+                    style={{ padding: "5px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", border: activeSheet === i ? "1px solid rgba(232,85,62,.3)" : "1px solid var(--border)", background: activeSheet === i ? "rgba(232,85,62,.1)" : "var(--bg-muted)", color: activeSheet === i ? "var(--accent)" : "var(--text2)", transition: "all .15s" }}>{s.name}</button>
                 ))}
               </div>
             )}

@@ -81,7 +81,7 @@ export default function RcvViewWrapper({ boletas, boletasYear, boletasMonth, ini
         <div style={{ padding: "10px 18px 0", fontSize: 10, color: "var(--text2)" }}>Cargando RCV...</div>
       )}
       {error && (
-        <div style={{ padding: "10px 18px 0", fontSize: 10, color: "#ef4444" }}>{error}</div>
+        <div style={{ padding: "10px 18px 0", fontSize: 10, color: "var(--red)" }}>{error}</div>
       )}
       <BoletasMensualesView
         boletas={currentBoletas}

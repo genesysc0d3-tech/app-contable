@@ -60,7 +60,7 @@ export default function VeredictoCartola({
   // Solo se puede aprobar si de verdad hay algo staged (evita 'Aprobar 0' cuando la
   // cartola ya fue enviada entera a Emitir: pendientes===0 pero listas===0).
   const puedeAprobar = todasListas && listas > 0;
-  const dotColor = todasListas ? "#22c55e" : pendientes < count ? "#f59e0b" : "var(--text3)";
+  const dotColor = todasListas ? "var(--green)" : pendientes < count ? "var(--amber)" : "var(--text3)";
   // Aprobar atómico = manda a Emitir (gatillo real hacia el SII). Confirmación en
   // dos pasos con el desglose para prevenir un click accidental sobre 600 tx.
   const [confirming, setConfirming] = useState(false);
@@ -103,11 +103,11 @@ export default function VeredictoCartola({
 
         {/* Split exenta/afecta (readout, no toggle) */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {exentas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(91,156,246,.13)", color: "#5b9cf6" }}>Exenta · {exentas}</span>}
-          {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(34,197,94,.13)", color: "#22c55e" }}>Afecta · {afectas}</span>}
+          {exentas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(91,156,246,.13)", color: "var(--blue)" }}>Exenta · {exentas}</span>}
+          {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(34,197,94,.13)", color: "var(--green)" }}>Afecta · {afectas}</span>}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 12, fontSize: "1.02em", color: "var(--text2)" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "#22c55e" }} />{listas} listas</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: pendientes > 0 ? "#f59e0b" : "var(--text3)" }} />{pendientes} pendientes</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--green)" }} />{listas} listas</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: pendientes > 0 ? "var(--amber)" : "var(--text3)" }} />{pendientes} pendientes</span>
           </span>
         </div>
       </div>
@@ -126,13 +126,13 @@ export default function VeredictoCartola({
                 {exentasListas > 0 && <> · exenta {exentasListas}</>}
                 <br />total <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
               </div>
-              <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "#E8553E", color: "#fff", fontSize: "1.05em" }}>
+              <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Confirmar emisión
               </button>
               <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
             </div>
           ) : (
-            <button className="vcart-cb" onClick={() => setConfirming(true)} disabled={busy} style={{ background: "#E8553E", color: "#fff", fontSize: "1.12em" }}>
+            <button className="vcart-cb" onClick={() => setConfirming(true)} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.12em" }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar {listas}
             </button>
           )

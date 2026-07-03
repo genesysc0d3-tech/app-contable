@@ -93,17 +93,25 @@ export async function fetchMesaDateDependent(
     return !!day && day >= workStartDay && day < workEndDay;
   };
 
+  // Boletas del rango visible: el filtro en memoria acepta por fecha_emision O por
+  // created_at, así que la consulta replica ese OR en el server. Antes se traían las
+  // 100 más recientes globales → un mes viejo con >100 boletas posteriores mostraba
+  // un falso "Aún no hay boletas".
+  const boletasRangeOr = `and(fecha_emision.gte.${workStartDay},fecha_emision.lt.${workEndDay}),and(created_at.gte.${workStart},created_at.lt.${workEnd})`;
+
   // ── Consultas date-dependientes (paralelas) ──
-  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes] = await Promise.all([
+  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes] = await Promise.all([
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(100),
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", workStartDay).lt("fecha_emision", workEndDay),
+    supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).or(boletasRangeOr),
+    supabase.from("empresas").select("boletas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
   ]);
   // Ventas del rango (registro de ventas atado al calendario maestro).
   const ventasRows = (ventasRangoRes.data ?? []) as { monto_total: number | null }[];
@@ -132,7 +140,16 @@ export async function fetchMesaDateDependent(
       : formatDisplayDateEsCl(selDate, { weekday: "long", day: "numeric", month: "long" }, selDate);
 
   // ── Boletas del rango + agregados sintéticos (boletas únicas) ──
-  const boletas = (boletasRawRes.data ?? []).filter((b) => inWorkRange(b.fecha_emision) || inWorkRange(b.created_at)).slice(0, 20);
+  const boletasRango = (boletasRawRes.data ?? []).filter((b) => inWorkRange(b.fecha_emision) || inWorkRange(b.created_at));
+  const boletas = boletasRango.slice(0, 20);
+  // Total REAL del rango (count exacto en DB): la lista de arriba muestra hasta 20,
+  // pero el conteo verdadero queda disponible para el render ("mostrando 20 de N").
+  const boletasTotal = boletasCountRes.count ?? boletasRango.length;
+  // Proveedor de boletas de la empresa (misma normalización que obtenerConfigEmision):
+  // viaja al tab Emitir para que la UI no prometa un carril masivo que aún no existe.
+  const provData = (empresaProvRes.data ?? null) as { boletas_emision_proveedor?: string | null; emision_proveedor?: string | null } | null;
+  const provRaw = provData?.boletas_emision_proveedor ?? provData?.emision_proveedor;
+  const boletasProveedor: "mock" | "sii_local" | "simpleapi" = provRaw === "sii_local" || provRaw === "simpleapi" ? provRaw : "mock";
   const docsBase = (docsData.data ?? []) as DocRow[];
   const boletasComoAgregados = boletas
     .filter((boleta) => !docsBase.some((doc) => (doc.progreso_ia as { boleta_id?: string } | null)?.boleta_id === boleta.id))
@@ -211,6 +228,9 @@ export async function fetchMesaDateDependent(
     listas_emitir: pendItems.filter((i) => i.balde === "listas").length,
     por_revisar: pendItems.filter((i) => i.balde === "por_revisar").length,
     monto_listo: pendItems.filter((i) => i.balde === "listas").reduce((s, i) => s + i.monto_total, 0),
+    // Va dentro de totales porque Mesa.tsx arma el payload del tab Emitir solo con
+    // items/totales/aprobadas_otros_tipos — así llega sin tocar ese componente.
+    boletas_proveedor: boletasProveedor,
   };
 
   return {
@@ -221,6 +241,7 @@ export async function fetchMesaDateDependent(
     docProgress,
     boletasView,
     boletasCount: boletas.length,
+    boletasTotal,
     ventasDocs,
     ventasTotal,
     actividadItems,

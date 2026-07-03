@@ -21,7 +21,7 @@ function compactEmpty(kind: "subidos" | "boletas") {
         <div style={{ position: "relative", width: 104, height: 104, margin: "0 auto 16px" }}>
           <div style={{ position: "absolute", inset: 8, borderRadius: "50%", border: isSubidos ? "1px solid rgba(232,85,62,.26)" : "1px solid rgba(59,130,246,.25)", animation: "emptySonar 2.8s ease-out infinite" }} />
           {isSubidos ? (
-            <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#E8553E" }}><path d="M30 72h36a8 8 0 0 0 8-8V34L56 16H30a8 8 0 0 0-8 8v40a8 8 0 0 0 8 8Z" stroke="currentColor" strokeWidth="4" /><path d="M55 16v17h18" stroke="currentColor" strokeWidth="4" /><path d="M35 49h26M35 59h18" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{ animation: "emptyDraw 2.8s ease-in-out infinite" }} /></svg>
+            <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "var(--accent)" }}><path d="M30 72h36a8 8 0 0 0 8-8V34L56 16H30a8 8 0 0 0-8 8v40a8 8 0 0 0 8 8Z" stroke="currentColor" strokeWidth="4" /><path d="M55 16v17h18" stroke="currentColor" strokeWidth="4" /><path d="M35 49h26M35 59h18" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{ animation: "emptyDraw 2.8s ease-in-out infinite" }} /></svg>
           ) : (
             <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#3B82F6" }}><path d="M29 15h30l12 12v54H29a6 6 0 0 1-6-6V21a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="4" /><path d="M59 16v13h13" stroke="currentColor" strokeWidth="4" /><path d="M35 45h26M35 56h20M35 67h27" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{ animation: "emptyDraw 2.8s ease-in-out infinite" }} /></svg>
           )}
@@ -74,18 +74,18 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                 const esAnulada = b.estado === "anulada";
                 return (
                   <div key={b.id} className={`bl-item ${esAnulada ? "an" : ""}`}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.03)", opacity: esAnulada ? 0.5 : 1 }}>
-                    <div className="ic" style={{ width: 28, height: 28, borderRadius: 6, background: b.es_unica ? "rgba(232,85,62,.07)" : "var(--bg-muted)", border: b.es_unica ? "1px dashed rgba(232,85,62,.5)" : "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: b.es_unica ? "#E8553E" : "var(--text2)" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: esAnulada ? 0.5 : 1 }}>
+                    <div className="ic" style={{ width: 28, height: 28, borderRadius: 6, background: b.es_unica ? "rgba(232,85,62,.07)" : "var(--bg-muted)", border: b.es_unica ? "1px dashed rgba(232,85,62,.5)" : "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: b.es_unica ? "var(--accent)" : "var(--text2)" }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
                     </div>
                     <div className="inf" style={{ flex: 1, minWidth: 0 }}>
                       <div className="top" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--text)" }}>
                         <span className="fl" style={{ color: "var(--text)" }}>#{b.folio}</span>
                         <span className={`bd ${b.tipo_dte === 39 ? "af" : b.tipo_dte === 41 ? "ex" : "an"}`}
-                          style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: b.tipo_dte === 39 ? "var(--accent-light)" : b.tipo_dte === 41 ? "rgba(59,130,246,.1)" : "var(--bg-muted)", color: b.tipo_dte === 39 ? "#E8553E" : b.tipo_dte === 41 ? "#5b9cf6" : "var(--text2)" }}
+                          style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: b.tipo_dte === 39 ? "var(--accent-light)" : b.tipo_dte === 41 ? "rgba(59,130,246,.1)" : "var(--bg-muted)", color: b.tipo_dte === 39 ? "var(--accent)" : b.tipo_dte === 41 ? "var(--blue)" : "var(--text2)" }}
                         >{b.tipo_dte === 39 ? "AFECTA" : b.tipo_dte === 41 ? "EXENTA" : `DTE ${b.tipo_dte}`}</span>
                         {b.es_unica && (
-                          <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 800, border: "1px dashed rgba(232,85,62,.55)", background: "rgba(232,85,62,.06)", color: "#E8553E" }}>ÚNICA</span>
+                          <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 800, border: "1px dashed rgba(232,85,62,.55)", background: "rgba(232,85,62,.06)", color: "var(--accent)" }}>ÚNICA</span>
                         )}
                         {esAnulada && (
                           <span className="bd an" style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: "var(--bg-muted)", color: "var(--text2)" }}>ANULADA</span>

@@ -55,7 +55,7 @@ export default function ActividadView({ items = [] }: { items?: ActividadItem[] 
                 <div style={{
                   width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                   background: item.tipo === "emision" ? "var(--accent-light)" : item.tipo === "subida" ? "rgba(180,240,39,.08)" : item.tipo === "aprobacion" ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)",
-                  color: item.tipo === "emision" ? "#E8553E" : item.tipo === "subida" ? "#b4f027" : item.tipo === "aprobacion" ? "#22c55e" : "#ef4444",
+                  color: item.tipo === "emision" ? "var(--accent)" : item.tipo === "subida" ? "var(--lime)" : item.tipo === "aprobacion" ? "var(--green)" : "var(--red)",
                 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={iconMap[item.tipo] ?? iconMap.subida} /></svg>
                 </div>

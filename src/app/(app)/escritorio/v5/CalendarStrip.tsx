@@ -84,7 +84,7 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
           <button type="button" onClick={() => navigate({ month: prevMonthParam, date: firstOfMonthParam(prevMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>‹</button>
           <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", flexShrink: 0, width: 100, textAlign: "center" }}>{monthName} {y}</span>
           <button type="button" onClick={() => navigate({ month: nextMonthParam, date: firstOfMonthParam(nextMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>›</button>
-          <button type="button" onClick={() => navigate({ date: selDate, month: `${y}-${m}`, view: nextView })} style={{ ...btnReset, fontSize: 9, fontWeight: 700, color: "#b4f027", padding: "2px 4px", margin: "0 4px", borderRadius: 4, border: workMode !== "day" ? "1px dashed #b4f027" : "1px solid transparent", background: "transparent", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flexShrink: 0, height: 28, width: 98, justifyContent: "center", lineHeight: 1.05 }}>
+          <button type="button" onClick={() => navigate({ date: selDate, month: `${y}-${m}`, view: nextView })} style={{ ...btnReset, fontSize: 9, fontWeight: 700, color: "var(--lime)", padding: "2px 4px", margin: "0 4px", borderRadius: 4, border: workMode !== "day" ? "1px dashed var(--lime)" : "1px solid transparent", background: "transparent", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flexShrink: 0, height: 28, width: 98, justifyContent: "center", lineHeight: 1.05 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", lineHeight: 1.05, textAlign: "left", fontSize: 9, fontWeight: 700 }}>
               <span>Mesa de trabajo</span>
@@ -101,14 +101,14 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               const info = byDay[day];
               return (
                 <button type="button" key={day} onClick={() => navigate({ date: ds, month: `${y}-${m}`, view: workMode })}
-                  style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: active ? "#b4f027" : "transparent", transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
-                  <span style={{ fontSize: 5, textTransform: "uppercase", lineHeight: 1, color: active ? "rgba(0,0,0,.5)" : "var(--text3)" }}>{wd[new Date(y, m, day).getDay()]}</span>
-                  <span style={{ fontSize: 8, fontWeight: isToday || isSel ? 700 : 500, lineHeight: 1, marginTop: 1, color: isToday ? "#E8553E" : active ? "#000" : "var(--text2)" }}>{day}</span>
+                  style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: active ? "var(--lime)" : "transparent", transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
+                  <span style={{ fontSize: 5, textTransform: "uppercase", lineHeight: 1, color: active ? "color-mix(in srgb, var(--bg) 50%, transparent)" : "var(--text3)" }}>{wd[new Date(y, m, day).getDay()]}</span>
+                  <span style={{ fontSize: 8, fontWeight: isToday || isSel ? 700 : 500, lineHeight: 1, marginTop: 1, color: isToday ? "var(--accent)" : active ? "var(--bg)" : "var(--text2)" }}>{day}</span>
                   {/* Puntos de trabajo del día (byDay de mesa-data): pendientes / aprobadas.
                       Fila de alto fijo para que todas las celdas midan igual (dock intacto). */}
                   <span style={{ display: "flex", gap: 2, height: 3, marginTop: 1, alignItems: "center", justifyContent: "center" }}>
                     {(info?.p ?? 0) > 0 && <span style={{ width: 3, height: 3, borderRadius: 999, background: "var(--accent)" }} />}
-                    {(info?.a ?? 0) > 0 && <span style={{ width: 3, height: 3, borderRadius: 999, background: "#22c55e" }} />}
+                    {(info?.a ?? 0) > 0 && <span style={{ width: 3, height: 3, borderRadius: 999, background: "var(--green)" }} />}
                   </span>
                 </button>
               );
