@@ -24,10 +24,10 @@ import { useToast } from "@/components/Toast";
 type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
 
 const SECTION_META: Record<SectionKey, { label: string; color: string }> = {
-  pendientes: { label: "Pendientes", color: "#f59e0b" },
-  listas: { label: "Listas", color: "#22c55e" },
-  rechazadas: { label: "Rechazadas", color: "#E8553E" },
-  emision: { label: "En emisión", color: "#5b9cf6" },
+  pendientes: { label: "Pendientes", color: "var(--amber)" },
+  listas: { label: "Listas", color: "var(--green)" },
+  rechazadas: { label: "Rechazadas", color: "var(--accent)" },
+  emision: { label: "En emisión", color: "var(--blue)" },
 };
 const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision"];
 
@@ -40,17 +40,17 @@ type FlatRow =
 
 const CSS = `
 .ce-scroll{scrollbar-width:thin;}
-.ce-row{display:flex;align-items:center;gap:6px;padding:6px 16px;border-bottom:1px solid rgba(255,255,255,.03);cursor:pointer;}
-.ce-row:hover{background:rgba(255,255,255,.02);}
+.ce-row{display:flex;align-items:center;gap:6px;padding:6px 16px;border-bottom:1px solid var(--border);cursor:pointer;}
+.ce-row:hover{background:color-mix(in srgb, var(--text) 2%, transparent);}
 .ce-reject{opacity:.28;transition:opacity .15s;}
 .ce-row:hover .ce-reject,.ce-reject:hover{opacity:1;}
 .ce-stat{display:inline-flex;align-items:center;gap:5px;border:none;background:transparent;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);padding:2px 4px;border-radius:6px;}
-.ce-stat:hover{background:rgba(255,255,255,.05);color:var(--text);}
+.ce-stat:hover{background:color-mix(in srgb, var(--text) 5%, transparent);color:var(--text);}
 `;
 
 function confColor(c: number | null | undefined) {
   const v = c ?? 0;
-  return v >= ALTA ? "#22c55e" : v >= MEDIA ? "#f59e0b" : "var(--text2)";
+  return v >= ALTA ? "var(--green)" : v >= MEDIA ? "var(--amber)" : "var(--text2)";
 }
 
 export default function CartolaEditor({
@@ -288,7 +288,7 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
   return (
     <div
       onClick={onToggle}
-      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 16px", cursor: "pointer", background: "var(--surface)", borderBottom: "1px solid rgba(255,255,255,.04)" }}
+      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 16px", cursor: "pointer", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
     >
       <span style={{ fontSize: 8, color: "var(--text2)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▶</span>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
@@ -298,7 +298,7 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
         <button
           onClick={(e) => { e.stopPropagation(); onStageAll(); }}
           disabled={bulkDisabled}
-          style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "#22c55e", cursor: bulkDisabled ? "default" : "pointer", opacity: bulkDisabled ? 0.5 : 1 }}
+          style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "var(--green)", cursor: bulkDisabled ? "default" : "pointer", opacity: bulkDisabled ? 0.5 : 1 }}
         >
           {busy ? "..." : bulkLabel}
         </button>
@@ -320,7 +320,7 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore }: {
     <div className="ce-row" onClick={onToggle}>
       {/* 16px reservado para checkbox (selección múltiple — fase posterior) */}
       <span style={{ width: 16, flexShrink: 0 }} />
-      <span style={{ transform: isOpen ? "rotate(90deg)" : "none", color: isOpen ? "#E8553E" : "var(--text2)", fontSize: 10, transition: "transform .2s", flexShrink: 0 }}>▶</span>
+      <span style={{ transform: isOpen ? "rotate(90deg)" : "none", color: isOpen ? "var(--accent)" : "var(--text2)", fontSize: 10, transition: "transform .2s", flexShrink: 0 }}>▶</span>
       <span title={tm.label} style={{ flexShrink: 0, minWidth: 38, textAlign: "center", fontSize: 7, fontWeight: 800, letterSpacing: ".04em", padding: "2px 5px", borderRadius: 8, background: tm.bg, color: tm.color }}>{tm.sigla}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 10, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion}</div>
@@ -330,15 +330,15 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore }: {
       <span style={{ flexShrink: 0, fontSize: 9, color: "var(--text3)", minWidth: 48, textAlign: "right" }}>{fmtShort(p.movimientos_raw?.fecha)}</span>
       <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 600, color: "var(--text)", minWidth: 64, textAlign: "right" }}>{fmt(p.total ?? p.movimientos_raw?.monto)}</span>
       <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, color: confColor(p.confianza), minWidth: 30, textAlign: "right" }}>{conf}%</span>
-      {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "#22c55e", letterSpacing: ".05em" }}>LISTO</span>}
-      {enEmision && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "#5b9cf6", letterSpacing: ".05em" }}>EN EMISIÓN</span>}
+      {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "var(--green)", letterSpacing: ".05em" }}>LISTO</span>}
+      {enEmision && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "var(--blue)", letterSpacing: ".05em" }}>EN EMISIÓN</span>}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* ✓ solo en borradores (pendiente/editado): nunca demotar una 'listo' (ya staged) ni una 'aprobado' (ya en Emitir) */}
         {(p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
         {rechazada ? (
           /* Restaurar reemplaza al ✎ en rechazadas: el detalle acá solo llevaba a un error engañoso */
           <button onClick={onRestore}
-            style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "#22c55e", cursor: "pointer" }}>
+            style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "var(--green)", cursor: "pointer" }}>
             Restaurar
           </button>
         ) : (

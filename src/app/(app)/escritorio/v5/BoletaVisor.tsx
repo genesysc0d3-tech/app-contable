@@ -23,15 +23,15 @@ export type BoletaEmitida = {
 };
 
 const ESTADO_META: Record<string, { label: string; color: string; bg: string }> = {
-  aceptado: { label: "Aceptada por el SII", color: "#22c55e", bg: "rgba(34,197,94,.14)" },
-  aceptado_reparos: { label: "Aceptada con reparos", color: "#f59e0b", bg: "rgba(245,158,11,.14)" },
-  rechazado: { label: "Rechazada por el SII", color: "#ef4444", bg: "rgba(239,68,68,.14)" },
+  aceptado: { label: "Aceptada por el SII", color: "var(--green)", bg: "rgba(34,197,94,.14)" },
+  aceptado_reparos: { label: "Aceptada con reparos", color: "var(--amber)", bg: "rgba(245,158,11,.14)" },
+  rechazado: { label: "Rechazada por el SII", color: "var(--red)", bg: "rgba(239,68,68,.14)" },
   anulada: { label: "Anulada", color: "var(--text3)", bg: "var(--bg-muted)" },
 };
 
 const TIPO_META: Record<number, { label: string; color: string }> = {
-  39: { label: "Afecta · con IVA · 39", color: "#22c55e" },
-  41: { label: "Exenta · sin IVA · 41", color: "#5b9cf6" },
+  39: { label: "Afecta · con IVA · 39", color: "var(--green)" },
+  41: { label: "Exenta · sin IVA · 41", color: "var(--blue)" },
   61: { label: "Nota de crédito · 61", color: "#c084fc" },
 };
 
@@ -72,7 +72,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
       {/* BODY */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: "0.55em" }}>
-          <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.42em 0.95em", borderRadius: 9, background: `${tipo.color}22`, color: tipo.color }}>{tipo.label}</span>
+          <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.42em 0.95em", borderRadius: 9, background: `color-mix(in srgb, ${tipo.color} 13%, transparent)`, color: tipo.color }}>{tipo.label}</span>
           <span style={{ color: "var(--text2)", fontSize: "1.18em" }}>
             {isAfecta
               ? <>neto {fmt(neto)} · IVA {fmt(iva)} <span style={{ color: "var(--text3)" }}>(19%)</span></>
@@ -93,7 +93,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
           <span style={{ color: "var(--text3)" }}>·</span>
           {calendarIcon}
           <span>{fecha}</span>
-          <button onClick={onVerEnBoletas} style={{ marginLeft: "auto", fontSize: "0.82em", fontWeight: 700, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}>Ver en Boletas →</button>
+          <button onClick={onVerEnBoletas} style={{ marginLeft: "auto", fontSize: "0.82em", fontWeight: 700, color: "var(--accent)", background: "transparent", border: "none", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}>Ver en Boletas →</button>
         </div>
       </div>
     </div>

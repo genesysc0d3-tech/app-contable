@@ -47,12 +47,12 @@ export function fmtShort(d: string | null | undefined): string {
 // Tipo de la propuesta para decisión rápida: visible tanto en la fila
 // colapsada (sigla) como en el detalle expandido (label completo).
 export function tipoMeta(tipoPropuesto: string | null) {
-  if (tipoPropuesto === "gasto_egreso") return { sigla: "GASTO", label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "#f59e0b" };
-  if (tipoPropuesto === "no_comercial") return { sigla: "N/C", label: "No comercial · no se boletea", bg: "rgba(255,255,255,.07)", color: "var(--text2)" };
+  if (tipoPropuesto === "gasto_egreso") return { sigla: "GASTO", label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "var(--amber)" };
+  if (tipoPropuesto === "no_comercial") return { sigla: "N/C", label: "No comercial · no se boletea", bg: "color-mix(in srgb, var(--text) 7%, transparent)", color: "var(--text2)" };
   const afecta = tipoPropuesto === "boleta" || tipoPropuesto === "factura";
   return afecta
-    ? { sigla: "AFE", label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "#b4f027" }
-    : { sigla: "EXE", label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "#5b9cf6" };
+    ? { sigla: "AFE", label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "var(--lime)" }
+    : { sigla: "EXE", label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "var(--blue)" };
 }
 
 export function RevisarEmpty() {
@@ -62,7 +62,7 @@ export function RevisarEmpty() {
       <div style={{transform:"translateY(7px)"}}>
         <div style={{position:"relative",width:104,height:104,margin:"0 auto 16px"}}>
           <div style={{position:"absolute",inset:8,borderRadius:"50%",border:"1px solid rgba(34,197,94,.26)",animation:"revisarSonar 2.8s ease-out infinite"}} />
-          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"#22c55e"}}><path d="M48 78c16.568 0 30-13.432 30-30S64.568 18 48 18 18 31.432 18 48s13.432 30 30 30Z" stroke="currentColor" strokeWidth="4"/><path d="m35 48 9 9 19-21" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="42" style={{animation:"revisarTrace 2.8s ease-in-out infinite"}}/></svg>
+          <svg viewBox="0 0 96 96" fill="none" style={{position:"absolute",inset:0,color:"var(--green)"}}><path d="M48 78c16.568 0 30-13.432 30-30S64.568 18 48 18 18 31.432 18 48s13.432 30 30 30Z" stroke="currentColor" strokeWidth="4"/><path d="m35 48 9 9 19-21" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="42" style={{animation:"revisarTrace 2.8s ease-in-out infinite"}}/></svg>
         </div>
         <div style={{fontSize:15,fontWeight:800,color:"var(--text)",letterSpacing:"-.025em"}}>Todo despejado</div>
         <div style={{marginTop:5,fontSize:11,lineHeight:1.45,maxWidth:270}}>No hay propuestas pendientes para revisar en esta mesa.</div>
@@ -105,7 +105,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
 .tr:hover .rs-reject,.rs-reject:hover{opacity:1;}`}</style>
       {/* Padding */}
       <div style={{padding:"10px 16px 0"}}>
-        <div className={`cg ${tipo}`} style={{borderBottom:"1px solid rgba(255,255,255,.03)"}}>
+        <div className={`cg ${tipo}`} style={{borderBottom:"1px solid var(--border)"}}>
           {/* Accordion header */}
           <div className="cg-h" onClick={() => setExpanded(!expanded)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",cursor:"pointer"}}>
             <span className="arr" style={{fontSize:8,color:"var(--text2)",transform:expanded?"rotate(90deg)":"none",transition:"transform .2s",flexShrink:0}}>▶</span>
@@ -129,7 +129,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       onClick={() => setActiveBlock(i)}
                       style={{
                         width:28,height:20,borderRadius:4,border:"none",cursor:"pointer",fontSize:8,fontWeight:600,
-                        background: i === curBlock ? "#E8553E" : "var(--bg-muted)",
+                        background: i === curBlock ? "var(--accent)" : "var(--bg-muted)",
                         color: i === curBlock ? "#fff" : "var(--text2)",
                         boxShadow: i === curBlock ? "0 0 8px rgba(232,85,62,.3)" : "none",
                       }}
@@ -148,24 +148,24 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                   <div key={p.id}>
                     {/* Thin row */}
                     <div className="tr" onClick={() => toggleRow(p.id)}
-                      style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid rgba(255,255,255,.02)",cursor:"pointer"}}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
                     >
-                      <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"#E8553E":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
+                      <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"var(--accent)":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
                       {(() => { const tm = tipoMeta(p.tipo_propuesto); return (
                         <span title={tm.label} style={{flexShrink:0,minWidth:38,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:tm.bg,color:tm.color}}>{tm.sigla}</span>
                       ); })()}
                       <div className="info" style={{flex:1,minWidth:0}}>
                         <div className="tt" style={{fontSize:10,fontWeight:500,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.movimientos_raw.descripcion}</div>
                         <div className="mt" style={{fontSize:8,color:"var(--text2)",marginTop:1,display:"flex",alignItems:"center",gap:4}}>
-                          {fmt(p.movimientos_raw.monto)} <span style={{color:"#2a2d36"}}>·</span> {fmtShort(p.movimientos_raw.fecha)}
-                          {p.receptor_nombre && <><span style={{color:"#2a2d36"}}>·</span> {p.receptor_nombre}</>}
+                          {fmt(p.movimientos_raw.monto)} <span style={{color:"var(--border)"}}>·</span> {fmtShort(p.movimientos_raw.fecha)}
+                          {p.receptor_nombre && <><span style={{color:"var(--border)"}}>·</span> {p.receptor_nombre}</>}
                         </div>
                       </div>
                       <span className={`cf ${(p.confianza ?? 0) >= ALTA ? "hi" : (p.confianza ?? 0) >= MEDIA ? "me" : "ba"}`}
-                        style={{fontSize:9,fontWeight:600,textAlign:"right",minWidth:30,color:(p.confianza??0)>=ALTA?"#22c55e":(p.confianza??0)>=MEDIA?"#f59e0b":"var(--text2)"}}
+                        style={{fontSize:9,fontWeight:600,textAlign:"right",minWidth:30,color:(p.confianza??0)>=ALTA?"var(--green)":(p.confianza??0)>=MEDIA?"var(--amber)":"var(--text2)"}}
                       >{Math.round((p.confianza??0)*100)}%</span>
-                      {p.estado === "listo" && <span style={{fontSize:8,fontWeight:800,color:"#22c55e",flexShrink:0,letterSpacing:".05em"}}>LISTO</span>}
-                      {enEmision && <span style={{fontSize:8,fontWeight:800,color:"#5b9cf6",flexShrink:0,letterSpacing:".05em"}}>EN EMISIÓN</span>}
+                      {p.estado === "listo" && <span style={{fontSize:8,fontWeight:800,color:"var(--green)",flexShrink:0,letterSpacing:".05em"}}>LISTO</span>}
+                      {enEmision && <span style={{fontSize:8,fontWeight:800,color:"var(--blue)",flexShrink:0,letterSpacing:".05em"}}>EN EMISIÓN</span>}
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
                         {!enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
                         {!enEmision && <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />}
@@ -189,7 +189,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
         </div>
       </div>
       {/* Bottom separator */}
-      <div style={{padding:"0 16px"}}><div style={{borderBottom:"1px solid rgba(255,255,255,.03)"}} /></div>
+      <div style={{padding:"0 16px"}}><div style={{borderBottom:"1px solid var(--border)"}} /></div>
     </>
   );
 }
@@ -197,7 +197,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
 /* ─── Row Action Button ─── */
 export function RowActionBtn({ onClick, icon, type }: { onClick: () => void; icon: string; type: "aprove"|"edit"|"reject" }) {
   const bg = type === "aprove" ? "rgba(34,197,94,.1)" : type === "edit" ? "rgba(245,158,11,.1)" : "rgba(239,68,68,.1)";
-  const cl = type === "aprove" ? "#22c55e" : type === "edit" ? "#f59e0b" : "#ef4444";
+  const cl = type === "aprove" ? "var(--green)" : type === "edit" ? "var(--amber)" : "var(--red)";
   return (
     <button onClick={onClick}
       style={{width:22,height:22,borderRadius:4,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,background:bg,color:cl}}
@@ -222,7 +222,7 @@ function BlockApproveBtn({ ids, label }: { ids: string[]; label: string }) {
   }
   return (
     <button onClick={handle} disabled={loading}
-      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(34,197,94,.35)",cursor:"pointer",fontWeight:600,background:"transparent",color:"#22c55e",opacity:loading?0.5:1}}
+      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(34,197,94,.35)",cursor:"pointer",fontWeight:600,background:"transparent",color:"var(--green)",opacity:loading?0.5:1}}
     >{loading ? "..." : label}</button>
   );
 }
@@ -253,7 +253,7 @@ function ApproveAllBtn({ propuestas }: { propuestas: Propuesta[] }) {
     : `Poner listas (${propuestas.length})`;
   return (
     <button onClick={handle} disabled={disabled}
-      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"none",cursor:disabled?"default":"pointer",fontWeight:600,background:"#22c55e",color:"#08240f",opacity:disabled?0.5:1}}
+      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"none",cursor:disabled?"default":"pointer",fontWeight:600,background:"var(--green)",color:"#08240f",opacity:disabled?0.5:1}}
     >{loading ? "..." : label}</button>
   );
 }
@@ -382,7 +382,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const inp: CSSProperties = { width: "100%", fontSize: 11, padding: "6px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" };
   const linkBtn: CSSProperties = { background: "none", border: "none", padding: "3px 0", cursor: "pointer", fontSize: 9, fontWeight: 600, color: "var(--text3)", textAlign: "left" };
   const conf = Math.round((propuesta.confianza ?? 0) * 100);
-  const confCol = (propuesta.confianza ?? 0) >= ALTA ? "#22c55e" : (propuesta.confianza ?? 0) >= MEDIA ? "#f59e0b" : "var(--text2)";
+  const confCol = (propuesta.confianza ?? 0) >= ALTA ? "var(--green)" : (propuesta.confianza ?? 0) >= MEDIA ? "var(--amber)" : "var(--text2)";
 
   return (
     <div className="pc op" style={{padding:"2px 16px 12px"}}>
@@ -409,7 +409,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           <div style={{marginBottom:8}}>
             <label style={{...lbl,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
               <span>Detalle</span>
-              <span style={{fontWeight:600,color:detalle.length>=80?"#ef4444":"var(--text3)"}}>{detalle.length}/80</span>
+              <span style={{fontWeight:600,color:detalle.length>=80?"var(--red)":"var(--text3)"}}>{detalle.length}/80</span>
             </label>
             <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} placeholder="Qué se vendió o prestó (se imprime en la boleta)" style={inp} />
           </div>
@@ -419,9 +419,9 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             <div>
               <label style={lbl}>Tipo</label>
               <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
-                {([["exenta","Exenta · 41","#5b9cf6"],["afecta","Afecta · 39","#22c55e"]] as const).map(([k,l,c])=>{
+                {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--green)"]] as const).map(([k,l,c])=>{
                   const active = tipo===k;
-                  return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:9,fontWeight:700,padding:"6px 12px",border:"none",cursor:active?"default":"pointer",background:active?`${c}33`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
+                  return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:9,fontWeight:700,padding:"6px 12px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}
               </div>
             </div>
@@ -429,7 +429,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
               <label style={lbl}>Monto</label>
               <input type="number" value={total} onChange={e=>setTotal(Math.round(Number(e.target.value)||0))} style={{...inp,fontWeight:700,fontSize:13,textAlign:"right"}} />
             </div>
-            <div style={{fontSize:9,fontWeight:600,color:conflicto?"#f59e0b":"var(--text3)",paddingBottom:8,textAlign:"right",whiteSpace:"nowrap"}}>
+            <div style={{fontSize:9,fontWeight:600,color:conflicto?"var(--amber)":"var(--text3)",paddingBottom:8,textAlign:"right",whiteSpace:"nowrap"}}>
               {conflicto ? "⚠ afecta con IVA $0" : isAfecta ? <>neto {fmt(neto)} · IVA {fmt(iva)}</> : "exenta · sin IVA"}
             </div>
           </div>
@@ -437,16 +437,16 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           {/* Comprador + forma de pago: progresivo por 135 UF (el 95% de las tx no lo necesita) */}
           {receptorAbierto ? (
             <div style={{marginBottom:8}}>
-              <label style={lbl}>Comprador{requiereReceptor && <span style={{color:"#f59e0b",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
+              <label style={lbl}>Comprador{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:6}}>
-                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" style={{...inp,borderColor:!rutValido?"#ef4444":requiereReceptor&&!rutTrim?"#f59e0b":"var(--border)"}} />
+                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
                 <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" style={inp} />
-                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"#f59e0b":"var(--border)"}}>
+                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
                   <option value="">Medio de pago…</option>
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              {!rutValido && <div style={{fontSize:10,color:"#ef4444",marginTop:2}}>RUT no válido</div>}
+              {!rutValido && <div style={{fontSize:10,color:"var(--red)",marginTop:2}}>RUT no válido</div>}
               {showMasDatos ? (
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
                   <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />
@@ -474,7 +474,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         <div style={{flex:1}} />
         <button onClick={handleAprobar} disabled={busy || !puedeStagear}
           title={!puedeStagear ? "Completa el detalle, el monto y —sobre 135 UF— RUT, nombre y medio de pago" : undefined}
-          style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"#22c55e",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
+          style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"var(--green)",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {busy ? "..." : "Poner listo"}
         </button>

@@ -111,11 +111,11 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
     width: "100%",
     height: compact ? 34 : 48,
     borderRadius: compact ? 10 : 16,
-    border: "1px solid rgba(255,255,255,0.09)",
-    background: "rgba(255,255,255,0.032)",
+    border: "1px solid var(--border, rgba(255,255,255,.06))",
+    background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
     padding: compact ? "0 10px" : "0 16px",
     fontSize: compact ? 12 : 15,
-    color: "#ffffff",
+    color: "var(--text, #e8eaf0)",
     outline: "none",
     transition: "all 160ms ease",
     boxSizing: "border-box" as const,
@@ -124,7 +124,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
   return (
     <>
       <style>{`
-        .ef-input::placeholder { color: rgba(255,255,255,0.20); }
+        .ef-input::placeholder { color: color-mix(in srgb, var(--text, #e8eaf0) 32%, transparent); }
         .ef-logo-card .ef-logo-fade,
         .ef-logo-card .ef-logo-actions { opacity: 0; }
         .ef-logo-card:hover .ef-logo-fade,
@@ -140,9 +140,9 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
       {/* CARD 1: DATOS DEL EMISOR */}
       <div style={{
         borderRadius: compact ? 14 : 22,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(255,255,255,0.025)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+        border: "1px solid var(--border, rgba(255,255,255,.06))",
+        background: "color-mix(in srgb, var(--text, #e8eaf0) 3%, transparent)",
+        boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
       }}>
         <div style={{
           maxWidth: 1180,
@@ -162,7 +162,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
               borderRadius: compact ? 10 : 16,
               border: "1px solid rgba(232,85,62,0.25)",
               background: "rgba(232,85,62,0.12)",
-              color: "#FDBA74",
+              color: "var(--accent, #E8553E)",
             }}>
               <svg viewBox="0 0 24 24" fill="none" width={compact ? 16 : 20} height={compact ? 16 : 20} aria-hidden="true">
                 <path d="M5 21V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v17" stroke="currentColor" strokeWidth="1.8" />
@@ -174,7 +174,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
                 <h3 style={{
                   fontSize: compact ? 15 : 22, fontWeight: 700, lineHeight: 1.2,
-                  letterSpacing: "-0.04em", color: "#ffffff",
+                  letterSpacing: "-0.04em", color: "var(--text, #e8eaf0)",
                 }}>
                   Datos del emisor
                 </h3>
@@ -185,14 +185,14 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                   background: "rgba(232,85,62,0.15)",
                    padding: compact ? "2px 7px" : "4px 10px",
                    fontSize: compact ? 9 : 11, fontWeight: 700,
-                  color: "#FDBA74",
+                  color: "var(--accent, #E8553E)",
                 }}>
                   Requerido
                 </span>
               </div>
               <p style={{
                 marginTop: compact ? 3 : 8, fontSize: compact ? 10 : 14, lineHeight: 1.35,
-                color: "rgba(255,255,255,0.45)",
+                color: "var(--text3, #697080)",
               }}>
                 Información tributaria que aparecerá en tus documentos.
               </p>
@@ -223,15 +223,15 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                   </div>
                 </div>
               ) : (
-                <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "#FDBA74", overflow: "hidden", textAlign: "center" }}>
+                <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "var(--accent, #E8553E)", overflow: "hidden", textAlign: "center" }}>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: compact ? 9 : 10, fontWeight: 750, lineHeight: 1.15 }}>
                     <span>{logoPending ? "Subiendo..." : "Subir logo"}</span>
-                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "#fca5a5" : "rgba(255,255,255,.42)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
+                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "var(--red, #ef4444)" : "var(--text3, #697080)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
                   </span>
                 </div>
               )}
               {hasLogo && logoStatus && (
-                <div style={{ marginTop: 5, maxWidth: compact ? 118 : 150, color: logoStatus === "Logo guardado" ? "#86EFAC" : "#fca5a5", fontSize: compact ? 8 : 9, fontWeight: 700, lineHeight: 1.2, textAlign: "center" }}>
+                <div style={{ marginTop: 5, maxWidth: compact ? 118 : 150, color: logoStatus === "Logo guardado" ? "var(--green, #22c55e)" : "var(--red, #ef4444)", fontSize: compact ? 8 : 9, fontWeight: 700, lineHeight: 1.2, textAlign: "center" }}>
                   {logoStatus}
                 </div>
               )}
@@ -251,15 +251,15 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 onChange={(e) => setRut(e.target.value)}
                 onBlur={(e) => {
                   if (rut) setRut(formatRut(rut));
-                  if (rutOk) { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }
+                  if (rutOk) { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }
                 }}
                 placeholder="12.345.678-9"
                 className="ef-input"
                 style={{
                   ...inputBase,
-                  border: rutOk ? "1px solid rgba(255,255,255,0.09)" : "1px solid rgba(239,68,68,0.80)",
+                  border: rutOk ? "1px solid var(--border, rgba(255,255,255,.06))" : "1px solid color-mix(in srgb, var(--red, #ef4444) 80%, transparent)",
                 }}
-                onFocus={(e) => { if (rutOk) e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
+                onFocus={(e) => { if (rutOk) e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
               />
             </Field>
 
@@ -271,8 +271,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Mi Empresa SpA"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -284,8 +284,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Servicios de software"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -297,8 +297,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Av. Apoquindo 123"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -310,8 +310,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Las Condes"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -323,8 +323,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="sii@miempresa.cl"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "rgba(255,255,255,0.055)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.09)"; e.target.style.background = "rgba(255,255,255,0.032)"; }}
+                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
           </div>
@@ -334,10 +334,10 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
       {/* CARD 2: TIPO DE CONTRIBUYENTE */}
       <div style={{
         borderRadius: compact ? 14 : 18,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.035)",
+        border: "1px solid var(--border, rgba(255,255,255,.06))",
+        background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
         padding: compact ? 10 : 24,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
       }}>
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -345,11 +345,11 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
         }}>
           <div>
             <div style={{
-              fontSize: compact ? 12 : 13, fontWeight: 700, letterSpacing: "-0.02em", color: "#ffffff",
+              fontSize: compact ? 12 : 13, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text, #e8eaf0)",
             }}>
               Tipo de contribuyente
             </div>
-            <div style={{ marginTop: 2, fontSize: compact ? 10 : 11, color: "rgba(255,255,255,0.50)" }}>
+            <div style={{ marginTop: 2, fontSize: compact ? 10 : 11, color: "var(--text2, #8b92a3)" }}>
               Define el tipo de boleta por defecto.
             </div>
           </div>
@@ -357,17 +357,17 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
           <span style={{
             borderRadius: 9999,
             border: `1px solid ${
-              tipoContribuyente === "afecto" ? "rgba(52,211,153,0.20)"
-                : tipoContribuyente === "exento" ? "rgba(101,184,255,0.20)"
+              tipoContribuyente === "afecto" ? "color-mix(in srgb, var(--green, #22c55e) 20%, transparent)"
+                : tipoContribuyente === "exento" ? "color-mix(in srgb, var(--blue, #5b9cf6) 20%, transparent)"
                 : "rgba(167,139,250,0.20)"
             }`,
             background: `${
-              tipoContribuyente === "afecto" ? "rgba(52,211,153,0.15)"
-                : tipoContribuyente === "exento" ? "rgba(101,184,255,0.15)"
+              tipoContribuyente === "afecto" ? "color-mix(in srgb, var(--green, #22c55e) 15%, transparent)"
+                : tipoContribuyente === "exento" ? "color-mix(in srgb, var(--blue, #5b9cf6) 15%, transparent)"
                 : "rgba(167,139,250,0.15)"
             }`,
             padding: compact ? "3px 8px" : "4px 10px", fontSize: compact ? 9 : 10, fontWeight: 700,
-            color: tipoContribuyente === "afecto" ? "#86EFAC" : tipoContribuyente === "exento" ? "#BFDBFE" : "#C4B5FD",
+            color: tipoContribuyente === "afecto" ? "var(--green, #22c55e)" : tipoContribuyente === "exento" ? "var(--blue, #5b9cf6)" : "color-mix(in srgb, #8b5cf6 60%, var(--text, #e8eaf0))",
           }}>
             {tipoContribuyente === "afecto" ? "AFECTO" : tipoContribuyente === "exento" ? "EXENTO" : "AUTO"}
           </span>
@@ -380,16 +380,16 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
             style={{
               borderRadius: 12,
               border: tipoContribuyente === "afecto"
-                ? "1px solid rgba(52,211,153,0.35)"
-                : "1px solid rgba(255,255,255,0.10)",
+                ? "1px solid color-mix(in srgb, var(--green, #22c55e) 35%, transparent)"
+                : "1px solid var(--border, rgba(255,255,255,.06))",
               background: tipoContribuyente === "afecto"
-                ? "rgba(52,211,153,0.18)"
-                : "rgba(255,255,255,0.035)",
+                ? "color-mix(in srgb, var(--green, #22c55e) 18%, transparent)"
+                : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
               padding: compact ? "7px 8px" : "12px 12px",
               fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "afecto" ? "#86EFAC" : "rgba(255,255,255,0.55)",
+              color: tipoContribuyente === "afecto" ? "var(--green, #22c55e)" : "var(--text2, #8b92a3)",
               boxShadow: tipoContribuyente === "afecto"
-                ? "0 14px 34px rgba(52,211,153,0.12)"
+                ? "0 14px 34px color-mix(in srgb, var(--green, #22c55e) 12%, transparent)"
                 : "none",
               cursor: "pointer",
               transition: "all 160ms ease",
@@ -408,13 +408,13 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
               borderRadius: 12,
               border: tipoContribuyente === "auto"
                 ? "1px solid rgba(167,139,250,0.35)"
-                : "1px solid rgba(255,255,255,0.10)",
+                : "1px solid var(--border, rgba(255,255,255,.06))",
               background: tipoContribuyente === "auto"
                 ? "rgba(167,139,250,0.18)"
-                : "rgba(255,255,255,0.035)",
+                : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
               padding: compact ? "7px 8px" : "12px 12px",
               fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "auto" ? "#C4B5FD" : "rgba(255,255,255,0.55)",
+              color: tipoContribuyente === "auto" ? "color-mix(in srgb, #8b5cf6 60%, var(--text, #e8eaf0))" : "var(--text2, #8b92a3)",
               boxShadow: tipoContribuyente === "auto"
                 ? "0 14px 34px rgba(167,139,250,0.12)"
                 : "none",
@@ -434,16 +434,16 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
             style={{
               borderRadius: 12,
               border: tipoContribuyente === "exento"
-                ? "1px solid rgba(101,184,255,0.35)"
-                : "1px solid rgba(255,255,255,0.10)",
+                ? "1px solid color-mix(in srgb, var(--blue, #5b9cf6) 35%, transparent)"
+                : "1px solid var(--border, rgba(255,255,255,.06))",
               background: tipoContribuyente === "exento"
-                ? "rgba(101,184,255,0.18)"
-                : "rgba(255,255,255,0.035)",
+                ? "color-mix(in srgb, var(--blue, #5b9cf6) 18%, transparent)"
+                : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
               padding: compact ? "7px 8px" : "12px 16px",
               fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "exento" ? "#BFDBFE" : "rgba(255,255,255,0.55)",
+              color: tipoContribuyente === "exento" ? "var(--blue, #5b9cf6)" : "var(--text2, #8b92a3)",
               boxShadow: tipoContribuyente === "exento"
-                ? "0 14px 34px rgba(101,184,255,0.12)"
+                ? "0 14px 34px color-mix(in srgb, var(--blue, #5b9cf6) 12%, transparent)"
                 : "none",
               cursor: "pointer",
               transition: "all 160ms ease",
@@ -459,17 +459,17 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
         <div style={{
           marginTop: compact ? 7 : 12,
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.10)",
+          border: "1px solid var(--border, rgba(255,255,255,.06))",
           background: "rgba(0,0,0,0.15)",
           padding: compact ? "6px 9px" : "8px 12px",
           fontSize: compact ? 9 : 11, lineHeight: compact ? 1.35 : 1.5,
-          color: "rgba(255,255,255,0.55)",
+          color: "var(--text2, #8b92a3)",
         }}>
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Afecto:</strong>{" "}
-          emite boletas con IVA 19% tipo 39.{" "}
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Exento:</strong>{" "}
-          emite boletas sin IVA tipo 41.{" "}
-          <strong style={{ color: "rgba(255,255,255,0.75)" }}>Auto:</strong>{" "}
+          <strong style={{ color: "var(--text, #e8eaf0)" }}>Afecto:</strong>{" "}
+          emite boletas con IVA 19%.{" "}
+          <strong style={{ color: "var(--text, #e8eaf0)" }}>Exento:</strong>{" "}
+          emite boletas sin IVA. Si vendes cripto o divisas (servicios exentos), eres exento.{" "}
+          <strong style={{ color: "var(--text, #e8eaf0)" }}>Auto:</strong>{" "}
           el clasificador decide por cada movimiento. Esto aplica por defecto para todos los clientes,
           salvo que configures un tipo distinto en cada cliente.
         </div>
@@ -489,7 +489,8 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
             height: 48,
             borderRadius: 12,
             border: "1px solid rgba(232,85,62,0.35)",
-            background: "linear-gradient(135deg, #E8553E, #cd5832)",
+            background: "linear-gradient(135deg, var(--accent, #E8553E), #cd5832)",
+            color: "#fff",
             boxShadow: "0 18px 38px rgba(232,85,62,0.28), inset 0 1px 0 rgba(255,255,255,0.22)",
             cursor: pending ? "not-allowed" : "pointer",
             opacity: pending ? 0.5 : 1,
@@ -544,16 +545,16 @@ function Field({
         marginBottom: compact ? 5 : 10,
         fontSize: compact ? 10 : 13,
         fontWeight: 600,
-        color: "rgba(255,255,255,0.48)",
+        color: "var(--text2, #8b92a3)",
       }}>
         {label}
-        {required && <span style={{ color: "#E8553E" }}>*</span>}
+        {required && <span style={{ color: "var(--accent, #E8553E)" }}>*</span>}
       </label>
 
       {children}
 
       {error && (
-        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 10 : 12, fontWeight: 500, color: "rgba(239,68,68,1)" }}>
+        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 10 : 12, fontWeight: 500, color: "var(--red, #ef4444)" }}>
           {error}
         </p>
       )}

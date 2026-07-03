@@ -36,6 +36,10 @@ interface PendientesResponse {
     bloqueadas: number;
     monto_total: number;
     monto_listo: number;
+    // Proveedor de boletas de la empresa (viaja en totales — Mesa.tsx arma este
+    // payload solo con items/totales/aprobadas_otros_tipos). El lote HOY solo
+    // emite con mock: con proveedor real se avisa y se bloquea el CTA.
+    boletas_proveedor?: "mock" | "sii_local" | "simpleapi" | null;
   };
   aprobadas_otros_tipos?: Record<string, number>;
 }
@@ -176,6 +180,12 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   const bloqueadasCount = data?.totales.bloqueadas ?? 0;
   const totalCount = data?.totales.total_pendientes ?? 0;
 
+  // El endpoint de lote solo emite con proveedor mock: con sii_local/simpleapi cada
+  // ítem fallaría después de confirmar. Se avisa antes y se bloquea el CTA.
+  const proveedorBoletas = data?.totales.boletas_proveedor ?? null;
+  const proveedorReal = proveedorBoletas === "sii_local" || proveedorBoletas === "simpleapi";
+  const proveedorNombre = proveedorBoletas === "sii_local" ? "SII Local" : proveedorBoletas === "simpleapi" ? "SimpleAPI" : null;
+
   const selectableItems = itemsList.filter(i => i.listo_emitir);
   const allSelected = selectableItems.length > 0 && selectableItems.every(i => selected.has(i.id));
 
@@ -211,6 +221,10 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
 
   async function handleEmitir() {
     if (selectedItems.length === 0) return;
+    if (proveedorReal) {
+      toast("La emisión masiva aún no está disponible para tu proveedor. Emite con Boleta única por ahora.", "error");
+      return;
+    }
     if (lockedByOther) {
       toast(lockMessage, "error");
       return;
@@ -247,6 +261,11 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
+        {proveedorReal && (
+          <div style={{ margin: "0 0 10px", padding: "10px 12px", borderRadius: 11, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.2)", color: "var(--amber, #f59e0b)", fontSize: 11, lineHeight: 1.5 }}>
+            La emisión masiva aún no está disponible para tu proveedor ({proveedorNombre}). Emite con Boleta única por ahora.
+          </div>
+        )}
         {/* Pills */}
         <div className="em-pills">
           <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
@@ -343,13 +362,14 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
             </div>
           )}
           <div className="r">
-            <button className="emit" onClick={() => setConfirmOpen(true)} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
+            <button className="emit" onClick={() => setConfirmOpen(true)} disabled={emitiendo || selectedCount === 0 || lockedByOther || proveedorReal}
+              title={proveedorReal ? `La emisión masiva aún no está disponible para tu proveedor (${proveedorNombre}). Emite con Boleta única por ahora.` : undefined}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? "Selecciona boletas" : `Emitir ${selectedCount}`}
+              {" "}{proveedorReal ? "Masivo no disponible" : lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? "Selecciona boletas" : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>

@@ -205,7 +205,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc.nombre_archivo}</span>
               {tipo === "telegram" && (
                 <button onClick={() => setViewImgDocId(selDoc.id)} title="Ver comprobante"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 600, color: "#5b9cf6", background: "rgba(91,156,246,.08)", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", flexShrink: 0 }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 600, color: "var(--blue)", background: "rgba(91,156,246,.08)", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", flexShrink: 0 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
                   Comprobante
                 </button>
@@ -217,13 +217,13 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
             <div>
               {tipo === "boleta" && (
                 <div style={{ padding: "0 16px 14px" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 9, fontWeight: 800, padding: "4px 9px", borderRadius: 8, background: "rgba(34,197,94,.12)", color: "#22c55e" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 9, fontWeight: 800, padding: "4px 9px", borderRadius: 8, background: "rgba(34,197,94,.12)", color: "var(--green)" }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7" /></svg>
                     Emitida · en Boletas
                   </span>
                   <div style={{ marginTop: 8, fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>Esta boleta se emitió directo al SII. Para corregir o anular, escríbenos a soporte.</div>
                   <button onClick={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))}
-                    style={{ marginTop: 10, fontSize: 10, fontWeight: 600, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>Ver en Boletas →</button>
+                    style={{ marginTop: 10, fontSize: 10, fontWeight: 600, color: "var(--accent)", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>Ver en Boletas →</button>
                 </div>
               )}
 
@@ -249,9 +249,9 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     <div style={{ padding: "0 16px 14px", fontSize: 10, color: "var(--text2)" }}>{selDoc.estado === "procesando" ? "Procesando movimientos…" : "Sin propuestas pendientes en este documento."}</div>
                   ) : (
                     <>
-                      <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="#22c55e" clientes={clientes} empresaId={empresaId} onAction={reload} empresaTipoContribuyente={empresaTipo} empresaGiro={empresaGiro} />
-                      <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="#f59e0b" clientes={clientes} empresaId={empresaId} onAction={reload} empresaTipoContribuyente={empresaTipo} empresaGiro={empresaGiro} />
-                      <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="#E8553E" clientes={clientes} empresaId={empresaId} onAction={reload} empresaTipoContribuyente={empresaTipo} empresaGiro={empresaGiro} />
+                      <ConfianzaGroupSection tipo="alta" label="Alta confianza" propuestas={alta} color="var(--green)" clientes={clientes} empresaId={empresaId} onAction={reload} empresaTipoContribuyente={empresaTipo} empresaGiro={empresaGiro} />
+                      <ConfianzaGroupSection tipo="media" label="Requiere revisión" propuestas={media} color="var(--amber)" clientes={clientes} empresaId={empresaId} onAction={reload} empresaTipoContribuyente={empresaTipo} empresaGiro={empresaGiro} />
+                      <ConfianzaGroupSection tipo="baja" label="Falta información" propuestas={baja} color="var(--accent)" clientes={clientes} empresaId={empresaId} onAction={reload} empresaTipoContribuyente={empresaTipo} empresaGiro={empresaGiro} />
                     </>
                   )}
                 </>
@@ -304,7 +304,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
               <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} title="Cerrar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
             </div>
             {editarScreen === "mapear" ? (
-              <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "#f6f7fb", fontFamily: "'DM Sans','Inter',sans-serif" }}>
+              <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif" }}>
                 <FieldMapperBody
                   documentoId={editarCartolaId}
                   variant="embedded"
@@ -322,7 +322,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                 )}
                 <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} />
                 <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
-                  <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "#E8553E", border: "none", borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}>Cerrar</button>
+                  <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}>Cerrar</button>
                 </div>
               </>
             )}

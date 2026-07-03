@@ -73,7 +73,7 @@ export default function TabsV5({
         }
         .tab-flow-arrow { overflow: hidden; }
         .tab-flow-arrow.active {
-          color: #fff !important;
+          color: var(--text) !important;
           background: rgba(232,85,62,.14) !important;
           box-shadow: inset 0 0 0 1px rgba(232,85,62,.20), 0 0 16px rgba(232,85,62,.20) !important;
         }
@@ -90,7 +90,7 @@ export default function TabsV5({
           align-items: center;
           justify-content: center;
           letter-spacing: -0.24em;
-          color: #fff;
+          color: var(--text);
         }
         .tab-flow-active span {
           display: inline-block;
@@ -112,7 +112,7 @@ export default function TabsV5({
           const arrowActive = i > 0 && tabs[i - 1].id === tab;
           return (
             <React.Fragment key={t.id}>
-            {i > 0 && <span data-tab-arrow="true" aria-hidden="true" className={`tab-flow-arrow${arrowActive ? " active" : ""}`} style={{position:"relative",zIndex:2,width:30,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,color:arrowActive ? "#fff" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:900,boxShadow:"none"}}><span className="tab-flow-static">››</span><span className="tab-flow-active"><span>›</span><span>›</span></span></span>}
+            {i > 0 && <span data-tab-arrow="true" aria-hidden="true" className={`tab-flow-arrow${arrowActive ? " active" : ""}`} style={{position:"relative",zIndex:2,width:30,height:26,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,color:arrowActive ? "var(--text)" : "var(--text3)",flexShrink:0,background:arrowActive ? "transparent" : "var(--bg-muted)",lineHeight:1,fontWeight:900,boxShadow:"none"}}><span className="tab-flow-static">››</span><span className="tab-flow-active"><span>›</span><span>›</span></span></span>}
             <button ref={el => { btnRefs.current[i] = el; }} onClick={() => setTab(t.id)}
               style={{
                 position:"relative",zIndex:2,padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",
@@ -141,7 +141,7 @@ export default function TabsV5({
           </span>
           <span style={{fontSize:9,color:"var(--text3)"}}>·</span>
           <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
-            <span style={{fontSize:13,fontWeight:300,color:"#b4f027"}}>{aprobCount}</span>
+            <span style={{fontSize:13,fontWeight:300,color:"var(--lime)"}}>{aprobCount}</span>
             <span style={{fontSize:9}}>aprobados</span>
           </span>
           <span style={{fontSize:9,color:"var(--text2)",marginLeft:4}}>{fecha}</span>

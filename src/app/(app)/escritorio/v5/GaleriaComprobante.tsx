@@ -84,8 +84,8 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
 
   // Estética frosted, alineada con el pill de zoom del editor y el botón Cerrar del visor.
   const frost = {
-    background: "rgba(20,20,26,.65)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-    border: "1px solid rgba(255,255,255,.08)", color: "var(--text2)",
+    background: "color-mix(in srgb, var(--bg) 65%, transparent)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+    border: "1px solid var(--border)", color: "var(--text2)",
   } as const;
   const arrow = {
     position: "absolute", top: "50%", transform: "translateY(-50%)", width: 38, height: 38,
@@ -107,7 +107,7 @@ export default function GaleriaComprobante({ images, alt = "comprobante" }: {
         onMouseMove={(e) => { if (dragRef.current && zoom > 1) setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y }); }}
         onMouseUp={() => { dragRef.current = null; setDragging(false); }}
         onMouseLeave={() => { dragRef.current = null; setDragging(false); }}
-        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 18, border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
+        style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 18, border: "1px solid color-mix(in srgb, var(--text) 10%, transparent)", boxShadow: "0 12px 40px rgba(0,0,0,.32)", transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default", transition: dragging ? "none" : "transform .12s ease", userSelect: "none" }} />
 
       {/* Contador + flechas (posición FIJA en los bordes del cuadro → no se mueven al
           cambiar de foto). El cuadro lo achica VisualizarArchivo para que queden cerca. */}

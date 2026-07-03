@@ -22,8 +22,8 @@ type TeamPerson = EquipoPersona & {
 };
 
 function statusColor(status: PresenceStatus) {
-  if (status === "active") return "#22c55e";
-  if (status === "idle") return "#f59e0b";
+  if (status === "active") return "var(--green)";
+  if (status === "idle") return "var(--amber)";
   return "var(--text3)";
 }
 
@@ -152,11 +152,11 @@ export default function TeamBusinessPanel({
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 10 }}>
           <span style={{ fontSize: 11, fontWeight: 850, color: "var(--text)" }}>Equipo</span>
-          <span style={{ fontSize: 9, fontWeight: 800, color: connected > 0 ? "#22c55e" : "var(--text3)" }}>{connected} conectados</span>
+          <span style={{ fontSize: 9, fontWeight: 800, color: connected > 0 ? "var(--green)" : "var(--text3)" }}>{connected} conectados</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {visible.map((persona) => (
-            <span key={persona.id} title={`${persona.nombre} · ${statusLabel(persona.status)}`} style={{ position: "relative", width: 28, height: 28, borderRadius: 999, display: "grid", placeItems: "center", background: persona.id === usuarioId ? "rgba(232,85,62,.14)" : "var(--bg-muted)", border: persona.id === usuarioId ? "1px solid rgba(232,85,62,.28)" : "1px solid var(--border)", color: persona.id === usuarioId ? "#E8553E" : "var(--text2)", fontSize: 9, fontWeight: 900, flexShrink: 0 }}>
+            <span key={persona.id} title={`${persona.nombre} · ${statusLabel(persona.status)}`} style={{ position: "relative", width: 28, height: 28, borderRadius: 999, display: "grid", placeItems: "center", background: persona.id === usuarioId ? "rgba(232,85,62,.14)" : "var(--bg-muted)", border: persona.id === usuarioId ? "1px solid rgba(232,85,62,.28)" : "1px solid var(--border)", color: persona.id === usuarioId ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 900, flexShrink: 0 }}>
               {persona.iniciales}
               <span style={{ position: "absolute", right: 0, bottom: 0, width: 8, height: 8, borderRadius: 999, background: statusColor(persona.status), border: "2px solid var(--surface)" }} />
             </span>
@@ -185,7 +185,7 @@ export default function TeamBusinessPanel({
           {/* Comprar persona adicional vive en /planes (el wizard de empresa no tiene ese paso) */}
           <a
             href="/planes"
-            style={{ marginTop: 10, width: "100%", height: 32, borderRadius: 10, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)", color: "#E8553E", fontSize: 10, fontWeight: 850, cursor: "pointer", display: "grid", placeItems: "center", textDecoration: "none", boxSizing: "border-box" }}
+            style={{ marginTop: 10, width: "100%", height: 32, borderRadius: 10, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)", color: "var(--accent)", fontSize: 10, fontWeight: 850, cursor: "pointer", display: "grid", placeItems: "center", textDecoration: "none", boxSizing: "border-box" }}
           >
             Agregar persona
           </a>

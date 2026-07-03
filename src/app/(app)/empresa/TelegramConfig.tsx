@@ -77,9 +77,9 @@ export default function TelegramConfig() {
   return (
     <div style={{
       borderRadius: 22,
-      border: "1px solid rgba(255,255,255,0.08)",
-      background: "rgba(255,255,255,0.025)",
-      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+      border: "1px solid var(--border, rgba(255,255,255,.06))",
+      background: "color-mix(in srgb, var(--text, #e8eaf0) 3%, transparent)",
+      boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
     }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 36px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24 }}>
@@ -89,7 +89,7 @@ export default function TelegramConfig() {
             borderRadius: 16,
             border: "1px solid rgba(232,85,62,0.25)",
             background: "rgba(232,85,62,0.12)",
-            color: "#FDBA74",
+            color: "var(--accent, #E8553E)",
           }}>
             <svg viewBox="0 0 24 24" fill="none" width={20} height={20}>
               <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
@@ -97,22 +97,22 @@ export default function TelegramConfig() {
           </div>
           <div style={{ minWidth: 0, paddingTop: 4, flex: 1 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "#ffffff" }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "var(--text, #e8eaf0)" }}>
                 Bot de Telegram
               </h3>
               {!loading && (
                 <span style={{
                   display: "inline-block", borderRadius: 9999,
                   padding: "2px 10px", fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${!enPlan ? "rgba(251,191,36,0.30)" : conectado ? "rgba(52,211,153,0.25)" : "rgba(251,113,133,0.20)"}`,
-                  background: !enPlan ? "rgba(251,191,36,0.12)" : conectado ? "rgba(52,211,153,0.12)" : "rgba(251,113,133,0.14)",
-                  color: !enPlan ? "#FCD34D" : conectado ? "#6ee7b7" : "#FDA4AF",
+                  border: `1px solid ${!enPlan ? "color-mix(in srgb, var(--amber, #f59e0b) 30%, transparent)" : conectado ? "color-mix(in srgb, var(--green, #22c55e) 25%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 20%, transparent)"}`,
+                  background: !enPlan ? "color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent)" : conectado ? "color-mix(in srgb, var(--green, #22c55e) 12%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 14%, transparent)",
+                  color: !enPlan ? "var(--amber, #f59e0b)" : conectado ? "var(--green, #22c55e)" : "var(--red, #ef4444)",
                 }}>
                   {!enPlan ? "Pro" : conectado ? "Conectado" : "Sin conectar"}
                 </span>
               )}
             </div>
-            <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
+            <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "var(--text3, #697080)" }}>
               Manda fotos de comprobantes por chat y caen en Agregados, listas para boletear.
             </p>
           </div>
@@ -120,8 +120,8 @@ export default function TelegramConfig() {
 
         <div style={{
           borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: conectado ? "rgba(52,211,153,0.04)" : "rgba(255,255,255,0.03)",
+          border: "1px solid var(--border, rgba(255,255,255,.06))",
+          background: conectado ? "color-mix(in srgb, var(--green, #22c55e) 6%, transparent)" : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
           padding: "14px 18px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
         }}>
@@ -129,13 +129,13 @@ export default function TelegramConfig() {
             <div style={{
               width: 22, height: 22, borderRadius: "50%",
               display: "grid", placeItems: "center",
-              color: conectado ? "#34d399" : "#fb7185",
-              border: `1px solid ${conectado ? "rgba(52,211,153,0.6)" : "rgba(251,113,133,0.6)"}`,
+              color: conectado ? "var(--green, #22c55e)" : "var(--red, #ef4444)",
+              border: `1px solid ${conectado ? "color-mix(in srgb, var(--green, #22c55e) 60%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 60%, transparent)"}`,
               fontSize: 12, fontWeight: 900, flexShrink: 0,
             }}>
               {conectado ? "✓" : "!"}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 760, color: "#eaf0f8" }}>
+            <div style={{ fontSize: 13, fontWeight: 760, color: "var(--text, #e8eaf0)" }}>
               {loading
                 ? "Cargando…"
                 : !botConfigured
@@ -152,8 +152,8 @@ export default function TelegramConfig() {
             <a
               href="/planes"
               style={{
-                height: 36, borderRadius: 10, border: "1px solid rgba(251,191,36,0.35)",
-                background: "rgba(251,191,36,0.12)", color: "#FCD34D",
+                height: 36, borderRadius: 10, border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 35%, transparent)",
+                background: "color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent)", color: "var(--amber, #f59e0b)",
                 padding: "0 14px", fontSize: 12, fontWeight: 600,
                 cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
                 textDecoration: "none", whiteSpace: "nowrap",
@@ -171,7 +171,7 @@ export default function TelegramConfig() {
                 rel="noreferrer"
                 style={{
                   height: 36, borderRadius: 10, border: "none",
-                  background: "#E8553E", color: "#fff",
+                  background: "var(--accent, #E8553E)", color: "#fff",
                   padding: "0 14px", fontSize: 12, fontWeight: 600,
                   cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
                   textDecoration: "none", whiteSpace: "nowrap",
@@ -186,9 +186,9 @@ export default function TelegramConfig() {
                 disabled={generando}
                 style={{
                   height: 36, borderRadius: 10,
-                  border: conectado ? "1px solid rgba(255,255,255,0.13)" : "none",
-                  background: conectado ? "rgba(255,255,255,0.045)" : "#E8553E",
-                  color: conectado ? "#eff3fa" : "#fff",
+                  border: conectado ? "1px solid var(--border, rgba(255,255,255,.06))" : "none",
+                  background: conectado ? "color-mix(in srgb, var(--text, #e8eaf0) 5%, transparent)" : "var(--accent, #E8553E)",
+                  color: conectado ? "var(--text, #e8eaf0)" : "#fff",
                   padding: "0 14px", fontSize: 12, fontWeight: 600,
                   cursor: "pointer", opacity: generando ? 0.5 : 1,
                   whiteSpace: "nowrap",
@@ -200,8 +200,8 @@ export default function TelegramConfig() {
           )}
         </div>
 
-        <div style={{ marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-          Manda <strong style={{ color: "rgba(255,255,255,0.7)" }}>screenshots nítidos</strong> — una foto de
+        <div style={{ marginTop: 12, fontSize: 11, color: "var(--text3, #697080)", lineHeight: 1.5 }}>
+          Manda <strong style={{ color: "var(--text2, #8b92a3)" }}>screenshots nítidos</strong> — una foto de
           la pantalla con reflejos se lee peor. Desde Telegram solo se suben comprobantes, no se emite nada.
         </div>
       </div>

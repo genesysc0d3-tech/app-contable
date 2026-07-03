@@ -142,20 +142,20 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
           {queue.map(q => {
             const isGrande = q.category === "grande";
             return (
-              <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 6, background: "rgba(255,255,255,.02)" }}>
+              <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 6, background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {editingId === q.id ? (
                     <div style={{ display: "flex", gap: 4 }}>
                       <input value={editName} onChange={e => setEditName(e.target.value)}
-                        style={{ flex: 1, fontSize: 10, background: "var(--bg-muted)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 4, color: "var(--text)", padding: "2px 6px" }} />
-                      <button onClick={() => saveName(q.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#22c55e", fontSize: 10 }}>✓</button>
+                        style={{ flex: 1, fontSize: 10, background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text)", padding: "2px 6px" }} />
+                      <button onClick={() => saveName(q.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--green)", fontSize: 10 }}>✓</button>
                     </div>
                   ) : (
                     <>
                       <div style={{ fontSize: 10, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {isGrande ? `${q.customName} (${(q.file.size / 1024 / 1024).toFixed(1)} MB)` : q.customName}
                       </div>
-                      <div style={{ fontSize: 8, color: q.error ? "#E8553E" : isGrande ? "#f59e0b" : "var(--text2)" }}>
+                      <div style={{ fontSize: 8, color: q.error ? "var(--accent)" : isGrande ? "var(--amber)" : "var(--text2)" }}>
                         {q.error ?? (isGrande ? "Procesa solo" : `${(q.file.size / 1024).toFixed(0)} KB`)}
                       </div>
                     </>
@@ -175,8 +175,8 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
             <button onClick={handleUploadAll} disabled={uploading || numSubibles === 0}
               style={{
-                flex: 1, border: "none", borderRadius: 6, background: "linear-gradient(135deg,#b4f027,#22c55e)",
-                padding: "7px 10px", fontSize: 10, fontWeight: 600, color: "#000", cursor: "pointer",
+                flex: 1, border: "none", borderRadius: 6, background: "linear-gradient(135deg,var(--lime),var(--green))",
+                padding: "7px 10px", fontSize: 10, fontWeight: 600, color: "var(--bg)", cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
                 opacity: uploading || numSubibles === 0 ? .6 : 1, transition: "all .2s",
               }}>
@@ -184,7 +184,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
               {uploading ? "Subiendo..." : `Subir todo (${numSubibles} archivo${numSubibles !== 1 ? "s" : ""})`}
             </button>
             <button onClick={() => setQueue([])}
-              style={{ padding: "7px 12px", border: "none", borderRadius: 6, background: "#1a1c24", fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,.4)", cursor: "pointer" }}>
+              style={{ padding: "7px 12px", border: "none", borderRadius: 6, background: "var(--surface2)", fontSize: 10, fontWeight: 600, color: "color-mix(in srgb, var(--text) 45%, transparent)", cursor: "pointer" }}>
               Cancelar
             </button>
           </div>

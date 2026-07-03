@@ -80,13 +80,13 @@ export default function EmpresaPopup({
           pointer-events: none;
           background:
             radial-gradient(circle at 8% 8%, rgba(232, 85, 62, 0.12), transparent 28%),
-            radial-gradient(circle at 84% 14%, rgba(101, 184, 255, 0.10), transparent 32%),
-            #070d15;
+            radial-gradient(circle at 84% 14%, color-mix(in srgb, var(--blue, #5b9cf6) 10%, transparent), transparent 32%),
+            var(--bg, #070d15);
         }
 
         .ep-fake-sidebar {
-          background: rgba(5, 9, 15, 0.9);
-          border-right: 1px solid rgba(255, 255, 255, 0.06);
+          background: var(--surface, rgba(5, 9, 15, 0.9));
+          border-right: 1px solid var(--border, rgba(255, 255, 255, 0.06));
           padding: 28px 18px;
         }
 
@@ -94,7 +94,7 @@ export default function EmpresaPopup({
           width: 34px;
           height: 34px;
           border-radius: 12px;
-          background: linear-gradient(145deg, #E8553E, #cd5832);
+          background: linear-gradient(145deg, var(--accent, #E8553E), #cd5832);
           box-shadow: 0 0 32px rgba(232, 85, 62, 0.28);
           margin-bottom: 38px;
         }
@@ -102,21 +102,21 @@ export default function EmpresaPopup({
         .ep-fake-line {
           height: 42px;
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.045);
-          border: 1px solid rgba(255, 255, 255, 0.04);
+          background: var(--bg-muted, rgba(255, 255, 255, 0.045));
+          border: 1px solid var(--border, rgba(255, 255, 255, 0.04));
           margin-bottom: 12px;
         }
 
         .ep-fake-main {
           padding: 28px;
-          background: linear-gradient(180deg, rgba(8, 14, 24, 0.7), rgba(8, 14, 24, 0.95));
+          background: linear-gradient(180deg, color-mix(in srgb, var(--bg, #080e18) 70%, transparent), var(--bg, #080e18));
         }
 
         .ep-fake-card {
           height: 130px;
           max-width: 760px;
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+          background: var(--bg-muted, rgba(255, 255, 255, 0.035));
           border-radius: 22px;
           margin: 72px 0 18px;
         }
@@ -200,7 +200,7 @@ export default function EmpresaPopup({
         }
 
         .ep-step-card.active {
-          color: #ffffff;
+          color: var(--text, #ffffff);
           background:
             radial-gradient(circle at 20% 20%, rgba(232, 85, 62, 0.30), transparent 60%),
             linear-gradient(135deg, rgba(232, 85, 62, 0.50), rgba(232, 85, 62, 0.18));
@@ -224,8 +224,8 @@ export default function EmpresaPopup({
         }
 
         .ep-step-card.active .ep-step-number {
-          background: rgba(255, 255, 255, 0.16);
-          color: #ffffff;
+          background: color-mix(in srgb, var(--text, #e8eaf0) 16%, transparent);
+          color: var(--text, #ffffff);
         }
 
         .ep-step-icon {
@@ -264,8 +264,8 @@ export default function EmpresaPopup({
           border-radius: 50%;
           display: grid;
           place-items: center;
-          background: linear-gradient(145deg, #E8553E, #cd5832);
-          color: var(--text);
+          background: linear-gradient(145deg, var(--accent, #E8553E), #cd5832);
+          color: #fff;
           font-weight: 900;
           margin-bottom: 8px;
           font-size: 12px;
@@ -276,7 +276,7 @@ export default function EmpresaPopup({
           font-weight: 650;
           font-size: 12px;
           margin-bottom: 4px;
-          color: #ffffff;
+          color: var(--text, #ffffff);
         }
 
         .ep-help-text {
@@ -287,7 +287,7 @@ export default function EmpresaPopup({
         }
 
         .ep-help-link {
-          color: #E8553E;
+          color: var(--accent, #E8553E);
           font-size: 11px;
           font-weight: 650;
           cursor: pointer;
@@ -315,7 +315,7 @@ export default function EmpresaPopup({
         .ep-help-toggle:hover {
           border-color: rgba(232, 85, 62, 0.38);
           background: rgba(232, 85, 62, 0.06);
-          color: #E8553E;
+          color: var(--accent, #E8553E);
         }
 
         .ep-help-switch {
@@ -344,7 +344,7 @@ export default function EmpresaPopup({
 
         .ep-help-toggle.active .ep-help-switch-dot {
           transform: translateX(14px);
-          background: #E8553E;
+          background: var(--accent, #E8553E);
         }
 
         .ep-main-panel {
@@ -530,7 +530,8 @@ export default function EmpresaPopup({
         .ep-footer-btn.primary {
           min-width: 150px;
           border-color: rgba(232, 85, 62, 0.55);
-          background: linear-gradient(135deg, #E8553E, #cd5832);
+          color: #fff;
+          background: linear-gradient(135deg, var(--accent, #E8553E), #cd5832);
           box-shadow:
             0 16px 34px rgba(232, 85, 62, 0.28),
             inset 0 1px 0 rgba(255, 255, 255, 0.22);

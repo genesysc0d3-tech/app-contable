@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { Building2, MessageCircle, ReceiptText, Users, CreditCard } from "lucide-react";
 import { obtenerFacturacion, type ResumenCupos, type FacturacionData } from "./actions";
 
-const RED = "#E8553E";
+const RED = "var(--accent)";
 
 function fmt(value: number) {
   return Math.max(0, Math.round(value)).toLocaleString("es-CL");
@@ -17,9 +17,9 @@ function pct(uso: number, total: number) {
 function estadoColor(disponible: number, total: number) {
   if (total <= 0) return "var(--text3)";
   const restante = disponible / total;
-  if (restante <= 0.08) return "#ef4444";
-  if (restante <= 0.2) return "#f59e0b";
-  return "#22c55e";
+  if (restante <= 0.08) return "var(--red)";
+  if (restante <= 0.2) return "var(--amber)";
+  return "var(--green)";
 }
 function fmtFecha(iso: string) {
   try {
@@ -40,7 +40,7 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h2 style={{ fontSize: 12, fontWeight: 900, color: "var(--text)" }}>Uso del mes</h2>
-        <div style={{ border: `1px solid ${RED}55`, background: `${RED}10`, borderRadius: 9, padding: "3px 10px", textAlign: "center", flexShrink: 0 }}>
+        <div style={{ border: `1px solid color-mix(in srgb, ${RED} 33%, transparent)`, background: `color-mix(in srgb, ${RED} 6%, transparent)`, borderRadius: 9, padding: "3px 10px", textAlign: "center", flexShrink: 0 }}>
           <div style={{ fontSize: 7, fontWeight: 800, letterSpacing: ".1em", color: "var(--text3)" }}>PLAN</div>
           <div style={{ fontSize: 12, fontWeight: 850, color: RED, lineHeight: 1.1, textTransform: "capitalize" }}>{resumen.plan ?? "Prueba"}</div>
         </div>
@@ -99,7 +99,7 @@ function PlanSide({ resumen, fact }: { resumen: ResumenCupos; fact: FacturacionD
           <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", color: RED, background: "rgba(232,85,62,.1)", border: "1px solid var(--border)" }}><CreditCard size={13} strokeWidth={2.2} /></span>
           <h2 style={{ fontSize: 12, fontWeight: 900, color: "var(--text)" }}>Tu plan</h2>
         </div>
-        <span style={{ fontSize: 8, fontWeight: 800, color: resumen.planActivo ? "#22c55e" : "#f59e0b" }}>● {resumen.planActivo ? "activo" : "prueba"}</span>
+        <span style={{ fontSize: 8, fontWeight: 800, color: resumen.planActivo ? "var(--green)" : "var(--amber)" }}>● {resumen.planActivo ? "activo" : "prueba"}</span>
       </div>
 
       <div style={{ marginTop: 12 }}>
