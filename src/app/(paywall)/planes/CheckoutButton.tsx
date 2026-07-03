@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 /**
  * Botón de compra: pide el init_point a /api/pagos/checkout y redirige a
@@ -21,7 +21,7 @@ export default function CheckoutButton({
   recommended?: boolean;
 }) {
   const [cargando, setCargando] = useState(false);
-  const [mensaje, setMensaje] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<ReactNode>(null);
 
   if (actual) {
     return (
@@ -60,7 +60,15 @@ export default function CheckoutButton({
         return; // mantiene "Abriendo…" mientras navega
       }
       if (res.status === 503 || data?.error === "MP_NO_CONFIGURADO") {
-        setMensaje("Pagos próximamente — escríbenos y activamos tu plan.");
+        setMensaje(
+          <>
+            Pagos próximamente —{" "}
+            <a href="mailto:soporte@appcontable.cl" style={{ color: "inherit", textDecoration: "underline" }}>
+              escríbenos
+            </a>{" "}
+            y activamos tu plan.
+          </>
+        );
       } else if (res.status === 403) {
         setMensaje("Tu cuenta no puede contratar este plan desde este acceso.");
       } else {

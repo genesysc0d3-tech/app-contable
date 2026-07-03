@@ -7,7 +7,7 @@
 
 import { useState, useEffect, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { rechazarPropuesta, aprobarTodas, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
+import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import type { Tables } from "@/lib/database.types";
@@ -26,6 +26,10 @@ export interface DocTab { docId: string; nombre: string; total: number; }
 
 export const ALTA = 0.85;
 export const MEDIA = 0.5;
+
+// Bulk gate compartido: nunca poner listas en lote las tx muy inseguras — esas
+// se revisan 1×1. Mismo umbral que usa el bulk de CartolaEditor.
+export const BULK_MIN_CONFIANZA = 0.8;
 
 export function classifyConfianza(p: Propuesta): "alta" | "media" | "baja" {
   const c = p.confianza ?? 0;
@@ -67,31 +71,6 @@ export function RevisarEmpty() {
   );
 }
 
-/* ─── Aprobar Todo Button ─── */
-export function AprobarTodoBtn({ ids }: { ids: string[] }) {
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const ctxReload = useMesaReload();
-  const { toast } = useToast();
-  async function handle() {
-    if (ids.length === 0) return;
-    setLoading(true);
-    const r = await aprobarTodas(ids);
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} aprobadas`);
-    if (ctxReload) ctxReload(); else router.refresh();
-    setLoading(false);
-  }
-  return (
-    <button className="btn-at" onClick={handle} disabled={loading} style={{
-      border:"none",borderRadius:6,background:"#E8553E",color:"#fff",padding:"6px 10px",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4,opacity:loading?0.5:1,
-    }}>
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      {loading ? "..." : `Aprobar todo (${ids.length})`}
-      <span style={{width:14,height:14,borderRadius:"50%",background:"rgba(255,255,255,.2)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,lineHeight:1,flexShrink:0,color:"#fff",cursor:"help"}} title="Solo aprueba props con confianza ≥ 85%">?</span>
-    </button>
-  );
-}
-
 /* ─── Confianza Group Section ─── */
 export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes, empresaId, onAction, empresaTipoContribuyente }: {
   tipo: string; label: string; propuestas: Propuesta[]; color: string; clientes: ClienteResumen[]; empresaId: string; onAction: () => void;
@@ -120,6 +99,10 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
 
   return (
     <>
+      {/* ✕ ghost (mismo patrón que .ce-reject de CartolaEditor): atenuado hasta hover
+          y separado del ✎ para prevenir misclick */}
+      <style>{`.rs-reject{opacity:.28;transition:opacity .15s;display:inline-flex;margin-left:8px;}
+.tr:hover .rs-reject,.rs-reject:hover{opacity:1;}`}</style>
       {/* Padding */}
       <div style={{padding:"10px 16px 0"}}>
         <div className={`cg ${tipo}`} style={{borderBottom:"1px solid rgba(255,255,255,.03)"}}>
@@ -131,7 +114,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
             <span className="cnt" style={{fontSize:9,color:"var(--text2)"}}>{propuestas.length}</span>
             <div className="act" style={{display:"flex",gap:4}} onClick={e => e.stopPropagation()}>
               {useBlocks && <BlockApproveBtn ids={visible.map(p => p.id)} label="Poner página lista" />}
-              <ApproveAllBtn ids={propuestas.map(p => p.id)} />
+              <ApproveAllBtn propuestas={propuestas} />
             </div>
           </div>
 
@@ -186,7 +169,11 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
                         {!enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
                         {!enEmision && <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />}
-                        <RowActionBtn type="reject" onClick={async () => {const r=await rechazarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Rechazada");onAction();}} icon="✕" />
+                        {!enEmision && (
+                          <span className="rs-reject">
+                            <RowActionBtn type="reject" onClick={async () => {const r=await rechazarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Rechazada");onAction();}} icon="✕" />
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -241,24 +228,33 @@ function BlockApproveBtn({ ids, label }: { ids: string[]; label: string }) {
 }
 
 /* ─── Approve All Button ─── */
-function ApproveAllBtn({ ids }: { ids: string[] }) {
+function ApproveAllBtn({ propuestas }: { propuestas: Propuesta[] }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const ctxReload = useMesaReload();
   const { toast } = useToast();
+  // Mismo gate que el bulk de CartolaEditor: las < BULK_MIN_CONFIANZA no se
+  // stagean en lote — se revisan 1×1. El label muestra lo que de verdad se prepara.
+  const elegibles = propuestas.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA);
+  const saltadas = propuestas.length - elegibles.length;
+  const disabled = loading || elegibles.length === 0;
   async function handle(e: React.MouseEvent) {
     e.stopPropagation();
-    if (ids.length === 0) return;
+    if (elegibles.length === 0) return;
     setLoading(true);
-    const r = await ponerListo(ids);
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas`);
+    const r = await ponerListo(elegibles.map((p) => p.id));
+    if (r.error) toast(r.error, "error");
+    else toast(saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }
+  const label = saltadas > 0
+    ? `Poner listas (${elegibles.length} de ${propuestas.length})`
+    : `Poner listas (${propuestas.length})`;
   return (
-    <button onClick={handle} disabled={loading}
-      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"none",cursor:"pointer",fontWeight:600,background:"#22c55e",color:"#08240f",opacity:loading?0.5:1}}
-    >{loading ? "..." : `Poner todas listas`}</button>
+    <button onClick={handle} disabled={disabled}
+      style={{fontSize:8,padding:"3px 8px",borderRadius:4,border:"none",cursor:disabled?"default":"pointer",fontWeight:600,background:"#22c55e",color:"#08240f",opacity:disabled?0.5:1}}
+    >{loading ? "..." : label}</button>
   );
 }
 
@@ -382,7 +378,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     onClose();
   }
 
-  const lbl: CSSProperties = { fontSize: 8, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 3 };
+  const lbl: CSSProperties = { fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 3 };
   const inp: CSSProperties = { width: "100%", fontSize: 11, padding: "6px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" };
   const linkBtn: CSSProperties = { background: "none", border: "none", padding: "3px 0", cursor: "pointer", fontSize: 9, fontWeight: 600, color: "var(--text3)", textAlign: "left" };
   const conf = Math.round((propuesta.confianza ?? 0) * 100);
@@ -400,7 +396,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
       {noBoletea ? (
         <>
           <div style={{fontSize:10,color:"var(--text2)",marginBottom:8,lineHeight:1.4}}>
-            Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si fue una venta tuya, cambiá el tipo en Emitir.
+            Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si fue una venta tuya, cambia el tipo en Emitir.
           </div>
           <div style={{marginBottom:8}}>
             <label style={lbl}>Detalle</label>
@@ -450,7 +446,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              {!rutValido && <div style={{fontSize:8,color:"#ef4444",marginTop:2}}>RUT no válido</div>}
+              {!rutValido && <div style={{fontSize:10,color:"#ef4444",marginTop:2}}>RUT no válido</div>}
               {showMasDatos ? (
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
                   <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />
@@ -477,7 +473,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         </select>
         <div style={{flex:1}} />
         <button onClick={handleAprobar} disabled={busy || !puedeStagear}
-          title={!puedeStagear ? "Completá el detalle, el monto y —sobre 135 UF— RUT, nombre y medio de pago" : undefined}
+          title={!puedeStagear ? "Completa el detalle, el monto y —sobre 135 UF— RUT, nombre y medio de pago" : undefined}
           style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"#22c55e",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {busy ? "..." : "Poner listo"}

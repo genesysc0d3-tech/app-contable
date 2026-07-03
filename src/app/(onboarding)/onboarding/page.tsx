@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { crearEmpresa } from "./actions";
+import { signOut } from "@/app/(auth)/auth/actions";
+import { createClient } from "@/lib/supabase/client";
 
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Email de la sesión activa: quien entró con la cuenta equivocada (ej. otro
+  // Google) necesita verlo y poder salir sin quedar atrapado en el onboarding.
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+  }, []);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
@@ -23,7 +33,11 @@ export default function OnboardingPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold">Tu empresa</h1>
           <p className="text-white/50 mt-2 text-sm">
-            Datos basicos para emitir documentos tributarios
+            Datos básicos para emitir documentos tributarios
+          </p>
+          <p className="text-white/35 mt-3 text-xs leading-relaxed">
+            Si trabajas a tu nombre (persona natural), usa tu RUT personal y tu
+            nombre completo como razón social.
           </p>
         </div>
 
@@ -53,7 +67,7 @@ export default function OnboardingPage() {
                 htmlFor="razon_social"
                 className="block text-sm text-white/70 mb-1"
               >
-                Razon social
+                Razón social
               </label>
               <input
                 id="razon_social"
@@ -74,7 +88,7 @@ export default function OnboardingPage() {
                 type="text"
                 required
                 className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
-                placeholder="Actividad economica principal"
+                placeholder="Actividad económica principal"
               />
             </div>
             <button
@@ -86,6 +100,20 @@ export default function OnboardingPage() {
             </button>
           </form>
         </div>
+
+        {email && (
+          <p className="text-center text-sm text-white/40">
+            Conectado como <span className="text-white/60">{email}</span>
+            {" · "}
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="text-[#e8553e] hover:text-[#e8553e]/80 transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

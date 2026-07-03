@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { CreditCard, ExternalLink, Receipt } from "lucide-react";
 import {
   obtenerFacturacion,
@@ -72,7 +72,7 @@ const iconBox: CSSProperties = {
   border: "1px solid var(--border)",
 };
 const badge: CSSProperties = {
-  fontSize: 8,
+  fontSize: 9,
   fontWeight: 850,
   padding: "3px 8px",
   borderRadius: 999,
@@ -103,27 +103,32 @@ export default function FacturacionUsoPanel() {
   const [resumen, setResumen] = useState<ResumenCupos | null>(null);
   const [estado, setEstado] = useState<"cargando" | "ok" | "error">("cargando");
 
-  useEffect(() => {
-    let vivo = true;
-    (async () => {
-      const [fact, res] = await Promise.all([obtenerFacturacion(), listarResumenCupos()]);
-      if (!vivo) return;
-      if (fact.ok) setData(fact.data);
-      if (res.ok) setResumen(res.resumen);
-      setEstado(fact.ok ? "ok" : "error");
-    })();
-    return () => {
-      vivo = false;
-    };
+  const cargar = useCallback(async () => {
+    setEstado("cargando");
+    const [fact, res] = await Promise.all([obtenerFacturacion(), listarResumenCupos()]);
+    if (fact.ok) setData(fact.data);
+    if (res.ok) setResumen(res.resumen);
+    setEstado(fact.ok ? "ok" : "error");
   }, []);
+
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
 
   if (estado === "cargando") {
     return <div style={{ padding: 20, color: "var(--text2)", fontSize: 12 }}>Cargando facturación…</div>;
   }
   if (estado === "error" || !data) {
     return (
-      <div style={{ padding: 20, color: "var(--text2)", fontSize: 12 }}>
-        No se pudo cargar la facturación. Intenta de nuevo.
+      <div style={{ padding: 20, display: "grid", gap: 10, justifyItems: "start" }}>
+        <div style={{ color: "var(--text2)", fontSize: 12 }}>No se pudo cargar la facturación.</div>
+        <button
+          type="button"
+          onClick={() => void cargar()}
+          style={{ height: 30, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.5)", background: "rgba(232,85,62,.1)", color: "#E8553E", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -234,7 +239,7 @@ export default function FacturacionUsoPanel() {
                   <span style={{ fontSize: 11, fontWeight: 850, color: "var(--text)", whiteSpace: "nowrap" }}>
                     {fmtClp(p.montoClp)}
                   </span>
-                  <span style={{ fontSize: 8, fontWeight: 850, color: e.color, whiteSpace: "nowrap" }}>{e.label}</span>
+                  <span style={{ fontSize: 9, fontWeight: 850, color: e.color, whiteSpace: "nowrap" }}>{e.label}</span>
                 </div>
               );
             })}

@@ -35,6 +35,7 @@ const panel: CSSProperties = { width: "50%", height: "100%", padding: "13px 14px
 function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
   const b = resumen.boletasCartolas;
   const t = resumen.telegram;
+  const barColor = estadoColor(b.disponible, b.total);
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -56,7 +57,7 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
             <span style={{ color: "var(--text)", fontSize: 11, fontWeight: 850, whiteSpace: "nowrap" }}>{fmt(b.uso)} / {fmt(b.total)}</span>
           </div>
           <div style={{ height: 5, borderRadius: 999, background: "var(--bg-muted)", overflow: "hidden" }}>
-            <div style={{ width: `${barW}%`, height: "100%", borderRadius: 999, background: estadoColor(b.disponible, b.total), boxShadow: "0 0 10px rgba(34,197,94,.35)", transition: "width 1s cubic-bezier(.22,1,.36,1)" }} />
+            <div style={{ width: `${barW}%`, height: "100%", borderRadius: 999, background: barColor, boxShadow: `0 0 10px color-mix(in srgb, ${barColor} 35%, transparent)`, transition: "width 1s cubic-bezier(.22,1,.36,1)" }} />
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -115,7 +116,7 @@ function PlanSide({ resumen, fact }: { resumen: ResumenCupos; fact: FacturacionD
 
       <div style={{ marginTop: "auto", paddingTop: 11 }}>
         <a href="/planes" onClick={(e) => e.stopPropagation()} style={{ display: "block", width: "100%", borderRadius: 9, border: `1px solid ${RED}`, background: RED, color: "#fff", padding: "8px", fontSize: 11, fontWeight: 850, textAlign: "center", textDecoration: "none", boxSizing: "border-box" }}>Gestionar plan</a>
-        <div style={{ marginTop: 6, textAlign: "center", fontSize: 8, color: "var(--text3)" }}>← toca para volver</div>
+        <div style={{ marginTop: 6, textAlign: "center", fontSize: 8, color: "var(--text3)" }}>← clic para volver</div>
       </div>
     </>
   );

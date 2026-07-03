@@ -9,7 +9,7 @@ const btnReset: CSSProperties = { border: "none", font: "inherit", cursor: "poin
 export type NavParams = { date?: string; month?: string; view?: string };
 
 export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependent["calendar"]; navigate: (p: NavParams) => void }) {
-  const { y, m, monthName, daysInMonth, today, isThisMonth, selDay, weekRange, prevMonthParam, nextMonthParam, workMode, selDate } = cal;
+  const { y, m, monthName, daysInMonth, byDay, today, isThisMonth, selDay, weekRange, prevMonthParam, nextMonthParam, workMode, selDate } = cal;
   const isMonthMode = workMode === "month";
   const isWeekMode = workMode === "week";
   const nextView = workMode === "day" ? "week" : workMode === "week" ? "month" : "day";
@@ -98,11 +98,18 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               const isToday = day === today && isThisMonth;
               const isInWeek = ds >= weekRange.start && ds < weekRange.end;
               const active = workMode === "month" || (workMode === "week" && isInWeek) || (workMode === "day" && isSel);
+              const info = byDay[day];
               return (
                 <button type="button" key={day} onClick={() => navigate({ date: ds, month: `${y}-${m}`, view: workMode })}
                   style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: active ? "#b4f027" : "transparent", transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
                   <span style={{ fontSize: 5, textTransform: "uppercase", lineHeight: 1, color: active ? "rgba(0,0,0,.5)" : "var(--text3)" }}>{wd[new Date(y, m, day).getDay()]}</span>
                   <span style={{ fontSize: 8, fontWeight: isToday || isSel ? 700 : 500, lineHeight: 1, marginTop: 1, color: isToday ? "#E8553E" : active ? "#000" : "var(--text2)" }}>{day}</span>
+                  {/* Puntos de trabajo del día (byDay de mesa-data): pendientes / aprobadas.
+                      Fila de alto fijo para que todas las celdas midan igual (dock intacto). */}
+                  <span style={{ display: "flex", gap: 2, height: 3, marginTop: 1, alignItems: "center", justifyContent: "center" }}>
+                    {(info?.p ?? 0) > 0 && <span style={{ width: 3, height: 3, borderRadius: 999, background: "var(--accent)" }} />}
+                    {(info?.a ?? 0) > 0 && <span style={{ width: 3, height: 3, borderRadius: 999, background: "#22c55e" }} />}
+                  </span>
                 </button>
               );
             })}

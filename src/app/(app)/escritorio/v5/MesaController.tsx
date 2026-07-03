@@ -70,10 +70,13 @@ export default function MesaController({
   }, [mesa]);
 
   // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
-  // diferencia de navigate, ignora la cache (los datos cambiaron) y la reescribe.
+  // diferencia de navigate, ignora la cache (los datos cambiaron): la vacía
+  // COMPLETA (aprobar/emitir también altera los contadores de otros rangos
+  // visitados) y re-siembra solo el rango actual.
   const reloadMesa = useCallback((opts?: { silent?: boolean }) => {
     const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode };
     const run = async () => {
+      cacheRef.current.clear();
       const res = await cargarMesa(params);
       if (res.ok) {
         cacheRef.current.set(keyOf(params.view, params.date, params.month), res.mesa);

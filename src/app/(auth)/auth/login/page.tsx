@@ -7,9 +7,18 @@ import { signIn, signInWithGoogle } from "../actions";
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<AuthFallback />}>
       <LoginContent />
     </Suspense>
+  );
+}
+
+// Evita el flash negro mientras carga el contenido (useSearchParams exige Suspense).
+function AuthFallback() {
+  return (
+    <div className="mesh-bg flex-1 flex items-center justify-center min-h-screen">
+      <div className="h-8 w-8 rounded-full border-2 border-white/15 border-t-[#e8553e] animate-spin" />
+    </div>
   );
 }
 
@@ -43,7 +52,7 @@ function LoginContent() {
     <div className="mesh-bg flex-1 flex items-center justify-center px-4 py-12 min-h-screen">
       <div className="w-full max-w-sm space-y-6 relative">
         <div className="text-center">
-          <h1 className="text-3xl font-bold">Iniciar sesion</h1>
+          <h1 className="text-3xl font-bold">Iniciar sesión</h1>
           <p className="text-white/50 mt-2 text-sm">
             Contabilidad inteligente para Chile
           </p>
@@ -76,7 +85,7 @@ function LoginContent() {
                 htmlFor="password"
                 className="block text-sm text-white/70 mb-1"
               >
-                Contrasena
+                Contraseña
               </label>
               <input
                 id="password"
@@ -87,6 +96,14 @@ function LoginContent() {
                 className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="••••••••"
               />
+              <div className="text-right mt-1.5">
+                <Link
+                  href={next ? `/auth/recuperar?next=${encodeURIComponent(next)}` : "/auth/recuperar"}
+                  className="text-xs text-white/40 hover:text-white/70 transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
             </div>
             <button
               type="submit"
@@ -116,7 +133,7 @@ function LoginContent() {
         </div>
 
         <p className="text-center text-sm text-white/40">
-          No tienes cuenta?{" "}
+          ¿No tienes cuenta?{" "}
           <Link
             href={next ? `/auth/registro?next=${encodeURIComponent(next)}` : "/auth/registro"}
             className="text-[#e8553e] hover:text-[#e8553e]/80"

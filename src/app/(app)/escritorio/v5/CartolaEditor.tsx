@@ -15,10 +15,10 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useVirtualizer, defaultRangeExtractor } from "@tanstack/react-virtual";
 import {
-  ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA,
+  ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA, BULK_MIN_CONFIANZA,
   type Propuesta, type ClienteResumen,
 } from "./revisar-shared";
-import { ponerListo, rechazarPropuesta } from "../../revisar/actions";
+import { ponerListo, rechazarPropuesta, restaurarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 
 type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
@@ -31,8 +31,8 @@ const SECTION_META: Record<SectionKey, { label: string; color: string }> = {
 };
 const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision"];
 
-// Bulk gate: nunca poner listas en lote las tx muy inseguras — fuerzan revisión 1×1.
-const BULK_MIN_CONFIANZA = 0.8;
+// Bulk gate (BULK_MIN_CONFIANZA, compartido con revisar-shared): nunca poner
+// listas en lote las tx muy inseguras — fuerzan revisión 1×1.
 
 type FlatRow =
   | { kind: "header"; section: SectionKey; count: number }
@@ -74,10 +74,12 @@ export default function CartolaEditor({
   const groups = useMemo(() => {
     const g: Record<SectionKey, Propuesta[]> = { pendientes: [], listas: [], rechazadas: [], emision: [] };
     for (const p of propuestas) {
-      if (p.estado === "pendiente") g.pendientes.push(p);
+      // 'editado' es borrador (no emitible): va con las pendientes. Solo 'aprobado'
+      // está comprometida a Emitir.
+      if (p.estado === "pendiente" || p.estado === "editado") g.pendientes.push(p);
       else if (p.estado === "listo") g.listas.push(p);
       else if (p.estado === "rechazado" || p.estado === "descartado") g.rechazadas.push(p);
-      else if (p.estado === "aprobado" || p.estado === "editado") g.emision.push(p);
+      else if (p.estado === "aprobado") g.emision.push(p);
     }
     return g;
   }, [propuestas]);
@@ -161,7 +163,7 @@ export default function CartolaEditor({
     const elegibles = groups.pendientes.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA);
     const saltadas = groups.pendientes.length - elegibles.length;
     if (elegibles.length === 0) {
-      toast(saltadas > 0 ? `Revisá las ${saltadas} de baja confianza a mano` : "Nada por preparar", "error");
+      toast(saltadas > 0 ? `Revisa las ${saltadas} de baja confianza a mano` : "Nada por preparar", "error");
       return;
     }
     setBusyBulk(true);
@@ -180,6 +182,12 @@ export default function CartolaEditor({
   async function rejectOne(p: Propuesta) {
     const r = await rechazarPropuesta(p.id);
     if (r.error) toast(r.error, "error"); else toast("Rechazada");
+    onAction();
+  }
+  // Restaurar una rechazada/descartada: vuelve a 'pendiente' y la lista se refresca.
+  async function restoreOne(p: Propuesta) {
+    const r = await restaurarPropuesta(p.id);
+    if (r.error) toast(r.error, "error"); else toast("Restaurada — quedó pendiente");
     onAction();
   }
 
@@ -243,6 +251,7 @@ export default function CartolaEditor({
                       onToggle={() => toggleRow(row.p.id)}
                       onStage={() => stageOne(row.p)}
                       onReject={() => rejectOne(row.p)}
+                      onRestore={() => restoreOne(row.p)}
                     />
                     {expandedRows.has(row.p.id) && (
                       <ExpandedDetail
@@ -299,13 +308,14 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
 }
 
 /* ─── Fila de tx (colapsada) ─── */
-function TxRow({ p, isOpen, onToggle, onStage, onReject }: {
-  p: Propuesta; isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void;
+function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore }: {
+  p: Propuesta; isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
 }) {
   const tm = tipoMeta(p.tipo_propuesto);
   const conf = Math.round((p.confianza ?? 0) * 100);
   // 'aprobado' = comprometida a Emitir → sin ✎ (auditoría #21).
   const enEmision = p.estado === "aprobado";
+  const rechazada = p.estado === "rechazado" || p.estado === "descartado";
   return (
     <div className="ce-row" onClick={onToggle}>
       {/* 16px reservado para checkbox (selección múltiple — fase posterior) */}
@@ -323,13 +333,23 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject }: {
       {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "#22c55e", letterSpacing: ".05em" }}>LISTO</span>}
       {enEmision && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "#5b9cf6", letterSpacing: ".05em" }}>EN EMISIÓN</span>}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-        {/* ✓ solo en pendientes: nunca demotar una 'listo' (ya staged) ni una 'aprobado'/'editado' (ya en Emitir) */}
-        {p.estado === "pendiente" && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
-        {!enEmision && <RowActionBtn type="edit" icon="✎" onClick={onToggle} />}
-        {/* ✗ separado y atenuado (ghost hasta hover) para prevenir misclick */}
-        <span className="ce-reject" style={{ marginLeft: 10 }}>
-          <RowActionBtn type="reject" icon="✕" onClick={onReject} />
-        </span>
+        {/* ✓ solo en borradores (pendiente/editado): nunca demotar una 'listo' (ya staged) ni una 'aprobado' (ya en Emitir) */}
+        {(p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
+        {rechazada ? (
+          /* Restaurar reemplaza al ✎ en rechazadas: el detalle acá solo llevaba a un error engañoso */
+          <button onClick={onRestore}
+            style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "#22c55e", cursor: "pointer" }}>
+            Restaurar
+          </button>
+        ) : (
+          !enEmision && <RowActionBtn type="edit" icon="✎" onClick={onToggle} />
+        )}
+        {/* ✗ separado y atenuado (ghost hasta hover) para prevenir misclick; sin ✗ en rechazadas (ya lo están) */}
+        {!rechazada && (
+          <span className="ce-reject" style={{ marginLeft: 10 }}>
+            <RowActionBtn type="reject" icon="✕" onClick={onReject} />
+          </span>
+        )}
       </div>
     </div>
   );

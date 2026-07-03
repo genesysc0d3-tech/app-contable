@@ -84,6 +84,16 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     };
   }, []);
 
+  // Escape cierra el popup Editar (mismo patrón que EditorAmpliado).
+  useEffect(() => {
+    if (!editarCartolaId) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }
+    };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [editarCartolaId, reload]);
+
   // Propuestas agrupadas por documento (ya vienen en memoria — sin fetch extra).
   const propsByDoc = useMemo(() => {
     const m = new Map<string, Propuesta[]>();

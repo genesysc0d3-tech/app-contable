@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { validarRut } from "@/lib/rut";
 
 function getServiceClient() {
   return createServiceClient<Database>(
@@ -28,6 +29,10 @@ export async function crearEmpresa(formData: FormData) {
   const razon_social = formData.get("razon_social") as string;
   const giro = formData.get("giro") as string;
 
+  if (!validarRut(rut)) {
+    return { error: "El RUT no es válido — revisa el dígito verificador" };
+  }
+
   // Use service role to bypass RLS (user has no empresa yet)
   const admin = getServiceClient();
 
@@ -39,7 +44,11 @@ export async function crearEmpresa(formData: FormData) {
     .single();
 
   if (empresaError) {
-    return { error: empresaError.message };
+    // 23505 = unique_violation en Postgres (RUT duplicado)
+    if (empresaError.code === "23505" || empresaError.message?.includes("duplicate key")) {
+      return { error: "Ese RUT ya está registrado" };
+    }
+    return { error: "No se pudo guardar tu empresa. Intenta de nuevo." };
   }
 
   // Create usuario linked to empresa
@@ -60,7 +69,7 @@ export async function crearEmpresa(formData: FormData) {
   if (usuarioError) {
     // Rollback empresa
     await admin.from("empresas").delete().eq("id", empresa.id);
-    return { error: usuarioError.message };
+    return { error: "No se pudo guardar tu empresa. Intenta de nuevo." };
   }
 
   const { data: cuenta, error: cuentaError } = await admin
@@ -76,7 +85,7 @@ export async function crearEmpresa(formData: FormData) {
 
   if (cuentaError || !cuenta) {
     await admin.from("empresas").delete().eq("id", empresa.id);
-    return { error: cuentaError?.message ?? "No se pudo crear la cuenta pagadora" };
+    return { error: "No se pudo crear la cuenta. Intenta de nuevo." };
   }
 
   const [{ error: cuentaEmpresaError }, { error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
@@ -103,7 +112,7 @@ export async function crearEmpresa(formData: FormData) {
   if (membershipError) {
     await admin.from("cuentas").delete().eq("id", cuenta.id);
     await admin.from("empresas").delete().eq("id", empresa.id);
-    return { error: membershipError.message };
+    return { error: "No se pudo crear la cuenta. Intenta de nuevo." };
   }
 
   // Si el usuario eligió un plan en el landing (?plan= → cookie en registro), lo

@@ -182,13 +182,13 @@ export default function TeamBusinessPanel({
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("toggle-empresa"))}
-            style={{ marginTop: 10, width: "100%", height: 32, borderRadius: 10, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)", color: "#E8553E", fontSize: 10, fontWeight: 850, cursor: "pointer" }}
+          {/* Comprar persona adicional vive en /planes (el wizard de empresa no tiene ese paso) */}
+          <a
+            href="/planes"
+            style={{ marginTop: 10, width: "100%", height: 32, borderRadius: 10, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)", color: "#E8553E", fontSize: 10, fontWeight: 850, cursor: "pointer", display: "grid", placeItems: "center", textDecoration: "none", boxSizing: "border-box" }}
           >
             Agregar persona
-          </button>
+          </a>
         </div>
       )}
     </div>

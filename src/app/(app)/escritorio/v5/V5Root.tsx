@@ -83,10 +83,9 @@ export default function V5Root({
   return (
     <EmissionLockProvider>
       <style>{`
-:root,[data-theme="dark"]{--bg:#0f1014;--surface:#16181d;--surface2:#1a1c24;--border:rgba(255,255,255,.06);--text:#e8eaf0;--text2:#636878;--text3:#4a4d55;--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--green:#22c55e;--amber:#f59e0b;--blue:#5b9cf6;--bg-muted:rgba(255,255,255,.04);--shadow:rgba(0,0,0,.3);--header-bg:rgba(22,24,29,.15);--header-border:rgba(255,255,255,.04)}
-[data-theme="light"]{--bg:#f5f0eb;--surface:#ffffff;--surface2:#faf7f3;--border:rgba(0,0,0,.08);--text:#1a1612;--text2:#8c8279;--text3:#b0a79e;--accent:#E8553E;--accent-light:rgba(232,85,62,.08);--green:#16a34a;--amber:#d97706;--blue:#3b82f6;--bg-muted:rgba(0,0,0,.04);--shadow:rgba(0,0,0,.08);--header-bg:rgba(255,255,255,.2);--header-border:rgba(0,0,0,.04)}
+:root,[data-theme="dark"]{--bg:#0f1014;--surface:#16181d;--surface2:#1a1c24;--border:rgba(255,255,255,.06);--text:#e8eaf0;--text2:#8b92a3;--text3:#697080;--accent:#E8553E;--accent-light:rgba(232,85,62,.1);--green:#22c55e;--amber:#f59e0b;--blue:#5b9cf6;--bg-muted:rgba(255,255,255,.04);--shadow:rgba(0,0,0,.3);--header-bg:rgba(22,24,29,.15);--header-border:rgba(255,255,255,.04)}
+[data-theme="light"]{--bg:#f5f0eb;--surface:#ffffff;--surface2:#faf7f3;--border:rgba(0,0,0,.08);--text:#1a1612;--text2:#6f6659;--text3:#8b8275;--accent:#E8553E;--accent-light:rgba(232,85,62,.08);--green:#16a34a;--amber:#d97706;--blue:#3b82f6;--bg-muted:rgba(0,0,0,.04);--shadow:rgba(0,0,0,.08);--header-bg:rgba(255,255,255,.2);--header-border:rgba(0,0,0,.04)}
 body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
-.root-noise::before{position:absolute;top:0;left:0;width:100%;height:100%;content:'';opacity:.01;z-index:-1;pointer-events:none;background-image:url(https://www.ui-layouts.com/noise.gif)}
 ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
 ::view-transition-new(root){z-index:9999;clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%));animation:circle-expand .5s cubic-bezier(.22,1,.36,1) forwards}
 @keyframes circle-expand{from{clip-path:circle(0 at var(--click-x,50%) var(--click-y,50%))}to{clip-path:circle(150% at var(--click-x,50%) var(--click-y,50%))}}
@@ -95,7 +94,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 @keyframes saved-ring{0%{transform:scale(.45);opacity:.9}100%{transform:scale(1.9);opacity:0}}
 `}</style>
 
-      <div className="root-noise" style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
+      <div style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
         <TabErrorBoundary label="Dashboard">
           <div>{dashboardContent}</div>
         </TabErrorBoundary>
@@ -244,7 +243,7 @@ function DashboardHelpHarness({ onDisable }: { onDisable: () => void }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 70, pointerEvents: "none" }}>
       <style>{`
-        .v5-help-step-badge{transition:opacity .16s ease,background .16s ease,border-color .16s ease;color .16s ease;pointer-events:none}
+        .v5-help-step-badge{transition:opacity .16s ease,background .16s ease,border-color .16s ease,color .16s ease;pointer-events:none}
       `}</style>
       <button
         type="button"

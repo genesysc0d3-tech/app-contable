@@ -69,41 +69,53 @@ export default function MfaChallengePage() {
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-sm flex-col justify-center gap-4 p-6">
-      <h1 className="text-xl font-semibold">Verificación en dos pasos</h1>
-      <p className="text-sm text-neutral-500">
-        Ingresa el código de 6 dígitos de tu app de autenticación.
-      </p>
+    <div className="mesh-bg flex-1 flex items-center justify-center px-4 py-12 min-h-screen">
+      <div className="w-full max-w-sm space-y-6 relative">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold">Verificación en dos pasos</h1>
+          <p className="text-white/50 mt-2 text-sm">
+            Ingresa el código de 6 dígitos de tu app de autenticación.
+          </p>
+        </div>
 
-      {loading ? (
-        <p className="text-sm text-neutral-500">Cargando…</p>
-      ) : (
-        <form onSubmit={onVerify} className="flex flex-col gap-3">
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            placeholder="123456"
-            className="rounded border border-neutral-300 px-3 py-2 text-center text-lg tracking-widest"
-            autoFocus
-          />
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={verifying || code.length < 6 || !challengeId}
-            className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-          >
-            {verifying ? "Verificando…" : "Verificar"}
+        <div className="glass rounded-2xl p-6 space-y-4 glow-accent-soft">
+          {loading ? (
+            <p className="text-sm text-white/50 text-center">Cargando…</p>
+          ) : (
+            <form onSubmit={onVerify} className="space-y-3">
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                placeholder="123456"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-center text-lg tracking-widest text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
+                autoFocus
+              />
+              {error && (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={verifying || code.length < 6 || !challengeId}
+                className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
+              >
+                {verifying ? "Verificando…" : "Verificar"}
+              </button>
+            </form>
+          )}
+        </div>
+
+        <p className="text-center text-sm text-white/40">
+          <button onClick={onLogout} className="hover:text-white/70 underline transition-colors">
+            Cerrar sesión
           </button>
-        </form>
-      )}
-
-      <button onClick={onLogout} className="text-sm text-neutral-500 underline">
-        Cerrar sesión
-      </button>
+        </p>
+      </div>
     </div>
   );
 }

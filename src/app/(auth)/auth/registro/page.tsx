@@ -8,9 +8,18 @@ import { POLICY_VERSION } from "@/lib/legal/version";
 
 export default function RegistroPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<AuthFallback />}>
       <RegistroContent />
     </Suspense>
+  );
+}
+
+// Evita el flash negro mientras carga el contenido (useSearchParams exige Suspense).
+function AuthFallback() {
+  return (
+    <div className="mesh-bg flex-1 flex items-center justify-center min-h-screen">
+      <div className="h-8 w-8 rounded-full border-2 border-white/15 border-t-[#e8553e] animate-spin" />
+    </div>
   );
 }
 
@@ -103,7 +112,7 @@ function RegistroContent() {
                 htmlFor="password"
                 className="block text-sm text-white/70 mb-1"
               >
-                Contrasena
+                Contraseña
               </label>
               <input
                 id="password"
@@ -112,7 +121,7 @@ function RegistroContent() {
                 required
                 minLength={6}
                 className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
-                placeholder="Minimo 6 caracteres"
+                placeholder="Mínimo 6 caracteres"
               />
             </div>
             <label className="flex items-start gap-2 text-xs text-white/50 cursor-pointer select-none">
@@ -126,9 +135,9 @@ function RegistroContent() {
               />
               <span>
                 Acepto la{" "}
-                <Link href="/legal/privacidad" target="_blank" className="text-[#e8553e] hover:text-[#e8553e]/80 underline">Politica de Privacidad</Link>
+                <Link href="/legal/privacidad" target="_blank" className="text-[#e8553e] hover:text-[#e8553e]/80 underline">Política de Privacidad</Link>
                 {" "}y los{" "}
-                <Link href="/legal/terminos" target="_blank" className="text-[#e8553e] hover:text-[#e8553e]/80 underline">Terminos</Link>.
+                <Link href="/legal/terminos" target="_blank" className="text-[#e8553e] hover:text-[#e8553e]/80 underline">Términos</Link>.
               </span>
             </label>
             <button
@@ -152,24 +161,20 @@ function RegistroContent() {
           <button
             onClick={handleGoogle}
             disabled={loading || !consent}
-            title={!consent ? "Primero acepta la Politica de Privacidad y los Terminos" : undefined}
+            title={!consent ? "Primero acepta la Política de Privacidad y los Términos" : undefined}
             className="w-full rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 border border-white/10 px-4 py-3 text-sm font-medium text-white/90 transition-colors"
           >
             Continuar con Google
           </button>
-
-          <p className="text-xs text-white/30 text-center">
-            Tu cuenta quedara sujeta a aprobacion
-          </p>
         </div>
 
         <p className="text-center text-sm text-white/40">
-          Ya tienes cuenta?{" "}
+          ¿Ya tienes cuenta?{" "}
           <Link
             href={next ? `/auth/login?next=${encodeURIComponent(next)}` : "/auth/login"}
             className="text-[#e8553e] hover:text-[#e8553e]/80"
           >
-            Iniciar sesion
+            Iniciar sesión
           </Link>
         </p>
       </div>

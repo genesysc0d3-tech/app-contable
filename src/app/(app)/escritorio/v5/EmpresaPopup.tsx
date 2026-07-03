@@ -37,12 +37,12 @@ export default function EmpresaPopup({
   useEffect(() => { router.refresh(); }, [router]); // Refresh server data on mount
 
   const handleClose = useCallback(() => {
-    // Auto-save EmisorForm before closing
+    // Auto-save EmisorForm before closing. El evento "v5-popup-saved" lo
+    // dispara EmisorForm SOLO cuando el guardado fue exitoso (no a ciegas acá).
     if (step === 0) {
       const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
       form?.requestSubmit();
     }
-    window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Empresa guardada" } }));
     onClose();
   }, [step, onClose]);
 
@@ -769,7 +769,8 @@ export default function EmpresaPopup({
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="ep-footer-btn" onClick={handleClose}>
+                {/* Cancelar descarta: cierra SIN auto-guardar (X/Cerrar sí guardan) */}
+                <button className="ep-footer-btn" onClick={onClose}>
                   Cancelar
                 </button>
 

@@ -69,13 +69,6 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
                 <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "#ffffff" }}>
                   Formatos de cartola
                 </h3>
-                <span style={{
-                  display: "inline-block", borderRadius: 9999,
-                  border: "1px solid rgba(96,165,250,0.20)",
-                  background: "rgba(96,165,250,0.13)",
-                  padding: "4px 10px", fontSize: 11, fontWeight: 700,
-                  color: "#93C5FD",
-                }}>2 formatos</span>
               </div>
               <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "rgba(255,255,255,0.45)" }}>
                 Sube ejemplos de tus cartolas y mapéalos automáticamente.

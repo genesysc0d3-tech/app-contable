@@ -327,6 +327,15 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
     setSelectedDate(null);
   }
 
+  // "Limpiar" resetea TODO: fechas + tipo + texto buscado (sincroniza el input
+  // externo igual que el Escape).
+  function clearAllFilters() {
+    clearDateFilters();
+    setFilter("todo");
+    setQuery("");
+    window.dispatchEvent(new CustomEvent("search-history-query-sync", { detail: { query: "" } }));
+  }
+
   const workspaceSubtitle = getWorkspaceSubtitle(datePreset, selectedDate);
 
   return (
@@ -343,7 +352,7 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <DatePill active={datePreset === "all"} onClick={clearDateFilters}>Todas</DatePill>
             {RANGE_FILTERS.map((r) => <DatePill key={r.key} active={datePreset === r.key} onClick={() => { setDatePreset(r.key); setSelectedDate(null); }}>{r.label}</DatePill>)}
-            <DatePill active={false} onClick={clearDateFilters}>Limpiar</DatePill>
+            <DatePill active={false} onClick={clearAllFilters}>Limpiar</DatePill>
           </div>
         </div>
       </header>
@@ -503,7 +512,9 @@ function TypeFields({ item }: { item: NormalizedItem }) {
 function ActionButtons({ item, onViewDocument }: { item: NormalizedItem; onViewDocument: (documentId: string) => void }) {
   if (item.type === "documento") { const docId = getDocumentId(item); const hasFile = Boolean(item.data?.storage_path); return docId && hasFile ? <PrimaryAction onClick={() => onViewDocument(docId)}>Visualizar Excel</PrimaryAction> : <span style={{ fontSize: 10, color: "var(--text2)" }}>Archivo no disponible para visualizar.</span>; }
   if (item.type === "boleta") return <><PrimaryAction onClick={() => navigator.clipboard?.writeText(String(item.data?.folio ?? ""))}>Copiar folio</PrimaryAction>{item.data?.receptor_rut && <SecondaryAction onClick={() => navigator.clipboard?.writeText(String(item.data?.receptor_rut))}>Copiar RUT</SecondaryAction>}</>;
-  if (item.type === "propuesta") return <PrimaryAction onClick={() => window.dispatchEvent(new CustomEvent("switch-view", { detail: "dashboard" }))}>Revisar propuesta</PrimaryAction>;
+  // Cierra el fullscreen del buscador antes del switch-view: si no, la mesa
+  // cambia DETRÁS del overlay y el botón parece muerto.
+  if (item.type === "propuesta") return <PrimaryAction onClick={() => { window.dispatchEvent(new CustomEvent("toggle-dashboard-fullscreen", { detail: { open: false } })); window.dispatchEvent(new CustomEvent("switch-view", { detail: "dashboard" })); }}>Revisar propuesta</PrimaryAction>;
   return <span style={{ fontSize: 10, color: "var(--text2)" }}>Sin acciones disponibles.</span>;
 }
 

@@ -83,7 +83,8 @@ export default function RegistrosCard({
       {/* ═══ COLAPSADO — slot chico, fijo a la derecha; click = intercambia + abre ═══ */}
       <button type="button" onClick={() => { setActive(otherKey); open(O.view); }} title={`Ver ${O.title.toLowerCase()}`}
         style={{ position: "relative", flexGrow: 1, flexBasis: 0, minWidth: 0, height: "100%", border: "none", padding: 0, textAlign: "left", color: "inherit", background: "transparent", cursor: "pointer", overflow: "hidden", WebkitTapHighlightColor: "transparent" }}>
-        <span aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, background: "linear-gradient(90deg, rgba(0,0,0,.3), rgba(0,0,0,.5))" }} />
+        {/* Atenuación con el fondo del tema (no negro fijo: en claro se veía como mancha) */}
+        <span aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, background: "linear-gradient(90deg, color-mix(in srgb, var(--bg) 45%, transparent), color-mix(in srgb, var(--bg) 80%, transparent))" }} />
         <motion.div key={otherKey} initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} whileHover={{ scale: 1.05 }} transition={appear}
           style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, height: "100%", width: "100%", padding: "0 4px" }}>
           <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.02em", textTransform: "uppercase", color: "var(--text2)", whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>{O.label}</span>
