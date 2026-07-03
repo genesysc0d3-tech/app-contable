@@ -84,20 +84,35 @@ export async function fetchMesaDateDependent(
   const isMonthMode = workMode === "month";
   const isWeekMode = workMode === "week";
 
-  const workStart = isMonthMode ? sm : chileDayStartUtc(isWeekMode ? weekRange.start : selDate);
-  const workEnd = isMonthMode ? em : chileDayStartUtc(isWeekMode ? weekRange.end : nextSelDate);
-  const workStartDay = workStart.slice(0, 10);
-  const workEndDay = workEnd.slice(0, 10);
+  // Mesa de TRABAJO del mes = mes calendario EXTENDIDO a semanas completas de
+  // borde (como los días grises de un calendario). Invariante: lo que muestra la
+  // semana visible lo muestra también su mes — sin esto, una cartola subida el
+  // 30 de junio aparecía en la semana 28jun-4jul pero DESAPARECÍA al pasar a
+  // "mesa del mes" de julio ("se ven cosas en semana y en mes no").
+  const lastOfMonth = addDaysStr(firstOfNextMonth, -1);
+  const workStart = isMonthMode
+    ? chileDayStartUtc(weekRangeStr(firstOfMonth).start)
+    : chileDayStartUtc(isWeekMode ? weekRange.start : selDate);
+  const workEnd = isMonthMode
+    ? chileDayStartUtc(weekRangeStr(lastOfMonth).end)
+    : chileDayStartUtc(isWeekMode ? weekRange.end : nextSelDate);
+  // Rango FISCAL: el Registro de Ventas y las boletas "del mes" siguen siendo el
+  // mes calendario estricto (una boleta del 30 de junio NO puede reportarse bajo
+  // "julio"). En día/semana coincide con el rango de trabajo.
+  const fiscalStart = isMonthMode ? sm : workStart;
+  const fiscalEnd = isMonthMode ? em : workEnd;
+  const fiscalStartDay = fiscalStart.slice(0, 10);
+  const fiscalEndDay = fiscalEnd.slice(0, 10);
   const inWorkRange = (fecha?: string | null) => {
     const day = fecha?.slice(0, 10);
-    return !!day && day >= workStartDay && day < workEndDay;
+    return !!day && day >= fiscalStartDay && day < fiscalEndDay;
   };
 
   // Boletas del rango visible: el filtro en memoria acepta por fecha_emision O por
   // created_at, así que la consulta replica ese OR en el server. Antes se traían las
   // 100 más recientes globales → un mes viejo con >100 boletas posteriores mostraba
   // un falso "Aún no hay boletas".
-  const boletasRangeOr = `and(fecha_emision.gte.${workStartDay},fecha_emision.lt.${workEndDay}),and(created_at.gte.${workStart},created_at.lt.${workEnd})`;
+  const boletasRangeOr = `and(fecha_emision.gte.${fiscalStartDay},fecha_emision.lt.${fiscalEndDay}),and(created_at.gte.${fiscalStart},created_at.lt.${fiscalEnd})`;
 
   // ── Consultas date-dependientes (paralelas) ──
   const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes] = await Promise.all([
@@ -109,7 +124,7 @@ export async function fetchMesaDateDependent(
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
-    supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", workStartDay).lt("fecha_emision", workEndDay),
+    supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).or(boletasRangeOr),
     supabase.from("empresas").select("boletas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
   ]);
@@ -207,11 +222,16 @@ export async function fetchMesaDateDependent(
   // ── Pendientes de emisión (cola del tab Emitir) — depende de empresa, no del rango ──
   const pendientes = await getPendientesEmision(supabase, empresaId, {
     giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente,
-  }, { start: workStart, end: workEnd }).catch(() => ({
-    items: [] as Awaited<ReturnType<typeof getPendientesEmision>>["items"],
-    totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, monto_total: 0, monto_listo: 0 },
-    aprobadas_otros_tipos: {} as Record<string, number>,
-  }));
+  }, { start: workStart, end: workEnd }).catch((e) => {
+    // NUNCA tragar en silencio: una cola vacía por error se ve igual que "no hay
+    // nada que emitir" y el usuario pierde boletas sin saberlo.
+    console.error("[mesa] getPendientesEmision falló — la cola de Emitir queda vacía", e);
+    return {
+      items: [] as Awaited<ReturnType<typeof getPendientesEmision>>["items"],
+      totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, monto_total: 0, monto_listo: 0 },
+      aprobadas_otros_tipos: {} as Record<string, number>,
+    };
+  });
 
   // 'editado' = borrador (editar la degrada, perdió el Aprobar): sigue visible en
   // la cola de Emitir pero cae en "por revisar" y nunca es emitible — coherente
