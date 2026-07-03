@@ -41,15 +41,17 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
-    // MFA opt-in (Supabase Auth). FAIL-OPEN: si el chequeo falla, NO bloquea
-    // (no dejar a nadie fuera del login). Solo afecta a quien YA enroló un
-    // factor verificado y está en aal1: debe completar el challenge.
+    // MFA opt-in (Supabase Auth). Solo afecta a quien YA enroló un factor verificado
+    // y está en aal1: debe completar el challenge. FAIL-CLOSED (auditoría #4): si el
+    // chequeo de aal falla, NO dejamos pasar a quien tiene un factor verificado —
+    // pero sí a quien no enroló MFA (no tiene nada que completar, no lo encerramos).
     let needsMfa = false;
     try {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       needsMfa = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
     } catch {
-      needsMfa = false;
+      const factores = (user.factors ?? []) as Array<{ status?: string | null }>;
+      needsMfa = factores.some((f) => f.status === "verified");
     }
 
     if (needsMfa) {
