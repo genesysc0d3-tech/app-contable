@@ -17,6 +17,7 @@ export type CuentaAuditAction =
   | "emision_fallida"
   | "modo_soporte_entrado"
   | "modo_soporte_salido"
+  | "documento_eliminado"
   | "plan_cambiado_dev"
   | "trial_cortesia_cambiado";
 

@@ -180,10 +180,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
 
   // Confirmación inline de dos pasos para acciones destructivas (sin window.confirm):
   // el primer click "arma" el botón (~4s), el segundo ejecuta.
-  const [armado, setArmado] = useState<{ docId: string; accion: "reprocesar" | "deshacer" } | null>(null);
+  const [armado, setArmado] = useState<{ docId: string; accion: "reprocesar" | "deshacer" | "eliminar" } | null>(null);
   const armadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (armadoTimer.current) clearTimeout(armadoTimer.current); }, []);
-  function confirmarDosPasos(docId: string, accion: "reprocesar" | "deshacer", path: string) {
+  function confirmarDosPasos(docId: string, accion: "reprocesar" | "deshacer" | "eliminar", path: string) {
     if (armadoTimer.current) clearTimeout(armadoTimer.current);
     if (armado?.docId === docId && armado.accion === accion) {
       setArmado(null);
@@ -330,6 +330,15 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   {!isBoletaUnica && !frozen && (doc.estado === "procesado" || doc.estado === "error") && (
                     <button className="ud" onClick={() => confirmarDosPasos(doc.id, "deshacer", "/api/deshacer-documento")}>
                       {armado?.docId === doc.id && armado.accion === "deshacer" ? "¿Seguro? Deshacer" : "↩ Deshacer"}
+                    </button>
+                  )}
+                  {/* Eliminar duro: archivo + propuestas fuera de la mesa. Solo si
+                      NO hay boletas emitidas (frozen) — la barrera final de Emitir
+                      no se toca. El server re-valida (guard en eliminar-documento). */}
+                  {!isBoletaUnica && !frozen && doc.estado !== "procesando" && (
+                    <button className="ud" title="Elimina la cartola completa de la mesa: archivo, movimientos y propuestas. Solo posible si no tiene boletas emitidas."
+                      onClick={() => confirmarDosPasos(doc.id, "eliminar", "/api/eliminar-documento")}>
+                      {armado?.docId === doc.id && armado.accion === "eliminar" ? "¿Seguro? Eliminar todo" : "🗑 Eliminar"}
                     </button>
                   )}
                   {doc.estado === "procesando" && (
