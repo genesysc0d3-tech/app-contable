@@ -164,9 +164,11 @@ function CreativeButton({ label, baseIcon, onClick, disabled, bg, color, border,
 // Visor de 1 transacción como VEREDICTO editable (3 columnas: comprobante · datos ·
 // acciones). El tipo afecta/exenta y el monto son ediciones LOCALES instantáneas
 // (cero servidor, cero recarga); se persisten una sola vez al Aprobar/Registrar.
-export default function VeredictoCard({ propuesta, clientes, empresaId: _empresaId, empresaTipo, onAction, onClose, documentoId, onViewImage }: {
+export default function VeredictoCard({ propuesta, clientes, empresaId: _empresaId, empresaTipo, onAction, onClose, documentoId, onViewImage, onEliminar, eliminarArmado = false }: {
   propuesta: Propuesta; clientes: ClienteResumen[]; empresaId: string; empresaTipo: string | null;
   onAction: () => void; onClose: () => void; documentoId: string; onViewImage: () => void;
+  /** Eliminar el documento completo de la mesa (solo sin boletas emitidas; dos pasos, estado en el padre). */
+  onEliminar?: () => void; eliminarArmado?: boolean;
 }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -244,6 +246,12 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: dotColor }}>
             <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: dotColor }} />{pct}%
           </span>
+          {onEliminar && (
+            <button onClick={onEliminar} title="Elimina el comprobante completo de la mesa: archivo y propuesta. Solo posible si no tiene boletas emitidas."
+              style={{ height: "2.15em", borderRadius: 10, border: "1px solid color-mix(in srgb, var(--red) 35%, transparent)", background: eliminarArmado ? "color-mix(in srgb, var(--red) 12%, transparent)" : "transparent", color: "var(--red)", cursor: "pointer", padding: "0 0.75em", fontSize: "0.82em", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
+              {eliminarArmado ? "¿Seguro? Eliminar todo" : "🗑 Eliminar"}
+            </button>
+          )}
           <button onClick={onClose} title="Cerrar" style={{ width: "2.15em", height: "2.15em", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cliente Cloudflare R2 (S3-compatible). Los archivos pesados (PDFs de boletas,
@@ -54,6 +54,11 @@ export async function r2SignedGetUrl(key: string, expiresInSeconds = 3600): Prom
     new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }),
     { expiresIn: expiresInSeconds },
   );
+}
+
+/** Borra un objeto de R2 (idempotente: borrar una key inexistente no falla). */
+export async function deleteFromR2(key: string): Promise<void> {
+  await r2Client().send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
 }
 
 /** Baja un objeto de R2 como Buffer (para servirlo desde una ruta del server). */

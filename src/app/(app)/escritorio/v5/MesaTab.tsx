@@ -162,6 +162,37 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     ? ((mesa.boletasView as unknown as BoletaEmitida[]).find((b) => b.id === selBoletaId) ?? null)
     : null;
 
+  // Eliminar el documento COMPLETO de la mesa (archivo + propuestas), solo si aún
+  // no tiene boletas emitidas (la barrera final de Emitir no se toca; el server
+  // re-valida en /api/eliminar-documento). Confirmación inline de dos pasos.
+  const selFrozen = selDoc ? ((mesa.docProgress as Record<string, { emitida?: number }>)?.[selDoc.id]?.emitida ?? 0) > 0 : false;
+  const [elimArmado, setElimArmado] = useState<string | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+  const eliminarSelDoc = async () => {
+    if (!selDoc || eliminando) return;
+    const docId = selDoc.id;
+    if (elimArmado !== docId) {
+      setElimArmado(docId);
+      setTimeout(() => setElimArmado((v) => (v === docId ? null : v)), 4000);
+      return;
+    }
+    setElimArmado(null);
+    setEliminando(true);
+    try {
+      const res = await fetch("/api/eliminar-documento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documento_id: docId }) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(json.error ?? "No se pudo eliminar el documento", "error"); return; }
+      toast("Documento eliminado de la mesa");
+      setSelDocId(null);
+      reload();
+    } catch {
+      toast("Error de red — intenta de nuevo", "error");
+    } finally {
+      setEliminando(false);
+    }
+  };
+  const puedeEliminarSel = Boolean(selDoc) && tipo !== "boleta" && !selFrozen && selDoc?.estado !== "procesando";
+
   // Un DocCardList (árbol) por panel, con la lista de su fuente; selección compartida.
   const renderArbol = (list: DocRow[]) => (
     <DocCardList
@@ -193,11 +224,11 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
             </div>
           </div>
         ) : tipo === "telegram" && pend[0] ? (
-          <VeredictoCard key={pend[0].id} propuesta={pend[0]} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} onClose={() => setSelDocId(null)} documentoId={selDoc.id} onViewImage={() => setViewImgDocId(selDoc.id)} />
+          <VeredictoCard key={pend[0].id} propuesta={pend[0]} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} onClose={() => setSelDocId(null)} documentoId={selDoc.id} onViewImage={() => setViewImgDocId(selDoc.id)} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} />
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
         ) : tipo === "massdte" && selDoc.estado === "procesado" && pend.length > 0 ? (
-          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} />
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
@@ -208,6 +239,13 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 600, color: "var(--blue)", background: "rgba(91,156,246,.08)", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", flexShrink: 0 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
                   Comprobante
+                </button>
+              )}
+              {puedeEliminarSel && (
+                <button onClick={eliminarSelDoc} disabled={eliminando}
+                  title="Elimina el documento completo de la mesa: archivo, movimientos y propuestas. Solo posible si no tiene boletas emitidas."
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 700, color: "var(--red)", background: "color-mix(in srgb, var(--red) 8%, transparent)", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", flexShrink: 0, opacity: eliminando ? .6 : 1 }}>
+                  {eliminando ? "Eliminando…" : elimArmado === selDoc.id ? "¿Seguro? Eliminar todo" : "🗑 Eliminar"}
                 </button>
               )}
               <button onClick={() => setSelDocId(null)} title="Cerrar visor"

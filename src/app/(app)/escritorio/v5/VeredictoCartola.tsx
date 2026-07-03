@@ -20,7 +20,7 @@ const CB_CSS = `
 const divider = { borderTop: "1px solid var(--border)", margin: "0.7em 0" } as const;
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null };
   propuestas: Propuesta[];
@@ -30,6 +30,9 @@ export default function VeredictoCartola({
   onEditar: () => void;
   onAprobar: () => void;
   busy?: boolean;
+  /** Eliminar el documento completo de la mesa (solo sin boletas emitidas; dos pasos, estado en el padre). */
+  onEliminar?: () => void;
+  eliminarArmado?: boolean;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -87,6 +90,12 @@ export default function VeredictoCartola({
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: dotColor }}>
             <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: dotColor }} />{listas}/{count} listas
           </span>
+          {onEliminar && (
+            <button onClick={onEliminar} title="Elimina la cartola completa de la mesa: archivo, movimientos y propuestas. Solo posible si no tiene boletas emitidas."
+              style={{ height: "2.15em", borderRadius: 10, border: "1px solid color-mix(in srgb, var(--red) 35%, transparent)", background: eliminarArmado ? "color-mix(in srgb, var(--red) 12%, transparent)" : "transparent", color: "var(--red)", cursor: "pointer", padding: "0 0.75em", fontSize: "0.82em", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
+              {eliminarArmado ? "¿Seguro? Eliminar todo" : "🗑 Eliminar"}
+            </button>
+          )}
           <button onClick={onClose} title="Cerrar" style={{ width: "2.15em", height: "2.15em", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
