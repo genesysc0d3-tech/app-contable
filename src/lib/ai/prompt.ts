@@ -1,3 +1,5 @@
+import { redactForAI, redactPiiHabilitado } from "./egress";
+
 const DEFAULT_SYSTEM_PROMPT = `Eres un clasificador tributario chileno experto. Analizas documentos del PROPIO usuario (capturas de su banco/billetera/exchange, comprobantes, cartolas) y extraes sus movimientos para proponer el documento tributario correcto. El usuario es el CONTRIBUYENTE (quien emite las boletas). Tómate el tiempo de razonar bien: acertar vale más que ir rápido.
 
 PASO 0 — ¿QUIÉN ES EL USUARIO Y HACIA DÓNDE VA LA PLATA? (lo más importante; un error acá arruina todo)
@@ -117,11 +119,15 @@ export function buildClassifyUserPrompt(
   loteInfo?: string
 ): string {
   const prefix = loteInfo ? `[${loteInfo}]\n\n` : "";
+  // Minimización PII (auditoría #26): con AI_REDACT_PII=1 se enmascaran RUT/cuentas/
+  // nombres en la glosa antes de salir al LLM. Default OFF (el clasificador necesita
+  // la glosa cruda; su exactitud está validada con datos reales).
+  const redact = redactPiiHabilitado();
   const json = JSON.stringify(
     movimientos.map((m, i) => ({
       movimiento_index: i,
       fecha: m.fecha,
-      descripcion: m.descripcion,
+      descripcion: redact ? redactForAI(m.descripcion) : m.descripcion,
       monto: m.monto,
       tipo_flujo: m.tipo_flujo,
       n_documento: m.n_documento ?? null,

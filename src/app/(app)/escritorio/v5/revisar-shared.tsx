@@ -5,7 +5,7 @@
 // (ConfianzaGroupSection) en el visor de la mesa unificada y en el popup MassDTE,
 // sin duplicar código. Comportamiento idéntico al original.
 
-import { useState, type CSSProperties } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { rechazarPropuesta, aprobarTodas, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
@@ -14,6 +14,7 @@ import type { Tables } from "@/lib/database.types";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { useMesaReload } from "./mesa-reload";
+import { obtenerUmbralReceptorClp } from "./actions";
 
 export type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -157,6 +158,9 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
               {/* Transaction rows */}
               {visible.map((p) => {
                 const isExpanded = expandedRows.has(p.id);
+                // 'aprobado' = comprometida a Emitir → bloqueada (no ✓/✎). 'editado'
+                // sigue siendo borrador editable (auditoría #21).
+                const enEmision = p.estado === "aprobado";
                 return (
                   <div key={p.id}>
                     {/* Thin row */}
@@ -178,9 +182,10 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                         style={{fontSize:9,fontWeight:600,textAlign:"right",minWidth:30,color:(p.confianza??0)>=ALTA?"#22c55e":(p.confianza??0)>=MEDIA?"#f59e0b":"var(--text2)"}}
                       >{Math.round((p.confianza??0)*100)}%</span>
                       {p.estado === "listo" && <span style={{fontSize:8,fontWeight:800,color:"#22c55e",flexShrink:0,letterSpacing:".05em"}}>LISTO</span>}
+                      {enEmision && <span style={{fontSize:8,fontWeight:800,color:"#5b9cf6",flexShrink:0,letterSpacing:".05em"}}>EN EMISIÓN</span>}
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
-                        <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />
-                        <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />
+                        {!enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
+                        {!enEmision && <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />}
                         <RowActionBtn type="reject" onClick={async () => {const r=await rechazarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Rechazada");onAction();}} icon="✕" />
                       </div>
                     </div>
@@ -276,6 +281,18 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const [showNewCliente, setShowNewCliente] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Umbral 135 UF con la UF VIVA (auditoría #10): arranca en la constante referencial
+  // y se re-ancla al valor del server para que el gate coincida con la validación de
+  // emisión. Si el fetch falla, queda el fallback referencial (nunca bloquea).
+  const [umbralReceptor, setUmbralReceptor] = useState<number>(RECEPTOR_OBLIGATORIO_DESDE);
+  useEffect(() => {
+    let vivo = true;
+    obtenerUmbralReceptorClp()
+      .then((u) => { if (vivo && u > 0) setUmbralReceptor(u); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
   const isGasto = propuesta.tipo_propuesto === "gasto_egreso";
   const isNoComercial = propuesta.tipo_propuesto === "no_comercial";
   const noBoletea = isGasto || isNoComercial;
@@ -318,7 +335,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const neto = isAfecta ? Math.round(total / 1.19) : total;
   const iva = isAfecta ? total - neto : 0;
   const conflicto = isAfecta && total > 0 && iva === 0; // afecta con IVA $0 → el SII la rechaza
-  const requiereReceptor = total > RECEPTOR_OBLIGATORIO_DESDE; // 135 UF
+  const requiereReceptor = total > umbralReceptor; // 135 UF (UF viva, fallback referencial)
   const rutTrim = rut.trim();
   const rutValido = !rutTrim || validarRut(rutTrim);
   const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());

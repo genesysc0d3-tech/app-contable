@@ -11,6 +11,7 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import {
   loadReglas,
@@ -64,7 +65,12 @@ function normTipo(val: string | null | undefined): string {
   if (s.includes("crypto") || s.includes("bitcoin") || s.includes("usdt")) return "compraventa_crypto";
   if (s.includes("p2p") || s.includes("transferencia")) return "transferencia_p2p";
   if (s.includes("forex") || s.includes("divisa")) return "operacion_forex";
-  if (s.includes("boleta") || s.includes("honorario")) return "boleta_honorarios";
+  // Honorarios (BHE, Segunda Categoría, fuera de emisión DTE): SOLO si el texto lo
+  // dice explícito. El literal exacto "boleta" ya salió en VALID_TIPOS; aquí caen
+  // variantes de texto libre ("boleta afecta", "boleta 39", "boleta electrónica").
+  if (s.includes("honorario")) return "boleta_honorarios";
+  if (s.includes("boleta") && (s.includes("exent") || s.includes("no afect"))) return "exenta";
+  if (s.includes("boleta")) return "boleta";
   if (s.includes("factura") && (s.includes("exent") || s.includes("no afect"))) return "factura_exenta";
   if (s.includes("factura")) return "factura_afecta";
   if (s.includes("impuesto") || s.includes("f29") || s.includes("ppm") || s.includes("tgr") || s.includes("contribucion")) return "impuesto";
@@ -280,7 +286,7 @@ export async function procesarDocumento(
   const aliasList = (identidades ?? []).map((i) => i.valor).filter(Boolean);
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
-      `- Razón social: «${emp.razon_social}» | RUT: ${emp.rut}` +
+      `- Razón social: «${emp.razon_social}» | RUT: ${redactPiiHabilitado() ? maskRut(emp.rut) : emp.rut}` +
       (emp.giro ? ` | Giro: ${emp.giro}` : "") +
       ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
       (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +

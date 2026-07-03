@@ -304,6 +304,8 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject }: {
 }) {
   const tm = tipoMeta(p.tipo_propuesto);
   const conf = Math.round((p.confianza ?? 0) * 100);
+  // 'aprobado' = comprometida a Emitir → sin ✎ (auditoría #21).
+  const enEmision = p.estado === "aprobado";
   return (
     <div className="ce-row" onClick={onToggle}>
       {/* 16px reservado para checkbox (selección múltiple — fase posterior) */}
@@ -319,10 +321,11 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject }: {
       <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 600, color: "var(--text)", minWidth: 64, textAlign: "right" }}>{fmt(p.total ?? p.movimientos_raw?.monto)}</span>
       <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, color: confColor(p.confianza), minWidth: 30, textAlign: "right" }}>{conf}%</span>
       {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "#22c55e", letterSpacing: ".05em" }}>LISTO</span>}
+      {enEmision && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "#5b9cf6", letterSpacing: ".05em" }}>EN EMISIÓN</span>}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* ✓ solo en pendientes: nunca demotar una 'listo' (ya staged) ni una 'aprobado'/'editado' (ya en Emitir) */}
         {p.estado === "pendiente" && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
-        <RowActionBtn type="edit" icon="✎" onClick={onToggle} />
+        {!enEmision && <RowActionBtn type="edit" icon="✎" onClick={onToggle} />}
         {/* ✗ separado y atenuado (ghost hasta hover) para prevenir misclick */}
         <span className="ce-reject" style={{ marginLeft: 10 }}>
           <RowActionBtn type="reject" icon="✕" onClick={onReject} />

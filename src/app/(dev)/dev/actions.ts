@@ -9,8 +9,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, TablesUpdate } from "@/lib/database.types";
-import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { contextoCuentaPorEmpresa, trialGlobalHabilitado } from "@/lib/entitlements";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { recordOpsEvent } from "@/lib/ops/events";
+import { purgarCuentaCompleta, type PurgaResumen } from "@/lib/derechos/purga-cuenta";
 import { clearDevSupportEmpresaCookie, getDevOperatorContext, getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { cuotaEmpresaMes, periodoActualChile, rangoMesActualChileUtc } from "./helpers";
 
@@ -402,4 +404,120 @@ export async function setCuentaPlan(
 
   revalidatePath(`/dev/cuentas/${cuentaId}`);
   return { ok: true };
+}
+
+/** Lee el estado del trial global para pintarlo en el panel. */
+export async function obtenerTrialGlobal(): Promise<boolean> {
+  const gate = await gateOperador();
+  if ("error" in gate) return false;
+  return trialGlobalHabilitado(gate.sb);
+}
+
+/**
+ * Prende/apaga el trial GLOBAL (config_global['trial_habilitado']) — la oferta pública
+ * de prueba para TODAS las cuentas sin plan (auditoría #4). Default OFF.
+ */
+export async function setTrialGlobal(
+  habilitado: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof habilitado !== "boolean") return { error: "Valor inválido" };
+
+  const { error } = await gate.sb
+    .from("config_global")
+    .upsert(
+      { clave: "trial_habilitado", valor: habilitado, updated_at: new Date().toISOString() },
+      { onConflict: "clave" },
+    );
+  if (error) return { error: error.message };
+
+  await recordOpsEvent({
+    sb: gate.sb,
+    severity: "info",
+    source: "dev-support",
+    eventName: "trial_global_cambiado",
+    summary: `Operador dev ${habilitado ? "prendió" : "apagó"} el trial global`,
+    metadata: { habilitado, usuario_id: gate.userId },
+  }).catch(() => {});
+
+  revalidatePath("/dev");
+  revalidatePath("/dev/cuentas");
+  return { ok: true };
+}
+
+/**
+ * Otorga/quita trial de CORTESÍA a una cuenta puntual (cuentas.trial_cortesia), para
+ * "amistades" aunque el trial global esté apagado (auditoría #4).
+ */
+export async function setCuentaTrialCortesia(
+  cuentaId: string,
+  habilitado: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof cuentaId !== "string" || !UUID_RE.test(cuentaId)) return { error: "Cuenta inválida" };
+  if (typeof habilitado !== "boolean") return { error: "Valor inválido" };
+
+  const { error, count } = await gate.sb
+    .from("cuentas")
+    .update({ trial_cortesia: habilitado }, { count: "exact" })
+    .eq("id", cuentaId);
+  if (error) return { error: error.message };
+  if (!count) return { error: "Cuenta no encontrada" };
+
+  await recordCuentaAudit({
+    sb: gate.sb,
+    cuentaId,
+    empresaId: null,
+    usuarioId: gate.userId,
+    accion: "trial_cortesia_cambiado",
+    recursoTipo: "cuenta",
+    recursoId: cuentaId,
+    resumen: `Operador dev ${habilitado ? "otorgó" : "quitó"} trial de cortesía`,
+  }).catch(() => {});
+
+  revalidatePath(`/dev/cuentas/${cuentaId}`);
+  return { ok: true };
+}
+
+/**
+ * Purga TOTAL de una cuenta (auditoría #27B, derecho de eliminación Ley 21.719). Es
+ * DESTRUCTIVO e irreversible: exige que el operador tipee el nombre exacto de la
+ * cuenta como confirmación. Conserva auth + consentimientos (prueba ARCO). Ver
+ * purgarCuentaCompleta.
+ */
+export async function purgarCuenta(
+  cuentaId: string,
+  confirmacion: string,
+): Promise<{ ok: true; resumen: PurgaResumen } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof cuentaId !== "string" || !UUID_RE.test(cuentaId)) return { error: "Cuenta inválida" };
+
+  const { data: cuenta } = await gate.sb.from("cuentas").select("nombre").eq("id", cuentaId).maybeSingle();
+  if (!cuenta) return { error: "Cuenta no encontrada" };
+  if (typeof confirmacion !== "string" || confirmacion.trim() !== cuenta.nombre.trim()) {
+    return { error: "La confirmación no coincide con el nombre exacto de la cuenta" };
+  }
+
+  let resumen: PurgaResumen;
+  try {
+    resumen = await purgarCuentaCompleta(gate.sb, cuentaId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Error al purgar la cuenta" };
+  }
+
+  // La auditoría por-cuenta ya no existe (se purgó): registra en ops_events.
+  await recordOpsEvent({
+    sb: gate.sb,
+    severity: "warn",
+    source: "dev-support",
+    eventName: "cuenta_purgada",
+    summary: `Operador dev purgó la cuenta «${cuenta.nombre}»: ${resumen.empresas} empresas, ${resumen.documentos} docs, ${resumen.auditChunks} audit_chunks, ${resumen.parserLogs} parser_logs`,
+    metadata: { cuentaId, usuario_id: gate.userId, ...resumen },
+  }).catch(() => {});
+
+  revalidatePath("/dev/cuentas");
+  return { ok: true, resumen };
 }

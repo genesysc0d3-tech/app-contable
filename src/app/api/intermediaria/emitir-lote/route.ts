@@ -126,9 +126,10 @@ export async function POST(request: Request) {
   if (!acceso.ok) {
     return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
   }
-  if (!acceso.planActivo) {
-    return NextResponse.json({ ok: false, error: "PLAN_INACTIVO", detalle: "Tu plan no está activo." }, { status: 402 });
-  }
+  // Sin bloqueo por !planActivo aquí (auditoría #4): verificarEmisionMasiva (más abajo)
+  // es la ÚNICA autoridad — devuelve SIN_PLAN cuando no hay plan ni trial, y activa el
+  // trial en la 1ª emisión masiva cuando está disponible. Un gate duro acá lo hacía
+  // inalcanzable.
   const emisionConfig = await obtenerConfigEmision(usuario.empresa_id);
   if (process.env.NODE_ENV !== "production") {
     console.info("[emitir-lote] configuracion emision", {

@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, type DevCuentaDetalle } from "@/lib/dev/account-360";
-import { DevLinkButton, VerComoClienteButton, PlanToggle } from "../DevCuentaActions";
+import { DevLinkButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton } from "../DevCuentaActions";
 
 const C = {
   bg: "#0f1014",
@@ -566,8 +566,19 @@ export default async function DevCuentaDetallePage({
 
         <Section title="Plan (control dev)">
           <PlanToggle cuentaId={cuentaId} planCodigo={cuenta.planCodigo} planActivo={cuenta.planActivo} />
+          <div style={{ marginTop: 10 }}>
+            <TrialCortesiaToggle cuentaId={cuentaId} cortesia={cuenta.trialCortesia} />
+          </div>
           <div style={{ marginTop: 8, fontSize: 11, color: C.text2 }}>
             Cambia plan/estado a mano (test de tiers y ops: si la pasarela falla o hay downgrade). Si la cuenta tiene suscripción activa, su plan manda sobre esto.
+            La cortesía habilita el trial para esta cuenta aunque el trial global esté apagado.
+          </div>
+        </Section>
+
+        <Section title="Zona de peligro">
+          <PurgarCuentaButton cuentaId={cuentaId} nombre={cuenta.nombre} />
+          <div style={{ marginTop: 8, fontSize: 11, color: C.text2 }}>
+            Purga TOTAL e irreversible (derecho de eliminación, Ley 21.719): borra empresas, cartolas, boletas, movimientos, propuestas y la PII cruda (audit_chunks/parser_logs). Conserva auth + consentimientos como prueba ARCO.
           </div>
         </Section>
 

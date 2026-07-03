@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   periodoActual,
+  periodoDePago,
   clpConIva,
   trialVigente,
   chileMonthUtcRange,
@@ -25,6 +26,23 @@ describe("periodoActual — período mensual en zona Chile", () => {
 
   it("caso normal a mitad de mes", () => {
     expect(periodoActual(new Date("2026-06-15T15:00:00Z"))).toBe("2026-06");
+  });
+});
+
+describe("periodoDePago — acredita según fecha real de aprobación (auditoría #22)", () => {
+  it("usa date_approved, no el checkout: cruce de mes en zona Chile", () => {
+    // 03:59Z del 1-jul aún es 30-jun en Chile (UTC-4) → cae en junio.
+    expect(periodoDePago({ date_approved: "2026-07-01T03:59:00Z" })).toBe("2026-06");
+    expect(periodoDePago({ date_approved: "2026-07-01T04:00:00Z" })).toBe("2026-07");
+  });
+
+  it("cae a date_created si no hay date_approved", () => {
+    expect(periodoDePago({ date_created: "2026-06-15T15:00:00Z" })).toBe("2026-06");
+  });
+
+  it("sin fechas válidas devuelve un período con formato YYYY-MM", () => {
+    expect(periodoDePago({})).toMatch(/^\d{4}-\d{2}$/);
+    expect(periodoDePago({ date_approved: "no-es-fecha" })).toMatch(/^\d{4}-\d{2}$/);
   });
 });
 

@@ -7,13 +7,21 @@ import type { AdapterConfig, ParsedLine, PreExtractedMovimiento, Row } from "./t
  */
 export function parseChileanNumber(v: unknown): number {
   if (v == null || v === "") return 0;
+  // Celdas numéricas (xlsx las entrega como number): redondear, NO stringificar —
+  // si no, 53000.5 → "53000.5" → "530005" (×10). Los montos son CLP enteros.
+  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : 0;
   const s = String(v).trim();
   if (!s) return 0;
-  // If the last 3 chars are ,dd or .dd treat as decimal and drop
-  const normalized = s.replace(/[^\d-]/g, "");
-  if (!normalized) return 0;
-  const n = parseInt(normalized, 10);
-  return Number.isFinite(n) ? n : 0;
+  const neg = s.startsWith("-");
+  // Formato chileno: la COMA es el separador DECIMAL → se conserva solo la parte
+  // entera. "53.000,00" = 53000, no 5.300.000 (antes daba ×100). El punto es
+  // separador de MILES y se elimina abajo con el resto de los no-dígitos.
+  const intPart = s.split(",")[0];
+  const digits = intPart.replace(/[^\d]/g, "");
+  if (!digits) return 0;
+  const n = parseInt(digits, 10);
+  if (!Number.isFinite(n)) return 0;
+  return neg ? -n : n;
 }
 
 export function normalizeDate(

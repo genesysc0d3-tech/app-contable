@@ -800,7 +800,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         // El formulario ya captura forma de pago — se registra como medio de
         // pago (obligatorio sobre 135 UF, Res. Ex. SII 44/2025).
         medio_pago: formaPago,
-        detalles: [{ nombre: detalleNombre.trim(), monto: total }],
+        detalles: [{ nombre: detalleNombre.trim().slice(0, 80), monto: total }],
         monto_total: total,
       };
 
@@ -878,7 +878,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         },
         Detalles: [{
           IndicadorExento: tipoDte === 34 ? 1 : 0,
-          Nombre: detalleNombre.trim(),
+          Nombre: detalleNombre.trim().slice(0, 80),
           Cantidad: 1,
           UnidadMedida: "un",
           Precio: tipoDte === 33 ? neto : total,
@@ -944,7 +944,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           direccion: receptorDireccion.trim() || undefined,
           comuna: receptorComuna.trim() || undefined,
         },
-        detalles: [{ nombre: detalleNombre.trim(), cantidad: 1, monto_total: total }],
+        detalles: [{ nombre: detalleNombre.trim().slice(0, 80), cantidad: 1, monto_total: total }],
         totales: {
           monto_total: total,
           monto_neto: tipoDte === 39 ? Math.round(total / 1.19) : 0,
@@ -1001,7 +1001,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               direccion: receptorDireccion.trim() || null,
               comuna: receptorComuna.trim() || null,
             },
-            detalles: [{ nombre: detalleNombre.trim(), cantidad: 1, monto_total: total }],
+            detalles: [{ nombre: detalleNombre.trim().slice(0, 80), cantidad: 1, monto_total: total }],
             totales: {
               monto_total: total,
               monto_neto: tipoDte === 39 ? Math.round(total / 1.19) : 0,
@@ -1278,7 +1278,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Un concepto por emisión directa.</p>
               </div>
               <div className="ed-grid-detail">
-                <Field label="Detalle" value={detalleNombre} onChange={(value) => updateActiveDraft({ detalleNombre: value })} placeholder="Servicio prestado" />
+                <Field label="Detalle" value={detalleNombre} onChange={(value) => updateActiveDraft({ detalleNombre: value })} placeholder="Servicio prestado" maxLength={80} />
                 <Field label={tipoDte === 39 || tipoDte === 33 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
               </div>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
@@ -1445,12 +1445,14 @@ function Field({
   onChange,
   placeholder,
   inputMode,
+  maxLength,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   inputMode?: "numeric";
+  maxLength?: number;
 }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1460,6 +1462,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         inputMode={inputMode}
+        maxLength={maxLength}
         style={{ width: "100%", height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", padding: "0 9px", fontSize: 11, outline: "none" }}
       />
     </label>

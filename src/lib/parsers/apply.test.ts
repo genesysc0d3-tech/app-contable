@@ -68,9 +68,17 @@ describe("parseChileanNumber — montos CLP con separadores chilenos", () => {
     expect(parseChileanNumber("-1.500")).toBe(-1500);
   });
 
-  it("strippea TODO separador: la cartola trae enteros CLP, no decimales", () => {
-    // El código quita puntos Y comas; '1.234,56' NO se lee como 1234,56.
-    expect(parseChileanNumber("1.234,56")).toBe(123456);
+  it("la COMA es decimal chileno → corta la fracción (no ×100)", () => {
+    // '.' = miles, ',' = decimal. '53.000,00' = 53000, NO 5.300.000.
+    expect(parseChileanNumber("1.234,56")).toBe(1234);
+    expect(parseChileanNumber("53.000,00")).toBe(53000);
+    expect(parseChileanNumber("-1.500,99")).toBe(-1500);
+  });
+
+  it("números crudos con fracción → redondea (celdas xlsx, no ×10)", () => {
+    expect(parseChileanNumber(53000)).toBe(53000);
+    expect(parseChileanNumber(53000.5)).toBe(53001);
+    expect(parseChileanNumber(53000.55)).toBe(53001);
   });
 
   it("texto no numérico → 0", () => {

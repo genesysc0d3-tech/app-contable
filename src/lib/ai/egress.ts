@@ -29,6 +29,28 @@ export function redactForAI(text: string | null | undefined): string {
     .replace(CUENTA_RE, "[NUM]");
 }
 
+/**
+ * ¿Minimización PII activa hacia el LLM? (auditoría #26). Env AI_REDACT_PII=1.
+ * Default OFF: el clasificador interno necesita la glosa/RUT crudos y su exactitud
+ * está validada bit-a-bit con datos reales — prender esto exige re-validar. Queda
+ * en código como interruptor para beta sin cambios grandes con clientes ya activos.
+ */
+export function redactPiiHabilitado(): boolean {
+  return process.env.AI_REDACT_PII === "1";
+}
+
+/**
+ * Enmascara el cuerpo de un RUT dejando solo los últimos 3 dígitos + verificador
+ * (traza suficiente, no reversible a la identidad). "18.512.171-2" → "••.•••.171-2".
+ */
+export function maskRut(rut: string | null | undefined): string {
+  const s = String(rut ?? "").trim();
+  if (!s) return s;
+  const m = s.match(/(\d{1,3})-([\dkK])$/);
+  if (!m) return "[RUT]";
+  return `••.•••.${m[1].padStart(3, "0")}-${m[2]}`;
+}
+
 /** Token estable y NO reversible (FNV-1a) para agrupar "mismo cliente" sin exponer identidad. */
 export function clienteToken(seed: string | null | undefined): string {
   const s = String(seed ?? "").trim().toLowerCase();

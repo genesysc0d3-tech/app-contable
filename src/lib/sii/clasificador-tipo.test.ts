@@ -35,6 +35,26 @@ describe("clasificarBoleta — precedencia de reglas", () => {
   });
 });
 
+describe("clasificarBoleta — hint afecta cede ante exención por ley / exento (auditoría #9)", () => {
+  it("empresa EXENTA + hint servicios + glosa neutral → EXENTA 41 (no puede emitir DTE 39)", () => {
+    const r = clasificarBoleta(mov("pago cliente"), { ...empresaAuto, tipo_contribuyente: "exento" }, undefined, "servicios");
+    expect(r.tipo_dte).toBe(41);
+    expect(r.sugerencia).toBe("exenta");
+  });
+
+  it("empresa afecta + hint ventas + glosa cripto por ley → EXENTA 41 (la ley gana al hint)", () => {
+    const r = clasificarBoleta(mov("venta USDT Binance P2P"), { ...empresaAuto, tipo_contribuyente: "afecto" }, undefined, "ventas");
+    expect(r.tipo_dte).toBe(41);
+    expect(r.sugerencia).toBe("exenta");
+  });
+
+  it("sanity: empresa afecta + hint servicios + glosa neutral SIGUE AFECTA 39 (hint autoritativo sin conflicto)", () => {
+    const r = clasificarBoleta(mov("pago cliente"), { ...empresaAuto, tipo_contribuyente: "afecto" }, undefined, "servicios");
+    expect(r.tipo_dte).toBe(39);
+    expect(r.sugerencia).toBe("afecta");
+  });
+});
+
 describe("clasificarBoleta — ángulos heurísticos", () => {
   it("glosa cripto sin hint → exenta (activo incorporal, sin IVA)", () => {
     const r = clasificarBoleta(mov("compra USDT binance p2p"), empresaAuto);

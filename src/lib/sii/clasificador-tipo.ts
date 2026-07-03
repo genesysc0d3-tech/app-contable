@@ -248,19 +248,30 @@ export function clasificarBoleta(
     };
   }
 
+  // Exención por ley (cripto Of. 963/2018, salud/educación/transporte; glosa ≥0.80):
+  // es un hecho tributario, no una preferencia de config. Se computa ANTES del hint
+  // porque un hint "servicios/ventas" (afecta) no puede taparla.
+  const exencionPorLey = glosa.veredicto === "exenta" && glosa.peso >= 0.8;
+
   // Si el usuario marcó la naturaleza de la cartola explícitamente
-  // (p2p_cripto, forex_divisas, servicios, ventas), eso es autoritativo.
-  // Las heurísticas son inferencias para cuando no tenemos la declaración
-  // del usuario; cuando la tenemos, son ruido que puede contradecirla.
+  // (p2p_cripto, forex_divisas, servicios, ventas), eso es autoritativo... salvo
+  // que un hint "afecta" contradiga una exención por ley o a un contribuyente
+  // declarado EXENTO (que no puede emitir DTE 39 con IVA). En esos dos casos el
+  // hint cede al ensemble de abajo, que lo corrige a exenta.
   if (hintAngle.veredicto === "afecta" || hintAngle.veredicto === "exenta") {
-    const otras = [glosa, giro, pat].filter((r) => r.veredicto !== "neutral").map((r) => r.razon);
-    return {
-      tipo_dte: hintAngle.veredicto === "afecta" ? 39 : 41,
-      sugerencia: hintAngle.veredicto,
-      confianza: hintAngle.peso,
-      razones: [hintAngle.razon, ...otras],
-      angulos: { glosa, giro, patron: pat },
-    };
+    const hintForzariaAfectaIndebida =
+      hintAngle.veredicto === "afecta" &&
+      (exencionPorLey || empresa.tipo_contribuyente === "exento");
+    if (!hintForzariaAfectaIndebida) {
+      const otras = [glosa, giro, pat].filter((r) => r.veredicto !== "neutral").map((r) => r.razon);
+      return {
+        tipo_dte: hintAngle.veredicto === "afecta" ? 39 : 41,
+        sugerencia: hintAngle.veredicto,
+        confianza: hintAngle.peso,
+        razones: [hintAngle.razon, ...otras],
+        angulos: { glosa, giro, patron: pat },
+      };
+    }
   }
 
   const votos: Record<TipoBoletaSugerido, number> = { afecta: 0, exenta: 0, no_boletar: 0 };
@@ -274,7 +285,7 @@ export function clasificarBoleta(
   // no una preferencia de config (evita boletear cripto como afecta por misconfig).
   // Al revés sí aplica: un "exento" legítimamente domina una señal "afecta" por
   // naturaleza (servicio/venta), que es el caso base, no una exención especial.
-  const exencionPorLey = glosa.veredicto === "exenta" && glosa.peso >= 0.8;
+  // (exencionPorLey se computó arriba, antes del hint.)
   if (empresa.tipo_contribuyente === "afecto" && !exencionPorLey) {
     votos.afecta += 0.9;
   } else if (empresa.tipo_contribuyente === "exento") {

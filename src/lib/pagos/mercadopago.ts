@@ -102,6 +102,31 @@ export async function crearSuscripcion(
   const uf = await getUfClp();
   const monto = clpConIva(plan.uf_mensual, uf);
 
+  // Reemplazo de plan (auditoría #5): cancela cualquier preapproval vivo de la
+  // cuenta ANTES de crear el nuevo, para no acumular cobros recurrentes duplicados.
+  // Si MP falla al cancelar, aborta: mejor no crear el 2º que dejar dos vivos.
+  const { data: previas } = await db
+    .from("suscripciones")
+    .select("id, proveedor_ref")
+    .eq("cuenta_id", cuentaId)
+    .in("estado", ["activa", "pendiente", "pausada", "morosa"]);
+  for (const prev of previas ?? []) {
+    if (prev.proveedor_ref) {
+      const cancel = await cancelarPreapproval(prev.proveedor_ref);
+      if (!cancel.ok) {
+        return {
+          ok: false,
+          error: "REEMPLAZO_FALLIDO",
+          detalle: `No se pudo cancelar la suscripción anterior: ${cancel.detalle ?? cancel.error}`,
+        };
+      }
+    }
+    await db
+      .from("suscripciones")
+      .update({ estado: "cancelada", updated_at: new Date().toISOString() })
+      .eq("id", prev.id);
+  }
+
   const res = await mpFetch<MpPreapproval>("/preapproval", {
     method: "POST",
     body: JSON.stringify({
@@ -280,6 +305,17 @@ export async function crearPersonaAdicionalCuenta(cuentaId: string, empresaId: s
     .eq("id", intent.id)
     .eq("estado", "pendiente");
   return { ok: true, url: res.data.init_point };
+}
+
+/** Cancela un preapproval en MP (idempotente: cancelar uno ya cancelado es OK). */
+export async function cancelarPreapproval(
+  preapprovalId: string,
+): Promise<{ ok: true } | MpError> {
+  const res = await mpFetch<MpPreapproval>(`/preapproval/${encodeURIComponent(preapprovalId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ status: "cancelled" }),
+  });
+  return res.ok ? { ok: true } : res;
 }
 
 /** Re-ancla el monto mensual de una suscripción (UF del día, cron día 1). */

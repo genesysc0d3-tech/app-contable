@@ -19,7 +19,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../database.types";
 import { chileDateString } from "../chile-date";
-import { contextoCuentaPorEmpresa, empresasActivasDeCuenta } from "../entitlements";
+import { contextoCuentaPorEmpresa, empresasActivasDeCuenta, trialGlobalHabilitado } from "../entitlements";
 
 type Sb = SupabaseClient<Database>;
 
@@ -29,6 +29,21 @@ const IVA = 1.19;
 /** Período mensual vigente en zona Chile, formato 'YYYY-MM'. */
 export function periodoActual(ahora: Date = new Date()): string {
   return chileDateString(ahora).slice(0, 7);
+}
+
+/**
+ * Período (YYYY-MM, calendario Chile) al que se ACREDITA un pago, derivado de la
+ * fecha real de aprobación de MP — NO del checkout (auditoría #22): un refill cuyo
+ * pago aprueba tras el cambio de mes debe caer en el mes en que se aprobó, que es
+ * justo el mes que `estadoCuota` cuenta. Cae a date_created y luego a "ahora".
+ */
+export function periodoDePago(recurso: Record<string, unknown>): string {
+  const aprobado = recurso.date_approved ?? recurso.date_created;
+  if (typeof aprobado === "string") {
+    const d = new Date(aprobado);
+    if (!Number.isNaN(d.getTime())) return periodoActual(d);
+  }
+  return periodoActual();
 }
 
 /** Monto CLP total (con IVA) para un precio en UF al valor UF del día. */
@@ -194,7 +209,23 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
     };
   }
 
-  // Sin suscripción activa → modo trial.
+  // Sin suscripción activa → modo trial, SOLO si está disponible (auditoría #4):
+  // global ON (config_global) o cortesía puntual de la cuenta. Si no, trial=null →
+  // decidirGate devuelve SIN_PLAN (comportamiento previo: no hay trial).
+  const trialDisponible = (cuenta?.trialCortesia === true) || (await trialGlobalHabilitado(sb));
+  if (!trialDisponible) {
+    return {
+      plan: null,
+      cuota: 0,
+      refills: 0,
+      uso: usoMes,
+      disponible: 0,
+      trial: null,
+      suscripcionActiva: false,
+      suscripcionEstado: suscripcion?.estado ?? null,
+    };
+  }
+
   const [planTrialRes, empresaRes] = await Promise.all([
     sb.from("planes_config").select("trial_dias, trial_boletas").eq("codigo", "pro").maybeSingle(),
     sb.from("empresas").select("trial_inicio").eq("id", empresaId).maybeSingle(),
@@ -223,6 +254,19 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
     suscripcionActiva: false,
     suscripcionEstado: suscripcion?.estado ?? null,
   };
+}
+
+/**
+ * ¿La empresa puede USAR la emisión ahora? (gate de acceso de página + boleta única,
+ * auditoría #4). = plan activo (o manual), o trial disponible y no terminado. El cupo
+ * de las MASIVAS lo decide aparte verificarEmisionMasiva (que además arranca el trial).
+ */
+export async function puedeEmitir(sb: Sb, empresaId: string, ahora: Date = new Date()): Promise<boolean> {
+  const estado = await estadoCuota(sb, empresaId, ahora);
+  if (estado.suscripcionActiva) return true;
+  if (!estado.trial) return false; // sin plan y sin trial disponible
+  // trial sin iniciar (elegible) o vigente → puede entrar; terminado → no.
+  return estado.trial.inicio === null || estado.trial.activo;
 }
 
 export type GateEmision =

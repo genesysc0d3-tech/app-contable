@@ -1,6 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { redactForAI, clienteToken, assertApprovedDataProcessor, payloadSeguroParaIA } from "./egress";
+import { redactForAI, clienteToken, assertApprovedDataProcessor, payloadSeguroParaIA, maskRut } from "./egress";
 import { OpenCodeGoProvider } from "./providers/opencodego";
+
+describe("maskRut — enmascara cuerpo, deja últimos 3 + DV (auditoría #26)", () => {
+  it("enmascara un RUT con puntos", () => {
+    expect(maskRut("18.512.171-2")).toBe("••.•••.171-2");
+  });
+  it("enmascara un RUT sin puntos y con DV k", () => {
+    expect(maskRut("9876543-k")).toBe("••.•••.543-k");
+  });
+  it("vacío/nulo devuelve vacío; basura sin forma de RUT → [RUT]", () => {
+    expect(maskRut("")).toBe("");
+    expect(maskRut(null)).toBe("");
+    expect(maskRut("no-es-rut")).toBe("[RUT]");
+  });
+});
 
 describe("redactForAI — minimización", () => {
   it("enmascara RUT (con y sin puntos)", () => {
