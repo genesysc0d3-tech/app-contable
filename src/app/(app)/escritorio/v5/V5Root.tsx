@@ -94,7 +94,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
 @keyframes saved-ring{0%{transform:scale(.45);opacity:.9}100%{transform:scale(1.9);opacity:0}}
 `}</style>
 
-      <div style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif", transition: "background .4s,color .4s" }}>
+      <div style={{ position: "relative", minHeight: "100vh", color: "var(--text)", fontFamily: "var(--font-geist-sans), sans-serif", transition: "background .4s,color .4s" }}>
         <TabErrorBoundary label="Dashboard">
           <div>{dashboardContent}</div>
         </TabErrorBoundary>

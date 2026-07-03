@@ -303,7 +303,7 @@ export default function FieldMapper(props: FieldMapperProps) {
         background: "var(--surface)",
         boxShadow: "0 30px 90px rgba(0,0,0,.45), inset 0 1px 0 var(--border)",
         display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "#f6f7fb",
-        fontFamily: "'DM Sans','Inter',sans-serif",
+        fontFamily: "var(--font-geist-sans), sans-serif",
       }}>
         <FieldMapperBody {...props} variant="modal" />
       </div>

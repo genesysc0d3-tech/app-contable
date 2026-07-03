@@ -304,7 +304,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
               <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} title="Cerrar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
             </div>
             {editarScreen === "mapear" ? (
-              <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "var(--text)", fontFamily: "'DM Sans','Inter',sans-serif" }}>
+              <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "var(--text)", fontFamily: "var(--font-geist-sans), sans-serif" }}>
                 <FieldMapperBody
                   documentoId={editarCartolaId}
                   variant="embedded"

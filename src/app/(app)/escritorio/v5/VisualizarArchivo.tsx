@@ -104,7 +104,7 @@ export default function VisualizarArchivo({
         @keyframes vx-pulse{0%,100%{opacity:.4}50%{opacity:1}}
         @keyframes lbZoom{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
         @keyframes lbFade{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
-        .vx-table { border-collapse: collapse; font-size: 11px; font-family: 'DM Sans','Inter',monospace; width: 100%; background: var(--surface); }
+        .vx-table { border-collapse: collapse; font-size: 11px; font-family: var(--font-geist-mono), monospace; width: 100%; background: var(--surface); }
         .vx-table td, .vx-table th { padding: 4px 8px; border: 1px solid var(--border); white-space: nowrap; color: var(--text); text-align: left; }
         .vx-table th { background: var(--bg-muted); font-weight: 600; font-size: 10px; position: sticky; top: 0; z-index: 1; color: var(--text2); text-transform: uppercase; letter-spacing: .03em; }
         .vx-table tr:nth-child(even) { background: var(--bg-muted); }
