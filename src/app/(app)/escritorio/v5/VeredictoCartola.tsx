@@ -158,13 +158,14 @@ export default function VeredictoCartola({
         {confirming && puedeAprobar ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.55em" }}>
             <div style={{ fontSize: "0.82em", color: "var(--text2)", lineHeight: 1.45, textAlign: "center" }}>
-              Vas a emitir <b style={{ color: "var(--text)" }}>{listas}</b>
+              Vas a dejar <b style={{ color: "var(--text)" }}>{listas}</b> listas en <b style={{ color: "var(--text)" }}>Emitir</b>
               {afectasListas > 0 && <> · afecta {afectasListas}</>}
               {exentasListas > 0 && <> · exenta {exentasListas}</>}
               <br />total <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
+              <br /><span style={{ fontSize: "0.92em", color: "var(--text3)" }}>El envío al SII se confirma en la pestaña Emitir.</span>
             </div>
             <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Confirmar emisión
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar y enviar a Emitir
             </button>
             <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
           </div>

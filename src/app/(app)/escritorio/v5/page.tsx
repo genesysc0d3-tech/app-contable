@@ -331,6 +331,11 @@ export default async function V5Page({ searchParams }: {
 
         {/* MESA: calendario (toggle sin navegar) + columnas izquierda/derecha */}
         <MesaController
+          // key por empresa: al cambiar de empresa activa (cuentas multiempresa),
+          // fuerza remount para re-sembrar el estado client-held y el cache de rangos
+          // (router.refresh NO re-siembra la mesa) — evita mostrar datos de la empresa
+          // anterior en Check/Emitir/Boletas.
+          key={empresaId}
           initialMesa={mesaInicial}
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
