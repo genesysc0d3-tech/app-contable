@@ -397,10 +397,31 @@ export async function editarMovimientoPropuesta(
 
   const sb = ctx.sb;
 
+  // Guard de estado (igual que editarPropuesta, auditoría #21): NO mutar una propuesta
+  // 'aprobado' ya comprometida a Emitir, ni resucitar rechazadas/emitidas. Sin esto se
+  // podía cambiar monto/receptor de una propuesta en cola justo antes de emitir-lote,
+  // que usa mov.monto y receptor_rut como fallback → burla la re-aprobación.
+  const { data: prop } = await sb
+    .from("propuestas_ia")
+    .select("estado")
+    .eq("empresa_id", ctx.empresaId)
+    .eq("id", propuestaId)
+    .maybeSingle();
+  if (!prop) return { error: "Propuesta no encontrada" };
+  if (!["pendiente", "editado", "listo"].includes(prop.estado)) {
+    return { error: "No se puede editar — el estado de la propuesta no lo permite" };
+  }
+
+  // Validación de monto en runtime (la server action es un endpoint público; el tipo
+  // TS no limita el payload).
+  if (campos.monto !== undefined && !Number.isFinite(Number(campos.monto))) {
+    return { error: "Monto inválido" };
+  }
+
   if (campos.descripcion !== undefined || campos.monto !== undefined) {
     const movUpdate: Record<string, string | number> = {};
     if (campos.descripcion !== undefined) movUpdate.descripcion = campos.descripcion.trim();
-    if (campos.monto !== undefined) movUpdate.monto = campos.monto;
+    if (campos.monto !== undefined) movUpdate.monto = Number(campos.monto);
     const { error: movErr } = await sb
       .from("movimientos_raw")
       .update(movUpdate)
@@ -409,22 +430,23 @@ export async function editarMovimientoPropuesta(
     if (movErr) return { error: movErr.message };
   }
 
-  const propUpdate: Record<string, string | number | null> = {};
+  // Cualquier edición de campos emitibles degrada la propuesta a 'editado' → exige
+  // re-aprobación antes de emitir (coherente con editarPropuesta).
+  const propUpdate: Record<string, string | number | null> = { estado: "editado" };
   if (campos.tipo_propuesto !== undefined) propUpdate.tipo_propuesto = campos.tipo_propuesto;
   if (campos.receptor_nombre !== undefined) propUpdate.receptor_nombre = campos.receptor_nombre;
   if (campos.receptor_rut !== undefined) propUpdate.receptor_rut = campos.receptor_rut;
   if (campos.notas !== undefined) propUpdate.notas = campos.notas;
 
-  if (Object.keys(propUpdate).length > 0) {
-    const { error: propErr, count } = await sb
-      .from("propuestas_ia")
-      .update(propUpdate, { count: "exact" })
-      .eq("empresa_id", ctx.empresaId)
-      .eq("id", propuestaId);
+  const { error: propErr, count } = await sb
+    .from("propuestas_ia")
+    .update(propUpdate, { count: "exact" })
+    .eq("empresa_id", ctx.empresaId)
+    .eq("id", propuestaId)
+    .in("estado", ["pendiente", "editado", "listo"]);
 
-    if (propErr) return { error: propErr.message };
-    if (!count) return { error: "No se pudo editar la propuesta" };
-  }
+  if (propErr) return { error: propErr.message };
+  if (!count) return { error: "No se pudo editar — el estado de la propuesta no lo permite" };
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
