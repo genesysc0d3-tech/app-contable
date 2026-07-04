@@ -114,9 +114,15 @@ export async function fetchMesaDateDependent(
   // un falso "Aún no hay boletas".
   const boletasRangeOr = `and(fecha_emision.gte.${fiscalStartDay},fecha_emision.lt.${fiscalEndDay}),and(created_at.gte.${fiscalStart},created_at.lt.${fiscalEnd})`;
 
+  // Tope explícito de propuestas del rango: sin él, PostgREST corta en su max-rows
+  // (1000) SIN avisar y la mesa muestra datos incompletos como si estuvieran todos.
+  // Con el count aparte detectamos el desborde y lo exponemos (propuestasTruncadas)
+  // para avisar "mostrando N de M" en vez de mentir por omisión.
+  const PROPS_LIMIT = 1000;
+
   // ── Consultas date-dependientes (paralelas) ──
-  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes] = await Promise.all([
-    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }),
+  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
+    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
@@ -127,7 +133,11 @@ export async function fetchMesaDateDependent(
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).or(boletasRangeOr),
     supabase.from("empresas").select("boletas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd),
   ]);
+  // Desborde del tope de propuestas: total real del rango vs lo servido.
+  const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
+  const propuestasTruncadas = propuestasTotal > (propsData.data?.length ?? 0);
   // Ventas del rango (registro de ventas atado al calendario maestro).
   const ventasRows = (ventasRangoRes.data ?? []) as { monto_total: number | null }[];
   const ventasDocs = ventasRows.length;
@@ -256,6 +266,8 @@ export async function fetchMesaDateDependent(
   return {
     selDate, workMode,
     propuestas: propsData.data ?? [],
+    propuestasTotal,
+    propuestasTruncadas,
     docsAgregados,
     docTipoMix,
     docProgress,
