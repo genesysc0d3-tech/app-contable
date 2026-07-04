@@ -33,22 +33,34 @@ export default function EmpresaPopup({
   const [step, setStep] = useState(0);
   const router = useRouter();
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const submitRef = useRef<(() => Promise<boolean>) | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const [emisorGuardadoOk, setEmisorGuardadoOk] = useState(false);
+  const [proveedorVivo, setProveedorVivo] = useState<{ boletas: string; facturas: string }>({
+    boletas: emisionConfig.boletasProveedor,
+    facturas: emisionConfig.facturasProveedor,
+  });
 
   useEffect(() => { router.refresh(); }, [router]); // Refresh server data on mount
+  useEffect(() => { closeBtnRef.current?.focus(); }, []); // Foco inicial al cierre (diálogo)
 
-  const handleClose = useCallback(() => {
-    // Auto-save EmisorForm before closing. El evento "v5-popup-saved" lo
-    // dispara EmisorForm SOLO cuando el guardado fue exitoso (no a ciegas acá).
+  const handleClose = useCallback(async () => {
+    // Guardado awaitable: valida + guarda EmisorForm antes de cerrar.
+    // Si la validación o el server fallan, NO cerramos (el error inline lo muestra EmisorForm).
     if (step === 0) {
-      const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
-      form?.requestSubmit();
+      const submit = submitRef.current;
+      if (submit) {
+        const ok = await submit();
+        if (!ok) return;
+      }
     }
     onClose();
   }, [step, onClose]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.defaultPrevented) return; // p. ej. el mapper de cartolas maneja su propio Escape
+      if (e.key === "Escape") void handleClose();
     },
     [handleClose]
   );
@@ -58,14 +70,30 @@ export default function EmpresaPopup({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const goToStep = useCallback((i: number) => {
-    // Auto-save EmisorForm before leaving step 0
-    if (step === 0) {
-      const form = document.getElementById("empresa-emisor-form") as HTMLFormElement | null;
-      form?.requestSubmit();
+  const goToStep = useCallback(async (i: number) => {
+    // Guardado awaitable al salir del paso Emisor: si falla, nos quedamos ahí.
+    if (step === 0 && i !== 0) {
+      const submit = submitRef.current;
+      if (submit) {
+        const ok = await submit();
+        if (!ok) return;
+        setEmisorGuardadoOk(true);
+      }
     }
     setStep(i);
   }, [step]);
+
+  const yaConfigurada = Boolean(inicial.razon_social?.trim());
+  const proveedorBoletas: "mock" | "sii_local" | "simpleapi" =
+    proveedorVivo.boletas === "sii_local" || proveedorVivo.boletas === "simpleapi"
+      ? proveedorVivo.boletas
+      : "mock";
+  const folioSub =
+    proveedorBoletas === "sii_local"
+      ? "El SII asigna el folio"
+      : proveedorBoletas === "simpleapi"
+        ? "Los cargas en la extensión"
+        : "Folios de prueba";
 
   return (
     <>
@@ -163,6 +191,7 @@ export default function EmpresaPopup({
         }
 
         .ep-step-card {
+          width: 100%;
           min-height: 64px;
           display: grid;
           grid-template-columns: 28px 20px 1fr;
@@ -174,6 +203,9 @@ export default function EmpresaPopup({
           color: var(--text2);
           background: var(--bg-muted);
           position: relative;
+          text-align: left;
+          font-family: inherit;
+          cursor: pointer;
           transition:
             background 160ms ease,
             border-color 160ms ease,
@@ -185,7 +217,7 @@ export default function EmpresaPopup({
         .ep-step-card + .ep-step-card::before {
           content: "";
           position: absolute;
-          left: 38px;
+          left: 24px;
           top: -7px;
           width: 1px;
           height: 6px;
@@ -264,12 +296,11 @@ export default function EmpresaPopup({
           border-radius: 50%;
           display: grid;
           place-items: center;
-          background: linear-gradient(145deg, var(--accent, #E8553E), #cd5832);
-          color: #fff;
-          font-weight: 900;
+          background: var(--bg-muted);
+          color: var(--text2);
+          font-weight: 700;
           margin-bottom: 8px;
           font-size: 12px;
-          box-shadow: 0 12px 26px rgba(232, 85, 62, 0.32);
         }
 
         .ep-help-title {
@@ -410,8 +441,8 @@ export default function EmpresaPopup({
           border: 1px solid var(--border);
           background: var(--bg-muted);
           color: var(--text2);
-          font-size: 30px;
-          line-height: 1;
+          display: grid;
+          place-items: center;
           cursor: pointer;
           transition:
             background 160ms ease,
@@ -430,50 +461,6 @@ export default function EmpresaPopup({
           padding: 24px 32px 28px;
           scrollbar-width: thin;
           scrollbar-color: rgba(160, 170, 185, 0.32) transparent;
-        }
-
-        .ep-main-panel.step-emisor {
-          max-height: min(820px, 92vh);
-        }
-
-        .ep-modal:has(.ep-main-panel.step-emisor) {
-          height: min(820px, 92vh);
-        }
-
-        .ep-main-panel.step-emisor .ep-modal-header {
-          min-height: 60px;
-          padding: 12px 18px;
-          gap: 10px;
-        }
-
-        .ep-main-panel.step-emisor .ep-header-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-        }
-
-        .ep-main-panel.step-emisor .ep-header-icon svg {
-          width: 19px;
-          height: 19px;
-        }
-
-        .ep-main-panel.step-emisor .ep-modal-header h1 {
-          font-size: 18px;
-        }
-
-        .ep-main-panel.step-emisor .ep-subtitle {
-          margin-top: 2px;
-          font-size: 11px;
-        }
-
-        .ep-main-panel.step-emisor .ep-content {
-          overflow: auto;
-          padding: 12px 18px;
-        }
-
-        .ep-main-panel.step-emisor .ep-main-footer {
-          min-height: 46px;
-          padding: 7px 16px;
         }
 
         .ep-content-inner {
@@ -631,7 +618,9 @@ export default function EmpresaPopup({
         <section
           ref={ref}
           className="ep-modal"
-          aria-label="Configuración de empresa"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ep-title"
         >
           <aside className="ep-wizard" aria-label="Pasos de configuración">
             {[
@@ -640,45 +629,66 @@ export default function EmpresaPopup({
                 icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0",
                 title: "Emisor",
                 sub: "Datos de tu empresa",
+                done: yaConfigurada || emisorGuardadoOk,
               },
               {
                 n: 2,
                 icon: "M7 3h7l4 4v14H7V3Z",
                 title: "Formatos de cartola",
-                sub: "Sube y mapea formatos",
+                sub: "Sube y mapea formatos · Opcional",
+                done: false,
               },
               {
                 n: 3,
-                icon: "M4 7h16v12H4V7Z",
-                title: "Folios CAF",
-                sub: "Gestión automática",
-              },
-              {
-                n: 4,
                 icon: "M4 7h16M7 4v16M17 4v16M4 17h16",
                 title: "Emisión",
                 sub: "Modo de prueba o SII local",
+                done: proveedorBoletas !== "mock",
+              },
+              {
+                n: 4,
+                icon: "M4 7h16v12H4V7Z",
+                title: "Folios CAF",
+                sub: folioSub,
+                done: false,
               },
               {
                 n: 5,
                 icon: "M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z",
                 title: "Bot de Telegram",
-                sub: "Sube fotos por chat",
+                sub: "Sube fotos por chat · Opcional",
+                done: false,
               },
               {
                 n: 6,
                 icon: "M3 7h18v10H3zM3 11h18",
                 title: "Facturación y uso",
                 sub: "Plan, uso y pagos",
+                done: false,
               },
             ].map((s, i) => (
-              <div
+              <button
                 key={i}
+                type="button"
                 className={`ep-step-card${step === i ? " active" : ""}`}
-                onClick={() => goToStep(i)}
-                style={{ cursor: "pointer" }}
+                aria-current={step === i ? "step" : undefined}
+                onClick={() => { void goToStep(i); }}
               >
-                <div className="ep-step-number">{s.n}</div>
+                <div className="ep-step-number">
+                  {s.done ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M20 6 9 17l-5-5"
+                        stroke="var(--green, #22c55e)"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    s.n
+                  )}
+                </div>
                 <svg className="ep-step-icon" viewBox="0 0 24 24" fill="none">
                   <path
                     d={s.icon}
@@ -692,14 +702,14 @@ export default function EmpresaPopup({
                   <div className="ep-step-title">{s.title}</div>
                   <div className="ep-step-subtitle">{s.sub}</div>
                 </div>
-              </div>
+              </button>
             ))}
 
             <div className="ep-help-box">
               <div className="ep-help-icon">?</div>
-              <div className="ep-help-title">¿Necesitas ayuda?</div>
+              <div className="ep-help-title">Guías del escritorio</div>
               <div className="ep-help-text">
-                Mostramos números sobre el dashboard para seguir el flujo.
+                Al cerrar esta ventana verás números guía sobre el escritorio para seguir el flujo.
               </div>
               <button
                 type="button"
@@ -715,7 +725,7 @@ export default function EmpresaPopup({
             </div>
           </aside>
 
-          <main className={`ep-main-panel${step === 0 ? " step-emisor" : ""}`}>
+          <main className="ep-main-panel">
             <header className="ep-modal-header">
               <div className="ep-header-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -734,22 +744,36 @@ export default function EmpresaPopup({
               </div>
 
               <div className="ep-header-text">
-                <h1>Empresa</h1>
-                <p className="ep-subtitle">Configuración inicial de tu empresa.</p>
+                <h1 id="ep-title">Empresa</h1>
+                <p className="ep-subtitle">
+                  {yaConfigurada ? "Datos, emisión y plan." : "Configuración inicial de tu empresa."}
+                </p>
               </div>
 
-              <button className="ep-close-btn" onClick={handleClose} aria-label="Cerrar">
-                ×
+              <button
+                ref={closeBtnRef}
+                className="ep-close-btn"
+                onClick={() => { void handleClose(); }}
+                aria-label="Cerrar"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M3.5 3.5l9 9M12.5 3.5l-9 9"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
               </button>
             </header>
 
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" /> },
+                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
-                  { key: "folios", content: <CAFPanel cafs={cafs} proveedor={emisionConfig.boletasProveedor} /> },
-                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} /> },
+                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} onProveedorChange={setProveedorVivo} /> },
+                  { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },
                   { key: "telegram", content: <TelegramConfig /> },
                   { key: "facturacion", content: <FacturacionUsoPanel /> },
                 ].map((s, i) => (
@@ -763,25 +787,20 @@ export default function EmpresaPopup({
             <footer className="ep-main-footer" style={{ justifyContent: "space-between" }}>
               <div style={{ display: "flex", gap: 8 }}>
                 {step > 0 && (
-                  <button className="ep-footer-btn" onClick={() => goToStep(step - 1)}>
+                  <button className="ep-footer-btn" onClick={() => { void goToStep(step - 1); }}>
                     ‹ Anterior
                   </button>
                 )}
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                {/* Cancelar descarta: cierra SIN auto-guardar (X/Cerrar sí guardan) */}
-                <button className="ep-footer-btn" onClick={onClose}>
-                  Cancelar
-                </button>
-
                 {step < 5 ? (
-                  <button className="ep-footer-btn primary" onClick={() => goToStep(step + 1)}>
+                  <button className="ep-footer-btn primary" onClick={() => { void goToStep(step + 1); }}>
                     Siguiente ›
                   </button>
                 ) : (
-                  <button className="ep-footer-btn primary" onClick={handleClose}>
-                    Cerrar
+                  <button className="ep-footer-btn primary" onClick={() => { void handleClose(); }}>
+                    Listo
                   </button>
                 )}
               </div>

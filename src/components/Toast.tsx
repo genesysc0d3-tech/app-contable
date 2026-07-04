@@ -32,7 +32,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div role="status" aria-live="polite" className="fixed bottom-6 left-0 right-0 z-[60] flex flex-col items-center gap-2 pointer-events-none">
+      {/* z-[120]: el feedback SIEMPRE sobre cualquier modal (el wizard de empresa y el
+          mapper usan z-100) — un "RUT inválido" debajo del overlay es un error invisible. */}
+      <div role="status" aria-live="polite" className="fixed bottom-6 left-0 right-0 z-[120] flex flex-col items-center gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}

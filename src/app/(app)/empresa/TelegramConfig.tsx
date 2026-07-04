@@ -7,7 +7,7 @@ import { useToast } from "@/components/Toast";
  * Panel de conexión del bot de Telegram (paso del wizard de empresa).
  * Reemplaza al antiguo "IA (DeepSeek)": la IA hoy es centralizada (OpenCode),
  * el cliente ya no pone clave. Acá vincula su Telegram para mandar fotos de
- * comprobantes que caen en Agregados por el mismo pipeline que el panel.
+ * comprobantes que quedan en la mesa de trabajo por el mismo pipeline que el panel.
  */
 export default function TelegramConfig() {
   const { toast } = useToast();
@@ -17,6 +17,8 @@ export default function TelegramConfig() {
   const [generando, setGenerando] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [enPlan, setEnPlan] = useState(true);
+  const [verificacionFallida, setVerificacionFallida] = useState(false);
+  const [reintento, setReintento] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -25,13 +27,16 @@ export default function TelegramConfig() {
         .then((r) => r.json())
         .then((d) => {
           if (cancel) return;
+          setVerificacionFallida(false);
           const v = Boolean(d.vinculado);
           setVinculado(v);
           setBotConfigured(d.botConfigured !== false);
           setEnPlan(d.enPlan !== false);
           if (v) setLink(null); // ya conectado: no dejar el botón "Abrir Telegram"
         })
-        .catch(() => { if (!cancel) setVinculado(false); })
+        // Un fallo de red NO es "sin conectar": se marca como no verificado
+        // (estado propio con Reintentar) sin pisar el estado de negocio.
+        .catch(() => { if (!cancel) setVerificacionFallida(true); })
         .finally(() => { if (!cancel) setLoading(false); });
     };
     cargar();
@@ -45,7 +50,12 @@ export default function TelegramConfig() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, []);
+  }, [reintento]);
+
+  function reintentarVerificacion() {
+    setLoading(true);
+    setReintento((n) => n + 1);
+  }
 
   async function conectar() {
     if (generando) return;
@@ -73,6 +83,9 @@ export default function TelegramConfig() {
   }
 
   const conectado = vinculado === true;
+  // Solo "sin verificar" si NUNCA se pudo leer el estado; si ya se conoce,
+  // un fallo transitorio de red no debe degradar lo que se muestra.
+  const sinVerificar = verificacionFallida && vinculado === null;
 
   return (
     <div style={{
@@ -100,20 +113,20 @@ export default function TelegramConfig() {
               <h3 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.04em", color: "var(--text, #e8eaf0)" }}>
                 Bot de Telegram
               </h3>
-              {!loading && (
+              {!loading && !sinVerificar && (
                 <span style={{
                   display: "inline-block", borderRadius: 9999,
                   padding: "2px 10px", fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${!enPlan ? "color-mix(in srgb, var(--amber, #f59e0b) 30%, transparent)" : conectado ? "color-mix(in srgb, var(--green, #22c55e) 25%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 20%, transparent)"}`,
-                  background: !enPlan ? "color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent)" : conectado ? "color-mix(in srgb, var(--green, #22c55e) 12%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 14%, transparent)",
-                  color: !enPlan ? "var(--amber, #f59e0b)" : conectado ? "var(--green, #22c55e)" : "var(--red, #ef4444)",
+                  border: `1px solid ${!enPlan ? "color-mix(in srgb, var(--amber, #f59e0b) 30%, transparent)" : conectado ? "color-mix(in srgb, var(--green, #22c55e) 25%, transparent)" : "color-mix(in srgb, var(--text3, #697080) 35%, transparent)"}`,
+                  background: !enPlan ? "color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent)" : conectado ? "color-mix(in srgb, var(--green, #22c55e) 12%, transparent)" : "color-mix(in srgb, var(--text3, #697080) 10%, transparent)",
+                  color: !enPlan ? "var(--amber, #f59e0b)" : conectado ? "var(--green, #22c55e)" : "var(--text3, #697080)",
                 }}>
                   {!enPlan ? "Pro" : conectado ? "Conectado" : "Sin conectar"}
                 </span>
               )}
             </div>
             <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "var(--text3, #697080)" }}>
-              Manda fotos de comprobantes por chat y caen en Agregados, listas para boletear.
+              Manda fotos de comprobantes por chat y quedan en tu mesa de trabajo, listas para boletear.
             </p>
           </div>
         </div>
@@ -129,15 +142,17 @@ export default function TelegramConfig() {
             <div style={{
               width: 22, height: 22, borderRadius: "50%",
               display: "grid", placeItems: "center",
-              color: conectado ? "var(--green, #22c55e)" : "var(--red, #ef4444)",
-              border: `1px solid ${conectado ? "color-mix(in srgb, var(--green, #22c55e) 60%, transparent)" : "color-mix(in srgb, var(--red, #ef4444) 60%, transparent)"}`,
+              color: conectado ? "var(--green, #22c55e)" : "var(--text3, #697080)",
+              border: `1px solid ${conectado ? "color-mix(in srgb, var(--green, #22c55e) 60%, transparent)" : "color-mix(in srgb, var(--text3, #697080) 55%, transparent)"}`,
               fontSize: 12, fontWeight: 900, flexShrink: 0,
             }}>
-              {conectado ? "✓" : "!"}
+              {conectado ? "✓" : ""}
             </div>
             <div style={{ fontSize: 13, fontWeight: 760, color: "var(--text, #e8eaf0)" }}>
               {loading
                 ? "Cargando…"
+                : sinVerificar
+                ? "No se pudo verificar la conexión"
                 : !botConfigured
                 ? "Disponible próximamente"
                 : !enPlan
@@ -148,7 +163,22 @@ export default function TelegramConfig() {
             </div>
           </div>
 
-          {!loading && botConfigured && !enPlan && (
+          {!loading && sinVerificar && (
+            <button
+              type="button"
+              onClick={reintentarVerificacion}
+              style={{
+                height: 36, borderRadius: 10, border: "1px solid var(--border, rgba(255,255,255,.06))",
+                background: "color-mix(in srgb, var(--text, #e8eaf0) 5%, transparent)", color: "var(--text, #e8eaf0)",
+                padding: "0 14px", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              Reintentar
+            </button>
+          )}
+
+          {!loading && !sinVerificar && botConfigured && !enPlan && (
             <a
               href="/planes"
               style={{
@@ -163,7 +193,7 @@ export default function TelegramConfig() {
             </a>
           )}
 
-          {!loading && botConfigured && enPlan && (
+          {!loading && !sinVerificar && botConfigured && enPlan && (
             link ? (
               <a
                 href={link}

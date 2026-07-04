@@ -57,10 +57,10 @@ export default function CAFPanel({ cafs, proveedor = "mock" }: { cafs: CAFRow[];
             </div>
             <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "var(--text3, #697080)" }}>
               {isSiiLocal
-                ? "En SII local, e-Boleta/MiPyme asigna el folio real al finalizar la emisión."
+                ? "CAF = la autorización de números de boleta que entrega el SII. No tienes que pedirla tú — el SII asigna el folio."
                 : isSimpleApi
-                  ? "SimpleAPI usará CAF y certificado cifrados en este equipo cuando el proxy esté listo."
-                  : "Folios de prueba para simular emisión sin informar al SII."}
+                  ? "CAF = la autorización de números de boleta que entrega el SII. Tus CAF y certificado quedan cifrados en este equipo y se usarán cuando el carril SimpleAPI esté disponible."
+                  : "CAF = la autorización de números de boleta que entrega el SII. Estos son folios de prueba para simular emisión sin informar al SII."}
             </p>
           </div>
         </div>
@@ -136,7 +136,7 @@ export default function CAFPanel({ cafs, proveedor = "mock" }: { cafs: CAFRow[];
           {[
             { value: activos.length, label: "Folios activos" },
             { value: totalDisponibles.toLocaleString(), label: "Folios disponibles" },
-            { value: totalEmitidos, label: "DTE emitidos" },
+            { value: totalEmitidos, label: "Boletas emitidas" },
             { value: `${uso}%`, label: "Uso promedio" },
           ].map((s, i) => (
             <div key={i} style={{

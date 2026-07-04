@@ -305,6 +305,45 @@ export async function setEmisionConfig(
   return { ok: true };
 }
 
+export interface FormatoCartolaGuardado {
+  id: string;
+  nombre: string | null;
+  createdAt: string;
+}
+
+// Solo lectura: lista los formatos de cartola (parser_adapters) enseñados por la
+// empresa del usuario. No hay columna "banco" en el schema: el nombre del formato
+// (hoja detectada o "Formato manual") es lo que se muestra.
+export async function listFormatosCartola(): Promise<{ ok?: boolean; formatos?: FormatoCartolaGuardado[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "Backend mal configurado" };
+  const sb = createServiceClient<Database>(url, key);
+
+  const { data, error } = await sb
+    .from("parser_adapters")
+    .select("id, nombre, created_at")
+    .eq("creado_por_empresa_id", usuario.empresa_id)
+    .order("created_at", { ascending: false });
+  if (error) return { error: error.message };
+
+  return {
+    ok: true,
+    formatos: (data ?? []).map((f) => ({ id: f.id, nombre: f.nombre, createdAt: f.created_at })),
+  };
+}
+
 export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?: boolean; invitePath?: string; error?: string }> {
   const supportBlock = await blockSupportWrite();
   if (supportBlock) return supportBlock;
