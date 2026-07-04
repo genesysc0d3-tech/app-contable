@@ -28,8 +28,44 @@ function getServiceClient(): LooseClient | null {
   return createClient<Database>(url, key);
 }
 
+/** Fila mínima para decidir aislamiento cross-tenant (subconjunto de AdapterRow). */
+export type AdapterOwnership = {
+  confianza: number;
+  disabled_until: string | null;
+  creado_por_empresa_id: string | null;
+};
+
+/**
+ * AISLAMIENTO CROSS-TENANT (lógica pura, testeable). El adapter 'manual' es un
+ * mapeo hecho a mano por una empresa (p. ej. monto→columna X). Aplicarlo a las
+ * cartolas de OTRA empresa con el mismo formato produciría montos incorrectos en
+ * boletas reales (envenenamiento first-writer-wins). Por eso, entre las filas de
+ * un fingerprint elegimos:
+ *   1) el adapter PROPIO de la empresa (cualquier source),
+ *   2) si no hay, uno GLOBAL sin dueño (heurístico/algorítmico, seguro de compartir),
+ *   3) nunca el 'manual' de otra empresa → null (el orquestador re-deriva heurístico).
+ * Descarta primero los deshabilitados y los de confianza bajo el umbral.
+ */
+export function selectAdapterForEmpresa<T extends AdapterOwnership>(
+  rows: T[],
+  empresaId: string | undefined,
+  now: Date = new Date(),
+): T | null {
+  const usable = rows.filter((row) => {
+    if (row.disabled_until && new Date(row.disabled_until) > now) return false;
+    if (row.confianza < CONFIANZA_DISABLE_THRESHOLD) return false;
+    return true;
+  });
+  if (!usable.length) return null;
+  const propio = empresaId ? usable.find((r) => r.creado_por_empresa_id === empresaId) : undefined;
+  if (propio) return propio;
+  const global = usable.find((r) => !r.creado_por_empresa_id);
+  return global ?? null;
+}
+
 export async function getAdapterByFingerprint(
-  fingerprint: string
+  fingerprint: string,
+  empresaId?: string,
 ): Promise<AdapterRow | null> {
   try {
     const sb = getServiceClient();
@@ -38,14 +74,14 @@ export async function getAdapterByFingerprint(
       .from("parser_adapters")
       .select("*")
       .eq("fingerprint", fingerprint)
-      .maybeSingle();
-    if (error || !data) return null;
-    // Respect disabled_until
-    if (data.disabled_until && new Date(data.disabled_until) > new Date()) {
-      return null;
-    }
-    if ((data.confianza as number) < CONFIANZA_DISABLE_THRESHOLD) return null;
-    return data as unknown as AdapterRow;
+      .order("confianza", { ascending: false })
+      .limit(20);
+    if (error || !data?.length) return null;
+    const elegido = selectAdapterForEmpresa(
+      data as unknown as (AdapterOwnership & AdapterRow)[],
+      empresaId,
+    );
+    return elegido ? (elegido as unknown as AdapterRow) : null;
   } catch {
     return null;
   }

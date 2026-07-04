@@ -408,7 +408,7 @@ export async function PATCH(request: Request) {
 
   const { data: job, error } = await service.service
     .from("emision_jobs")
-    .select("job_id, cuenta_id, usuario_id, estado")
+    .select("job_id, cuenta_id, usuario_id, estado, provider")
     .eq("job_id", jobId)
     .maybeSingle();
   if (error) {
@@ -431,10 +431,16 @@ export async function PATCH(request: Request) {
 
   const now = new Date().toISOString();
   const estado = cleanStatus(payload.estado ?? payload.status);
+  // El heartbeat renueva la ventana del job: un RPA lento (SII lento, 2FA,
+  // reintentos de PDF, cadencia humana del motor masivo) mantiene vivo el job
+  // mientras siga latiendo. Sin esto, un job de sii_local muere a los 15 min y
+  // el resultado —una boleta REAL ya emitida— se rechaza y se pierde.
+  const ttlSeconds = job.provider === "sii_local" ? 15 * 60 : 5 * 60;
+  const nuevaExpiracion = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
-    .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now })
+    .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
     .eq("job_id", job.job_id);
   if (updateJobError) {
     await recordOpsError({
@@ -455,7 +461,7 @@ export async function PATCH(request: Request) {
 
   const { error: updateLockError } = await service.service
     .from("emision_locks")
-    .update({ estado_visible: estado, heartbeat_at: now })
+    .update({ estado_visible: estado, heartbeat_at: now, locked_until: nuevaExpiracion })
     .eq("cuenta_id", job.cuenta_id)
     .eq("job_id", job.job_id);
   if (updateLockError) {

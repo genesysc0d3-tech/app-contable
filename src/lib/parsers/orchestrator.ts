@@ -37,7 +37,7 @@ import {
  */
 export async function parseExcelWithOrchestrator(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string }
+  opts?: { documento_id?: string; empresa_id?: string }
 ): Promise<{ content: string; result: OrchestratorResult }> {
   const start = Date.now();
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
@@ -52,8 +52,8 @@ export async function parseExcelWithOrchestrator(
 
     const fingerprint = computeFingerprint(rows);
 
-    // Layer 0: adapter cache
-    const cached = await getAdapterByFingerprint(fingerprint);
+    // Layer 0: adapter cache (aislado por empresa: no aplica el manual de otro tenant)
+    const cached = await getAdapterByFingerprint(fingerprint, opts?.empresa_id);
     if (cached) {
       const result = tryApply(rows, cached.config, sheetName);
       if (result) {

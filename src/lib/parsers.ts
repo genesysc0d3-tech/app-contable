@@ -10,10 +10,12 @@ import type { PreExtractedMovimiento } from "./parsers/types";
  * processor can use to bypass Mistral extraction entirely.
  *
  * Optional `documento_id` enables parser_logs auditing for that document.
+ * `empresa_id` aísla el cache de adapters por tenant (no aplicar el mapeo manual
+ * de otra empresa al mismo formato de banco).
  */
 export async function parseExcel(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string }
+  opts?: { documento_id?: string; empresa_id?: string }
 ): Promise<{
   content: string;
   preExtracted: PreExtractedMovimiento[] | null;

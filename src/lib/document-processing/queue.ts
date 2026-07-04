@@ -31,6 +31,9 @@ type EnqueueArgs = {
   storagePath: string;
   metadata?: Record<string, unknown>;
   maxAttempts?: number;
+  /** Reproceso explícito del usuario: re-encola aunque el job ya esté 'completed'.
+   *  Nunca interrumpe un job 'running' (evita doble procesamiento en vuelo). */
+  force?: boolean;
 };
 
 type ProcessQueueArgs = {
@@ -75,7 +78,12 @@ export async function enqueueDocumentProcessingJob(sb: Sb, args: EnqueueArgs) {
   if (existing.error) throw new Error(`JOB_LOOKUP_FAILED:${existing.error.message}`);
 
   if (existing.data) {
-    if (["queued", "running", "retryable", "completed"].includes(existing.data.status)) {
+    // 'running' = worker en vuelo: jamás lo re-encolamos (doble procesamiento).
+    if (existing.data.status === "running") return existing.data;
+    // Sin force, un job ya resuelto/encolado no se reinicia. Con force (reproceso
+    // explícito, p. ej. tras Deshacer), reiniciamos aunque esté 'completed' —
+    // así Deshacer→Reprocesar deja de ser un no-op silencioso.
+    if (!args.force && ["queued", "retryable", "completed"].includes(existing.data.status)) {
       return existing.data;
     }
     const { data, error } = await sb
@@ -258,7 +266,7 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
 
   if (job.tipo === "excel") {
     const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer;
-    const parsed = await parseExcel(ab, { documento_id: job.documento_id });
+    const parsed = await parseExcel(ab, { documento_id: job.documento_id, empresa_id: job.empresa_id });
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
   } else if (job.tipo === "pdf") {
@@ -364,7 +372,10 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
     }
 
     const completedAt = new Date().toISOString();
-    const { error } = await sb
+    // Compare-and-set: solo completamos si el job SIGUE 'running'. Si el usuario
+    // canceló en vuelo (status → 'cancelled'), el update no toca ninguna fila y el
+    // job queda cancelado en vez de revivir como 'completed'.
+    const { data: completado, error } = await sb
       .from("document_processing_jobs")
       .update({
         status: "completed",
@@ -374,8 +385,20 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
         completed_at: completedAt,
         updated_at: completedAt,
       })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", "running")
+      .select("id")
+      .maybeSingle();
     if (error) throw new Error(`JOB_COMPLETE_UPDATE_FAILED:${error.message}`);
+    if (!completado) {
+      // El job dejó de estar 'running' (cancelado mientras procesaba): dejamos el
+      // documento en 'error' para que no aparezca como procesado.
+      await sb
+        .from("documentos_subidos")
+        .update({ estado: "error", progreso_ia: safeJson({ estado: "error", error: "Cancelado por el usuario" }) })
+        .eq("id", job.documento_id);
+      return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, cancelled: true };
+    }
 
     return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: movimientosTotal };
   } catch (error) {
@@ -406,6 +429,24 @@ export async function processDocumentQueue(args: ProcessQueueArgs = {}) {
     failed_or_retryable: results.filter((r) => !r.ok).length,
     results,
   };
+}
+
+/**
+ * Marca como 'cancelled' el job de un documento (si no está en un estado terminal).
+ * Un job 'cancelled' no lo reclama el worker (claimJobs solo toma queued/retryable)
+ * ni lo revive el watchdog (solo mira 'running'), y el compare-and-set de
+ * processOneJob impide que un job cancelado en vuelo termine como 'completed'.
+ * Devuelve true si había un job vivo (queued/running/retryable) que se canceló.
+ */
+export async function cancelDocumentProcessingJob(sb: Sb, documentoId: string): Promise<boolean> {
+  const now = new Date().toISOString();
+  const { data } = await sb
+    .from("document_processing_jobs")
+    .update({ status: "cancelled", locked_at: null, locked_by: null, updated_at: now })
+    .eq("documento_id", documentoId)
+    .in("status", ["queued", "running", "retryable"])
+    .select("id");
+  return (data?.length ?? 0) > 0;
 }
 
 export async function retryDocumentProcessingJob(sb: Sb, args: { jobId?: string; documentoId?: string; actorUserId?: string }) {
