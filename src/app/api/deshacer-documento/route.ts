@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -51,6 +52,25 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  // Si el worker está procesando el documento en este momento, borrar sus filas
+  // ahora choca con los inserts en vuelo (FK / zombie). Se cancela el job; si
+  // estaba 'running', se pide reintentar cuando termine en vez de borrar a ciegas.
+  const eraVivo = await cancelDocumentProcessingJob(svc, documento_id);
+  if (eraVivo) {
+    const { data: jobRunning } = await svc
+      .from("document_processing_jobs")
+      .select("id")
+      .eq("documento_id", documento_id)
+      .eq("status", "running")
+      .maybeSingle();
+    if (jobRunning) {
+      return NextResponse.json(
+        { error: "El documento se está procesando en este momento. Intenta deshacer de nuevo en unos segundos." },
+        { status: 409 },
+      );
+    }
+  }
 
   // Delete in FK order: propuestas → movimientos → ia_uso → reset documento
   // First get movimiento IDs for this document

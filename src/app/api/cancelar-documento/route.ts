@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -35,5 +38,15 @@ export async function POST(request: Request) {
     .eq("empresa_id", usuario.empresa_id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Cancelar el JOB durable, no solo el documento: sin esto el worker sigue
+  // 'queued'/'running', re-procesa y revive los datos (documento zombie).
+  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (svcUrl && svcKey) {
+    const svc = createServiceClient<Database>(svcUrl, svcKey);
+    await cancelDocumentProcessingJob(svc, body.documento_id).catch(() => {});
+  }
+
   return NextResponse.json({ ok: true });
 }

@@ -70,6 +70,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    // force: es un reproceso EXPLÍCITO del usuario. Sin esto, un job ya 'completed'
+    // se devolvía tal cual y el reproceso (incluido Deshacer→Reprocesar) era un
+    // no-op silencioso que dejaba el documento con 0 movimientos.
     const job = await enqueueDocumentProcessingJob(svc, {
       documentoId: documento.id,
       empresaId: usuario.empresa_id,
@@ -77,15 +80,16 @@ export async function POST(request: Request) {
       tipo: documento.tipo,
       storagePath,
       metadata: groupedImages.length ? { grouped_images: groupedImages } : {},
+      force: true,
     });
 
-    if (job.status === "completed") {
+    if (job.status === "running") {
       return NextResponse.json({
         ok: true,
         documento_id: documento.id,
         job_id: job.id,
         status: job.status,
-        message: "Documento ya procesado.",
+        message: "El documento se está procesando en este momento.",
       });
     }
 

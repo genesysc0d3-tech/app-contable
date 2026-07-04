@@ -389,6 +389,20 @@ export async function POST(request: Request) {
 
   const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId: effectiveJobId, provider: "sii_local" });
   if (!jobGate.ok) {
+    // El gate falló (job expirado/cerrado), pero el payload puede traer una boleta
+    // REAL ya emitida en el SII. Si la descartamos, queda invisible en la app y el
+    // usuario re-emite → boleta real DUPLICADA (sin NC para revertir). La guardamos
+    // con status 'job_gate_failed' para que recover_latest/reconcile la levanten.
+    if (!payload.recover_latest && (folio || result)) {
+      await rememberResult(sb, {
+        user_id: user.id,
+        job_id: effectiveJobId,
+        folio,
+        status: "job_gate_failed",
+        error: jobGate.error,
+        result: result ?? null,
+      });
+    }
     await recordOpsEvent({
       sb,
       severity: jobGate.status >= 500 ? "error" : "warn",
@@ -398,7 +412,7 @@ export async function POST(request: Request) {
       usuarioId: user.id,
       resourceType: "emision_job",
       resourceId: effectiveJobId,
-      metadata: { error: jobGate.error, detalle: jobGate.detalle },
+      metadata: { error: jobGate.error, detalle: jobGate.detalle, folio_recibido: folio },
     });
     return NextResponse.json({ ok: false, error: jobGate.error, detalle: jobGate.detalle }, { status: jobGate.status });
   }

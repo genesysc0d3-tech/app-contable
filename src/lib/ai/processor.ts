@@ -259,6 +259,49 @@ async function insertInBatches<T extends Record<string, unknown>>(
   return { ids: allIds, error: null };
 }
 
+/**
+ * Idempotencia del reproceso: procesarDocumento reinserta TODOS los movimientos
+ * del documento, así que un reintento del job (fallo a mitad, watchdog que re-encola
+ * un 'running' colgado, o Deshacer→Reprocesar) duplicaría las filas —y en bypass,
+ * que no deduplica, terminaría en boletas dobles del mismo pago. Antes de insertar,
+ * limpiamos lo que este mismo documento ya haya dejado.
+ *
+ * GUARDA DE PLATA: si alguna propuesta previa del documento ya tiene una boleta
+ * emitida (propuesta_id, ON DELETE SET NULL), NO limpiamos —borrarla orfanaría un
+ * folio real del SII. Eso no debería pasar (los guardas de deshacer/emitir lo
+ * bloquean antes), pero si ocurre se aborta el reproceso en vez de corromper.
+ */
+async function limpiarInsercionesPrevias(
+  documentoId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = getServiceClient();
+  const { data: movsPrevios } = await supabase
+    .from("movimientos_raw")
+    .select("id")
+    .eq("documento_id", documentoId);
+  const movIds = (movsPrevios ?? []).map((m) => m.id);
+  if (movIds.length === 0) return { ok: true };
+
+  const { data: propsPrevias } = await supabase
+    .from("propuestas_ia")
+    .select("id")
+    .in("movimiento_id", movIds);
+  const propIds = (propsPrevias ?? []).map((p) => p.id);
+
+  if (propIds.length > 0) {
+    const { count } = await supabase
+      .from("boletas_emitidas")
+      .select("id", { count: "exact", head: true })
+      .in("propuesta_id", propIds);
+    if ((count ?? 0) > 0) {
+      return { ok: false, error: "REPROCESO_CON_BOLETA_EMITIDA" };
+    }
+    await supabase.from("propuestas_ia").delete().in("movimiento_id", movIds);
+  }
+  await supabase.from("movimientos_raw").delete().eq("documento_id", documentoId);
+  return { ok: true };
+}
+
 export async function procesarDocumento(
   documentoId: string,
   empresaId: string,
@@ -298,6 +341,18 @@ export async function procesarDocumento(
     .from("documentos_subidos")
     .update({ estado: "procesando" })
     .eq("id", documentoId);
+
+  // Reproceso idempotente: borra lo que este documento haya dejado en un intento
+  // anterior antes de reinsertar (evita movimientos/propuestas duplicados en los
+  // reintentos del job). Aborta si ya hay una boleta emitida colgando (ver helper).
+  const limpieza = await limpiarInsercionesPrevias(documentoId);
+  if (!limpieza.ok) {
+    await supabase
+      .from("documentos_subidos")
+      .update({ estado: "error", progreso_ia: { error: "No se puede reprocesar: el documento ya tiene boletas emitidas." } })
+      .eq("id", documentoId);
+    return { movimientos_total: 0, error: limpieza.error };
+  }
 
   try {
     // Build the chunked work units. In bypass mode we first try to classify
