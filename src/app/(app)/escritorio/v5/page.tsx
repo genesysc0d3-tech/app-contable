@@ -366,6 +366,7 @@ export default async function V5Page({ searchParams }: {
                 empresaId={empresaId}
                 emisionProveedor={boletasProveedor}
                 facturasProveedor={facturasProveedor}
+                devMode={usuario.dev_mode === true}
                 empresaRut={usuario.empresas.rut}
                 empresaRazonSocial={usuario.empresas.razon_social}
                 empresaGiro={usuario.empresas.giro}
