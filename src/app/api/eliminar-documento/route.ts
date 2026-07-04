@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { esRolEmision } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
   }
   // Eliminar es más destructivo que deshacer: mismos roles permitidos.
-  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+  if (!esRolEmision(usuario.rol)) {
     return NextResponse.json({ error: "Tu rol no permite eliminar documentos" }, { status: 403 });
   }
 

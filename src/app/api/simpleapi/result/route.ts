@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -8,7 +9,6 @@ import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
 
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 type ServiceDb = SupabaseClient<Database>;
 
 interface SimpleApiResultPayload {

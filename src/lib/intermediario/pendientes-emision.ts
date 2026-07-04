@@ -6,11 +6,10 @@ import { evaluarEmision } from "@/lib/intermediario/emision-decision";
 type Supa = Awaited<ReturnType<typeof createClient>>;
 export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contribuyente: string | null };
 
-/**
- * Tipos de propuesta IA que representan INGRESOS boletificables. Facturas,
- * gastos, no comerciales y honorarios quedan fuera.
- */
-export const TIPOS_EMITIBLES = ["boleta", "exenta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
+// Fuente única en @/lib/sii/tipos-propuesta (compartida con emitir-lote). Se
+// re-exporta por compatibilidad con importadores existentes.
+export { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
+import { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
 
 /**
  * Lista propuestas tipo boleta aprobadas/editadas que aún NO están emitidas,

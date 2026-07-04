@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { validarAccesoCuenta } from "@/lib/entitlements";
 
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 /**
  * Reconciliación sii-local contra el Resumen de Ventas del SII (la fuente de

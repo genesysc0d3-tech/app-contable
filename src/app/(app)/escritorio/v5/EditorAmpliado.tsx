@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { editarPropuesta } from "../../revisar/actions";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { fmt, type Propuesta } from "./revisar-shared";
 import GaleriaComprobante from "./GaleriaComprobante";
 
@@ -32,12 +33,11 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   // empresa 'afecto' NUNCA puede pisar una exención POR LEY (cripto/forex/P2P,
   // Of. SII 963/2018): eso fabricaría IVA inexistente sobre una venta exenta.
   // Misma derivación que ExpandedDetail (revisar-shared). Siempre editable (sin lock).
-  const EXENTOS_POR_TIPO = ["exenta", "factura_exenta", "compraventa_crypto", "transferencia_p2p", "operacion_forex"];
   const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : EXENTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "exenta"
+        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
           : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipo === "exento" ? "exenta"
               : empresaTipo === "afecto" ? "afecta"

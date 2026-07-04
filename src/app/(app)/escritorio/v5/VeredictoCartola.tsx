@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileXls, FilePdf, FileCsv, FileImage, File as FileGenerico, type Icon } from "@phosphor-icons/react";
 import { fmt, type Propuesta } from "./revisar-shared";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
 // para el conjunto: izquierda = el archivo, centro = agregados (nº tx · total · split
@@ -70,8 +71,7 @@ export default function VeredictoCartola({
     const t = p.tipo_dte;
     if (t === 41) return true;
     if (t === 39) return false;
-    const tp = p.tipo_propuesto ?? "";
-    return tp === "exenta" || tp === "compraventa_crypto" || tp === "operacion_forex";
+    return esTipoPropuestoExento(p.tipo_propuesto);
   };
   const exentas = tipoMix?.exentas ?? propuestas.filter(esExenta).length;
   const afectas = tipoMix?.afectas ?? propuestas.filter((p) => !esExenta(p)).length;
