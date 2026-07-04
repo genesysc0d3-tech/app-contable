@@ -31,6 +31,10 @@ export default function EmpresaPopup({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
+  // "Ver como cliente": apaga el modo dev SOLO en esta sesión del wizard (estado
+  // local, no toca la cuenta ni la DB) — para verificar qué ve un cliente real.
+  const [verComoCliente, setVerComoCliente] = useState(false);
+  const devModeEfectivo = devMode && !verComoCliente;
   const router = useRouter();
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const submitRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -750,6 +754,23 @@ export default function EmpresaPopup({
                 </p>
               </div>
 
+              {devMode && (
+                <button
+                  type="button"
+                  onClick={() => setVerComoCliente((v) => !v)}
+                  title={verComoCliente ? "Viendo el wizard como lo ve un cliente (sin opciones dev). Click para volver a la vista dev." : "Muestra el wizard tal como lo ve un cliente real: sin badge DEV, sin modo de prueba ni notas internas."}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, marginRight: 10,
+                    padding: "5px 11px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    border: `1px solid ${verComoCliente ? "color-mix(in srgb, var(--accent) 45%, transparent)" : "var(--border)"}`,
+                    background: verComoCliente ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
+                    color: verComoCliente ? "var(--accent)" : "var(--text2)",
+                  }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  {verComoCliente ? "Viendo como cliente" : "Ver como cliente"}
+                </button>
+              )}
+
               <button
                 ref={closeBtnRef}
                 className="ep-close-btn"
@@ -772,7 +793,7 @@ export default function EmpresaPopup({
                 {[
                   { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
-                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devMode} onProveedorChange={setProveedorVivo} /> },
+                  { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },
                   { key: "telegram", content: <TelegramConfig /> },
                   { key: "facturacion", content: <FacturacionUsoPanel /> },
