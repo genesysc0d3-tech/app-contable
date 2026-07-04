@@ -27,9 +27,18 @@ interface BoletaRaw {
   ted: string;
   track_id: string;
   estado: string;
-  emision_proveedor?: "mock" | "baseapi" | "sii_local";
+  emision_proveedor?: "mock" | "baseapi" | "sii_local" | "simpleapi";
   emision_sandbox?: boolean;
   proveedor_respuesta?: unknown;
+}
+
+// ¿Hay un PDF OFICIAL guardado (storage_path)? Lo sirve /api/intermediaria/boleta/[id]/pdf
+// para cualquier proveedor. Rutear a él evita regenerar un PDF local con "Timbre
+// simulado" cuando existe el documento real (sii_local y simpleapi lo guardan).
+function tieneePdfOficial(proveedorRespuesta: unknown): boolean {
+  if (!proveedorRespuesta || typeof proveedorRespuesta !== "object") return false;
+  const pdf = (proveedorRespuesta as { pdf?: { storage_path?: unknown } }).pdf;
+  return Boolean(pdf && typeof pdf === "object" && typeof pdf.storage_path === "string" && pdf.storage_path);
 }
 
 export default function DescargarBoletaButton({ id }: { id: string }) {
@@ -49,18 +58,20 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
         return;
       }
       const b = j.boleta as BoletaRaw;
-      if (b.emision_proveedor === "sii_local") {
+      // PDF oficial del SII (sii_local o simpleapi): se baja el documento real
+      // guardado, nunca el fallback local con "Timbre simulado".
+      if (b.emision_proveedor === "sii_local" || b.emision_proveedor === "simpleapi" || tieneePdfOficial(b.proveedor_respuesta)) {
         const pdfRes = await fetch(`/api/intermediaria/boleta/${id}/pdf`, { cache: "no-store" });
         if (!pdfRes.ok) {
           const error = await pdfRes.json().catch(() => ({ error: "PDF_NO_DISPONIBLE" }));
-          toast(error.error ?? "PDF SII no disponible en la app", "error");
+          toast(error.error ?? "PDF oficial no disponible en la app", "error");
           return;
         }
         const blob = await pdfRes.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `boleta-sii-${b.tipo_dte}-${b.folio}.pdf`;
+        a.download = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();

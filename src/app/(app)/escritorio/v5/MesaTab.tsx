@@ -149,6 +149,29 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     setAprobandoCartola(false);
   };
 
+  // Reprocesar una cartola que quedó en error (el visor ofrece esta salida en vez
+  // del dead-end "Sin propuestas pendientes"). El route fuerza el re-encolado.
+  const [reprocesando, setReprocesando] = useState(false);
+  const handleReprocesar = async (docId: string) => {
+    if (reprocesando) return;
+    setReprocesando(true);
+    try {
+      const res = await fetch("/api/procesar-documento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documento_id: docId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) { toast(json.error ?? "No se pudo reprocesar", "error"); return; }
+      toast("Reprocesando la cartola…");
+      reload();
+    } catch {
+      toast("Error de red — intenta de nuevo", "error");
+    } finally {
+      setReprocesando(false);
+    }
+  };
+
   const tipoNombre = (selDoc?.nombre_archivo ?? "");
   const tipo = selDoc
     ? ((selDoc.tipo ?? "").startsWith("boleta_") ? "boleta"
@@ -283,7 +306,27 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                       <GlosaComunControl documentoId={selDoc.id} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} />
                     </div>
                   )}
-                  {pend.length === 0 ? (
+                  {pend.length === 0 && selDoc.estado === "error" ? (
+                    <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 600 }}>No se pudo leer esta cartola</div>
+                      <div style={{ fontSize: 10, color: "var(--text2)", lineHeight: 1.5 }}>
+                        {(selDoc.progreso_ia as { error?: string } | null)?.error || "Ocurrió un problema al procesar el archivo."}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+                        <button onClick={() => handleReprocesar(selDoc.id)} disabled={reprocesando}
+                          style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: reprocesando ? "wait" : "pointer", opacity: reprocesando ? 0.6 : 1 }}>
+                          {reprocesando ? "Reprocesando…" : "↻ Reprocesar"}
+                        </button>
+                        <button onClick={() => setMappingDocId(selDoc.id)}
+                          style={{ fontSize: 10, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 7, padding: "6px 12px", cursor: "pointer" }}>
+                          ↔ Mapear columnas
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.5 }}>
+                        Si el formato del banco no se reconoció, usa <b>Mapear columnas</b> para indicar dónde están fecha, monto y descripción.
+                      </div>
+                    </div>
+                  ) : pend.length === 0 ? (
                     <div style={{ padding: "0 16px 14px", fontSize: 10, color: "var(--text2)" }}>{selDoc.estado === "procesando" ? "Procesando movimientos…" : "Sin propuestas pendientes en este documento."}</div>
                   ) : (
                     <>
