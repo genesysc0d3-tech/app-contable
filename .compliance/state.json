@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "generated_at": "2026-06-25T08:10:00Z",
+  "git_commit": "9fde99f",
+  "company": {
+    "razon_social": "AlphaCode SpA",
+    "rut": "[COMPLETAR]",
+    "domicilio": "[COMPLETAR]",
+    "contacto": "[COMPLETAR]",
+    "representacion_legal": "2 fundadores 50/50",
+    "responsable_datos": "fundador (declarado)",
+    "tamano": "micro"
+  },
+  "active_packs": ["ley-21595", "ley-21719"],
+  "notas": "Docs 14/14 generados. ARCO (export+supresión) implementado. IA vía OpenCode Go (EE.UU./UE/SG, zero-retention, sin entrenamiento): MiniMax M3 + DeepSeek V4 Flash. Partials = borradores pendientes de [COMPLETAR]/validación legal o de activación (backup/alertas). Disclaimer: borradores, no asesoría legal.",
+  "controls": {
+    "gov-responsable": { "status": "partial", "evidence": "21595-acta-encargado-prevencion.md (nombre [COMPLETAR])", "remediation": "Firmar acta con nombre real." },
+    "gov-registro": { "status": "partial", "evidence": "21719-rat.md, 21595-matriz-riesgos.md", "remediation": "Completar [COMPLETAR] y revisar." },
+    "gov-politicas": { "status": "partial", "evidence": "21719-politica-privacidad.md, 21595-codigo-etica.md", "remediation": "Publicar + validar." },
+    "gov-capacitacion": { "status": "partial", "evidence": "documentada en MPD", "remediation": "Ejecutar capacitación." },
+    "gov-auditoria": { "status": "partial", "evidence": "audit:app/roles/locks + re-correr compliance-cl", "remediation": "Definir cadencia." },
+    "gov-disciplinario": { "status": "partial", "evidence": "régimen en MPD", "remediation": "Incorporar a reglamento interno." },
+    "gov-denuncias": { "status": "partial", "evidence": "21595-reglamento-canal-denuncias.md, 21719-canal-derechos.md", "remediation": "Definir el medio (correo/form) [COMPLETAR]." },
+    "data-licitud": { "status": "partial", "evidence": "emission_authorizations + 21719-consentimiento.md", "remediation": "Implementar opt-in en el registro." },
+    "data-derechos": { "status": "pass", "evidence": "src/app/api/derechos/exportar + borrar", "remediation": "" },
+    "data-info": { "status": "partial", "evidence": "21719-politica-privacidad.md + /legal/privacidad", "remediation": "Publicar la política completa." },
+    "data-minimizacion": { "status": "pass", "evidence": "no se retiene PDF/XML/base64 crudo; sanitización; retención DTE 6 años", "remediation": "" },
+    "data-dpa": { "status": "partial", "evidence": "21719-dpa.md (plantilla)", "remediation": "Firmar/aceptar DPA con proveedores (insumo externo)." },
+    "data-transfer": { "status": "partial", "evidence": "21719-anexo-transferencias.md", "remediation": "Incorporar cláusulas modelo con cada proveedor." },
+    "data-consent-text": { "status": "partial", "evidence": "21719-consentimiento.md", "remediation": "Implementar el checkbox + registro en el formulario." },
+    "data-rights-channel": { "status": "pass", "evidence": "21719-canal-derechos.md + endpoints /api/derechos/*", "remediation": "" },
+    "data-eipd": { "status": "pass", "evidence": "21719-eipd.md (completada)", "remediation": "Reevaluar ante cambios." },
+    "data-privacy-by-design": { "status": "pass", "evidence": "RLS deny-by-default; privacy by default; minimización", "remediation": "" },
+    "data-pseudonym": { "status": "partial", "evidence": "masking de RUT/email en logs", "remediation": "Extender donde aplique." },
+    "sec-tls": { "status": "pass", "evidence": "HTTPS + HSTS (next.config.ts)", "remediation": "" },
+    "sec-rest": { "status": "pass", "evidence": "cifrado en reposo (Supabase)", "remediation": "" },
+    "sec-passwords": { "status": "pass", "evidence": "Supabase Auth (bcrypt)", "remediation": "" },
+    "sec-mfa": { "status": "pass", "evidence": "Supabase Auth MFA: /seguridad (enrolar TOTP) + /auth/mfa (challenge) + enforcement AAL2 en proxy (fail-open)", "remediation": "El operador debe enrolar su TOTP en /seguridad." },
+    "sec-logs": { "status": "pass", "evidence": "cuenta_audit_events, ops_events, audit_chunks", "remediation": "" },
+    "sec-tenant": { "status": "pass", "evidence": "RLS por cuenta/empresa; PROBADO (rls-isolation.test.ts)", "remediation": "" },
+    "sec-secrets": { "status": "pass", "evidence": "tokens aislados + gitignored; gate audit:secrets", "remediation": "" },
+    "sec-backups": { "status": "partial", "evidence": "scripts/backup/ (tooling)", "remediation": "Activar backup en la Mac Mini (insumo del usuario)." },
+    "inc-brechas": { "status": "partial", "evidence": "21719-plan-respuesta-brechas.md + breach-procedure.md", "remediation": "Definir canal formal." },
+    "ctrl-interno": { "status": "partial", "evidence": "DEV_SUPPORT_READ_ONLY; separación de roles", "remediation": "Formalizar segregación de funciones." },
+    "sec-monitoring": { "status": "partial", "evidence": "ops_events + /dev/diagnostico + bot de alertas (código)", "remediation": "Activar alertas (env Vercel) — insumo del usuario." }
+  },
+  "frameworks": {
+    "ley-21719": { "score": 0.72, "controls_required": 27, "pass": 12, "partial": 15, "fail": 0 },
+    "ley-21595": { "score": 0.64, "controls_required": 14, "pass": 4, "partial": 10, "fail": 0 }
+  }
+}

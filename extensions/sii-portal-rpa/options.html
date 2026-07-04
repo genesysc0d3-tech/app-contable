@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>App Contable Motor Local</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">App Contable</p>
+          <h1>Motor Local</h1>
+          <p class="lede">Emisión local SII y bóveda segura SimpleAPI para operar desde este equipo.</p>
+        </div>
+        <div class="status-pill" id="global-status">Extensión cargada</div>
+      </section>
+
+      <section class="grid" aria-label="Módulos locales">
+        <article class="card card-sii">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Módulo</p>
+              <h2>SII Local</h2>
+            </div>
+            <span class="module-status module-ready">Disponible</span>
+          </div>
+          <p class="copy">Boletas 39/41 desde Portal SII/e-Boleta con una ventana segura visible. La extensión no guarda ni envía tu clave SII.</p>
+          <ul class="checks">
+            <li>Sesión local del contribuyente</li>
+            <li>Captcha y 2FA siempre humanos</li>
+            <li>Captura folio y PDF oficial cuando SII lo entrega</li>
+          </ul>
+
+          <form class="vault-form sii-vault-form" id="sii-vault-form">
+            <label>
+              <span>RUT SII</span>
+              <input type="text" id="sii-rut" autocomplete="username" placeholder="12345678-9">
+            </label>
+            <label>
+              <span>Clave Tributaria</span>
+              <input type="password" id="sii-clave" autocomplete="current-password" placeholder="Clave SII">
+            </label>
+            <label>
+              <span>Passphrase local</span>
+              <input type="password" id="sii-pin" autocomplete="new-password" placeholder="Mínimo 12 caracteres">
+            </label>
+          </form>
+
+          <dl class="vault-grid sii-vault-grid">
+            <div>
+              <dt>RUT SII</dt>
+              <dd id="sii-vault-rut">Falta</dd>
+            </div>
+            <div>
+              <dt>Clave cifrada</dt>
+              <dd id="sii-vault-clave">Falta</dd>
+            </div>
+            <div>
+              <dt>Cifrado local</dt>
+              <dd id="sii-vault-encrypted">Sin bóveda cifrada</dd>
+            </div>
+            <div>
+              <dt>Desbloqueo</dt>
+              <dd id="sii-vault-unlocked">Bloqueada</dd>
+            </div>
+          </dl>
+
+          <div class="actions">
+            <button type="button" id="refresh-status">Actualizar estado</button>
+            <button type="submit" form="sii-vault-form" id="save-sii-vault">Guardar clave cifrada</button>
+            <button type="button" id="unlock-sii-vault">Desbloquear bóveda</button>
+            <button type="button" class="secondary" id="clear-sii-vault">Eliminar bóveda SII</button>
+          </div>
+          <p class="muted" id="sii-diagnostic">La clave SII se cifra en este navegador con una passphrase local de al menos 12 caracteres. Si autologin falla, se abrirá SII para inicio manual.</p>
+        </article>
+
+        <article class="card card-simpleapi">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Módulo</p>
+              <h2>SimpleAPI</h2>
+            </div>
+            <span class="module-status" id="simpleapi-status-label">Pendiente</span>
+          </div>
+          <p class="copy">Bóveda local para facturas 33/34. Al guardar, el PFX y el CAF se cifran en este equipo. Durante una emisión se envían temporalmente a App Contable para firmar y enviar el DTE; no se almacenan en nuestros servidores.</p>
+
+          <form class="vault-form" id="vault-form">
+            <label>
+              <span>Certificado PFX</span>
+              <input type="file" id="pfx-file" accept=".pfx,.p12,application/x-pkcs12">
+            </label>
+            <label>
+              <span>Password certificado</span>
+              <input type="password" id="certificate-password" autocomplete="off" placeholder="Clave del PFX">
+            </label>
+            <label>
+              <span>RUT certificado</span>
+              <input type="text" id="certificate-rut" autocomplete="off" placeholder="17096073-4">
+            </label>
+            <label>
+              <span>CAF XML</span>
+              <input type="file" id="caf-file" accept=".xml,text/xml,application/xml">
+            </label>
+            <label>
+              <span>RUT emisor</span>
+              <input type="text" id="emisor-rut" autocomplete="off" placeholder="76269769-6">
+            </label>
+            <label>
+              <span>Fecha resolución</span>
+              <input type="date" id="resolution-date">
+            </label>
+            <label>
+              <span>Número resolución</span>
+              <input type="number" id="resolution-number" min="0" step="1" placeholder="0">
+            </label>
+            <label>
+              <span>Ambiente SII</span>
+              <select id="sii-environment">
+                <option value="0">Certificación (pruebas)</option>
+                <option value="1">Producción</option>
+              </select>
+            </label>
+            <label>
+              <span>Passphrase local</span>
+              <input type="password" id="vault-passphrase" autocomplete="new-password" placeholder="Mínimo 10 caracteres">
+            </label>
+          </form>
+
+          <dl class="vault-grid">
+            <div>
+              <dt>Certificado PFX</dt>
+              <dd id="vault-pfx">Falta</dd>
+            </div>
+            <div>
+              <dt>CAF XML</dt>
+              <dd id="vault-caf">Falta</dd>
+            </div>
+            <div>
+              <dt>Cifrado local</dt>
+              <dd id="vault-encrypted">Pendiente</dd>
+            </div>
+            <div>
+              <dt>Ambiente</dt>
+              <dd id="vault-ambiente">Certificación</dd>
+            </div>
+            <div>
+              <dt>Última actualización</dt>
+              <dd id="vault-updated">Nunca</dd>
+            </div>
+            <div>
+              <dt>Desbloqueo</dt>
+              <dd id="vault-unlocked">Bloqueada</dd>
+            </div>
+          </dl>
+
+          <div class="actions">
+            <button type="submit" form="vault-form" id="configure-vault">Guardar bóveda cifrada</button>
+            <button type="button" id="unlock-vault">Desbloquear 10 min</button>
+            <button type="button" class="secondary" id="clear-vault">Eliminar bóveda local</button>
+          </div>
+          <p class="muted" id="simpleapi-diagnostic">Selecciona PFX, CAF, password y passphrase local. Se cifran sólo cuando presionas Guardar bóveda cifrada.</p>
+        </article>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -6,14 +6,44 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "audit:app": "node scripts/audit-app-devtools.mjs",
+    "audit:roles": "node scripts/audit-role-matrix.mjs",
+    "audit:locks": "node scripts/audit-emission-lock.mjs",
+    "audit:secrets": "node scripts/audit-secrets.mjs",
+    "audit:safety": "node scripts/audit-safety.mjs",
+    "check:prod-readiness": "node scripts/check-prod-readiness.mjs",
+    "sii:explore": "node scripts/sii-explorer.mjs",
+    "limpiar:test:storage": "node scripts/limpiar-test-storage.mjs",
+    "cb4w": "node scripts/reset-db.js"
   },
   "dependencies": {
-    "next": "16.2.2",
+    "@aws-sdk/client-s3": "^3.1066.0",
+    "@aws-sdk/s3-request-presigner": "^3.1066.0",
+    "@mistralai/mistralai": "^2.1.2",
+    "@phosphor-icons/react": "^2.1.10",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "@tanstack/react-virtual": "^3.14.5",
+    "chart.js": "^4.5.1",
+    "clsx": "^2.1.1",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^1.16.0",
+    "motion": "^12.40.0",
+    "next": "^16.2.9",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "shiki": "^4.1.0",
+    "tailwind-merge": "^3.6.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -21,6 +51,10 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   }
 }

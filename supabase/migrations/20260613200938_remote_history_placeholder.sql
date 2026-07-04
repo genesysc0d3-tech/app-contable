@@ -1,0 +1,8 @@
+-- Placeholder de historial remoto.
+--
+-- Esta version existe en la tabla de migraciones del proyecto Supabase remoto,
+-- pero no estaba presente en el repo local al retomar cuenta pagadora fase 1.
+-- Se conserva vacia para alinear historial sin ejecutar `migration repair`
+-- destructivo sobre remoto. El esquema remoto observado ya contenia las tablas
+-- de Telegram/identidades/multiempresa cubiertas por las migraciones locales
+-- fechadas 20260613.

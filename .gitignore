@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.r2.example
+
+# herramienta local para pegar claves R2 (no versionar)
+r2-setup.html
 
 # vercel
 .vercel
@@ -39,3 +43,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# session notes
+SESSION_NOTES.md
+
+# local SII/debug artifacts
+/.sii-explorer-profile/
+/artifacts/*
+!/artifacts/README.md
+!/artifacts/signals/
+!/artifacts/signals/*.md
+!/artifacts/tasks/
+!/artifacts/tasks/*.md
+!/artifacts/docs/
+!/artifacts/docs/*.md
+!/artifacts/runs/
+!/artifacts/runs/*.md
+/*.xlsx
+/~$*.xlsx
+.vercel/token
+.supabase/token
+.git/.git-credentials-local

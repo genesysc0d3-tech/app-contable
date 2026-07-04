@@ -1,0 +1,74 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: lighthouse-ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: lighthouse-ci-service-role-key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Start Next.js
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/massdte-next.log 2>&1 &
+          echo "$!" > /tmp/massdte-next.pid
+
+      - name: Wait for local app
+        run: |
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/auth/login > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/massdte-next.log
+          exit 1
+
+      - name: Run Lighthouse
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            http://127.0.0.1:3000/auth/login
+            http://127.0.0.1:3000/auth/registro
+            http://127.0.0.1:3000/bloqueado
+          configPath: ./lighthouserc.json
+          uploadArtifacts: true
+          runs: 3
+
+      - name: Stop Next.js
+        if: always()
+        run: |
+          if [ -f /tmp/massdte-next.pid ]; then
+            kill "$(cat /tmp/massdte-next.pid)" || true
+          fi

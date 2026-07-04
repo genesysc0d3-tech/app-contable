@@ -1,26 +1,311 @@
 @import "tailwindcss";
 
+/* El tema se controla con la clase .dark en <html> (script inline en layout
+   + ThemeToggle); las utilidades dark: deben seguir esa clase, no el SO. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #EDE9E1;
+  --foreground: #1A1612;
+  --accent: #E8553E;
+  --accent-light: #FFF0EE;
+  --accent-hover: #d44a35;
+  --card: #FFFFFF;
+  --card-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --border: #E2DCD1;
+  --muted: #6B6559;
+  --muted-light: #9A9486;
+  --surface: #E8E2D7;
+  /* Glass + glow tokens (light mode) */
+  --glass-bg: rgba(255,253,249,0.68);
+  --glass-border: rgba(255,255,255,0.9);
+  --glow-accent: 0 0 32px -8px rgba(232,85,62,0.35);
+  --glow-accent-soft: 0 0 64px -16px rgba(232,85,62,0.22);
+  --mesh-1: rgba(232,85,62,0.09);
+  --mesh-2: rgba(245,158,11,0.06);
+  --mesh-3: rgba(232,85,62,0.04);
+}
+
+.dark {
+  /* Cool neutral dark — OpenSea style, not warm brown */
+  --background: #18181B;
+  --foreground: #EDEDED;
+  --accent: #E8553E;
+  --accent-light: rgba(232,85,62,0.15);
+  --accent-hover: #f06a55;
+  --card: rgba(255,255,255,0.04);
+  --card-shadow: none;
+  --border: rgba(255,255,255,0.08);
+  --muted: rgba(255,255,255,0.55);
+  --muted-light: rgba(255,255,255,0.35);
+  --surface: rgba(255,255,255,0.04);
+  /* Glass tokens (dark mode) */
+  --glass-bg: rgba(24,24,27,0.75);
+  --glass-border: rgba(255,255,255,0.06);
+  --glow-accent: 0 0 40px -6px rgba(232,85,62,0.35);
+  --glow-accent-soft: 0 0 80px -16px rgba(232,85,62,0.22);
+  /* Subtle brand tint in ambient gradient (dimmed per principle #4) */
+  --mesh-1: rgba(232,85,62,0.12);
+  --mesh-2: rgba(245,158,11,0.06);
+  --mesh-3: rgba(232,85,62,0.04);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Fuente oficial: Inter (next/font, --font-geist-sans). El fallback de sistema
+     solo cubre el instante del swap. Los features cv11/ss01/ss03 de abajo son
+     alternates de Inter — recién ahora se activan de verdad. */
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  letter-spacing: -0.01em;
+  transition: background-color 300ms ease, color 300ms ease;
 }
+
+.dark body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+select option {
+  background: #fff;
+  color: #111;
+}
+.dark select option {
+  background: #1c1c1e;
+  color: #eee;
+}
+
+/* Tabular numbers for amounts */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Animations */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-out-right {
+  to { opacity: 0; transform: translateX(100px); }
+}
+@keyframes bounce-icon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 200ms ease-out;
+}
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+.animate-slide-out-right {
+  animation: slide-out-right 250ms ease-in forwards;
+}
+.animate-bounce-icon {
+  animation: bounce-icon 400ms ease;
+}
+
+/* Button press effect */
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Smooth collapse */
+.collapse-transition {
+  transition: grid-template-rows 300ms ease-in-out;
+}
+
+/* Page transition fade + slide */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-page-in {
+  animation: page-in 300ms ease both;
+}
+
+/* Indeterminate progress bar */
+@keyframes progress-indeterminate {
+  0% { width: 5%; margin-left: 0; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 5%; margin-left: 95%; }
+}
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+/* Card hover lift — desktop only via md: prefix in Tailwind */
+
+/* Check draw animation */
+@keyframes draw-check {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes scale-in {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes particle-burst {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-check-circle {
+  animation: scale-in 0.4s ease-out forwards;
+}
+.animate-check-draw {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: draw-check 0.35s ease-out 0.3s forwards;
+}
+.animate-particle {
+  animation: particle-burst 0.5s ease-out 0.5s forwards;
+  opacity: 0;
+}
+.animate-particle { animation-fill-mode: forwards; }
+
+/* Utility: hide native scrollbar (for horizontal tab strips, chip rows, etc) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ----- FieldMapper motion ----- */
+
+/* Stagger-in: blocks fade up with delay */
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mapper-stagger { opacity: 0; animation: stagger-in 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mapper-stagger-1 { animation-delay: 60ms; }
+.mapper-stagger-2 { animation-delay: 140ms; }
+.mapper-stagger-3 { animation-delay: 220ms; }
+
+/* Chip role-change pop */
+@keyframes chip-pop {
+  0%   { opacity: 0; transform: scale(0.7) translateY(-4px); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-chip-pop { animation: chip-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* One-time glow on auto-detected chips */
+@keyframes chip-detected-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  30%  { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+.animate-chip-detected { animation: chip-detected-glow 1600ms ease-out 200ms 1; }
+
+/* Arrow bounce (between chip and column header) */
+@keyframes arrow-hint {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50%      { transform: translateY(3px); opacity: 1; }
+}
+.animate-arrow-hint { animation: arrow-hint 1600ms ease-in-out infinite; }
+
+/* Column hover bar (vertical gradient behind a column) */
+.mapper-col-hover {
+  background: linear-gradient(180deg, var(--tint, transparent) 0%, transparent 100%);
+}
+
+/* Data row subtle hover shift */
+.mapper-data-row { transition: transform 150ms ease, background 150ms ease; }
+.mapper-data-row:hover { transform: translateX(2px); }
+
+/* Smooth grid collapse (for BlockIgnored expand/collapse) */
+@keyframes expand-block {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 600px; }
+}
+.animate-expand-block { animation: expand-block 320ms cubic-bezier(0.22, 1, 0.36, 1) both; overflow: hidden; }
+
+/* Item departure — fade + slide right + collapse height.
+   Used when approving/hiding propuestas so siblings slide up smoothly. */
+@keyframes depart {
+  0%   { opacity: 1; max-height: 500px; transform: translateX(0); }
+  35%  { opacity: 0; transform: translateX(32px); }
+  100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-top: 0; margin-bottom: 0; transform: translateX(32px); }
+}
+.animate-depart {
+  animation: depart 450ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* =======================================================================
+   Glassmorphism, glow, and animated mesh background
+   All pure CSS — zero bundle cost. Uses backdrop-filter + CSS gradients.
+   ======================================================================= */
+
+/* Glass surface — translucent card with blur and subtle border */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+}
+
+/* Accent glow — orange halo around element */
+.glow-accent { box-shadow: var(--glow-accent); }
+.glow-accent-soft { box-shadow: var(--glow-accent-soft); }
+
+/* Premium ambient background — gradient que envuelve la página
+   Fondo completo con un halo principal arriba-centro que se desvanece
+   hacia los bordes. Estilo fintech moderno. No animación. */
+.mesh-bg {
+  position: relative;
+  isolation: isolate;
+}
+.mesh-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  /* Halo primario arriba-centro-derecha */
+  background:
+    radial-gradient(ellipse 60vw 50vh at 75% -10%, var(--mesh-1) 0%, transparent 55%),
+    radial-gradient(ellipse 50vw 40vh at 15% 110%, var(--mesh-2) 0%, transparent 60%);
+  z-index: -1;
+  pointer-events: none;
+}
+.mesh-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  /* Tinta ambiental general muy suave */
+  background: radial-gradient(ellipse 100vw 80vh at 50% 30%, var(--mesh-3) 0%, transparent 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Number entrance — slides up with spring as data loads */
+@keyframes number-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-number-in { animation: number-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
