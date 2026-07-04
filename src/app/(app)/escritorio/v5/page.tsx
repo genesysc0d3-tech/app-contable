@@ -192,6 +192,7 @@ export default async function V5Page({ searchParams }: {
 .e-scroll .sec:last-child{padding-bottom:14px}
 .dz{padding:14px;border-radius:10px;border:1.5px dashed var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s}
 .dz:hover{border-color:color-mix(in srgb,var(--lime) 30%,transparent);background:color-mix(in srgb,var(--lime) 2%,transparent)}
+.dz:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:color-mix(in srgb,var(--lime) 40%,transparent)}
 .dz-icon{width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--lime) 6%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .dz-icon svg{width:16px;height:16px;color:var(--lime)}
 .dz-txt h4{font-size:12px;font-weight:600}

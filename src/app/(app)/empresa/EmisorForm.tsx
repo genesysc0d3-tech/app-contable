@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useId, isValidElement, cloneElement, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
 import { formatRut, validarRut, cleanRut } from "@/lib/sii/validation";
@@ -294,7 +294,10 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
                   )}
                 </div>
               ) : (
-                <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "var(--accent, #E8553E)", overflow: "hidden", textAlign: "center" }}>
+                <div role="button" tabIndex={logoPending ? -1 : 0} aria-label="Subir logo de la empresa (PNG o WebP transparente)"
+                  onClick={() => logoInputRef.current?.click()}
+                  onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !logoPending) { e.preventDefault(); logoInputRef.current?.click(); } }}
+                  style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "var(--accent, #E8553E)", overflow: "hidden", textAlign: "center" }}>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 750, lineHeight: 1.2 }}>
                     <span>{logoPending ? "Subiendo…" : "Subir logo"}</span>
                     <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "var(--red, #ef4444)" : "var(--text3, #697080)", fontSize: 11, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
@@ -606,9 +609,28 @@ function Field({
   style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
+  // Asocia label ↔ input (htmlFor/id) y anuncia el error (aria-invalid + aria-describedby
+  // + role="alert") para lectores de pantalla. Si el child es un elemento simple, se le
+  // inyectan los ids/aria; si no, degrada sin romper.
+  const autoId = useId();
+  const msgId = `${autoId}-msg`;
+  let control = children;
+  if (isValidElement(children)) {
+    const child = children as ReactElement<Record<string, unknown>>;
+    const childId = (child.props.id as string | undefined) ?? autoId;
+    control = cloneElement(child, {
+      id: childId,
+      "aria-invalid": error ? true : undefined,
+      "aria-describedby": (error || hint) ? msgId : child.props["aria-describedby"],
+    });
+  }
+  const controlId = isValidElement(children)
+    ? ((children as ReactElement<Record<string, unknown>>).props.id as string | undefined) ?? autoId
+    : undefined;
+
   return (
     <div style={style}>
-      <label style={{
+      <label htmlFor={controlId} style={{
         display: "flex",
         alignItems: "center",
         gap: 4,
@@ -621,14 +643,14 @@ function Field({
         {required && <span style={{ color: "var(--accent, #E8553E)" }}>*</span>}
       </label>
 
-      {children}
+      {control}
 
       {error ? (
-        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--red, #ef4444)" }}>
+        <p id={msgId} role="alert" style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--red, #ef4444)" }}>
           {error}
         </p>
       ) : hint ? (
-        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--text3, #697080)" }}>
+        <p id={msgId} style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--text3, #697080)" }}>
           {hint}
         </p>
       ) : null}
