@@ -236,6 +236,11 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      {mesa.propuestasTruncadas && (
+        <div style={{ flexShrink: 0, fontSize: 10, fontWeight: 600, color: "var(--amber)", background: "color-mix(in srgb, var(--amber) 12%, transparent)", borderBottom: "1px solid var(--border)", padding: "5px 12px", textAlign: "center" }}>
+          Mostrando {mesa.propuestas.length} de {mesa.propuestasTotal} propuestas del período — acota el rango (día/semana) para verlas todas.
+        </div>
+      )}
       {/* ── VISOR (permanente, altura fija) ── */}
       <div style={{ flexShrink: 0, height: "clamp(172px, 24vh, 224px)", minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "thin", borderBottom: "1px solid var(--bg-muted)" }}>
         {!selDoc ? (

@@ -36,36 +36,46 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
 
   if (pErr) throw new Error(pErr.message);
 
+  // IDs de las propuestas candidatas (ya acotadas al rango visible). Las consultas
+  // auxiliares se acotan a este conjunto en vez de barrer TODA la historia de la
+  // empresa: sin esto crecían sin techo y, al pasar el max-rows de PostgREST (1000),
+  // el Set yaEmitidas se truncaba en silencio y boletas YA emitidas reaparecían como
+  // "listas para emitir" (el server las bloquea, pero el usuario ve pendientes fantasma).
+  const propIds = (propuestas ?? []).map((p) => p.id);
+
   let yaEmitidas = new Set<string>();
-  try {
-    const { data: emitidas } = await supabase
-      .from("boletas_emitidas")
-      .select("propuesta_id")
-      .eq("empresa_id", empresaId)
-      .neq("estado", "anulada")
-      .not("propuesta_id", "is", null);
-    yaEmitidas = new Set((emitidas ?? []).map((e) => e.propuesta_id).filter((id): id is string => typeof id === "string"));
-  } catch {
-    /* tabla aún no existe — todas son pendientes */
+  if (propIds.length > 0) {
+    try {
+      const { data: emitidas } = await supabase
+        .from("boletas_emitidas")
+        .select("propuesta_id")
+        .eq("empresa_id", empresaId)
+        .neq("estado", "anulada")
+        .in("propuesta_id", propIds);
+      yaEmitidas = new Set((emitidas ?? []).map((e) => e.propuesta_id).filter((id): id is string => typeof id === "string"));
+    } catch {
+      /* tabla aún no existe — todas son pendientes */
+    }
   }
 
   // Paso P: decisión humana del tipo (degradado si la columna tipo_dte no está migrada).
   const tipoDteById = new Map<string, 39 | 41>();
-  try {
-    const { data: tdRows, error: tdErr } = await supabase
-      .from("propuestas_ia")
-      .select("id, tipo_dte")
-      .eq("empresa_id", empresaId)
-      .in("estado", ["aprobado", "editado"])
-      .not("tipo_dte", "is", null);
-    // tipo_dte ya está en los tipos generados; el runtime degrada si la consulta
-    // falla (tdErr).
-    if (!tdErr && tdRows) {
-      for (const r of tdRows) {
-        if (r.tipo_dte === 39 || r.tipo_dte === 41) tipoDteById.set(r.id, r.tipo_dte);
+  if (propIds.length > 0) {
+    try {
+      const { data: tdRows, error: tdErr } = await supabase
+        .from("propuestas_ia")
+        .select("id, tipo_dte")
+        .in("id", propIds)
+        .not("tipo_dte", "is", null);
+      // tipo_dte ya está en los tipos generados; el runtime degrada si la consulta
+      // falla (tdErr).
+      if (!tdErr && tdRows) {
+        for (const r of tdRows) {
+          if (r.tipo_dte === 39 || r.tipo_dte === 41) tipoDteById.set(r.id, r.tipo_dte);
+        }
       }
-    }
-  } catch { /* columna tipo_dte aún no migrada */ }
+    } catch { /* columna tipo_dte aún no migrada */ }
+  }
 
   type PropuestaRaw = NonNullable<typeof propuestas>[number];
   const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id));
