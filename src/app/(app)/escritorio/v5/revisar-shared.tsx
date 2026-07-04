@@ -439,14 +439,14 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             <div style={{marginBottom:8}}>
               <label style={lbl}>Comprador{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:6}}>
-                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
-                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" style={inp} />
-                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
+                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" aria-label="RUT del comprador" aria-invalid={!rutValido || undefined} style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
+                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" aria-label="Nombre o razón social del comprador" style={inp} />
+                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
                   <option value="">Medio de pago…</option>
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              {!rutValido && <div style={{fontSize:10,color:"var(--red)",marginTop:2}}>RUT no válido</div>}
+              {!rutValido && <div role="alert" style={{fontSize:10,color:"var(--red)",marginTop:2}}>RUT no válido</div>}
               {showMasDatos ? (
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
                   <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />

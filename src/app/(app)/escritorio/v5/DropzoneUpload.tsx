@@ -119,7 +119,11 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
       <input ref={inputRef} type="file" accept=".xls,.xlsx,.pdf,.csv,.png,.jpg,.jpeg,.webp" multiple
         style={{ display: "none" }} onChange={handleInput} />
 
-      <div className="dz" onClick={() => inputRef.current?.click()}
+      <div className="dz" role="button" tabIndex={uploading ? -1 : 0}
+        aria-label="Subir cartola o comprobante: Excel, PDF, CSV o foto (máx 10MB)"
+        aria-disabled={uploading || undefined}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !uploading) { e.preventDefault(); inputRef.current?.click(); } }}
         onDragEnter={e => { e.preventDefault(); setDragOver(true); }}
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
