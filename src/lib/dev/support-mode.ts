@@ -69,7 +69,10 @@ export async function getDevOperatorContext(): Promise<DevOperatorContext> {
   if (error) return { ok: false, error: "USUARIO_QUERY_FAILED", detalle: error.message };
 
   const email = (usuario?.email || user.email || "").trim().toLowerCase();
-  if (email !== DEV_OPERATOR_EMAIL || !usuario || usuario.vetado === true) {
+  // Doble gate como promete la doc: email operador + usuarios.dev_mode + no vetado.
+  // dev_mode funciona como kill-switch por columna: si la cuenta se compromete, basta
+  // ponerla en false para cortar el god-mode aunque el email siga siendo el del operador.
+  if (email !== DEV_OPERATOR_EMAIL || !usuario || usuario.vetado === true || usuario.dev_mode !== true) {
     return { ok: false, error: "NOT_DEV_OPERATOR" };
   }
 
