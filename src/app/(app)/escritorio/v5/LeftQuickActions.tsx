@@ -14,7 +14,7 @@ function todayStr() {
 
 type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
-export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
@@ -131,7 +131,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       {open && (
         <div className="ed-overlay">
           <div className="ed-panel">
-            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} onClose={closeWithSavedPulse} />
+            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} onClose={closeWithSavedPulse} />
           </div>
         </div>
       )}

@@ -251,7 +251,10 @@ export default function EmissionProviderConfig({
           />
         </ProviderGroup>
 
-        <ProviderGroup title="Facturas" code="DTE 33/34" subtitle="Recomendado: SimpleAPI con certificado y CAF de facturas.">
+        {/* Facturas 33/34 DESACTIVADO para clientes (decisión founder 2026-07-04:
+            el carril existe pero no está pulido — no se ofrece hasta pulirlo).
+            Solo visible con dev_mode; NO borrar. */}
+        {devMode && <ProviderGroup title="Facturas" code="DTE 33/34" subtitle="Recomendado: SimpleAPI con certificado y CAF de facturas.">
           {showMockFacturas && (
             <ProviderButton
               active={state.facturasProveedor === "mock"}
@@ -269,7 +272,7 @@ export default function EmissionProviderConfig({
             confirming={confirmReal?.grupo === "facturas" && confirmReal.proveedor === "simpleapi"}
             onClick={() => selectFacturas("simpleapi")}
           />
-        </ProviderGroup>
+        </ProviderGroup>}
 
         <div style={{
           marginTop: 12,

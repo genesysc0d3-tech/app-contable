@@ -280,7 +280,7 @@ const WORKER_STATUS_LABELS: Record<string, string> = {
   error: "Error",
 };
 
-export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
+export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   const tipoInicial: TipoDte = empresaTipo === "exento" ? 41 : 39;
@@ -1288,7 +1288,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   <div style={{ fontSize: 12, fontWeight: 800 }}>Boleta exenta</div>
                   <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 41 · Sin IVA</div>
                 </button>
-                {facturasProveedor === "simpleapi" && (
+                {/* Facturas solo en dev (founder 2026-07-04): carril sin pulir, no se ofrece. */}
+                {facturasProveedor === "simpleapi" && devMode && (
                   <>
                     <button className="ed-type-button" onClick={() => setTipo(33)} disabled={tipoLocked} style={{ borderColor: tipoDte === 33 ? "rgba(232,85,62,.45)" : "var(--border)", background: tipoDte === 33 ? "var(--accent-light)" : "var(--surface)", color: tipoDte === 33 ? "#E8553E" : "var(--text2)", opacity: tipoLocked && tipoDte !== 33 ? 0.45 : 1 }}>
                       <div style={{ fontSize: 12, fontWeight: 800 }}>Factura afecta</div>
