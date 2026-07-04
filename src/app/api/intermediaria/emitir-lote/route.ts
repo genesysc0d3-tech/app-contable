@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
+import { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -30,7 +32,6 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 const CONCURRENCY = 1; // secuencial — folios en orden
 
 // Roles que pueden emitir documentos tributarios (viewer solo consulta).
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 interface BatchItem {
   propuesta_id: string;
@@ -221,7 +222,7 @@ export async function POST(request: Request) {
     }
     // "exenta" incluida (ya estaba en pendientes-emision): un contribuyente exento
     // emite DTE 41; el tipo_dte real lo decide clasificarBoleta abajo, no este tipo.
-    const TIPOS_EMITIBLES = ["boleta", "exenta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
+    // TIPOS_EMITIBLES viene de la fuente única (misma lista que la cola de pendientes).
     if (!TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
       results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como boleta` });
       continue;

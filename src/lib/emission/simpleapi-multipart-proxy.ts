@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -14,7 +15,6 @@ import {
   simpleApiEndpoint,
 } from "@/lib/emission/simpleapi";
 
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 export async function proxySimpleApiMultipart(request: Request, path: string) {
   try {

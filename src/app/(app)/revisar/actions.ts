@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
@@ -35,8 +36,7 @@ async function getEmpresaAndService() {
   // TODAS las acciones de este archivo MUTAN (aprobar/editar/rechazar/poner listo/
   // crear cliente). Aprobar/editar propuestas es un acto tributario: 'viewer' queda
   // fuera, igual que en las rutas de emisión (ROLES_EMISION). Gate único acá.
-  const ROLES_ESCRITURA = new Set(["owner", "admin", "contador"]);
-  if (!ROLES_ESCRITURA.has(String(usuario.rol))) {
+  if (!ROLES_EMISION.has(String(usuario.rol))) {
     return { error: "Tu rol no permite esta acción" } as const;
   }
 

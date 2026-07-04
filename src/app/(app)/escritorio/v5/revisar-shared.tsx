@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import type { Tables } from "@/lib/database.types";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
@@ -298,12 +299,11 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   // sugerencia de la empresa. Un default de empresa 'afecto'/'auto' NUNCA puede pisar
   // una exención POR LEY (cripto/forex/P2P, Of. SII 963/2018): eso fabricaría IVA
   // inexistente sobre una venta exenta (el footgun que el clasificador ya prohíbe).
-  const EXENTOS_POR_TIPO = ["exenta", "factura_exenta", "compraventa_crypto", "transferencia_p2p", "operacion_forex"];
   const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : EXENTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "exenta"
+        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
           : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipoContribuyente === "exento" ? "exenta"
               : empresaTipoContribuyente === "afecto" ? "afecta"

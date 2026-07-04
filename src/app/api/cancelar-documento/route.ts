@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { esRolEmision } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return NextResponse.json({ error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
-  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+  if (!esRolEmision(usuario.rol)) {
     return NextResponse.json({ error: "ROL_SIN_PERMISO" }, { status: 403 });
   }
 

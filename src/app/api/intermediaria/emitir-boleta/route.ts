@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -24,7 +25,6 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
  */
 
 // Roles que pueden emitir documentos tributarios (viewer solo consulta).
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 export async function POST(request: Request) {
   try {
