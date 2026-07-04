@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useToast } from "@/components/Toast";
 import CartolaMapperDragDrop from "@/components/mapping/CartolaMapperDragDrop";
+import { listFormatosCartola, type FormatoCartolaGuardado } from "./actions";
 
 export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string }) {
   const { toast } = useToast();
@@ -12,9 +13,19 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
     sheetName: string; fingerprint: string; totalRows: number; cols: number;
     rows: string[][]; txStart: number; hasHeader: boolean;
   } | null>(null);
+  const [formatos, setFormatos] = useState<FormatoCartolaGuardado[] | null>(null);
+
+  const cargarFormatos = useCallback(() => {
+    listFormatosCartola()
+      .then((r) => { setFormatos(r.ok && r.formatos ? r.formatos : []); })
+      .catch(() => { setFormatos([]); });
+  }, []);
+
+  useEffect(() => { cargarFormatos(); }, [cargarFormatos]);
 
   async function handleFile(file: File) {
-    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls") && !file.name.endsWith(".csv")) {
+    const nombreArchivo = file.name.toLowerCase();
+    if (!nombreArchivo.endsWith(".xlsx") && !nombreArchivo.endsWith(".xls") && !nombreArchivo.endsWith(".csv")) {
       toast("Solo archivos Excel o CSV", "error");
       return;
     }
@@ -71,7 +82,7 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
                 </h3>
               </div>
               <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4, color: "var(--text3, #697080)" }}>
-                Sube ejemplos de tus cartolas y mapéalos automáticamente.
+                Opcional — la mayoría de los bancos se leen solos. Si el tuyo no, sube una cartola de ejemplo y enséñale a la app qué hay en cada columna (una sola vez).
               </p>
             </div>
           </div>
@@ -109,6 +120,42 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
           <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
           />
+
+          {/* Formatos configurados */}
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 760, color: "var(--text, #e8eaf0)", marginBottom: 8 }}>
+              Formatos configurados
+            </div>
+            {formatos === null ? (
+              <div style={{ fontSize: 12, color: "var(--text3, #697080)" }}>Cargando…</div>
+            ) : formatos.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--text3, #697080)" }}>
+                Aún no has enseñado ningún formato — la mayoría de los bancos se leen solos.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {formatos.map((f) => (
+                  <div key={f.id} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    borderRadius: 12,
+                    border: "1px solid var(--border, rgba(255,255,255,.06))",
+                    background: "color-mix(in srgb, var(--text, #e8eaf0) 3%, transparent)",
+                    padding: "10px 14px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: "var(--green, #34d46e)" }} />
+                      <span style={{ fontSize: 13, fontWeight: 650, color: "var(--text, #e8eaf0)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {f.nombre || "Formato sin nombre"}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 12, color: "var(--text3, #697080)", flexShrink: 0 }}>
+                      {new Date(f.createdAt).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -116,7 +163,7 @@ export default function EmpresaFormatoCartola({ empresaId }: { empresaId: string
         <CartolaMapperDragDrop
           empresaId={empresaId}
           onClose={() => setPreview(null)}
-          onSaved={() => setPreview(null)}
+          onSaved={() => { setPreview(null); cargarFormatos(); }}
           previewData={preview}
         />
       )}

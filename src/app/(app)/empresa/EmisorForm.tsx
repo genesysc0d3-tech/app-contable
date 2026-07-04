@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
 import { formatRut, validarRut, cleanRut } from "@/lib/sii/validation";
@@ -9,9 +9,11 @@ import { useToast } from "@/components/Toast";
 interface Props {
   inicial: DatosEmisor;
   variant?: "page" | "popup";
+  /** C1: el popup lo consulta en goToStep/handleClose para auto-guardar de forma awaitable. */
+  submitRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
 }
 
-export default function EmisorForm({ inicial, variant = "page" }: Props) {
+export default function EmisorForm({ inicial, variant = "page", submitRef }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -25,6 +27,9 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
   const [comuna, setComuna] = useState(inicial.comuna ?? "");
   const [emailSii, setEmailSii] = useState(inicial.email_sii ?? "");
   const [hasLogo, setHasLogo] = useState(true);
+  // Confirmado por onLoad del <img>; sin marco visible hasta entonces (evita
+  // el recuadro fantasma cuando la empresa aún no tiene logo).
+  const [logoListo, setLogoListo] = useState(false);
   const [logoVersion, setLogoVersion] = useState(0);
   const [logoStatus, setLogoStatus] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -32,41 +37,92 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
     inicial.tipo_contribuyente ?? "auto"
   );
 
-  const rutOk = !rut || validarRut(rut);
+  // Errores inline: el RUT se valida recién al salir del campo (touched), no
+  // por keystroke; razón social se marca cuando la validación del submit falla.
+  const [rutTouched, setRutTouched] = useState(false);
+  const [razonTouched, setRazonTouched] = useState(false);
+  const rutError = rutTouched && rut && !validarRut(rut) ? "RUT inválido (dígito verificador)" : null;
+  const razonError = razonTouched && !razonSocial.trim() ? "Razón social obligatoria" : null;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (logoPending) return;
+  // Último snapshot guardado; base del dirty-check del auto-save al navegar.
+  const ultimoGuardado = useRef({
+    rut: inicial.rut ? cleanRut(inicial.rut) : null,
+    razon_social: inicial.razon_social ?? "",
+    giro: inicial.giro ?? "",
+    direccion: inicial.direccion ?? "",
+    comuna: inicial.comuna ?? "",
+    email_sii: inicial.email_sii ?? "",
+    tipo_contribuyente: inicial.tipo_contribuyente ?? "auto",
+  });
 
-    if (rut && !validarRut(rut)) {
-      toast("RUT inválido", "error");
-      return;
+  // Validación + guardado compartidos por el submit del form y por submitRef
+  // (C1). Retorna true si guardó OK (o si no había cambios, con soloSiCambio);
+  // false si la validación o el server fallaron.
+  async function guardar(opts?: { soloSiCambio?: boolean }): Promise<boolean> {
+    if (logoPending) {
+      toast("Espera a que termine de subir el logo", "error");
+      return false;
     }
 
-    if (!razonSocial.trim()) {
-      toast("Razón social obligatoria", "error");
-      return;
+    const datos = {
+      rut: rut ? cleanRut(rut) : null,
+      razon_social: razonSocial,
+      giro,
+      direccion,
+      comuna,
+      email_sii: emailSii,
+      tipo_contribuyente: tipoContribuyente,
+    };
+
+    // Dirty-check ANTES de validar: si nada cambió respecto del último guardado,
+    // navegar no debe castigar con toasts/pulsos/escrituras redundantes.
+    const prev = ultimoGuardado.current;
+    const sinCambios =
+      datos.rut === prev.rut &&
+      datos.razon_social === prev.razon_social &&
+      datos.giro === prev.giro &&
+      datos.direccion === prev.direccion &&
+      datos.comuna === prev.comuna &&
+      datos.email_sii === prev.email_sii &&
+      datos.tipo_contribuyente === prev.tipo_contribuyente;
+    if (opts?.soloSiCambio && sinCambios) return true;
+
+    const rutInvalido = !!rut && !validarRut(rut);
+    const razonVacia = !razonSocial.trim();
+    if (rutInvalido || razonVacia) {
+      if (rutInvalido) setRutTouched(true);
+      if (razonVacia) setRazonTouched(true);
+      toast(rutInvalido ? "RUT inválido" : "Razón social obligatoria", "error");
+      return false;
     }
 
     setPending(true);
     try {
-      const r = await setDatosEmisor({
-        rut: rut ? cleanRut(rut) : null,
-        razon_social: razonSocial,
-        giro,
-        direccion,
-        comuna,
-        email_sii: emailSii,
-        tipo_contribuyente: tipoContribuyente,
-      });
-      if (r.error) { toast(r.error, "error"); return; }
+      const r = await setDatosEmisor(datos);
+      if (r.error) { toast(r.error, "error"); return false; }
+      ultimoGuardado.current = datos;
       toast("Datos del emisor guardados");
       // Éxito real: avisa al v5 (pulse "Empresa guardada"); antes lo disparaba
       // el popup a ciegas aunque la validación fallara.
       window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Empresa guardada" } }));
-    } catch { toast("Error al guardar", "error"); }
+      return true;
+    } catch { toast("Error al guardar", "error"); return false; }
     finally { setPending(false); }
   }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void guardar();
+  }
+
+  // C1: expone el guardado awaitable al popup (goToStep/handleClose). Sin deps:
+  // se reasigna en cada render para que el closure vea siempre el estado vigente.
+  useEffect(() => {
+    if (!submitRef) return;
+    const ref = submitRef;
+    ref.current = () => guardar({ soloSiCambio: true });
+    return () => { ref.current = null; };
+  });
 
   async function handleLogoChange(file: File | null) {
     if (!file || logoPending) return;
@@ -109,12 +165,12 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
 
   const inputBase = {
     width: "100%",
-    height: compact ? 34 : 48,
+    height: compact ? 38 : 48,
     borderRadius: compact ? 10 : 16,
-    border: "1px solid var(--border, rgba(255,255,255,.06))",
+    // El borde vive en la clase .ef-input (habilita :focus-visible y error por CSS).
     background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
-    padding: compact ? "0 10px" : "0 16px",
-    fontSize: compact ? 12 : 15,
+    padding: compact ? "0 12px" : "0 16px",
+    fontSize: compact ? 13 : 15,
     color: "var(--text, #e8eaf0)",
     outline: "none",
     transition: "all 160ms ease",
@@ -124,7 +180,10 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
   return (
     <>
       <style>{`
+        .ef-input { border: 1px solid var(--border, rgba(255,255,255,.06)); }
         .ef-input::placeholder { color: color-mix(in srgb, var(--text, #e8eaf0) 32%, transparent); }
+        .ef-input.ef-input-error { border-color: color-mix(in srgb, var(--red, #ef4444) 80%, transparent); }
+        .ef-input:focus-visible { border-color: color-mix(in srgb, var(--accent, #E8553E) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #E8553E) 15%, transparent); }
         .ef-logo-card .ef-logo-fade,
         .ef-logo-card .ef-logo-actions { opacity: 0; }
         .ef-logo-card:hover .ef-logo-fade,
@@ -135,7 +194,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
       `}</style>
       <form id="empresa-emisor-form"
       onSubmit={handleSubmit}
-      style={{ display: "flex", flexDirection: "column", gap: compact ? 8 : 16 }}
+      style={{ display: "flex", flexDirection: "column", gap: compact ? 10 : 16 }}
     >
       {/* CARD 1: DATOS DEL EMISOR */}
       <div style={{
@@ -147,14 +206,14 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
         <div style={{
           maxWidth: 1180,
           margin: "0 auto",
-          padding: compact ? "12px 14px" : "36px 40px",
+          padding: compact ? "14px 16px" : "36px 40px",
         }}>
           {/* HEADER */}
           <div style={{
             display: "flex",
             alignItems: "flex-start",
             gap: compact ? 10 : 20,
-            marginBottom: compact ? 10 : 36,
+            marginBottom: compact ? 12 : 36,
           }}>
             <div style={{
               width: compact ? 34 : 48, height: compact ? 34 : 48, flexShrink: 0,
@@ -191,28 +250,39 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 </span>
               </div>
               <p style={{
-                marginTop: compact ? 3 : 8, fontSize: compact ? 10 : 14, lineHeight: 1.35,
+                marginTop: compact ? 3 : 8, fontSize: compact ? 11 : 14, lineHeight: 1.35,
                 color: "var(--text3, #697080)",
               }}>
                 Información tributaria que aparecerá en tus documentos.
               </p>
             </div>
 
-            <div style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}>
+            {/* Drag & drop: soltar un archivo acá sube el logo (antes el browser navegaba a la imagen) */}
+            <div
+              style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0] ?? null;
+                handleLogoChange(f);
+              }}
+            >
               <input ref={logoInputRef} type="file" accept="image/png,image/webp,image/gif,image/jpeg" disabled={logoPending}
                 onChange={(e) => { const f = e.target.files?.[0] ?? null; handleLogoChange(f); e.target.value = ""; }}
                 style={{ display: "none" }}
               />
               {hasLogo ? (
-                <div className="ef-logo-card" style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, overflow: "hidden", position: "relative" }}>
+                <div className="ef-logo-card" style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: logoListo ? "1px dashed rgba(232,85,62,0.30)" : "1px dashed transparent", background: logoListo ? "rgba(232,85,62,0.055)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, overflow: "hidden", position: "relative" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- logo servido por API same-origin; next/image no aplica */}
                   <img
                     src={`/api/empresa/logo/current?v=${logoVersion}`}
                     alt="Logo"
-                    onError={() => setHasLogo(false)}
-                    style={{ maxWidth: "100%", maxHeight: compact ? 38 : 48, objectFit: "contain", display: "block", transition: "filter 160ms ease, transform 160ms ease" }}
+                    onLoad={() => setLogoListo(true)}
+                    onError={() => { setLogoListo(false); setHasLogo(false); }}
+                    style={{ maxWidth: "100%", maxHeight: compact ? 38 : 48, objectFit: "contain", display: "block", opacity: logoListo ? 1 : 0, transition: "opacity 160ms ease, filter 160ms ease, transform 160ms ease" }}
                   />
-                  <div className="ef-logo-fade" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,10,12,.08), rgba(10,10,12,.46))", backdropFilter: "blur(1px)", transition: "opacity 160ms ease", pointerEvents: "none" }} />
+                  {logoListo && <div className="ef-logo-fade" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,10,12,.08), rgba(10,10,12,.46))", backdropFilter: "blur(1px)", transition: "opacity 160ms ease", pointerEvents: "none" }} />}
+                  {logoListo && (
                   <div className="ef-logo-actions" style={{ position: "absolute", left: "50%", bottom: 7, display: "flex", gap: 5, transform: "translate(-50%, 4px) scale(.98)", transition: "opacity 160ms ease, transform 160ms ease" }}>
                     <button type="button" onClick={() => logoInputRef.current?.click()} disabled={logoPending} aria-label="Cambiar logo" style={{ width: compact ? 25 : 29, height: compact ? 25 : 29, borderRadius: 999, border: "1px solid rgba(255,255,255,.22)", background: "rgba(15,15,18,.72)", color: "#fff", display: "grid", placeItems: "center", cursor: logoPending ? "wait" : "pointer", backdropFilter: "blur(8px)", boxShadow: "0 8px 18px rgba(0,0,0,.24)" }}>
                       {logoPending ? <span style={{ fontSize: 10, fontWeight: 800 }}>...</span> : <svg viewBox="0 0 24 24" fill="none" width={compact ? 13 : 14} height={compact ? 13 : 14} aria-hidden="true"><path d="m4 16.5-.5 4 4-.5L18.9 8.6a2.1 2.1 0 0 0 0-3L18.4 5a2.1 2.1 0 0 0-3 0L4 16.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="m13.8 6.6 3.6 3.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}
@@ -221,17 +291,18 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                       <svg viewBox="0 0 24 24" fill="none" width={compact ? 13 : 14} height={compact ? 13 : 14} aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M9 7l.7-2h4.6L15 7M7 7l.8 13h8.4L17 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                   </div>
+                  )}
                 </div>
               ) : (
                 <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "var(--accent, #E8553E)", overflow: "hidden", textAlign: "center" }}>
-                  <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: compact ? 9 : 10, fontWeight: 750, lineHeight: 1.15 }}>
-                    <span>{logoPending ? "Subiendo..." : "Subir logo"}</span>
-                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "var(--red, #ef4444)" : "var(--text3, #697080)", fontSize: compact ? 8 : 9, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 750, lineHeight: 1.2 }}>
+                    <span>{logoPending ? "Subiendo…" : "Subir logo"}</span>
+                    <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "var(--red, #ef4444)" : "var(--text3, #697080)", fontSize: 11, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
                   </span>
                 </div>
               )}
               {hasLogo && logoStatus && (
-                <div style={{ marginTop: 5, maxWidth: compact ? 118 : 150, color: logoStatus === "Logo guardado" ? "var(--green, #22c55e)" : "var(--red, #ef4444)", fontSize: compact ? 8 : 9, fontWeight: 700, lineHeight: 1.2, textAlign: "center" }}>
+                <div style={{ marginTop: 5, maxWidth: compact ? 118 : 150, color: logoStatus === "Logo guardado" ? "var(--green, #22c55e)" : "var(--red, #ef4444)", fontSize: 11, fontWeight: 700, lineHeight: 1.2, textAlign: "center" }}>
                   {logoStatus}
                 </div>
               )}
@@ -242,37 +313,39 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(2, 1fr)",
-            gap: compact ? "8px 12px" : "28px 32px",
+            gap: compact ? "10px 14px" : "28px 32px",
           }}>
-            <Field label="RUT" compact={compact} error={!rutOk ? "RUT inválido (dígito verificador)" : null}>
+            <Field
+              label="RUT del emisor"
+              compact={compact}
+              error={rutError}
+              hint="El de tu empresa (77.xxx.xxx) o el tuyo si trabajas como persona natural con giro"
+            >
               <input
                 type="text"
                 value={rut}
                 onChange={(e) => setRut(e.target.value)}
-                onBlur={(e) => {
-                  if (rut) setRut(formatRut(rut));
-                  if (rutOk) { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }
-                }}
+                onBlur={() => { if (rut) setRut(formatRut(rut)); setRutTouched(true); }}
                 placeholder="12.345.678-9"
-                className="ef-input"
-                style={{
-                  ...inputBase,
-                  border: rutOk ? "1px solid var(--border, rgba(255,255,255,.06))" : "1px solid color-mix(in srgb, var(--red, #ef4444) 80%, transparent)",
-                }}
-                onFocus={(e) => { if (rutOk) e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
+                className={`ef-input${rutError ? " ef-input-error" : ""}`}
+                style={inputBase}
               />
             </Field>
 
-            <Field label="Razón social" compact={compact} required>
+            <Field
+              label="Razón social"
+              compact={compact}
+              required
+              error={razonError}
+              hint="Persona natural: escribe tu nombre completo tal como aparece en el SII"
+            >
               <input
                 type="text"
                 value={razonSocial}
                 onChange={(e) => setRazonSocial(e.target.value)}
-                placeholder="Mi Empresa SpA"
-                className="ef-input"
+                placeholder="Osvaldo Pérez / Mi Empresa SpA"
+                className={`ef-input${razonError ? " ef-input-error" : ""}`}
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -284,8 +357,6 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Servicios de software"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -297,8 +368,6 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Av. Apoquindo 123"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
@@ -310,12 +379,15 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="Las Condes"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
 
-            <Field label="Email para el SII" compact={compact} style={{ gridColumn: "span 2" }}>
+            <Field
+              label="Email para el SII"
+              compact={compact}
+              style={{ gridColumn: "span 2" }}
+              hint="El correo de contacto que aparecerá en tus documentos (usa el tuyo habitual)"
+            >
               <input
                 type="email"
                 value={emailSii}
@@ -323,8 +395,6 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
                 placeholder="sii@miempresa.cl"
                 className="ef-input"
                 style={inputBase}
-                onFocus={(e) => { e.target.style.borderColor = "rgba(167,139,250,0.45)"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 6%, transparent)"; }}
-                onBlur={(e) => { e.target.style.borderColor = "var(--border, rgba(255,255,255,.06))"; e.target.style.background = "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)"; }}
               />
             </Field>
           </div>
@@ -336,41 +406,18 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
         borderRadius: compact ? 14 : 18,
         border: "1px solid var(--border, rgba(255,255,255,.06))",
         background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
-        padding: compact ? 10 : 24,
+        padding: compact ? 12 : 24,
         boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
       }}>
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          marginBottom: compact ? 7 : 16,
-        }}>
-          <div>
-            <div style={{
-              fontSize: compact ? 12 : 13, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text, #e8eaf0)",
-            }}>
-              Tipo de contribuyente
-            </div>
-            <div style={{ marginTop: 2, fontSize: compact ? 10 : 11, color: "var(--text2, #8b92a3)" }}>
-              Define el tipo de boleta por defecto.
-            </div>
-          </div>
-
-          <span style={{
-            borderRadius: 9999,
-            border: `1px solid ${
-              tipoContribuyente === "afecto" ? "color-mix(in srgb, var(--green, #22c55e) 20%, transparent)"
-                : tipoContribuyente === "exento" ? "color-mix(in srgb, var(--blue, #5b9cf6) 20%, transparent)"
-                : "rgba(167,139,250,0.20)"
-            }`,
-            background: `${
-              tipoContribuyente === "afecto" ? "color-mix(in srgb, var(--green, #22c55e) 15%, transparent)"
-                : tipoContribuyente === "exento" ? "color-mix(in srgb, var(--blue, #5b9cf6) 15%, transparent)"
-                : "rgba(167,139,250,0.15)"
-            }`,
-            padding: compact ? "3px 8px" : "4px 10px", fontSize: compact ? 9 : 10, fontWeight: 700,
-            color: tipoContribuyente === "afecto" ? "var(--green, #22c55e)" : tipoContribuyente === "exento" ? "var(--blue, #5b9cf6)" : "color-mix(in srgb, #8b5cf6 60%, var(--text, #e8eaf0))",
+        <div style={{ marginBottom: compact ? 8 : 16 }}>
+          <div style={{
+            fontSize: compact ? 12 : 13, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text, #e8eaf0)",
           }}>
-            {tipoContribuyente === "afecto" ? "AFECTO" : tipoContribuyente === "exento" ? "EXENTO" : "AUTO"}
-          </span>
+            Tipo de contribuyente
+          </div>
+          <div style={{ marginTop: 2, fontSize: 11, color: "var(--text2, #8b92a3)" }}>
+            Define el tipo de boleta por defecto.
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: compact ? 7 : 10 }}>
@@ -407,16 +454,16 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
             style={{
               borderRadius: 12,
               border: tipoContribuyente === "auto"
-                ? "1px solid rgba(167,139,250,0.35)"
+                ? "1px solid color-mix(in srgb, var(--accent, #E8553E) 35%, transparent)"
                 : "1px solid var(--border, rgba(255,255,255,.06))",
               background: tipoContribuyente === "auto"
-                ? "rgba(167,139,250,0.18)"
+                ? "color-mix(in srgb, var(--accent, #E8553E) 18%, transparent)"
                 : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
               padding: compact ? "7px 8px" : "12px 12px",
               fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "auto" ? "color-mix(in srgb, #8b5cf6 60%, var(--text, #e8eaf0))" : "var(--text2, #8b92a3)",
+              color: tipoContribuyente === "auto" ? "var(--accent, #E8553E)" : "var(--text2, #8b92a3)",
               boxShadow: tipoContribuyente === "auto"
-                ? "0 14px 34px rgba(167,139,250,0.12)"
+                ? "0 14px 34px color-mix(in srgb, var(--accent, #E8553E) 12%, transparent)"
                 : "none",
               cursor: "pointer",
               transition: "all 160ms ease",
@@ -424,7 +471,7 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
           >
             AUTO
             <span style={{ display: "block", marginTop: compact ? 2 : 4, fontSize: compact ? 9 : 10, fontWeight: 500, opacity: 0.7 }}>
-              Programa decide
+              La app elige según cada venta
             </span>
           </button>
 
@@ -456,22 +503,43 @@ export default function EmisorForm({ inicial, variant = "page" }: Props) {
           </button>
         </div>
 
+        {/* Consecuencia tributaria de elegir EXENTO (hallazgo del contador) */}
+        {tipoContribuyente === "exento" && (
+          <div style={{
+            marginTop: compact ? 8 : 12,
+            fontSize: compact ? 11 : 12, lineHeight: 1.45,
+            color: "var(--amber, #f59e0b)",
+          }}>
+            Solo si NINGUNA de tus ventas lleva IVA (cripto, divisas, servicios exentos). Si vendes
+            productos o servicios normales, emitirías boletas sin el IVA que debes — el SII lo cobra
+            igual, con multa.
+          </div>
+        )}
+
         <div style={{
-          marginTop: compact ? 7 : 12,
+          marginTop: compact ? 8 : 12,
           borderRadius: 12,
           border: "1px solid var(--border, rgba(255,255,255,.06))",
-          background: "rgba(0,0,0,0.15)",
-          padding: compact ? "6px 9px" : "8px 12px",
-          fontSize: compact ? 9 : 11, lineHeight: compact ? 1.35 : 1.5,
+          background: "var(--bg-muted, rgba(0,0,0,0.15))",
+          padding: compact ? "8px 10px" : "10px 12px",
+          fontSize: compact ? 11 : 12, lineHeight: 1.5,
           color: "var(--text2, #8b92a3)",
+          display: "flex", flexDirection: "column", gap: 2,
         }}>
-          <strong style={{ color: "var(--text, #e8eaf0)" }}>Afecto:</strong>{" "}
-          emite boletas con IVA 19%.{" "}
-          <strong style={{ color: "var(--text, #e8eaf0)" }}>Exento:</strong>{" "}
-          emite boletas sin IVA. Si vendes cripto o divisas (servicios exentos), eres exento.{" "}
-          <strong style={{ color: "var(--text, #e8eaf0)" }}>Auto:</strong>{" "}
-          el clasificador decide por cada movimiento. Esto aplica por defecto para todos los clientes,
-          salvo que configures un tipo distinto en cada cliente.
+          <div><strong style={{ color: "var(--text, #e8eaf0)" }}>Afecto:</strong> boletas con IVA 19%.</div>
+          <div><strong style={{ color: "var(--text, #e8eaf0)" }}>Exento:</strong> boletas sin IVA (cripto, divisas, servicios exentos).</div>
+          <div><strong style={{ color: "var(--text, #e8eaf0)" }}>Auto:</strong> la app elige según cada venta (recomendado si no estás seguro).</div>
+          <div>Se aplica a todas tus ventas, salvo que fijes un tipo distinto para un cliente.</div>
+        </div>
+
+        {/* Aviso BHE: evita que independientes confundan boleta de venta con boleta de honorarios */}
+        <div style={{
+          marginTop: compact ? 8 : 12,
+          fontSize: compact ? 10 : 11, lineHeight: 1.4,
+          color: "var(--text3, #697080)",
+        }}>
+          massdte emite boletas de venta electrónicas. Las boletas de honorarios (profesionales
+          independientes) se emiten en sii.cl — esta app no las reemplaza.
         </div>
       </div>
 
@@ -525,6 +593,7 @@ function Field({
   label,
   required,
   error,
+  hint,
   compact,
   style,
   children,
@@ -532,6 +601,7 @@ function Field({
   label: string;
   required?: boolean;
   error?: string | null;
+  hint?: string;
   compact?: boolean;
   style?: React.CSSProperties;
   children: React.ReactNode;
@@ -542,8 +612,8 @@ function Field({
         display: "flex",
         alignItems: "center",
         gap: 4,
-        marginBottom: compact ? 5 : 10,
-        fontSize: compact ? 10 : 13,
+        marginBottom: compact ? 6 : 10,
+        fontSize: compact ? 11 : 13,
         fontWeight: 600,
         color: "var(--text2, #8b92a3)",
       }}>
@@ -553,11 +623,15 @@ function Field({
 
       {children}
 
-      {error && (
-        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 10 : 12, fontWeight: 500, color: "var(--red, #ef4444)" }}>
+      {error ? (
+        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--red, #ef4444)" }}>
           {error}
         </p>
-      )}
+      ) : hint ? (
+        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--text3, #697080)" }}>
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }

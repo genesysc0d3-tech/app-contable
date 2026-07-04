@@ -41,7 +41,7 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h2 style={{ fontSize: 12, fontWeight: 900, color: "var(--text)" }}>Uso del mes</h2>
         <div style={{ border: `1px solid color-mix(in srgb, ${RED} 33%, transparent)`, background: `color-mix(in srgb, ${RED} 6%, transparent)`, borderRadius: 9, padding: "3px 10px", textAlign: "center", flexShrink: 0 }}>
-          <div style={{ fontSize: 7, fontWeight: 800, letterSpacing: ".1em", color: "var(--text3)" }}>PLAN</div>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)" }}>Plan</div>
           <div style={{ fontSize: 12, fontWeight: 850, color: RED, lineHeight: 1.1, textTransform: "capitalize" }}>{resumen.plan ?? "Prueba"}</div>
         </div>
       </div>
@@ -52,7 +52,7 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
             <span style={{ width: 24, height: 24, borderRadius: 7, display: "grid", placeItems: "center", color: RED, background: "rgba(232,85,62,.1)", border: "1px solid var(--border)", flexShrink: 0 }}><ReceiptText size={12} strokeWidth={2.2} /></span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", color: "var(--text)", fontSize: 11, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Boletas desde cartolas</span>
-              <span style={{ display: "block", marginTop: 1, color: "var(--text2)", fontSize: 8 }}>{fmt(b.disponible)} disponibles</span>
+              <span style={{ display: "block", marginTop: 1, color: "var(--text2)", fontSize: 10 }}>{fmt(b.disponible)} disponibles</span>
             </span>
             <span style={{ color: "var(--text)", fontSize: 11, fontWeight: 850, whiteSpace: "nowrap" }}>{fmt(b.uso)} / {fmt(b.total)}</span>
           </div>
@@ -64,7 +64,7 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
           <span style={{ width: 24, height: 24, borderRadius: 7, display: "grid", placeItems: "center", color: "var(--text3)", background: "var(--bg-muted)", border: "1px solid var(--border)", flexShrink: 0 }}><MessageCircle size={12} strokeWidth={2.2} /></span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: "block", color: t.habilitado ? "var(--text)" : "var(--text2)", fontSize: 11, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Comprobantes por Telegram</span>
-            <span style={{ display: "block", marginTop: 1, color: "var(--text3)", fontSize: 8 }}>{t.total > 0 ? `${fmt(t.disponible)} disponibles` : "No incluido"}</span>
+            <span style={{ display: "block", marginTop: 1, color: "var(--text3)", fontSize: 10 }}>{t.total > 0 ? `${fmt(t.disponible)} disponibles` : "No incluido"}</span>
           </span>
           <span style={{ color: t.habilitado ? "var(--text)" : "var(--text3)", fontSize: 11, fontWeight: 850 }}>{t.total > 0 ? `${fmt(t.uso)} / ${fmt(t.total)}` : "0"}</span>
         </div>
@@ -99,7 +99,7 @@ function PlanSide({ resumen, fact }: { resumen: ResumenCupos; fact: FacturacionD
           <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", color: RED, background: "rgba(232,85,62,.1)", border: "1px solid var(--border)" }}><CreditCard size={13} strokeWidth={2.2} /></span>
           <h2 style={{ fontSize: 12, fontWeight: 900, color: "var(--text)" }}>Tu plan</h2>
         </div>
-        <span style={{ fontSize: 8, fontWeight: 800, color: resumen.planActivo ? "var(--green)" : "var(--amber)" }}>● {resumen.planActivo ? "activo" : "prueba"}</span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: resumen.planActivo ? "var(--green)" : "var(--amber)" }}>● {resumen.planActivo ? "activo" : "prueba"}</span>
       </div>
 
       <div style={{ marginTop: 12 }}>
@@ -116,13 +116,13 @@ function PlanSide({ resumen, fact }: { resumen: ResumenCupos; fact: FacturacionD
 
       <div style={{ marginTop: "auto", paddingTop: 11 }}>
         <a href="/planes" onClick={(e) => e.stopPropagation()} style={{ display: "block", width: "100%", borderRadius: 9, border: `1px solid ${RED}`, background: RED, color: "#fff", padding: "8px", fontSize: 11, fontWeight: 850, textAlign: "center", textDecoration: "none", boxSizing: "border-box" }}>Gestionar plan</a>
-        <div style={{ marginTop: 6, textAlign: "center", fontSize: 8, color: "var(--text3)" }}>← clic para volver</div>
+        <div style={{ marginTop: 6, textAlign: "center", fontSize: 10, color: "var(--text3)" }}>← clic para volver</div>
       </div>
     </>
   );
 }
 
-export default function UsageCountersPanel({ resumen }: { resumen: ResumenCupos }) {
+export default function UsageCountersPanel({ resumen, plain = false }: { resumen: ResumenCupos; plain?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
@@ -153,6 +153,26 @@ export default function UsageCountersPanel({ resumen }: { resumen: ResumenCupos 
     const r = el.getBoundingClientRect();
     el.style.setProperty("--mx", `${e.clientX - r.left}px`);
     el.style.setProperty("--my", `${e.clientY - r.top}px`);
+  }
+
+  // Modo plano (popup Facturación y uso): solo la cara de uso como card
+  // estática — sin flip, sin glow ni "clic para volver".
+  if (plain) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: 210,
+          overflow: "hidden",
+          borderRadius: 16,
+          border: "1px solid var(--border)",
+          background: "var(--surface)",
+          boxShadow: "inset 0 1px 0 var(--border), 0 8px 32px var(--shadow)",
+        }}
+      >
+        <div style={{ ...panel, width: "100%" }}><UsoSide resumen={resumen} barW={barW} /></div>
+      </div>
+    );
   }
 
   return (

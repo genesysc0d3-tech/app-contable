@@ -72,7 +72,7 @@ const iconBox: CSSProperties = {
   border: "1px solid var(--border)",
 };
 const badge: CSSProperties = {
-  fontSize: 9,
+  fontSize: 11,
   fontWeight: 850,
   padding: "3px 8px",
   borderRadius: 999,
@@ -101,18 +101,24 @@ const primaryBtn: CSSProperties = {
 export default function FacturacionUsoPanel() {
   const [data, setData] = useState<FacturacionData | null>(null);
   const [resumen, setResumen] = useState<ResumenCupos | null>(null);
-  const [estado, setEstado] = useState<"cargando" | "ok" | "error">("cargando");
+  const [estado, setEstado] = useState<"cargando" | "ok" | "sin-cuenta" | "error">("cargando");
 
-  // setState solo dentro del .then (callback async): llamarlo síncrono en el
-  // efecto dispara react-hooks/set-state-in-effect. El estado inicial ya es
-  // "cargando", así que el efecto no necesita resetearlo.
+  // setState solo dentro del .then/.catch (callbacks async): llamarlo síncrono
+  // en el efecto dispara react-hooks/set-state-in-effect. El estado inicial ya
+  // es "cargando", así que el efecto no necesita resetearlo.
   const cargar = useCallback(
     () =>
-      Promise.all([obtenerFacturacion(), listarResumenCupos()]).then(([fact, res]) => {
-        if (fact.ok) setData(fact.data);
-        if (res.ok) setResumen(res.resumen);
-        setEstado(fact.ok ? "ok" : "error");
-      }),
+      Promise.all([obtenerFacturacion(), listarResumenCupos()])
+        .then(([fact, res]) => {
+          if (fact.ok) setData(fact.data);
+          if (res.ok) setResumen(res.resumen);
+          if (fact.ok) setEstado("ok");
+          else if (fact.error === "EMPRESA_SIN_CUENTA" || fact.error === "USUARIO_SIN_CUENTA")
+            // Sin cuenta no es un error técnico: es "todavía no tienes plan".
+            setEstado("sin-cuenta");
+          else setEstado("error");
+        })
+        .catch(() => setEstado("error")),
     []
   );
 
@@ -127,6 +133,29 @@ export default function FacturacionUsoPanel() {
 
   if (estado === "cargando") {
     return <div style={{ padding: 20, color: "var(--text2)", fontSize: 12 }}>Cargando facturación…</div>;
+  }
+  if (estado === "sin-cuenta") {
+    // Cuenta inexistente = usuario sin plan contratado: mismo diseño que la
+    // card "Sin plan", no un bloque de error con Reintentar.
+    return (
+      <section style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <span style={iconBox}>
+            <CreditCard size={16} strokeWidth={2.2} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 850, color: "var(--text)" }}>Sin plan</div>
+            <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 1 }}>
+              Contrata un plan para emitir boletas masivas
+            </div>
+          </div>
+        </div>
+        <a href="/planes" style={primaryBtn}>
+          Ver planes
+          <ExternalLink size={13} strokeWidth={2.2} />
+        </a>
+      </section>
+    );
   }
   if (estado === "error" || !data) {
     return (
@@ -197,8 +226,9 @@ export default function FacturacionUsoPanel() {
         </a>
       </section>
 
-      {/* Uso del mes — reutiliza el panel existente */}
-      {resumen && <UsageCountersPanel resumen={resumen} />}
+      {/* Uso del mes — reutiliza el panel existente en modo plano (la card
+          "Plan actual" de arriba ya cumple el rol de la cara B del flip) */}
+      {resumen && <UsageCountersPanel resumen={resumen} plain />}
 
       {/* Historial de pagos */}
       <section style={cardStyle}>
@@ -210,8 +240,7 @@ export default function FacturacionUsoPanel() {
         </div>
         {data.pagos.length === 0 ? (
           <div style={{ fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
-            Aún no hay pagos.{" "}
-            {!data.mpConfigurado && "Los pagos se activan cuando conectamos Mercado Pago."}
+            Aún no hay pagos registrados.
           </div>
         ) : (
           <div style={{ display: "grid", gap: 6 }}>
@@ -244,12 +273,12 @@ export default function FacturacionUsoPanel() {
                     >
                       {TIPO_PAGO[p.tipo] ?? p.tipo}
                     </div>
-                    <div style={{ fontSize: 9, color: "var(--text2)" }}>{fmtFecha(p.fecha)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text2)" }}>{fmtFecha(p.fecha)}</div>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 850, color: "var(--text)", whiteSpace: "nowrap" }}>
                     {fmtClp(p.montoClp)}
                   </span>
-                  <span style={{ fontSize: 9, fontWeight: 850, color: e.color, whiteSpace: "nowrap" }}>{e.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 850, color: e.color, whiteSpace: "nowrap" }}>{e.label}</span>
                 </div>
               );
             })}
