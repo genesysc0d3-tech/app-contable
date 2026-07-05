@@ -66,4 +66,4 @@ SESSION_NOTES.md
 .git/.git-credentials-local
 
 # Reporte del harness de tokenización (contiene glosas reales con PII)
-artifacts/runs/tokenize-harness-report.json
+artifacts/runs/tokenize-*.json
