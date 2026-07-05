@@ -16,6 +16,7 @@ import { procesarDocumento } from "@/lib/ai/processor";
 import { sendMessage } from "@/lib/telegram/api";
 import { enviarResumenPropuestas, mensajeLeiEsto, registrarMensajeTelegram } from "@/lib/telegram/propuestas";
 import { chileDateString, chileDayStartUtc } from "@/lib/chile-date";
+import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import {
   destinoDesdeTextoTelegram,
   fechaDesdeTextoTelegram,
@@ -307,18 +308,23 @@ async function procesarComprobanteDeterministico(
       : parsed.tipo_venta === "operacion_forex"
       ? "Venta de divisa (exenta)"
       : "Venta";
+    // Minimización por monto (Ley 19.628 / Res. 44/2025): bajo umbral no se guarda
+    // la identidad de la contraparte, ni en columnas ni en la glosa (notas manda en
+    // resolverGlosa → se imprimiría en la boleta). Piso conservador, igual que el
+    // processor, para no minimizar algo que la emisión podría exigir.
+    const identificarContraparte = receptorObligatorio(parsed.monto, RECEPTOR_OBLIGATORIO_DESDE);
     const { error: propError } = await svc.from("propuestas_ia").insert({
       empresa_id: empresaId,
       movimiento_id: mov.id,
       estado: "pendiente",
       tipo_propuesto: parsed.tipo_venta ?? (exento ? "exenta" : "boleta"),
-      receptor_nombre: parsed.contraparte_nombre,
-      receptor_rut: parsed.contraparte_rut,
+      receptor_nombre: identificarContraparte ? parsed.contraparte_nombre : null,
+      receptor_rut: identificarContraparte ? parsed.contraparte_rut : null,
       total: parsed.monto,
       monto_neto: neto,
       iva: exento ? 0 : parsed.monto - neto,
       confianza: 0.92,
-      notas: `${notaTipo} detectada por parser determinístico de Telegram${parsed.contraparte_nombre ? ` · contraparte ${parsed.contraparte_nombre}` : ""}`,
+      notas: `${notaTipo} detectada por parser determinístico de Telegram${identificarContraparte && parsed.contraparte_nombre ? ` · contraparte ${parsed.contraparte_nombre}` : ""}`,
       fuente_clasificacion: "telegram_deterministico",
     });
     if (propError) {

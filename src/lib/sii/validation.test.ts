@@ -6,6 +6,7 @@ import {
   calcularIVA,
   descomponerBruto,
   validarBoleta,
+  receptorObligatorio,
   RECEPTOR_OBLIGATORIO_DESDE,
 } from "./validation";
 
@@ -136,5 +137,33 @@ describe("validarBoleta — reglas SII 39/41", () => {
 
     const malo = validarBoleta({ tipo_dte: 39, detalles: linea(1190), monto_total: 1200 });
     expect(malo.errors.map((e) => e.code)).toContain("DETALLE_NO_CUADRA");
+  });
+});
+
+describe("receptorObligatorio — predicado único del umbral (emisión == minimización)", () => {
+  const umbral = RECEPTOR_OBLIGATORIO_DESDE;
+
+  it("en o bajo el umbral el receptor es OPCIONAL → no obligatorio (se minimiza)", () => {
+    expect(receptorObligatorio(0, umbral)).toBe(false);
+    expect(receptorObligatorio(1_000_000, umbral)).toBe(false);
+    expect(receptorObligatorio(umbral, umbral)).toBe(false); // exacto: la exigencia es >, no >=
+  });
+
+  it("sobre el umbral el receptor es OBLIGATORIO → se conserva", () => {
+    expect(receptorObligatorio(umbral + 1, umbral)).toBe(true);
+    expect(receptorObligatorio(10_000_000, umbral)).toBe(true);
+  });
+
+  it("coincide EXACTAMENTE con la exigencia de validarBoleta (una sola fuente de verdad)", () => {
+    // El predicado que minimiza el guardado debe ser el mismo que exige la emisión:
+    // nunca guardar de menos lo que luego se exigiría, ni de más lo que no.
+    const bajo = validarBoleta({ tipo_dte: 39, detalles: [{ nombre: "x", monto: umbral }] });
+    const sobre = validarBoleta({ tipo_dte: 39, detalles: [{ nombre: "x", monto: umbral + 1 }] });
+    // Bajo umbral: predicado false ⇔ la emisión NO exige receptor
+    expect(receptorObligatorio(umbral, umbral)).toBe(false);
+    expect(bajo.errors.map((e) => e.code)).not.toContain("RECEPTOR_RUT_OBLIGATORIO");
+    // Sobre umbral: predicado true ⇔ la emisión SÍ exige receptor
+    expect(receptorObligatorio(umbral + 1, umbral)).toBe(true);
+    expect(sobre.errors.map((e) => e.code)).toContain("RECEPTOR_RUT_OBLIGATORIO");
   });
 });
