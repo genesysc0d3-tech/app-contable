@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { recordCuentaAudit } from "@/lib/audit/account";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -47,6 +48,16 @@ export async function POST(request: Request) {
   if (svcUrl && svcKey) {
     const svc = createServiceClient<Database>(svcUrl, svcKey);
     await cancelDocumentProcessingJob(svc, body.documento_id).catch(() => {});
+    // Rastro de auditoría (antes cancelar no dejaba registro).
+    await recordCuentaAudit({
+      sb: svc,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      accion: "documento_cancelado",
+      recursoTipo: "documento",
+      recursoId: body.documento_id,
+      resumen: "Procesamiento de documento cancelado por el usuario",
+    }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true });
