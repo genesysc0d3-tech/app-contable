@@ -25,8 +25,22 @@ import { PII_SRC } from "./egress";
 const PERSONA_RE = new RegExp(`\\b(${PII_SRC.PREP})\\s+(${PII_SRC.NAME})(?:\\s+(${PII_SRC.RUT}))?`, "g");
 // RUT suelto (sin nombre delante)
 const RUT_SUELTO_RE = new RegExp(`\\b${PII_SRC.RUT}\\b`, "g");
-// Nº de cuenta / secuencia larga de dígitos (no aporta a clasificar)
-const CUENTA_RE = /\b\d{8,}\b/g;
+// Nº de cuenta / referencia (8+ dígitos, con dígito verificador opcional). No aporta
+// a clasificar. Ojo: los RUT (con puntos) no tienen 8 dígitos seguidos → no se pisan.
+const CUENTA_RE = /\b\d{8,}[kK]?/g;
+
+// Contraparte en glosa BANCARIA real: "[ref] TRANSF[.|ER] [DE|A|DESDE|PARA]? <NOMBRE
+// a fin>". Case-insensitive; el nombre puede ir en MAYÚS o Título (que el patrón
+// genérico de egress no caza). Se CONSERVA el keyword y la dirección (señal de
+// entrada/salida); se tokeniza SOLO el nombre. Espeja inferReceptorNombre del
+// clasificador SAGRADO, que ya lee estas glosas.
+const CONTRAPARTE_RE =
+  /\b(transf(?:er)?\.?|trf)(\s+(?:de|a|desde|para))?\s+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ.'?\s]*[A-Za-zÁÉÍÓÚÑáéíóúñ])[\s.\-]*$/gi;
+// Señal de clasificación que NUNCA se tokeniza aunque caiga tras "Transf de": cripto,
+// plataformas, forex y términos de TIPO de operación (que el clasificador podría usar).
+// Si el "nombre" capturado trae esto, es señal, no identidad de un tercero.
+const SIGNAL_RE =
+  /\b(usdt|usdc|usdd|btc|eth|bnb|dai|trx|sol|xrp|binance|buda|orionx|cryptomkt|kraken|okx|bybit|paypal|mercado\s?pago|global\s?66|western\s?union|forex|d[oó]lar|divisa|cripto|crypto|reembolso|devoluci[oó]n|reverso|anulaci[oó]n|factura|boleta|sueldo|remuneraci[oó]n|honorarios|arriendo|dividendo|pr[eé]stamo|aporte|comisi[oó]n|inter[eé]s|seguro|cuota|iva|sii)\b/i;
 // Diacríticos combinantes (para normalizar tildes tras NFD)
 const DIACRITICOS_RE = /[\u0300-\u036f]/g;
 
@@ -97,6 +111,14 @@ function tokenFor(vault: Vault, rut: string | null, nombre: string | null): stri
  */
 export function tokenizeForAI(text: string | null | undefined, vault: Vault): string {
   let out = String(text ?? "");
+
+  // 0) Contraparte de glosa bancaria: "Transf[.|er] [de|a]? <NOMBRE a fin>". Conserva
+  // el keyword + dirección (señal); tokeniza el nombre salvo que sea señal/plataforma.
+  out = out.replace(CONTRAPARTE_RE, (m, kw: string, dir: string | undefined, nombre: string) => {
+    const n = nombre.trim();
+    if (esPlataforma(n) || SIGNAL_RE.test(n)) return m;
+    return `${kw}${dir ?? ""} ${tokenFor(vault, null, n)}`;
+  });
 
   // 1) Persona = nombre (tras preposición) + RUT opcional pegado.
   out = out.replace(PERSONA_RE, (_m, prep: string, nombre: string, rut?: string) => {
