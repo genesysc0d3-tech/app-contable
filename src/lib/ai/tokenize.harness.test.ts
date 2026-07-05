@@ -17,6 +17,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { parseExcel } from "../parsers";
 import { classifyWithRules, type ClasificacionRegla } from "./classifier";
 import { createVault, tokenizeForAI } from "./tokenize";
+import { getAIProvider } from "./provider";
+import { getClassifyOnlySystemPrompt } from "./prompt";
 import type { MovimientoExtraido } from "./types";
 
 const CARTOLAS = [
@@ -128,4 +130,62 @@ describe("HARNESS tokenización — cartolas reales", () => {
     // Gate innegociable de la compuerta: la clasificación NO cambia por tokenizar.
     expect(invarianzaGlobalOk, "la tokenización cambió la clasificación determinista").toBe(true);
   }, 60000);
+});
+
+// A/B con el MODELO VIVO: la prueba empírica final. Manda una muestra de glosas con
+// contraparte al LLM real, crudo vs tokenizado, y verifica que el tipo_propuesto no
+// cambie más allá del ruido propio del modelo (temp 0.1). Gateado por la API key: se
+// salta en CI y en cualquier corrida sin OPENCODE_GO_API_KEY.
+describe("HARNESS A/B en vivo (modelo real)", () => {
+  const hayCartola = CARTOLAS.some((c) => existsSync(c.file));
+  const live = Boolean(process.env.OPENCODE_GO_API_KEY) && hayCartola;
+  const maybe = live ? it : it.skip;
+
+  const SAMPLE_N = Number(process.env.AB_SAMPLE || 10);
+  maybe("el modelo clasifica IGUAL crudo vs tokenizado (dentro del ruido del modelo)", async () => {
+    const sample: MovimientoExtraido[] = [];
+    for (const { file } of CARTOLAS) {
+      if (!existsSync(file) || sample.length >= SAMPLE_N) continue;
+      const { preExtracted } = await parseExcel(toAB(file));
+      for (const m of preExtracted ?? []) {
+        if (sample.length >= SAMPLE_N) break;
+        if (TRANSFER_KW.test(m.descripcion)) {
+          sample.push({ fecha: m.fecha, descripcion: m.descripcion, monto: m.monto, tipo_flujo: m.tipo_flujo, origen: "cartola" });
+        }
+      }
+    }
+    const vault = createVault();
+    const sampleTok = sample.map((m) => ({ ...m, descripcion: tokenizeForAI(m.descripcion, vault) }));
+
+    const provider = getAIProvider();
+    const sys = getClassifyOnlySystemPrompt();
+    const rRaw = await provider.classifyMovimientos!(sample, sys);
+    const rTok = await provider.classifyMovimientos!(sampleTok, sys);
+
+    const tipoDe = (ps: { movimiento_index: number; tipo_propuesto: string }[]) =>
+      new Map(ps.map((p) => [p.movimiento_index, p.tipo_propuesto]));
+    const tR = tipoDe(rRaw.propuestas), tT = tipoDe(rTok.propuestas);
+
+    let difTok = 0;
+    const ejemplos: string[] = [];
+    for (let i = 0; i < sample.length; i++) {
+      if (tR.get(i) !== tT.get(i)) { difTok++; if (ejemplos.length < 15) ejemplos.push(`idx${i}: ${tR.get(i)} → ${tT.get(i)}  «${sample[i].descripcion}»`); }
+    }
+    // El modelo, en el run tokenizado, JAMÁS debe devolver un nombre real (solo tokens/null).
+    const receptorLeaks = rTok.propuestas
+      .map((p) => p.receptor_nombre?.trim())
+      .filter((n): n is string => Boolean(n) && !/^PER_\d+$/.test(n!));
+
+    const reporte = {
+      muestra: sample.length,
+      difTipo_crudoVsTokenizado: difTok,
+      receptorLeaksEnTokenizado: receptorLeaks.slice(0, 15),
+      ejemplosDif: ejemplos,
+    };
+    try { mkdirSync("artifacts/runs", { recursive: true }); } catch { /* noop */ }
+    writeFileSync("artifacts/runs/tokenize-ab-live-report.json", JSON.stringify(reporte, null, 2));
+
+    // PASS: tokenizar no cambia la clasificación del modelo (tolera 1 por el ruido de temp 0.1).
+    expect(difTok, `tokenizar cambió ${difTok} clasificaciones del modelo`).toBeLessThanOrEqual(1);
+  }, 300000);
 });

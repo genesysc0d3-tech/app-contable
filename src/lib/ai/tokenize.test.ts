@@ -90,11 +90,20 @@ describe("tokenizeForAI — bordes", () => {
 });
 
 describe("glosas bancarias REALES (calibración PR 2 — cartolas santander/cartola2)", () => {
-  it("nombre en MAYÚSCULAS tras 'Transf de' → tokeniza y enmascara la cuenta", () => {
+  it("nombre de PERSONA en MAYÚSCULAS tras 'Transf de' → tokeniza y enmascara la cuenta", () => {
     const v = createVault();
-    const out = tokenizeForAI("0782035096 Transf de EMPREFERNANDEZ SPA", v);
+    const out = tokenizeForAI("0782035096 Transf de FRANKLIN JOSE FERNANDEZ", v);
     expect(out).toBe("[NUM] Transf de PER_1");
-    expect(out).not.toContain("EMPREFERNANDEZ");
+    expect(out).not.toContain("FRANKLIN");
+  });
+
+  it("EMPRESA (SpA/Ltda/S.A.) NO se tokeniza — es persona jurídica + señal de clasificación", () => {
+    const v = createVault();
+    // la forma jurídica se conserva (señal afecta/factura); la cuenta sí se enmascara
+    const out = tokenizeForAI("0782035096 Transf de EMPREFERNANDEZ SPA", v);
+    expect(out).toBe("[NUM] Transf de EMPREFERNANDEZ SPA");
+    expect(tokenizeForAI("Transfer a Comercial Los Robles Ltda", v)).toContain("Comercial Los Robles Ltda");
+    expect(v.seq.n).toBe(0); // no se creó ningún token de persona
   });
 
   it("'TRANSFER DE' en mayúscula + nombre MAYÚS → tokeniza (conserva keyword+dirección)", () => {

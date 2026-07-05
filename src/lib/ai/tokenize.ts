@@ -41,6 +41,10 @@ const CONTRAPARTE_RE =
 // Si el "nombre" capturado trae esto, es señal, no identidad de un tercero.
 const SIGNAL_RE =
   /\b(usdt|usdc|usdd|btc|eth|bnb|dai|trx|sol|xrp|binance|buda|orionx|cryptomkt|kraken|okx|bybit|paypal|mercado\s?pago|global\s?66|western\s?union|forex|d[oó]lar|divisa|cripto|crypto|reembolso|devoluci[oó]n|reverso|anulaci[oó]n|factura|boleta|sueldo|remuneraci[oó]n|honorarios|arriendo|dividendo|pr[eé]stamo|aporte|comisi[oó]n|inter[eé]s|seguro|cuota|iva|sii)\b/i;
+// Formas jurídicas (SpA, S.A., Ltda, EIRL): marcan una EMPRESA — persona JURÍDICA (Ley
+// 19.628 protege a la natural, no a ésta) y SEÑAL de clasificación (afecta/factura vs P2P).
+// El nombre de empresa NO se tokeniza: ni es el PII que protegemos ni conviene ocultarlo.
+const EMPRESA_RE = /\b(spa|s\.a\.?|ltda\.?|limitada|eirl|e\.i\.r\.l\.?)\b/i;
 // Diacríticos combinantes (para normalizar tildes tras NFD)
 const DIACRITICOS_RE = /[\u0300-\u036f]/g;
 
@@ -116,15 +120,15 @@ export function tokenizeForAI(text: string | null | undefined, vault: Vault): st
   // el keyword + dirección (señal); tokeniza el nombre salvo que sea señal/plataforma.
   out = out.replace(CONTRAPARTE_RE, (m, kw: string, dir: string | undefined, nombre: string) => {
     const n = nombre.trim();
-    if (esPlataforma(n) || SIGNAL_RE.test(n)) return m;
+    if (esPlataforma(n) || SIGNAL_RE.test(n) || EMPRESA_RE.test(n)) return m;
     return `${kw}${dir ?? ""} ${tokenFor(vault, null, n)}`;
   });
 
   // 1) Persona = nombre (tras preposición) + RUT opcional pegado.
-  out = out.replace(PERSONA_RE, (_m, prep: string, nombre: string, rut?: string) => {
-    if (esPlataforma(nombre)) {
-      // Conservar la plataforma; si traía un RUT pegado, tokenizar solo el RUT.
-      return rut ? `${prep} ${nombre} ${tokenFor(vault, rut, null)}` : `${prep} ${nombre}`;
+  out = out.replace(PERSONA_RE, (m, prep: string, nombre: string, rut?: string) => {
+    if (esPlataforma(nombre) || SIGNAL_RE.test(nombre) || EMPRESA_RE.test(nombre)) {
+      // Conservar (plataforma/señal/empresa); si traía un RUT pegado, tokenizar el RUT.
+      return rut ? `${prep} ${nombre} ${tokenFor(vault, rut, null)}` : m;
     }
     return `${prep} ${tokenFor(vault, rut ?? null, nombre)}`;
   });
