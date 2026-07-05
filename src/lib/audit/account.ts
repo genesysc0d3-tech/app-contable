@@ -18,6 +18,8 @@ export type CuentaAuditAction =
   | "modo_soporte_entrado"
   | "modo_soporte_salido"
   | "documento_eliminado"
+  | "documento_deshecho"
+  | "documento_cancelado"
   | "plan_cambiado_dev"
   | "trial_cortesia_cambiado";
 
