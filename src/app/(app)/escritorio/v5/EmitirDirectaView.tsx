@@ -1531,7 +1531,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               )}
             </div>
             <div style={{ marginBottom: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: tipoDte === 33 || tipoDte === 39 ? "var(--green)" : "var(--blue)", background: tipoDte === 33 || tipoDte === 39 ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{tipoHumano}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: tipoDte === 33 || tipoDte === 39 ? "var(--accent)" : "var(--blue)", background: tipoDte === 33 || tipoDte === 39 ? "rgba(232,85,62,.13)" : "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{tipoHumano}</span>
             </div>
             <div style={{ fontSize: 12, color: "var(--text2)" }}>
               Receptor <b style={{ color: "var(--text)" }}>{receptorResumen}</b>

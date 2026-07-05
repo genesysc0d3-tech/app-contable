@@ -295,7 +295,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: "0.7em" }}>
                   <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
-                    {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["boleta", "Afecta · con IVA · 39", "var(--green)"]] as const).map(([k, lbl, c]) => {
+                    {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["boleta", "Afecta · con IVA · 39", "var(--accent)"]] as const).map(([k, lbl, c]) => {
                       const active = k === "boleta" ? isAfecta : !isAfecta;
                       return (
                         <button key={k} onClick={() => { if (!active || conflicto) setTipo(k); }} disabled={busy}

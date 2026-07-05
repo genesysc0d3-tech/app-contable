@@ -193,7 +193,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
             {/* Tipo (editable — sin lock) */}
             <div>
               <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
-                {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["afecta", "Afecta · con IVA · 39", "var(--green)"]] as const).map(([k, lbl, c]) => {
+                {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["afecta", "Afecta · con IVA · 39", "var(--accent)"]] as const).map(([k, lbl, c]) => {
                   const active = tipo === k;
                   return (
                     <button key={k} onClick={() => setTipo(k)}

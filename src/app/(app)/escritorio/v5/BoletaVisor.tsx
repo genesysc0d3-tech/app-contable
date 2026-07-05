@@ -30,7 +30,7 @@ const ESTADO_META: Record<string, { label: string; color: string; bg: string }> 
 };
 
 const TIPO_META: Record<number, { label: string; color: string }> = {
-  39: { label: "Afecta · con IVA · 39", color: "var(--green)" },
+  39: { label: "Afecta · con IVA · 39", color: "var(--accent)" },
   41: { label: "Exenta · sin IVA · 41", color: "var(--blue)" },
   61: { label: "Nota de crédito · 61", color: "#c084fc" },
 };
