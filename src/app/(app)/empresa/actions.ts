@@ -187,10 +187,15 @@ export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: strin
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+  // Borrar el logo es editar la identidad del emisor: mismo gate que setDatosEmisor
+  // (owner/admin) — un 'viewer' no debe poder borrarlo.
+  if (!ROLES_GESTION_MIEMBROS.has(String(usuario.rol))) {
+    return { error: "Tu rol no permite editar los datos de la empresa" };
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

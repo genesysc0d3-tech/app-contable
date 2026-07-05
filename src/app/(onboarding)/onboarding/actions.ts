@@ -36,6 +36,19 @@ export async function crearEmpresa(formData: FormData) {
   // Use service role to bypass RLS (user has no empresa yet)
   const admin = getServiceClient();
 
+  // Si el usuario YA pertenece a una empresa, NO re-onboardear: sobrescribir su
+  // empresa_id lo desconectaría de la empresa compartida (caso invitado: un
+  // contador/viewer que manda este form quedaría de 'owner' de una empresa nueva y
+  // sin acceso a la suya) y solo se recupera vía operador.
+  const { data: usuarioExistente } = await admin
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (usuarioExistente?.empresa_id) {
+    return { error: "Tu cuenta ya está asociada a una empresa." };
+  }
+
   // Create empresa
   const { data: empresa, error: empresaError } = await admin
     .from("empresas")
