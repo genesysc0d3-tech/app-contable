@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { telegramHabilitadoEmpresa } from "@/lib/entitlements";
+import { esRolEmision } from "@/lib/auth/roles";
 
 /**
  * Estado de vinculación del Telegram de la empresa del usuario autenticado.
@@ -62,11 +63,18 @@ export async function POST() {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol, vetado")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
     return NextResponse.json({ error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  }
+  // El chat de Telegram aprueba/edita propuestas (acto tributario): solo roles de
+  // emisión pueden vincularlo, no un 'viewer'. (El webhook debería además revalidar
+  // rol/vetado del que vinculó y desactivar su chat al removerlo — pendiente para
+  // cuando el bot esté vivo; hoy la ruta ya devuelve 503 sin TELEGRAM_BOT_TOKEN.)
+  if (usuario.vetado === true || !esRolEmision(usuario.rol)) {
+    return NextResponse.json({ error: "ROL_SIN_PERMISO" }, { status: 403 });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;

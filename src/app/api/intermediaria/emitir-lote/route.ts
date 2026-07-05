@@ -117,7 +117,10 @@ export async function POST(request: Request) {
     .in("id", ids);
 
   if (pErr) {
-    return NextResponse.json({ ok: false, error: "QUERY_FAILED", detalle: pErr.message }, { status: 500 });
+    // No exponer el error crudo de Postgres al cliente (fuga de detalles internos);
+    // se registra server-side y el cliente recibe un mensaje genérico.
+    console.error("[emitir-lote] QUERY_FAILED", pErr.message);
+    return NextResponse.json({ ok: false, error: "QUERY_FAILED", detalle: "No se pudieron leer las propuestas. Intenta de nuevo." }, { status: 500 });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;

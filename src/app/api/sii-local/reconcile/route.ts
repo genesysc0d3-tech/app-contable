@@ -52,8 +52,14 @@ export async function POST(request: Request) {
   let body: { rows?: ReconRow[]; desde?: string; hasta?: string } = {};
   try { body = await request.json(); } catch { return NextResponse.json({ ok: false, error: "BODY_INVALIDO" }, { status: 400 }); }
 
+  // Tope de filas por request: cada fila válida hace un INSERT secuencial en
+  // boletas_emitidas; sin cap, un body enorme puede colgar la función. El Resumen de
+  // Ventas de un mes cabe de sobra en 500 (emitir-lote usa el mismo orden de tope).
+  const MAX_RECONCILE_ROWS = 500;
+
   // Normalizar filas válidas (folio + tipo + monto + fecha).
   const rows: ReconRow[] = (Array.isArray(body.rows) ? body.rows : [])
+    .slice(0, MAX_RECONCILE_ROWS)
     .map((r) => ({
       folio: intOrNull(r.folio) ?? 0,
       tipo_dte: r.tipo_dte === 41 ? 41 : 39,
