@@ -73,6 +73,27 @@ function errorAmable(code?: string, msg?: string): string {
   }
 }
 
+// Traduce el error TOP-LEVEL del lote (falla toda la operación, no un ítem) a lenguaje
+// humano. El server manda a veces `detalle` con copy listo — se prefiere ese; si solo
+// viene el código, lo traducimos acá para no mostrarle jerga al usuario.
+function errorLoteAmable(code?: string, detalle?: string): string {
+  if (detalle && !/^[A-Z0-9_]+$/.test(detalle)) return detalle;
+  switch (code) {
+    case "EMPRESA_SIN_CUENTA": return "Tu cuenta aún no está activada para emitir. Escríbenos si no sabes por qué.";
+    case "EMPRESA_SIN_DATOS_FISCALES": return "Faltan datos de tu empresa (RUT o razón social). Complétalos en Empresa.";
+    case "CERTIFICADO_REQUERIDO": return "Falta tu certificado digital del SII para emitir en real.";
+    case "EMISION_BLOQUEADA": return "Ya hay una emisión en curso en tu cuenta. Espera a que termine.";
+    case "PLAN_INACTIVO":
+    case "SIN_PLAN": return "Necesitas un plan activo para emitir. Actívalo en Planes.";
+    case "ROL_SIN_PERMISO": return "Tu rol no permite emitir documentos.";
+    case "DEMASIADAS_PROPUESTAS": return "Son demasiadas de una vez (máximo 200 por lote).";
+    case "SIN_PROPUESTAS": return "No hay nada seleccionado para emitir.";
+    case "QUERY_FAILED": return "No pudimos leer las propuestas. Reintenta en un momento.";
+    case "NO_AUTH": return "Tu sesión expiró. Vuelve a entrar.";
+    default: return detalle || "No se pudo emitir. Reintenta en un momento.";
+  }
+}
+
 // Salta a Check de agregados y abre la tx (navega el mes si es de otro periodo).
 // docsAgregados se filtra por el created_at del DOCUMENTO (cuándo se subió), no
 // por la fecha del movimiento — por eso el mes a navegar sale de ahí.
@@ -93,6 +114,11 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
         </div>
         <div style={{fontSize:14,fontWeight:600,color:"var(--text)",letterSpacing:"-.02em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
         <div style={{marginTop:5,fontSize:12,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión…" : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
+        {!loading && (
+          <div style={{marginTop:8,fontSize:11,lineHeight:1.45,maxWidth:280,color:"var(--text3)"}}>
+            Estás viendo solo el período del calendario. Si aprobaste en otra fecha, cambia el día, semana o mes arriba.
+          </div>
+        )}
         {!loading && otros > 0 && (
           <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"var(--amber)",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
             {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Check.
@@ -246,8 +272,9 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
           reload();
         }
       } else {
-        // 'detalle' trae el copy humano del server (p.ej. metering); 'error' es el código.
-        toast(json.detalle ?? json.error ?? "Error al emitir", "error");
+        // 'detalle' trae el copy humano del server (p.ej. metering); si solo viene el
+        // código, errorLoteAmable lo traduce (nunca mostrar jerga al usuario).
+        toast(errorLoteAmable(json.error, json.detalle), "error");
         setConfirmOpen(false);
       }
     } catch { toast("Error al emitir lote", "error"); }

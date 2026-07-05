@@ -1139,7 +1139,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       if (!message) {
         setExtensionStatus("missing");
         setLocalWorkerLoading(false);
-        toast("No pude encontrar la extensión local SII", "error");
+        toast("No encuentro la extensión del SII. Instálala desde Empresa → Configuración de emisión.", "error");
         return;
       }
       setExtensionStatus("ready");
@@ -1153,7 +1153,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   async function handlePrimaryEmit() {
     if (primaryDisabled || confirmOpen) return;
     if (usesSimpleApi && extensionStatus !== "ready") {
-      toast("Instala o recarga la extensión App Contable Motor Local", "error");
+      toast("Instala o activa la extensión del SII desde Empresa → Configuración de emisión.", "error");
       return;
     }
     if (usesSiiLocal || usesSimpleApi) {
@@ -1405,11 +1405,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 </div>
                 {localWorker && (
                   <div style={{ padding: 8, borderRadius: 9, background: "rgba(232,85,62,.08)", border: "1px solid rgba(232,85,62,.16)", color: "var(--text2)", fontSize: 9, lineHeight: 1.4 }}>
-                    <strong style={{ color: "#E8553E" }}>{WORKER_STATUS_LABELS[localWorker.status] ?? localWorker.status}</strong><br />{localWorker.message}
+                    <strong style={{ color: "#E8553E" }}>{WORKER_STATUS_LABELS[localWorker.status] ?? "Procesando…"}</strong><br />{localWorker.message}
                   </div>
                 )}
                 {extensionStatus === "missing" && (
-                  <div style={{ fontSize: 9, color: "var(--red)", lineHeight: 1.35 }}>No encuentro la extensión local. Recárgala en Chrome y vuelve a intentar.</div>
+                  <div style={{ fontSize: 9, color: "var(--red)", lineHeight: 1.4 }}>
+                    No encuentro la extensión del SII en este navegador. Instálala o actívala desde <strong>Empresa → Configuración de emisión</strong> (ahí están los pasos), y vuelve a intentar.
+                  </div>
                 )}
                 {total > 0 && (
                   <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
