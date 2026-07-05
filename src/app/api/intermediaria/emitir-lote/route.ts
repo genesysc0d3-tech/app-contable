@@ -286,12 +286,11 @@ export async function POST(request: Request) {
 
     // Payload canónico (glosa/receptor/medio) vía el armador único — MISMA regla
     // que boleta única. Glosa: detalle editado (notas) › glosa común de la cartola
-    // (si activa) › glosa del banco. Medio: el de la propuesta o el default del carril.
+    // (si activa) › genérico por tipo. NUNCA la glosa cruda del banco (dato de terceros).
     const payload = armarBoletaPayload({
       tipoDte,
       total,
       notas: p.notas,
-      glosaBanco: mov?.descripcion,
       glosaComun: docNode?.glosa_comun,
       glosaComunActiva: docNode?.glosa_activa,
       receptorRut: receptor_rut,
