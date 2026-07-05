@@ -419,7 +419,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             <div>
               <label style={lbl}>Tipo</label>
               <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
-                {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--green)"]] as const).map(([k,l,c])=>{
+                {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--accent)"]] as const).map(([k,l,c])=>{
                   const active = tipo===k;
                   return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:9,fontWeight:700,padding:"6px 12px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}

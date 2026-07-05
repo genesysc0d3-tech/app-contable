@@ -340,7 +340,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                     // Sin decisión humana aún → no afirmar un tipo (evita contradecir a Check).
                     <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: "var(--amber)", background: "rgba(245,158,11,.12)" }}>Falta tipo</span>
                   ) : (
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "var(--green)" : "var(--blue)", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "var(--accent)" : "var(--blue)", background: isAfecta ? "rgba(232,85,62,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
                   )}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
@@ -434,7 +434,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                   <span style={{ fontSize: 14, color: "var(--text2)" }}>{selectedCount === 1 ? "boleta" : "boletas"}</span>
                 </div>
                 <div style={{ display: "flex", gap: 8, margin: "10px 0" }}>
-                  {selAfecta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "rgba(34,197,94,.13)", padding: "4px 10px", borderRadius: 8 }}>{selAfecta} con IVA</span>}
+                  {selAfecta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "rgba(232,85,62,.13)", padding: "4px 10px", borderRadius: 8 }}>{selAfecta} con IVA</span>}
                   {selExenta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{selExenta} sin IVA</span>}
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 12, color: "var(--text2)" }}>
