@@ -14,12 +14,20 @@
  * externa. NO reemplaza al clasificador interno (que necesita la glosa cruda).
  */
 
-const RUT_RE = /\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b/g;
+// Bloques base de la calibración PII (fuente única). tokenize.ts los reusa para
+// componer sus regex — cambiar acá cambia redacción Y tokenización a la vez, sin
+// riesgo de que diverjan. Los RE de abajo se rearman idénticos a los originales.
+const PREP_SRC = "(?:a|de|para|por)";
+const NAME_SRC = "[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+";
+const RUT_SRC = "\\d{1,2}\\.?\\d{3}\\.?\\d{3}-[\\dkK]";
+export const PII_SRC = { PREP: PREP_SRC, NAME: NAME_SRC, RUT: RUT_SRC } as const;
+
+const RUT_RE = new RegExp(`\\b${RUT_SRC}\\b`, "g");
 // Nº de cuenta / secuencias largas de dígitos (8+).
 const CUENTA_RE = /\b\d{8,}\b/g;
 // Nombre de persona tras preposición: 2+ palabras Capitalizadas (evita pisar
 // keywords de una palabra como "Binance" o all-caps como "USDT").
-const NOMBRE_RE = /\b(a|de|para|por)\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+/g;
+const NOMBRE_RE = new RegExp(`\\b(${PREP_SRC})\\s+${NAME_SRC}`, "g");
 
 /** Enmascara RUT, números de cuenta y nombres de persona de un texto. */
 export function redactForAI(text: string | null | undefined): string {
