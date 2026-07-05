@@ -91,11 +91,15 @@ export async function POST(request: Request) {
       }
     }
   }
-  const ids = Array.isArray(body.items)
+  const idsRaw = Array.isArray(body.items)
     ? body.items.map((i) => i.id).filter((x): x is string => typeof x === "string")
     : Array.isArray(body.propuesta_ids)
       ? body.propuesta_ids.filter((x) => typeof x === "string")
       : [];
+  // Dedupe: un id repetido en el payload procesaría la misma propuesta dos veces
+  // (la 2ª quemaría un folio y chocaría con el índice único → DB_INSERT_FAIL). El
+  // índice tipoPorId conserva el primer tipo enviado para cada id.
+  const ids = Array.from(new Set(idsRaw));
   if (ids.length === 0) {
     return NextResponse.json({ ok: false, error: "SIN_PROPUESTAS" }, { status: 400 });
   }
@@ -273,7 +277,11 @@ export async function POST(request: Request) {
     // humana persistida (p.tipo_dte, Paso P) → clasificación → 39. Antes ignoraba
     // p.tipo_dte y coercía a 39 AFECTA una propuesta con 41 ya persistido (auditoría #7).
     const tipoPersistido = p.tipo_dte === 39 || p.tipo_dte === 41 ? (p.tipo_dte as 39 | 41) : undefined;
-    const tipoDte = (tipoPorId.get(pid) ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
+    let tipoDte = (tipoPorId.get(pid) ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
+    // Un contribuyente EXENTO no puede emitir afecta (39): fabricaría IVA inexistente.
+    // El override de la UI o un tipo persistido no mandan sobre la naturaleza fiscal
+    // del emisor (misma regla que la normalización afecta→exenta del insert).
+    if (empresa.tipo_contribuyente === "exento") tipoDte = 41;
     const proveedorEfectivo = providerForTipoDte(emisionConfig, tipoDte);
 
     // Payload canónico (glosa/receptor/medio) vía el armador único — MISMA regla
@@ -509,5 +517,8 @@ export async function POST(request: Request) {
 }
 
 export const dynamic = "force-dynamic";
+// Hasta 200 boletas secuenciales pueden tardar: sin un tope explícito, un corte a
+// mitad deja el lock de emisión colgado y la respuesta perdida. 300s = tope de Vercel.
+export const maxDuration = 300;
 // Use CONCURRENCY in case we want to parallelize later
 void CONCURRENCY;

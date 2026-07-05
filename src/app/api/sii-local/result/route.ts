@@ -319,14 +319,21 @@ async function uploadResultPdf(
 function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResultPayload["result"] extends infer R ? R extends { totales?: infer T } ? T : never : never) {
   const montoNeto = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { monto_neto?: unknown }).monto_neto : null);
   const iva = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { iva?: unknown }).iva : null);
-  const montoExento = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { monto_exento?: unknown }).monto_exento : null);
 
+  // Exenta: todo el total es exento (no hay neto/iva). El monto_exento del cliente se
+  // ignora — para una 41 siempre es el total.
   if (tipoDte === 41) {
-    return { monto_neto: 0, iva: 0, monto_exento: montoExento ?? total };
+    return { monto_neto: 0, iva: 0, monto_exento: total };
   }
 
-  const neto = montoNeto ?? Math.round(total / 1.19);
-  return { monto_neto: neto, iva: iva ?? total - neto, monto_exento: 0 };
+  // Afecta: se usan neto/iva del cliente SOLO si suman el total (±1 por redondeo).
+  // Si no cuadran (o faltan), se recomputan desde el total —el valor confiable, ya
+  // validado— para no persistir un desglose incoherente (neto+iva ≠ total).
+  if (montoNeto !== null && iva !== null && Math.abs(montoNeto + iva - total) <= 1) {
+    return { monto_neto: montoNeto, iva, monto_exento: 0 };
+  }
+  const neto = Math.round(total / 1.19);
+  return { monto_neto: neto, iva: total - neto, monto_exento: 0 };
 }
 
 export async function POST(request: Request) {
