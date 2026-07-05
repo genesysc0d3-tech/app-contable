@@ -94,7 +94,7 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
         <div style={{fontSize:14,fontWeight:600,color:"var(--text)",letterSpacing:"-.02em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
         <div style={{marginTop:5,fontSize:12,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión…" : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
         {!loading && otros > 0 && (
-          <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"#f59e0b",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
+          <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"var(--amber)",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
             {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Check.
           </div>
         )}
@@ -338,9 +338,9 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                 <div className="tp" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                   {item.balde === "por_revisar" ? (
                     // Sin decisión humana aún → no afirmar un tipo (evita contradecir a Check).
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: "#f59e0b", background: "rgba(245,158,11,.12)" }}>Falta tipo</span>
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: "var(--amber)", background: "rgba(245,158,11,.12)" }}>Falta tipo</span>
                   ) : (
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "#22c55e" : "#5b9cf6", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "var(--green)" : "var(--blue)", background: isAfecta ? "rgba(34,197,94,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
                   )}
                 </div>
                 <div className="mo">{fmt(item.monto_total)}</div>
@@ -357,7 +357,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
             <span className="b">{listasCount}</span> {listasCount === 1 ? "lista" : "listas"} para emitir · <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
           </div>
           {lockedByOther && (
-            <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "#f59e0b", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
               <strong style={{ fontSize: 9 }}>{businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
             </div>
           )}
@@ -385,12 +385,12 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-.02em" }}>{lastResult.exitos > 0 ? "Emisión lista" : "No se pudo emitir"}</span>
-                  {lastResult.sandbox && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#f59e0b", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● PRUEBA</span>}
+                  {lastResult.sandbox && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "var(--amber)", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● PRUEBA</span>}
                 </div>
                 {lastResult.exitos > 0 && (
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-                      <span style={{ fontSize: 30, fontWeight: 800, color: "#22c55e", letterSpacing: "-.03em" }}>{lastResult.exitos}</span>
+                      <span style={{ fontSize: 30, fontWeight: 800, color: "var(--green)", letterSpacing: "-.03em" }}>{lastResult.exitos}</span>
                       <span style={{ fontSize: 13, color: "var(--text2)" }}>{lastResult.exitos === 1 ? "boleta emitida" : "boletas emitidas"}</span>
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 4 }}>
@@ -404,7 +404,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                     {lastResult.resultados.filter((r) => !r.ok).map((r) => {
                       const it = emitSnapshot[r.propuesta_id];
                       return (
-                        <div key={r.propuesta_id} style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.5 }}>
+                        <div key={r.propuesta_id} style={{ fontSize: 11, color: "var(--red)", lineHeight: 1.5 }}>
                           · {it && <span style={{ color: "var(--text2)" }}>{it.receptor} · {fmt(it.monto)} — </span>}{errorAmable(r.error_code, r.error_message)}
                         </div>
                       );
@@ -427,15 +427,15 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text2)" }}>Vas a emitir</span>
-                  <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#f59e0b", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
+                  <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "var(--amber)", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                   <span style={{ fontSize: 38, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em" }}>{selectedCount}</span>
                   <span style={{ fontSize: 14, color: "var(--text2)" }}>{selectedCount === 1 ? "boleta" : "boletas"}</span>
                 </div>
                 <div style={{ display: "flex", gap: 8, margin: "10px 0" }}>
-                  {selAfecta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,.13)", padding: "4px 10px", borderRadius: 8 }}>{selAfecta} con IVA</span>}
-                  {selExenta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#5b9cf6", background: "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{selExenta} sin IVA</span>}
+                  {selAfecta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "rgba(34,197,94,.13)", padding: "4px 10px", borderRadius: 8 }}>{selAfecta} con IVA</span>}
+                  {selExenta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{selExenta} sin IVA</span>}
                 </div>
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 12, color: "var(--text2)" }}>
                   Total <b style={{ color: "var(--text)" }}>{fmt(selectedTotal)}</b>
