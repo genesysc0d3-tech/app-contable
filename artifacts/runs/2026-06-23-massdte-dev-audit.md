@@ -1,0 +1,601 @@
+---
+kind: run
+status: done
+created_at: 2026-06-23T05:49:54.643Z
+tags: [audit, devtools, playwright, massdte]
+---
+
+# MassDTE DevTools Audit
+
+## Trigger
+
+Auditoria real de app con Playwright como reproductor verificable y Chrome DevTools MCP como inspector interactivo configurado localmente. La extension SII queda fuera del alcance.
+
+## Run
+
+- Base URL: https://app-contable-five.vercel.app
+- Auth source: storage-state
+- Storage state path: /tmp/e2e-state-vercel.json
+- Screenshots: /tmp/massdte-audit-2026-06-23T05-49-54-643Z
+- Report: /Users/take/Desktop/app-contable/artifacts/runs/2026-06-23-massdte-dev-audit.md
+- Base status: 307
+
+## Summary
+
+- Routes visited: 28
+- Support plan scenarios: 3
+- Business checks: 56
+- Console errors: 16
+- Console warnings: 0
+- Page errors: 0
+- Failed requests: 81 (1 unexpected, 80 expected navigation aborts)
+- HTTP 4xx/5xx: 16
+- Findings: 1
+
+## Findings
+
+1. **MEDIUM - Network request failures**
+   1 request(s) fallaron a nivel red.
+   Evidence: GET https://app-contable-five.vercel.app/api/empresa/logo/:uuid :: net::ERR_ABORTED
+
+## Routes
+
+| Route | Status | Final path | HTTP | ms | Screenshot | Signals |
+|---|---|---|---:|---:|---|---|
+| dev-cuentas | ok | /dev/cuentas | 200 | 3261 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/01-dev-cuentas.png | no:Panel operador<br>yes:Account 360<br>yes:Ver cliente<br>yes:Detalle |
+| dev-diagnostico | ok | /dev/diagnostico | 200 | 3634 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/02-dev-diagnostico.png | no:Diagnostico<br>yes:Genesys<br>no:operador |
+| massdte | ok | /massdte | 200 | 6956 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/03-massdte.png | yes:Uso del mes<br>no:Equipo<br>no:Modo soporte Genesys<br>no:Cambiar empresa<br>no:Emitir bloqueado |
+| empresa | ok | /empresa | 200 | 4776 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/04-empresa.png | yes:Empresa<br>yes:Datos del emisor<br>yes:Formatos de cartola<br>yes:Folios CAF<br>no:Agregar persona |
+| revisar | ok | /revisar | 200 | 3523 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/05-revisar.png | yes:Revisar<br>yes:propuestas<br>yes:pendientes |
+| subir | ok | /subir | 200 | 5183 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/06-subir.png | no:Subir<br>yes:documento<br>yes:cartola |
+| clientes | ok | /clientes | 200 | 3596 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/07-clientes.png | yes:Clientes<br>yes:cliente |
+| boletas-reportes | ok | /boletas/reportes | 200 | 3869 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/08-boletas-reportes.png | yes:Reporte RCV<br>yes:Registro de ventas |
+| planes | ok | /planes | 200 | 4345 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/09-planes.png | no:Start<br>no:Pro<br>no:Business<br>yes:Mercado Pago |
+| dev-cuenta-detalle | ok | /dev/cuentas/:uuid |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/10-dev-cuenta-detalle.png | dynamic |
+| readonly-business-massdte | ok | /massdte |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/14-readonly-business-massdte.png | dynamic |
+| readonly-business-empresa | ok | /empresa |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/15-readonly-business-empresa.png | dynamic |
+| readonly-business-revisar | ok | /revisar |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/16-readonly-business-revisar.png | dynamic |
+| readonly-business-subir | ok | /subir |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/17-readonly-business-subir.png | dynamic |
+| readonly-business-clientes | ok | /clientes |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/18-readonly-business-clientes.png | dynamic |
+| readonly-business-boletas-reportes | ok | /boletas/reportes |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/19-readonly-business-boletas-reportes.png | dynamic |
+| readonly-pro-massdte | ok | /massdte |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/22-readonly-pro-massdte.png | dynamic |
+| readonly-pro-empresa | ok | /empresa |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/23-readonly-pro-empresa.png | dynamic |
+| readonly-pro-revisar | ok | /revisar |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/24-readonly-pro-revisar.png | dynamic |
+| readonly-pro-subir | ok | /subir |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/25-readonly-pro-subir.png | dynamic |
+| readonly-pro-clientes | ok | /clientes |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/26-readonly-pro-clientes.png | dynamic |
+| readonly-pro-boletas-reportes | ok | /boletas/reportes |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/27-readonly-pro-boletas-reportes.png | dynamic |
+| readonly-start-massdte | ok | /massdte |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/30-readonly-start-massdte.png | dynamic |
+| readonly-start-empresa | ok | /empresa |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/31-readonly-start-empresa.png | dynamic |
+| readonly-start-revisar | ok | /revisar |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/32-readonly-start-revisar.png | dynamic |
+| readonly-start-subir | ok | /subir |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/33-readonly-start-subir.png | dynamic |
+| readonly-start-clientes | ok | /clientes |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/34-readonly-start-clientes.png | dynamic |
+| readonly-start-boletas-reportes | ok | /boletas/reportes |  |  | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/35-readonly-start-boletas-reportes.png | dynamic |
+
+## Support Read-Only Matrix
+
+| Plan | Status | Support path | Banner | Uso | Equipo UI | business_mode | Routes OK | Screenshot |
+|---|---|---|---|---|---|---|---:|---|
+| Business | checked | /massdte | yes | yes | yes | true | 6/6 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/13-readonly-business-massdte.png |
+| Pro | checked | /massdte | yes | yes | no | false | 6/6 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/21-readonly-pro-massdte.png |
+| Start | checked | /massdte | yes | yes | no | false | 6/6 | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/29-readonly-start-massdte.png |
+
+## Route Deep Detail
+
+### dev-cuentas
+- Final path: /dev/cuentas
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/01-dev-cuentas.png
+- Page title: App Contable
+- H1: Cuentas
+- DOMContentLoaded ms: 1654
+- Load event ms: 1773
+- Resource count from Performance API: 12
+- Transfer size KB from Performance API: 256
+- Visible text chars: 27817
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:2, h1:1, sections:1, main:1, forms:1, buttons:4, disabledButtons:0, links:9, inputs:1, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: text:1
+- Allowed text hits: Account 360, Buscar, Detalle, Diagnostico, Empresa, Ver cliente
+- Allowed button labels: Buscar, Ver cliente
+- Allowed link labels: Diagnostico, Detalle
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 13
+- Network status counts: 200:13
+- Network method counts: GET:13
+- Network resource types: document:1, stylesheet:1, script:9, font:2
+- Top endpoints:
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/28tryz5g3xfa2.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /dev/cuentas
+
+### dev-diagnostico
+- Final path: /dev/diagnostico
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/02-dev-diagnostico.png
+- Page title: App Contable
+- H1: Diagnóstico de acceso dev
+- DOMContentLoaded ms: 1226
+- Load event ms: 1470
+- Resource count from Performance API: 14
+- Transfer size KB from Performance API: 4
+- Visible text chars: 22682
+- Scroll height / viewport: 983 / 900
+- UI counts: headings:1, h1:1, sections:2, main:1, forms:0, buttons:0, disabledButtons:0, links:1, inputs:0, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: n/a
+- Allowed text hits: n/a
+- Allowed button labels: n/a
+- Allowed link labels: n/a
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 15
+- Network status counts: 200:15
+- Network method counts: GET:15
+- Network resource types: document:1, font:2, stylesheet:1, script:9, fetch:2
+- Top endpoints:
+  - 2x /dev/cuentas?_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/1rxncug86bump.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /dev/diagnostico
+
+### massdte
+- Final path: /massdte
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/03-massdte.png
+- Page title: App Contable
+- H1: 
+- DOMContentLoaded ms: 3431
+- Load event ms: 5084
+- Resource count from Performance API: 75
+- Transfer size KB from Performance API: 438
+- Visible text chars: 117461
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:3, h1:0, sections:1, main:0, forms:0, buttons:22, disabledButtons:0, links:33, inputs:1, images:1, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: text:1
+- Allowed text hits: Emitir, Empresa, Revisar, Uso del mes
+- Allowed button labels: Revisar, Emitir
+- Allowed link labels: n/a
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 76
+- Network status counts: 200:76
+- Network method counts: GET:76
+- Network resource types: document:1, font:2, stylesheet:1, script:15, image:2, fetch:55
+- Top endpoints:
+  - 52x /massdte?date=%3Avalue&month=%3Avalue&view=%3Avalue&_rsc=%3Avalue
+  - 2x /massdte?month=%3Avalue&date=%3Avalue&view=%3Avalue&_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/054w68tgn5qld.js
+  - 1x /_next/static/chunks/0bv70hh4b9u6x.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/1gfom58mdzy87.js
+  - 1x /_next/static/chunks/1yt64z58ugbjh.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/23lg7fozf9q2g.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/2wt_8rnrn8rz7.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/454goiwzokoet.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /api/emision/jobs
+  - 1x /api/empresa/logo/:uuid
+  - 1x /massdte
+  - 1x /noise.gif
+
+### empresa
+- Final path: /empresa
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/04-empresa.png
+- Page title: App Contable
+- H1: Empresa
+- DOMContentLoaded ms: 1730
+- Load event ms: 3171
+- Resource count from Performance API: 22
+- Transfer size KB from Performance API: 138
+- Visible text chars: 18652
+- Scroll height / viewport: 3504 / 900
+- UI counts: headings:11, h1:1, sections:6, main:1, forms:2, buttons:15, disabledButtons:2, links:3, inputs:8, images:1, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: text:5, email:2, select:1
+- Allowed text hits: Emitir, Empresa, Folios CAF, Revisar, Subir
+- Allowed button labels: ⇧ Subir archivo, SimpleAPIEmitira con nuestra API key y datos cifrados en la extension.
+- Allowed link labels: Emitir, Revisar3, Empresa
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 35
+- Network status counts: 200:35
+- Network method counts: GET:35
+- Network resource types: fetch:18, document:1, font:2, stylesheet:1, script:12, image:1
+- Top endpoints:
+  - 10x /massdte?date=%3Avalue&month=%3Avalue&view=%3Avalue&_rsc=%3Avalue
+  - 2x /massdte?month=%3Avalue&date=%3Avalue&view=%3Avalue&_rsc=%3Avalue
+  - 2x /revisar?_rsc=%3Avalue
+  - 2x /subir?_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/054w68tgn5qld.js
+  - 1x /_next/static/chunks/08n-f6peugcze.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/21ra8zo0zxlto.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/454goiwzokoet.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /api/empresa/logo/current?v=%3Avalue
+  - 1x /api/telegram/link
+  - 1x /empresa
+  - 1x /empresa?_rsc=%3Avalue
+
+### revisar
+- Final path: /revisar
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/05-revisar.png
+- Page title: App Contable
+- H1: Revisar
+- DOMContentLoaded ms: 1594
+- Load event ms: 1863
+- Resource count from Performance API: 20
+- Transfer size KB from Performance API: 21
+- Visible text chars: 18480
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:1, h1:1, sections:0, main:0, forms:0, buttons:5, disabledButtons:0, links:3, inputs:0, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: n/a
+- Allowed text hits: Emitir, Empresa, Revisar
+- Allowed button labels: n/a
+- Allowed link labels: Emitir, Revisar3, Empresa
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 21
+- Network status counts: 200:21
+- Network method counts: GET:21
+- Network resource types: document:1, font:2, stylesheet:1, script:12, fetch:5
+- Top endpoints:
+  - 2x /empresa?_rsc=%3Avalue
+  - 2x /subir?_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/054w68tgn5qld.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/1wj2n0z1-ru2o.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/2jjrlrsaa2-g9.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/454goiwzokoet.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /revisar
+  - 1x /revisar?_rsc=%3Avalue
+
+### subir
+- Final path: /subir
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/06-subir.png
+- Page title: App Contable
+- H1: Emitir
+- DOMContentLoaded ms: 1875
+- Load event ms: 2166
+- Resource count from Performance API: 23
+- Transfer size KB from Performance API: 41
+- Visible text chars: 11638
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:3, h1:1, sections:1, main:0, forms:0, buttons:2, disabledButtons:0, links:3, inputs:0, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: n/a
+- Allowed text hits: Emitir, Empresa, Revisar
+- Allowed button labels: n/a
+- Allowed link labels: Emitir, Revisar3, Empresa
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 24
+- Network status counts: 200:24
+- Network method counts: GET:24
+- Network resource types: document:1, font:2, stylesheet:1, script:13, fetch:7
+- Top endpoints:
+  - 2x /empresa?_rsc=%3Avalue
+  - 2x /revisar?_rsc=%3Avalue
+  - 1x /_next/static/chunks/013qx5qbkrzep.js
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/054w68tgn5qld.js
+  - 1x /_next/static/chunks/0gs0zvxv_nd_v.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/2mv1clh19plap.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/454goiwzokoet.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /api/sii-mock/rcv?mes=%3Avalue
+  - 1x /rest/v1/:id?select=%3Avalue&empresa_id=%3Avalue&order=%3Avalue&limit=%3Avalue
+  - 1x /subir
+  - 1x /subir?_rsc=%3Avalue
+
+### clientes
+- Final path: /clientes
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/07-clientes.png
+- Page title: App Contable
+- H1: Clientes
+- DOMContentLoaded ms: 1421
+- Load event ms: 1645
+- Resource count from Performance API: 20
+- Transfer size KB from Performance API: 12
+- Visible text chars: 13956
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:1, h1:1, sections:0, main:0, forms:0, buttons:1, disabledButtons:0, links:3, inputs:1, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: text:1
+- Allowed text hits: Emitir, Empresa, Revisar
+- Allowed button labels: n/a
+- Allowed link labels: Emitir, Revisar3, Empresa
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 21
+- Network status counts: 200:21
+- Network method counts: GET:21
+- Network resource types: document:1, font:2, stylesheet:1, script:11, fetch:6
+- Top endpoints:
+  - 2x /empresa?_rsc=%3Avalue
+  - 2x /revisar?_rsc=%3Avalue
+  - 2x /subir?_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/054w68tgn5qld.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/1ywkqykvbwyo-.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/454goiwzokoet.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /clientes
+
+### boletas-reportes
+- Final path: /boletas/reportes
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/08-boletas-reportes.png
+- Page title: App Contable
+- H1: Reporte RCV
+- DOMContentLoaded ms: 1385
+- Load event ms: 1713
+- Resource count from Performance API: 21
+- Transfer size KB from Performance API: 9
+- Visible text chars: 9643
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:2, h1:1, sections:0, main:1, forms:0, buttons:2, disabledButtons:0, links:3, inputs:1, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: month:1
+- Allowed text hits: Detalle, Emitir, Empresa, Reporte RCV, Revisar
+- Allowed button labels: n/a
+- Allowed link labels: Emitir, Revisar3, Empresa
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 22
+- Network status counts: 200:22
+- Network method counts: GET:22
+- Network resource types: document:1, font:2, stylesheet:1, script:11, fetch:7
+- Top endpoints:
+  - 2x /empresa?_rsc=%3Avalue
+  - 2x /revisar?_rsc=%3Avalue
+  - 2x /subir?_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/054w68tgn5qld.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2tlgs1j5tpx2f.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/454goiwzokoet.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /api/sii-mock/rcv?mes=%3Avalue
+  - 1x /boletas/reportes
+
+### planes
+- Final path: /planes
+- Status: ok
+- Screenshot: /tmp/massdte-audit-2026-06-23T05-49-54-643Z/09-planes.png
+- Page title: App Contable
+- H1: Planes
+- DOMContentLoaded ms: 1919
+- Load event ms: 2397
+- Resource count from Performance API: 14
+- Transfer size KB from Performance API: 5
+- Visible text chars: 28816
+- Scroll height / viewport: 900 / 900
+- UI counts: headings:1, h1:1, sections:0, main:0, forms:0, buttons:3, disabledButtons:0, links:1, inputs:0, images:0, imagesWithoutAlt:0, tables:0, dialogs:0, ariaLive:0
+- Input types: n/a
+- Allowed text hits: Contratar con Mercado Pago, Equipo
+- Allowed button labels: Contratar con Mercado Pago
+- Allowed link labels: n/a
+- Storage keys: local=n/a; session=n/a
+- Network total responses: 15
+- Network status counts: 200:15
+- Network method counts: GET:15
+- Network resource types: document:1, font:2, stylesheet:1, script:9, fetch:2
+- Top endpoints:
+  - 2x /massdte?_rsc=%3Avalue
+  - 1x /_next/static/chunks/0245a4ypel7xx.js
+  - 1x /_next/static/chunks/05zlc_qxc-54o.js
+  - 1x /_next/static/chunks/0ka149_6qbdzf.css
+  - 1x /_next/static/chunks/0paxexg6-m0de.js
+  - 1x /_next/static/chunks/14mrh2-p_w84d.js
+  - 1x /_next/static/chunks/2_-e5gw93r_j6.js
+  - 1x /_next/static/chunks/2nykiepra7i1k.js
+  - 1x /_next/static/chunks/2u-_0oirjw3tn.js
+  - 1x /_next/static/chunks/3nnuvsin9lcwb.js
+  - 1x /_next/static/chunks/turbopack-39rh59cn3m2ha.js
+  - 1x /_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2
+  - 1x /_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2
+  - 1x /planes
+
+
+## Business Checks
+
+| Check | Status | Detail | Evidence |
+|---|---|---|---|
+| detalle-cuenta | pass | Detalle de cuenta carga con prioridad. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/10-dev-cuenta-detalle.png |
+| modo-cliente-banner | pass | Banner de modo soporte visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/11-modo-cliente-massdte.png |
+| support-block-upload | pass | escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| support-block-checkout | pass | escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| support-block-emission-job | pass | escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| support-block-emitir-boleta | pass | escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| modo-cliente-volver | pass | Volver a dev retorna a /dev/cuentas. |  |
+| readonly-business-support-banner | pass | Business: banner Modo soporte Genesys visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/13-readonly-business-massdte.png |
+| readonly-business-usage | pass | Business: Uso del mes visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/13-readonly-business-massdte.png |
+| readonly-business-team-panel | pass | Business: Equipo visible como corresponde. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/13-readonly-business-massdte.png |
+| readonly-business-business-mode-api | pass | Business: /api/emision/jobs business_mode=true; esperado=true. |  |
+| readonly-business-massdte-support-banner | pass | Business: /massdte mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/14-readonly-business-massdte.png |
+| readonly-business-empresa-support-banner | pass | Business: /empresa mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/15-readonly-business-empresa.png |
+| readonly-business-revisar-support-banner | pass | Business: /revisar mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/16-readonly-business-revisar.png |
+| readonly-business-subir-support-banner | pass | Business: /subir mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/17-readonly-business-subir.png |
+| readonly-business-clientes-support-banner | pass | Business: /clientes mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/18-readonly-business-clientes.png |
+| readonly-business-boletas-reportes-support-banner | pass | Business: /boletas/reportes mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/19-readonly-business-boletas-reportes.png |
+| readonly-business-support-block-upload | pass | Business: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-business-support-block-checkout | pass | Business: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-business-support-block-emission-job | pass | Business: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-business-support-block-emitir-boleta | pass | Business: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-business-support-exit | pass | Business: Volver a dev retorna a /dev/cuentas. |  |
+| readonly-pro-support-banner | pass | Pro: banner Modo soporte Genesys visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/21-readonly-pro-massdte.png |
+| readonly-pro-usage | pass | Pro: Uso del mes visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/21-readonly-pro-massdte.png |
+| readonly-pro-team-panel | pass | Pro: Equipo oculto como corresponde. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/21-readonly-pro-massdte.png |
+| readonly-pro-business-mode-api | pass | Pro: /api/emision/jobs business_mode=false; esperado=false. |  |
+| readonly-pro-massdte-support-banner | pass | Pro: /massdte mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/22-readonly-pro-massdte.png |
+| readonly-pro-empresa-support-banner | pass | Pro: /empresa mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/23-readonly-pro-empresa.png |
+| readonly-pro-revisar-support-banner | pass | Pro: /revisar mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/24-readonly-pro-revisar.png |
+| readonly-pro-subir-support-banner | pass | Pro: /subir mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/25-readonly-pro-subir.png |
+| readonly-pro-clientes-support-banner | pass | Pro: /clientes mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/26-readonly-pro-clientes.png |
+| readonly-pro-boletas-reportes-support-banner | pass | Pro: /boletas/reportes mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/27-readonly-pro-boletas-reportes.png |
+| readonly-pro-support-block-upload | pass | Pro: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-pro-support-block-checkout | pass | Pro: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-pro-support-block-emission-job | pass | Pro: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-pro-support-block-emitir-boleta | pass | Pro: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-pro-support-exit | pass | Pro: Volver a dev retorna a /dev/cuentas. |  |
+| readonly-start-support-banner | pass | Start: banner Modo soporte Genesys visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/29-readonly-start-massdte.png |
+| readonly-start-usage | pass | Start: Uso del mes visible. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/29-readonly-start-massdte.png |
+| readonly-start-team-panel | pass | Start: Equipo oculto como corresponde. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/29-readonly-start-massdte.png |
+| readonly-start-business-mode-api | pass | Start: /api/emision/jobs business_mode=false; esperado=false. |  |
+| readonly-start-massdte-support-banner | pass | Start: /massdte mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/30-readonly-start-massdte.png |
+| readonly-start-empresa-support-banner | pass | Start: /empresa mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/31-readonly-start-empresa.png |
+| readonly-start-revisar-support-banner | pass | Start: /revisar mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/32-readonly-start-revisar.png |
+| readonly-start-subir-support-banner | pass | Start: /subir mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/33-readonly-start-subir.png |
+| readonly-start-clientes-support-banner | pass | Start: /clientes mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/34-readonly-start-clientes.png |
+| readonly-start-boletas-reportes-support-banner | pass | Start: /boletas/reportes mantiene banner de modo soporte. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/35-readonly-start-boletas-reportes.png |
+| readonly-start-support-block-upload | pass | Start: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-start-support-block-checkout | pass | Start: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-start-support-block-emission-job | pass | Start: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-start-support-block-emitir-boleta | pass | Start: escritura bloqueada con DEV_SUPPORT_READ_ONLY. |  |
+| readonly-start-support-exit | pass | Start: Volver a dev retorna a /dev/cuentas. |  |
+| uso-del-mes | pass | Contador Uso del mes visible. |  |
+| plan-equipo-signal | pass | Cuenta no Business: Equipo oculto. |  |
+| lock-emision-visible | skipped | No hay lock activo para validar bloqueo visual. |  |
+| nondev-dev-panel | pass | Sesion no dev no ve panel dev; termino en /auth/login. | /tmp/massdte-audit-2026-06-23T05-49-54-643Z/36-nondev-dev-cuentas.png |
+
+## Browser Diagnostics
+
+### Console
+- error: https://app-contable-five.vercel.app/massdte :: Failed to load resource: the server responded with a status of 403 ()
+
+### Page Errors
+- Sin pageerror.
+
+### Network
+- FAILED GET https://app-contable-five.vercel.app/dev/cuentas?_rsc=obvI9fmlAMG9Gcyj :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-29&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-30&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-03&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?month=2026-6&date=2026-06-23&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/api/emision/jobs :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/revisar?_rsc=8dPzX9ssjFU6ByqJ :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/empresa?_rsc=8dPzX9ssjFU6ByqJ :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?_rsc=x_XMCvaAkCCBV8bp :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?_rsc=ddaTtC17XKcwO8A8 :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-23&month=2026-5&view=week&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-26&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-16&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-13&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-01&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/dev/cuentas?_rsc=sKlBWfOrLMZlW-Pb :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/dev/cuentas?_rsc=6qcu2BUlUud1WZox :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED POST https://app-contable-five.vercel.app/massdte :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-27&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-08&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-28&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-21&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-23&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-17&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-25&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/subir?_rsc=uNv041CZ3FqA9p6B :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/revisar?_rsc=uNv041CZ3FqA9p6B :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/subir?_rsc=7oGOB8vwt1jkMw16 :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/empresa?_rsc=ARmYJ4uoEhazazJn :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/revisar?_rsc=A22GVYxYv3M_6KNb :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/revisar?_rsc=lAChIPUK3IUWV1vX :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-21&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-11&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/dev/cuentas?_rsc=DpBDBAOR4UZELxMi :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-27&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-10&month=2026-5&view=day&_rsc=JWHwEFtrOzdcadjx :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-19&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-10&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/massdte?date=2026-06-08&month=2026-5&view=day&_rsc=4Ql9QT7sXOAyECnY :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+- FAILED GET https://app-contable-five.vercel.app/subir?_rsc=-fQRlzxyll3plXPL :: net::ERR_ABORTED (esperado: navegación Next cancelada)
+
+### Network Totals
+- Total responses: 1721
+- Status counts: 200:1692, 204:6, 304:6, 307:1, 403:16
+- Method counts: GET:1697, POST:24
+- Resource types: document:39, stylesheet:38, script:478, font:76, fetch:1063, image:27
+
+## Storage Privacy Snapshot
+
+- cookies: sb-aluuuyecwifaakehvcam-auth-token
+- Valores de cookies, localStorage y sessionStorage no se escriben en este reporte.
+
+## Lighthouse
+
+- No solicitado.
+
+## Validation
+
+- Script ejecutado localmente contra la app en Chrome/Playwright.
+- No se probo extension SII ni flujos reales contra SII.
+
+## Timeline
+
+- 2026-06-23T05:49:54.643Z: corrida generada por scripts/audit-app-devtools.mjs.
+

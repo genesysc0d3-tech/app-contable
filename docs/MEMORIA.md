@@ -25,6 +25,38 @@ respuesta a brechas, derechos ARCO, contratos/DPA y readiness legal antes de
 beta pagada o lanzamiento abierto. No instalar ni copiar codigo del repo externo
 sin decision explicita.
 
+### Sesion 2026-06-24 - Plan calidad, seguridad y operacion con clientes
+
+**Decision guardada:**
+- Se consolido un plan reestructurado para pasar de readiness/auditorias
+  manuales a gates permanentes y operacion controlada con clientes reales.
+- Documento durable:
+  `artifacts/docs/massdte-quality-security-compliance-operating-plan-2026-06-24.md`.
+- El foco no es rehacer MassDTE desde cero: ya existen CI, Lighthouse,
+  `audit:app`, `audit:roles`, `audit:locks`, compliance beta 8/10, cola
+  durable, observabilidad, autorizacion versionada de emision y hardening de
+  extension. El foco nuevo es volverlo obligatorio, repetible y operable.
+- Tres revisiones independientes recomendaron reestructurar el plan por fases:
+  baseline/limpieza segura, gates automaticos, documentacion operativa,
+  checklist tecnico Ley 21.719, operacion con clientes y auditoria externa.
+- Ponytail queda adoptado solo como criterio anti-sobreingenieria: menor diff,
+  menos dependencias y reutilizacion. No manda sobre seguridad, compliance,
+  auth, ownership, RLS, emision, pagos, auditoria, validaciones, tests,
+  retencion ni documentacion operativa.
+
+**Prioridades P0/P1:**
+- `audit:secrets`, `audit:safety` y `check:prod-readiness`.
+- Scanner sin imprimir secretos para tokens, cookies, service role, env reales,
+  perfiles Chrome, storage states, certificados, CAF, XML/PDF/base64 y datos
+  tributarios crudos.
+- Politica de artifacts sanitizados y baseline de material sensible local:
+  `.env*`, `.vercel/token`, `.supabase/token`, `.sii-explorer-profile`,
+  `artifacts/playwright-auth/**`.
+- Runbook de bugfix con clientes activos y checklist de junior/senior para no
+  romper auth, emision, pagos, soporte dev, OCR/IA ni extension.
+- Checklist tecnico Ley 21.719 por flujo: finalidad, datos, base legal,
+  proveedor, retencion, ARCO, borrado/exportacion, logs, riesgos y responsable.
+
 ### Sesion 2026-06-22 - Plan preauditoria 9.3
 
 **Decision guardada:**
