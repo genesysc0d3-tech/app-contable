@@ -337,7 +337,9 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());
   // Sobre 135 UF el medio de pago es tan obligatorio como el RUT (Res. Ex. SII 44/2025).
   const medioOk = !requiereReceptor || !!medioPago.trim();
-  const puedeStagear = noBoletea || (total > 0 && !conflicto && rutValido && receptorOk && medioOk && !!detalle.trim());
+  // Detalle OPCIONAL (igual que el flujo masivo): el SII no exige glosa detallada en
+  // una boleta a consumidor final; si va vacío, sale un genérico limpio (resolverGlosa).
+  const puedeStagear = noBoletea || (total > 0 && !conflicto && rutValido && receptorOk && medioOk);
   const tieneReceptorData = !!rutTrim || !!razon.trim() || !!medioPago.trim() || !!direccion.trim() || !!comuna.trim();
   const receptorAbierto = requiereReceptor || showReceptorManual || tieneReceptorData;
 
@@ -390,7 +392,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
         <span style={{color:confCol,fontSize:11,fontWeight:700}}>{conf}%</span>
         {!compact && <TermHint width={250}>Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada.</TermHint>}
-        <span style={{marginLeft:"auto",fontSize:8,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"46%"}} title={propuesta.movimientos_raw.descripcion}>banco: {propuesta.movimientos_raw.descripcion}</span>
+        <span style={{marginLeft:"auto",fontSize:8,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"46%"}} title={propuesta.movimientos_raw.descripcion}>del banco (no se imprime): {propuesta.movimientos_raw.descripcion}</span>
       </div>
 
       {noBoletea ? (
@@ -399,7 +401,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si fue una venta tuya, cambia el tipo en Emitir.
           </div>
           <div style={{marginBottom:8}}>
-            <label style={lbl}>Detalle</label>
+            <label style={lbl}>Detalle (opcional)</label>
             <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} style={inp} />
           </div>
         </>
@@ -408,7 +410,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           {/* Detalle — única fila full-width: es la glosa que se imprime (máx 80 chars) */}
           <div style={{marginBottom:8}}>
             <label style={{...lbl,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-              <span>Detalle</span>
+              <span>Detalle (opcional)</span>
               <span style={{fontWeight:600,color:detalle.length>=80?"var(--red)":"var(--text3)"}}>{detalle.length}/80</span>
             </label>
             <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} placeholder="Qué se vendió o prestó (se imprime en la boleta)" style={inp} />
@@ -473,7 +475,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         </select>
         <div style={{flex:1}} />
         <button onClick={handleAprobar} disabled={busy || !puedeStagear}
-          title={!puedeStagear ? "Completa el detalle, el monto y —sobre 135 UF— RUT, nombre y medio de pago" : undefined}
+          title={!puedeStagear ? "Falta el monto y —sobre 135 UF— RUT, nombre y medio de pago del comprador" : undefined}
           style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"var(--green)",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {busy ? "..." : "Poner listo"}

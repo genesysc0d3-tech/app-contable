@@ -62,7 +62,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const rutTrim = rut.trim();
   const rutValido = !rutTrim || validarRut(rutTrim);
   const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());
-  const bloqueado = total <= 0 || conflicto || !rutValido || !receptorOk || !detalle.trim();
+  // Detalle OPCIONAL (igual que el flujo masivo): vacío → genérico limpio (resolverGlosa).
+  const bloqueado = total <= 0 || conflicto || !rutValido || !receptorOk;
 
   // ── Imagen(es) del comprobante ── foto suelta o álbum de Telegram. El zoom/pan
   // y las flechas viven en GaleriaComprobante (un solo lugar para visor y editor).
@@ -205,7 +206,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
 
             {/* Detalle + monto */}
             <div>
-              <label style={label}>Detalle</label>
+              <label style={label}>Detalle (opcional)</label>
               <textarea value={detalle} onChange={(e) => setDetalle(e.target.value)} rows={2}
                 placeholder="Qué se vendió o prestó (se imprime en la boleta)"
                 style={{ ...field, resize: "none", lineHeight: 1.5 }} />
