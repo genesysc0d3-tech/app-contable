@@ -18,6 +18,17 @@ export const UMBRAL_IDENTIFICACION_UF = 135;
 export const UF_REFERENCIA_CLP = 40_611; // fallback referencial — la fuente viva es uf.ts
 export const RECEPTOR_OBLIGATORIO_DESDE = UMBRAL_IDENTIFICACION_UF * UF_REFERENCIA_CLP; // ≈ $5.482.485
 
+/**
+ * Predicado ÚNICO del umbral de identificación (Res. Ex. SII 44/2025): sobre él,
+ * el receptor es OBLIGATORIO; en o bajo él, OPCIONAL. Lo usa tanto la validación
+ * de emisión (exigir el receptor) como el clasificador (minimizar: no guardar la
+ * identidad del tercero bajo umbral, Ley 19.628). Una sola fuente de verdad: el
+ * dato que se guarda es exactamente el que la emisión podría exigir.
+ */
+export function receptorObligatorio(totalClp: number, umbralClp: number): boolean {
+  return totalClp > umbralClp;
+}
+
 export type DteAfecto = 39;
 export type DteExento = 41;
 export type DteNotaCredito = 61;
@@ -170,7 +181,7 @@ export function validarBoleta(
   }
 
   // --- Identificación del comprador sobre 135 UF (Res. Ex. SII 44/2025) ---
-  if (totalProvisto > umbralIdentificacion) {
+  if (receptorObligatorio(totalProvisto, umbralIdentificacion)) {
     if (!input.receptor_rut) {
       errors.push({
         code: "RECEPTOR_RUT_OBLIGATORIO",

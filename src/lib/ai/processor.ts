@@ -20,6 +20,7 @@ import {
   type ClasificacionRegla,
 } from "./classifier";
 import { recordOpsEvent } from "../ops/events";
+import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validation";
 
 /** Extended propuesta with SII traceability fields used internally. */
 type EnrichedPropuesta = PropuestaExtraida & {
@@ -1003,7 +1004,9 @@ export async function procesarDocumento(
       originalToNewIndex.set(origIdx, newIdx);
     });
 
-    // Auto-detect clients from propuesta descriptions/receptor data
+    // Auto-detect clients from propuesta descriptions/receptor data. Bajo umbral
+    // NO se auto-crea el cliente (contraparte no consentida; el contador confirmó
+    // que no hay necesidad tributaria de conservarla — RCV/F29/F22 no la usan).
     const clienteCache = await detectAndCreateClients(
       supabase,
       empresaId,
@@ -1035,16 +1038,24 @@ export async function procesarDocumento(
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
             tipo_propuesto: tipoNorm,
-            receptor_nombre: p.receptor_nombre || null,
-            receptor_rut: p.receptor_rut || null,
+            // Minimización por monto (Ley 19.628 + Res. 44/2025): solo se guarda la
+            // identidad del tercero cuando la emisión PODRÍA exigirla. Se usa el PISO
+            // conservador (RECEPTOR_OBLIGATORIO_DESDE), no la UF viva: la emisión puede
+            // caer a ese piso si mindicador.cl no responde, así que nunca minimizamos
+            // algo que la emisión luego demandaría (evita bloquear la boleta sin dato).
+            receptor_nombre: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.receptor_nombre || null) : null,
+            receptor_rut: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.receptor_rut || null) : null,
             monto_neto: exentoFinal ? total : toNum(p.monto_neto),
             iva: exentoFinal ? 0 : toNum(p.iva),
             total,
             confianza,
-            // notas = detalle/glosa del humano; NO marcadores internos (se filtran a la
-            // glosa de la boleta vía armar-boleta.ts). La baja confianza ya vive en la
-            // columna `confianza` — la UI la marca desde ahí, no desde notas.
-            notas: p.notas || null,
+            // notas = detalle/glosa; se imprime en la boleta (máxima precedencia en
+            // resolverGlosa). Bajo umbral se descarta la nota GENERADA por la IA: el
+            // modelo puede colar el nombre/RUT del tercero en el texto libre y saldría
+            // impreso en el DTE (misma fuga que cerró PR #56, por otra columna). El
+            // usuario puede escribir su propio detalle después (ruta consentida). Sobre
+            // umbral se conserva (la identidad ahí es legítima/exigida).
+            notas: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.notas || null) : null,
             // Auto-stage a "listo" SOLO con clasificación real por regla (regla_id).
             // El atajo template (boleta @0.95 sin match) nace "pendiente": el usuario
             // hace un gesto de bulk antes de que quede a un click del SII.
@@ -1055,7 +1066,12 @@ export async function procesarDocumento(
             spread_compra: toNum(p.spread_compra),
             spread_venta: toNum(p.spread_venta),
             spread_ganancia: toNum(p.spread_ganancia),
-            cliente_id: clienteId,
+            // cliente_id también se minimiza bajo umbral: aunque no se auto-cree un
+            // cliente, resolveClienteId podría enlazar a uno existente (creado por una
+            // operación SOBRE umbral en el mismo lote, o pre-registrado) y la emisión
+            // resucita la identidad vía `p.receptor_rut ?? cliente?.rut`. La normalización
+            // exenta ya se calculó con el clienteId local (no depende del campo guardado).
+            cliente_id: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? clienteId : null,
             fuente_clasificacion: enriched.__fuente ?? "mistral",
             regla_id: enriched.__regla_id ?? null,
           };
@@ -1172,6 +1188,12 @@ async function detectAndCreateClients(
   for (const p of propuestas) {
     const mov = movimientos[p.movimiento_index];
     if (!mov) continue;
+
+    // Minimización (Ley 19.628): bajo umbral no se identifica al tercero, así que
+    // no se auto-crea un cliente con su RUT (ni el extraído por IA ni el hallado
+    // por regex en la glosa). Sobre umbral sí (la emisión lo exige). Un RUT que
+    // aparezca en al menos UNA operación sobre umbral sí se crea.
+    if (!receptorObligatorio(toNum(p.total) ?? 0, RECEPTOR_OBLIGATORIO_DESDE)) continue;
 
     // Try receptor_rut first (from AI extraction)
     const rutFromPropuesta = p.receptor_rut
