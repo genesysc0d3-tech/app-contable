@@ -69,6 +69,9 @@ export default function CartolaEditor({
   });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [busyBulk, setBusyBulk] = useState(false);
+  // Guard anti-doble-click por fila: sin esto, dos clics rápidos en ✓/✕/restaurar
+  // disparaban la mutación dos veces.
+  const actingRef = useRef<Set<string>>(new Set());
 
   // Agrupar por ESTADO (la fecha bancaria NO agrupa — va como columna en la fila).
   const groups = useMemo(() => {
@@ -175,20 +178,32 @@ export default function CartolaEditor({
   }
 
   async function stageOne(p: Propuesta) {
-    const r = await ponerListo([p.id]);
-    if (r.error) toast(r.error, "error"); else toast("Lista");
-    onAction();
+    if (actingRef.current.has(p.id)) return;
+    actingRef.current.add(p.id);
+    try {
+      const r = await ponerListo([p.id]);
+      if (r.error) toast(r.error, "error"); else toast("Lista");
+      onAction();
+    } finally { actingRef.current.delete(p.id); }
   }
   async function rejectOne(p: Propuesta) {
-    const r = await rechazarPropuesta(p.id);
-    if (r.error) toast(r.error, "error"); else toast("Rechazada");
-    onAction();
+    if (actingRef.current.has(p.id)) return;
+    actingRef.current.add(p.id);
+    try {
+      const r = await rechazarPropuesta(p.id);
+      if (r.error) toast(r.error, "error"); else toast("Rechazada");
+      onAction();
+    } finally { actingRef.current.delete(p.id); }
   }
   // Restaurar una rechazada/descartada: vuelve a 'pendiente' y la lista se refresca.
   async function restoreOne(p: Propuesta) {
-    const r = await restaurarPropuesta(p.id);
-    if (r.error) toast(r.error, "error"); else toast("Restaurada — quedó pendiente");
-    onAction();
+    if (actingRef.current.has(p.id)) return;
+    actingRef.current.add(p.id);
+    try {
+      const r = await restaurarPropuesta(p.id);
+      if (r.error) toast(r.error, "error"); else toast("Restaurada — quedó pendiente");
+      onAction();
+    } finally { actingRef.current.delete(p.id); }
   }
 
   if (propuestas.length === 0) {

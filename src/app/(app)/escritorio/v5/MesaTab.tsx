@@ -143,10 +143,17 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   const handleAprobarCartola = async () => {
     if (!selDoc) return;
     setAprobandoCartola(true);
-    const r = await aprobarCartola(selDoc.id);
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir`);
-    reload();
-    setAprobandoCartola(false);
+    try {
+      const r = await aprobarCartola(selDoc.id);
+      if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir`);
+      reload();
+    } catch {
+      // Un throw de la server action dejaba el botón "Aprobar" deshabilitado para
+      // siempre (setAprobandoCartola(false) no corría sin finally).
+      toast("Error de conexión — intenta de nuevo", "error");
+    } finally {
+      setAprobandoCartola(false);
+    }
   };
 
   // Reprocesar una cartola que quedó en error (el visor ofrece esta salida en vez
