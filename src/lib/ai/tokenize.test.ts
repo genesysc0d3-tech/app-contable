@@ -89,6 +89,56 @@ describe("tokenizeForAI — bordes", () => {
   });
 });
 
+describe("glosas bancarias REALES (calibración PR 2 — cartolas santander/cartola2)", () => {
+  it("nombre en MAYÚSCULAS tras 'Transf de' → tokeniza y enmascara la cuenta", () => {
+    const v = createVault();
+    const out = tokenizeForAI("0782035096 Transf de EMPREFERNANDEZ SPA", v);
+    expect(out).toBe("[NUM] Transf de PER_1");
+    expect(out).not.toContain("EMPREFERNANDEZ");
+  });
+
+  it("'TRANSFER DE' en mayúscula + nombre MAYÚS → tokeniza (conserva keyword+dirección)", () => {
+    const v = createVault();
+    const out = tokenizeForAI("TRANSFER DE ABEL ANDRES C", v);
+    expect(out).toBe("TRANSFER DE PER_1");
+  });
+
+  it("'Transf.' SIN preposición + nombre Título → tokeniza", () => {
+    const v = createVault();
+    const out = tokenizeForAI("0264867657 Transf. Marvin Alberto Lujano", v);
+    expect(out).toBe("[NUM] Transf. PER_1");
+    expect(out.toLowerCase()).not.toContain("marvin");
+  });
+
+  it("cuenta con dígito verificador ('025844986K') se enmascara", () => {
+    const v = createVault();
+    const out = tokenizeForAI("025844986K Transf de FRANKLIN JOSE FERNA", v);
+    expect(out).toContain("[NUM]");
+    expect(out).not.toContain("025844986");
+    expect(out).not.toContain("FRANKLIN");
+  });
+
+  it("nombre con 'eth'/'sol' adentro (CARLYSBETH) se tokeniza sin dejar el fragmento", () => {
+    const v = createVault();
+    const out = tokenizeForAI("TRANSFER DE ELIANETH ABIG", v);
+    expect(out).toBe("TRANSFER DE PER_1");
+    expect(out.toLowerCase()).not.toContain("eth");
+  });
+
+  it("NO tokeniza señal tras 'Transf' (plataforma/cripto se conservan)", () => {
+    const v = createVault();
+    expect(tokenizeForAI("Transf a Mercado Pago", v)).toContain("Mercado Pago");
+    expect(tokenizeForAI("Transf de Binance", v)).toContain("Binance");
+    expect(v.seq.n).toBe(0);
+  });
+
+  it("conserva la dirección (de=entrada, a=salida) como señal", () => {
+    const v = createVault();
+    expect(tokenizeForAI("Transf de PEDRO GOMEZ LOPEZ", v)).toContain("Transf de PER_");
+    expect(tokenizeForAI("Transfer a JUANA PEREZ SOTO", v)).toContain("Transfer a PER_");
+  });
+});
+
 describe("rehydrateReceptor — nunca deja pasar un token literal", () => {
   it("token inventado por el modelo → null (aguas abajo se usa la glosa cruda)", () => {
     const v = createVault();
