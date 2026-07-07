@@ -84,6 +84,14 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     };
   }, []);
 
+  // El salto "Revisar propuesta" del Historial no encontró el doc (ya emitido/
+  // eliminado): avisar en vez del no-op mudo. Emitido por MesaController al rendirse.
+  useEffect(() => {
+    const onFail = () => toast("Esa propuesta ya no está en la mesa", "error");
+    window.addEventListener("massdte:open-doc-fail", onFail);
+    return () => window.removeEventListener("massdte:open-doc-fail", onFail);
+  }, [toast]);
+
   // Escape cierra el popup Editar (mismo patrón que EditorAmpliado).
   useEffect(() => {
     if (!editarCartolaId) return;

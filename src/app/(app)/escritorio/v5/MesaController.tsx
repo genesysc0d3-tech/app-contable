@@ -51,6 +51,12 @@ export default function MesaController({
   const cacheRef = useRef<Map<string, MesaDateDependent>>(
     new Map([[keyOf(initialMesa.workMode, initialMesa.selDate, `${initialMesa.calendar.y}-${initialMesa.calendar.m}`), initialMesa]]),
   );
+  // Para la red de seguridad de "abrir doc": leer el estado de carga vivo desde el
+  // timeout (el closure captura valores viejos) y no dejar timers huérfanos.
+  const isPendingRef = useRef(isPending);
+  useEffect(() => { isPendingRef.current = isPending; }, [isPending]);
+  const failTimerRef = useRef<number | null>(null);
+  useEffect(() => () => { if (failTimerRef.current != null) window.clearTimeout(failTimerRef.current); }, []);
 
   const navigate = useCallback((patch: NavParams) => {
     const params = {
@@ -103,6 +109,23 @@ export default function MesaController({
       // Caso mismo-mes: el doc ya está en la mesa; empuja a MesaTab a abrirlo
       // (el caso de otro mes llega por "mesa-updated" tras cargar el calendario).
       window.setTimeout(() => window.dispatchEvent(new Event("massdte:try-open")), 80);
+      // Red de seguridad: si tras cargar el doc NUNCA aparece (propuesta ya emitida/
+      // eliminada), no dejar al usuario en silencio — soltar el pendiente y avisar.
+      // tryOpen limpia pendingOpenDoc.id al abrir, así que si sigue igual = no llegó.
+      // Clave: solo avisar si la carga YA terminó (!isPending); si una navegación a otro
+      // mes sigue en vuelo, NO disparar (sería un toast falso) ni soltar el pendiente —
+      // cuando la carga aterrice, tryOpen abrirá el doc. Solo mantenemos un timer (el último).
+      if (detail?.documentoId) {
+        const pedido = detail.documentoId;
+        if (failTimerRef.current != null) window.clearTimeout(failTimerRef.current);
+        failTimerRef.current = window.setTimeout(() => {
+          failTimerRef.current = null;
+          if (pendingOpenDoc.id === pedido && !isPendingRef.current) {
+            pendingOpenDoc.id = null;
+            window.dispatchEvent(new CustomEvent("massdte:open-doc-fail"));
+          }
+        }, 2500);
+      }
     };
     window.addEventListener("massdte:open-doc", onOpenDoc);
     return () => window.removeEventListener("massdte:open-doc", onOpenDoc);

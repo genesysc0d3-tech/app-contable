@@ -13,6 +13,8 @@ import TeamBusinessPanel from "./TeamBusinessPanel";
 import UsageCountersPanel from "./UsageCountersPanel";
 import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, RCVButton } from "./LeftQuickActions";
 import type { SearchItem } from "@/lib/tree-structure";
+import { buildPropuestaItem } from "@/lib/historial/items";
+import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import { chileDateString } from "@/lib/chile-date";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
@@ -149,12 +151,11 @@ export default async function V5Page({ searchParams }: {
     });
   }
   for (const prop of (searchPropsData.data ?? []).slice(0, 100)) {
-    searchHistoryItems.push({
-      id: "prop-" + prop.id,
-      label: "Propuesta · " + (prop.movimientos_raw?.descripcion ?? "—"),
-      subtitle: "Confianza " + Math.round((prop.confianza ?? 0) * 100) + "%",
-      type: "propuesta", fecha: prop.created_at, data: searchData(prop),
-    });
+    // Minimización del tercero por monto: bajo umbral no expone identidad ni la
+    // hace buscable (ver src/lib/historial/items.ts). El umbral usa la constante
+    // baseline (la UF viva la refina la emisión; para un display-minimize del
+    // P2P — montos muy por debajo — el baseline es suficiente y conservador).
+    searchHistoryItems.push(buildPropuestaItem(prop, RECEPTOR_OBLIGATORIO_DESDE));
   }
   searchHistoryItems.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
