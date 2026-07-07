@@ -101,10 +101,15 @@ function getMonthKey(fecha: string) {
   return chileDisplayMonthKey(fecha);
 }
 
-function getWorkspaceSubtitle(datePreset: DatePreset, selectedDate: string | null) {
-  if (selectedDate || datePreset === "day" || datePreset === "today") return "del día";
-  if (datePreset === "7d" || datePreset === "30d") return "del período";
-  return "del mes";
+// Mes 0-indexado del calendario de la mesa, del MISMO modo que goToCheck
+// (EmitirTabContent): slice directo del string. La mesa ventana los documentos por
+// su created_at (fecha de SUBIDA), así que el mes debe salir de ese campo — no de
+// la fecha del movimiento, o una cartola vieja abriría un mes vacío.
+function calendarMonthKey(fecha: string | null | undefined): string | undefined {
+  if (!fecha || fecha.length < 7) return undefined;
+  const m = Number(fecha.slice(5, 7));
+  if (!Number.isFinite(m)) return undefined;
+  return `${fecha.slice(0, 4)}-${m - 1}`;
 }
 
 function getEditDate(item: SearchItem) {
@@ -217,7 +222,9 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
   const [libraryCollapsed, setLibraryCollapsed] = useState(false);
   const [datesCollapsed, setDatesCollapsed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(allItems[0]?.id ?? null);
+  // Arranca SIN selección: un finder no preselecciona un ítem al azar (de otra
+  // fecha) — la ficha refleja lo que el usuario elige, o nada.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
 
   const normalized = useMemo(() => allItems.map((item) => normalizeItem(item, dateMode)), [allItems, dateMode]);
@@ -242,7 +249,9 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
     return Array.from(groups.entries());
   }, [filtered]);
 
-  const selectedItem = useMemo(() => filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null, [filtered, selectedId]);
+  // No auto-saltar a filtered[0] cuando el seleccionado sale del filtro: mejor el
+  // placeholder que mostrar "otra cosa" que el usuario no eligió.
+  const selectedItem = useMemo(() => filtered.find((item) => item.id === selectedId) ?? null, [filtered, selectedId]);
 
   const explorerMonths = useMemo(() => {
     const months = new Map<string, { label: string; sort: number; count: number; dates: Map<string, { label: string; count: number; types: Record<SearchItem["type"], number>; sort: number }> }>();
@@ -304,7 +313,8 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
         return;
       }
       if (!filtered.length) return;
-      const current = Math.max(0, filtered.findIndex((item) => item.id === selectedItem?.id));
+      // -1 cuando no hay selección → la primera flecha cae en filtered[0].
+      const current = filtered.findIndex((item) => item.id === selectedItem?.id);
       if (event.key === "ArrowDown") {
         event.preventDefault();
         setSelectedId(filtered[Math.min(filtered.length - 1, current + 1)].id);
@@ -336,7 +346,10 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
     window.dispatchEvent(new CustomEvent("search-history-query-sync", { detail: { query: "" } }));
   }
 
-  const workspaceSubtitle = getWorkspaceSubtitle(datePreset, selectedDate);
+  // La dualidad Emisión/Subida solo tiene sentido con boletas a la vista (son las
+  // únicas con emisión ≠ subida). Sin boletas: una sola columna "Fecha", sin el modo,
+  // en vez de media tabla de "—" bajo una etiqueta de "Emisión SII" que no aplica.
+  const hasBoletas = filtered.some((i) => i.type === "boleta");
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--surface)", color: "var(--text)", fontFeatureSettings: '"kern" 1, "liga" 1' }}>
@@ -345,9 +358,9 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
           <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               <EmpresaBrand nombre={empresaNombre ?? "Mesa de trabajo"} logoUrl={empresaLogoUrl ?? ""} size={38} textSize={17} />
-              <span style={{ fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)", whiteSpace: "nowrap" }}>{workspaceSubtitle}</span>
+              <span style={{ fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)", whiteSpace: "nowrap" }}>{filtered.length} {filtered.length === 1 ? "elemento" : "elementos"}</span>
             </div>
-            <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />
+            {hasBoletas && <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />}
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <DatePill active={datePreset === "all"} onClick={clearDateFilters}>Todas</DatePill>
@@ -361,7 +374,7 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
         <ExplorerSidebar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((v) => !v)} months={explorerMonths} filter={filter} selectedDate={selectedDate} collapsedMonths={collapsedMonths} libraryCollapsed={libraryCollapsed} datesCollapsed={datesCollapsed} onToggleLibrary={() => setLibraryCollapsed((v) => !v)} onToggleDates={() => setDatesCollapsed((v) => !v)} onToggleMonth={(key) => setCollapsedMonths((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; })} onAll={() => { setFilter("todo"); clearDateFilters(); }} onType={(type) => { setFilter(type); clearDateFilters(); }} onDate={(key) => { setDatePreset("day"); setSelectedDate(key); setFilter("todo"); }} onDateType={(key, type) => { setDatePreset("day"); setSelectedDate(key); setFilter(type); }} />
 
         <main style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--border)", background: "var(--surface)" }}>
-          {filtered.length === 0 ? <EmptyState query={debouncedQuery} filtered={allItems.length > 0} /> : <FinderTable grouped={grouped} selectedId={selectedItem?.id ?? null} dateMode={dateMode} query={normalizedQuery} onSelect={setSelectedId} />}
+          {filtered.length === 0 ? <EmptyState query={debouncedQuery} filtered={allItems.length > 0} /> : <FinderTable grouped={grouped} selectedId={selectedItem?.id ?? null} dateMode={dateMode} query={normalizedQuery} showDual={hasBoletas} onSelect={setSelectedId} />}
         </main>
 
         <aside style={{ minHeight: 0, overflow: "auto", padding: "16px", background: "linear-gradient(180deg, var(--surface), var(--bg-muted))" }}>
@@ -405,7 +418,10 @@ function ExplorerSidebar({ collapsed, onToggleCollapsed, months, filter, selecte
       <SectionToggle label="Biblioteca" collapsed={libraryCollapsed} onClick={onToggleLibrary} />
       {!libraryCollapsed && <>
         <ExplorerButton active={filter === "todo" && selectedDate === null} label="Todos los elementos" count={total} onClick={onAll} />
-        {types.map((type) => <ExplorerButton key={type.key} active={filter === type.key && selectedDate === null} label={type.label} count={months.reduce((sum, month) => sum + month.dates.reduce((s, [, d]) => s + d.types[type.key], 0), 0)} color={TYPE_MAP[type.key].color} onClick={() => onType(type.key)} />)}
+        {types
+          .map((type) => ({ type, count: months.reduce((sum, month) => sum + month.dates.reduce((s, [, d]) => s + d.types[type.key], 0), 0) }))
+          .filter(({ count }) => count > 0)
+          .map(({ type, count }) => <ExplorerButton key={type.key} active={filter === type.key && selectedDate === null} label={type.label} count={count} color={TYPE_MAP[type.key].color} onClick={() => onType(type.key)} />)}
       </>}
 
       <SectionToggle label="Fechas" collapsed={datesCollapsed} onClick={onToggleDates} style={{ marginTop: 14 }} />
@@ -441,28 +457,34 @@ function ExplorerButton({ active, label, count, color = "var(--accent)", small, 
   return <button onClick={onClick} style={{ width: "100%", display: "grid", gridTemplateColumns: "12px 1fr auto", gap: 6, alignItems: "center", border: active ? `1px solid color-mix(in srgb, ${color} 26%, transparent)` : "1px solid transparent", background: active ? `color-mix(in srgb, ${color} 8%, transparent)` : "transparent", color: active ? "var(--text)" : "var(--text2)", borderRadius: 8, padding: tiny ? "3px 6px" : small ? "4px 6px" : "5px 7px", cursor: "pointer", textAlign: "left", fontSize: tiny ? 8 : small ? 9 : 10, fontWeight: active ? 850 : 650 }}><span style={{ width: tiny ? 5 : 7, height: tiny ? 5 : 7, borderRadius: 2, background: color, opacity: active ? 1 : .55 }} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span><span style={{ fontSize: 8, color: active ? color : "var(--text3)" }}>{count}</span></button>;
 }
 
-function FinderTable({ grouped, selectedId, dateMode, query, onSelect }: { grouped: [string, NormalizedItem[]][]; selectedId: string | null; dateMode: DateMode; query: string; onSelect: (id: string) => void }) {
-  const columns = "76px minmax(240px,1fr) 92px 96px 100px 104px";
-  return <div style={{ minWidth: 820 }}>
+function FinderTable({ grouped, selectedId, dateMode, query, showDual, onSelect }: { grouped: [string, NormalizedItem[]][]; selectedId: string | null; dateMode: DateMode; query: string; showDual: boolean; onSelect: (id: string) => void }) {
+  const columns = showDual ? "76px minmax(240px,1fr) 92px 96px 100px 104px" : "76px minmax(240px,1fr) 92px 96px 116px";
+  return <div style={{ minWidth: showDual ? 820 : 720 }}>
     <div style={{ position: "sticky", top: 0, zIndex: 5, display: "grid", gridTemplateColumns: columns, gap: 10, alignItems: "center", padding: "9px 14px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 82%, transparent)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".09em" }}>
-      <span>Tipo</span><span>Nombre</span><span style={{ textAlign: "right" }}>Monto</span><span>Estado</span><span style={{ color: dateMode === "emision" ? "var(--accent)" : "var(--text2)" }}>Emisión SII</span><span style={{ color: dateMode === "edicion" ? "var(--accent)" : "var(--text2)" }}>Edición/Subida</span>
+      <span>Tipo</span><span>Nombre</span><span style={{ textAlign: "right" }}>Monto</span><span>Estado</span>{showDual
+        ? <><span style={{ color: dateMode === "emision" ? "var(--accent)" : "var(--text2)" }}>Emisión SII</span><span style={{ color: dateMode === "edicion" ? "var(--accent)" : "var(--text2)" }}>Edición/Subida</span></>
+        : <span>Fecha</span>}
     </div>
     {grouped.map(([label, items]) => <section key={label}>
       <div style={{ position: "sticky", top: 33, zIndex: 4, padding: "7px 14px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 90%, transparent)", backdropFilter: "blur(12px)", color: "var(--text2)", fontSize: 10, fontWeight: 850 }}>{label}</div>
-      {items.map((item) => <FinderRow key={item.id} item={item} selected={selectedId === item.id} columns={columns} dateMode={dateMode} query={query} onSelect={() => onSelect(item.id)} />)}
+      {items.map((item) => <FinderRow key={item.id} item={item} selected={selectedId === item.id} columns={columns} dateMode={dateMode} query={query} showDual={showDual} onSelect={() => onSelect(item.id)} />)}
     </section>)}
   </div>;
 }
 
-function FinderRow({ item, selected, columns, dateMode, query, onSelect }: { item: NormalizedItem; selected: boolean; columns: string; dateMode: DateMode; query: string; onSelect: () => void }) {
+function FinderRow({ item, selected, columns, dateMode, query, showDual, onSelect }: { item: NormalizedItem; selected: boolean; columns: string; dateMode: DateMode; query: string; showDual: boolean; onSelect: () => void }) {
   const statusMeta = Object.values(STATUS_META).find((s) => s.label === item.statusLabel) ?? { label: item.statusLabel, color: "var(--text2)", bg: "var(--bg-muted)" };
   return <button onClick={onSelect} style={{ position: "relative", width: "100%", minHeight: 46, display: "grid", gridTemplateColumns: columns, gap: 10, alignItems: "center", padding: "6px 14px", border: "none", borderBottom: "1px solid color-mix(in srgb, var(--border) 62%, transparent)", cursor: "pointer", textAlign: "left", background: selected ? `linear-gradient(90deg, ${item.typeMeta.bg}, transparent 78%)` : "transparent", color: "inherit", boxShadow: selected ? `inset 2px 0 0 ${item.typeMeta.color}, inset 0 0 0 1px color-mix(in srgb, ${item.typeMeta.color} 14%, transparent)` : "none" }}>
     <span style={{ display: "flex", alignItems: "center", gap: 7 }}><span style={{ width: 20, height: 20, borderRadius: 6, display: "grid", placeItems: "center", background: item.typeMeta.bg, color: item.typeMeta.color, fontSize: 9, fontWeight: 900 }}>{item.typeMeta.glyph}</span><span style={{ fontSize: 9, color: item.typeMeta.color, fontWeight: 850 }}>{item.typeMeta.label}</span></span>
     <span style={{ minWidth: 0 }}><span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ fontSize: 11, fontWeight: 820, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{highlightText(item.label, query)}</span>{item.deferred && <DeferredBadge item={item} compact />}</span><span style={{ marginTop: 2, display: "block", fontSize: 9, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{highlightText(item.subtitle, query)}</span></span>
     <span style={{ textAlign: "right", fontSize: 11, color: item.amount ? "var(--text)" : "var(--text3)", fontWeight: 850, fontVariantNumeric: "tabular-nums lining-nums" }}>{item.amountLabel}</span>
     <StatusBadge meta={statusMeta} />
-    <span style={{ position: "relative", fontSize: 10, color: dateMode === "emision" ? "var(--text)" : "var(--text2)", fontWeight: dateMode === "emision" ? 850 : 650, fontVariantNumeric: "tabular-nums lining-nums" }}>{dateMode === "emision" && <ActiveDateRail />}{fmtDate(item.emissionDate)}</span>
-    <span style={{ position: "relative", fontSize: 10, color: dateMode === "edicion" ? "var(--text)" : "var(--text2)", fontWeight: dateMode === "edicion" ? 850 : 650, fontVariantNumeric: "tabular-nums lining-nums" }}>{dateMode === "edicion" && <ActiveDateRail />}{fmtDate(item.editDate)}</span>
+    {showDual ? <>
+      <span style={{ position: "relative", fontSize: 10, color: dateMode === "emision" ? "var(--text)" : "var(--text2)", fontWeight: dateMode === "emision" ? 850 : 650, fontVariantNumeric: "tabular-nums lining-nums" }}>{dateMode === "emision" && <ActiveDateRail />}{item.type === "boleta" ? fmtDate(item.emissionDate) : <span style={{ color: "var(--text3)" }}>—</span>}</span>
+      <span style={{ position: "relative", fontSize: 10, color: dateMode === "edicion" ? "var(--text)" : "var(--text2)", fontWeight: dateMode === "edicion" ? 850 : 650, fontVariantNumeric: "tabular-nums lining-nums" }}>{dateMode === "edicion" && <ActiveDateRail />}{fmtDate(item.editDate)}</span>
+    </> : (
+      <span style={{ fontSize: 10, color: "var(--text)", fontWeight: 650, fontVariantNumeric: "tabular-nums lining-nums" }}>{fmtDate(item.activeDate)}</span>
+    )}
   </button>;
 }
 
@@ -505,7 +527,7 @@ function TypeFields({ item }: { item: NormalizedItem }) {
   const d = item.data ?? {};
   if (item.type === "boleta") return <><Row label="Estado">{item.statusLabel}</Row><Row label="Receptor">{String(d.receptor_razon_social ?? "-")}</Row><Row label="RUT">{String(d.receptor_rut ?? "-")}</Row><Row label="Folio">#{String(d.folio ?? "-")}</Row><Row label="Emisión SII">{fmtDate(item.emissionDate, "long")}</Row><Row label="Subida/Edición">{fmtDate(item.editDate, "long")}</Row><Row label="Neto">{fmtMoney((d.monto_neto as number | undefined) ?? item.amount) || "-"}</Row><Row label="IVA">{fmtMoney(d.iva as number | undefined) || "-"}</Row></>;
   if (item.type === "documento") { const progreso = (d.progreso_ia as { movimientos_encontrados?: number; duplicados_saltados?: number } | undefined) ?? {}; return <><Row label="Archivo">{String(d.nombre_archivo ?? item.label)}</Row><Row label="Tipo">{String(d.tipo ?? "Excel")}</Row><Row label="Subido">{fmtDate(item.editDate, "long")}</Row><Row label="Estado">{item.statusLabel}</Row><Row label="Encontrados">{String(progreso.movimientos_encontrados ?? d.movimientos_detectados ?? 0)}</Row>{(progreso.duplicados_saltados ?? 0) > 0 && <Row label="Duplicados">{progreso.duplicados_saltados}</Row>}</>; }
-  if (item.type === "propuesta") { const mov = (d.movimientos_raw as MovRaw | undefined) ?? {}; return <><Row label="Descripción">{String(mov.descripcion ?? item.label)}</Row><Row label="Monto">{item.amountLabel}</Row><Row label="Flujo">{mov.tipo_flujo === "entrada" ? "Ingreso" : mov.tipo_flujo === "salida" ? "Gasto" : "-"}</Row><Row label="Fecha mov.">{mov.fecha ? fmtDate(String(mov.fecha), "long") : "-"}</Row><Row label="Documento">{String(mov.n_documento ?? "-")}</Row></>; }
+  if (item.type === "propuesta") { const mov = (d.movimientos_raw as MovRaw | undefined) ?? {}; return <><Row label="Descripción">{d.receptor_minimizado ? "Consumidor final" : String(mov.descripcion ?? item.label)}</Row><Row label="Monto">{item.amountLabel}</Row><Row label="Flujo">{mov.tipo_flujo === "entrada" ? "Ingreso" : mov.tipo_flujo === "salida" ? "Gasto" : "-"}</Row>{mov.fecha && <Row label="Fecha mov.">{fmtDate(String(mov.fecha), "long")}</Row>}{mov.n_documento && <Row label="Documento">{String(mov.n_documento)}</Row>}</>; }
   return <><Row label="Detalle">{item.subtitle || "Registro de actividad"}</Row><Row label="Fecha">{fmtDate(item.activeDate, "long")}</Row></>;
 }
 
@@ -513,8 +535,21 @@ function ActionButtons({ item, onViewDocument }: { item: NormalizedItem; onViewD
   if (item.type === "documento") { const docId = getDocumentId(item); const hasFile = Boolean(item.data?.storage_path); return docId && hasFile ? <PrimaryAction onClick={() => onViewDocument(docId)}>Visualizar Excel</PrimaryAction> : <span style={{ fontSize: 10, color: "var(--text2)" }}>Archivo no disponible para visualizar.</span>; }
   if (item.type === "boleta") return <><PrimaryAction onClick={() => navigator.clipboard?.writeText(String(item.data?.folio ?? ""))}>Copiar folio</PrimaryAction>{item.data?.receptor_rut && <SecondaryAction onClick={() => navigator.clipboard?.writeText(String(item.data?.receptor_rut))}>Copiar RUT</SecondaryAction>}</>;
   // Cierra el fullscreen del buscador antes del switch-view: si no, la mesa
-  // cambia DETRÁS del overlay y el botón parece muerto.
-  if (item.type === "propuesta") return <PrimaryAction onClick={() => { window.dispatchEvent(new CustomEvent("toggle-dashboard-fullscreen", { detail: { open: false } })); window.dispatchEvent(new CustomEvent("switch-view", { detail: "dashboard" })); }}>Revisar propuesta</PrimaryAction>;
+  // cambia DETRÁS del overlay y el botón parece muerto. Además salta CON el id
+  // (contrato massdte:open-doc, el mismo que usa Emitir→Check) para abrir la
+  // propuesta EXACTA en la mesa, en vez de soltar al usuario en el dashboard.
+  if (item.type === "propuesta") {
+    const doc = (item.data?.movimientos_raw as { documentos_subidos?: { id?: string; created_at?: string } } | undefined)?.documentos_subidos;
+    const docId = doc?.id;
+    // El mes sale del created_at del DOC (fecha de subida), NO del movimiento: la
+    // mesa ventana los docs por created_at (mesa-data.ts) — igual que goToCheck.
+    const month = calendarMonthKey(doc?.created_at ?? item.editDate);
+    return <PrimaryAction onClick={() => {
+      window.dispatchEvent(new CustomEvent("toggle-dashboard-fullscreen", { detail: { open: false } }));
+      window.dispatchEvent(new CustomEvent("switch-view", { detail: "dashboard" }));
+      if (docId) window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: { documentoId: docId, month } }));
+    }}>Revisar propuesta</PrimaryAction>;
+  }
   return <span style={{ fontSize: 10, color: "var(--text2)" }}>Sin acciones disponibles.</span>;
 }
 
