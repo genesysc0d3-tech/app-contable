@@ -834,6 +834,9 @@
       folio,
       folio_confidence: captured?.confidence ?? "none",
       folio_evidence: captured?.evidence ?? null,
+      // RUT del emisor ACTIVO del portal al momento de capturar: permite al server
+      // detectar si la boleta salió bajo otra empresa que la registrada en la app.
+      emisor_rut_activo: readActiveEmisorRut(),
       tipo_dte: job?.tipo_dte ?? null,
       fecha_emision: job?.fecha_emision ?? null,
       estado: strongFolio ? "emitida_capturada" : folio ? "resultado_requiere_revision" : "resultado_no_detectado",
@@ -938,6 +941,20 @@
     assertEmisorRut(job);
 
     renderOverlay("LOCKED_AUTOMATION", "Preparando e-Boleta. No escribas ni hagas click.");
+
+    // Cinturón anti-concatenación: si el pad trae un botón de borrado, limpiarlo
+    // antes de teclear (inofensivo con el display en cero). La garantía dura es el
+    // reload pre-retry del librero (background.js), que deja la calculadora virgen;
+    // sin ambas, un reintento tecleaba el monto ENCIMA del anterior y podía emitir
+    // una boleta real por los dos montos pegados.
+    for (const clearText of ["C", "CE", "AC", "BORRAR"]) {
+      const clearBtn = buttonByText(clearText);
+      if (clearBtn) {
+        await clickElement(clearBtn);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        break;
+      }
+    }
 
     for (const digit of amount) {
       await clickButtonText(digit);

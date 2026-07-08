@@ -281,6 +281,20 @@ const WORKER_STATUS_LABELS: Record<string, string> = {
   error: "Error",
 };
 
+// Estados PRE-emisión donde "cancelar y volver a emitir" es seguro (aún no se
+// cliqueó el EMITIR real → no hay folio en juego). Para submitting/capturing/
+// result_needs_review/save_failed la salida correcta es RECUPERAR, no re-emitir:
+// ofrecer un reset ahí invitaba a duplicar una boleta real (auditoría).
+const RESET_SAFE_STATUSES = new Set([
+  "opening_sii",
+  "waiting_sii_login",
+  "waiting_manual_login",
+  "autologin_attempting",
+  "autologin_sent",
+  "sii_page_ready",
+  "retrying",
+]);
+
 export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -717,14 +731,27 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
 
       void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
-      setLocalWorker({
-        jobId: data.job_id ?? null,
-        status: data.status ?? "error",
-        message: data.message ?? "Estado recibido desde motor local SII",
+      setLocalWorker((current) => {
+        // Un éxito terminal NO se pisa: tras "Boleta emitida y guardada", un
+        // "closed"/"result_needs_review" tardío (cierre de la ventana SII) volvía
+        // a alarmar y a bloquear el botón por una boleta que ya está guardada.
+        if (current && current.jobId != null && current.jobId === (data.job_id ?? null)
+          && (current.status === "emitted" || current.status === "already_exists")) {
+          return current;
+        }
+        return {
+          jobId: data.job_id ?? null,
+          status: data.status ?? "error",
+          message: data.message ?? "Estado recibido desde motor local SII",
+        };
       });
       setLocalWorkerLoading(false);
       if ((data.status === "error" || data.status === "cancelled") && data.job_id) {
         void closeEmissionJobEvent(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
+        // Cerrar también la ventana worker de ese job: si quedaba viva con su botón
+        // "Reintentar" mientras acá se re-habilitaba Emitir, había dos cerebros
+        // capaces de emitir dos boletas reales. (Post-emit la extensión la protege.)
+        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: data.job_id }, window.location.origin);
         if (data.job_id === simpleApiJobId) {
           setEmitiendo(false);
           setSimpleApiJobId(null);
@@ -1045,7 +1072,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       return;
     }
     if (!localWorker?.jobId) {
-      toast("Primero inicia una emisión SII para crear el job seguro", "error");
+      // JAMÁS sugerir "iniciar una emisión" para rescatar un folio: eso emite una
+      // SEGUNDA boleta real (auditoría: crítico). La salida sin job es el botón de
+      // arriba, que no necesita emisión activa.
+      toast("No hay una emisión activa para asociar este folio. Usa «Guardar último PDF SII» (funciona sin emisión activa). No vuelvas a emitir la boleta.", "error");
       return;
     }
 
@@ -1107,16 +1137,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }
 
   async function persistLatestSiiPdf() {
-    if (!localWorker?.jobId) {
-      toast("Primero inicia una emisión SII para crear el job seguro", "error");
-      return;
-    }
+    // SIN exigir job vivo: el server soporta recover_latest con job_id null
+    // (resuelve el último resultado SII del usuario y hace backfill idempotente).
+    // El gate anterior exigía un jobId que muere al recargar la página — justo el
+    // escenario donde se necesita rescate — y su error inducía a re-emitir.
     setLocalWorkerLoading(true);
     try {
       const res = await fetch("/api/sii-local/result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: localWorker.jobId, recover_latest: true }),
+        body: JSON.stringify({ job_id: localWorker?.jobId ?? null, recover_latest: true }),
       });
       const json = (await res.json()) as { ok?: boolean; folio?: number; boleta_id?: string; error?: string; detalle?: string; already_exists?: boolean };
       if (!res.ok || !json.ok) {
@@ -1135,6 +1165,21 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     } finally {
       setLocalWorkerLoading(false);
     }
+  }
+
+  // Cancela una emisión SII pegada en estado PRE-emisión: cierra el job en el
+  // server (libera el lock YA — antes solo se limpiaba el estado local y el botón
+  // pasaba a "Emisión en curso" hasta 15 minutos) y pide a la extensión cerrar la
+  // ventana worker (sin esto quedaban dos cerebros: "Reintentar" allá + "Emitir"
+  // acá = dos boletas reales). Solo se ofrece para RESET_SAFE_STATUSES.
+  function resetStuckSiiEmission() {
+    const jobId = localWorker?.jobId ?? null;
+    void closeEmissionJob(jobId, "cancelled");
+    if (jobId) {
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+    }
+    setLocalWorker(null);
+    setLocalWorkerLoading(false);
   }
 
   function openLocalSiiWorker() {
@@ -1428,8 +1473,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                     No encuentro la extensión del SII en este navegador. Instálala o actívala desde <strong>Empresa → Configuración de emisión</strong> (ahí están los pasos), y vuelve a intentar.
                   </div>
                 )}
-                {total > 0 && (
-                  <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {/* Siempre visible (antes exigía total>0: tras recargar la página el
+                    borrador muere, total=0, y el rescate desaparecía justo cuando
+                    más se necesitaba — auditoría: crítico). */}
+                <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <summary style={{ cursor: "pointer", fontSize: 9, fontWeight: 800, color: "var(--text)" }}>
                       Recuperar emisión SII
                     </summary>
@@ -1461,8 +1508,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                       </button>
                     </div>
                     </div>
-                  </details>
-                )}
+                </details>
               </div>
             )}
 
@@ -1523,10 +1569,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
             <div style={{ marginTop: "auto", paddingTop: 2 }}>
               {siiWorkerPendiente ? (
-                <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
-                  Hay una emisión SII anterior sin resolver ({localWorker?.status}). Si quedó colgada,{" "}
-                  <button type="button" onClick={() => { setLocalWorker(null); setLocalWorkerLoading(false); }} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>reiníciala</button>{" "}para volver a emitir.
-                </div>
+                RESET_SAFE_STATUSES.has(localWorker?.status ?? "") ? (
+                  <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
+                    Emisión SII en curso: {WORKER_STATUS_LABELS[localWorker?.status ?? ""] ?? "procesando"}. ¿Quedó pegada?{" "}
+                    <button type="button" onClick={resetStuckSiiEmission} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>cancélala</button>{" "}y vuelve a emitir.
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
+                    Hay una emisión SII sin resolver ({WORKER_STATUS_LABELS[localWorker?.status ?? ""] ?? "en proceso"}). No vuelvas a emitir: usa <strong>Recuperar emisión SII</strong> (a la izquierda) para rescatar el folio.
+                  </div>
+                )
               ) : (
                 <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
                   {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y razón social)." : "Ingresa detalle y monto."}

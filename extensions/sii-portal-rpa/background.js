@@ -1,6 +1,7 @@
 "use strict";
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl } from "./modules/core.js";
+import { normalizeRut } from "./modules/rut.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
 import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, siiVaultStatus } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
@@ -150,7 +151,11 @@ async function handleCapturedResult(state, result) {
   const msg = conPdf
     ? `Boleta emitida en SII. Folio ${result.folio}. PDF de respaldo capturado.`
     : `Boleta emitida en SII. Folio ${result.folio}. El PDF de respaldo quedó pendiente (se puede adjuntar luego); la boleta ya quedó registrada.`;
-  sendToApp(state, resultMessage(state.jobId, { ...resultWithPdf, job: state.job }, msg));
+  const message = resultMessage(state.jobId, { ...resultWithPdf, job: state.job }, msg);
+  // PRIMERO el stash, DESPUÉS la entrega: si la pestaña de la app está cerrada,
+  // el folio sobrevive en storage y se reentrega al próximo ping de la app.
+  await stashPendingResult(state.jobId, message);
+  sendToApp(state, message);
   state.awaitingResult = false;
   sendToSii(state.workerTabId, {
     type: "APP_CONTABLE_SII_WORKER_OVERLAY",
@@ -165,8 +170,100 @@ async function sendToApp(jobState, message) {
   try {
     await chrome.tabs.sendMessage(jobState.appTabId, message);
   } catch {
-    // The app tab may have been closed; the job remains recoverable from the app.
+    // The app tab may have been closed. Los RESULTADOS no dependen de este envío:
+    // quedan en el stash de chrome.storage.local y se reentregan al próximo ping
+    // de la app (redeliverPendingResults). Los STATUS sí son best-effort.
   }
+}
+
+// ── Stash anti-pérdida de folio ─────────────────────────────────────────────
+// El folio solo llegaba al servidor VÍA la pestaña de la app (app-bridge hace el
+// POST). Si esa pestaña estaba cerrada/navegando cuando terminó la emisión, la
+// boleta REAL quedaba invisible para siempre (auditoría: crítico). Ahora todo
+// resultado se guarda primero en chrome.storage.local y se reentrega a cualquier
+// pestaña de la app que haga ping, hasta que el POST confirme (ack PERSISTED).
+// El server dedupea por UNIQUE(empresa,tipo,folio), así que reentregar es seguro.
+const PENDING_RESULTS_KEY = "sii_pending_results";
+const PENDING_RESULT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
+
+function slimResultForStash(message) {
+  // Sin el PDF base64 (puede pesar MBs y reventar la cuota de storage): lo que
+  // importa registrar es el folio con su evidencia; el PDF es respaldo reintentable.
+  const result = message?.result && typeof message.result === "object"
+    ? { ...message.result, pdf: undefined }
+    : message?.result;
+  return { ...message, result };
+}
+
+async function stashPendingResult(jobId, message) {
+  if (!jobId) return;
+  try {
+    const stored = await chrome.storage.local.get(PENDING_RESULTS_KEY);
+    const pending = stored?.[PENDING_RESULTS_KEY] && typeof stored[PENDING_RESULTS_KEY] === "object"
+      ? stored[PENDING_RESULTS_KEY]
+      : {};
+    pending[jobId] = { message: slimResultForStash(message), saved_at: Date.now() };
+    await chrome.storage.local.set({ [PENDING_RESULTS_KEY]: pending });
+  } catch {
+    // Best-effort: si storage falla, queda la entrega directa por la pestaña.
+  }
+}
+
+async function clearPendingResult(jobId) {
+  if (!jobId) return;
+  try {
+    const stored = await chrome.storage.local.get(PENDING_RESULTS_KEY);
+    const pending = stored?.[PENDING_RESULTS_KEY];
+    if (!pending || typeof pending !== "object" || !(jobId in pending)) return;
+    delete pending[jobId];
+    await chrome.storage.local.set({ [PENDING_RESULTS_KEY]: pending });
+  } catch {
+    // Best-effort.
+  }
+}
+
+async function redeliverPendingResults(tabId) {
+  if (!tabId) return;
+  try {
+    const stored = await chrome.storage.local.get(PENDING_RESULTS_KEY);
+    const pending = stored?.[PENDING_RESULTS_KEY];
+    if (!pending || typeof pending !== "object") return;
+    const now = Date.now();
+    let mutated = false;
+    for (const [jobId, entry] of Object.entries(pending)) {
+      if (!entry?.message || (now - (entry.saved_at || 0)) > PENDING_RESULT_TTL_MS) {
+        delete pending[jobId];
+        mutated = true;
+        continue;
+      }
+      // Reentrega al tab que hizo ping; app-bridge re-POSTea (idempotente) y al
+      // confirmar llega el ack PERSISTED que limpia esta entrada.
+      chrome.tabs.sendMessage(tabId, entry.message).catch(() => undefined);
+    }
+    if (mutated) await chrome.storage.local.set({ [PENDING_RESULTS_KEY]: pending });
+  } catch {
+    // Best-effort.
+  }
+}
+
+// ── Expiración de jobs dentro de la extensión ───────────────────────────────
+// expires_at solo se validaba al RECIBIR el job; después el state vivía para
+// siempre. Un worker viejo abandonado + un job nuevo podían emitir LOS DOS al
+// desbloquear la bóveda (auditoría: crítico → doble boleta real). Pre-emit un
+// job vencido se cierra; post-emit NUNCA se expira (protege el folio).
+function jobExpired(state) {
+  const t = Date.parse(state?.job?.expires_at || "");
+  return Number.isFinite(t) && t <= Date.now();
+}
+
+function expireWorker(state) {
+  sendToApp(state, statusMessage(
+    state.jobId,
+    "cancelled",
+    "Este intento de emisión expiró (pasaron más de 15 minutos sin completarse). No se emitió nada; vuelve a la app y emite de nuevo.",
+    true,
+  ));
+  closeWorker(state);
 }
 
 async function sendToSii(tabId, message) {
@@ -237,10 +334,21 @@ function handleWorkerAction(message, sender, sendResponse) {
       return false;
     }
 
+    // Un intento vencido no se reanuda: la app pudo cerrar el job y volver a emitir.
+    if (jobExpired(state)) {
+      expireWorker(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
+
     state.filledDraft = false;
     state.submitted = false;
     sendToApp(state, statusMessage(state.jobId, "retrying", "Reintentando deteccion de e-Boleta.", true));
-    scanWorkerPage(state);
+    // Recargar la página ANTES de re-intentar: la calculadora vuelve a cero. Sin
+    // esto, re-teclear el monto CONCATENABA dígitos sobre lo ya tecleado y podía
+    // salir una boleta real por un monto gigante (auditoría: crítico). El reload
+    // dispara tabs.onUpdated → scanWorkerPage sobre una pantalla limpia.
+    chrome.tabs.reload(state.workerTabId).catch(() => scanWorkerPage(state));
     sendResponse?.({ ok: true });
     return false;
   }
@@ -270,7 +378,21 @@ function handleWorkerAction(message, sender, sendResponse) {
   }
 
   if (message.action === "close") {
-    sendToApp(state, statusMessage(state.jobId, "closed", "Ventana segura SII cerrada.", false));
+    // Post-emit sin confirmación de guardado: NO mandar "closed" (la app lo trata
+    // como terminal y re-habilitaba Emitir con una boleta real emitida y no
+    // guardada → doble emisión; auditoría: crítico). El stash + reentrega ya
+    // protegen el folio; el estado no-cerrante mantiene el candado en la app.
+    if (state.finalEmitClicked && !state.resultPersisted) {
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "Cerraste tras emitir y la boleta aún no se confirma guardada. Se guardará sola al volver a la app; no re-emitas.", true));
+      closeWorker(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
+    // Guardado confirmado: no mandar nada (la app ya muestra "Boleta emitida";
+    // pisarla con "Ventana cerrada" solo confunde). Pre-emit: cierre normal.
+    if (!state.finalEmitClicked) {
+      sendToApp(state, statusMessage(state.jobId, "closed", "Ventana segura SII cerrada.", false));
+    }
     closeWorker(state);
     sendResponse?.({ ok: true });
     return false;
@@ -281,6 +403,12 @@ function handleWorkerAction(message, sender, sendResponse) {
 }
 
 function scanWorkerPage(state, attempt = 1) {
+  // Pre-emit vencido → cerrar, no seguir automatizando. (Post-emit jamás se
+  // expira: la prioridad es capturar el folio ya emitido.)
+  if (!state.learnOnly && !state.finalEmitClicked && jobExpired(state)) {
+    expireWorker(state);
+    return;
+  }
   chrome.tabs.sendMessage(state.workerTabId, baseMessage({
     type: "APP_CONTABLE_SII_SCAN_PAGE",
     job_id: state.jobId,
@@ -425,6 +553,12 @@ function resumeJobsAfterSiiUnlock() {
   if (!credentials?.rut || !credentials?.clave) return;
   for (const state of activeJobs.values()) {
     if (state.learnOnly || state.submitted || state.awaitingResult || state.finalEmitClicked) continue;
+    // Un worker viejo abandonado NO se reanuda: sin este check, desbloquear la
+    // bóveda hacía emitir al job nuevo Y al viejo (dos boletas idénticas).
+    if (jobExpired(state)) {
+      expireWorker(state);
+      continue;
+    }
     state.humanRequired = false;
     state.autologinAttempted = false; // permitir un intento limpio ahora que hay clave
     sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Bóveda desbloqueada: reanudando inicio de sesión SII automático.", true));
@@ -638,6 +772,8 @@ async function openWorkerWindow(job, appTabId) {
     awaitingResult: false,
     autologinAttempted: false,
     humanRequired: false,
+    // true cuando la app confirmó (ack) que el POST del resultado quedó guardado.
+    resultPersisted: false,
   };
   activeJobs.set(job.job_id, state);
 
@@ -691,12 +827,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!isAllowedAppUrl(sender.url || "")) return false;
 
   if (message?.type === "APP_CONTABLE_EXTENSION_PING") {
+    // La app está viva: si hay folios pendientes de entrega (pestaña cerrada
+    // cuando terminó una emisión), reentregarlos ahora a ESTA pestaña.
+    redeliverPendingResults(sender.tab?.id);
     sendResponse(baseMessage({
       type: "APP_CONTABLE_EXTENSION_PONG",
       extension_version: EXTENSION_VERSION,
       capabilities: CAPABILITIES,
       nonce: message.nonce,
     }));
+    return false;
+  }
+
+  // Ack de app-bridge: el POST /api/sii-local/result respondió ok → el folio quedó
+  // guardado en la app. Limpia el stash y desarma los avisos "sin resolver".
+  if (message?.type === "APP_CONTABLE_SII_RESULT_PERSISTED") {
+    if (message.ok === true && message.job_id) {
+      clearPendingResult(message.job_id);
+      const state = activeJobs.get(message.job_id);
+      if (state) state.resultPersisted = true;
+    }
+    sendResponse?.({ ok: true });
+    return false;
+  }
+
+  // La app cerró/canceló el job (error, reset del usuario): cerrar también la
+  // ventana worker para que no queden DOS cerebros vivos (el "Reintentar" de la
+  // ventana + el botón Emitir re-habilitado de la app = dos boletas reales).
+  // Post-emit NUNCA se cierra desde aquí: el folio manda.
+  if (message?.type === "APP_CONTABLE_SII_JOB_CLOSE") {
+    const state = message.job_id ? activeJobs.get(message.job_id) : null;
+    if (state && !state.finalEmitClicked) closeWorker(state);
+    sendResponse(baseMessage({ type: "APP_CONTABLE_SII_JOB_CLOSE_RESULT", ok: true }));
     return false;
   }
 
@@ -713,13 +875,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SII_BOLETA_JOB") {
     const job = message.job;
-    // Override explícito del usuario: si configuró un RUT de empresa emisora en la
-    // extensión, ESE manda (caso p.ej. cuenta con varias personas jurídicas donde la app
-    // no puede saber cuál). Vacío = manda el emisor_rut que trae la app. La validación
-    // (incluye el gate de emisor) corre DESPUÉS del override, sobre el RUT final.
+    // RUT de empresa configurado en la extensión: SOLO rellena cuando el job no trae
+    // emisor; si AMBOS existen y difieren, se ABORTA con mensaje claro (fail-closed).
+    // Antes el config pisaba en silencio al de la app: la boleta salía en el SII a
+    // nombre de una empresa y la app la registraba bajo otra — libros divergentes
+    // sin aviso (auditoría: crítico). No emitir > emitir por la empresa equivocada.
     getSiiEmpresaRutDefault()
       .then((configEmpresaRut) => {
-        if (configEmpresaRut) job.emisor_rut = configEmpresaRut;
+        if (configEmpresaRut) {
+          const jobRut = normalizeRut(job?.emisor_rut);
+          const cfgRut = normalizeRut(configEmpresaRut);
+          if (jobRut && cfgRut && jobRut !== cfgRut) {
+            sendResponse(statusMessage(
+              job?.job_id ?? null,
+              "error",
+              `La extensión está configurada para emitir por la empresa ${configEmpresaRut}, pero tu empresa en la app es ${job.emisor_rut}. No emití nada. Corrige el RUT en la configuración de la extensión (o déjalo vacío para usar el de la app) y vuelve a intentar.`,
+              true,
+            ));
+            return;
+          }
+          if (!jobRut) job.emisor_rut = configEmpresaRut;
+        }
         const validationError = validateSiiBoletaJob(job);
         if (validationError) {
           sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
@@ -826,10 +1002,13 @@ chrome.windows.onRemoved.addListener((windowId) => {
   for (const [jobId, state] of activeJobs.entries()) {
     if (state.workerWindowId !== windowId) continue;
     activeJobs.delete(jobId);
-    // Post-emit: no cerrar el job (perdería el folio). Pedir el folio a mano; el
-    // backfill del servidor lo registra con evidencia fuerte aunque el job cierre.
+    // Post-emit: no cerrar el job (perdería el folio). Pero si el guardado YA se
+    // confirmó, no mandar nada — pisar "Boleta emitida" con "sin resolver" por
+    // cerrar la ventana con la X asustaba y volvía a bloquear el botón.
     if (state.finalEmitClicked) {
-      sendToApp(state, statusMessage(jobId, "result_needs_review", "Cerraste la ventana tras emitir. Si viste el folio, ingrésalo abajo para no perder la boleta; no re-emitas.", true));
+      if (!state.resultPersisted) {
+        sendToApp(state, statusMessage(jobId, "result_needs_review", "Cerraste la ventana tras emitir y la boleta aún no se confirma guardada. Se guardará sola al volver a la app; no re-emitas.", true));
+      }
       continue;
     }
     sendToApp(state, statusMessage(jobId, "cancelled", "La ventana segura SII fue cerrada.", true));
