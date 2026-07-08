@@ -23,7 +23,11 @@ const LEGACY_V1_KEY = "app_contable_sii_vault_v1";
 const DEVICE_ID_KEY = "app_contable_sii_device_id";
 const APP_ORIGIN_KEY = "app_contable_sii_app_origin"; // último origen de app visto (session)
 const VK_CACHE_KEY = "app_contable_sii_vk"; // { vk, user_id, expiresAt } en storage.session
-const VK_TTL_MS = 10 * 60 * 1000;
+// TTL corto: el cache existe para no re-pedir WS a cada rato, pero también acota la
+// ventana ciega del kill-switch (tras revocar, la VK cacheada dejaría de servir en
+// ≤ este tiempo). Con el masivo deshabilitado, las emisiones son una a una y minutos
+// aparte, así que re-pedir WS cada 90s no molesta y hace la revocación casi inmediata.
+const VK_TTL_MS = 90 * 1000;
 
 // ── Identidad de dispositivo (estable por navegador, compartida entre usuarios) ─
 async function ensureDeviceId() {
@@ -104,6 +108,14 @@ export async function handleSiiVaultMessage(message, appOriginHint) {
   }
 
   return null;
+}
+
+// Wipe LOCAL de la bóveda (sin tocar el servidor): lo dispara el botón "Desconectar"
+// de la app DESPUÉS de revocar WS server-side. Solo BORRA datos locales (no lee
+// secretos), así que no viola la frontera app↔bóveda. Deja el equipo "sin conectar".
+export async function wipeLocalVault() {
+  await clearVkCache();
+  await chrome.storage.local.remove(STORAGE_KEY);
 }
 
 // PÚBLICO (no cifrado): RUT de empresa emisora configurado. No requiere desbloquear.

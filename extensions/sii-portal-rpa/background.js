@@ -3,7 +3,7 @@
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl } from "./modules/core.js";
 import { normalizeRut } from "./modules/rut.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin } from "./modules/sii-vault.js";
+import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, wipeLocalVault } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
 const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEAPI_CAPABILITIES];
@@ -574,6 +574,8 @@ function resumeJobsAfterSiiUnlock() {
     }
     state.humanRequired = false;
     state.autologinAttempted = false; // permitir un intento limpio ahora que hay clave
+    state.autologinInFlight = false;
+    state.unlockError = null;
     sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Clave SII conectada: reanudando inicio de sesión automático.", true));
     sendToSii(state.workerTabId, {
       type: "APP_CONTABLE_SII_WORKER_OVERLAY",
@@ -585,18 +587,49 @@ function resumeJobsAfterSiiUnlock() {
   }
 }
 
+// La app volvió a estar viva (PING): reintenta los jobs que quedaron esperando por
+// un fallo TRANSITORIO (sesión caducada / origen desconocido). Esto cumple la
+// promesa "entra de nuevo a la app y la emisión sigue sola" sin exigir re-guardar
+// toda la clave. Los permanentes (revocada/otro usuario) no se tocan.
+function retryTransientUnlocks() {
+  for (const state of activeJobs.values()) {
+    if (state.learnOnly || state.submitted || state.awaitingResult || state.finalEmitClicked) continue;
+    if (!state.unlockError || !UNLOCK_TRANSIENT.has(state.unlockError)) continue;
+    if (jobExpired(state)) { expireWorker(state); continue; }
+    state.humanRequired = false;
+    state.autologinAttempted = false;
+    state.autologinInFlight = false;
+    state.unlockError = null;
+    scanWorkerPage(state);
+  }
+}
+
+// Errores de desbloqueo TRANSITORIOS (la sesión de la app puede volver): no
+// consumen el intento — al reloguear/volver a la app (PING) se reintenta solo.
+// Los permanentes (revocada / otro usuario / no conectada) sí lo consumen.
+const UNLOCK_TRANSIENT = new Set(["SESSION_EXPIRED", "APP_ORIGIN_DESCONOCIDO"]);
+
 async function attemptSiiAutologin(state) {
-  if (state.autologinAttempted) {
-    focusWorkerForHuman(state, "No pudimos iniciar sesión automáticamente. SII puede pedir captcha, 2FA, cambio de clave o selección de contribuyente. Inicia sesión manualmente en esta ventana y continuaremos automáticamente.");
+  // Candado de reentrancia ANTES del await: getUnlockedSiiCredentials hace un
+  // round-trip de red (fetch de WS), y scanWorkerPage puede reinvocar en paralelo
+  // (varios 'complete' del login del SII). Sin este flag síncrono, dos intentos
+  // concurrentes tecleaban RUT+Clave y clickeaban Ingresar DOS veces (riesgo de
+  // bloqueo de la cuenta SII).
+  if (state.autologinAttempted || state.autologinInFlight) {
+    if (state.autologinAttempted) {
+      focusWorkerForHuman(state, "No pudimos iniciar sesión automáticamente. SII puede pedir captcha, 2FA, cambio de clave o selección de contribuyente. Inicia sesión manualmente en esta ventana y continuaremos automáticamente.");
+    }
     return;
   }
+  state.autologinInFlight = true;
 
   // Desbloqueo v2: pide WS al servidor con la sesión (dentro del módulo de bóveda).
   const unlock = await getUnlockedSiiCredentials(state.appOrigin);
   if (!unlock.ok) {
-    // Evita martillar el servidor en escaneos repetidos del mismo login; el login
-    // manual sigue disponible y (re)conectar desde la app dispara resumeJobsAfterSiiUnlock.
-    state.autologinAttempted = true;
+    state.autologinInFlight = false;
+    // Transitorio → NO consumir el intento: reloguear en la app y volver dispara el
+    // reintento (retryTransientUnlocks en el PING). Permanente → consumir + login manual.
+    if (!UNLOCK_TRANSIENT.has(unlock.error)) state.autologinAttempted = true;
     state.unlockError = unlock.error;
     focusWorkerForHuman(state, mapUnlockError(unlock.error));
     return;
@@ -604,6 +637,8 @@ async function attemptSiiAutologin(state) {
   const credentials = { rut: unlock.rut, clave: unlock.clave };
 
   state.autologinAttempted = true;
+  state.autologinInFlight = false;
+  state.unlockError = null;
   state.humanRequired = false;
   sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Iniciando sesión en el SII con tu clave (desbloqueada por tu sesión).", true));
   sendToSii(state.workerTabId, {
@@ -843,11 +878,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // el desbloqueo v2 para el fetch de WS al casillero del servidor.
   try { void rememberAppOrigin(new URL(sender.url).origin); } catch { /* ignore */ }
 
+  // Wipe LOCAL desde la app (tras revocar en el servidor con "Desconectar en todos
+  // mis equipos"): solo borra datos locales, no lee secretos → no viola la frontera.
+  if (message?.type === "APP_CONTABLE_SII_VAULT_LOCAL_WIPE") {
+    wipeLocalVault().catch(() => undefined);
+    sendResponse(baseMessage({ type: "APP_CONTABLE_SII_VAULT_LOCAL_WIPE_RESULT", ok: true }));
+    return false;
+  }
+
   if (message?.type === "APP_CONTABLE_EXTENSION_PING") {
     // La app está viva: si hay folios pendientes de entrega (pestaña cerrada
     // cuando terminó una emisión), reentregarlos ahora a ESTA pestaña — solo
     // los de la MISMA empresa que declara el ping.
     redeliverPendingResults(sender.tab?.id, message.empresa_id ?? null);
+    // La sesión pudo restablecerse: reintenta jobs colgados por un fallo transitorio.
+    retryTransientUnlocks();
     sendResponse(baseMessage({
       type: "APP_CONTABLE_EXTENSION_PONG",
       extension_version: EXTENSION_VERSION,

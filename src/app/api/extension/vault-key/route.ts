@@ -32,9 +32,12 @@ function originAllowed(origin: string | null): boolean {
 
 // WS se guarda CIFRADO en reposo con un secreto de entorno (defensa en profundidad:
 // un dump de la DB solo no rinde llaves; hace falta también el secreto del entorno).
+// EXTENSION_VAULT_WRAP_SECRET DEBE ser aleatorio de alta entropía (≥32 chars: idealmente
+// `openssl rand -base64 32`), NO una frase — con sha256 crudo, un secreto débil sería
+// fuerza-bruteable desde un dump de la DB.
 function wrapKey(): Buffer | null {
   const secret = process.env.EXTENSION_VAULT_WRAP_SECRET;
-  if (!secret || secret.length < 16) return null;
+  if (!secret || secret.length < 32) return null;
   return crypto.createHash("sha256").update(secret).digest();
 }
 

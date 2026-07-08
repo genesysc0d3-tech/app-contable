@@ -128,9 +128,11 @@ export default function EmissionProviderConfig({
         toast(json.error === "NO_AUTH" ? "Inicia sesión para revocar." : "No se pudo revocar. Intenta de nuevo.", "error");
         return;
       }
-      // Además, limpia la bóveda local de ESTE equipo si la extensión está presente.
+      // Además, limpia la bóveda local de ESTE equipo si la extensión está presente
+      // (mensaje dedicado que el bridge sí relaya; CLEAR está gateado a páginas de
+      // la extensión). El WS ya fue revocado arriba: sin él, lo local es inservible.
       if (extensionStatus === "ready") {
-        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_VAULT_CLEAR", protocol_version: 1 }, window.location.origin);
+        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_VAULT_LOCAL_WIPE", protocol_version: 1 }, window.location.origin);
       }
       toast("Clave del SII desconectada en todos tus equipos.", "success");
     } catch {
