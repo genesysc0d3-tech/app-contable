@@ -8,6 +8,7 @@ import { requireEmisionJob } from "@/lib/emission/jobs";
 import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { cleanRut } from "@/lib/sii/validation";
 
 interface SiiLocalResultPayload {
   job_id?: string | null;
@@ -16,6 +17,9 @@ interface SiiLocalResultPayload {
     folio?: number | null;
     folio_confidence?: string | null;
     folio_evidence?: unknown;
+    // RUT del emisor ACTIVO del portal al capturar (lo reporta el worker): permite
+    // detectar una boleta emitida bajo otra empresa que la registrada en la app.
+    emisor_rut_activo?: string | null;
     tipo_dte?: number | null;
     fecha_emision?: string | null;
     estado?: string | null;
@@ -439,6 +443,10 @@ export async function POST(request: Request) {
       .order("received_at", { ascending: false })
       .limit(1);
     if (payload.job_id) query = query.eq("job_id", payload.job_id);
+    // Sin job_id el rescate es "lo último que emitiste": acotarlo a 24 h. Sin la
+    // ventana podía resucitar una boleta VIEJA de otra emisión y reportarla como
+    // el rescate de la actual (falso éxito que enmascara el folio perdido).
+    else query = query.gte("received_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
     const { data: recoveredRows, error: recoverErr } = await query;
     if (recoverErr) {
       return NextResponse.json(
@@ -520,7 +528,10 @@ export async function POST(request: Request) {
     // El gate falló y no se pudo respaldar arriba: el payload puede traer una boleta
     // REAL ya emitida. Si la descartamos, queda invisible y el usuario re-emite →
     // boleta DUPLICADA. La guardamos con status 'job_gate_failed' para reintentar.
-    if (!payload.recover_latest && (folio || result)) {
+    // EXCEPTO cuando el job es de OTRO usuario (FORBIDDEN): guardar el payload ajeno
+    // bajo la sesión actual contaminaría su historial con datos de un tercero — el
+    // dueño real lo reintenta desde su propia sesión (stash de la extensión).
+    if (!payload.recover_latest && (folio || result) && jobGate.error !== "EMISION_JOB_FORBIDDEN") {
       await rememberResult(sb, {
         user_id: user.id,
         job_id: effectiveJobId,
@@ -650,6 +661,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
   }
 
+  // Emisor cruzado: si el portal tenía activa OTRA empresa al capturar, la boleta
+  // salió en el SII bajo un RUT distinto al que registramos acá. Se registra igual
+  // (la boleta real existe) pero con marca visible + alerta ops — antes los libros
+  // divergían en silencio y nadie se enteraba.
+  const emisorActivo = cleanText(result?.emisor_rut_activo);
+  const emisorMismatch = Boolean(emisorActivo && empresa.rut && cleanRut(emisorActivo) !== cleanRut(empresa.rut));
+  if (emisorMismatch) {
+    await recordOpsEvent({
+      sb,
+      severity: "error",
+      source: "sii-local",
+      eventName: "sii_local_emisor_mismatch",
+      summary: "Boleta emitida en el SII bajo un emisor distinto al registrado en la app",
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: effectiveJobId,
+      metadata: { folio, tipo_dte: tipoDte, emisor_activo: emisorActivo, emisor_registrado: empresa.rut },
+    });
+  }
+
   const totals = totalsFor(tipoDte, montoTotal, result?.totales ?? null);
   const receptor = result?.receptor ?? null;
   const detalles = Array.isArray(result?.detalles) && result.detalles.length > 0
@@ -682,6 +713,8 @@ export async function POST(request: Request) {
     } : null,
     pdf_pendiente: pdfPendiente,
     pdf_upload_error: pdfUpload.storagePath ? null : (pdfUpload.error || "PDF_PENDIENTE"),
+    emisor_activo_portal: emisorActivo ?? null,
+    emisor_mismatch: emisorMismatch,
     artifact_links: (result?.artifact_links ?? []).map((link) => ({
       kind: link.kind,
       text: link.text,
@@ -723,6 +756,22 @@ export async function POST(request: Request) {
     .single();
 
   if (insertErr || !boleta) {
+    // Carrera de doble POST (entrega directa + reentrega del stash en paralelo):
+    // el perdedor choca con el UNIQUE(empresa,tipo,folio). La boleta SÍ está
+    // guardada — responder already_exists como hace el backfill, no un 500 que
+    // la app mostraba como "Boleta no quedó guardada" sobre una boleta guardada.
+    const { data: raceWinner } = await sb
+      .from("boletas_emitidas")
+      .select("id, estado")
+      .eq("empresa_id", empresaId)
+      .eq("tipo_dte", tipoDte)
+      .eq("folio", folio)
+      .maybeSingle();
+    if (raceWinner) {
+      await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
+      await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
+      return NextResponse.json({ ok: true, boleta_id: raceWinner.id, folio, estado: raceWinner.estado, already_exists: true });
+    }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "insert_failed", error: insertErr?.message ?? "DB_INSERT_FAILED", result });
     await recordCuentaAudit({
       sb,

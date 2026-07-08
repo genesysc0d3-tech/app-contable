@@ -154,7 +154,7 @@ async function handleCapturedResult(state, result) {
   const message = resultMessage(state.jobId, { ...resultWithPdf, job: state.job }, msg);
   // PRIMERO el stash, DESPUÉS la entrega: si la pestaña de la app está cerrada,
   // el folio sobrevive en storage y se reentrega al próximo ping de la app.
-  await stashPendingResult(state.jobId, message);
+  await stashPendingResult(state.jobId, message, state.job?.empresa_id ?? null);
   sendToApp(state, message);
   state.awaitingResult = false;
   sendToSii(state.workerTabId, {
@@ -183,27 +183,39 @@ async function sendToApp(jobState, message) {
 // resultado se guarda primero en chrome.storage.local y se reentrega a cualquier
 // pestaña de la app que haga ping, hasta que el POST confirme (ack PERSISTED).
 // El server dedupea por UNIQUE(empresa,tipo,folio), así que reentregar es seguro.
-const PENDING_RESULTS_KEY = "sii_pending_results";
+// Una CLAVE POR JOB (no un objeto compartido): get→mutar→set sobre una clave
+// única no es atómico en el SW MV3 y dos escrituras concurrentes se pisaban
+// (lost update) — justo el respaldo que no puede perderse. set/remove por clave
+// individual no compiten entre jobs distintos.
+const PENDING_RESULT_KEY_PREFIX = "sii_pending_result:";
 const PENDING_RESULT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
+const PENDING_RESULT_MAX_ATTEMPTS = 12; // tope: un POST que falla PERMANENTE no reintenta para siempre
 
 function slimResultForStash(message) {
   // Sin el PDF base64 (puede pesar MBs y reventar la cuota de storage): lo que
   // importa registrar es el folio con su evidencia; el PDF es respaldo reintentable.
-  const result = message?.result && typeof message.result === "object"
-    ? { ...message.result, pdf: undefined }
-    : message?.result;
-  return { ...message, result };
+  if (!message?.result || typeof message.result !== "object") return message;
+  const hadPdf = Boolean(message.result.pdf?.base64);
+  const result = { ...message.result, pdf: undefined };
+  // El texto congelado decía "PDF capturado" aunque acá lo soltamos: sincerarlo
+  // (el server lo registrará como pdf_pendiente y se adjunta después).
+  const msg = hadPdf && typeof message.message === "string"
+    ? message.message.replace(/PDF de respaldo capturado\.?/, "El PDF de respaldo quedó pendiente; la boleta queda registrada igual.")
+    : message.message;
+  return { ...message, message: msg, result };
 }
 
-async function stashPendingResult(jobId, message) {
+async function stashPendingResult(jobId, message, empresaId) {
   if (!jobId) return;
   try {
-    const stored = await chrome.storage.local.get(PENDING_RESULTS_KEY);
-    const pending = stored?.[PENDING_RESULTS_KEY] && typeof stored[PENDING_RESULTS_KEY] === "object"
-      ? stored[PENDING_RESULTS_KEY]
-      : {};
-    pending[jobId] = { message: slimResultForStash(message), saved_at: Date.now() };
-    await chrome.storage.local.set({ [PENDING_RESULTS_KEY]: pending });
+    await chrome.storage.local.set({
+      [PENDING_RESULT_KEY_PREFIX + jobId]: {
+        message: slimResultForStash(message),
+        empresa_id: empresaId ?? null,
+        saved_at: Date.now(),
+        attempts: 0,
+      },
+    });
   } catch {
     // Best-effort: si storage falla, queda la entrega directa por la pestaña.
   }
@@ -212,35 +224,33 @@ async function stashPendingResult(jobId, message) {
 async function clearPendingResult(jobId) {
   if (!jobId) return;
   try {
-    const stored = await chrome.storage.local.get(PENDING_RESULTS_KEY);
-    const pending = stored?.[PENDING_RESULTS_KEY];
-    if (!pending || typeof pending !== "object" || !(jobId in pending)) return;
-    delete pending[jobId];
-    await chrome.storage.local.set({ [PENDING_RESULTS_KEY]: pending });
+    await chrome.storage.local.remove(PENDING_RESULT_KEY_PREFIX + jobId);
   } catch {
     // Best-effort.
   }
 }
 
-async function redeliverPendingResults(tabId) {
+async function redeliverPendingResults(tabId, empresaId) {
   if (!tabId) return;
   try {
-    const stored = await chrome.storage.local.get(PENDING_RESULTS_KEY);
-    const pending = stored?.[PENDING_RESULTS_KEY];
-    if (!pending || typeof pending !== "object") return;
+    const stored = await chrome.storage.local.get(null);
     const now = Date.now();
-    let mutated = false;
-    for (const [jobId, entry] of Object.entries(pending)) {
-      if (!entry?.message || (now - (entry.saved_at || 0)) > PENDING_RESULT_TTL_MS) {
-        delete pending[jobId];
-        mutated = true;
+    for (const [key, entry] of Object.entries(stored || {})) {
+      if (!key.startsWith(PENDING_RESULT_KEY_PREFIX)) continue;
+      if (!entry?.message || (now - (entry.saved_at || 0)) > PENDING_RESULT_TTL_MS
+        || (entry.attempts || 0) >= PENDING_RESULT_MAX_ATTEMPTS) {
+        chrome.storage.local.remove(key).catch(() => undefined);
         continue;
       }
+      // Solo a la MISMA empresa que emitió: sin este filtro, otro usuario logueado
+      // en el mismo navegador re-POSTeaba resultados ajenos bajo SU sesión
+      // (contaminaba su historial y le bloqueaba Emitir con avisos de otro).
+      if (!entry.empresa_id || !empresaId || entry.empresa_id !== empresaId) continue;
+      chrome.storage.local.set({ [key]: { ...entry, attempts: (entry.attempts || 0) + 1 } }).catch(() => undefined);
       // Reentrega al tab que hizo ping; app-bridge re-POSTea (idempotente) y al
       // confirmar llega el ack PERSISTED que limpia esta entrada.
       chrome.tabs.sendMessage(tabId, entry.message).catch(() => undefined);
     }
-    if (mutated) await chrome.storage.local.set({ [PENDING_RESULTS_KEY]: pending });
   } catch {
     // Best-effort.
   }
@@ -334,8 +344,10 @@ function handleWorkerAction(message, sender, sendResponse) {
       return false;
     }
 
-    // Un intento vencido no se reanuda: la app pudo cerrar el job y volver a emitir.
-    if (jobExpired(state)) {
+    // Un intento vencido no se reanuda: la app pudo cerrar el job y volver a
+    // emitir. (learn_only queda exento, igual que en scan/resume: una sesión de
+    // aprendizaje larga no emite nada y no debe cortarse a los 15 minutos.)
+    if (!state.learnOnly && jobExpired(state)) {
       expireWorker(state);
       sendResponse?.({ ok: true });
       return false;
@@ -344,6 +356,12 @@ function handleWorkerAction(message, sender, sendResponse) {
     state.filledDraft = false;
     state.submitted = false;
     sendToApp(state, statusMessage(state.jobId, "retrying", "Reintentando deteccion de e-Boleta.", true));
+    if (state.learnOnly) {
+      // Aprendizaje: solo re-escanear (recargar le pisaría la navegación al usuario).
+      scanWorkerPage(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
     // Recargar la página ANTES de re-intentar: la calculadora vuelve a cero. Sin
     // esto, re-teclear el monto CONCATENABA dígitos sobre lo ya tecleado y podía
     // salir una boleta real por un monto gigante (auditoría: crítico). El reload
@@ -828,8 +846,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_EXTENSION_PING") {
     // La app está viva: si hay folios pendientes de entrega (pestaña cerrada
-    // cuando terminó una emisión), reentregarlos ahora a ESTA pestaña.
-    redeliverPendingResults(sender.tab?.id);
+    // cuando terminó una emisión), reentregarlos ahora a ESTA pestaña — solo
+    // los de la MISMA empresa que declara el ping.
+    redeliverPendingResults(sender.tab?.id, message.empresa_id ?? null);
     sendResponse(baseMessage({
       type: "APP_CONTABLE_EXTENSION_PONG",
       extension_version: EXTENSION_VERSION,
@@ -846,6 +865,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clearPendingResult(message.job_id);
       const state = activeJobs.get(message.job_id);
       if (state) state.resultPersisted = true;
+    } else if (message.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO"].includes(message.error)) {
+      // Rechazo PERMANENTE de la cuenta: reintentar jamás va a funcionar.
+      // (FORBIDDEN no limpia: el resultado es de otra sesión y su dueño lo
+      // reintenta desde la suya; el filtro por empresa evita el spam acá.)
+      clearPendingResult(message.job_id);
     }
     sendResponse?.({ ok: true });
     return false;

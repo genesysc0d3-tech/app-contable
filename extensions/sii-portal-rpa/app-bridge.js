@@ -39,17 +39,21 @@
     const data = event.data;
     if (!data || data.source !== APP_SOURCE || !ALLOWED_TYPES.has(data.type)) return;
 
+    // JOB_CLOSE es fire-and-forget: su fallo NO se reporta como status "error".
+    // Reportarlo creaba un BUCLE infinito con la app cuando la extensión quedaba
+    // huérfana (recargada/deshabilitada): error → JOB_CLOSE → error → JOB_CLOSE…
+    const fireAndForget = data.type === "APP_CONTABLE_SII_JOB_CLOSE";
     try {
       chrome.runtime.sendMessage(data, (response) => {
         if (chrome.runtime.lastError) {
-          reportBridgeError(data, chrome.runtime.lastError.message || "No se pudo contactar la extension");
+          if (!fireAndForget) reportBridgeError(data, chrome.runtime.lastError.message || "No se pudo contactar la extension");
           return;
         }
 
         if (response) postToPage(response);
       });
     } catch (error) {
-      reportBridgeError(data, error instanceof Error ? error.message : "Extension no disponible. Recarga la extension y esta pagina.");
+      if (!fireAndForget) reportBridgeError(data, error instanceof Error ? error.message : "Extension no disponible. Recarga la extension y esta pagina.");
     }
   });
 
@@ -79,6 +83,7 @@
               type: "APP_CONTABLE_SII_RESULT_PERSISTED",
               job_id: message.job_id ?? null,
               ok: persisted?.ok === true,
+              error: persisted?.error ?? null,
             }, () => { void chrome.runtime.lastError; });
           } catch {
             // Extensión recargada: el stash reintenta solo.
