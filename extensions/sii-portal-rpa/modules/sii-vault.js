@@ -1,5 +1,7 @@
 "use strict";
 
+import { isRutValido, normalizeRut } from "./rut.js";
+
 export const SII_VAULT_CAPABILITIES = [
   "sii_vault_status",
   "sii_vault_encrypted",
@@ -24,6 +26,8 @@ export async function siiVaultStatus() {
     encrypted: Boolean(meta?.encrypted),
     has_rut: Boolean(meta?.has_rut),
     has_clave: Boolean(meta?.has_clave),
+    has_empresa_rut: Boolean(meta?.has_empresa_rut),
+    empresa_rut: typeof meta?.empresa_rut === "string" ? meta.empresa_rut : null,
     updated_at: typeof meta?.updated_at === "string" ? meta.updated_at : null,
     unlocked: isUnlocked(),
     unlocked_until: isUnlocked() ? new Date(unlockedVault.expiresAt).toISOString() : null,
@@ -62,10 +66,23 @@ export function getUnlockedSiiCredentials() {
   };
 }
 
+// Lee el RUT de empresa emisora configurado (override explícito del usuario). Es PÚBLICO
+// (vive en meta en claro), así que NO requiere desbloquear la bóveda. Devuelve el RUT
+// canónico o null si no se configuró.
+export async function getSiiEmpresaRutDefault() {
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
+  const raw = vault?.meta?.empresa_rut;
+  return typeof raw === "string" && raw ? normalizeRut(raw) : null;
+}
+
 async function saveSiiVault(payload) {
   const validationError = validatePayload(payload);
   if (validationError) return { ok: false, error: validationError };
   const passphrase = payload.passphrase ?? payload.pin;
+  // RUT de empresa emisora (opcional, PÚBLICO): override explícito de por cuál persona
+  // jurídica emitir. Se normaliza a forma canónica; null si no se configuró.
+  const empresaRut = payload.empresa_rut && String(payload.empresa_rut).trim() ? normalizeRut(payload.empresa_rut) : null;
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -95,6 +112,8 @@ async function saveSiiVault(payload) {
         encrypted: true,
         has_rut: true,
         has_clave: true,
+        has_empresa_rut: Boolean(empresaRut),
+        empresa_rut: empresaRut, // en claro: el RUT de empresa es público, se lee sin desbloquear
         updated_at: now,
       },
     },
@@ -155,6 +174,8 @@ function validatePayload(payload) {
   if (typeof payload.rut !== "string" || !payload.rut.trim()) return "RUT_REQUIRED";
   if (typeof payload.clave !== "string" || !payload.clave) return "CLAVE_REQUIRED";
   if (!isValidPassphrase(payload.passphrase ?? payload.pin)) return "SII_PASSPHRASE_INVALID";
+  // empresa_rut es OPCIONAL; si viene, debe ser un RUT válido (DV módulo 11).
+  if (payload.empresa_rut && String(payload.empresa_rut).trim() && !isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
   return null;
 }
 

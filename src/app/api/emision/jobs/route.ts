@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { CURRENT_EMISSION_AUTHORIZATION_VERSION, getEmissionAuthorizationStatus } from "@/lib/emission/authorizations";
+import { validarRut } from "@/lib/sii/validation";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled";
@@ -174,8 +175,15 @@ export async function POST(request: Request) {
   }
 
   const expectedEmisorRut = cleanText(empresa?.rut) ?? cleanText(payload.expected_emisor_rut);
-  if (provider === "sii_local" && !expectedEmisorRut) {
-    return NextResponse.json({ ok: false, error: "EMPRESA_SIN_RUT" }, { status: 422 });
+  if (provider === "sii_local") {
+    // Fuente de verdad del emisor: sin RUT no se puede garantizar por cuál empresa se
+    // emite. Fail-closed en 2 niveles: ausente, o presente con DV (módulo 11) inválido.
+    if (!expectedEmisorRut) {
+      return NextResponse.json({ ok: false, error: "EMPRESA_SIN_RUT" }, { status: 422 });
+    }
+    if (!validarRut(expectedEmisorRut)) {
+      return NextResponse.json({ ok: false, error: "EMISOR_RUT_INVALID", detalle: expectedEmisorRut }, { status: 422 });
+    }
   }
 
   try {

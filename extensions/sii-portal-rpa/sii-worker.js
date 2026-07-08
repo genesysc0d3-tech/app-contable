@@ -117,6 +117,21 @@
     }
   }
 
+  // Aviso INMEDIATO al librero de que el EMITIR real ya se cliqueó, sin esperar la
+  // confirmación de 16s. Arma el candado anti-doble-emisión al instante y protege el
+  // folio aunque el content script muera después (puerto cerrado). Fire-and-forget.
+  function notifyFinalEmitClicked() {
+    try {
+      chrome.runtime.sendMessage({
+        source: EXT_SOURCE,
+        type: "APP_CONTABLE_SII_FINAL_EMIT_CLICKED",
+        job_id: currentJobId,
+      }, () => { void chrome.runtime.lastError; });
+    } catch {
+      // Sin conexión: el librero igual infiere post-emit por el cierre de puerto.
+    }
+  }
+
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -558,15 +573,104 @@
       }) || null;
   }
 
-  // El contador puede operar varias empresas en e-Boleta (selector superior):
-  // antes de emitir se verifica que el RUT emisor visible sea el del job.
+  // --- RUT canónico (espejo de modules/rut.js — el content-script NO importa ESM;
+  // misma lógica y mismos vectores de test). La regla del emisor exige comparación
+  // EXACTA sobre "CUERPO-DV", nunca substring. ---
+  function normalizeRut(value) {
+    if (value == null) return null;
+    const s = String(value).trim().toUpperCase().replace(/[^0-9K]/g, "");
+    if (s.length < 2) return null;
+    const dv = s.slice(-1);
+    let cuerpo = s.slice(0, -1);
+    if (!/^[0-9]+$/.test(cuerpo)) return null;
+    cuerpo = cuerpo.replace(/^0+/, "") || "0";
+    if (cuerpo.length < 1 || cuerpo.length > 8) return null;
+    if (!/^[0-9K]$/.test(dv)) return null;
+    return cuerpo + "-" + dv;
+  }
+  function extractRutTokens(text) {
+    if (text == null) return [];
+    const out = [];
+    const seen = new Set();
+    const matches = String(text).match(/\b\d{1,2}(?:\.?\d{3}){2}\s*-?\s*[0-9kK]\b/g) || [];
+    for (const m of matches) {
+      const canon = normalizeRut(m);
+      if (canon && !seen.has(canon)) { seen.add(canon); out.push(canon); }
+    }
+    return out;
+  }
+
+  // Lee el RUT del EMISOR ACTIVO (el que el portal tiene seleccionado) desde el
+  // .v-select__selections del selector superior. Es el ÚNICO v-select cuyo texto de
+  // selección trae un RUT (los demás son tipo boleta / pago / sucursal), así que es
+  // inmune a que el dropdown esté abierto mostrando toda la lista. Devuelve canónico o null.
+  // (Estructura verificada contra el DOM real de eboleta.sii.cl, cuenta multi-empresa.)
+  function readActiveEmisorRut() {
+    for (const sel of document.querySelectorAll(".v-select__selections")) {
+      const toks = extractRutTokens(sel.textContent || "");
+      if (toks.length) return toks[0];
+    }
+    return null;
+  }
+
+  // SELECCIÓN ACTIVA del emisor: deja seleccionada la empresa objetivo en el selector
+  // superior (v-select). Si ya está activa, no toca nada. Match EXACTO por RUT contra la
+  // lista REAL de habilitados; 0 o >1 coincidencias → THROW (nunca la primera, nunca
+  // adivinar). Re-verifica que quedó activa. Corre ANTES de teclear el monto.
+  async function selectEmisorByRut(rutObjetivo) {
+    const objetivo = normalizeRut(rutObjetivo);
+    if (!objetivo) throw new Error("Sin RUT de empresa objetivo: no puedo seleccionar el emisor. Abortado por seguridad.");
+    if (readActiveEmisorRut() === objetivo) return; // ya está la correcta
+    const emisorSelect = Array.from(document.querySelectorAll(".v-select"))
+      .find((vs) => extractRutTokens(vs.querySelector(".v-select__selections")?.textContent || "").length > 0);
+    if (!emisorSelect) throw new Error("No encontré el selector de emisor en el portal. Selecciónalo manualmente y reintenta.");
+    await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
+    let options = [];
+    for (let i = 0; i < 24; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const menu = Array.from(document.querySelectorAll(".v-menu__content"))
+        .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
+      if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
+    }
+    if (!options.length) throw new Error("No pude leer la lista de empresas habilitadas del portal. Selecciona el emisor manualmente y reintenta.");
+    const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
+    if (candidatos.length !== 1) {
+      throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala manualmente y reintenta.`);
+    }
+    await clickElement(candidatos[0]);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (readActiveEmisorRut() !== objetivo) {
+      throw new Error(`Intenté seleccionar ${rutObjetivo} pero el emisor activo no quedó en ese RUT. Abortado por seguridad.`);
+    }
+  }
+
+  // Verifica (fail-CLOSED) que el EMISOR ACTIVO del portal sea EXACTO al del job. Ante
+  // cualquier duda (sin RUT objetivo, emisor activo no legible, o distinto) → THROW.
+  // Preferimos NO emitir a emitir bajo el emisor equivocado (incidente tributario). Corre
+  // ANTES del modal, con el selector superior visible.
   function assertEmisorRut(job) {
-    const want = String(job?.emisor_rut || "").replace(/[^0-9kK]/g, "").toUpperCase();
-    if (!want) return;
-    const rutsVisibles = (pageText().match(/\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dkK]/g) || [])
-      .map((r) => r.replace(/[^0-9kK]/g, "").toUpperCase());
-    if (rutsVisibles.length > 0 && !rutsVisibles.includes(want)) {
-      throw new Error(`El portal SII tiene seleccionada otra empresa. Elige el emisor RUT ${job.emisor_rut} en el selector superior y reintenta.`);
+    const objetivo = normalizeRut(job?.emisor_rut);
+    if (!objetivo) {
+      throw new Error("Sin RUT de empresa emisora en el trabajo: no puedo confirmar por cuál empresa emitir. Abortado por seguridad.");
+    }
+    const activo = readActiveEmisorRut();
+    if (!activo) {
+      throw new Error(`No pude leer el emisor activo del portal para confirmar que es ${job.emisor_rut}. Selecciona el emisor arriba y reintenta.`);
+    }
+    if (activo !== objetivo) {
+      throw new Error(`El emisor activo del portal es ${activo}, no ${job.emisor_rut}. Elige la empresa correcta en el selector superior y reintenta.`);
+    }
+  }
+
+  // Última compuerta JUSTO antes del EMITIR: si el emisor activo cambió a otro legible
+  // distinto del objetivo (re-render, reset del portal), abortar. Suave ante "no legible"
+  // por si el modal tapa el selector — la verificación dura ya corrió antes (arriba).
+  function assertEmisorNoCambio(job) {
+    const objetivo = normalizeRut(job?.emisor_rut);
+    if (!objetivo) return;
+    const activo = readActiveEmisorRut();
+    if (activo && activo !== objetivo) {
+      throw new Error(`El emisor cambió en el portal (ahora ${activo}, no ${job.emisor_rut}). Abortado antes de emitir; revisa el selector y reintenta.`);
     }
   }
 
@@ -823,7 +927,14 @@
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
     if (!buttonByText("EMITIR")) throw new Error("Pantalla e-Boleta no lista");
 
-    // Verificación de emisor antes de tocar nada (cuentas multi-empresa).
+    // Cuentas multi-empresa: dejar seleccionada la EMPRESA correcta antes de nada.
+    // Cambiar el emisor puede refrescar el portal para esa empresa, así que esperamos a
+    // que el EMITIR vuelva a estar listo. Luego verificación fail-closed del emisor activo.
+    await selectEmisorByRut(job?.emisor_rut);
+    for (let i = 0; i < 20 && !buttonByText("EMITIR"); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    if (!buttonByText("EMITIR")) throw new Error("La pantalla e-Boleta no volvió a estar lista tras seleccionar la empresa.");
     assertEmisorRut(job);
 
     renderOverlay("LOCKED_AUTOMATION", "Preparando e-Boleta. No escribas ni hagas click.");
@@ -909,7 +1020,15 @@
     renderOverlay("LOCKED_AUTOMATION", "Emitiendo boleta final en SII.");
     dialog = activeEmitDialog();
     if (!dialog) throw new Error("Modal Emitir e-Boleta cerrado antes de emitir; no se presiono el EMITIR final.");
+    assertEmisorNoCambio(job); // ÚLTIMA COMPUERTA: aborta si el emisor cambió (THROW aquí = ANTES de notifyFinalEmitClicked → job reintentable, sin folio, sin doble emisión)
     await clickFinalEmitInDialog(dialog);
+    notifyFinalEmitClicked(); // arma el candado en el librero AL INSTANTE (no espera los 16s)
+    // ⚠️ ZONA POST-EMIT: el EMITIR real YA se cliqueó. Cualquier fallo de aquí en
+    // adelante puede significar un folio emitido en el SII pero aún sin confirmar.
+    // Marcamos el error con finalEmitClicked para que el librero (background.js) NO
+    // cierre el trabajo ni permita re-emitir, y pase a CAPTURA: así nunca se pierde
+    // el folio ni se emite dos veces. (No cambia CÓMO se detecta/cliquea el EMITIR.)
+    try {
     await new Promise((resolve) => setTimeout(resolve, 2500));
     await clickFirstAvailable(["ACEPTAR", "CONFIRMAR", "SÍ", "CONTINUAR"]);
 
@@ -930,9 +1049,14 @@
       return false;
     })();
     if (!emitConfirmed) {
-      throw new Error("Cliqué EMITIR pero el SII no confirmó la boleta (revisa método de pago u otra validación). No se marcará como emitida.");
+      throw new Error("Cliqué EMITIR pero el SII no confirmó la boleta (revisa método de pago u otra validación). Buscaré el folio para no perderlo.");
     }
     renderOverlay("LOCKED_AUTOMATION", "Boleta emitida en SII. Capturando folio y respaldo.");
+    } catch (error) {
+      const tagged = error instanceof Error ? error : new Error(String(error));
+      tagged.finalEmitClicked = true;
+      throw tagged;
+    }
   }
 
   async function captureResultWhenReady(job) {
@@ -999,7 +1123,12 @@
     if (message.type === "APP_CONTABLE_SII_FILL_AND_EMIT") {
       fillAndEmit(message.job)
         .then(() => sendResponse({ ok: true }))
-        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+        .catch((error) => sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          // El librero usa esto para NO cerrar el trabajo ni re-emitir tras el emit real.
+          final_emit_clicked: error?.finalEmitClicked === true,
+        }));
       return true;
     }
     if (message.type === "APP_CONTABLE_SII_ATTEMPT_AUTOLOGIN") {

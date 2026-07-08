@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
@@ -347,7 +348,17 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   // Res. Ex. SII 44/2025: sobre ~135 UF la boleta debe identificar al comprador.
   const receptorObligatorioPendiente = total > umbralReceptor && (!receptorRut.trim() || !receptorRazonSocial.trim());
   const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorObligatorioPendiente && !emitiendo;
-  const canOpenLocalWorker = canSubmit && !localWorkerLoading && !lockBlocksEmission;
+  // Anti-doble-emisión CROSS-JOB: mientras una emisión SII siga sin resolverse
+  // (folio pendiente de capturar/ingresar), NO re-habilitar el botón aunque el
+  // servidor haya soltado el lock por una captura de evidencia débil. De lo
+  // contrario el usuario podría lanzar un job NUEVO y emitir la boleta dos veces
+  // (sin Nota de Crédito para revertir). Terminal = seguro para empezar otra.
+  // NOTA: "save_failed" queda FUERA del set terminal A PROPÓSITO — un fallo de
+  // guardado LOCAL no descarta que la boleta se emitiera en el SII; se resuelve por
+  // el panel "Recuperar emisión", no re-emitiendo. No lo agregues como terminal.
+  const siiWorkerPendiente = usesSiiLocal && localWorker != null
+    && !["emitted", "already_exists", "error", "cancelled", "closed"].includes(localWorker.status);
+  const canOpenLocalWorker = canSubmit && !localWorkerLoading && !lockBlocksEmission && !siiWorkerPendiente;
   const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : usesSimpleApi ? !canSubmit || lockBlocksEmission : !canSubmit;
   const primaryLabel = lockBlocksEmission && (usesSiiLocal || usesSimpleApi)
     ? "Emisión en curso"
@@ -1178,7 +1189,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
+    // maxHeight + minHeight:0 auto-limitan el modal a 92vh: el .ed-panel padre usa max-height
+    // sin height definido (para que asomen las pestañas laterales necesita overflow:visible), así
+    // que height:100% no resolvía y el contenido se DERRAMABA por abajo (Emitir se salía del cuadro).
+    // Con el root acotado, el .ed-body (flex:1 + overflowY:auto) scrollea adentro y nada se sale.
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", maxHeight: "92vh", minHeight: 0, position: "relative" }}>
       <style>{`
         .ed-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:start}
         .ed-card{border:1px solid var(--border);background:var(--bg-muted);border-radius:12px;padding:10px}
@@ -1507,9 +1522,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
 
             <div style={{ marginTop: "auto", paddingTop: 2 }}>
-              <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
-                {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y razón social)." : "Ingresa detalle y monto."}
-              </div>
+              {siiWorkerPendiente ? (
+                <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
+                  Hay una emisión SII anterior sin resolver ({localWorker?.status}). Si quedó colgada,{" "}
+                  <button type="button" onClick={() => { setLocalWorker(null); setLocalWorkerLoading(false); }} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>reiníciala</button>{" "}para volver a emitir.
+                </div>
+              ) : (
+                <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
+                  {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y razón social)." : "Ingresa detalle y monto."}
+                </div>
+              )}
               <button onClick={() => { void handlePrimaryEmit(); }} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
                 {primaryLabel}
               </button>
@@ -1518,8 +1540,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         </div>
       </div>
 
-      {/* Pre-vuelo: confirmación SIEMPRE antes de emitir (patrón modal de EmitirTabContent). */}
-      {confirmOpen && (
+      {/* Pre-vuelo: confirmación SIEMPRE antes de emitir (patrón modal de EmitirTabContent).
+          Se PORTALEA a document.body: el .ed-overlay usa backdrop-filter, que lo vuelve el
+          bloque contenedor de los position:fixed → sin portal el modal se ancla al panel y se
+          rompe (y hay backdrop-filters anidados). Portal = fixed real al viewport. */}
+      {confirmOpen && createPortal((
         <div onClick={() => { if (!emitBusy) setConfirmOpen(false); }}
           style={{ position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
@@ -1555,10 +1580,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
-      {/* Autorización legal (primera emisión real por proveedor) — mismo lenguaje visual. */}
-      {legalPrompt && (
+      {/* Autorización legal (primera emisión real por proveedor) — mismo lenguaje visual.
+          Portaleado a document.body por la misma razón que el pre-vuelo (backdrop-filter del overlay). */}
+      {legalPrompt && createPortal((
         <div onClick={() => resolveLegalPrompt(false)}
           style={{ position: "fixed", inset: 0, zIndex: 210, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
@@ -1586,7 +1612,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
     </div>
   );

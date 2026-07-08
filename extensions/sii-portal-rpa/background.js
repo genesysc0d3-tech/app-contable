@@ -2,7 +2,7 @@
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl } from "./modules/core.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, siiVaultStatus } from "./modules/sii-vault.js";
+import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, siiVaultStatus } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
 const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEAPI_CAPABILITIES];
@@ -226,6 +226,17 @@ function handleWorkerAction(message, sender, sendResponse) {
       return false;
     }
 
+    // Candado anti-doble-emisión: si el EMITIR real ya se cliqueó una vez en este
+    // trabajo, "Reintentar" NUNCA vuelve a emitir (eso duplicaría la boleta). Solo
+    // reintenta capturar el folio que ya se emitió.
+    if (state.finalEmitClicked) {
+      state.awaitingResult = true;
+      sendToApp(state, statusMessage(state.jobId, "capturing_result", "Ya se emitió en este trabajo; no re-emito. Reintentando capturar el folio.", true));
+      captureWorkerResult(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
+
     state.filledDraft = false;
     state.submitted = false;
     sendToApp(state, statusMessage(state.jobId, "retrying", "Reintentando deteccion de e-Boleta.", true));
@@ -243,6 +254,15 @@ function handleWorkerAction(message, sender, sendResponse) {
   }
 
   if (message.action === "cancel") {
+    // Post-emit: NO enviar "cancelled" (la app cerraría el job y se perdería el folio
+    // YA emitido). El usuario puede cerrar la ventana, pero el trabajo queda vivo
+    // pidiendo el folio; el backfill del servidor lo registra con evidencia fuerte.
+    if (state.finalEmitClicked) {
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "Cerraste tras emitir. Si viste el folio, ingrésalo abajo para no perder la boleta; no re-emitas.", true));
+      closeWorker(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
     sendToApp(state, statusMessage(state.jobId, "cancelled", "Operacion SII cancelada por el usuario.", true));
     closeWorker(state);
     sendResponse?.({ ok: true });
@@ -304,7 +324,7 @@ function scanWorkerPage(state, attempt = 1) {
 
     const hasEmitButton = Array.isArray(map.buttons) && map.buttons.some((button) => button?.text === "EMITIR");
     const hasNumberPad = Array.isArray(map.buttons) && ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].every((digit) => map.buttons.some((button) => button?.text === digit));
-    if (!state.submitted && hasEmitButton && hasNumberPad) {
+    if (!state.submitted && !state.finalEmitClicked && hasEmitButton && hasNumberPad) {
       state.filledDraft = true;
       state.submitted = true;
       sendToApp(state, statusMessage(
@@ -320,6 +340,23 @@ function scanWorkerPage(state, attempt = 1) {
       }), (emitResponse) => {
         if (chrome.runtime.lastError || !emitResponse?.ok) {
           const errorMessage = emitResponse?.error || chrome.runtime.lastError?.message || "No se pudo emitir en e-Boleta.";
+          // Post-emit si: (a) el worker lo confirmó, o (b) el candado ya se armó por el
+          // aviso inmediato (notifyFinalEmitClicked, apenas se cliqueó el EMITIR real).
+          // En ese caso NO cerrar ni re-emitir: capturar el folio. Una muerte de puerto
+          // SIN el candado armado se trata como PRE-emit (no hubo folio) → se permite
+          // reintentar, sin inventar una emisión que no ocurrió (evita folio fantasma).
+          if (emitResponse?.final_emit_clicked || state.finalEmitClicked) {
+            state.finalEmitClicked = true;
+            state.awaitingResult = true;
+            sendToApp(state, statusMessage(
+              state.jobId,
+              "capturing_result",
+              "Cliqué EMITIR y el SII aún no confirma. Busco el folio para no perderlo (no re-emito).",
+              true,
+            ));
+            captureWorkerResult(state);
+            return;
+          }
           pauseWorker(state, errorMessage);
           sendToApp(state, statusMessage(
             state.jobId,
@@ -355,6 +392,31 @@ function focusWorkerForHuman(state, message) {
 }
 
 // Cuando el usuario desbloquea (o guarda) la bóveda SII desde las opciones,
+// Ventana aislada de desbloqueo (compliant): al llegar un trabajo con la bóveda SII
+// bloqueada, la abrimos sola. La clave local se tipea DENTRO de la extensión, nunca en
+// la página de la app. Al desbloquear, resumeJobsAfterSiiUnlock continúa la emisión.
+let siiUnlockWindowId = null;
+function openSiiUnlockWindow() {
+  if (siiUnlockWindowId != null) {
+    chrome.windows.update(siiUnlockWindowId, { focused: true }, () => {
+      if (chrome.runtime.lastError) siiUnlockWindowId = null;
+    });
+    return;
+  }
+  chrome.windows.create({
+    url: chrome.runtime.getURL("unlock.html"),
+    type: "popup",
+    width: 400,
+    height: 380,
+    focused: true,
+  }, (win) => {
+    siiUnlockWindowId = win?.id ?? null;
+  });
+}
+chrome.windows.onRemoved.addListener((winId) => {
+  if (winId === siiUnlockWindowId) siiUnlockWindowId = null;
+});
+
 // reanudar solo los trabajos que quedaron esperando login: vuelve a escanear
 // la ventana SII, que ahora encontrará credenciales y hará autologin. Esto
 // es lo que hace que "desbloquear bóveda" continúe la emisión sin recargar nada.
@@ -362,7 +424,7 @@ function resumeJobsAfterSiiUnlock() {
   const credentials = getUnlockedSiiCredentials();
   if (!credentials?.rut || !credentials?.clave) return;
   for (const state of activeJobs.values()) {
-    if (state.learnOnly || state.submitted || state.awaitingResult) continue;
+    if (state.learnOnly || state.submitted || state.awaitingResult || state.finalEmitClicked) continue;
     state.humanRequired = false;
     state.autologinAttempted = false; // permitir un intento limpio ahora que hay clave
     sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Bóveda desbloqueada: reanudando inicio de sesión SII automático.", true));
@@ -386,10 +448,14 @@ function attemptSiiAutologin(state) {
   if (!credentials?.rut || !credentials?.clave) {
     siiVaultStatus()
       .then((status) => {
-        const message = status.configured
-          ? "SII requiere inicio de sesión, pero la bóveda SII está bloqueada. Abre la extensión, ingresa tu passphrase local y presiona Desbloquear; luego reintenta la emisión. También puedes iniciar sesión manualmente aquí."
-          : "SII requiere inicio de sesión. Configura la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta.";
-        focusWorkerForHuman(state, message);
+        if (status.configured) {
+          // Bóveda configurada pero bloqueada: abrir SOLO el mini-prompt de desbloqueo
+          // (aislado en la extensión) — sin "mil pasos". Al desbloquear, la emisión sigue.
+          openSiiUnlockWindow();
+          focusWorkerForHuman(state, "Abrimos una ventana para desbloquear tu bóveda local: ingresa tu clave ahí y la emisión sigue sola. (También puedes iniciar sesión a mano aquí.)");
+        } else {
+          focusWorkerForHuman(state, "SII requiere inicio de sesión. Configura la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta.");
+        }
       })
       .catch(() => focusWorkerForHuman(state, "SII requiere inicio de sesión. Desbloquea la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta."));
     return;
@@ -525,6 +591,14 @@ function captureWorkerResult(state) {
   }), (captureResponse) => {
     if (chrome.runtime.lastError || !captureResponse?.ok) {
       const errorMessage = captureResponse?.error || chrome.runtime.lastError?.message || "No se pudo capturar el resultado SII.";
+      // Post-emit: NUNCA subir "error" (la app cerraría el job y perdería el folio ya
+      // emitido). Pausar en un estado NO-cerrante para reintentar captura o ingresar
+      // el folio a mano. El candado sigue impidiendo re-emitir.
+      if (state.finalEmitClicked) {
+        pauseWorker(state, "Emitiste, pero no pude capturar el folio automáticamente. Reintenta captura o ingresa el folio visible. NO re-emitas.");
+        sendToApp(state, statusMessage(state.jobId, "result_needs_review", "Emitiste, pero no pude capturar el folio. Reintenta captura o ingrésalo abajo; no re-emitas.", true));
+        return;
+      }
       pauseWorker(state, errorMessage);
       sendToApp(state, statusMessage(state.jobId, "error", errorMessage, true));
       return;
@@ -558,6 +632,9 @@ async function openWorkerWindow(job, appTabId) {
     learningTimer: null,
     filledDraft: false,
     submitted: false,
+    // Candado monótono: una vez que se cliqueó el EMITIR real, NUNCA se re-emite ni
+    // se cierra el trabajo por "error" — solo se captura/recupera el folio.
+    finalEmitClicked: false,
     awaitingResult: false,
     autologinAttempted: false,
     humanRequired: false,
@@ -579,6 +656,16 @@ async function openWorkerWindow(job, appTabId) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "APP_CONTABLE_SII_WORKER_ACTION" && isAllowedSiiUrl(sender.url || "")) {
     return handleWorkerAction(message, sender, sendResponse);
+  }
+
+  // Aviso inmediato del worker: el EMITIR real ya se cliqueó. Arma el candado AL
+  // INSTANTE (no espera la confirmación de 16s), así ninguna ruta de error post-emit
+  // (captura, salida de dominio, ventana cerrada) cierra el job ni permite re-emitir.
+  if (message?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED" && isAllowedSiiUrl(sender.url || "")) {
+    const state = stateForWorkerTab(sender.tab?.id);
+    if (state) state.finalEmitClicked = true;
+    sendResponse?.({ ok: true });
+    return false;
   }
 
   if (message?.type?.startsWith("APP_CONTABLE_SIMPLEAPI_VAULT_") && sender.url?.startsWith(chrome.runtime.getURL(""))) {
@@ -626,24 +713,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SII_BOLETA_JOB") {
     const job = message.job;
-    const validationError = validateSiiBoletaJob(job);
-    if (validationError) {
-      sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
-      return false;
-    }
-
-    openWorkerWindow(job, sender.tab?.id)
-      .then((state) => {
-        sendResponse(statusMessage(job.job_id, "opening_sii", "Ventana segura SII creada.", true));
-        sendToApp(state, statusMessage(
-          job.job_id,
-          "waiting_sii_login",
-          state.learnOnly ? "Modo aprendizaje activo. Inicia sesion y navega el flujo SII." : "Inicia sesion en la ventana SII dedicada.",
-          true,
-        ));
+    // Override explícito del usuario: si configuró un RUT de empresa emisora en la
+    // extensión, ESE manda (caso p.ej. cuenta con varias personas jurídicas donde la app
+    // no puede saber cuál). Vacío = manda el emisor_rut que trae la app. La validación
+    // (incluye el gate de emisor) corre DESPUÉS del override, sobre el RUT final.
+    getSiiEmpresaRutDefault()
+      .then((configEmpresaRut) => {
+        if (configEmpresaRut) job.emisor_rut = configEmpresaRut;
+        const validationError = validateSiiBoletaJob(job);
+        if (validationError) {
+          sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
+          return;
+        }
+        return openWorkerWindow(job, sender.tab?.id).then((state) => {
+          sendResponse(statusMessage(job.job_id, "opening_sii", "Ventana segura SII creada.", true));
+          sendToApp(state, statusMessage(
+            job.job_id,
+            "waiting_sii_login",
+            state.learnOnly ? "Modo aprendizaje activo. Inicia sesion y navega el flujo SII." : "Inicia sesion en la ventana SII dedicada.",
+            true,
+          ));
+        });
       })
       .catch((error) => {
-        sendResponse(statusMessage(job.job_id, "error", error instanceof Error ? error.message : String(error), true));
+        sendResponse(statusMessage(job?.job_id ?? null, "error", error instanceof Error ? error.message : String(error), true));
       });
 
     return true;
@@ -733,6 +826,12 @@ chrome.windows.onRemoved.addListener((windowId) => {
   for (const [jobId, state] of activeJobs.entries()) {
     if (state.workerWindowId !== windowId) continue;
     activeJobs.delete(jobId);
+    // Post-emit: no cerrar el job (perdería el folio). Pedir el folio a mano; el
+    // backfill del servidor lo registra con evidencia fuerte aunque el job cierre.
+    if (state.finalEmitClicked) {
+      sendToApp(state, statusMessage(jobId, "result_needs_review", "Cerraste la ventana tras emitir. Si viste el folio, ingrésalo abajo para no perder la boleta; no re-emitas.", true));
+      continue;
+    }
     sendToApp(state, statusMessage(jobId, "cancelled", "La ventana segura SII fue cerrada.", true));
   }
 });
@@ -743,6 +842,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (state.workerTabId !== tabId) continue;
     const url = tab.url || "";
     if (!/^https:\/\/([^/]+\.)?sii\.cl\//.test(url)) {
+      // Post-emit: no cerrar el job por salir del dominio (descarga de PDF, compartir,
+      // logout) — un folio ya pudo emitirse. Estado no-cerrante para capturar/ingresar.
+      if (state.finalEmitClicked) {
+        pauseWorker(state, "Saliste del dominio SII tras emitir. Si ves el folio, usa Capturar folio o ingrésalo. NO re-emitas.");
+        sendToApp(state, statusMessage(state.jobId, "result_needs_review", "Saliste del dominio SII tras emitir. Captura o ingresa el folio para no perderlo; no re-emitas.", true));
+        continue;
+      }
       pauseWorker(state, "La ventana segura salio del dominio SII.");
       sendToApp(state, statusMessage(state.jobId, "error", "La ventana segura salio del dominio SII.", true));
       continue;

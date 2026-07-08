@@ -7,7 +7,9 @@ export type EmisionJob = Tables<"emision_jobs">;
 
 export type EmisionJobGate =
   | { ok: true; job: EmisionJob }
-  | { ok: false; status: number; error: string; detalle?: string };
+  // En cierre/expiración incluimos `job` (ownership ya verificada): permite el
+  // respaldo por evidencia fuerte para no perder un folio ya emitido.
+  | { ok: false; status: number; error: string; detalle?: string; job?: EmisionJob };
 
 export async function requireEmisionJob(args: {
   sb: Sb;
@@ -27,9 +29,9 @@ export async function requireEmisionJob(args: {
   if (!job) return { ok: false, status: 409, error: "EMISION_JOB_NOT_FOUND" };
   if (job.provider !== args.provider) return { ok: false, status: 409, error: "EMISION_JOB_PROVIDER_MISMATCH" };
   if (job.usuario_id !== args.userId) return { ok: false, status: 403, error: "EMISION_JOB_FORBIDDEN" };
-  if (new Date(job.expires_at).getTime() <= Date.now()) return { ok: false, status: 409, error: "EMISION_JOB_EXPIRED" };
+  if (new Date(job.expires_at).getTime() <= Date.now()) return { ok: false, status: 409, error: "EMISION_JOB_EXPIRED", job };
   if (["completed", "failed", "cancelled", "expired"].includes(job.estado)) {
-    return { ok: false, status: 409, error: "EMISION_JOB_CLOSED" };
+    return { ok: false, status: 409, error: "EMISION_JOB_CLOSED", job };
   }
 
   const acceso = await validarAccesoCuenta(args.sb, args.userId, job.empresa_id);

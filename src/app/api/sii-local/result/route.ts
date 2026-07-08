@@ -336,6 +336,81 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
   return { monto_neto: neto, iva: total - neto, monto_exento: 0 };
 }
 
+// 🛟 Respaldo idempotente de un folio cuando el trabajo (emision_job) ya NO está
+// vivo (cerrado/expirado: ventana cerrada, cancelación, carrera) pero el SII SÍ
+// emitió la boleta. Deriva el emisor de la empresa (no del job) y deduplica por
+// empresa+tipo+folio. Espeja la forma de /api/sii-local/reconcile y NO toca el
+// ciclo de vida del job ni el lock. Es la última línea de la invariante sagrada:
+// "una boleta emitida nunca queda invisible en la app".
+async function backfillFolioSinJobVivo(
+  sb: ServiceDb,
+  args: {
+    empresaId: string;
+    tipoDte: 39 | 41;
+    folio: number;
+    montoTotal: number;
+    fechaEmision: string;
+    totales: { monto_total?: number | null; monto_neto?: number | null; iva?: number | null; monto_exento?: number | null } | null;
+    jobId: string | null;
+  },
+): Promise<{ ok: boolean; boletaId?: string; already?: boolean; error?: string }> {
+  const { data: empresa } = await sb
+    .from("empresas").select("rut, razon_social, giro, direccion, comuna").eq("id", args.empresaId).single();
+  if (!empresa?.rut || !empresa?.razon_social) return { ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" };
+
+  // Dedup por la MISMA clave que el índice UNIQUE(empresa_id, tipo_dte, folio) —
+  // sin filtrar estado — para no chocar con la constraint ni "registrar" un folio
+  // nuevo apuntando a una boleta anulada (coincide con el camino vivo).
+  const { data: existing } = await sb
+    .from("boletas_emitidas").select("id")
+    .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio)
+    .maybeSingle();
+  if (existing) return { ok: true, boletaId: existing.id, already: true };
+
+  const totals = totalsFor(args.tipoDte, args.montoTotal, args.totales);
+  const { data: boleta, error } = await sb
+    .from("boletas_emitidas")
+    .insert({
+      empresa_id: args.empresaId,
+      tipo_dte: args.tipoDte,
+      folio: args.folio,
+      fecha_emision: args.fechaEmision,
+      emisor_rut: empresa.rut,
+      emisor_razon_social: empresa.razon_social,
+      emisor_giro: empresa.giro,
+      emisor_direccion: empresa.direccion,
+      emisor_comuna: empresa.comuna,
+      monto_neto: totals.monto_neto,
+      monto_exento: totals.monto_exento,
+      iva: totals.iva,
+      monto_total: args.montoTotal,
+      detalles: [{ nro_lin: 1, nombre: "Servicio prestado", qty: 1, monto: args.montoTotal }],
+      xml_dte: `sii-local://boleta/${args.tipoDte}/${args.folio}`,
+      ted: `sii-local://ted/${args.tipoDte}/${args.folio}`,
+      track_id: `sii-local-recovery:${args.jobId ?? "manual"}:${args.tipoDte}:${args.folio}`,
+      estado: "aceptado",
+      emision_proveedor: "sii_local",
+      emision_sandbox: false,
+      proveedor_respuesta: {
+        origen: "backfill_job_cerrado",
+        job_id: args.jobId,
+        pdf_pendiente: true,
+        recuperado_en: new Date().toISOString(),
+      },
+    })
+    .select("id").single();
+
+  if (error || !boleta) {
+    // Carrera: otra request insertó el mismo folio entremedio → tratar como already.
+    const { data: raced } = await sb
+      .from("boletas_emitidas").select("id")
+      .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio).maybeSingle();
+    if (raced) return { ok: true, boletaId: raced.id, already: true };
+    return { ok: false, error: error?.message ?? "INSERT_FAILED" };
+  }
+  return { ok: true, boletaId: boleta.id, already: false };
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -396,10 +471,55 @@ export async function POST(request: Request) {
 
   const jobGate = await requireEmisionJob({ sb, userId: user.id, jobId: effectiveJobId, provider: "sii_local" });
   if (!jobGate.ok) {
-    // El gate falló (job expirado/cerrado), pero el payload puede traer una boleta
-    // REAL ya emitida en el SII. Si la descartamos, queda invisible en la app y el
-    // usuario re-emite → boleta real DUPLICADA (sin NC para revertir). La guardamos
-    // con status 'job_gate_failed' para que recover_latest/reconcile la levanten.
+    // 🛟 RED DE SEGURIDAD ("nunca se pierde un folio"): el gate falló porque el job
+    // está cerrado/expirado, pero el payload puede traer una boleta REAL con
+    // evidencia fuerte (folio confiable). Antes esto era un callejón sin salida y el
+    // folio quedaba invisible → el usuario re-emitía → boleta DUPLICADA (sin NC para
+    // revertir). Ahora la respaldamos igual (idempotente). Esto también hace que los
+    // botones "Recuperar folio/PDF" funcionen aunque el job ya esté cerrado.
+    const jobCerrado = jobGate.job;
+    const evidenciaFuerte = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
+    if (
+      jobCerrado &&
+      (jobGate.error === "EMISION_JOB_CLOSED" || jobGate.error === "EMISION_JOB_EXPIRED") &&
+      folio && tipoDte && montoTotal && fechaEmision && evidenciaFuerte
+    ) {
+      const respaldo = await backfillFolioSinJobVivo(sb, {
+        empresaId: jobCerrado.empresa_id,
+        tipoDte,
+        folio,
+        montoTotal,
+        fechaEmision,
+        totales: result?.totales ?? null,
+        jobId: effectiveJobId,
+      });
+      if (respaldo.ok) {
+        await rememberResult(sb, {
+          user_id: user.id,
+          job_id: effectiveJobId,
+          folio,
+          status: respaldo.already ? "already_exists" : "backfill_job_cerrado",
+          result: result ?? null,
+        });
+        await recordOpsEvent({
+          sb,
+          severity: "warn",
+          source: "sii-local",
+          eventName: "sii_local_backfill_job_cerrado",
+          summary: "Folio respaldado pese a job cerrado (red anti-pérdida)",
+          usuarioId: user.id,
+          resourceType: "emision_job",
+          resourceId: effectiveJobId,
+          metadata: { folio, tipo_dte: tipoDte, already_exists: Boolean(respaldo.already) },
+        });
+        return NextResponse.json({ ok: true, boleta_id: respaldo.boletaId ?? null, folio, already_exists: Boolean(respaldo.already), recuperado: true });
+      }
+      // Si el backfill falló (p.ej. empresa sin datos fiscales), caemos al stash de
+      // abajo para no perder el rastro del folio.
+    }
+    // El gate falló y no se pudo respaldar arriba: el payload puede traer una boleta
+    // REAL ya emitida. Si la descartamos, queda invisible y el usuario re-emite →
+    // boleta DUPLICADA. La guardamos con status 'job_gate_failed' para reintentar.
     if (!payload.recover_latest && (folio || result)) {
       await rememberResult(sb, {
         user_id: user.id,
