@@ -21,10 +21,10 @@
           <h2>SII Local · Boletas</h2>
           <span class="module-status" id="sii-status-label">Sin configurar</span>
         </div>
-        <p class="copy">Boletas 39 / 41 desde el Portal e-Boleta, en una ventana segura y visible. La extensión no guarda ni envía tu clave SII.</p>
+        <p class="copy">Boletas 39 / 41 desde el Portal e-Boleta, en una ventana segura y visible. Tu clave se cifra solo en este equipo; nunca la guardamos ni la enviamos a nuestros servidores. Se desbloquea sola con tu sesión de la app: no necesitas ninguna clave extra.</p>
 
         <form class="vault-form" id="sii-vault-form">
-          <p class="step full">Paso 1 · Tus datos del SII</p>
+          <p class="step full">Conecta tu clave del SII (una sola vez)</p>
           <label>
             <span>RUT</span>
             <span class="inp"><input type="text" id="sii-rut" autocomplete="username" placeholder="12.345.678-9"></span>
@@ -38,12 +38,8 @@
             <span class="inp"><input type="text" id="sii-empresa-rut" placeholder="Ej: 77.155.156-4"></span>
             <span class="hint">Si emites por una persona jurídica específica, ponla acá y la extensión emitirá siempre por ella. Vacío = la define la app en cada boleta.</span>
           </label>
-
-          <p class="step full">Paso 2 · Crea una clave local para proteger esto</p>
           <label class="full">
-            <span>Clave local (passphrase)</span>
-            <span class="inp"><input type="password" id="sii-pin" autocomplete="new-password" placeholder="Mínimo 12 caracteres"><button type="button" class="eye" data-eye="sii-pin" aria-label="Mostrar clave">ver</button></span>
-            <span class="hint">La inventas tú. Te la pediremos para desbloquear la bóveda antes de emitir. Si la pierdes, tendrás que reconfigurar.</span>
+            <span class="hint">Necesitas tener la app abierta con tu sesión iniciada para conectar: tu sesión es la que desbloquea la clave al emitir. Si cierras sesión o pierdes el equipo, revócala con «Eliminar / revocar».</span>
           </label>
         </form>
 
@@ -51,17 +47,16 @@
           <div><dt>RUT</dt><dd id="sii-vault-rut">Falta</dd></div>
           <div><dt>Clave cifrada</dt><dd id="sii-vault-clave">Falta</dd></div>
           <div><dt>Cifrado local</dt><dd id="sii-vault-encrypted">Sin bóveda</dd></div>
-          <div><dt>Desbloqueo</dt><dd id="sii-vault-unlocked">Bloqueada</dd></div>
+          <div><dt>Estado</dt><dd id="sii-vault-unlocked">Sin conectar</dd></div>
         </dl>
 
         <div class="actions">
-          <button type="submit" form="sii-vault-form" id="save-sii-vault">Guardar clave cifrada</button>
-          <button type="button" class="secondary" id="unlock-sii-vault">Desbloquear</button>
+          <button type="submit" form="sii-vault-form" id="save-sii-vault">Conectar clave del SII</button>
           <span class="spacer"></span>
           <button type="button" class="link" id="refresh-status">Actualizar</button>
-          <button type="button" class="link" id="clear-sii-vault">Eliminar bóveda</button>
+          <button type="button" class="link" id="clear-sii-vault">Eliminar / revocar</button>
         </div>
-        <p class="muted" id="sii-diagnostic">Tu clave se cifra en este navegador con la clave local (mínimo 12 caracteres). Si el inicio de sesión automático falla, se abrirá el SII para entrar a mano.</p>
+        <p class="muted" id="sii-diagnostic">Tu Clave Tributaria se cifra en este equipo con una llave aleatoria. Se desbloquea sola con tu sesión de la app cuando emites. Si el inicio de sesión automático falla, se abre el SII para entrar a mano.</p>
       </article>
 
       <!-- Carril avanzado: facturas (bloqueado hasta habilitar en la empresa) -->

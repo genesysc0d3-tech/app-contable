@@ -3,7 +3,7 @@
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl } from "./modules/core.js";
 import { normalizeRut } from "./modules/rut.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, siiVaultStatus } from "./modules/sii-vault.js";
+import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
 const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEAPI_CAPABILITIES];
@@ -537,41 +537,36 @@ function focusWorkerForHuman(state, message) {
   sendToApp(state, statusMessage(state.jobId, "waiting_manual_login", message, true));
 }
 
-// Cuando el usuario desbloquea (o guarda) la bóveda SII desde las opciones,
-// Ventana aislada de desbloqueo (compliant): al llegar un trabajo con la bóveda SII
-// bloqueada, la abrimos sola. La clave local se tipea DENTRO de la extensión, nunca en
-// la página de la app. Al desbloquear, resumeJobsAfterSiiUnlock continúa la emisión.
-let siiUnlockWindowId = null;
-function openSiiUnlockWindow() {
-  if (siiUnlockWindowId != null) {
-    chrome.windows.update(siiUnlockWindowId, { focused: true }, () => {
-      if (chrome.runtime.lastError) siiUnlockWindowId = null;
-    });
-    return;
+// Bóveda v2: NO hay popup de passphrase. Al llegar a la pantalla de login del SII,
+// la extensión pide WS al servidor con la sesión de la app y desbloquea sola. Si no
+// puede (sesión expirada, bóveda no conectada/revocada), se lo dice al usuario en
+// humano y ofrece el login manual — nunca una clave local. Traduce el código del
+// unlock a un mensaje simple.
+function mapUnlockError(error) {
+  switch (error) {
+    case "SESSION_EXPIRED":
+      return "Tu sesión de la app se cerró. Entra de nuevo a la app y la emisión sigue sola (o inicia sesión en el SII a mano aquí).";
+    case "VAULT_REVOKED":
+      return "La conexión con el SII fue revocada en este equipo. Reconéctala desde la app para emitir automáticamente (o inicia sesión a mano aquí).";
+    case "VAULT_NEEDS_MIGRATION":
+      return "Actualizamos la seguridad: reconecta tu clave del SII una vez desde la app (ya no necesitas clave local). Mientras, puedes iniciar sesión a mano aquí.";
+    case "VAULT_OTHER_USER":
+      return "Esta cuenta no tiene su clave del SII conectada en este equipo. Conéctala desde la app (o inicia sesión a mano aquí).";
+    case "VAULT_NOT_CONFIGURED":
+      return "Aún no conectas tu clave del SII. Hazlo desde la app para emitir automáticamente (o inicia sesión a mano aquí).";
+    case "APP_ORIGIN_DESCONOCIDO":
+      return "Abre la app y vuelve a intentar para conectar el desbloqueo automático (o inicia sesión a mano aquí).";
+    default:
+      return "No pude desbloquear tu clave del SII automáticamente. Inicia sesión a mano en esta ventana y continúo.";
   }
-  chrome.windows.create({
-    url: chrome.runtime.getURL("unlock.html"),
-    type: "popup",
-    width: 400,
-    height: 380,
-    focused: true,
-  }, (win) => {
-    siiUnlockWindowId = win?.id ?? null;
-  });
 }
-chrome.windows.onRemoved.addListener((winId) => {
-  if (winId === siiUnlockWindowId) siiUnlockWindowId = null;
-});
 
-// reanudar solo los trabajos que quedaron esperando login: vuelve a escanear
-// la ventana SII, que ahora encontrará credenciales y hará autologin. Esto
-// es lo que hace que "desbloquear bóveda" continúe la emisión sin recargar nada.
+// Reanuda los trabajos en espera de login tras (re)conectar la bóveda desde la app:
+// vuelve a escanear; attemptSiiAutologin desbloqueará solo con la sesión.
 function resumeJobsAfterSiiUnlock() {
-  const credentials = getUnlockedSiiCredentials();
-  if (!credentials?.rut || !credentials?.clave) return;
   for (const state of activeJobs.values()) {
     if (state.learnOnly || state.submitted || state.awaitingResult || state.finalEmitClicked) continue;
-    // Un worker viejo abandonado NO se reanuda: sin este check, desbloquear la
+    // Un worker viejo abandonado NO se reanuda: sin este check, reconectar la
     // bóveda hacía emitir al job nuevo Y al viejo (dos boletas idénticas).
     if (jobExpired(state)) {
       expireWorker(state);
@@ -579,48 +574,43 @@ function resumeJobsAfterSiiUnlock() {
     }
     state.humanRequired = false;
     state.autologinAttempted = false; // permitir un intento limpio ahora que hay clave
-    sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Bóveda desbloqueada: reanudando inicio de sesión SII automático.", true));
+    sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Clave SII conectada: reanudando inicio de sesión automático.", true));
     sendToSii(state.workerTabId, {
       type: "APP_CONTABLE_SII_WORKER_OVERLAY",
       job_id: state.jobId,
       mode: "LOCKED_AUTOMATION",
-      message: "Bóveda desbloqueada. Reanudando inicio de sesión automático en SII.",
+      message: "Clave SII conectada. Reanudando inicio de sesión automático en SII.",
     });
     scanWorkerPage(state);
   }
 }
 
-function attemptSiiAutologin(state) {
+async function attemptSiiAutologin(state) {
   if (state.autologinAttempted) {
     focusWorkerForHuman(state, "No pudimos iniciar sesión automáticamente. SII puede pedir captcha, 2FA, cambio de clave o selección de contribuyente. Inicia sesión manualmente en esta ventana y continuaremos automáticamente.");
     return;
   }
 
-  const credentials = getUnlockedSiiCredentials();
-  if (!credentials?.rut || !credentials?.clave) {
-    siiVaultStatus()
-      .then((status) => {
-        if (status.configured) {
-          // Bóveda configurada pero bloqueada: abrir SOLO el mini-prompt de desbloqueo
-          // (aislado en la extensión) — sin "mil pasos". Al desbloquear, la emisión sigue.
-          openSiiUnlockWindow();
-          focusWorkerForHuman(state, "Abrimos una ventana para desbloquear tu bóveda local: ingresa tu clave ahí y la emisión sigue sola. (También puedes iniciar sesión a mano aquí.)");
-        } else {
-          focusWorkerForHuman(state, "SII requiere inicio de sesión. Configura la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta.");
-        }
-      })
-      .catch(() => focusWorkerForHuman(state, "SII requiere inicio de sesión. Desbloquea la bóveda SII en la extensión o inicia sesión manualmente; continuaremos automáticamente al entrar a e-Boleta."));
+  // Desbloqueo v2: pide WS al servidor con la sesión (dentro del módulo de bóveda).
+  const unlock = await getUnlockedSiiCredentials(state.appOrigin);
+  if (!unlock.ok) {
+    // Evita martillar el servidor en escaneos repetidos del mismo login; el login
+    // manual sigue disponible y (re)conectar desde la app dispara resumeJobsAfterSiiUnlock.
+    state.autologinAttempted = true;
+    state.unlockError = unlock.error;
+    focusWorkerForHuman(state, mapUnlockError(unlock.error));
     return;
   }
+  const credentials = { rut: unlock.rut, clave: unlock.clave };
 
   state.autologinAttempted = true;
   state.humanRequired = false;
-  sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Intentando inicio de sesión SII con la bóveda local desbloqueada.", true));
+  sendToApp(state, statusMessage(state.jobId, "autologin_attempting", "Iniciando sesión en el SII con tu clave (desbloqueada por tu sesión).", true));
   sendToSii(state.workerTabId, {
     type: "APP_CONTABLE_SII_WORKER_OVERLAY",
     job_id: state.jobId,
     mode: "LOCKED_AUTOMATION",
-    message: "Intentando iniciar sesión en SII desde la bóveda local. Si SII pide captcha o 2FA, abriremos esta ventana para intervención manual.",
+    message: "Iniciando sesión en SII. Si SII pide captcha o 2FA, esta ventana quedará lista para tu intervención.",
   });
 
   chrome.tabs.sendMessage(state.workerTabId, baseMessage({
@@ -760,7 +750,7 @@ function captureWorkerResult(state) {
   });
 }
 
-async function openWorkerWindow(job, appTabId) {
+async function openWorkerWindow(job, appTabId, appOrigin) {
   const worker = await chrome.windows.create({
     url: SII_START_URL,
     type: "popup",
@@ -776,6 +766,7 @@ async function openWorkerWindow(job, appTabId) {
     jobId: job.job_id,
     job,
     appTabId,
+    appOrigin: appOrigin ?? null, // origen de la app para pedir WS (desbloqueo v2)
     workerWindowId: worker.id,
     workerTabId,
     createdAt: new Date().toISOString(),
@@ -830,11 +821,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type?.startsWith("APP_CONTABLE_SII_VAULT_") && sender.url?.startsWith(chrome.runtime.getURL(""))) {
-    handleSiiVaultMessage(message)
+    // El SAVE (setup) viene de la página de la extensión (chrome-extension://), que
+    // no conoce el origen de la app; el módulo usa el último origen visto (stash de
+    // rememberAppOrigin, seteado por el ping/job de la app). message.app_origin es un
+    // hint opcional si la app abrió el setup pasándolo.
+    handleSiiVaultMessage(message, message.app_origin)
       .then((response) => {
         sendResponse(baseMessage(response));
-        // Desbloqueo o guardado exitoso → reanudar trabajos en espera de login.
-        if ((message.type === "APP_CONTABLE_SII_VAULT_UNLOCK" || message.type === "APP_CONTABLE_SII_VAULT_SAVE") && response?.ok) {
+        // (Re)conexión exitosa → reanudar trabajos en espera de login.
+        if (message.type === "APP_CONTABLE_SII_VAULT_SAVE" && response?.ok) {
           resumeJobsAfterSiiUnlock();
         }
       })
@@ -843,6 +838,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (!isAllowedAppUrl(sender.url || "")) return false;
+
+  // Aprende el origen de la app de cualquier mensaje suyo: lo usa el setup (SAVE) y
+  // el desbloqueo v2 para el fetch de WS al casillero del servidor.
+  try { void rememberAppOrigin(new URL(sender.url).origin); } catch { /* ignore */ }
 
   if (message?.type === "APP_CONTABLE_EXTENSION_PING") {
     // La app está viva: si hay folios pendientes de entrega (pestaña cerrada
@@ -899,6 +898,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SII_BOLETA_JOB") {
     const job = message.job;
+    let jobAppOrigin = null;
+    try { jobAppOrigin = new URL(sender.url).origin; } catch { jobAppOrigin = null; }
     // RUT de empresa configurado en la extensión: SOLO rellena cuando el job no trae
     // emisor; si AMBOS existen y difieren, se ABORTA con mensaje claro (fail-closed).
     // Antes el config pisaba en silencio al de la app: la boleta salía en el SII a
@@ -925,7 +926,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
           return;
         }
-        return openWorkerWindow(job, sender.tab?.id).then((state) => {
+        return openWorkerWindow(job, sender.tab?.id, jobAppOrigin).then((state) => {
           sendResponse(statusMessage(job.job_id, "opening_sii", "Ventana segura SII creada.", true));
           sendToApp(state, statusMessage(
             job.job_id,

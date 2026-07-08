@@ -78,13 +78,18 @@
     elements.siiVaultRut.textContent = status?.has_rut ? "Configurado" : "Falta";
     elements.siiVaultClave.textContent = status?.has_clave ? "Configurada" : "Falta";
     elements.siiVaultEncrypted.textContent = status?.encrypted ? "Activo" : "Sin bóveda";
-    elements.siiVaultUnlocked.textContent = status?.unlocked ? `Hasta ${formatDate(status.unlocked_until)}` : "Bloqueada";
+    // v2: se desbloquea con la sesión de la app, no con passphrase.
+    elements.siiVaultUnlocked.textContent = status?.needs_migration
+      ? "Reconecta tu clave"
+      : status?.configured
+        ? (status?.unlocked ? "Lista (sesión activa)" : "Se activa con tu sesión")
+        : "Sin conectar";
 
     const ready = Boolean(status?.has_rut && status?.has_clave && status?.encrypted);
     const partial = Boolean(status?.has_rut || status?.has_clave);
     setModuleStatus(elements.siiStatusLabel, ready, {
-      ready: "Listo para emitir",
-      pending: partial ? "Falta completar" : "Sin configurar",
+      ready: "Conectada — emite sola",
+      pending: status?.needs_migration ? "Reconecta tu clave" : partial ? "Falta completar" : "Sin conectar",
     });
   }
 
@@ -178,7 +183,6 @@
     const rut = elements.siiRut?.value || "";
     const clave = elements.siiClave?.value || "";
     const empresaRut = elements.siiEmpresaRut?.value || "";
-    const passphrase = elements.siiPin?.value || "";
     if (!rut.trim()) {
       setDiag(elements.siiDiagnostic, "error", "Ingresa el RUT del SII.");
       return;
@@ -187,45 +191,29 @@
       setDiag(elements.siiDiagnostic, "error", "Ingresa la Clave Tributaria.");
       return;
     }
-    if (!isStrongSiiPassphrase(passphrase)) {
-      setDiag(elements.siiDiagnostic, "error", "La clave local debe tener mínimo 12 caracteres y no puede ser sólo números.");
-      return;
-    }
 
     elements.saveSiiVault.disabled = true;
-    setDiag(elements.siiDiagnostic, "info", "Cifrando tu clave del SII localmente…");
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave, empresa_rut: empresaRut, passphrase } }, (response) => {
+    setDiag(elements.siiDiagnostic, "info", "Cifrando y conectando tu clave del SII…");
+    // v2: sin passphrase. La clave se cifra localmente con una llave aleatoria y se
+    // conecta a tu sesión de la app (se desbloquea sola al emitir). Debes tener la
+    // app abierta y con sesión iniciada para conectar.
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave, empresa_rut: empresaRut } }, (response) => {
       elements.saveSiiVault.disabled = false;
       if (chrome.runtime.lastError || !response?.ok) {
-        setDiag(elements.siiDiagnostic, "error", errorMessage(response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED"));
+        const err = response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED";
+        setDiag(elements.siiDiagnostic, "error", err === "APP_ORIGIN_DESCONOCIDO"
+          ? "Abre la app (con tu sesión iniciada) en otra pestaña y vuelve a intentar: la conexión necesita tu sesión."
+          : errorMessage(err));
         return;
       }
       elements.siiClave.value = "";
-      elements.siiPin.value = "";
-      setDiag(elements.siiDiagnostic, "ok", "✓ Clave del SII guardada y desbloqueada por 10 minutos.");
-      renderSiiStatus(response.status);
-    });
-  });
-
-  elements.unlockSiiVault?.addEventListener("click", () => {
-    const passphrase = elements.siiPin?.value || "";
-    if (!isStrongSiiPassphrase(passphrase)) {
-      setDiag(elements.siiDiagnostic, "error", "Ingresa tu clave local (mínimo 12 caracteres) para desbloquear.");
-      return;
-    }
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_UNLOCK", passphrase }, (response) => {
-      if (chrome.runtime.lastError || !response?.ok) {
-        setDiag(elements.siiDiagnostic, "error", errorMessage(response?.error || chrome.runtime.lastError?.message || "SII_UNLOCK_FAILED"));
-        return;
-      }
-      elements.siiPin.value = "";
-      setDiag(elements.siiDiagnostic, "ok", "✓ Bóveda del SII desbloqueada por 10 minutos.");
+      setDiag(elements.siiDiagnostic, "ok", "✓ Clave del SII conectada. Se usa sola cuando emites, mientras tengas tu sesión iniciada. No necesitas ninguna clave local.");
       renderSiiStatus(response.status);
     });
   });
 
   elements.clearSiiVault?.addEventListener("click", () => {
-    const confirmed = window.confirm("Esto elimina la Clave Tributaria cifrada de este navegador. ¿Continuar?");
+    const confirmed = window.confirm("Esto elimina la Clave Tributaria cifrada de este navegador y revoca su llave en el servidor. ¿Continuar?");
     if (!confirmed) return;
     chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_CLEAR" }, (response) => {
       if (chrome.runtime.lastError || !response?.ok) {

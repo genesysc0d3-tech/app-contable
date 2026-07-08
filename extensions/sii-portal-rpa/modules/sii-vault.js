@@ -5,209 +5,293 @@ import { isRutValido, normalizeRut } from "./rut.js";
 export const SII_VAULT_CAPABILITIES = [
   "sii_vault_status",
   "sii_vault_encrypted",
-  "sii_vault_unlock_memory",
+  "sii_vault_envelope_v2",
+  "sii_vault_session_unlock",
 ];
 
-const STORAGE_KEY = "app_contable_sii_vault_v1";
-const LOCK_KEY = "app_contable_sii_vault_lock_v1";
-const PBKDF2_ITERATIONS = 250000;
-const UNLOCK_TTL_MS = 10 * 60 * 1000;
-const MAX_UNLOCK_ATTEMPTS = 5;
-const LOCK_WINDOW_MS = 5 * 60 * 1000;
+// ── Bóveda SII v2 "llave partida" (envelope encryption) ──────────────────────
+// Las credenciales SII se cifran con una llave aleatoria VK. VK se envuelve bajo
+// KEK = HKDF(WS, salt), donde WS (32 bytes) vive SOLO en el servidor (tabla
+// extension_vault_keys) y se obtiene con la sesión de la app. Ni el disco solo
+// (no tiene WS) ni el servidor solo (no tiene el ciphertext ni la Clave
+// Tributaria) pueden descifrar. Adiós passphrase manual: la sesión de la app es
+// lo único que desbloquea, y VK se cachea en chrome.storage.session (sobrevive la
+// muerte del service worker MV3 —el bug del "10 min" falso—, se borra al cerrar
+// el navegador, invisible a content scripts).
+const STORAGE_KEY = "app_contable_sii_vault_v2"; // slot único, etiquetado con user_id
+const LEGACY_V1_KEY = "app_contable_sii_vault_v1";
+const DEVICE_ID_KEY = "app_contable_sii_device_id";
+const APP_ORIGIN_KEY = "app_contable_sii_app_origin"; // último origen de app visto (session)
+const VK_CACHE_KEY = "app_contable_sii_vk"; // { vk, user_id, expiresAt } en storage.session
+const VK_TTL_MS = 10 * 60 * 1000;
 
-let unlockedVault = null;
+// ── Identidad de dispositivo (estable por navegador, compartida entre usuarios) ─
+async function ensureDeviceId() {
+  const stored = await chrome.storage.local.get(DEVICE_ID_KEY);
+  const existing = stored?.[DEVICE_ID_KEY];
+  if (typeof existing === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(existing)) return existing;
+  const id = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(18)));
+  await chrome.storage.local.set({ [DEVICE_ID_KEY]: id });
+  return id;
+}
+
+// El origen de la app (para el fetch de WS) lo aprende el background de los
+// mensajes de la pestaña de la app y lo guarda acá; el setup y la emisión lo usan.
+export async function rememberAppOrigin(origin) {
+  if (typeof origin === "string" && /^https?:\/\//.test(origin)) {
+    try { await chrome.storage.session.set({ [APP_ORIGIN_KEY]: origin }); } catch { /* best-effort */ }
+  }
+}
+async function getAppOrigin(explicit) {
+  if (typeof explicit === "string" && /^https?:\/\//.test(explicit)) return explicit;
+  try {
+    const s = await chrome.storage.session.get(APP_ORIGIN_KEY);
+    const o = s?.[APP_ORIGIN_KEY];
+    if (typeof o === "string" && o) return o;
+  } catch { /* fall through */ }
+  return null;
+}
+
+async function readSlot() {
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  const slot = stored?.[STORAGE_KEY];
+  return slot && typeof slot === "object" ? slot : null;
+}
 
 export async function siiVaultStatus() {
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
-  const meta = vault?.meta && typeof vault.meta === "object" ? vault.meta : null;
+  const slot = await readSlot();
+  const meta = slot?.meta && typeof slot.meta === "object" ? slot.meta : null;
+  let legacyV1 = false;
+  if (!slot) {
+    const legacy = await chrome.storage.local.get(LEGACY_V1_KEY);
+    legacyV1 = Boolean(legacy?.[LEGACY_V1_KEY]);
+  }
   return {
     configured: Boolean(meta?.configured),
-    encrypted: Boolean(meta?.encrypted),
+    encrypted: Boolean(meta?.configured),
     has_rut: Boolean(meta?.has_rut),
     has_clave: Boolean(meta?.has_clave),
     has_empresa_rut: Boolean(meta?.has_empresa_rut),
     empresa_rut: typeof meta?.empresa_rut === "string" ? meta.empresa_rut : null,
     updated_at: typeof meta?.updated_at === "string" ? meta.updated_at : null,
-    unlocked: isUnlocked(),
-    unlocked_until: isUnlocked() ? new Date(unlockedVault.expiresAt).toISOString() : null,
+    session_unlock: true, // v2: se desbloquea con la sesión de la app, sin passphrase
+    needs_migration: legacyV1, // bóveda v1 antigua: pedir reconectar la clave una vez
+    unlocked: await hasFreshVk(),
   };
 }
 
-export async function handleSiiVaultMessage(message) {
+export async function handleSiiVaultMessage(message, appOriginHint) {
   if (message?.type === "APP_CONTABLE_SII_VAULT_STATUS") {
     return { type: "APP_CONTABLE_SII_VAULT_STATUS_RESULT", status: await siiVaultStatus() };
   }
 
   if (message?.type === "APP_CONTABLE_SII_VAULT_SAVE") {
-    const result = await saveSiiVault(message.payload);
+    const result = await saveSiiVault(message.payload, appOriginHint);
     return { type: "APP_CONTABLE_SII_VAULT_SAVE_RESULT", ...result, status: await siiVaultStatus() };
   }
 
-  if (message?.type === "APP_CONTABLE_SII_VAULT_UNLOCK") {
-    const result = await unlockSiiVault(message.passphrase ?? message.pin);
-    return { type: "APP_CONTABLE_SII_VAULT_UNLOCK_RESULT", ...result, status: await siiVaultStatus() };
+  if (message?.type === "APP_CONTABLE_SII_VAULT_CLEAR") {
+    // Borra la bóveda local Y revoca WS en el servidor (kill-switch completo).
+    await clearVkCache();
+    await chrome.storage.local.remove(STORAGE_KEY);
+    await revokeDeviceKey(appOriginHint).catch(() => undefined);
+    return { type: "APP_CONTABLE_SII_VAULT_CLEAR_RESULT", ok: true, status: await siiVaultStatus() };
   }
 
-  if (message?.type === "APP_CONTABLE_SII_VAULT_CLEAR") {
-    unlockedVault = null;
-    await chrome.storage.local.remove(STORAGE_KEY);
-    return { type: "APP_CONTABLE_SII_VAULT_CLEAR_RESULT", ok: true, status: await siiVaultStatus() };
+  // v2 no usa passphrase: el UNLOCK manual queda como no-op informativo.
+  if (message?.type === "APP_CONTABLE_SII_VAULT_UNLOCK") {
+    return { type: "APP_CONTABLE_SII_VAULT_UNLOCK_RESULT", ok: true, status: await siiVaultStatus() };
   }
 
   return null;
 }
 
-export function getUnlockedSiiCredentials() {
-  if (!isUnlocked()) return null;
-  return {
-    rut: unlockedVault.secrets.rut,
-    clave: unlockedVault.secrets.clave,
-  };
-}
-
-// Lee el RUT de empresa emisora configurado (override explícito del usuario). Es PÚBLICO
-// (vive en meta en claro), así que NO requiere desbloquear la bóveda. Devuelve el RUT
-// canónico o null si no se configuró.
+// PÚBLICO (no cifrado): RUT de empresa emisora configurado. No requiere desbloquear.
 export async function getSiiEmpresaRutDefault() {
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
-  const raw = vault?.meta?.empresa_rut;
+  const slot = await readSlot();
+  const raw = slot?.meta?.empresa_rut;
   return typeof raw === "string" && raw ? normalizeRut(raw) : null;
-}
-
-async function saveSiiVault(payload) {
-  const validationError = validatePayload(payload);
-  if (validationError) return { ok: false, error: validationError };
-  const passphrase = payload.passphrase ?? payload.pin;
-  // RUT de empresa emisora (opcional, PÚBLICO): override explícito de por cuál persona
-  // jurídica emitir. Se normaliza a forma canónica; null si no se configuró.
-  const empresaRut = payload.empresa_rut && String(payload.empresa_rut).trim() ? normalizeRut(payload.empresa_rut) : null;
-
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const now = new Date().toISOString();
-  const encrypted = await encryptCleartext({
-    rut: String(payload.rut).trim(),
-    clave: payload.clave,
-    saved_at: now,
-  }, passphrase, salt, iv);
-
-  const secrets = {
-    rut: String(payload.rut).trim(),
-    clave: payload.clave,
-    saved_at: now,
-  };
-
-  await chrome.storage.local.set({
-    [STORAGE_KEY]: {
-      version: 1,
-      algorithm: "PBKDF2-SHA256-AES-GCM",
-      kdf_iterations: PBKDF2_ITERATIONS,
-      salt: bytesToBase64(salt),
-      iv: bytesToBase64(iv),
-      ciphertext: bytesToBase64(new Uint8Array(encrypted)),
-      meta: {
-        configured: true,
-        encrypted: true,
-        has_rut: true,
-        has_clave: true,
-        has_empresa_rut: Boolean(empresaRut),
-        empresa_rut: empresaRut, // en claro: el RUT de empresa es público, se lee sin desbloquear
-        updated_at: now,
-      },
-    },
-  });
-  unlockedVault = {
-    secrets,
-    expiresAt: Date.now() + UNLOCK_TTL_MS,
-  };
-  return { ok: true };
-}
-
-// Freno a fuerza bruta de passphrase vía mensajes: 5 fallos seguidos bloquean el
-// desbloqueo por 5 minutos. Persistido en storage para sobrevivir al sleep
-// del service worker MV3.
-async function getUnlockLock() {
-  const stored = await chrome.storage.local.get(LOCK_KEY);
-  const lock = stored?.[LOCK_KEY];
-  return lock && typeof lock === "object" ? { failed: Number(lock.failed) || 0, until: Number(lock.until) || 0 } : { failed: 0, until: 0 };
-}
-
-async function registerFailedUnlock() {
-  const lock = await getUnlockLock();
-  const failed = lock.failed + 1;
-  if (failed >= MAX_UNLOCK_ATTEMPTS) {
-    await chrome.storage.local.set({ [LOCK_KEY]: { failed: 0, until: Date.now() + LOCK_WINDOW_MS } });
-  } else {
-    await chrome.storage.local.set({ [LOCK_KEY]: { failed, until: 0 } });
-  }
-}
-
-async function unlockSiiVault(passphrase) {
-  if (!isValidPassphrase(passphrase)) return { ok: false, error: "SII_PASSPHRASE_INVALID" };
-  const lock = await getUnlockLock();
-  if (lock.until > Date.now()) return { ok: false, error: "VAULT_LOCKED_RETRY_LATER" };
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const vault = stored?.[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object" ? stored[STORAGE_KEY] : null;
-  if (!vault?.ciphertext || !vault?.salt || !vault?.iv) return { ok: false, error: "VAULT_NOT_CONFIGURED" };
-
-  try {
-    unlockedVault = {
-      secrets: await decryptPayload(vault, passphrase),
-      expiresAt: Date.now() + UNLOCK_TTL_MS,
-    };
-    setTimeout(() => {
-      if (unlockedVault && unlockedVault.expiresAt <= Date.now()) unlockedVault = null;
-    }, UNLOCK_TTL_MS + 1000);
-    await chrome.storage.local.remove(LOCK_KEY);
-    return { ok: true };
-  } catch {
-    unlockedVault = null;
-    await registerFailedUnlock();
-    return { ok: false, error: "SII_PASSPHRASE_INVALID" };
-  }
 }
 
 function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "PAYLOAD_INVALID";
   if (typeof payload.rut !== "string" || !payload.rut.trim()) return "RUT_REQUIRED";
   if (typeof payload.clave !== "string" || !payload.clave) return "CLAVE_REQUIRED";
-  if (!isValidPassphrase(payload.passphrase ?? payload.pin)) return "SII_PASSPHRASE_INVALID";
-  // empresa_rut es OPCIONAL; si viene, debe ser un RUT válido (DV módulo 11).
   if (payload.empresa_rut && String(payload.empresa_rut).trim() && !isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
   return null;
 }
 
-function isValidPassphrase(value) {
-  return typeof value === "string" && value.length >= 12 && !/^\d+$/.test(value);
+async function saveSiiVault(payload, appOriginHint) {
+  const validationError = validatePayload(payload);
+  if (validationError) return { ok: false, error: validationError };
+
+  const appOrigin = await getAppOrigin(appOriginHint);
+  if (!appOrigin) return { ok: false, error: "APP_ORIGIN_DESCONOCIDO" };
+
+  // 1) Registrar WS en el servidor (autenticado con la sesión de la app).
+  const deviceId = await ensureDeviceId();
+  const reg = await callVaultKey(appOrigin, { action: "register", device_id: deviceId });
+  if (!reg.ok) return { ok: false, error: reg.error || "VAULT_KEY_REGISTER_FAILED" };
+  const userId = reg.user_id;
+  const wsBytes = base64ToBytes(reg.ws);
+
+  // 2) VK aleatoria → cifra las credenciales.
+  const empresaRut = payload.empresa_rut && String(payload.empresa_rut).trim() ? normalizeRut(payload.empresa_rut) : null;
+  const now = new Date().toISOString();
+  const vk = crypto.getRandomValues(new Uint8Array(32));
+  const credIv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await aesEncrypt(vk, credIv, JSON.stringify({
+    rut: String(payload.rut).trim(), clave: payload.clave, saved_at: now,
+  }));
+
+  // 3) KEK = HKDF(WS, salt) → envuelve VK.
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const kek = await hkdfKey(wsBytes, salt);
+  const wrapIv = crypto.getRandomValues(new Uint8Array(12));
+  const wrappedVk = await aesEncryptKey(kek, wrapIv, vk);
+
+  await chrome.storage.local.set({
+    [STORAGE_KEY]: {
+      version: 2,
+      user_id: userId,
+      device_id: deviceId,
+      salt: bytesToBase64(salt),
+      cred_iv: bytesToBase64(credIv),
+      ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+      wrapped_vk_iv: bytesToBase64(wrapIv),
+      wrapped_vk: bytesToBase64(new Uint8Array(wrappedVk)),
+      meta: {
+        configured: true, has_rut: true, has_clave: true,
+        has_empresa_rut: Boolean(empresaRut), empresa_rut: empresaRut, updated_at: now,
+      },
+    },
+  });
+  // La bóveda v1 antigua ya no se usa; limpiarla para no confundir el estado.
+  await chrome.storage.local.remove(LEGACY_V1_KEY);
+  await cacheVk(vk, userId);
+  return { ok: true };
 }
 
-async function encryptCleartext(cleartextPayload, passphrase, salt, iv) {
-  const key = await deriveKey(passphrase, salt);
-  const cleartext = new TextEncoder().encode(JSON.stringify(cleartextPayload));
-  return crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, cleartext);
+// Desbloqueo para emitir: devuelve credenciales o un CÓDIGO de error humano (nunca
+// pide passphrase). Usa el cache de VK; si no está, pide WS al servidor con la
+// sesión y desenvuelve. Anti cross-user: si el usuario logueado no es el dueño de
+// la bóveda de este equipo, NO desenvuelve (pide reconectar).
+export async function getUnlockedSiiCredentials(appOriginHint) {
+  const slot = await readSlot();
+  if (!slot?.meta?.configured) {
+    const legacy = await chrome.storage.local.get(LEGACY_V1_KEY);
+    if (legacy?.[LEGACY_V1_KEY]) return { ok: false, error: "VAULT_NEEDS_MIGRATION" };
+    return { ok: false, error: "VAULT_NOT_CONFIGURED" };
+  }
+
+  const cached = await getFreshVk();
+  if (cached && cached.user_id === slot.user_id) {
+    return unwrapCreds(slot, base64ToBytes(cached.vk));
+  }
+
+  const appOrigin = await getAppOrigin(appOriginHint);
+  if (!appOrigin) return { ok: false, error: "APP_ORIGIN_DESCONOCIDO" };
+  const deviceId = await ensureDeviceId();
+  const got = await callVaultKey(appOrigin, { action: "get", device_id: deviceId });
+  if (!got.ok) {
+    if (got.status === 401) return { ok: false, error: "SESSION_EXPIRED" };
+    if (got.status === 404 || got.status === 410) return { ok: false, error: "VAULT_REVOKED" };
+    return { ok: false, error: got.error || "VAULT_KEY_GET_FAILED" };
+  }
+  if (got.user_id !== slot.user_id) return { ok: false, error: "VAULT_OTHER_USER" };
+
+  try {
+    const kek = await hkdfKey(base64ToBytes(got.ws), base64ToBytes(slot.salt));
+    const vkBytes = new Uint8Array(await aesDecryptRaw(kek, base64ToBytes(slot.wrapped_vk_iv), base64ToBytes(slot.wrapped_vk)));
+    const creds = await unwrapCreds(slot, vkBytes);
+    if (creds.ok) await cacheVk(vkBytes, slot.user_id);
+    return creds;
+  } catch {
+    return { ok: false, error: "VAULT_UNWRAP_FAILED" };
+  }
 }
 
-async function decryptPayload(vault, passphrase) {
-  const salt = base64ToBytes(vault.salt);
-  const iv = base64ToBytes(vault.iv);
-  const ciphertext = base64ToBytes(vault.ciphertext);
-  const key = await deriveKey(passphrase, salt);
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
-  return JSON.parse(new TextDecoder().decode(decrypted));
+async function unwrapCreds(slot, vkBytes) {
+  try {
+    const plain = await aesDecrypt(vkBytes, base64ToBytes(slot.cred_iv), base64ToBytes(slot.ciphertext));
+    const secrets = JSON.parse(plain);
+    if (!secrets?.rut || !secrets?.clave) return { ok: false, error: "VAULT_UNWRAP_FAILED" };
+    return { ok: true, rut: secrets.rut, clave: secrets.clave };
+  } catch {
+    return { ok: false, error: "VAULT_UNWRAP_FAILED" };
+  }
 }
 
-async function deriveKey(passphrase, salt) {
-  const material = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(passphrase),
-    "PBKDF2",
-    false,
-    ["deriveKey"],
-  );
+// ── Fetch al casillero del servidor (con la sesión de la app) ────────────────
+async function callVaultKey(appOrigin, body) {
+  try {
+    const res = await fetch(`${appOrigin}/api/extension/vault-key`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+      body: JSON.stringify(body),
+    });
+    let json = null;
+    try { json = await res.json(); } catch { json = null; }
+    if (!res.ok || !json?.ok) {
+      return { ok: false, status: res.status, error: json?.error || `HTTP_${res.status}` };
+    }
+    return { ok: true, status: res.status, user_id: json.user_id, ws: json.ws };
+  } catch (error) {
+    return { ok: false, status: 0, error: error instanceof Error ? error.message : "FETCH_FAILED" };
+  }
+}
+
+async function revokeDeviceKey(appOriginHint) {
+  const appOrigin = await getAppOrigin(appOriginHint);
+  if (!appOrigin) return;
+  const deviceId = await ensureDeviceId();
+  await callVaultKey(appOrigin, { action: "revoke", device_id: deviceId });
+}
+
+// ── Cache de VK en storage.session (sobrevive la muerte del SW; muere al cerrar) ─
+async function cacheVk(vkBytes, userId) {
+  try {
+    await chrome.storage.session.set({
+      [VK_CACHE_KEY]: { vk: bytesToBase64(vkBytes), user_id: userId, expiresAt: Date.now() + VK_TTL_MS },
+    });
+  } catch { /* best-effort */ }
+}
+async function getFreshVk() {
+  try {
+    const s = await chrome.storage.session.get(VK_CACHE_KEY);
+    const c = s?.[VK_CACHE_KEY];
+    if (c && typeof c === "object" && c.expiresAt > Date.now() && typeof c.vk === "string") return c;
+  } catch { /* fall through */ }
+  return null;
+}
+async function hasFreshVk() { return Boolean(await getFreshVk()); }
+async function clearVkCache() { try { await chrome.storage.session.remove(VK_CACHE_KEY); } catch { /* ignore */ } }
+
+// ── Cripto (WebCrypto) ───────────────────────────────────────────────────────
+async function aesKeyFromBytes(bytes, usages) {
+  return crypto.subtle.importKey("raw", bytes, { name: "AES-GCM" }, false, usages);
+}
+async function aesEncrypt(vkBytes, iv, plaintext) {
+  const key = await aesKeyFromBytes(vkBytes, ["encrypt"]);
+  return crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+}
+async function aesDecrypt(vkBytes, iv, ciphertext) {
+  const key = await aesKeyFromBytes(vkBytes, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return new TextDecoder().decode(pt);
+}
+async function aesEncryptKey(kek, iv, rawBytes) {
+  return crypto.subtle.encrypt({ name: "AES-GCM", iv }, kek, rawBytes);
+}
+async function aesDecryptRaw(kek, iv, ciphertext) {
+  return crypto.subtle.decrypt({ name: "AES-GCM", iv }, kek, ciphertext);
+}
+async function hkdfKey(wsBytes, salt) {
+  const material = await crypto.subtle.importKey("raw", wsBytes, "HKDF", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: "HKDF", hash: "SHA-256", salt, info: new TextEncoder().encode("sii-vault-kek-v2") },
     material,
     { name: "AES-GCM", length: 256 },
     false,
@@ -215,6 +299,7 @@ async function deriveKey(passphrase, salt) {
   );
 }
 
+// ── base64 ───────────────────────────────────────────────────────────────────
 function bytesToBase64(bytes) {
   let binary = "";
   const chunkSize = 0x8000;
@@ -223,21 +308,13 @@ function bytesToBase64(bytes) {
   }
   return btoa(binary);
 }
-
-function base64ToBytes(value) {
-  const binary = atob(String(value));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
+function bytesToBase64Url(bytes) {
+  return bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
-
-function isUnlocked() {
-  if (!unlockedVault) return false;
-  if (unlockedVault.expiresAt <= Date.now()) {
-    unlockedVault = null;
-    return false;
-  }
-  return true;
+function base64ToBytes(value) {
+  const norm = String(value).replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(norm);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
