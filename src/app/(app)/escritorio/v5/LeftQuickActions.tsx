@@ -6,6 +6,7 @@ import EmitirDirectaView from "./EmitirDirectaView";
 import DropzoneUpload from "./DropzoneUpload";
 import GlowWrap from "./GlowWrap";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
+import { useToast } from "@/components/Toast";
 import { chileDateString } from "@/lib/chile-date";
 
 function todayStr() {
@@ -18,6 +19,33 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
+  const { toast } = useToast();
+  // openRef: el listener siempre-montado lee el estado actual del modal sin re-suscribirse.
+  const openRef = useRef(open);
+  useEffect(() => { openRef.current = open; }, [open]);
+
+  // Aviso "✓ emitida" SIEMPRE montado (el botón vive fijo en la barra; el modal es
+  // condicional). El window.postMessage del bridge llega a la PÁGINA aunque el modal
+  // esté cerrado, así el aviso ya no se pierde al cerrarlo. El REFRESCO de la mesa lo
+  // hace el sensor central Realtime de MesaController (el INSERT en boletas_emitidas),
+  // no este listener; acá solo mostramos la confirmación cuando el modal no está para
+  // hacerlo. Dedup por job para no repetir el toast ante reentrega/mensaje duplicado.
+  const handledJobsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    function onEmissionResult(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { source?: string; type?: string; job_id?: string | null; result?: { folio?: number; folio_confidence?: string; persisted?: { ok?: boolean } } } | undefined;
+      if (data?.source !== "app-contable-extension" || data.type !== "APP_CONTABLE_SII_JOB_RESULT") return;
+      const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && data.result.persisted?.ok === true);
+      if (!emitted) return;
+      const jobKey = String(data.job_id ?? data.result?.folio ?? "");
+      if (handledJobsRef.current.has(jobKey)) return;
+      handledJobsRef.current.add(jobKey);
+      if (!openRef.current) toast(`Boleta #${data.result?.folio} emitida y guardada.`, "success");
+    }
+    window.addEventListener("message", onEmissionResult);
+    return () => window.removeEventListener("message", onEmissionResult);
+  }, [toast]);
 
   function closeWithSavedPulse(saved = false) {
     setOpen(false);

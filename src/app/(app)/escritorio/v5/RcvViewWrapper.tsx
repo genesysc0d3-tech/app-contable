@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RCVContentWrapper } from "./LeftQuickActions";
 import BoletasMensualesView, { type BoletaRow } from "./sections/BoletasMensualesView";
 
@@ -24,6 +24,27 @@ export default function RcvViewWrapper({ boletas, boletasYear, boletasMonth, ini
   const [errorsByMonth, setErrorsByMonth] = useState<Record<string, string | null>>({});
   const currentKey = monthKey(year, month);
   const currentBoletas = useMemo(() => monthCache[currentKey] ?? [], [currentKey, monthCache]);
+
+  // El RCV es una isla: cache propia por mes, fuera del estado de la mesa. Cuando el
+  // sensor central (MesaController) detecta una boleta nueva, avisa por "massdte:emitted";
+  // acá invalidamos el mes VISIBLE para forzar su re-fetch (si no, una boleta emitida en
+  // el mes ya cargado no aparecía hasta navegar a otro mes y volver, o F5).
+  const currentKeyRef = useRef(currentKey);
+  useEffect(() => { currentKeyRef.current = currentKey; }, [currentKey]);
+  useEffect(() => {
+    const onEmitted = () => {
+      const key = currentKeyRef.current;
+      setMonthCache((current) => {
+        if (!(key in current)) return current; // no cargado aún: el fetch normal lo traerá
+        const next = { ...current };
+        delete next[key]; // dispara el efecto de fetch (loading solo si no hay error previo)
+        return next;
+      });
+      setErrorsByMonth((current) => ({ ...current, [currentKeyRef.current]: null }));
+    };
+    window.addEventListener("massdte:emitted", onEmitted);
+    return () => window.removeEventListener("massdte:emitted", onEmitted);
+  }, []);
   const error = errorsByMonth[currentKey] ?? null;
   const loading = !monthCache[currentKey] && !error;
 

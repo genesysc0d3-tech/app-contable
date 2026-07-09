@@ -8,6 +8,7 @@ import { cargarMesa } from "./actions";
 import { MesaReloadContext, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
+import { supabase } from "@/lib/supabase";
 
 const keyOf = (view: string, date: string, month: string) => `${view}|${date}|${month}`;
 
@@ -131,6 +132,40 @@ export default function MesaController({
     window.addEventListener("massdte:uploaded", onUploaded);
     return () => window.removeEventListener("massdte:uploaded", onUploaded);
   }, [mesa]);
+
+  // ── COLUMNA VERTEBRAL DE FRESCURA (patrón Linear/Figma/Notion) ───────────────
+  // UNA suscripción Realtime en el contenedor SIEMPRE montado (MesaController vive
+  // por encima de las pestañas), filtrada por empresa. Cualquier escritura a las
+  // tablas vivas —de ESTA pestaña, de OTRA pestaña, de un compañero de equipo, o de
+  // la EXTENSIÓN (que postea a /api/sii-local/result con service role)— dispara
+  // reloadMesa sin importar en qué pestaña esté el usuario. Antes esta suscripción
+  // vivía DENTRO de EmitirTabContent, que se desmonta al cambiar de tab: por eso el
+  // folio emitido por la extensión quedaba invisible salvo F5. reloadRef evita
+  // re-suscribir el canal en cada cambio de `mesa`; el debounce coalesce ráfagas
+  // (p.ej. una emisión de varias boletas) en un solo reload silencioso.
+  const reloadRef = useRef(reloadMesa);
+  useEffect(() => { reloadRef.current = reloadMesa; }, [reloadMesa]);
+  useEffect(() => {
+    if (!empresaId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const bump = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => reloadRef.current({ silent: true }), 500);
+    };
+    // Boleta nueva: además de refrescar la mesa, avisa a la isla RCV (vive fuera del
+    // estado de la mesa, con su propia cache por mes) para que invalide el mes visible.
+    const onBoleta = () => {
+      bump();
+      window.dispatchEvent(new CustomEvent("massdte:emitted"));
+    };
+    const ch = supabase
+      .channel(`v5-mesa-${empresaId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "boletas_emitidas", filter: `empresa_id=eq.${empresaId}` }, onBoleta)
+      .on("postgres_changes", { event: "*", schema: "public", table: "propuestas_ia", filter: `empresa_id=eq.${empresaId}` }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` }, bump)
+      .subscribe();
+    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(ch); };
+  }, [empresaId]);
 
   return (
     <>
