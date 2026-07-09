@@ -715,6 +715,33 @@
     }
   }
 
+  // Espera a que el botón EMITIR del modal esté PRESENTE y HABILITADO. El SII lo
+  // deshabilita mientras valida el receptor (el lookup async del RUT que rellena el
+  // nombre, o un dato inválido). Sin esta espera, el robot cliqueaba un botón
+  // deshabilitado (no-op) → 16s sin confirmar → job colgado SIN boleta. Acotado por
+  // timeout; corre ANTES de notifyFinalEmitClicked, así un throw deja el job
+  // reintentable (sin folio, sin doble emisión). NO cambia el click final en sí.
+  async function waitFinalEmitEnabled(timeoutMs = 9000) {
+    const start = Date.now();
+    let seen = false;
+    while (Date.now() - start < timeoutMs) {
+      const dlg = activeEmitDialog();
+      const btn = dlg && Array.from(dlg.querySelectorAll("button")).reverse()
+        .find((b) => normalizeText(b.innerText || b.textContent || b.getAttribute("value")) === "EMITIR");
+      if (btn) {
+        seen = true;
+        const disabled = btn.disabled
+          || btn.getAttribute("aria-disabled") === "true"
+          || (typeof btn.className === "string" && /v-btn--disabled/.test(btn.className));
+        if (!disabled) return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    throw new Error(seen
+      ? "El SII no habilitó el botón EMITIR (revisa los datos del receptor: RUT, e-mail o teléfono). No se emitió; corrige y reintenta."
+      : "No apareció el botón EMITIR habilitado en el modal.");
+  }
+
   async function clickFinalEmitInDialog(dialog) {
     const buttons = Array.from(dialog.querySelectorAll("button"));
     const finalEmit = buttons.reverse().find((button) => normalizeText(button.innerText || button.textContent || button.getAttribute("value")) === "EMITIR");
@@ -1083,8 +1110,12 @@
       return;
     }
 
-    renderOverlay("LOCKED_AUTOMATION", "Emitiendo boleta final en SII.");
-    dialog = activeEmitDialog();
+    renderOverlay("LOCKED_AUTOMATION", "Validando datos y emitiendo boleta en SII.");
+    // Esperar a que el SII habilite EMITIR (deshabilitado mientras valida el receptor:
+    // lookup del RUT, e-mail/teléfono). Convierte el cuelgue silencioso en éxito (si solo
+    // faltaba asentarse) o error claro (si un dato del receptor no pasa). PRE-emit.
+    await waitFinalEmitEnabled();
+    dialog = activeEmitDialog(); // re-capturar: el modal pudo re-renderizarse al validar
     if (!dialog) throw new Error("Modal Emitir e-Boleta cerrado antes de emitir; no se presiono el EMITIR final.");
     assertEmisorNoCambio(job); // ÚLTIMA COMPUERTA: aborta si el emisor cambió (THROW aquí = ANTES de notifyFinalEmitClicked → job reintentable, sin folio, sin doble emisión)
     await clickFinalEmitInDialog(dialog);
