@@ -369,7 +369,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const {
     status: emissionLock,
     activeLock: activeEmissionLock,
-    lockedByOther: lockBlocksEmission,
+    // Solo OTRO usuario emitiendo bloquea el botón. Tu propio candado pegado NO te
+    // encierra (myStaleLock): se cancela en un click, no espera el TTL de 15 min.
+    lockedByOtherUser: lockBlocksEmission,
+    myStaleLock,
     setStatus: setEmissionLock,
   } = useEmissionLockStatus({ enabled: usesSiiLocal || usesSimpleApi, currentJobId: currentEmissionJobId });
   // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
@@ -1235,6 +1238,20 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     setLocalWorkerLoading(false);
   }
 
+  // Cancela TU PROPIO candado pegado de un job anterior (myStaleLock): el job cuyo
+  // lock quedó tomado ya no es el actual en vuelo (el modal se remonteó, localWorker
+  // es null), así que se cierra por el job_id del propio lock. Libera el lock al toque
+  // y cierra la ventana worker que haya quedado — sin esperar el TTL de 15 min.
+  async function cancelStaleLock() {
+    const jobId = activeEmissionLock?.job_id ?? null;
+    if (jobId) {
+      await closeEmissionJob(jobId, "cancelled");
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+    }
+    setLocalWorker(null);
+    setLocalWorkerLoading(false);
+  }
+
   function openLocalSiiWorker() {
     if (!canSubmit || localWorkerLoading) return;
     if (extensionStatus === "ready") {
@@ -1516,7 +1533,22 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             {lockBlocksEmission && activeEmissionLock && (usesSiiLocal || usesSimpleApi) && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45 }}>
                 <span className="ed-label" style={{ color: "var(--amber)" }}>{emissionLock?.business_mode ? "Equipo" : "Emisión en curso"}</span><br />
-                {activeEmissionLock.mensaje ?? "Hay una emisión en curso para esta cuenta. Intenta nuevamente cuando termine."}
+                {activeEmissionLock.mensaje ?? "Otra persona de tu cuenta está emitiendo. Intenta nuevamente cuando termine."}
+              </div>
+            )}
+
+            {/* Tu propio candado pegado de un intento anterior (no bloquea a nadie más):
+                un click lo cancela y podés emitir de nuevo — sin esperar el TTL. */}
+            {myStaleLock && !lockBlocksEmission && (usesSiiLocal || usesSimpleApi) && (
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  <span className="ed-label" style={{ color: "var(--amber)" }}>Emisión anterior pegada</span><br />
+                  Quedó un intento tuyo sin cerrar. Si viste un folio en el SII, usá <strong>Recuperar emisión SII</strong> (abajo) en vez de re-emitir. Si no salió nada, cancélalo y emite de nuevo.
+                </div>
+                <button type="button" onClick={() => { void cancelStaleLock(); }}
+                  style={{ alignSelf: "flex-start", height: 30, borderRadius: 8, border: "1px solid rgba(245,158,11,.4)", background: "rgba(245,158,11,.12)", color: "var(--amber)", padding: "0 12px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+                  Cancelar y emitir de nuevo
+                </button>
               </div>
             )}
 
