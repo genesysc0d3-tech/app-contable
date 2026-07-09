@@ -344,10 +344,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const tipoDte = activeDraft.tipoDte;
   const receptorRut = activeDraft.receptorRut;
   const receptorRazonSocial = activeDraft.receptorRazonSocial;
-  const receptorDireccion = activeDraft.receptorDireccion;
-  const receptorComuna = activeDraft.receptorComuna;
-  const receptorEmail = activeDraft.receptorEmail;
-  const receptorTelefono = activeDraft.receptorTelefono;
+  const receptorDireccion = activeDraft.receptorDireccion ?? "";
+  const receptorComuna = activeDraft.receptorComuna ?? "";
+  const receptorEmail = activeDraft.receptorEmail ?? "";
+  const receptorTelefono = activeDraft.receptorTelefono ?? "";
   const detalleNombre = activeDraft.detalleNombre;
   const monto = activeDraft.monto;
   const formaPago = activeDraft.formaPago ?? "Efectivo";
@@ -420,6 +420,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         }
         const savedDrafts = Array.isArray(parsed) ? parsed : parsed.drafts;
         const validDrafts = (savedDrafts ?? []).filter((draft) => draft?.id).slice(0, 3).map((draft, index) => ({
+          // Fusiona SOBRE una base con TODOS los campos: un borrador viejo (guardado
+          // antes de agregar receptorEmail/Telefono u otros) toma el default "" en los
+          // que falten, evitando el warning de input controlado→no-controlado (undefined).
+          ...newDraft(draft.tipoDte ?? tipoInicial),
           ...draft,
           slot: draft.slot ?? (((index % 3) + 1) as 1 | 2 | 3),
           colorIndex: draft.colorIndex ?? 0,
@@ -440,6 +444,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     } finally {
       setHydrated(true);
     }
+    // tipoInicial (de empresaTipo) es estable por montaje; la hidratación corre UNA vez
+    // por storageKey y NO debe re-ejecutarse si cambiara el tipo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 
   useEffect(() => {
