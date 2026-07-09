@@ -645,44 +645,70 @@
     return readActiveEmisorRut();
   }
 
-  // SELECCIÓN ACTIVA del emisor: deja seleccionada la empresa objetivo en el selector
-  // superior (v-select). Si ya está activa (y estable), no toca nada. Match EXACTO por RUT
-  // contra la lista REAL de habilitados; 0 o >1 coincidencias → THROW (nunca la primera,
-  // nunca adivinar). Re-verifica ESTABLE que quedó activa. Ante cualquier error, cierra el
-  // dropdown para no dejar el portal a medias. Todo acotado por timeout: no cuelga jamás.
+  // ¿El portal está recargando la lista de empresas ("Cargando Emisores…")? Cambiar de
+  // empresa dispara ese re-render; leer/actuar DURANTE él era la causa del cuelgue.
+  function emisoresCargando() {
+    return /Cargando Emisores/i.test(document.body?.innerText || document.body?.textContent || "");
+  }
+  // Espera a que el portal termine de cargar la empresa (sin "Cargando Emisores" y con un
+  // emisor legible). Acotado por timeout: no cuelga.
+  async function waitEmisoresReady(timeoutMs = 9000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (!emisoresCargando() && readActiveEmisorRut()) return;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  // Un intento de abrir el dropdown, encontrar la empresa objetivo (match EXACTO por RUT,
+  // 0 o >1 = THROW) y clickearla. Devuelve tras cerrar el dropdown; el caller confirma.
+  async function selectEmisorOnce(objetivo, rutObjetivo) {
+    const emisorSelect = Array.from(document.querySelectorAll(".v-select"))
+      .find((vs) => extractRutTokens(vs.querySelector(".v-select__selections")?.textContent || "").length > 0);
+    if (!emisorSelect) throw new Error("No encontré el selector de emisor en el portal. Selecciónalo a mano arriba y reintenta.");
+    await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
+    let options = [];
+    for (let i = 0; i < 24; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const menu = Array.from(document.querySelectorAll(".v-menu__content"))
+        .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
+      if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
+    }
+    if (!options.length) throw new Error("No pude abrir la lista de empresas del portal. Selecciona la empresa a mano arriba y reintenta.");
+    const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
+    if (candidatos.length !== 1) {
+      throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala a mano arriba y reintenta.`);
+    }
+    await clickElement(candidatos[0]);
+    await closeEmisorDropdown();
+  }
+
+  // SELECCIÓN ACTIVA del emisor (cuentas multi-empresa). Espera a que el portal esté
+  // listo, y si la empresa activa no es la objetivo la cambia — con REINTENTOS: cambiar de
+  // empresa re-renderiza el portal ("Cargando Emisores") y a veces la selección no "toma"
+  // al primer intento. Match EXACTO por RUT; confirma ESTABLE que quedó la correcta antes
+  // de seguir. Fail-CLOSED: si tras varios intentos no queda la objetivo → THROW (nunca
+  // emite bajo la equivocada). Todo acotado: no cuelga. Fallback: elegir a mano + Reintentar.
   async function selectEmisorByRut(rutObjetivo) {
     const objetivo = normalizeRut(rutObjetivo);
     if (!objetivo) throw new Error("Sin RUT de empresa objetivo: no puedo seleccionar el emisor. Abortado por seguridad.");
+    await waitEmisoresReady();
     if ((await waitStableEmisorRut(1500)) === objetivo) return; // ya está la correcta y estable
-    const emisorSelect = Array.from(document.querySelectorAll(".v-select"))
-      .find((vs) => extractRutTokens(vs.querySelector(".v-select__selections")?.textContent || "").length > 0);
-    if (!emisorSelect) throw new Error("No encontré el selector de emisor en el portal. Selecciónalo manualmente y reintenta.");
-    try {
-      await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
-      let options = [];
-      for (let i = 0; i < 24; i += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 150));
-        const menu = Array.from(document.querySelectorAll(".v-menu__content"))
-          .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
-        if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
+
+    let ultimo = null;
+    for (let intento = 0; intento < 3; intento += 1) {
+      try {
+        await selectEmisorOnce(objetivo, rutObjetivo);
+        await waitEmisoresReady(); // esperar a que el portal recargue para la empresa nueva
+        ultimo = await waitStableEmisorRut();
+        if (ultimo === objetivo) return; // ✓ quedó estable en la objetivo
+      } catch (error) {
+        await closeEmisorDropdown();
+        if (intento === 2) throw error; // último intento: propagar el mensaje concreto
       }
-      if (!options.length) throw new Error("No pude abrir la lista de empresas habilitadas del portal. Selecciona el emisor manualmente y reintenta.");
-      const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
-      if (candidatos.length !== 1) {
-        throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala manualmente y reintenta.`);
-      }
-      await clickElement(candidatos[0]);
-      await closeEmisorDropdown();
-      // Confirmar ESTABLE que quedó el objetivo (el portal recarga la calculadora al
-      // cambiar de empresa; esperamos a que asiente antes de seguir).
-      const activo = await waitStableEmisorRut();
-      if (activo !== objetivo) {
-        throw new Error(`Intenté seleccionar ${rutObjetivo} pero el emisor activo quedó en ${activo || "ilegible"}. Abortado por seguridad.`);
-      }
-    } catch (error) {
-      await closeEmisorDropdown();
-      throw error;
+      await new Promise((resolve) => setTimeout(resolve, 600));
     }
+    throw new Error(`Intenté seleccionar ${rutObjetivo} varias veces pero el emisor activo quedó en ${ultimo || "ilegible"}. Elige la empresa a mano en el selector de arriba y aprieta Reintentar.`);
   }
 
   // Verifica (fail-CLOSED) que el EMISOR ACTIVO del portal sea EXACTO al del job. Ante
