@@ -1125,11 +1125,20 @@
           const input = findDialogControl(pattern);
           if (input) setControlValue(input, String(value));
         };
+        // ORDEN CRÍTICO: el RUT PRIMERO. Al escribirlo, el SII hace un lookup async y,
+        // si el RUT NO está registrado, muestra "No hay información registrada... indique
+        // su nombre" y BORRA el campo Nombre. Por eso hay que esperar a que ese lookup
+        // termine ANTES de escribir el nombre — si no, el lookup lo pisa y queda vacío,
+        // y sin nombre el SII no habilita EMITIR (era el bug del cuelgue con receptor).
         fill(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/, r.rut);
+        if (r.rut) await new Promise((resolve) => setTimeout(resolve, 1800));
+        // Nombre DESPUÉS del lookup (para que no lo borre). El SII lo EXIGE cuando el RUT
+        // no está registrado; la app ya obliga a ponerlo si hay RUT.
         fill(/NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/, r.razon_social);
         fill(/DIRECCION.*RECEPTOR|RECEPTOR.*DIRECCION/, r.direccion);
         fill(/(E-?MAIL|CORREO).*RECEPTOR|RECEPTOR.*(E-?MAIL|CORREO)/, r.email);
         fill(/(TELEFONO|FONO|CELULAR).*RECEPTOR|RECEPTOR.*(TELEFONO|FONO|CELULAR)/, r.telefono);
+        await new Promise((resolve) => setTimeout(resolve, 400)); // asentar la validación
       }
     }
 

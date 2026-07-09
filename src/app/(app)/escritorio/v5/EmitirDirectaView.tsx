@@ -378,9 +378,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
   // un dígito verificador malo termina en rechazo SII.
   const rutReceptorInvalido = receptorRut.trim().length > 0 && !validarRut(receptorRut);
+  // El SII EXIGE el nombre si se pone un RUT que no está registrado (muestra "No hay
+  // información registrada para este receptor, indique su nombre" y no habilita EMITIR).
+  // Como no sabemos si el RUT está registrado, con RUT presente pedimos el nombre siempre.
+  const receptorNombrePendiente = receptorRut.trim().length > 0 && !receptorRazonSocial.trim();
   // Res. Ex. SII 44/2025: sobre ~135 UF la boleta debe identificar al comprador.
   const receptorObligatorioPendiente = total > umbralReceptor && (!receptorRut.trim() || !receptorRazonSocial.trim());
-  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorObligatorioPendiente && !emitiendo;
+  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorNombrePendiente && !receptorObligatorioPendiente && !emitiendo;
   // Anti-doble-emisión CROSS-JOB: mientras una emisión SII siga sin resolverse
   // (folio pendiente de capturar/ingresar), NO re-habilitar el botón aunque el
   // servidor haya soltado el lock por una captura de evidencia débil. De lo
@@ -1482,6 +1486,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   El RUT del receptor no es válido — revisa el dígito verificador o déjalo vacío.
                 </p>
               )}
+              {!rutReceptorInvalido && receptorNombrePendiente && (
+                <p style={{ fontSize: 9, color: "var(--amber)", marginTop: 7, lineHeight: 1.45 }}>
+                  Pusiste un RUT: indica también el <strong>nombre</strong>. El SII lo exige si el RUT no está registrado (o deja el RUT vacío para consumidor final).
+                </p>
+              )}
               {receptorObligatorioPendiente ? (
                 <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.45 }}>
                   Sobre ~{fmt(umbralReceptor)} necesitas identificar al comprador (RUT y nombre) — Res. 44/2025.
@@ -1687,7 +1696,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 )
               ) : (
                 <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
-                  {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y nombre)." : "Ingresa detalle y monto."}
+                  {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorNombrePendiente ? "Con RUT, indica también el nombre." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y nombre)." : "Ingresa detalle y monto."}
                 </div>
               )}
               <button onClick={() => { void handlePrimaryEmit(); }} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
