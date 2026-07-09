@@ -1448,11 +1448,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.45 }}>
                   Sobre ~{fmt(umbralReceptor)} necesitas identificar al comprador (RUT y nombre) — Res. 44/2025.
                 </div>
-              ) : (
+              ) : total > 0 ? (
                 <p style={{ marginTop: 7, fontSize: 9, color: "var(--text3)", lineHeight: 1.45 }}>
                   Para este monto el comprador es <strong style={{ color: "var(--text2)" }}>consumidor final</strong>: identificarlo es opcional (bajo ~{fmt(umbralReceptor)}, Res. 44/2025).
                 </p>
-              )}
+              ) : null}
             </section>
 
             <section className="ed-card-quiet">
@@ -1634,7 +1634,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 )
               ) : (
                 <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
-                  {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y razón social)." : "Ingresa detalle y monto."}
+                  {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y nombre)." : "Ingresa detalle y monto."}
                 </div>
               )}
               <button onClick={() => { void handlePrimaryEmit(); }} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
