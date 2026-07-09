@@ -337,6 +337,11 @@
       else control.value = value;
       control.dispatchEvent(new Event("input", { bubbles: true }));
       control.dispatchEvent(new Event("change", { bubbles: true }));
+      // blur: Vuetify/Vue corren la VALIDACIÓN del campo al perder el foco (y el SII
+      // dispara el lookup del RUT del receptor). Sin esto, el formulario quedaba en
+      // estado "sin validar" y el botón EMITIR no se habilitaba con receptor.
+      control.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+      control.dispatchEvent(new Event("blur", { bubbles: true }));
     } finally {
       automationClickInProgress = false;
     }
@@ -741,21 +746,19 @@
     }
   }
 
-  // Espera a que el botón EMITIR del modal esté PRESENTE y HABILITADO. El SII lo
-  // deshabilita mientras valida el receptor (el lookup async del RUT que rellena el
-  // nombre, o un dato inválido). Sin esta espera, el robot cliqueaba un botón
-  // deshabilitado (no-op) → 16s sin confirmar → job colgado SIN boleta. Acotado por
-  // timeout; corre ANTES de notifyFinalEmitClicked, así un throw deja el job
-  // reintentable (sin folio, sin doble emisión). NO cambia el click final en sí.
-  async function waitFinalEmitEnabled(timeoutMs = 9000) {
+  // Espera (best-effort) a que el botón EMITIR se HABILITE — el SII lo deshabilita un
+  // instante mientras valida el receptor (lookup del RUT). NO bloquea: apenas está
+  // habilitado, o al agotar el timeout, retorna y el caller lo clickea igual. Antes
+  // esto LANZABA si creía el botón deshabilitado → el robot NUNCA apretaba EMITIR con
+  // receptor (bug). Si de verdad quedara deshabilitado, el click es no-op y el bucle
+  // de confirmación de 16s lo detecta; nunca inventa un folio.
+  async function waitFinalEmitEnabled(timeoutMs = 12000) {
     const start = Date.now();
-    let seen = false;
     while (Date.now() - start < timeoutMs) {
       const dlg = activeEmitDialog();
       const btn = dlg && Array.from(dlg.querySelectorAll("button")).reverse()
         .find((b) => normalizeText(b.innerText || b.textContent || b.getAttribute("value")) === "EMITIR");
       if (btn) {
-        seen = true;
         const disabled = btn.disabled
           || btn.getAttribute("aria-disabled") === "true"
           || (typeof btn.className === "string" && /v-btn--disabled/.test(btn.className));
@@ -763,9 +766,8 @@
       }
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
-    throw new Error(seen
-      ? "El SII no habilitó el botón EMITIR (revisa los datos del receptor: RUT, e-mail o teléfono). No se emitió; corrige y reintenta."
-      : "No apareció el botón EMITIR habilitado en el modal.");
+    // Timeout: seguimos igual — no bloqueamos el EMITIR (la detección de "disabled"
+    // puede dar falso positivo en Vuetify).
   }
 
   async function clickFinalEmitInDialog(dialog) {
