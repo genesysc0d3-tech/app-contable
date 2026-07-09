@@ -600,47 +600,88 @@
     return out;
   }
 
-  // Lee el RUT del EMISOR ACTIVO (el que el portal tiene seleccionado) desde el
-  // .v-select__selections del selector superior. Es el ÚNICO v-select cuyo texto de
-  // selección trae un RUT (los demás son tipo boleta / pago / sucursal), así que es
-  // inmune a que el dropdown esté abierto mostrando toda la lista. Devuelve canónico o null.
-  // (Estructura verificada contra el DOM real de eboleta.sii.cl, cuenta multi-empresa.)
+  // ¿Está abierto el dropdown de emisor (la lista desplegada en el body)?
+  function emisorMenuOpen() {
+    return Array.from(document.querySelectorAll(".v-menu__content"))
+      .some((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
+  }
+
+  // Cierra cualquier dropdown abierto (Escape) para no dejar el portal "sucio" — clave
+  // ante un error a mitad de la selección de empresa.
+  async function closeEmisorDropdown() {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  // Lee el RUT del EMISOR ACTIVO desde el .v-select__selections del selector superior.
+  // EXCLUYE cualquier selección que esté dentro de un menú desplegado (.v-menu__content):
+  // con el dropdown abierto, leer la lista causaba el "salto" CONSTANZA↔MV que colgaba
+  // la emisión en cuentas multi-empresa. Devuelve canónico o null.
   function readActiveEmisorRut() {
     for (const sel of document.querySelectorAll(".v-select__selections")) {
+      if (sel.closest(".v-menu__content")) continue; // no leer la lista desplegada
       const toks = extractRutTokens(sel.textContent || "");
       if (toks.length) return toks[0];
     }
     return null;
   }
 
+  // Espera a que el emisor activo se ESTABILICE: mismo RUT en ≥2 lecturas seguidas, con
+  // el dropdown CERRADO. Cambiar de empresa re-renderiza el portal y el valor oscila unos
+  // instantes; leer durante ese re-render era la causa del congelamiento. Acotado por
+  // timeout → NUNCA cuelga (devuelve la última lectura como último recurso).
+  async function waitStableEmisorRut(timeoutMs = 6000) {
+    const start = Date.now();
+    let prev = null;
+    let stable = 0;
+    while (Date.now() - start < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (emisorMenuOpen()) { prev = null; stable = 0; continue; }
+      const cur = readActiveEmisorRut();
+      if (cur && cur === prev) { stable += 1; if (stable >= 2) return cur; }
+      else { stable = 0; }
+      prev = cur;
+    }
+    return readActiveEmisorRut();
+  }
+
   // SELECCIÓN ACTIVA del emisor: deja seleccionada la empresa objetivo en el selector
-  // superior (v-select). Si ya está activa, no toca nada. Match EXACTO por RUT contra la
-  // lista REAL de habilitados; 0 o >1 coincidencias → THROW (nunca la primera, nunca
-  // adivinar). Re-verifica que quedó activa. Corre ANTES de teclear el monto.
+  // superior (v-select). Si ya está activa (y estable), no toca nada. Match EXACTO por RUT
+  // contra la lista REAL de habilitados; 0 o >1 coincidencias → THROW (nunca la primera,
+  // nunca adivinar). Re-verifica ESTABLE que quedó activa. Ante cualquier error, cierra el
+  // dropdown para no dejar el portal a medias. Todo acotado por timeout: no cuelga jamás.
   async function selectEmisorByRut(rutObjetivo) {
     const objetivo = normalizeRut(rutObjetivo);
     if (!objetivo) throw new Error("Sin RUT de empresa objetivo: no puedo seleccionar el emisor. Abortado por seguridad.");
-    if (readActiveEmisorRut() === objetivo) return; // ya está la correcta
+    if ((await waitStableEmisorRut(1500)) === objetivo) return; // ya está la correcta y estable
     const emisorSelect = Array.from(document.querySelectorAll(".v-select"))
       .find((vs) => extractRutTokens(vs.querySelector(".v-select__selections")?.textContent || "").length > 0);
     if (!emisorSelect) throw new Error("No encontré el selector de emisor en el portal. Selecciónalo manualmente y reintenta.");
-    await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
-    let options = [];
-    for (let i = 0; i < 24; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      const menu = Array.from(document.querySelectorAll(".v-menu__content"))
-        .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
-      if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
-    }
-    if (!options.length) throw new Error("No pude leer la lista de empresas habilitadas del portal. Selecciona el emisor manualmente y reintenta.");
-    const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
-    if (candidatos.length !== 1) {
-      throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala manualmente y reintenta.`);
-    }
-    await clickElement(candidatos[0]);
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    if (readActiveEmisorRut() !== objetivo) {
-      throw new Error(`Intenté seleccionar ${rutObjetivo} pero el emisor activo no quedó en ese RUT. Abortado por seguridad.`);
+    try {
+      await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
+      let options = [];
+      for (let i = 0; i < 24; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const menu = Array.from(document.querySelectorAll(".v-menu__content"))
+          .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
+        if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
+      }
+      if (!options.length) throw new Error("No pude abrir la lista de empresas habilitadas del portal. Selecciona el emisor manualmente y reintenta.");
+      const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
+      if (candidatos.length !== 1) {
+        throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala manualmente y reintenta.`);
+      }
+      await clickElement(candidatos[0]);
+      await closeEmisorDropdown();
+      // Confirmar ESTABLE que quedó el objetivo (el portal recarga la calculadora al
+      // cambiar de empresa; esperamos a que asiente antes de seguir).
+      const activo = await waitStableEmisorRut();
+      if (activo !== objetivo) {
+        throw new Error(`Intenté seleccionar ${rutObjetivo} pero el emisor activo quedó en ${activo || "ilegible"}. Abortado por seguridad.`);
+      }
+    } catch (error) {
+      await closeEmisorDropdown();
+      throw error;
     }
   }
 

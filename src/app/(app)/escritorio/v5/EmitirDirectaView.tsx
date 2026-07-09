@@ -1431,21 +1431,27 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   }}
                 />
               </div>
+              {/* Campos 1:1 con el formulario del SII (RUT + Nombre). Antes había
+                  "Dirección" y "Comuna": el SII no las tipea en la boleta (campos
+                  muertos) y "Comuna" ni siquiera existe en el modal e-Boleta — se
+                  quitaron para no pedir datos que no llegan a ningún lado. */}
               <div className="ed-grid-2">
                 <Field label="RUT receptor" value={receptorRut} onChange={(value) => updateActiveDraft({ receptorRut: value })} placeholder="Opcional (obligatorio sobre 135 UF)" />
-                <Field label="Razón social" value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder="Cliente o consumidor" />
-                <Field label="Dirección" value={receptorDireccion} onChange={(value) => updateActiveDraft({ receptorDireccion: value })} placeholder="Opcional" />
-                <Field label="Comuna" value={receptorComuna} onChange={(value) => updateActiveDraft({ receptorComuna: value })} placeholder="Opcional" />
+                <Field label="Nombre" value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder="Cliente o consumidor" />
               </div>
               {rutReceptorInvalido && (
                 <p style={{ fontSize: 9, color: "var(--red)", marginTop: 7 }}>
                   El RUT del receptor no es válido — revisa el dígito verificador o déjalo vacío.
                 </p>
               )}
-              {receptorObligatorioPendiente && (
+              {receptorObligatorioPendiente ? (
                 <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.45 }}>
-                  Sobre ~{fmt(umbralReceptor)} necesitas identificar al comprador (RUT y razón social) — Res. 44/2025.
+                  Sobre ~{fmt(umbralReceptor)} necesitas identificar al comprador (RUT y nombre) — Res. 44/2025.
                 </div>
+              ) : (
+                <p style={{ marginTop: 7, fontSize: 9, color: "var(--text3)", lineHeight: 1.45 }}>
+                  Para este monto el comprador es <strong style={{ color: "var(--text2)" }}>consumidor final</strong>: identificarlo es opcional (bajo ~{fmt(umbralReceptor)}, Res. 44/2025).
+                </p>
               )}
             </section>
 
@@ -1459,7 +1465,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <Field label={tipoDte === 39 || tipoDte === 33 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
               </div>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-                <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Forma de pago</span>
+                <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Método de pago</span>
                 <select value={formaPago} onChange={(e) => updateActiveDraft({ formaPago: e.target.value as FormaPago })}
                   style={{ width: "100%", height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", padding: "0 9px", fontSize: 11, outline: "none" }}>
                   {FORMAS_PAGO.map((fp) => <option key={fp} value={fp}>{fp}</option>)}
