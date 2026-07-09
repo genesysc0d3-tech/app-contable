@@ -39,7 +39,9 @@ interface BoletaDraft {
   receptorRut: string;
   receptorRazonSocial: string;
   receptorDireccion: string;
-  receptorComuna: string;
+  receptorComuna: string; // solo carril facturas (SimpleAPI); e-Boleta no tiene Comuna
+  receptorEmail: string;
+  receptorTelefono: string;
   detalleNombre: string;
   monto: string;
   formaPago: FormaPago;
@@ -233,6 +235,8 @@ function newDraft(tipoDte: TipoDte, seq = 1): BoletaDraft {
     receptorRazonSocial: "",
     receptorDireccion: "",
     receptorComuna: "",
+    receptorEmail: "",
+    receptorTelefono: "",
     detalleNombre: "Servicio prestado",
     monto: "",
     formaPago: "Efectivo",
@@ -256,6 +260,8 @@ function draftHasContent(draft: BoletaDraft) {
     draft.receptorRazonSocial.trim() ||
     draft.receptorDireccion.trim() ||
     draft.receptorComuna.trim() ||
+    draft.receptorEmail.trim() ||
+    draft.receptorTelefono.trim() ||
     draft.monto.trim() ||
     draft.detalleNombre.trim() !== "Servicio prestado"
   );
@@ -340,6 +346,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const receptorRazonSocial = activeDraft.receptorRazonSocial;
   const receptorDireccion = activeDraft.receptorDireccion;
   const receptorComuna = activeDraft.receptorComuna;
+  const receptorEmail = activeDraft.receptorEmail;
+  const receptorTelefono = activeDraft.receptorTelefono;
   const detalleNombre = activeDraft.detalleNombre;
   const monto = activeDraft.monto;
   const formaPago = activeDraft.formaPago ?? "Efectivo";
@@ -1069,6 +1077,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           razon_social: receptorRazonSocial.trim() || undefined,
           direccion: receptorDireccion.trim() || undefined,
           comuna: receptorComuna.trim() || undefined,
+          email: receptorEmail.trim() || undefined,
+          telefono: receptorTelefono.trim() || undefined,
         },
         detalles: [{ nombre: detalleNombre.trim().slice(0, 80), cantidad: 1, monto_total: total }],
         totales: {
@@ -1431,13 +1441,17 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   }}
                 />
               </div>
-              {/* Campos 1:1 con el formulario del SII (RUT + Nombre). Antes había
-                  "Dirección" y "Comuna": el SII no las tipea en la boleta (campos
-                  muertos) y "Comuna" ni siquiera existe en el modal e-Boleta — se
-                  quitaron para no pedir datos que no llegan a ningún lado. */}
+              {/* Espejo EXACTO del formulario e-Boleta del SII: los mismos campos que
+                  el SII deja llenar del receptor (RUT, Nombre, Dirección, E-mail,
+                  Teléfono), todos opcionales. Lo que llenes lo escribe el robot en el
+                  SII; lo que dejes vacío, queda vacío. Sobre 135 UF, RUT+Nombre pasan a
+                  obligatorios (Res. 44/2025). (No hay "Comuna": el e-Boleta no la tiene.) */}
               <div className="ed-grid-2">
                 <Field label="RUT receptor" value={receptorRut} onChange={(value) => updateActiveDraft({ receptorRut: value })} placeholder="Opcional (obligatorio sobre 135 UF)" />
                 <Field label="Nombre" value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder="Cliente o consumidor" />
+                <Field label="Dirección" value={receptorDireccion} onChange={(value) => updateActiveDraft({ receptorDireccion: value })} placeholder="Opcional" />
+                <Field label="E-mail" value={receptorEmail} onChange={(value) => updateActiveDraft({ receptorEmail: value })} placeholder="Opcional (para enviarle la boleta)" />
+                <Field label="Teléfono" value={receptorTelefono} onChange={(value) => updateActiveDraft({ receptorTelefono: value })} placeholder="Opcional" />
               </div>
               {rutReceptorInvalido && (
                 <p style={{ fontSize: 9, color: "var(--red)", marginTop: 7 }}>

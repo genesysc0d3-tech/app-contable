@@ -1055,18 +1055,26 @@
       if (!glosaOk) await setDialogToggle("Detalle", false);
     }
 
-    // Receptor opcional: solo si el job lo trae (legal sin receptor < $180.000).
-    if (job?.receptor?.rut) {
+    // Receptor OPCIONAL — espejo del formulario SII: RUT, Nombre, Dirección, E-mail,
+    // Teléfono. Cada campo se escribe solo si el job lo trae (best-effort: si el SII no
+    // muestra ese input, se salta sin romper — NO relanza, para no reintroducir fragilidad).
+    // Se activa si viene CUALQUIER dato del receptor, no solo el RUT (todos opcionales).
+    const r = job?.receptor || {};
+    if (r.rut || r.razon_social || r.direccion || r.email || r.telefono) {
       renderOverlay("LOCKED_AUTOMATION", "Completando datos del receptor.");
       const toggled = await enableDialogToggle("Receptor");
       if (toggled) {
         await new Promise((resolve) => setTimeout(resolve, 300));
-        const rutInput = findDialogControl(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/);
-        if (rutInput) setControlValue(rutInput, String(job.receptor.rut));
-        if (job.receptor.razon_social) {
-          const nombreInput = findDialogControl(/NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/);
-          if (nombreInput) setControlValue(nombreInput, String(job.receptor.razon_social));
-        }
+        const fill = (pattern, value) => {
+          if (!value) return;
+          const input = findDialogControl(pattern);
+          if (input) setControlValue(input, String(value));
+        };
+        fill(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/, r.rut);
+        fill(/NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/, r.razon_social);
+        fill(/DIRECCION.*RECEPTOR|RECEPTOR.*DIRECCION/, r.direccion);
+        fill(/(E-?MAIL|CORREO).*RECEPTOR|RECEPTOR.*(E-?MAIL|CORREO)/, r.email);
+        fill(/(TELEFONO|FONO|CELULAR).*RECEPTOR|RECEPTOR.*(TELEFONO|FONO|CELULAR)/, r.telefono);
       }
     }
 
