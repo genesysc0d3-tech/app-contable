@@ -329,7 +329,12 @@
     ].filter(Boolean).join(" "));
   }
 
-  function setControlValue(control, value) {
+  function setControlValue(control, value, opts) {
+    // blur: Vuetify/Vue corren la VALIDACIÓN del campo al perder el foco (y el SII
+    // dispara el lookup del RUT del receptor). Necesario para el RUT del receptor;
+    // NOCIVO para la glosa ("Detalle"), donde el blur reinicia la validación y borra
+    // el valor recién escrito → por eso es opcional (default on, off para la glosa).
+    const withBlur = opts?.blur !== false;
     const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value");
     automationClickInProgress = true;
     try {
@@ -337,11 +342,10 @@
       else control.value = value;
       control.dispatchEvent(new Event("input", { bubbles: true }));
       control.dispatchEvent(new Event("change", { bubbles: true }));
-      // blur: Vuetify/Vue corren la VALIDACIÓN del campo al perder el foco (y el SII
-      // dispara el lookup del RUT del receptor). Sin esto, el formulario quedaba en
-      // estado "sin validar" y el botón EMITIR no se habilitaba con receptor.
-      control.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
-      control.dispatchEvent(new Event("blur", { bubbles: true }));
+      if (withBlur) {
+        control.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+        control.dispatchEvent(new Event("blur", { bubbles: true }));
+      }
     } finally {
       automationClickInProgress = false;
     }
@@ -1097,14 +1101,21 @@
       renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
       let glosaOk = false;
       if (await enableDialogToggle("Detalle")) {
-        for (let i = 0; i < 12 && !glosaOk; i += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          const glosaInput = findGlosaInput();
-          if (glosaInput) {
-            setControlValue(glosaInput, glosa);
-            await new Promise((resolve) => setTimeout(resolve, 150));
-            glosaOk = normalizeText(glosaInput.value) === normalizeText(glosa);
-          }
+        // 1) Esperar a que el campo aparezca (el toggle lo despliega con animación).
+        //    Antes escribíamos a ciegas y el spin de 12 intentos era el "se demora".
+        let glosaInput = null;
+        for (let i = 0; i < 8 && !glosaInput; i += 1) {
+          glosaInput = findGlosaInput();
+          if (!glosaInput) await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+        // 2) Escribir SIN blur (el blur borraba el valor) y verificar RE-CONSULTANDO el
+        //    input (Vuetify puede re-renderizar el nodo). Corta apenas queda escrito.
+        for (let i = 0; i < 4 && !glosaOk && glosaInput; i += 1) {
+          setControlValue(glosaInput, glosa, { blur: false });
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          const check = findGlosaInput() || glosaInput;
+          glosaOk = normalizeText(check.value) === normalizeText(glosa);
+          if (!glosaOk) glosaInput = check;
         }
       }
       if (!glosaOk) await setDialogToggle("Detalle", false);
