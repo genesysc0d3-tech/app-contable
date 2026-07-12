@@ -112,6 +112,7 @@ export async function POST(request: Request) {
     .from("propuestas_ia")
     .select(`
       id, tipo_propuesto, tipo_dte, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
+      receptor_email, receptor_telefono,
       medio_pago, notas, monto_neto, iva, total, estado,
       cliente_id,
       clientes(id, nombre, rut),
@@ -387,6 +388,10 @@ export async function POST(request: Request) {
         receptor_razon_social: payload.receptor_razon_social ?? null,
         receptor_direccion: payload.receptor_direccion ?? null,
         receptor_comuna: payload.receptor_comuna ?? null,
+        // Contacto del receptor (para enviarle la boleta) — no van en el XML fiscal;
+        // se guardan en el registro. Hermanos de dirección/comuna, desde la propuesta.
+        receptor_email: p.receptor_email ?? null,
+        receptor_telefono: p.receptor_telefono ?? null,
         medio_pago: payload.medio_pago ?? MEDIO_PAGO_LOTE,
         monto_neto: validation.totales.neto,
         monto_exento: validation.totales.exento,

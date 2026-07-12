@@ -160,6 +160,8 @@ export type Database = {
           proveedor_respuesta: Json | null
           receptor_comuna: string | null
           receptor_direccion: string | null
+          receptor_email: string | null
+          receptor_telefono: string | null
           receptor_razon_social: string | null
           receptor_rut: string | null
           referencia_id: string | null
@@ -195,6 +197,8 @@ export type Database = {
           proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           referencia_id?: string | null
@@ -230,6 +234,8 @@ export type Database = {
           proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           referencia_id?: string | null
@@ -1937,6 +1943,8 @@ export type Database = {
           notas: string | null
           receptor_comuna: string | null
           receptor_direccion: string | null
+          receptor_email: string | null
+          receptor_telefono: string | null
           receptor_nombre: string | null
           receptor_rut: string | null
           regla_id: string | null
@@ -1965,6 +1973,8 @@ export type Database = {
           notas?: string | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           regla_id?: string | null
@@ -1993,6 +2003,8 @@ export type Database = {
           notas?: string | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           regla_id?: string | null

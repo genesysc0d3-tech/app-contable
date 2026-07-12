@@ -269,7 +269,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   empresaTipoContribuyente?: string | null; compact?: boolean;
 }) {
   const { toast } = useToast();
-  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; medio_pago?: string | null };
+  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; receptor_email?: string | null; receptor_telefono?: string | null; medio_pago?: string | null };
 
   // Cliente
   const [selClienteId, setSelClienteId] = useState(propuesta.cliente_id ?? "");
@@ -320,12 +320,14 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const [razon, setRazon] = useState<string>(propuesta.receptor_nombre ?? "");
   const [direccion, setDireccion] = useState<string>(extra.receptor_direccion ?? "");
   const [comuna, setComuna] = useState<string>(extra.receptor_comuna ?? "");
+  const [email, setEmail] = useState<string>(extra.receptor_email ?? "");
+  const [telefono, setTelefono] = useState<string>(extra.receptor_telefono ?? "");
   const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
   // Progresivos (gobernados por 135 UF): bajo el umbral el receptor va escondido tras
   // un link; dirección/comuna detrás de "más datos" (nunca obligatorias). Se abren si
   // ya traen dato o si el usuario los despliega.
   const [showReceptorManual, setShowReceptorManual] = useState(false);
-  const [showMasDatos, setShowMasDatos] = useState<boolean>(!!(extra.receptor_direccion || extra.receptor_comuna));
+  const [showMasDatos, setShowMasDatos] = useState<boolean>(!!(extra.receptor_direccion || extra.receptor_comuna || extra.receptor_email || extra.receptor_telefono));
 
   const isAfecta = tipo === "afecta";
   const neto = isAfecta ? Math.round(total / 1.19) : total;
@@ -360,6 +362,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           total: Math.round(total), monto_neto: neto, iva,
           receptor_rut: rutTrim || null, receptor_nombre: razon.trim() || null,
           receptor_direccion: direccion.trim() || null, receptor_comuna: comuna.trim() || null,
+          receptor_email: email.trim() || null, receptor_telefono: telefono.trim() || null,
           medio_pago: medioPago.trim() || null, notas: detalle.trim() || null,
         };
     const e = await editarPropuesta(propuesta.id, patch);
@@ -453,9 +456,11 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
                   <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />
                   <input value={comuna} onChange={e=>setComuna(e.target.value)} placeholder="Comuna (opcional)" style={inp} />
+                  <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail (opcional)" type="email" style={inp} />
+                  <input value={telefono} onChange={e=>setTelefono(e.target.value)} placeholder="Teléfono (opcional)" type="tel" style={inp} />
                 </div>
               ) : (
-                <button onClick={()=>setShowMasDatos(true)} style={{...linkBtn,marginTop:4}}>+ dirección y comuna</button>
+                <button onClick={()=>setShowMasDatos(true)} style={{...linkBtn,marginTop:4}}>+ dirección, comuna y contacto</button>
               )}
             </div>
           ) : (
