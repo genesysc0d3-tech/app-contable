@@ -19,6 +19,7 @@ type ServiceDb = SupabaseClient<Database>;
 
 const TIPOS_SII_LOCAL = new Set([39, 41]);
 const TIPOS_SIMPLEAPI = new Set([33, 34, 39, 41]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function cleanText(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -221,6 +222,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMISSION_AUTHORIZATION_QUERY_FAILED" }, { status: 500 });
   }
 
+  // Motor masivo: el job del lote apunta a la propuesta que va a emitir, para que
+  // el folio real quede enlazado a ella. Fail-closed: un id ajeno (o inexistente)
+  // enlazaría el folio a la propuesta de OTRO contribuyente → integridad rota. La
+  // boleta única no manda propuesta_id (queda null, como hoy).
+  const propuestaId = cleanText(payload.propuesta_id);
+  if (propuestaId) {
+    if (!UUID_RE.test(propuestaId)) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_ID_INVALID" }, { status: 422 });
+    }
+    const { data: prop, error: propErr } = await guard.service
+      .from("propuestas_ia")
+      .select("id, empresa_id")
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (propErr) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_QUERY_FAILED", detalle: propErr.message }, { status: 500 });
+    }
+    if (!prop || prop.empresa_id !== guard.empresaId) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_NO_PERTENECE" }, { status: 422 });
+    }
+  }
+
   const lock = await acquireCuentaEmissionLock({
     sb: guard.service,
     cuentaId: guard.cuentaId,
@@ -229,6 +252,7 @@ export async function POST(request: Request) {
     provider,
     origin: cleanText(payload.origin) ?? "emision_directa",
     expectedEmisorRut,
+    propuestaId,
     ttlSeconds: provider === "sii_local" ? 15 * 60 : 5 * 60,
   });
 

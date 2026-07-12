@@ -19,6 +19,9 @@ export async function acquireCuentaEmissionLock(args: {
   origin?: string;
   expectedEmisorRut?: string | null;
   ttlSeconds?: number;
+  // Motor masivo: cada job del lote apunta a la propuesta que emite, para que el
+  // folio real quede enlazado a ella (la boleta única no lo trae → null).
+  propuestaId?: string | null;
 }): Promise<CuentaEmissionLock> {
   const now = new Date();
   const lockedUntil = new Date(now.getTime() + (args.ttlSeconds ?? 300) * 1000).toISOString();
@@ -38,6 +41,7 @@ export async function acquireCuentaEmissionLock(args: {
     provider: args.provider,
     origin: args.origin ?? "server_lock",
     expected_emisor_rut: args.expectedEmisorRut ?? null,
+    propuesta_id: args.propuestaId ?? null,
     estado: "running",
     estado_visible: "running",
     expires_at: lockedUntil,

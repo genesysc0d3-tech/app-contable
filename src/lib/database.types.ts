@@ -930,6 +930,7 @@ export type Database = {
           job_id: string
           locked_until: string | null
           origin: string
+          propuesta_id: string | null
           provider: string
           status_message: string | null
           updated_at: string
@@ -948,6 +949,7 @@ export type Database = {
           job_id: string
           locked_until?: string | null
           origin?: string
+          propuesta_id?: string | null
           provider: string
           status_message?: string | null
           updated_at?: string
@@ -966,6 +968,7 @@ export type Database = {
           job_id?: string
           locked_until?: string | null
           origin?: string
+          propuesta_id?: string | null
           provider?: string
           status_message?: string | null
           updated_at?: string

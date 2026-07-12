@@ -925,7 +925,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Post-emit NUNCA se cierra desde aquí: el folio manda.
   if (message?.type === "APP_CONTABLE_SII_JOB_CLOSE") {
     const state = message.job_id ? activeJobs.get(message.job_id) : null;
-    if (state && !state.finalEmitClicked) closeWorker(state);
+    // Pre-emit: cierre normal. Post-emit: SOLO si el folio ya quedó guardado
+    // (resultPersisted = ack del POST). Esto deja que el motor masivo recupere la
+    // ventana entre boletas sin arriesgar el folio: mientras no esté persistido, la
+    // ventana se mantiene (el stash + reentrega siguen protegiendo la boleta).
+    if (state && (!state.finalEmitClicked || state.resultPersisted)) closeWorker(state);
     sendResponse(baseMessage({ type: "APP_CONTABLE_SII_JOB_CLOSE_RESULT", ok: true }));
     return false;
   }

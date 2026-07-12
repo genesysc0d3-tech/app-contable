@@ -356,6 +356,7 @@ async function backfillFolioSinJobVivo(
     fechaEmision: string;
     totales: { monto_total?: number | null; monto_neto?: number | null; iva?: number | null; monto_exento?: number | null } | null;
     jobId: string | null;
+    propuestaId: string | null;
   },
 ): Promise<{ ok: boolean; boletaId?: string; already?: boolean; error?: string }> {
   const { data: empresa } = await sb
@@ -376,6 +377,10 @@ async function backfillFolioSinJobVivo(
     .from("boletas_emitidas")
     .insert({
       empresa_id: args.empresaId,
+      // Enlace propuesta ↔ folio también en la ruta de recuperación (job cerrado):
+      // sin esto la boleta respaldada quedaría sin enlace y su propuesta seguiría
+      // "pendiente" → el orbe la marcaría y re-emitirla generaría un folio nuevo.
+      propuesta_id: args.propuestaId ?? null,
       tipo_dte: args.tipoDte,
       folio: args.folio,
       fecha_emision: args.fechaEmision,
@@ -500,6 +505,7 @@ export async function POST(request: Request) {
         fechaEmision,
         totales: result?.totales ?? null,
         jobId: effectiveJobId,
+        propuestaId: jobCerrado.propuesta_id ?? null,
       });
       if (respaldo.ok) {
         await rememberResult(sb, {
@@ -727,6 +733,9 @@ export async function POST(request: Request) {
     .from("boletas_emitidas")
     .insert({
       empresa_id: empresaId,
+      // Motor masivo: enlaza el folio real a la propuesta que lo originó. Boleta
+      // única → null. El índice UNIQUE parcial de propuesta_id bloquea el doble.
+      propuesta_id: job.propuesta_id ?? null,
       tipo_dte: tipoDte,
       folio,
       fecha_emision: fechaEmision,
