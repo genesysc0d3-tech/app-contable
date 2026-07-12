@@ -18,7 +18,17 @@ import { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
  * mesa (page.tsx), para que la pestaña Emitir venga con datos del server como
  * el resto de las pestañas (sin fetch al cliente que recargue cada vez).
  */
-export async function getPendientesEmision(supabase: Supa, empresaId: string, empresaCtx: EmpresaCtx, range?: { start: string; end: string }) {
+export async function getPendientesEmision(
+  supabase: Supa,
+  empresaId: string,
+  empresaCtx: EmpresaCtx,
+  range?: { start: string; end: string },
+  opts?: { soloAprobado?: boolean },
+) {
+  // 'editado' es borrador (perdió el Aprobar) y NUNCA es emitible; la cola de Emitir
+  // igual lo muestra en "por revisar". El guardarraíl, en cambio, cuenta SOLO lo
+  // realmente emitible → soloAprobado excluye 'editado' de raíz.
+  const estados = opts?.soloAprobado ? ["aprobado"] : ["aprobado", "editado"];
   let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
@@ -27,7 +37,7 @@ export async function getPendientesEmision(supabase: Supa, empresaId: string, em
       movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at))
     `)
     .eq("empresa_id", empresaId)
-    .in("estado", ["aprobado", "editado"])
+    .in("estado", estados)
     .in("tipo_propuesto", TIPOS_EMITIBLES);
   // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
   if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);

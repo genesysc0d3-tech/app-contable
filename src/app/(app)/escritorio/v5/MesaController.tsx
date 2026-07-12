@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import RightColumnView from "./RightColumnView";
 import Mesa, { type MesaProps } from "./Mesa";
+import GuardarailOrbe from "./GuardarailOrbe";
 import CalendarStrip, { type NavParams } from "./CalendarStrip";
 import { cargarMesa } from "./actions";
 import { MesaReloadContext, pendingOpenDoc } from "./mesa-reload";
@@ -191,6 +192,7 @@ export default function MesaController({
           }
         />
       </div>
+      <GuardarailOrbe guardarail={mesa.guardarail} />
     </>
   );
 }
