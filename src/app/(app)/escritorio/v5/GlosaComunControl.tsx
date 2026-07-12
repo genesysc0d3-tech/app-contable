@@ -27,7 +27,7 @@ export default function GlosaComunControl({
   activaInicial: boolean;
 }) {
   const { toast } = useToast();
-  const placeholder = GLOSA_DEFAULT[hint ?? "mixto"] || "Glosa de las boletas (ej. Compraventa USDT)";
+  const placeholder = GLOSA_DEFAULT[hint ?? "mixto"] || "Detalle de las boletas (ej. Compraventa USDT)";
   const [activa, setActiva] = useState(activaInicial);
   const [glosa, setGlosa] = useState(glosaInicial ?? "");
   const [saving, setSaving] = useState(false);
@@ -44,13 +44,13 @@ export default function GlosaComunControl({
     const next = !activa;
     setActiva(next);
     if (!(await persist(next, glosa))) setActiva(!next);
-    else toast(next ? "Glosa activada para este documento" : "Boletas de este documento sin glosa");
+    else toast(next ? "Detalle activado para este documento" : "Boletas de este documento sin detalle");
   }
 
   async function saveGlosa() {
     const trimmed = glosa.trim();
     if (trimmed === (glosaInicial ?? "").trim()) return;
-    if (await persist(activa, trimmed)) toast("Glosa común guardada");
+    if (await persist(activa, trimmed)) toast("Detalle común guardado");
   }
 
   return (
@@ -59,10 +59,10 @@ export default function GlosaComunControl({
         type="button"
         role="switch"
         aria-checked={activa}
-        aria-label="Glosa para todas las boletas de este documento"
+        aria-label="Detalle para todas las boletas de este documento"
         onClick={toggle}
         disabled={saving}
-        title="Activa o desactiva la glosa para todas las boletas de este documento"
+        title="Activa o desactiva el detalle para todas las boletas de este documento"
         style={{
           display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
           background: "transparent", color: activa ? "var(--green)" : "var(--text3)", fontSize: 9, fontWeight: 800,
@@ -75,7 +75,7 @@ export default function GlosaComunControl({
         }}>
           <span style={{ width: 11, height: 11, borderRadius: "50%", background: activa ? "var(--green)" : "var(--text3)" }} />
         </span>
-        Glosa
+        Detalle
       </button>
       {activa && (
         <input
@@ -85,8 +85,8 @@ export default function GlosaComunControl({
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
           placeholder={placeholder}
           maxLength={80}
-          aria-label="Glosa común de las boletas de este documento"
-          title="Misma glosa para todas las boletas de este documento (máx 80). Vacío usa el default por tipo."
+          aria-label="Detalle común de las boletas de este documento"
+          title="Mismo detalle para todas las boletas de este documento (máx 80). Vacío usa el default por tipo."
           style={{
             flex: 1, minWidth: 160, height: 24, borderRadius: 6, border: "1px solid var(--border)",
             background: "var(--bg-muted)", color: "var(--text)", padding: "0 8px", fontSize: 9, outline: "none",

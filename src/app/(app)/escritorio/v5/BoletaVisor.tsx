@@ -82,7 +82,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
         <div style={{ fontSize: "3em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.04em", lineHeight: 1 }}>{fmt(boleta.monto_total)}</div>
         <div style={divider} />
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: "1.24em" }}>
-          <span style={{ flexShrink: 0, color: "var(--text3)" }}>Glosa</span>
+          <span style={{ flexShrink: 0, color: "var(--text3)" }}>Detalle</span>
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: glosa === SIN_INFO ? "var(--text3)" : "var(--text)" }} title={glosa}>{glosa}</span>
         </div>
         <div style={divider} />

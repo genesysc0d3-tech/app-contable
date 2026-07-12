@@ -436,13 +436,13 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             </div>
           </div>
 
-          {/* Comprador + forma de pago: progresivo por 135 UF (el 95% de las tx no lo necesita) */}
+          {/* Receptor + forma de pago: progresivo por 135 UF (el 95% de las tx no lo necesita) */}
           {receptorAbierto ? (
             <div style={{marginBottom:8}}>
-              <label style={lbl}>Comprador{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
+              <label style={lbl}>Receptor{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:6}}>
-                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" aria-label="RUT del comprador" aria-invalid={!rutValido || undefined} style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
-                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" aria-label="Nombre o razón social del comprador" style={inp} />
+                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" aria-label="RUT del receptor" aria-invalid={!rutValido || undefined} style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
+                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" aria-label="Nombre o razón social del receptor" style={inp} />
                 <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
                   <option value="">Medio de pago…</option>
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
@@ -459,7 +459,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
               )}
             </div>
           ) : (
-            <button onClick={()=>setShowReceptorManual(true)} style={{...linkBtn,marginBottom:8}}>+ identificar comprador (opcional)</button>
+            <button onClick={()=>setShowReceptorManual(true)} style={{...linkBtn,marginBottom:8}}>+ identificar receptor (opcional)</button>
           )}
         </>
       )}
@@ -475,7 +475,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         </select>
         <div style={{flex:1}} />
         <button onClick={handleAprobar} disabled={busy || !puedeStagear}
-          title={!puedeStagear ? "Falta el monto y —sobre 135 UF— RUT, nombre y medio de pago del comprador" : undefined}
+          title={!puedeStagear ? "Falta el monto y —sobre 135 UF— RUT, nombre y medio de pago del receptor" : undefined}
           style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"var(--green)",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {busy ? "..." : "Poner listo"}

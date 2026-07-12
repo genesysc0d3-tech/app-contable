@@ -207,9 +207,10 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
             {/* Detalle + monto */}
             <div>
               <label style={label}>Detalle (opcional)</label>
-              <textarea value={detalle} onChange={(e) => setDetalle(e.target.value)} rows={2}
+              <textarea value={detalle} onChange={(e) => setDetalle(e.target.value.slice(0, 80))} rows={2} maxLength={80}
                 placeholder="Qué se vendió o prestó (se imprime en la boleta)"
                 style={{ ...field, resize: "none", lineHeight: 1.5 }} />
+              <div style={{ fontSize: 10, color: detalle.length >= 80 ? "var(--red)" : "var(--text3)", marginTop: 3, textAlign: "right" }}>{detalle.length}/80</div>
               <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 10 }}>
                 <span style={{ fontSize: 26, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em" }}>$</span>
                 <input type="number" value={total} onChange={(e) => setTotal(Math.round(Number(e.target.value) || 0))}

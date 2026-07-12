@@ -62,7 +62,7 @@ function errorAmable(code?: string, msg?: string): string {
   switch (code) {
     case "YA_EMITIDA": return "Ya tenía una boleta emitida.";
     case "RECEPTOR_RUT_OBLIGATORIO":
-    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA": return "Falta identificar al comprador (sobre 135 UF).";
+    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA": return "Falta identificar al receptor (sobre 135 UF).";
     case "MEDIO_PAGO_OBLIGATORIO": return "Falta el medio de pago.";
     case "ESTADO_INVALIDO": return "Apruébala en Check antes de emitir.";
     case "PROVEEDOR_NO_IMPLEMENTADO": return "La emisión masiva aún no está disponible para tu proveedor. Usa Boleta única por ahora.";
