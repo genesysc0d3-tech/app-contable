@@ -32,7 +32,7 @@ export async function getPendientesEmision(
   let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, receptor_nombre, receptor_rut, medio_pago, monto_neto, iva, total, estado, created_at, cliente_id,
+      id, tipo_propuesto, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, monto_neto, iva, total, estado, created_at, cliente_id,
       clientes(id, nombre, rut),
       movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at))
     `)
@@ -154,6 +154,13 @@ export async function getPendientesEmision(
       fecha,
       receptor_rut,
       receptor_nombre,
+      // Campos del receptor + medio de pago para que el motor masivo arme el MISMO
+      // payload que boleta única (buildBoletaJob) desde la propuesta ya aprobada.
+      receptor_direccion: p.receptor_direccion ?? null,
+      receptor_comuna: p.receptor_comuna ?? null,
+      receptor_email: p.receptor_email ?? null,
+      receptor_telefono: p.receptor_telefono ?? null,
+      medio_pago: p.medio_pago ?? null,
       monto_total: total,
       balde: verdict.balde,
       listo_emitir: verdict.puedeEmitir,
