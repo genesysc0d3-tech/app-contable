@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extraerPatronContraparte } from "./aprender-regla";
+import { extraerPatronContraparte, regexContraparte } from "./aprender-regla";
 
 // Extracción de la clave de contraparte: la pieza que decide QUÉ se aprende.
 // Debe extraer nombres específicos y RECHAZAR (null) glosas genéricas, para no
@@ -8,9 +8,13 @@ describe("extraerPatronContraparte", () => {
   it("extrae el nombre tras el verbo bancario (caso P2P real)", () => {
     expect(extraerPatronContraparte("TRANSFERENCIA DE JUAN PEREZ")).toEqual({
       patron: "JUAN PEREZ",
-      patron_tipo: "contains",
     });
     expect(extraerPatronContraparte("TEF DE MARIA SOTO 09:23")?.patron).toBe("MARIA SOTO");
+  });
+
+  it("bota los sufijos jurídicos (SPA, LTDA) del patrón", () => {
+    expect(extraerPatronContraparte("TRANSFERENCIA DE JUAN PEREZ SPA")?.patron).toBe("JUAN PEREZ");
+    expect(extraerPatronContraparte("TEF DE COMERCIAL SOTO LTDA")?.patron).toBe("COMERCIAL SOTO");
   });
 
   it("funciona sin verbo, con el puro nombre", () => {
@@ -55,10 +59,34 @@ describe("extraerPatronContraparte", () => {
 
   it("el patrón resultante realmente re-matchea la glosa que lo originó", () => {
     // Invariante de correctitud: si aprendemos de una glosa, la regla creada debe
-    // volver a matchear esa misma glosa (contains, case-insensitive).
+    // volver a matchear esa misma glosa (via el regex con límites de palabra).
     const glosa = "TRANSFERENCIA DE JOSÉ TAPIA 14:05";
     const r = extraerPatronContraparte(glosa);
     expect(r).not.toBeNull();
-    expect(glosa.toLowerCase().includes(r!.patron.toLowerCase())).toBe(true);
+    const re = new RegExp(regexContraparte(r!.patron), "i");
+    expect(re.test(glosa)).toBe(true);
+  });
+});
+
+describe("regexContraparte (límite de palabra, no substring)", () => {
+  it("MARIA no se lleva MARIANA; JUAN no se lleva JUANA", () => {
+    const reMaria = new RegExp(regexContraparte("MARIA"), "i");
+    expect(reMaria.test("TRANSFERENCIA DE MARIA SOTO")).toBe(true);
+    expect(reMaria.test("TRANSFERENCIA DE MARIANA REYES")).toBe(false);
+    const reJuan = new RegExp(regexContraparte("JUAN"), "i");
+    expect(reJuan.test("ABONO JUAN")).toBe(true);
+    expect(reJuan.test("ABONO JUANA")).toBe(false);
+  });
+
+  it("respeta acentos y separadores no-letra (coma, dígitos)", () => {
+    const re = new RegExp(regexContraparte("JOSÉ TAPIA"), "i");
+    expect(re.test("TRANSFERENCIA DE JOSÉ TAPIA, REF 5")).toBe(true);
+    expect(re.test("PAGO A JOSÉ TAPIALES")).toBe(false); // no es sub-palabra
+  });
+
+  it("matchea al inicio y al fin de la glosa", () => {
+    const re = new RegExp(regexContraparte("JUAN PEREZ"), "i");
+    expect(re.test("JUAN PEREZ")).toBe(true);
+    expect(re.test("abono juan perez")).toBe(true);
   });
 });

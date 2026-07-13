@@ -159,7 +159,13 @@ function buildPropuestaFromRule(
     iva,
     total,
     confianza: rule.confianza,
-    notas: `Clasificado automáticamente por regla: "${rule.nombre}"`,
+    // notas = detalle IMPRIMIBLE en la boleta (máxima precedencia en resolverGlosa).
+    // NO metemos el nombre de la regla acá: sobre el umbral de identificación se
+    // imprimiría en el DTE y la regla aprendida lleva el nombre de la contraparte
+    // (tercero) → fuga de datos (misma clase que cerró PR #56). Sin nota, la glosa
+    // cae a la glosa común de la cartola o al genérico. El humano puede escribir
+    // su propio detalle después.
+    notas: null,
     spread_compra: null,
     spread_venta: null,
     spread_ganancia: null,

@@ -138,6 +138,17 @@ function angleGlosa(descripcion: string | null | undefined): AngleResult {
   return { veredicto: "neutral", peso: 0, razon: "" };
 }
 
+/**
+ * True si la glosa marca fuertemente NO_BOLETAR (transf cuenta propia, préstamo,
+ * devolución, sueldo, aporte de capital, DAP) con peso ≥ 0.7 — el mismo umbral
+ * con que un no_boletar prevalece en el ensemble incluso sobre el hint. Se usa
+ * para NO propagar un tipo aprendido sobre un movimiento no comercial.
+ */
+export function detectaNoBoletar(descripcion: string | null | undefined): boolean {
+  const g = angleGlosa(descripcion);
+  return g.veredicto === "no_boletar" && g.peso >= 0.7;
+}
+
 // ============================================================
 // Ángulo 2 — Giro de la empresa
 // ============================================================

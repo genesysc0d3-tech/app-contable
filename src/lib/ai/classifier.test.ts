@@ -112,4 +112,12 @@ describe("classifyWithRules", () => {
     ]);
     expect(usuarioSinTipo.clasificados[0].tipo_dte).toBeNull();
   });
+
+  it("no filtra el nombre de la regla a notas (privacidad: la regla lleva el nombre del tercero)", () => {
+    const res = classifyWithRules([mov({ descripcion: "transf juan" })], [
+      regla({ patron: "juan", nombre: 'Auto: JUAN PEREZ → Exenta' }),
+    ]);
+    // notas se imprime en el DTE sobre el umbral; el nombre del tercero no debe colarse ahí.
+    expect(res.clasificados[0].propuesta.notas).toBeNull();
+  });
 });

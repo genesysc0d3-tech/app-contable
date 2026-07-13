@@ -11,3 +11,18 @@ ALTER TABLE public.clasificacion_reglas
 
 COMMENT ON COLUMN public.clasificacion_reglas.tipo_dte IS
   'DTE recordado de una decisión humana: 39 (afecta) / 41 (exenta) / null (no forzar). Solo reglas de usuario lo persisten en la propuesta para auto-pasar a listas.';
+
+-- Invariante reforzada: una regla GLOBAL (empresa_id null, seed tributario) NUNCA
+-- lleva tipo_dte — solo las de usuario recuerdan la decisión. Sin esto, un
+-- tipo_dte en una global quedaría configurado en DB pero ignorado en silencio por
+-- el classifier (que solo lo propaga para reglas de usuario). Idempotente.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'clasificacion_reglas_tipo_dte_solo_usuario'
+  ) THEN
+    ALTER TABLE public.clasificacion_reglas
+      ADD CONSTRAINT clasificacion_reglas_tipo_dte_solo_usuario
+      CHECK (empresa_id IS NOT NULL OR tipo_dte IS NULL);
+  END IF;
+END $$;
