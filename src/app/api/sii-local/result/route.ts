@@ -346,6 +346,24 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
 // empresa+tipo+folio. Espeja la forma de /api/sii-local/reconcile y NO toca el
 // ciclo de vida del job ni el lock. Es la última línea de la invariante sagrada:
 // "una boleta emitida nunca queda invisible en la app".
+// Levanta la LÁPIDA: al quedar registrada la boleta de una propuesta que estaba
+// "a medias" (revision_pendiente), su job pasa a 'completed' → la propuesta deja de
+// estar bloqueada (ahora sale por yaEmitidas, no por enRevision). Idempotente: si ya
+// está completed, el WHERE no matchea. Best-effort: la boleta ya quedó guardada, que
+// es lo que importa.
+async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) {
+  if (!propuestaId) return;
+  try {
+    await sb
+      .from("emision_jobs")
+      .update({ estado: "completed", estado_visible: "completed", updated_at: new Date().toISOString() })
+      .eq("propuesta_id", propuestaId)
+      .eq("estado", "revision_pendiente");
+  } catch {
+    /* best-effort */
+  }
+}
+
 async function backfillFolioSinJobVivo(
   sb: ServiceDb,
   args: {
@@ -370,7 +388,7 @@ async function backfillFolioSinJobVivo(
     .from("boletas_emitidas").select("id")
     .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio)
     .maybeSingle();
-  if (existing) return { ok: true, boletaId: existing.id, already: true };
+  if (existing) { await liftRevisionTombstone(sb, args.propuestaId); return { ok: true, boletaId: existing.id, already: true }; }
 
   const totals = totalsFor(args.tipoDte, args.montoTotal, args.totales);
   const { data: boleta, error } = await sb
@@ -414,9 +432,10 @@ async function backfillFolioSinJobVivo(
     const { data: raced } = await sb
       .from("boletas_emitidas").select("id")
       .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio).maybeSingle();
-    if (raced) return { ok: true, boletaId: raced.id, already: true };
+    if (raced) { await liftRevisionTombstone(sb, args.propuestaId); return { ok: true, boletaId: raced.id, already: true }; }
     return { ok: false, error: error?.message ?? "INSERT_FAILED" };
   }
+  await liftRevisionTombstone(sb, args.propuestaId);
   return { ok: true, boletaId: boleta.id, already: false };
 }
 

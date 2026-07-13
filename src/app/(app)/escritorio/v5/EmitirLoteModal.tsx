@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { chileDateString } from "@/lib/chile-date";
+import { recoverLatestFolio, type RecoverLatestResult } from "@/lib/emission/recover-latest";
 import { useEmisionLote, type ItemLoteEmision } from "./useEmisionLote";
 
 export interface LoteItemInput {
@@ -37,7 +38,7 @@ export default function EmitirLoteModal({
   onClose: () => void;
   onDone?: () => void;
 }) {
-  const { progreso, pausa, corriendo, iniciar, detener, responderPausa } = useEmisionLote({ empresaId, empresaRut });
+  const { progreso, pausa, corriendo, jobIdRevision, iniciar, detener, responderPausa } = useEmisionLote({ empresaId, empresaRut });
   const [modo, setModo] = useState<"idle" | "legal" | "verificando">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -125,7 +126,7 @@ export default function EmitirLoteModal({
           <Corriendo p={progreso} onDetener={detener} />
         )}
         {progreso && fase === "terminada" && <Terminada folios={progreso.folios} onCerrar={() => { onClose(); onDone?.(); }} />}
-        {progreso && fase === "requiere_revision" && <Revision p={progreso} onCerrar={() => { onClose(); onDone?.(); }} />}
+        {progreso && fase === "requiere_revision" && <Revision p={progreso} jobId={jobIdRevision} onCerrar={() => { onClose(); onDone?.(); }} />}
         {progreso && fase === "detenida" && <Detenida p={progreso} onCerrar={() => { onClose(); onDone?.(); }} />}
 
         {pausa && <Pausa motivo={pausa.motivo} onSeguir={() => responderPausa("continuar")} onDetener={() => responderPausa("detener")} />}
@@ -244,17 +245,50 @@ function Terminada({ folios, onCerrar }: { folios: number[]; onCerrar: () => voi
   );
 }
 
-function Revision({ p, onCerrar }: { p: import("@/lib/emission/lote-runner").ProgresoLote; onCerrar: () => void }) {
+function Revision({ p, jobId, onCerrar }: { p: import("@/lib/emission/lote-runner").ProgresoLote; jobId: string | null; onCerrar: () => void }) {
   const faltan = p.total - p.procesadas;
+  const [recuperando, setRecuperando] = useState(false);
+  const [res, setRes] = useState<RecoverLatestResult | null>(null);
+
+  async function recuperar() {
+    setRecuperando(true);
+    setRes(await recoverLatestFolio(jobId));
+    setRecuperando(false);
+  }
+
+  // Éxito: el folio quedó registrado y la lápida se levantó → la propuesta ya no
+  // está bloqueada. Cierre limpio.
+  if (res?.estado === "recuperado") {
+    return (
+      <>
+        <Badge bg="rgba(34,197,94,.13)">✅</Badge>
+        <div style={h1}>Folio recuperado</div>
+        <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
+          {res.folio ? `Folio ${res.folio} ` : "La boleta "}{res.already ? "ya estaba guardada." : "quedó guardada en la app."} Podés emitir el resto desde la pestaña.
+        </div>
+        <button onClick={onCerrar} style={{ ...primaryBtn }}>Cerrar</button>
+      </>
+    );
+  }
+
   return (
     <>
       <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
       <div style={h1}>Frené en la boleta {p.procesadas}</div>
       <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.5, marginTop: 6 }}>
-        Emitiste, pero no pude confirmar el folio. Resuélvela en la ventana SII abierta —<span style={{ color: "#f6ab3d", fontWeight: 600 }}> captura o ingresa el folio</span>— y volvés a emitir el resto. <span style={{ color: "#f6ab3d", fontWeight: 600 }}>No la vuelvas a emitir.</span>
+        Emitiste, pero no pude confirmar el folio. Esta boleta quedó <span style={{ color: "#f6ab3d", fontWeight: 600 }}>bloqueada</span> para que no salga dos veces. Recuperá su folio antes de seguir. <span style={{ color: "#f6ab3d", fontWeight: 600 }}>No la vuelvas a emitir a mano.</span>
       </div>
+      {res?.estado === "sin_resultado" && (
+        <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--text2)", lineHeight: 1.45 }}>
+          No encontré un folio para recuperar. Si la ventana del SII <b>no</b> mostró un folio, no se emitió nada. Abrí la ventana del SII para confirmar; la boleta queda en revisión (no la re-emitas hasta estar seguro).
+        </div>
+      )}
+      {res?.estado === "error" && <div style={{ marginTop: 10, fontSize: 12, color: "var(--red,#ef4444)" }}>{res.mensaje}</div>}
       {chips([{ l: "emitidas", v: String(p.emitidas) }, { l: "a medias", v: String(p.revision) }, { l: "faltan", v: String(Math.max(0, faltan)) }])}
-      <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Ir a la ventana SII</button>
+      <button onClick={recuperar} disabled={recuperando} style={{ ...primaryBtn, opacity: recuperando ? 0.6 : 1 }}>
+        {recuperando ? "Recuperando…" : "Recuperar el folio de esta boleta"}
+      </button>
+      <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 10 }}>Ir a la ventana SII</button>
     </>
   );
 }

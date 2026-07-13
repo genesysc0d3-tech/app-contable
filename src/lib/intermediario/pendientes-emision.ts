@@ -68,6 +68,25 @@ export async function getPendientesEmision(
     }
   }
 
+  // Lápidas: propuestas cuya emisión quedó "a medias" (posible folio real sin
+  // registrar). NO tienen fila en boletas_emitidas todavía, así que sin este Set
+  // reaparecerían como "listas" y el usuario las re-emitiría → doble folio. Se
+  // excluyen hasta recuperar el folio (que sube el job a 'completed' y crea la boleta).
+  let enRevision = new Set<string>();
+  if (propIds.length > 0) {
+    try {
+      const { data: revJobs } = await supabase
+        .from("emision_jobs")
+        .select("propuesta_id")
+        .eq("empresa_id", empresaId)
+        .eq("estado", "revision_pendiente")
+        .in("propuesta_id", propIds);
+      enRevision = new Set((revJobs ?? []).map((j) => j.propuesta_id).filter((id): id is string => typeof id === "string"));
+    } catch {
+      /* columna/estado aún no migrado — degrada sin romper */
+    }
+  }
+
   // Paso P: decisión humana del tipo (degradado si la columna tipo_dte no está migrada).
   const tipoDteById = new Map<string, 39 | 41>();
   if (propIds.length > 0) {
@@ -88,7 +107,7 @@ export async function getPendientesEmision(
   }
 
   type PropuestaRaw = NonNullable<typeof propuestas>[number];
-  const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id));
+  const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id) && !enRevision.has(p.id));
 
   // Umbral 135 UF con la UF del día (fallback a referencial si la API cae).
   const umbralIdentificacionClp = await getUmbralIdentificacionClp();
@@ -158,10 +177,14 @@ export async function getPendientesEmision(
       receptor_nombre,
       // Campos del receptor + medio de pago para que el motor masivo arme el MISMO
       // payload que boleta única (buildBoletaJob) desde la propuesta ya aprobada.
-      receptor_direccion: p.receptor_direccion ?? null,
-      receptor_comuna: p.receptor_comuna ?? null,
-      receptor_email: p.receptor_email ?? null,
-      receptor_telefono: p.receptor_telefono ?? null,
+      // MINIMIZACIÓN por monto (Ley 19.628 / Res. 44/2025): bajo el umbral de
+      // identificación (135 UF) la identidad/contacto del receptor NO se conserva.
+      // RED en el punto de emisión: cubre propuestas VIEJAS que guardaron los 4
+      // campos crudos antes de que el insert los minimizara.
+      receptor_direccion: total >= umbralIdentificacionClp ? (p.receptor_direccion ?? null) : null,
+      receptor_comuna: total >= umbralIdentificacionClp ? (p.receptor_comuna ?? null) : null,
+      receptor_email: total >= umbralIdentificacionClp ? (p.receptor_email ?? null) : null,
+      receptor_telefono: total >= umbralIdentificacionClp ? (p.receptor_telefono ?? null) : null,
       medio_pago: p.medio_pago ?? null,
       // Glosa YA SEGURA (misma política que el lote mock, resolverGlosa: editado ›
       // común › genérico, NUNCA la glosa cruda del banco). Solo viaja el string

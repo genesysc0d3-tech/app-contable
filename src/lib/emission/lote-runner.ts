@@ -55,6 +55,9 @@ export interface ProgresoLote {
   fase: FaseLote;
   itemActual: ItemLote | null;
   subestado: string | null; // mensaje fino de la emisión en curso (login, captura, etc.)
+  // Boleta "a medias" que frenó el lote: el modal la usa para ofrecer recuperar el
+  // folio (propuestaId viene en item). folio = el que se alcanzó a leer, si alguno.
+  revisionPendiente: { item: ItemLote; folio: number | null } | null;
   resultados: Array<{ item: ItemLote; desenlace: DesenlaceItem }>;
   folios: number[];
 }
@@ -109,6 +112,7 @@ export async function ejecutarLote(
     fase: "preparando",
     itemActual: null,
     subestado: null,
+    revisionPendiente: null,
     resultados: [],
     folios: [],
   };
@@ -159,7 +163,19 @@ export async function ejecutarLote(
     // usuario. Hay una ventana abierta con un folio posiblemente REAL; seguir es
     // inseguro. El humano la resuelve (captura/ingresa folio) y re-lanza el resto.
     if (desenlace.estado === "revisar") {
+      p.revisionPendiente = { item, folio: desenlace.folio ?? null };
       p.fase = "requiere_revision";
+      emitir();
+      return p;
+    }
+
+    // Detener cooperativo: si el usuario pidió parar MIENTRAS esta boleta estaba en
+    // vuelo, respetarlo ACÁ — antes de cualquier pausa por error/tope. La boleta en
+    // vuelo ya se dejó terminar (invariante), pero no abrimos una pausa espuria ni
+    // arrancamos la próxima. (El "Detener" durante el jitter lo cubre el chequeo de
+    // más abajo; este cubre el caso de una boleta que terminó fallida/tope.)
+    if (detenido()) {
+      p.fase = "detenida";
       emitir();
       return p;
     }

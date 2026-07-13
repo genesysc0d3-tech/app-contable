@@ -73,7 +73,10 @@ export async function releaseCuentaEmissionLock(args: {
   sb: Sb;
   cuentaId: string;
   jobId: string;
-  estado?: "completed" | "failed" | "cancelled" | "expired";
+  // 'revision_pendiente' = lápida de boleta "a medias": suelta el candado de
+  // cuenta igual, pero sella el job con un estado que BLOQUEA re-emitir esa
+  // propuesta hasta recuperar/registrar el folio (ver migración revision_pendiente).
+  estado?: "completed" | "failed" | "cancelled" | "expired" | "revision_pendiente";
 }) {
   const estado = args.estado ?? "completed";
   await finalizeFolioReservaForJob({ sb: args.sb, jobId: args.jobId, estado });

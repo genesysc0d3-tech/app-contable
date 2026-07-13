@@ -87,6 +87,24 @@ describe("ejecutarLote — Detener nunca corta una emisión en vuelo", () => {
     expect(log).toEqual(["emitir:a"]); // nunca "emitir:b" ni "esperar"
   });
 
+  it("abort DENTRO de una emisión que termina 'fallida' → detenida, sin pausa espuria", async () => {
+    // El bug que cazó la revisión: Detener a mitad de una boleta que luego falla
+    // abría el modal de pausa por error en vez de detener. Ahora va directo a detenida.
+    const ac = new AbortController();
+    let pregunto = false;
+    const { driver, log } = fakeDriver([fallida(), emitida(2)], {
+      dentroDeEmitir: (_it, i) => { if (i === 0) ac.abort(); },
+    });
+    const p = await ejecutarLote([item("a"), item("b")], driver, {
+      señalDetener: ac.signal,
+      alPausar: async () => { pregunto = true; return "continuar"; },
+    });
+    expect(p.fase).toBe("detenida");
+    expect(pregunto).toBe(false); // NO abre pausa por error
+    expect(p.fallidas).toBe(1);
+    expect(log).toEqual(["emitir:a"]); // "b" nunca arranca, sin jitter
+  });
+
   it("abort antes de empezar → no emite nada", async () => {
     const ac = new AbortController();
     ac.abort();
@@ -162,6 +180,14 @@ describe("ejecutarLote — boleta 'a medias' frena en seco", () => {
     const p = await ejecutarLote([item("a"), item("b")], driver);
     expect(p.fase).toBe("requiere_revision");
     expect(p.revision).toBe(1);
+  });
+
+  it("'revisar' expone revisionPendiente con el item trabado y el folio leído", async () => {
+    const { driver } = fakeDriver([emitida(1), { estado: "revisar", motivo: "no confirmé", folio: 99 }]);
+    const p = await ejecutarLote([item("a"), item("b", 41)], driver);
+    expect(p.fase).toBe("requiere_revision");
+    expect(p.revisionPendiente?.item.propuestaId).toBe("b");
+    expect(p.revisionPendiente?.folio).toBe(99);
   });
 });
 

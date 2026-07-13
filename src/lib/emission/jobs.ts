@@ -30,7 +30,10 @@ export async function requireEmisionJob(args: {
   if (job.provider !== args.provider) return { ok: false, status: 409, error: "EMISION_JOB_PROVIDER_MISMATCH" };
   if (job.usuario_id !== args.userId) return { ok: false, status: 403, error: "EMISION_JOB_FORBIDDEN" };
   if (new Date(job.expires_at).getTime() <= Date.now()) return { ok: false, status: 409, error: "EMISION_JOB_EXPIRED", job };
-  if (["completed", "failed", "cancelled", "expired"].includes(job.estado)) {
+  // 'revision_pendiente' se trata como CERRADO-recuperable: NO es un job vivo, pero
+  // sí adjunta `job` para que el rescate (recover_latest → backfill) enganche por
+  // la misma rama que un job cerrado/expirado y registre el folio "a medias".
+  if (["completed", "failed", "cancelled", "expired", "revision_pendiente"].includes(job.estado)) {
     return { ok: false, status: 409, error: "EMISION_JOB_CLOSED", job };
   }
 
@@ -45,7 +48,7 @@ export async function requireEmisionJob(args: {
 export async function markEmisionJob(args: {
   sb: Sb;
   jobId: string;
-  estado: "running" | "completed" | "failed" | "expired" | "cancelled";
+  estado: "running" | "completed" | "failed" | "expired" | "cancelled" | "revision_pendiente";
 }) {
   await args.sb
     .from("emision_jobs")
