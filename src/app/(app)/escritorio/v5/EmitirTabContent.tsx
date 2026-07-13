@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useId } from "react";
+import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
@@ -492,9 +493,12 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
         const revItems = porRevisarByDoc.get(popupDoc) ?? [];
         const nombre = grupos.find(g => (g.docId ?? "__sueltas__") === popupDoc)?.nombre
           ?? revItems[0]?.receptor_nombre ?? "Documento";
-        return (
-          <div onClick={() => setPopupDoc(null)} style={{ position: "fixed", inset: 0, zIndex: 30, display: "grid", placeItems: "center", padding: 20, background: "rgba(6,7,10,.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ width: "min(500px,95vw)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
+        // Portal a document.body + z-index alto: sin esto el popup se ancla al panel
+        // (ancestro transformado) y la card de plan / paneles del escritorio se le
+        // colaban encima. Mismo patrón que EmitirLoteModal / EditorAmpliado.
+        return createPortal(
+          <div onClick={() => setPopupDoc(null)} style={{ position: "fixed", inset: 0, zIndex: 215, display: "grid", placeItems: "center", padding: 20, background: "rgba(6,7,10,.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "min(760px,96vw)", maxHeight: "82vh", display: "flex", flexDirection: "column", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
               <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700 }}>Por revisar</div>
@@ -502,9 +506,9 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                 </div>
                 <button onClick={() => setPopupDoc(null)} style={{ width: 26, height: 26, border: "none", background: "var(--bg-muted)", color: "var(--text2)", borderRadius: 7, cursor: "pointer", fontSize: 12 }}>✕</button>
               </div>
-              <div style={{ overflowY: "auto", padding: "8px 12px" }}>
+              <div style={{ overflowY: "auto", padding: "10px 12px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8, alignContent: "start" }}>
                 {revItems.map((it) => (
-                  <div key={it.id} style={{ padding: "9px 10px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", marginBottom: 6 }}>
+                  <div key={it.id} style={{ padding: "9px 10px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", display: "flex", flexDirection: "column" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.receptor_nombre || it.descripcion || "Sin nombre"}</div>
                       <div style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmt(it.monto_total)}</div>
@@ -512,14 +516,15 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                     {it.motivo_no_listo && <div style={{ fontSize: 9, color: "var(--amber)", marginTop: 5, lineHeight: 1.4 }}>⚠ {it.motivo_no_listo}</div>}
                     {it.documento_id && (
                       <button onClick={() => { goToCheck(it); setPopupDoc(null); }}
-                        style={{ marginTop: 8, fontSize: 10, fontWeight: 600, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 7, padding: "6px 11px", cursor: "pointer" }}>Resolver en Check →</button>
+                        style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10, fontWeight: 600, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 7, padding: "6px 11px", cursor: "pointer", paddingTop: 6 }}>Resolver en Check →</button>
                     )}
                   </div>
                 ))}
-                {revItems.length === 0 && <div style={{ textAlign: "center", padding: "24px 0", color: "#5fd98a", fontSize: 12 }}>✓ Nada por revisar en esta cartola.</div>}
+                {revItems.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "24px 0", color: "#5fd98a", fontSize: 12 }}>✓ Nada por revisar en esta cartola.</div>}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body,
         );
       })()}
 
