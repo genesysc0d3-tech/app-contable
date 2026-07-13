@@ -297,6 +297,7 @@ export type Database = {
           prioridad: number
           receptor_nombre_default: string | null
           receptor_rut_default: string | null
+          tipo_dte: number | null
           tipo_flujo_match: string | null
           tipo_propuesto: string
           veces_aplicada: number
@@ -315,6 +316,7 @@ export type Database = {
           prioridad?: number
           receptor_nombre_default?: string | null
           receptor_rut_default?: string | null
+          tipo_dte?: number | null
           tipo_flujo_match?: string | null
           tipo_propuesto: string
           veces_aplicada?: number
@@ -333,6 +335,7 @@ export type Database = {
           prioridad?: number
           receptor_nombre_default?: string | null
           receptor_rut_default?: string | null
+          tipo_dte?: number | null
           tipo_flujo_match?: string | null
           tipo_propuesto?: string
           veces_aplicada?: number

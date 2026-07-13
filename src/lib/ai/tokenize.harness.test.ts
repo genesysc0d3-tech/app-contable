@@ -45,9 +45,9 @@ function toAB(path: string): ArrayBuffer {
 // forex, y P2P por transferencia. La invarianza debe cumplirse para CUALQUIER
 // regla que matchee por forma de la operación (nunca por identidad).
 const REGLAS: ClasificacionRegla[] = [
-  { id: "r-crypto", empresa_id: null, nombre: "cripto", patron: "\\b(usdt|btc|eth|binance|buda|cripto)\\b", patron_tipo: "regex", tipo_flujo_match: null, tipo_propuesto: "compraventa_crypto", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.95, prioridad: 60 },
-  { id: "r-transf", empresa_id: null, nombre: "transferencia entrada", patron: "transf", patron_tipo: "starts_with", tipo_flujo_match: "entrada", tipo_propuesto: "boleta", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.8, prioridad: 40 },
-  { id: "r-abono", empresa_id: null, nombre: "abono", patron: "abono", patron_tipo: "starts_with", tipo_flujo_match: "entrada", tipo_propuesto: "boleta", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.7, prioridad: 30 },
+  { id: "r-crypto", empresa_id: null, nombre: "cripto", patron: "\\b(usdt|btc|eth|binance|buda|cripto)\\b", patron_tipo: "regex", tipo_flujo_match: null, tipo_propuesto: "compraventa_crypto", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.95, prioridad: 60, tipo_dte: null },
+  { id: "r-transf", empresa_id: null, nombre: "transferencia entrada", patron: "transf", patron_tipo: "starts_with", tipo_flujo_match: "entrada", tipo_propuesto: "boleta", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.8, prioridad: 40, tipo_dte: null },
+  { id: "r-abono", empresa_id: null, nombre: "abono", patron: "abono", patron_tipo: "starts_with", tipo_flujo_match: "entrada", tipo_propuesto: "boleta", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.7, prioridad: 30, tipo_dte: null },
 ];
 
 function nombreSobrante(glosa: string): string | null {

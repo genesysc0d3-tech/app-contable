@@ -11,7 +11,8 @@ function regla(p: Partial<ClasificacionRegla>): ClasificacionRegla {
   return {
     id: "r1", empresa_id: null, nombre: "regla", patron: "", patron_tipo: "contains",
     tipo_flujo_match: null, tipo_propuesto: "compraventa_crypto",
-    receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.9, prioridad: 50, ...p,
+    receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.9, prioridad: 50,
+    tipo_dte: null, ...p,
   };
 }
 
@@ -88,5 +89,27 @@ describe("classifyWithRules", () => {
     expect(conDefault.clasificados[0].propuesta.receptor_nombre).toBe("Cliente Fijo");
     const inferido = classifyWithRules([mov({ descripcion: "TRANSF DE JUAN PEREZ" })], [regla({ patron: "transf", receptor_nombre_default: null })]);
     expect(inferido.clasificados[0].propuesta.receptor_nombre).toBe("JUAN PEREZ");
+  });
+
+  it("tipo_dte: solo las reglas de USUARIO lo propagan; las globales lo dejan null", () => {
+    // Regla de usuario con tipo recordado → la propuesta nace con tipo_dte para
+    // auto-pasar a "listas" en el gate (sinDecisionHumana = false).
+    const usuario = classifyWithRules([mov({ descripcion: "transf juan" })], [
+      regla({ patron: "juan", empresa_id: "emp1", tipo_dte: 41 }),
+    ]);
+    expect(usuario.clasificados[0].tipo_dte).toBe(41);
+
+    // Regla global (seed) con tipo_dte set → NO se propaga (conservador: el gate
+    // sigue decidiendo por ellas, sin cambio de comportamiento).
+    const global = classifyWithRules([mov({ descripcion: "usdt" })], [
+      regla({ patron: "usdt", empresa_id: null, tipo_dte: 41 }),
+    ]);
+    expect(global.clasificados[0].tipo_dte).toBeNull();
+
+    // Regla de usuario sin tipo recordado → null (no fuerza nada).
+    const usuarioSinTipo = classifyWithRules([mov({ descripcion: "usdt" })], [
+      regla({ patron: "usdt", empresa_id: "emp1", tipo_dte: null }),
+    ]);
+    expect(usuarioSinTipo.clasificados[0].tipo_dte).toBeNull();
   });
 });

@@ -28,6 +28,13 @@ export interface ClasificacionRegla {
   receptor_rut_default: string | null;
   confianza: number;
   prioridad: number;
+  /**
+   * DTE recordado de una decisión humana (39 afecta / 41 exenta / null = no
+   * forzar). Solo las reglas de USUARIO lo aprovechan: cuando matchean, la
+   * propuesta nace con tipo_dte persistido y el gate la manda directo a
+   * "listas" en vez de rebotar a Check (ver aprender-regla.ts).
+   */
+  tipo_dte: number | null;
 }
 
 export interface ClassifierResult {
@@ -36,6 +43,12 @@ export interface ClassifierResult {
     propuesta: PropuestaExtraida;
     regla_id: string;
     fuente: "regla_usuario" | "regla_global";
+    /**
+     * tipo_dte a persistir en la propuesta. Solo != null para reglas de
+     * usuario que lo recordaron; las globales (seed) lo dejan null para no
+     * cambiar su comportamiento (el gate sigue decidiendo por ellas).
+     */
+    tipo_dte: number | null;
   }>;
   noClasificados: Array<{
     movimiento_index: number;
@@ -175,6 +188,9 @@ export function classifyWithRules(
         propuesta: buildPropuestaFromRule(mov, i, matchingRule),
         regla_id: matchingRule.id,
         fuente: matchingRule.empresa_id ? "regla_usuario" : "regla_global",
+        // Solo las reglas de usuario (empresa_id set) auto-pasan a listas con el
+        // tipo recordado. Las globales dejan tipo_dte null → el gate decide.
+        tipo_dte: matchingRule.empresa_id ? (matchingRule.tipo_dte ?? null) : null,
       });
     } else {
       noClasificados.push({ movimiento_index: i, movimiento: mov });

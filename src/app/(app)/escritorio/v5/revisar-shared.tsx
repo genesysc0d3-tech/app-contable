@@ -368,7 +368,14 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     const e = await editarPropuesta(propuesta.id, patch);
     if (e?.error) { toast(e.error, "error"); setBusy(false); return; }
     const r = await ponerListo([propuesta.id], cid || null);
-    if (r.error) toast(r.error, "error"); else toast("Lista");
+    // Aprender-al-clasificar: si al resolver este movimiento la app acomodó a los
+    // hermanos de la misma contraparte en la cartola, lo mostramos (el "momento
+    // mágico"). Si solo aprendió la regla para la próxima, un aviso más suave.
+    const ap = e && "aprendizaje" in e ? e.aprendizaje : null;
+    if (r.error) toast(r.error, "error");
+    else if (ap && ap.propagadas > 0) toast(`Lista · acomodé ${ap.propagadas} más de la misma contraparte`);
+    else if (ap && (ap.creada || ap.actualizada)) toast("Lista · aprendí esta contraparte");
+    else toast("Lista");
     onAction();
     setBusy(false);
     onClose();

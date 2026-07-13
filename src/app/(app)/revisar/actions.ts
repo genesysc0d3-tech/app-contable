@@ -6,6 +6,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { aprenderReglaDesdeResolucion, type AprenderResultado } from "@/lib/ai/aprender-regla";
 
 const BATCH_SIZE = 50;
 
@@ -233,6 +234,36 @@ export async function editarPropuesta(
     update.monto_moneda_origen = campos.monto_moneda_origen === null ? null : numField(campos.monto_moneda_origen);
   }
 
+  // Snapshot previo para aprender-al-clasificar: si esta edición fija tipo_dte
+  // (39/41) sobre una propuesta que aún NO tenía decisión humana, guardamos la
+  // glosa/flujo/cartola para enseñar la regla después del update. Se lee ANTES
+  // porque el update sobreescribe el tipo_dte previo.
+  let previo:
+    | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null }
+    | null = null;
+  if (campos.tipo_dte === 39 || campos.tipo_dte === 41) {
+    const { data: p } = await ctx.sb
+      .from("propuestas_ia")
+      .select("tipo_dte, movimiento_id")
+      .eq("empresa_id", ctx.empresaId)
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (p && p.tipo_dte == null && p.movimiento_id) {
+      const { data: m } = await ctx.sb
+        .from("movimientos_raw")
+        .select("descripcion, tipo_flujo, documento_id")
+        .eq("id", p.movimiento_id)
+        .maybeSingle();
+      if (m && (m.tipo_flujo === "entrada" || m.tipo_flujo === "salida")) {
+        previo = {
+          descripcion: m.descripcion ?? "",
+          tipo_flujo: m.tipo_flujo,
+          documento_id: m.documento_id,
+        };
+      }
+    }
+  }
+
   const doUpdate = () => ctx.sb
     .from("propuestas_ia")
     .update(update, { count: "exact" })
@@ -250,10 +281,28 @@ export async function editarPropuesta(
   }
   if (error) return { error: error.message };
   if (!count) return { error: "No se pudo editar — el estado de la propuesta no lo permite" };
+
+  // Aprender-al-clasificar: solo si tipo_dte REALMENTE se persistió (no lo botó
+  // el fallback de arriba) y era la primera decisión humana (previo != null).
+  // Best-effort: aprenderReglaDesdeResolucion nunca lanza; un fallo acá no rompe
+  // la edición ya guardada.
+  const tipoDtePersistida = "tipo_dte" in update && (update.tipo_dte === 39 || update.tipo_dte === 41);
+  let aprendizaje: AprenderResultado | null = null;
+  if (previo && tipoDtePersistida) {
+    aprendizaje = await aprenderReglaDesdeResolucion(ctx.sb, {
+      empresaId: ctx.empresaId,
+      userId: ctx.userId,
+      documentoId: previo.documento_id,
+      descripcion: previo.descripcion,
+      tipoFlujo: previo.tipo_flujo,
+      tipoDte: update.tipo_dte as 39 | 41,
+    });
+  }
+
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true };
+  return { ok: true, aprendizaje };
 }
 
 export async function aprobarTodas(

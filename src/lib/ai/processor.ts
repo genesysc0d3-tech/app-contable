@@ -26,6 +26,8 @@ import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validati
 type EnrichedPropuesta = PropuestaExtraida & {
   __fuente?: "regla_usuario" | "regla_global" | "mistral";
   __regla_id?: string | null;
+  /** tipo_dte recordado por una regla de usuario (39/41); null = el gate decide. */
+  __tipo_dte?: number | null;
 };
 
 const MISTRAL_MAX_CONFIANZA = 0.75; // Cap Mistral classifications — never auto-approve
@@ -371,6 +373,7 @@ export async function procesarDocumento(
       propuesta: PropuestaExtraida;
       regla_id: string;
       fuente: "regla_usuario" | "regla_global";
+      tipo_dte: number | null;
     };
     const ruleClassifications = new Map<number, RuleClassification>();
     // Maps the position of each mov inside the flat forMistral array back
@@ -394,6 +397,7 @@ export async function procesarDocumento(
           propuesta: c.propuesta,
           regla_id: c.regla_id,
           fuente: c.fuente,
+          tipo_dte: c.tipo_dte,
         });
       }
 
@@ -552,6 +556,7 @@ export async function procesarDocumento(
           movimiento_index: origIdx,
           __fuente: rc.fuente,
           __regla_id: rc.regla_id,
+          __tipo_dte: rc.tipo_dte,
         });
       }
 
@@ -1034,10 +1039,19 @@ export async function procesarDocumento(
           const tipoBase = normTipo(p.tipo_propuesto);
           const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp?.tipo_contribuyente);
           const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp?.tipo_contribuyente);
+          // tipo_dte persistido SOLO cuando una regla de USUARIO lo recordó
+          // (__tipo_dte != null). Eso apaga `sinDecisionHumana` en el gate y la
+          // propuesta nace en "listas" sin rebotar a Check. Todo lo demás
+          // (mistral, template, reglas globales) deja tipo_dte null → sin cambio
+          // de comportamiento. Si el emisor es exento, se fuerza 41 (nunca emite
+          // 39), coherente con la normalización exenta de tipo_propuesto de arriba.
+          const tipoDtePersist =
+            enriched.__tipo_dte != null ? (exentoFinal ? 41 : enriched.__tipo_dte) : null;
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
             tipo_propuesto: tipoNorm,
+            tipo_dte: tipoDtePersist,
             // Minimización por monto (Ley 19.628 + Res. 44/2025): solo se guarda la
             // identidad del tercero cuando la emisión PODRÍA exigirla. Se usa el PISO
             // conservador (RECEPTOR_OBLIGATORIO_DESDE), no la UF viva: la emisión puede
