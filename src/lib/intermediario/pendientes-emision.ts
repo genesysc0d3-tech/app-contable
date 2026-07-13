@@ -2,6 +2,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
 import { evaluarEmision } from "@/lib/intermediario/emision-decision";
+import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contribuyente: string | null };
@@ -32,9 +33,9 @@ export async function getPendientesEmision(
   let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, monto_neto, iva, total, estado, created_at, cliente_id,
+      id, tipo_propuesto, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, notas, monto_neto, iva, total, estado, created_at, cliente_id,
       clientes(id, nombre, rut),
-      movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at))
+      movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at, glosa_comun, glosa_activa))
     `)
     .eq("empresa_id", empresaId)
     .in("estado", estados)
@@ -106,9 +107,10 @@ export async function getPendientesEmision(
 
   const items = visibles.map((p: PropuestaRaw) => {
     const cliente = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as { id: string; nombre: string; rut: string | null } | null;
+    type DocNode = { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null; glosa_comun: string | null; glosa_activa: boolean | null };
     const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as {
       fecha: string; descripcion: string; monto: number;
-      documentos_subidos?: { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null } | { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null }[] | null;
+      documentos_subidos?: DocNode | DocNode[] | null;
     } | null;
     const docNested = mov?.documentos_subidos;
     const docArr = Array.isArray(docNested) ? docNested[0] : docNested;
@@ -161,6 +163,13 @@ export async function getPendientesEmision(
       receptor_email: p.receptor_email ?? null,
       receptor_telefono: p.receptor_telefono ?? null,
       medio_pago: p.medio_pago ?? null,
+      // Glosa YA SEGURA (misma política que el lote mock, resolverGlosa: editado ›
+      // común › genérico, NUNCA la glosa cruda del banco). Solo viaja el string
+      // final — las fuentes crudas (notas/glosa_comun) no salen del server.
+      detalle: resolverGlosa(
+        { notas: p.notas, glosaComun: docArr?.glosa_comun, glosaComunActiva: docArr?.glosa_activa },
+        verdict.tipoDte ?? undefined,
+      ),
       monto_total: total,
       balde: verdict.balde,
       listo_emitir: verdict.puedeEmitir,
