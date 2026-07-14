@@ -4,7 +4,7 @@
  * Replica EXACTAMENTE la ingesta de imágenes del panel
  * (/api/subir-procesar con tipo "imagen"), reutilizando los mismos módulos:
  * insert en documentos_subidos + upload a Storage "documentos" +
- * OCR Mistral (ocrAndGroupImages) + clasificación (procesarDocumento).
+ * OCR OpenCode (ocrAndGroupImages) + clasificación (procesarDocumento).
  * La única diferencia es que acá no hay sesión de usuario (webhook), así
  * que todo va con service client scoped a la empresa del chat vinculado.
  */
@@ -522,7 +522,7 @@ export async function crearDocumentoTelegram(args: {
 
 /**
  * Parte pesada de la ingesta, mismo pipeline que el panel para tipo
- * "imagen": OCR Mistral -> clasificación con procesarDocumento. Al final
+ * "imagen": OCR OpenCode -> clasificación con procesarDocumento. Al final
  * reinyecta `origen: "telegram"` en progreso_ia (el pipeline lo reescribe
  * completo) para que quede trazable que el comprobante llegó por Telegram.
  * Nunca lanza: el error se marca en el registro, igual que el panel.
@@ -538,7 +538,7 @@ export async function procesarComprobanteTelegram(args: {
 }): Promise<void> {
   const svc = getServiceClient();
   try {
-    // Import dinámico igual que /api/subir-procesar (no cargar Mistral de más).
+    // Import dinámico igual que /api/subir-procesar (no cargar OpenCode de más).
     const { ocrAndGroupImages } = await import("@/lib/ai/ocr");
     const { groupedText } = await ocrAndGroupImages([
       { base64: args.base64, mimeType: args.mime, fileName: args.nombreArchivo },

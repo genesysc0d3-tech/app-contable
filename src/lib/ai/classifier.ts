@@ -5,15 +5,15 @@ import type { MovimientoExtraido, PropuestaExtraida } from "./types";
 /**
  * Deterministic rules-based classifier.
  *
- * Runs BEFORE Mistral in the bypass path. For each movimiento, tries to
+ * Runs BEFORE OpenCode in the bypass path. For each movimiento, tries to
  * match a user rule (empresa_id set) first, then a global rule
  * (empresa_id NULL), in order of `prioridad` ascending. First match wins.
  *
  * Movimientos that don't match any rule are returned in `noClasificados`
- * for Mistral to handle as a fallback. Mistral-classified propuestas are
+ * for OpenCode to handle as a fallback. OpenCode-classified propuestas are
  * then capped at confianza ≤ 0.75 by the processor so they always land
  * in the "requires review" bucket — protecting the user from silent
- * Mistral mistakes that could matter for SII compliance.
+ * OpenCode mistakes that could matter for SII compliance.
  */
 
 export interface ClasificacionRegla {

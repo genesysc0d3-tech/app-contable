@@ -1,5 +1,5 @@
 /**
- * Aprender-al-clasificar — el corazón de "no depender de Mistral".
+ * Aprender-al-clasificar — el corazón de "no depender de OpenCode".
  *
  * Cuando el usuario resuelve un movimiento en Check (fija Exenta·41 / Afecta·39),
  * acaba de enseñarle al sistema qué es esa contraparte. Este módulo captura esa

@@ -24,13 +24,13 @@ import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validati
 
 /** Extended propuesta with SII traceability fields used internally. */
 type EnrichedPropuesta = PropuestaExtraida & {
-  __fuente?: "regla_usuario" | "regla_global" | "mistral";
+  __fuente?: "regla_usuario" | "regla_global" | "ia_opencode";
   __regla_id?: string | null;
   /** tipo_dte recordado por una regla de usuario (39/41); null = el gate decide. */
   __tipo_dte?: number | null;
 };
 
-const MISTRAL_MAX_CONFIANZA = 0.75; // Cap Mistral classifications — never auto-approve
+const IA_MESA_MAX_CONFIANZA = 0.75; // Cap de la IA de la mesa (OpenCode) — nunca auto-aprueba
 
 const CHUNK_SIZE = 100;
 const MAX_RETRIES = 3;
@@ -39,13 +39,13 @@ const DB_BATCH_SIZE = 100;
 const MIN_CONFIANZA = 0.6;
 // Pre-stageo: una tx nace "listo" (staged, NO emitido) solo si supera este umbral Y
 // viene de una regla REAL (regla_id presente). El clasificador IA (OpenCode) está
-// capado en MISTRAL_MAX_CONFIANZA (0.75, nombre legacy) y el atajo "template" (asume boleta @0.95 sin match)
+// capado en IA_MESA_MAX_CONFIANZA (0.75) y el atajo "template" (asume boleta @0.95 sin match)
 // NO lleva regla_id → ninguno de esos auto-stagea: quedan "pendiente" para que el
 // usuario los prepare con un gesto de bulk deliberado. El Aprobar atómico
 // (aprobarCartola) sigue siendo el único gatillo hacia Emitir. Banda ALTA=0.85 del visor.
 const AUTO_STAGE_THRESHOLD = 0.85;
 
-/** Sanitize a value that should be numeric but Mistral may return as "null" string */
+/** Sanitize a value that should be numeric but OpenCode may return as "null" string */
 function toNum(val: unknown): number | null {
   if (val === null || val === undefined || val === "null" || val === "") return null;
   const n = Number(val);
@@ -64,7 +64,7 @@ function normTipo(val: string | null | undefined): string {
   if (!val) return "no_comercial";
   const s = val.trim().toLowerCase();
   if (VALID_TIPOS.has(s)) return s;
-  // Common Mistral variations
+  // Common OpenCode variations
   if (s.includes("crypto") || s.includes("bitcoin") || s.includes("usdt")) return "compraventa_crypto";
   if (s.includes("p2p") || s.includes("transferencia")) return "transferencia_p2p";
   if (s.includes("forex") || s.includes("divisa")) return "operacion_forex";
@@ -164,7 +164,7 @@ async function processChunkWithRetry(
 
 /**
  * Bypass-mode chunk: the movimientos are already extracted deterministically
- * by the parser. We only ask Mistral to classify each one. The returned
+ * by the parser. We only ask OpenCode to classify each one. The returned
  * movimientos in ChunkResult echo the input (never modified) so the
  * downstream code works unchanged.
  */
@@ -183,7 +183,7 @@ async function classifyChunkWithRetry(
     try {
       const response = await provider.classifyMovimientos(chunkMovs, systemPrompt);
       // Propuestas with movimiento_index referencing position WITHIN this chunk.
-      // If Mistral dropped or mis-indexed some, we fill with defaults so every
+      // If OpenCode dropped or mis-indexed some, we fill with defaults so every
       // movimiento has a corresponding propuesta.
       const propuestasByIdx = new Map<number, PropuestaExtraida>();
       for (const p of response.propuestas) {
@@ -194,11 +194,11 @@ async function classifyChunkWithRetry(
       const completed: PropuestaExtraida[] = chunkMovs.map((m, i) => {
         const existing = propuestasByIdx.get(i);
         if (existing) {
-          // Force total to match the deterministic monto — never let Mistral
+          // Force total to match the deterministic monto — never let OpenCode
           // alter the amount.
           return { ...existing, movimiento_index: i, total: m.monto };
         }
-        // Fallback: if Mistral didn't return a propuesta for this index,
+        // Fallback: if OpenCode didn't return a propuesta for this index,
         // synthesize a neutral one so nothing is lost.
         return {
           movimiento_index: i,
@@ -209,7 +209,7 @@ async function classifyChunkWithRetry(
           iva: 0,
           total: m.monto,
           confianza: 0.4,
-          notas: "fallback: Mistral no devolvió propuesta para este índice",
+          notas: "fallback: OpenCode no devolvió propuesta para este índice",
           spread_compra: null,
           spread_venta: null,
           spread_ganancia: null,
@@ -360,7 +360,7 @@ export async function procesarDocumento(
   try {
     // Build the chunked work units. In bypass mode we first try to classify
     // each movimiento with deterministic rules (user rules + global rules).
-    // Only the leftover unmatched movimientos are sent to Mistral for
+    // Only the leftover unmatched movimientos are sent to OpenCode for
     // classification, capped at confianza 0.75 so they always require review.
     type MovChunk = { movs: MovimientoExtraido[] };
     type TextChunk = { text: string[] };
@@ -376,9 +376,9 @@ export async function procesarDocumento(
       tipo_dte: number | null;
     };
     const ruleClassifications = new Map<number, RuleClassification>();
-    // Maps the position of each mov inside the flat forMistral array back
+    // Maps the position of each mov inside the flat forIA array back
     // to its original index in preExtracted.
-    const origIndexByMistralIdx: number[] = [];
+    const origIndexByIAIdx: number[] = [];
 
     // Result containers (used by both bypass and non-bypass paths)
     const allMovimientos: MovimientoExtraido[] = [];
@@ -432,24 +432,24 @@ export async function procesarDocumento(
           });
         }
 
-        // No Mistral chunks needed
+        // No OpenCode chunks needed
         console.log(
           `[template] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${ruleResult.noClasificados.length} como boleta (template)`
         );
       } else {
-      // 2. Chunk only the leftover movs for Mistral classification
-      const forMistral: MovimientoExtraido[] = [];
+      // 2. Chunk only the leftover movs for OpenCode classification
+      const forIA: MovimientoExtraido[] = [];
       for (const nc of ruleResult.noClasificados) {
-        origIndexByMistralIdx.push(nc.movimiento_index);
-        forMistral.push(nc.movimiento);
+        origIndexByIAIdx.push(nc.movimiento_index);
+        forIA.push(nc.movimiento);
       }
 
       console.log(
-        `[bypass+rules] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${forMistral.length} a Mistral`
+        `[bypass+rules] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${forIA.length} a OpenCode`
       );
 
-      for (let i = 0; i < forMistral.length; i += CHUNK_SIZE) {
-        movChunks.push({ movs: forMistral.slice(i, i + CHUNK_SIZE) });
+      for (let i = 0; i < forIA.length; i += CHUNK_SIZE) {
+        movChunks.push({ movs: forIA.slice(i, i + CHUNK_SIZE) });
       }
       }
 
@@ -497,7 +497,7 @@ export async function procesarDocumento(
         completedCount++;
         totalMovsFound += r.movimientos.length;
 
-        // Audit logging — save chunk input + Mistral response
+        // Audit logging — save chunk input + OpenCode response
         try {
           const chunkInputPreview = bypassMode
             ? JSON.stringify(movChunks[r.index]?.movs.slice(0, 3) ?? []).slice(0, 5000)
@@ -535,7 +535,7 @@ export async function procesarDocumento(
 
     // Combine results. In bypass+rules mode, allMovimientos is the original
     // preExtracted list, and allPropuestas merges rule classifications +
-    // Mistral classifications (capped at MISTRAL_MAX_CONFIANZA).
+    // clasificaciones de la IA de la mesa (capadas a IA_MESA_MAX_CONFIANZA).
     let totalTokensInput = 0;
     let totalTokensOutput = 0;
     let modelo = "";
@@ -560,8 +560,8 @@ export async function procesarDocumento(
         });
       }
 
-      // Add Mistral classifications, remapping chunk-local → original index
-      // and capping confianza. Synthesize a neutral fallback if Mistral
+      // Add OpenCode classifications, remapping chunk-local → original index
+      // and capping confianza. Synthesize a neutral fallback if OpenCode
       // dropped an index so nothing is lost.
       for (let ci = 0; ci < results.length; ci++) {
         const r = results[ci];
@@ -577,19 +577,19 @@ export async function procesarDocumento(
         }
 
         for (let localIdx = 0; localIdx < chunkMovCount; localIdx++) {
-          const origIdx = origIndexByMistralIdx[chunkStart + localIdx];
+          const origIdx = origIndexByIAIdx[chunkStart + localIdx];
           if (origIdx == null) continue;
           const p = propuestasByLocalIdx.get(localIdx);
           if (p) {
             allPropuestas.push({
               ...p,
               movimiento_index: origIdx,
-              confianza: Math.min(p.confianza ?? 0.5, MISTRAL_MAX_CONFIANZA),
-              __fuente: "mistral",
+              confianza: Math.min(p.confianza ?? 0.5, IA_MESA_MAX_CONFIANZA),
+              __fuente: "ia_opencode",
               __regla_id: null,
             });
           } else {
-            // Mistral dropped this index — add a fallback with low confidence
+            // OpenCode dropped this index — add a fallback with low confidence
             const mov = allMovimientos[origIdx];
             allPropuestas.push({
               movimiento_index: origIdx,
@@ -601,11 +601,11 @@ export async function procesarDocumento(
               iva: 0,
               total: mov.monto,
               confianza: 0.4,
-              notas: "Fallback: Mistral no devolvió propuesta para este movimiento",
+              notas: "Fallback: OpenCode no devolvió propuesta para este movimiento",
               spread_compra: null,
               spread_venta: null,
               spread_ganancia: null,
-              __fuente: "mistral",
+              __fuente: "ia_opencode",
               __regla_id: null,
             });
           }
@@ -629,7 +629,7 @@ export async function procesarDocumento(
           allPropuestas.push({
             ...p,
             movimiento_index: p.movimiento_index + offset,
-            __fuente: "mistral",
+            __fuente: "ia_opencode",
             __regla_id: null,
           });
         }
@@ -640,7 +640,7 @@ export async function procesarDocumento(
       }
     }
 
-    // Filter out movimientos with null/empty required fields (Mistral sometimes
+    // Filter out movimientos with null/empty required fields (OpenCode sometimes
     // returns nulls for summary rows, totals, or headers in cartolas)
     const validIndices: number[] = [];
     for (let i = 0; i < allMovimientos.length; i++) {
@@ -760,7 +760,7 @@ export async function procesarDocumento(
       }
     }
 
-    // Classify n_documento: simple heuristic instead of Mistral calls
+    // Classify n_documento: simple heuristic instead of OpenCode calls
     // RUT pattern: 1-2 digits + dot + 3 digits + dot + 3 digits + dash + 1 digit/K
     // or without dots: 7-8 digits + dash + 1 digit/K
     function isRutPattern(ndoc: string): boolean {
@@ -1042,7 +1042,7 @@ export async function procesarDocumento(
           // tipo_dte persistido SOLO cuando una regla de USUARIO lo recordó
           // (__tipo_dte != null). Eso apaga `sinDecisionHumana` en el gate y la
           // propuesta nace en "listas" sin rebotar a Check. Todo lo demás
-          // (mistral, template, reglas globales) deja tipo_dte null → sin cambio
+          // (IA, template, reglas globales) deja tipo_dte null → sin cambio
           // de comportamiento. Si el emisor es exento, se fuerza 41 (nunca emite
           // 39), coherente con la normalización exenta de tipo_propuesto de arriba.
           const tipoDtePersist =
@@ -1086,7 +1086,7 @@ export async function procesarDocumento(
             // resucita la identidad vía `p.receptor_rut ?? cliente?.rut`. La normalización
             // exenta ya se calculó con el clienteId local (no depende del campo guardado).
             cliente_id: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? clienteId : null,
-            fuente_clasificacion: enriched.__fuente ?? "mistral",
+            fuente_clasificacion: enriched.__fuente ?? "ia_opencode",
             regla_id: enriched.__regla_id ?? null,
           };
         });

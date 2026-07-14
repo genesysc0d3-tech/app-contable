@@ -27,13 +27,13 @@ import {
  *   3. Named             — header-name matching (Banco de Chile style)
  *   4. Legacy fallback   — generic sheet_to_csv (current behavior)
  *
- * (Layer 1 — Mistral structural analyzer — is intentionally deferred to a
+ * (Layer 1 — OpenCode structural analyzer — is intentionally deferred to a
  * follow-up PR.)
  *
  * Every layer's output is passed through the validator. If it fails the
  * blocking checks, we drop to the next layer. The legacy fallback always
  * "succeeds" structurally so we never return an error to the caller —
- * worst case the generic TSV is sent to Mistral just like before this PR.
+ * worst case the generic TSV is sent to OpenCode just like before this PR.
  */
 export async function parseExcelWithOrchestrator(
   buffer: ArrayBuffer,

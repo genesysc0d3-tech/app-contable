@@ -7,7 +7,7 @@ import { recordOpsError } from "@/lib/ops/events";
 /**
  * OCR de comprobantes de transferencia (imagen → campos pre-llenables).
  *
- * Recibe JSON { base64, mime }, corre Mistral OCR + heurísticas chilenas y
+ * Recibe JSON { base64, mime }, corre OpenCode OCR + heurísticas chilenas y
  * devuelve monto/fecha/glosa/pagador con confianza por campo. NUNCA emite
  * nada: solo pre-llena el formulario y el usuario revisa y aprueba.
  */

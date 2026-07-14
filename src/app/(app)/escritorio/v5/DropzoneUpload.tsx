@@ -14,7 +14,7 @@ interface QueuedFile {
 let idCounter = 0;
 
 // El backend despacha el parser según este tipo: parseExcel, pdf-parse,
-// OCR Mistral para fotos/capturas, o texto plano (csv).
+// OCR OpenCode para fotos/capturas, o texto plano (csv).
 function tipoForFile(file: File): { tipo: string; mime: string } {
   const ext = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? "";
   if (ext === "pdf") return { tipo: "pdf", mime: "application/pdf" };

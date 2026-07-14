@@ -85,7 +85,7 @@ export interface OrchestratorResult {
   /**
    * Pre-extracted movimientos in the AI layer format. Populated whenever a
    * deterministic layer (0, 2, 3) succeeds, enabling the bypass path in the
-   * processor that skips Mistral extraction entirely.
+   * processor that skips OpenCode extraction entirely.
    * `null` when the legacy fallback (layer 4) was used.
    */
   preExtracted: PreExtractedMovimiento[] | null;
