@@ -78,7 +78,9 @@ function angleGlosa(descripcion: string | null | undefined): AngleResult {
     return { veredicto: "no_boletar", peso: 0.85, razon: "Devolución / reverso" };
   if (/\b(pr[eé]stamo|mutuo|cr[eé]dito recibido|cr[eé]dito hipotecario|cuota cr[eé]dito)\b/.test(desc))
     return { veredicto: "no_boletar", peso: 0.80, razon: "Préstamo / crédito recibido" };
-  if (/\b(aporte (de )?capital|aporte socio|inversi[oó]n inicial|capital social)\b/.test(desc))
+  // Aporte de capital (NO es venta). Cubre variantes con palabra intermedia
+  // ("aporte integración capital") y "capital accionista/social".
+  if (/\b(aporte\s+(?:de\s+)?(?:integraci[oó]n\s+)?capital|aporte socio|inversi[oó]n inicial|capital (social|accionista))\b/.test(desc))
     return { veredicto: "no_boletar", peso: 0.85, razon: "Aporte de capital" };
   if (/\b(sueldo|liquidaci[oó]n de remu|salario|remuneraci[oó]n|finiquito)\b/.test(desc))
     return { veredicto: "no_boletar", peso: 0.75, razon: "Remuneración / sueldo" };

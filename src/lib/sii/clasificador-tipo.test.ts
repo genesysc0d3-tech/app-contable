@@ -99,3 +99,34 @@ describe("clasificarBoleta — ángulos heurísticos", () => {
     expect(r2.tipo_dte).toBe(39);
   });
 });
+
+// Guardarraíl del CABLE de auto-clasificación (processor.ts): el cable persiste
+// tipo_dte al vuelo para que la cartola no nazca 100% pendiente, PERO nunca sobre
+// un no_boletar. Estos tests fijan que el clasificador caza los no-ventas claros
+// (aunque venga un hint fuerte) y que sí resuelve la transferencia muda del P2P.
+describe("clasificarBoleta — guardarraíl del cable de auto-clasificación", () => {
+  it("caza los no-ventas CLAROS como no_boletar aunque venga hint fuerte", () => {
+    // El cable nunca persiste tipo sobre estos → nunca se emiten, ni con hint.
+    for (const g of [
+      "PRESTAMO DE JUAN",
+      "transferencia entre cuentas propias",
+      "CAPITAL ACCIONISTA 2025",
+      "APORTE INTEGRACION CAPITAL",
+      "aporte de capital socio",
+      "DEPOSITO A PLAZO 90 dias",
+      "sueldo liquidacion de remuneraciones",
+    ]) {
+      const r = clasificarBoleta(mov(g), empresaAuto, undefined, "p2p_cripto");
+      expect(r.sugerencia, g).toBe("no_boletar");
+      expect(r.tipo_dte, g).toBeNull();
+    }
+  });
+
+  it("el hint SÍ clasifica la transferencia P2P muda como venta exenta (caso del fundador)", () => {
+    // "TRANSF DE JUAN PEREZ" no tiene señal cripto en la glosa, pero el hint
+    // p2p_cripto la lleva a 41 — es exactamente lo que el cable persiste.
+    const r = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto, undefined, "p2p_cripto");
+    expect(r.sugerencia).not.toBe("no_boletar");
+    expect(r.tipo_dte).toBe(41);
+  });
+});

@@ -11,6 +11,7 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { clasificarBoleta, type DocumentoHint } from "../sii/clasificador-tipo";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import {
@@ -44,6 +45,15 @@ const MIN_CONFIANZA = 0.6;
 // usuario los prepare con un gesto de bulk deliberado. El Aprobar atómico
 // (aprobarCartola) sigue siendo el único gatillo hacia Emitir. Banda ALTA=0.85 del visor.
 const AUTO_STAGE_THRESHOLD = 0.85;
+
+// tipo_propuesto que representan una VENTA emitible (boleta) — el cable de
+// auto-clasificación solo persiste tipo_dte para estos. Deja fuera gasto/
+// no_comercial/impuesto/cotización/remuneración/dividendo/interés/etc. (no son
+// ventas → no boleta, aunque la empresa sea exenta).
+const TIPOS_VENTA_AUTO = new Set([
+  "boleta", "factura", "exenta", "factura_afecta", "factura_exenta",
+  "compraventa_crypto", "transferencia_p2p", "operacion_forex", "arriendo", "comision",
+]);
 
 /** Sanitize a value that should be numeric but OpenCode may return as "null" string */
 function toNum(val: unknown): number | null {
@@ -330,6 +340,20 @@ export async function procesarDocumento(
     .select("valor")
     .eq("empresa_id", empresaId);
   const aliasList = (identidades ?? []).map((i) => i.valor).filter(Boolean);
+  // Hint de la cartola (el usuario la marcó "toda P2P cripto"/"forex"/etc.): señal
+  // fuerte para decidir tipo_dte al clasificar cuando la glosa es muda ("Transf de
+  // Juan"). Junto con empresa exenta, es lo que permite que la cartola no nazca
+  // 100% "pendiente" (ver el cable de auto-clasificación en el insert de propuestas).
+  const { data: docRow } = await supabase
+    .from("documentos_subidos")
+    .select("tipo_operacion_hint")
+    .eq("id", documentoId)
+    .maybeSingle();
+  const HINTS_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
+  const docHint: DocumentoHint =
+    docRow?.tipo_operacion_hint && HINTS_VALIDOS.has(docRow.tipo_operacion_hint)
+      ? (docRow.tipo_operacion_hint as DocumentoHint)
+      : null;
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
       `- Razón social: «${emp.razon_social}» | RUT: ${redactPiiHabilitado() ? maskRut(emp.rut) : emp.rut}` +
@@ -1039,14 +1063,57 @@ export async function procesarDocumento(
           const tipoBase = normTipo(p.tipo_propuesto);
           const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp?.tipo_contribuyente);
           const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp?.tipo_contribuyente);
-          // tipo_dte persistido SOLO cuando una regla de USUARIO lo recordó
-          // (__tipo_dte != null). Eso apaga `sinDecisionHumana` en el gate y la
-          // propuesta nace en "listas" sin rebotar a Check. Todo lo demás
-          // (IA, template, reglas globales) deja tipo_dte null → sin cambio
-          // de comportamiento. Si el emisor es exento, se fuerza 41 (nunca emite
-          // 39), coherente con la normalización exenta de tipo_propuesto de arriba.
-          const tipoDtePersist =
-            enriched.__tipo_dte != null ? (exentoFinal ? 41 : enriched.__tipo_dte) : null;
+          // ── Cable de auto-clasificación de tipo_dte ──────────────────────────
+          // Persistir tipo_dte apaga `sinDecisionHumana` en el gate (la propuesta
+          // nace en "listas", no rebota a Check). Solo cuando la decisión es
+          // DETERMINISTA — no un guess de la IA: (1) regla de usuario, (2) empresa
+          // EXENTA (siempre 41), (3) hint de la cartola, o (4) glosa inequívoca.
+          // Gated a VENTAS de entrada y NUNCA sobre no_boletar (guardarraíl:
+          // préstamo/cuenta propia/sueldo se apartan aunque la cartola sea cripto).
+          // Reusa el MISMO clasificarBoleta del gate downstream (coherente).
+          const empExento = emp?.tipo_contribuyente === "exento";
+          const clasifTipo = clasificarBoleta(
+            { descripcion: mov?.descripcion ?? "", monto: total ?? 0, fecha: mov?.fecha ?? "", receptor_nombre: p.receptor_nombre },
+            { giro: emp?.giro, razon_social: emp?.razon_social, tipo_contribuyente: emp?.tipo_contribuyente },
+            undefined,
+            docHint,
+          );
+          // GUARDARRAÍL DURO: nunca persistir tipo_dte sobre un no_boletar
+          // (préstamo/cuenta propia/sueldo/aporte capital/devolución) ni sobre una
+          // SALIDA. Vale para TODOS los orígenes (regla de usuario, auto o exento):
+          // aunque una regla vieja o el hint digan otra cosa, un no_boletar no
+          // recibe tipo ni se emite.
+          const puedePersistirTipo =
+            mov?.tipo_flujo === "entrada" && clasifTipo.sugerencia !== "no_boletar";
+          // El AUTO determinista solo corre sobre tipos de VENTA (no gasto/impuesto/
+          // etc.). La glosa muda ("TRANSF DE JUAN") es EL caso a resolver por el
+          // hint+exento — no se puede exigir señal de glosa sin matar justo eso. La
+          // defensa contra no-ventas es el guardarraíl no_boletar (arriba) + la
+          // revisión humana de "Listas". Los no-ventas claros (aporte capital,
+          // préstamo, cuenta propia, DAP) los caza angleGlosa como no_boletar.
+          const esVentaCandidata =
+            puedePersistirTipo && TIPOS_VENTA_AUTO.has(tipoBase);
+          const tipoDteAuto: 39 | 41 | null =
+            !esVentaCandidata ? null
+              : empExento ? 41
+                : (docHint != null || clasifTipo.confianza >= 0.85) && (clasifTipo.tipo_dte === 39 || clasifTipo.tipo_dte === 41)
+                  ? clasifTipo.tipo_dte
+                  : null;
+          // Precedencia: la regla de usuario manda (si pasa el guardarraíl); si no,
+          // el auto. El emisor exento se fuerza a 41 (nunca 39).
+          const tipoDtePersist: 39 | 41 | null =
+            !puedePersistirTipo ? null
+              : enriched.__tipo_dte === 39 || enriched.__tipo_dte === 41
+                ? (exentoFinal || empExento ? 41 : enriched.__tipo_dte)
+                : tipoDteAuto;
+          // Auto-clasificado (determinista, sin regla) → sube la confianza a
+          // bulk-elegible (BULK_MIN_CONFIANZA 0.8) para que "Poner listas (N)" las
+          // tome. NO auto-stagea: el estado sigue la regla de abajo (queda
+          // "pendiente" salvo regla_id), respetando el gesto de bulk deliberado.
+          const confianzaFinal =
+            tipoDteAuto != null && enriched.__regla_id == null
+              ? Math.max(confianza ?? 0, 0.9)
+              : confianza;
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
@@ -1062,7 +1129,7 @@ export async function procesarDocumento(
             monto_neto: exentoFinal ? total : toNum(p.monto_neto),
             iva: exentoFinal ? 0 : toNum(p.iva),
             total,
-            confianza,
+            confianza: confianzaFinal,
             // notas = detalle/glosa; se imprime en la boleta (máxima precedencia en
             // resolverGlosa). Bajo umbral se descarta la nota GENERADA por la IA: el
             // modelo puede colar el nombre/RUT del tercero en el texto libre y saldría
