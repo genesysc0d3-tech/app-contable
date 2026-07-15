@@ -7,7 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
-import EmitirLoteModal from "./EmitirLoteModal";
+import EmitirLoteModal, { type LoteItemInput } from "./EmitirLoteModal";
+import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
 
 interface Item {
   id: string;
@@ -162,6 +163,21 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loteOpen, setLoteOpen] = useState(false);
+  // Reanudar un lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
+  // lotePendiente = los IDs que faltan (leídos de localStorage); loteResume = esos
+  // items re-hidratados del server para pasárselos al modal; null = emisión fresca.
+  const [lotePendiente, setLotePendiente] = useState<LotePendiente | null>(null);
+  const [loteResume, setLoteResume] = useState<LoteItemInput[] | null>(null);
+  const [loteResumeTotal, setLoteResumeTotal] = useState<number | null>(null);
+  const [resumiendo, setResumiendo] = useState(false);
+  useEffect(() => {
+    if (!empresaId) return;
+    const p = leerLotePendiente(empresaId);
+    if (!p) return;
+    // Lectura de localStorage post-montaje (no existe en SSR): se hace en effect a
+    // propósito, para no romper la hidratación (server y cliente-1er-render = null).
+    setLotePendiente(p);
+  }, [empresaId]);
   // File-first: qué documentos están expandidos + qué popup de "por revisar" está abierta.
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
   const [popupDoc, setPopupDoc] = useState<string | null>(null);
@@ -388,6 +404,57 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
+        {/* Reanudar lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
+            Re-hidrata contra los pendientes del server a nivel EMPRESA (endpoint sin
+            filtro de período): así reanudar no depende de qué mes muestre el calendario.
+            Lo ya emitido / en revisión salió de "pendientes" → no vuelve al lote; y solo
+            se descarta el rastro cuando el server confirma que ya no queda nada. */}
+        {lotePendiente && !loteOpen && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 10px", padding:"10px 13px", borderRadius:10, background:"color-mix(in srgb, var(--amber) 9%, transparent)", border:"1px solid color-mix(in srgb, var(--amber) 28%, transparent)" }}>
+            <span style={{fontSize:14}}>⏸</span>
+            <span style={{fontSize:11.5,color:"var(--text)",flex:1,lineHeight:1.4}}>
+              Quedó un lote a medias: faltan <b>{lotePendiente.remainingIds.length} de {lotePendiente.total}</b>. Retomá desde donde quedó.
+            </span>
+            <button disabled={resumiendo} onClick={async () => {
+              setResumiendo(true);
+              try {
+                const res = await fetch("/api/intermediaria/pendientes-emision");
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok || !json?.ok || !Array.isArray(json.items)) {
+                  toast("No pude cargar el lote para reanudar. Reintentá en un momento.", "error");
+                  return; // NO limpiar: el rastro sigue para reintentar
+                }
+                const byId = new Map((json.items as Array<LoteItemInput & { listo_emitir?: boolean }>).map((i) => [i.id, i] as const));
+                // Presentes = siguen pendientes en el server. Emitibles = además `listo_emitir`
+                // (nunca reanudar una que se volvió "por revisar": emitiría con tipo por defecto).
+                const presentes = lotePendiente.remainingIds.map((id) => byId.get(id)).filter(Boolean) as Array<LoteItemInput & { listo_emitir?: boolean }>;
+                const resume = presentes.filter((i) => i.listo_emitir !== false) as LoteItemInput[];
+                if (presentes.length === 0) {
+                  // El server (empresa-wide) confirma que ninguno sigue pendiente → ya
+                  // emitidas o en revisión. Ahora sí es seguro descartar el rastro.
+                  limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null);
+                  toast("Ese lote ya quedó emitido, no queda nada por reanudar.", "success");
+                  return;
+                }
+                if (resume.length === 0) {
+                  // Siguen pendientes pero ninguna está lista (volvieron a "por revisar").
+                  // No las emitimos a ciegas; el usuario las resuelve en Check. Quedan en la cola.
+                  limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null);
+                  toast("El resto del lote quedó en “por revisar”. Resolvelo en Check y emitilo de nuevo.", "error");
+                  return;
+                }
+                setLoteResume(resume); setLoteResumeTotal(lotePendiente.total); setLoteOpen(true);
+              } catch {
+                toast("No pude cargar el lote para reanudar. Reintentá en un momento.", "error");
+              } finally {
+                setResumiendo(false);
+              }
+            }}
+              style={{fontSize:11,fontWeight:700,color:"#fff",background:"var(--accent)",border:"none",borderRadius:8,padding:"7px 13px",cursor:resumiendo?"default":"pointer",opacity:resumiendo?0.6:1}}>{resumiendo ? "Cargando…" : `Reanudar ${lotePendiente.remainingIds.length} →`}</button>
+            <button onClick={() => { limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null); }}
+              style={{fontSize:10,fontWeight:600,color:"var(--text3)",background:"transparent",border:"none",cursor:"pointer"}}>Descartar</button>
+          </div>
+        )}
         {/* Pills */}
         <div className="em-pills">
           <button className={`pl ${statusFilter === "listas" ? "act" : "ina"}`} onClick={() => setStatusFilter("listas")}>Listas ({listasCount})</button>
@@ -531,11 +598,12 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
       {/* Carril REAL (SII local): el motor masivo sale encima de la pestaña. */}
       {loteOpen && (
         <EmitirLoteModal
-          items={selectedItems}
+          items={loteResume ?? selectedItems}
           empresaId={empresaId ?? ""}
           empresaRut={null}
-          onClose={() => setLoteOpen(false)}
-          onDone={() => { setSelected(new Set()); reload(); }}
+          totalOriginal={loteResume ? (loteResumeTotal ?? loteResume.length) : selectedItems.length}
+          onClose={() => { setLoteOpen(false); setLoteResume(null); setLoteResumeTotal(null); setLotePendiente(leerLotePendiente(empresaId ?? "")); }}
+          onDone={() => { setSelected(new Set()); setLoteResume(null); setLoteResumeTotal(null); reload(); setLotePendiente(leerLotePendiente(empresaId ?? "")); }}
         />
       )}
 

@@ -5,11 +5,12 @@
 // traza), luego confirmación liviana por tanda. Estados: idle → emitiendo →
 // terminada | requiere_revision | detenida (+ pausa por error/tope).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { chileDateString } from "@/lib/chile-date";
 import { recoverLatestFolio, type RecoverLatestResult } from "@/lib/emission/recover-latest";
 import { useEmisionLote, type ItemLoteEmision } from "./useEmisionLote";
+import { guardarLotePendiente, limpiarLotePendiente } from "@/lib/emission/lote-persist";
 
 export interface LoteItemInput {
   id: string;
@@ -30,11 +31,14 @@ const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 const ACCENT = "#E8553E";
 
 export default function EmitirLoteModal({
-  items, empresaId, empresaRut, onClose, onDone,
+  items, empresaId, empresaRut, totalOriginal, onClose, onDone,
 }: {
   items: LoteItemInput[];
   empresaId: string;
   empresaRut?: string | null;
+  /** Total del lote ORIGINAL (para el banner honesto entre reanudaciones). Si no
+   *  viene, es una emisión fresca y el total es items.length. */
+  totalOriginal?: number;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -100,9 +104,26 @@ export default function EmitirLoteModal({
   }
 
   const fase = progreso?.fase;
-  const terminal = fase === "terminada" || fase === "requiere_revision" || fase === "detenida";
+  // Fin VOLUNTARIO (terminó todo / el usuario detuvo): no hay nada que reanudar.
+  const terminalLimpio = fase === "terminada" || fase === "detenida";
+  const terminal = terminalLimpio || fase === "requiere_revision";
   // Cerrar solo cuando no hay una emisión en vuelo (proteger el folio).
   const puedeCerrar = !corriendo || terminal;
+
+  // Persistir QUÉ FALTA para reanudar si se cierra la pestaña a mitad, o si el SII
+  // congela el lote en una boleta "a medias" (requiere_revision). Solo IDs (sin PII);
+  // al reabrir se re-hidratan contra los pendientes del server. Se borra al terminar
+  // o detener; un cierre duro NO llega acá → el rastro queda para reanudar.
+  useEffect(() => {
+    if (terminalLimpio) { limpiarLotePendiente(empresaId); return; }
+    if (!progreso) return;
+    // corriendo = cierre en vuelo; requiere_revision = freno por "a medias" (H-1):
+    // en ambos, lo que falta (slice tras la ya-procesada) debe quedar reanudable.
+    if (corriendo || fase === "requiere_revision") {
+      const remainingIds = items.slice(progreso.procesadas).map((i) => i.id);
+      guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? items.length });
+    }
+  }, [progreso, corriendo, fase, terminalLimpio, empresaId, items, totalOriginal]);
 
   return createPortal(
     <div

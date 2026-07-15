@@ -113,6 +113,20 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     return () => window.removeEventListener("message", onMsg);
   }, []);
 
+  // Aviso al cerrar la pestaña MIENTRAS emite: el motor corre en el navegador, así
+  // que un cierre duro corta el lote a medias. El navegador muestra su diálogo
+  // nativo ("¿seguro que quieres salir?"). Si igual cierra, el progreso quedó
+  // persistido (ver EmitirLoteModal) y se ofrece reanudar al reabrir.
+  useEffect(() => {
+    if (!corriendo) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // requerido por algunos navegadores para gatillar el diálogo
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [corriendo]);
+
   const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<{ jobId: string; expiresAt: string } | null> => {
     try {
       const res = await fetch("/api/emision/jobs", {
