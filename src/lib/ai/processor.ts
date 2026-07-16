@@ -11,7 +11,7 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
-import { clasificarBoleta, type DocumentoHint } from "../sii/clasificador-tipo";
+import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import {
@@ -1101,15 +1101,13 @@ export async function procesarDocumento(
           // préstamo, cuenta propia, DAP) los caza angleGlosa como no_boletar.
           const esVentaCandidata =
             puedePersistirTipo && TIPOS_VENTA_AUTO.has(tipoBase);
+          // Política de auto-persistencia (pura, testeable): el default de cuenta NO
+          // cortocircuita (una glosa contraria baja la confianza → revisar), y un 39
+          // (afecta, fabrica IVA) exige evidencia real, no solo el bias de cuenta con
+          // glosa muda. El hint por-cartola (docHint) y el exento sí son autoritativos.
           const tipoDteAuto: 39 | 41 | null =
             !esVentaCandidata ? null
-              : empExento ? 41
-                // El default de cuenta NO cortocircuita: si la clasificación queda
-                // contestada (glosa contraria) la confianza cae bajo 0.85 y va a
-                // revisar. El hint por-cartola (docHint) sí es autoritativo.
-                : (docHint != null || clasifTipo.confianza >= 0.85) && (clasifTipo.tipo_dte === 39 || clasifTipo.tipo_dte === 41)
-                  ? clasifTipo.tipo_dte
-                  : null;
+              : decidirTipoDteAuto(clasifTipo, { docHint, tipoContribuyente: emp?.tipo_contribuyente });
           // Precedencia: la regla de usuario manda (si pasa el guardarraíl); si no,
           // el auto. El emisor exento se fuerza a 41 (nunca 39).
           const tipoDtePersist: 39 | 41 | null =

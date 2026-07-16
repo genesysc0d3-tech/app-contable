@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clasificarBoleta } from "./clasificador-tipo";
+import { clasificarBoleta, decidirTipoDteAuto } from "./clasificador-tipo";
 
 const empresaAuto = { giro: null, razon_social: "Test SpA", tipo_contribuyente: "auto" };
 const mov = (descripcion: string, monto = 50_000) => ({ descripcion, monto, fecha: "2026-06-11", receptor_nombre: null });
@@ -164,5 +164,47 @@ describe("clasificarBoleta — default de operación de la CUENTA (bias beatable
     const r = clasificarBoleta(mov("préstamo bancario cuota"), empP2P);
     expect(r.sugerencia).toBe("no_boletar");
     expect(r.tipo_dte).toBeNull();
+  });
+});
+
+describe("decidirTipoDteAuto — asimetría de seguridad del 39 (fabrica IVA)", () => {
+  const empP2P = { ...empresaAuto, operacion_default: "p2p_cripto" as const };
+  const empVentas = { ...empresaAuto, operacion_default: "ventas" as const };
+
+  it("41 auto: default p2p + glosa muda (el caso del fundador) → 41", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empP2P);
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBe(41);
+  });
+
+  it("39 BLOQUEADO: default 'ventas' (afecta) + glosa muda + emisor 'auto' → null (a revisar, no fabrica IVA)", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empVentas);
+    expect(c.tipo_dte).toBe(39); // el clasificador sugiere afecta…
+    // …pero el cable NO lo auto-persiste sin evidencia de glosa.
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
+  });
+
+  it("39 OK: la glosa corrobora afecta (servicio) → 39", () => {
+    const c = clasificarBoleta(mov("servicio de asesoría profesional"), empVentas);
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBe(39);
+  });
+
+  it("39 OK: emisor declarado 'afecto' (cobra IVA por definición) → 39 aunque la glosa sea muda", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), { ...empresaAuto, tipo_contribuyente: "afecto" });
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "afecto" })).toBe(39);
+  });
+
+  it("39 OK: hint AFECTA por-cartola explícito (ventas) → 39 (gesto del usuario en esa cartola)", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto, undefined, "ventas");
+    expect(decidirTipoDteAuto(c, { docHint: "ventas", tipoContribuyente: "auto" })).toBe(39);
+  });
+
+  it("exento → 41 (nunca 39)", () => {
+    const c = clasificarBoleta(mov("servicio de asesoría"), { ...empresaAuto, tipo_contribuyente: "exento" });
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "exento" })).toBe(41);
+  });
+
+  it("baja confianza sin hint (glosa muda, sin default) → null", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto);
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
   });
 });

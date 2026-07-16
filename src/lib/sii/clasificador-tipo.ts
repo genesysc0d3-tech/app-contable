@@ -356,3 +356,37 @@ export function clasificarBoleta(
     angulos: { glosa, giro, patron: pat },
   };
 }
+
+// ============================================================
+// Política de AUTO-PERSISTENCIA de tipo_dte (el "cable" al clasificar)
+// ============================================================
+
+/**
+ * Decide si una clasificación es lo bastante firme para NACER con tipo_dte (auto-
+ * clasificada, sin decisión humana pendiente) o si va a revisión. Pura y testeable.
+ *
+ * ASIMETRÍA DE SEGURIDAD (hallazgo de la revisión adversarial): un 39 (afecta) mal
+ * puesto FABRICA IVA (el SII lo cobra); un 41 (exenta) mal puesto no. Por eso el 41
+ * mantiene la regla normal (hint por-cartola o confianza ≥ 0.85), pero un 39 AUTO
+ * exige evidencia real de que es afecta:
+ *   - el emisor se declaró 'afecto' (cobra IVA por definición) → 39 OK; o
+ *   - la GLOSA de la propia transacción dice afecta (evidencia transaccional); o
+ *   - hay un hint AFECTA por-cartola explícito (servicios/ventas, gesto del usuario).
+ * Un bias de EMPRESA/CUENTA (operacion_hint_default) con glosa MUDA NO alcanza para
+ * un 39: cae a revisión. El caso p2p del fundador (→41) no se toca.
+ */
+export function decidirTipoDteAuto(
+  clasif: ClasificacionResult,
+  opts: { docHint: DocumentoHint; tipoContribuyente?: string | null },
+): 39 | 41 | null {
+  if (opts.tipoContribuyente === "exento") return 41;
+  const firme = opts.docHint != null || clasif.confianza >= 0.85;
+  if (!firme) return null;
+  if (clasif.tipo_dte === 41) return 41;
+  if (clasif.tipo_dte !== 39) return null;
+  // A partir de acá el candidato es un 39 (afecta): exigir evidencia.
+  if (opts.tipoContribuyente === "afecto") return 39;
+  const glosaCorroboraAfecta = clasif.angulos.glosa.veredicto === "afecta";
+  const hintAfectaExplicito = opts.docHint === "servicios" || opts.docHint === "ventas";
+  return glosaCorroboraAfecta || hintAfectaExplicito ? 39 : null;
+}
