@@ -5,7 +5,9 @@ import { evaluarEmision } from "@/lib/intermediario/emision-decision";
 import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
-export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contribuyente: string | null };
+export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contribuyente: string | null; operacion_default?: DocumentoHint };
+
+const HINTS_OPERACION = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 
 // Fuente única en @/lib/sii/tipos-propuesta (compartida con emitir-lote). Se
 // re-exporta por compatibilidad con importadores existentes.
@@ -112,6 +114,17 @@ export async function getPendientesEmision(
   // Umbral 135 UF con la UF del día (fallback a referencial si la API cae).
   const umbralIdentificacionClp = await getUmbralIdentificacionClp();
 
+  // Default de operación de la cuenta: MISMO bias que aplicó el clasificador al
+  // procesar, para que sugerencia/balde mostrados coincidan con lo persistido (si no,
+  // un item auto-clasificado 41 por el default se mostraría con sugerencia "afecta").
+  // Se busca acá una vez (por PK) salvo que el caller ya lo haya provisto.
+  let empresaCtxFull: EmpresaCtx = empresaCtx;
+  if (empresaCtx.operacion_default === undefined) {
+    const { data: empRow } = await supabase.from("empresas").select("operacion_hint_default").eq("id", empresaId).maybeSingle();
+    const h = (empRow as { operacion_hint_default?: string | null } | null)?.operacion_hint_default ?? null;
+    empresaCtxFull = { ...empresaCtx, operacion_default: h && HINTS_OPERACION.has(h) ? (h as DocumentoHint) : null };
+  }
+
   const patronDia = new Map<string, number>();
   const patronMes = new Map<string, number>();
   for (const p of visibles) {
@@ -158,7 +171,7 @@ export async function getPendientesEmision(
           cantidad_mes_mismo_receptor: (patronMes.get(`${recId}|${fecha.slice(0, 7)}`) ?? 1),
         },
       },
-      { empresa: empresaCtx, umbralIdentificacionClp },
+      { empresa: empresaCtxFull, umbralIdentificacionClp },
     );
 
     const primer = verdict.bloqueos[0] ?? verdict.advertencias[0] ?? null;

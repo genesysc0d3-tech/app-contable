@@ -332,7 +332,7 @@ export async function procesarDocumento(
   // bien dirección y montos. Nunca va en el system prompt global (compartido).
   const { data: emp } = await supabase
     .from("empresas")
-    .select("razon_social, rut, giro, tipo_contribuyente")
+    .select("razon_social, rut, giro, tipo_contribuyente, operacion_hint_default")
     .eq("id", empresaId)
     .maybeSingle();
   const { data: identidades } = await supabase
@@ -353,6 +353,14 @@ export async function procesarDocumento(
   const docHint: DocumentoHint =
     docRow?.tipo_operacion_hint && HINTS_VALIDOS.has(docRow.tipo_operacion_hint)
       ? (docRow.tipo_operacion_hint as DocumentoHint)
+      : null;
+  // Default de operación de la CUENTA (el cliente declaró a qué se dedica). Semilla
+  // para que la 1ª cartola no nazca 100% "pendiente" cuando no hay hint por documento
+  // ni reglas aprendidas. Entra como BIAS de empresa (beatable), NO como el hint por
+  // cartola: una glosa contraria o exención por ley le gana (ver clasificarBoleta).
+  const empHintDefault: DocumentoHint =
+    emp?.operacion_hint_default && HINTS_VALIDOS.has(emp.operacion_hint_default)
+      ? (emp.operacion_hint_default as DocumentoHint)
       : null;
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
@@ -1074,7 +1082,7 @@ export async function procesarDocumento(
           const empExento = emp?.tipo_contribuyente === "exento";
           const clasifTipo = clasificarBoleta(
             { descripcion: mov?.descripcion ?? "", monto: total ?? 0, fecha: mov?.fecha ?? "", receptor_nombre: p.receptor_nombre },
-            { giro: emp?.giro, razon_social: emp?.razon_social, tipo_contribuyente: emp?.tipo_contribuyente },
+            { giro: emp?.giro, razon_social: emp?.razon_social, tipo_contribuyente: emp?.tipo_contribuyente, operacion_default: empHintDefault },
             undefined,
             docHint,
           );
@@ -1096,6 +1104,9 @@ export async function procesarDocumento(
           const tipoDteAuto: 39 | 41 | null =
             !esVentaCandidata ? null
               : empExento ? 41
+                // El default de cuenta NO cortocircuita: si la clasificación queda
+                // contestada (glosa contraria) la confianza cae bajo 0.85 y va a
+                // revisar. El hint por-cartola (docHint) sí es autoritativo.
                 : (docHint != null || clasifTipo.confianza >= 0.85) && (clasifTipo.tipo_dte === 39 || clasifTipo.tipo_dte === 41)
                   ? clasifTipo.tipo_dte
                   : null;

@@ -404,7 +404,7 @@ export default async function V5Page({ searchParams }: {
   return (
     <V5Root
       dashboardContent={dashboardContent}
-      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto" }}
+      empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto", operacion_hint_default: usuario.empresas.operacion_hint_default ?? null }}
       empresaCafs={(cafsData.data ?? []) as CAFRow[]}
       empresaId={empresaId}
       empresaEmisionConfig={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}

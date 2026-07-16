@@ -36,6 +36,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
   const [tipoContribuyente, setTipoContribuyente] = useState(
     inicial.tipo_contribuyente ?? "auto"
   );
+  // "" = sin default (la IA decide). Semilla para auto-clasificar la 1ª cartola.
+  const [operacionHint, setOperacionHint] = useState(inicial.operacion_hint_default ?? "");
 
   // Errores inline: el RUT se valida recién al salir del campo (touched), no
   // por keystroke; razón social se marca cuando la validación del submit falla.
@@ -53,6 +55,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
     comuna: inicial.comuna ?? "",
     email_sii: inicial.email_sii ?? "",
     tipo_contribuyente: inicial.tipo_contribuyente ?? "auto",
+    operacion_hint_default: inicial.operacion_hint_default ?? null,
   });
 
   // Validación + guardado compartidos por el submit del form y por submitRef
@@ -72,6 +75,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
       comuna,
       email_sii: emailSii,
       tipo_contribuyente: tipoContribuyente,
+      operacion_hint_default: operacionHint || null,
     };
 
     // Dirty-check ANTES de validar: si nada cambió respecto del último guardado,
@@ -84,7 +88,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
       datos.direccion === prev.direccion &&
       datos.comuna === prev.comuna &&
       datos.email_sii === prev.email_sii &&
-      datos.tipo_contribuyente === prev.tipo_contribuyente;
+      datos.tipo_contribuyente === prev.tipo_contribuyente &&
+      (datos.operacion_hint_default ?? null) === (prev.operacion_hint_default ?? null);
     if (opts?.soloSiCambio && sinCambios) return true;
 
     const rutInvalido = !!rut && !validarRut(rut);
@@ -544,6 +549,49 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
           massdte emite boletas de venta electrónicas. Las boletas de honorarios (profesionales
           independientes) se emiten en sii.cl — esta app no las reemplaza.
         </div>
+      </div>
+
+      {/* CARD 3: TIPO DE OPERACIÓN HABITUAL — semilla para clasificar la 1ª cartola */}
+      <div style={{
+        borderRadius: compact ? 14 : 18,
+        border: "1px solid var(--border, rgba(255,255,255,.06))",
+        background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
+        padding: compact ? 12 : 24,
+        boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
+      }}>
+        <div style={{ marginBottom: compact ? 8 : 12 }}>
+          <div style={{
+            fontSize: compact ? 12 : 13, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text, #e8eaf0)",
+          }}>
+            Tipo de operación habitual
+          </div>
+          <div style={{ marginTop: 2, fontSize: 11, color: "var(--text2, #8b92a3)" }}>
+            Ayuda a clasificar tu primera cartola, antes de que la app aprenda tus movimientos.
+            Podés cambiarlo por cartola al subirla.
+          </div>
+        </div>
+
+        <select
+          value={operacionHint}
+          onChange={(e) => setOperacionHint(e.target.value)}
+          style={{
+            width: "100%",
+            borderRadius: 12,
+            border: "1px solid var(--border, rgba(255,255,255,.06))",
+            background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
+            color: "var(--text, #e8eaf0)",
+            padding: compact ? "9px 10px" : "12px 12px",
+            fontSize: compact ? 12 : 13, fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <option value="">Sin definir — la app decide en cada venta</option>
+          <option value="p2p_cripto">P2P / Cripto (exenta)</option>
+          <option value="forex_divisas">Forex / Divisas (exenta)</option>
+          <option value="servicios">Servicios</option>
+          <option value="ventas">Venta de productos</option>
+          <option value="mixto">Mixto (varios tipos)</option>
+        </select>
       </div>
 
       {/* SUBMIT */}

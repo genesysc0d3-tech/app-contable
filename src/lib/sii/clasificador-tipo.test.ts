@@ -130,3 +130,39 @@ describe("clasificarBoleta — guardarraíl del cable de auto-clasificación", (
     expect(r.tipo_dte).toBe(41);
   });
 });
+
+describe("clasificarBoleta — default de operación de la CUENTA (bias beatable, no hint)", () => {
+  const empP2P = { ...empresaAuto, operacion_default: "p2p_cripto" as const };
+  const empVentas = { ...empresaAuto, operacion_default: "ventas" as const };
+
+  it("glosa muda + default p2p_cripto → 41 exenta (el caso del fundador, 1ª cartola)", () => {
+    const r = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empP2P);
+    expect(r.tipo_dte).toBe(41);
+    expect(r.confianza).toBeGreaterThanOrEqual(0.85); // auto-clasifica (no queda pendiente)
+  });
+
+  it("default 'ventas' (afecta) NO tapa una exención por ley (cripto): gana exenta", () => {
+    // Aunque la cuenta declare 'ventas', una venta claramente cripto es exenta por ley.
+    const r = clasificarBoleta(mov("venta USDT Binance P2P"), empVentas);
+    expect(r.tipo_dte).toBe(41);
+  });
+
+  it("default es BEATABLE: una glosa afecta contraria contesta al default exento y baja la confianza", () => {
+    // default p2p_cripto (exenta) vs glosa de servicio afecto: queda contestado, la
+    // confianza cae bajo el umbral de auto-persistencia (0.85) → va a revisar, NO se
+    // fuerza el tipo. (Con el short-circuit viejo se emitía 41 a ciegas.)
+    const r = clasificarBoleta(mov("servicio de asesoría profesional"), empP2P);
+    expect(r.confianza).toBeLessThan(0.85);
+  });
+
+  it("sin default ('auto') no cambia nada: glosa muda queda de baja confianza", () => {
+    const r = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto);
+    expect(r.confianza).toBeLessThan(0.85);
+  });
+
+  it("un no_boletar fuerte (préstamo) prevalece sobre el default de cuenta", () => {
+    const r = clasificarBoleta(mov("préstamo bancario cuota"), empP2P);
+    expect(r.sugerencia).toBe("no_boletar");
+    expect(r.tipo_dte).toBeNull();
+  });
+});

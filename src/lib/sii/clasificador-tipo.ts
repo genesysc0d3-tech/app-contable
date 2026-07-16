@@ -43,6 +43,9 @@ export interface EmpresaContext {
   giro?: string | null;
   razon_social?: string;
   tipo_contribuyente?: string | null;
+  /** Default de operación declarado por la cuenta (p2p_cripto/servicios/…). Entra
+   *  como BIAS de desempate (beatable), NO como el hint por-cartola (autoritativo). */
+  operacion_default?: DocumentoHint;
 }
 
 export interface PatronContext {
@@ -305,6 +308,24 @@ export function clasificarBoleta(
     votos.exenta += 0.9;
   }
   // Si es "auto", no hay biés. El clasificador decide libremente.
+
+  // Default de operación de la CUENTA (el cliente declaró a qué se dedica). Es un
+  // BIAS de desempate, MÁS DÉBIL que un hint por-cartola: no corta el ensemble, así
+  // que una glosa contraria o una exención por ley le ganan. Sirve para que la 1ª
+  // cartola de glosa muda ("Transf de Juan") caiga clasificada, sin forzar el tipo
+  // sobre una venta atípica del tipo contrario (esa queda contestada → a revisar).
+  // Mismo guard asimétrico que arriba: un default "afecta" no puede tapar exención
+  // por ley ni a un contribuyente exento.
+  const defaultAngle = angleHint(empresa.operacion_default ?? null);
+  if (defaultAngle.veredicto === "exenta") {
+    votos.exenta += 0.85;
+  } else if (
+    defaultAngle.veredicto === "afecta" &&
+    !exencionPorLey &&
+    empresa.tipo_contribuyente !== "exento"
+  ) {
+    votos.afecta += 0.85;
+  }
 
   // Priorizo el hint del usuario en las razones (lo ven primero)
   const allAngles = [hintAngle, glosa, giro, pat];
