@@ -160,6 +160,8 @@ export type Database = {
           proveedor_respuesta: Json | null
           receptor_comuna: string | null
           receptor_direccion: string | null
+          receptor_email: string | null
+          receptor_telefono: string | null
           receptor_razon_social: string | null
           receptor_rut: string | null
           referencia_id: string | null
@@ -195,6 +197,8 @@ export type Database = {
           proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           referencia_id?: string | null
@@ -230,6 +234,8 @@ export type Database = {
           proveedor_respuesta?: Json | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           referencia_id?: string | null
@@ -291,6 +297,7 @@ export type Database = {
           prioridad: number
           receptor_nombre_default: string | null
           receptor_rut_default: string | null
+          tipo_dte: number | null
           tipo_flujo_match: string | null
           tipo_propuesto: string
           veces_aplicada: number
@@ -309,6 +316,7 @@ export type Database = {
           prioridad?: number
           receptor_nombre_default?: string | null
           receptor_rut_default?: string | null
+          tipo_dte?: number | null
           tipo_flujo_match?: string | null
           tipo_propuesto: string
           veces_aplicada?: number
@@ -327,6 +335,7 @@ export type Database = {
           prioridad?: number
           receptor_nombre_default?: string | null
           receptor_rut_default?: string | null
+          tipo_dte?: number | null
           tipo_flujo_match?: string | null
           tipo_propuesto?: string
           veces_aplicada?: number
@@ -924,6 +933,7 @@ export type Database = {
           job_id: string
           locked_until: string | null
           origin: string
+          propuesta_id: string | null
           provider: string
           status_message: string | null
           updated_at: string
@@ -942,6 +952,7 @@ export type Database = {
           job_id: string
           locked_until?: string | null
           origin?: string
+          propuesta_id?: string | null
           provider: string
           status_message?: string | null
           updated_at?: string
@@ -960,6 +971,7 @@ export type Database = {
           job_id?: string
           locked_until?: string | null
           origin?: string
+          propuesta_id?: string | null
           provider?: string
           status_message?: string | null
           updated_at?: string
@@ -1228,6 +1240,7 @@ export type Database = {
           id: string
           logo_mime_type: string | null
           logo_storage_path: string | null
+          operacion_hint_default: string | null
           plan: string | null
           plan_activo: boolean
           plan_vence_at: string | null
@@ -1253,6 +1266,7 @@ export type Database = {
           id?: string
           logo_mime_type?: string | null
           logo_storage_path?: string | null
+          operacion_hint_default?: string | null
           plan?: string | null
           plan_activo?: boolean
           plan_vence_at?: string | null
@@ -1278,6 +1292,7 @@ export type Database = {
           id?: string
           logo_mime_type?: string | null
           logo_storage_path?: string | null
+          operacion_hint_default?: string | null
           plan?: string | null
           plan_activo?: boolean
           plan_vence_at?: string | null
@@ -1937,6 +1952,8 @@ export type Database = {
           notas: string | null
           receptor_comuna: string | null
           receptor_direccion: string | null
+          receptor_email: string | null
+          receptor_telefono: string | null
           receptor_nombre: string | null
           receptor_rut: string | null
           regla_id: string | null
@@ -1965,6 +1982,8 @@ export type Database = {
           notas?: string | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           regla_id?: string | null
@@ -1993,6 +2012,8 @@ export type Database = {
           notas?: string | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
+          receptor_email?: string | null
+          receptor_telefono?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           regla_id?: string | null

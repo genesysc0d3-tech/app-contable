@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
@@ -38,7 +39,9 @@ interface BoletaDraft {
   receptorRut: string;
   receptorRazonSocial: string;
   receptorDireccion: string;
-  receptorComuna: string;
+  receptorComuna: string; // solo carril facturas (SimpleAPI); e-Boleta no tiene Comuna
+  receptorEmail: string;
+  receptorTelefono: string;
   detalleNombre: string;
   monto: string;
   formaPago: FormaPago;
@@ -167,7 +170,7 @@ function chileTodayString(): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-function pingLocalSiiExtension(onResult: (message: ExtensionPageMessage | null) => void): () => void {
+function pingLocalSiiExtension(onResult: (message: ExtensionPageMessage | null) => void, empresaId?: string | null): () => void {
   const nonce = makeClientId();
   let settled = false;
 
@@ -199,6 +202,9 @@ function pingLocalSiiExtension(onResult: (message: ExtensionPageMessage | null) 
     type: "APP_CONTABLE_EXTENSION_PING",
     protocol_version: 1,
     nonce,
+    // La extensión reentrega folios pendientes SOLO a la empresa que declara el
+    // ping (mismo valor que viaja en el job: empresa_id ?? "default").
+    empresa_id: empresaId ?? "default",
   }, window.location.origin);
 
   return cleanup;
@@ -229,6 +235,8 @@ function newDraft(tipoDte: TipoDte, seq = 1): BoletaDraft {
     receptorRazonSocial: "",
     receptorDireccion: "",
     receptorComuna: "",
+    receptorEmail: "",
+    receptorTelefono: "",
     detalleNombre: "Servicio prestado",
     monto: "",
     formaPago: "Efectivo",
@@ -252,6 +260,8 @@ function draftHasContent(draft: BoletaDraft) {
     draft.receptorRazonSocial.trim() ||
     draft.receptorDireccion.trim() ||
     draft.receptorComuna.trim() ||
+    draft.receptorEmail.trim() ||
+    draft.receptorTelefono.trim() ||
     draft.monto.trim() ||
     draft.detalleNombre.trim() !== "Servicio prestado"
   );
@@ -280,6 +290,20 @@ const WORKER_STATUS_LABELS: Record<string, string> = {
   error: "Error",
 };
 
+// Estados PRE-emisión donde "cancelar y volver a emitir" es seguro (aún no se
+// cliqueó el EMITIR real → no hay folio en juego). Para submitting/capturing/
+// result_needs_review/save_failed la salida correcta es RECUPERAR, no re-emitir:
+// ofrecer un reset ahí invitaba a duplicar una boleta real (auditoría).
+const RESET_SAFE_STATUSES = new Set([
+  "opening_sii",
+  "waiting_sii_login",
+  "waiting_manual_login",
+  "autologin_attempting",
+  "autologin_sent",
+  "sii_page_ready",
+  "retrying",
+]);
+
 export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -298,6 +322,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const [extensionStatus, setExtensionStatus] = useState<ExtensionInstallStatus>("checking");
   const [localWorker, setLocalWorker] = useState<LocalWorkerState | null>(null);
   const [localWorkerLoading, setLocalWorkerLoading] = useState(false);
+  // Espejo del estado para leerlo dentro del listener de mensajes sin re-suscribir.
+  const localWorkerRef = useRef<LocalWorkerState | null>(null);
+  useEffect(() => { localWorkerRef.current = localWorker; }, [localWorker]);
+  // Jobs ya cerrados desde esta sesión: JOB_CLOSE se manda UNA vez por job.
+  const closedJobIdsRef = useRef<Set<string>>(new Set());
   const [simpleApiJobId, setSimpleApiJobId] = useState<string | null>(null);
   const [manualSiiFolio, setManualSiiFolio] = useState("");
   const [leyendoComprobante, setLeyendoComprobante] = useState(false);
@@ -315,8 +344,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const tipoDte = activeDraft.tipoDte;
   const receptorRut = activeDraft.receptorRut;
   const receptorRazonSocial = activeDraft.receptorRazonSocial;
-  const receptorDireccion = activeDraft.receptorDireccion;
-  const receptorComuna = activeDraft.receptorComuna;
+  const receptorDireccion = activeDraft.receptorDireccion ?? "";
+  const receptorComuna = activeDraft.receptorComuna ?? "";
+  const receptorEmail = activeDraft.receptorEmail ?? "";
+  const receptorTelefono = activeDraft.receptorTelefono ?? "";
   const detalleNombre = activeDraft.detalleNombre;
   const monto = activeDraft.monto;
   const formaPago = activeDraft.formaPago ?? "Efectivo";
@@ -338,16 +369,33 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const {
     status: emissionLock,
     activeLock: activeEmissionLock,
-    lockedByOther: lockBlocksEmission,
+    // Solo OTRO usuario emitiendo bloquea el botón. Tu propio candado pegado NO te
+    // encierra (myStaleLock): se cancela en un click, no espera el TTL de 15 min.
+    lockedByOtherUser: lockBlocksEmission,
+    myStaleLock,
     setStatus: setEmissionLock,
   } = useEmissionLockStatus({ enabled: usesSiiLocal || usesSimpleApi, currentJobId: currentEmissionJobId });
   // Receptor es opcional, pero si se escribió un RUT tiene que ser válido:
   // un dígito verificador malo termina en rechazo SII.
   const rutReceptorInvalido = receptorRut.trim().length > 0 && !validarRut(receptorRut);
+  // El SII EXIGE el nombre si se pone un RUT que no está registrado (muestra "No hay
+  // información registrada para este receptor, indique su nombre" y no habilita EMITIR).
+  // Como no sabemos si el RUT está registrado, con RUT presente pedimos el nombre siempre.
+  const receptorNombrePendiente = receptorRut.trim().length > 0 && !receptorRazonSocial.trim();
   // Res. Ex. SII 44/2025: sobre ~135 UF la boleta debe identificar al comprador.
   const receptorObligatorioPendiente = total > umbralReceptor && (!receptorRut.trim() || !receptorRazonSocial.trim());
-  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorObligatorioPendiente && !emitiendo;
-  const canOpenLocalWorker = canSubmit && !localWorkerLoading && !lockBlocksEmission;
+  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorNombrePendiente && !receptorObligatorioPendiente && !emitiendo;
+  // Anti-doble-emisión CROSS-JOB: mientras una emisión SII siga sin resolverse
+  // (folio pendiente de capturar/ingresar), NO re-habilitar el botón aunque el
+  // servidor haya soltado el lock por una captura de evidencia débil. De lo
+  // contrario el usuario podría lanzar un job NUEVO y emitir la boleta dos veces
+  // (sin Nota de Crédito para revertir). Terminal = seguro para empezar otra.
+  // NOTA: "save_failed" queda FUERA del set terminal A PROPÓSITO — un fallo de
+  // guardado LOCAL no descarta que la boleta se emitiera en el SII; se resuelve por
+  // el panel "Recuperar emisión", no re-emitiendo. No lo agregues como terminal.
+  const siiWorkerPendiente = usesSiiLocal && localWorker != null
+    && !["emitted", "already_exists", "error", "cancelled", "closed"].includes(localWorker.status);
+  const canOpenLocalWorker = canSubmit && !localWorkerLoading && !lockBlocksEmission && !siiWorkerPendiente;
   const primaryDisabled = usesSiiLocal ? !canOpenLocalWorker : usesSimpleApi ? !canSubmit || lockBlocksEmission : !canSubmit;
   const primaryLabel = lockBlocksEmission && (usesSiiLocal || usesSimpleApi)
     ? "Emisión en curso"
@@ -379,6 +427,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         }
         const savedDrafts = Array.isArray(parsed) ? parsed : parsed.drafts;
         const validDrafts = (savedDrafts ?? []).filter((draft) => draft?.id).slice(0, 3).map((draft, index) => ({
+          // Fusiona SOBRE una base con TODOS los campos: un borrador viejo (guardado
+          // antes de agregar receptorEmail/Telefono u otros) toma el default "" en los
+          // que falten, evitando el warning de input controlado→no-controlado (undefined).
+          ...newDraft(draft.tipoDte ?? tipoInicial),
           ...draft,
           slot: draft.slot ?? (((index % 3) + 1) as 1 | 2 | 3),
           colorIndex: draft.colorIndex ?? 0,
@@ -399,6 +451,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     } finally {
       setHydrated(true);
     }
+    // tipoInicial (de empresaTipo) es estable por montaje; la hidratación corre UNA vez
+    // por storageKey y NO debe re-ejecutarse si cambiara el tipo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 
   useEffect(() => {
@@ -443,7 +498,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         return;
       }
       setExtensionStatus("ready");
-    });
+    }, empresaId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -673,6 +729,17 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         const persisted = data.result?.persisted;
         const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && persisted?.ok === true);
         const persistenceError = persisted?.ok === false ? ` No se guardó en la app: ${persisted.detalle ?? persisted.error ?? "error desconocido"}.` : "";
+        const current = localWorkerRef.current;
+        const sameJob = current?.jobId != null && current.jobId === (data.job_id ?? null);
+        if (!emitted) {
+          // Resultado REENTREGADO de un job que no es el de esta sesión y cuyo POST
+          // falló: no pisar el estado ni bloquear Emitir por un aviso ajeno (el
+          // stash de la extensión lo reintentará solo). Y un éxito terminal ya
+          // mostrado no se pisa con una falla tardía del mismo job (carrera de
+          // doble POST: el perdedor decía "no guardada" sobre una boleta guardada).
+          if (!sameJob) return;
+          if (current && (current.status === "emitted" || current.status === "already_exists")) return;
+        }
         setLocalWorker({
           jobId: data.job_id ?? null,
           status: emitted ? "emitted" : "result_needs_review",
@@ -706,14 +773,34 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
 
       void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
-      setLocalWorker({
-        jobId: data.job_id ?? null,
-        status: data.status ?? "error",
-        message: data.message ?? "Estado recibido desde motor local SII",
+      setLocalWorker((current) => {
+        // Un éxito terminal NO se pisa: tras "Boleta emitida y guardada", un
+        // "closed"/"result_needs_review" tardío (cierre de la ventana SII) volvía
+        // a alarmar y a bloquear el botón por una boleta que ya está guardada.
+        // jobId null = éxito de un rescate manual (Recuperar): también protegido —
+        // una emisión NUEVA resetea el estado directo en sendLocalSiiJob, nunca
+        // por esta vía, así que acá no se bloquea nada legítimo.
+        if (current && (current.status === "emitted" || current.status === "already_exists")
+          && (current.jobId == null || current.jobId === (data.job_id ?? null))) {
+          return current;
+        }
+        return {
+          jobId: data.job_id ?? null,
+          status: data.status ?? "error",
+          message: data.message ?? "Estado recibido desde motor local SII",
+        };
       });
       setLocalWorkerLoading(false);
-      if ((data.status === "error" || data.status === "cancelled") && data.job_id) {
+      if ((data.status === "error" || data.status === "cancelled") && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
+        // Una sola vez por job (el Set corta el bucle error→JOB_CLOSE→error que se
+        // formaba cuando la extensión quedaba huérfana y el bridge respondía con
+        // otro status "error" para el mismo job).
+        closedJobIdsRef.current.add(data.job_id);
         void closeEmissionJobEvent(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
+        // Cerrar también la ventana worker de ese job: si quedaba viva con su botón
+        // "Reintentar" mientras acá se re-habilitaba Emitir, había dos cerebros
+        // capaces de emitir dos boletas reales. (Post-emit la extensión la protege.)
+        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: data.job_id }, window.location.origin);
         if (data.job_id === simpleApiJobId) {
           setEmitiendo(false);
           setSimpleApiJobId(null);
@@ -1004,6 +1091,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           razon_social: receptorRazonSocial.trim() || undefined,
           direccion: receptorDireccion.trim() || undefined,
           comuna: receptorComuna.trim() || undefined,
+          email: receptorEmail.trim() || undefined,
+          telefono: receptorTelefono.trim() || undefined,
         },
         detalles: [{ nombre: detalleNombre.trim().slice(0, 80), cantidad: 1, monto_total: total }],
         totales: {
@@ -1033,8 +1122,18 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       toast("Ingresa el folio visible en SII", "error");
       return;
     }
+    // El panel ahora es alcanzable con el borrador vacío: sin monto, el POST se iba
+    // con total=0, el server lo rechazaba con 422 y de paso cerraba el job vivo y
+    // soltaba el lock (review). Pedir el monto ANTES de tocar nada.
+    if (total <= 0) {
+      toast("Escribe también el monto de la boleta emitida (el mismo que emitiste) antes de guardar el folio.", "error");
+      return;
+    }
     if (!localWorker?.jobId) {
-      toast("Primero inicia una emisión SII para crear el job seguro", "error");
+      // JAMÁS sugerir "iniciar una emisión" para rescatar un folio: eso emite una
+      // SEGUNDA boleta real (auditoría: crítico). La salida sin job es el botón de
+      // arriba, que no necesita emisión activa.
+      toast("No hay una emisión activa para asociar este folio. Usa «Guardar último PDF SII» (funciona sin emisión activa). No vuelvas a emitir la boleta.", "error");
       return;
     }
 
@@ -1096,20 +1195,22 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }
 
   async function persistLatestSiiPdf() {
-    if (!localWorker?.jobId) {
-      toast("Primero inicia una emisión SII para crear el job seguro", "error");
-      return;
-    }
+    // SIN exigir job vivo: el server soporta recover_latest con job_id null
+    // (resuelve el último resultado SII del usuario y hace backfill idempotente).
+    // El gate anterior exigía un jobId que muere al recargar la página — justo el
+    // escenario donde se necesita rescate — y su error inducía a re-emitir.
     setLocalWorkerLoading(true);
     try {
       const res = await fetch("/api/sii-local/result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: localWorker.jobId, recover_latest: true }),
+        body: JSON.stringify({ job_id: localWorker?.jobId ?? null, recover_latest: true }),
       });
       const json = (await res.json()) as { ok?: boolean; folio?: number; boleta_id?: string; error?: string; detalle?: string; already_exists?: boolean };
       if (!res.ok || !json.ok) {
-        toast(json.detalle ?? json.error ?? "No se pudo guardar el PDF SII detectado", "error");
+        toast(json.error === "SIN_RESULTADO_SII_RECUPERABLE"
+          ? "No encontré ninguna boleta SII pendiente de rescatar (últimas 24 horas). Si la ventana del SII no mostró un folio, no se emitió nada."
+          : json.detalle ?? json.error ?? "No se pudo guardar el PDF SII detectado", "error");
         return;
       }
       setLocalWorker({
@@ -1124,6 +1225,35 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     } finally {
       setLocalWorkerLoading(false);
     }
+  }
+
+  // Cancela una emisión SII pegada en estado PRE-emisión: cierra el job en el
+  // server (libera el lock YA — antes solo se limpiaba el estado local y el botón
+  // pasaba a "Emisión en curso" hasta 15 minutos) y pide a la extensión cerrar la
+  // ventana worker (sin esto quedaban dos cerebros: "Reintentar" allá + "Emitir"
+  // acá = dos boletas reales). Solo se ofrece para RESET_SAFE_STATUSES.
+  function resetStuckSiiEmission() {
+    const jobId = localWorker?.jobId ?? null;
+    void closeEmissionJob(jobId, "cancelled");
+    if (jobId) {
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+    }
+    setLocalWorker(null);
+    setLocalWorkerLoading(false);
+  }
+
+  // Cancela TU PROPIO candado pegado de un job anterior (myStaleLock): el job cuyo
+  // lock quedó tomado ya no es el actual en vuelo (el modal se remonteó, localWorker
+  // es null), así que se cierra por el job_id del propio lock. Libera el lock al toque
+  // y cierra la ventana worker que haya quedado — sin esperar el TTL de 15 min.
+  async function cancelStaleLock() {
+    const jobId = activeEmissionLock?.job_id ?? null;
+    if (jobId) {
+      await closeEmissionJob(jobId, "cancelled");
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+    }
+    setLocalWorker(null);
+    setLocalWorkerLoading(false);
   }
 
   function openLocalSiiWorker() {
@@ -1144,7 +1274,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       }
       setExtensionStatus("ready");
       void sendLocalSiiJob();
-    });
+    }, empresaId);
   }
 
   // Confirmación SIEMPRE antes de emitir: primera vez modal legal → pre-vuelo;
@@ -1178,7 +1308,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
+    // maxHeight + minHeight:0 auto-limitan el modal a 92vh: el .ed-panel padre usa max-height
+    // sin height definido (para que asomen las pestañas laterales necesita overflow:visible), así
+    // que height:100% no resolvía y el contenido se DERRAMABA por abajo (Emitir se salía del cuadro).
+    // Con el root acotado, el .ed-body (flex:1 + overflowY:auto) scrollea adentro y nada se sale.
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", maxHeight: "92vh", minHeight: 0, position: "relative" }}>
       <style>{`
         .ed-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:start}
         .ed-card{border:1px solid var(--border);background:var(--bg-muted);border-radius:12px;padding:10px}
@@ -1335,22 +1469,37 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   }}
                 />
               </div>
+              {/* Espejo EXACTO del formulario e-Boleta del SII: los mismos campos que
+                  el SII deja llenar del receptor (RUT, Nombre, Dirección, E-mail,
+                  Teléfono), todos opcionales. Lo que llenes lo escribe el robot en el
+                  SII; lo que dejes vacío, queda vacío. Sobre 135 UF, RUT+Nombre pasan a
+                  obligatorios (Res. 44/2025). (No hay "Comuna": el e-Boleta no la tiene.) */}
               <div className="ed-grid-2">
                 <Field label="RUT receptor" value={receptorRut} onChange={(value) => updateActiveDraft({ receptorRut: value })} placeholder="Opcional (obligatorio sobre 135 UF)" />
-                <Field label="Razón social" value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder="Cliente o consumidor" />
+                <Field label="Nombre" value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder="Cliente o consumidor" />
                 <Field label="Dirección" value={receptorDireccion} onChange={(value) => updateActiveDraft({ receptorDireccion: value })} placeholder="Opcional" />
-                <Field label="Comuna" value={receptorComuna} onChange={(value) => updateActiveDraft({ receptorComuna: value })} placeholder="Opcional" />
+                <Field label="E-mail" value={receptorEmail} onChange={(value) => updateActiveDraft({ receptorEmail: value })} placeholder="Opcional (para enviarle la boleta)" />
+                <Field label="Teléfono" value={receptorTelefono} onChange={(value) => updateActiveDraft({ receptorTelefono: value })} placeholder="Opcional" />
               </div>
               {rutReceptorInvalido && (
                 <p style={{ fontSize: 9, color: "var(--red)", marginTop: 7 }}>
                   El RUT del receptor no es válido — revisa el dígito verificador o déjalo vacío.
                 </p>
               )}
-              {receptorObligatorioPendiente && (
-                <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.45 }}>
-                  Sobre ~{fmt(umbralReceptor)} necesitas identificar al comprador (RUT y razón social) — Res. 44/2025.
-                </div>
+              {!rutReceptorInvalido && receptorNombrePendiente && (
+                <p style={{ fontSize: 9, color: "var(--amber)", marginTop: 7, lineHeight: 1.45 }}>
+                  Pusiste un RUT: indica también el <strong>nombre</strong>. El SII lo exige si el RUT no está registrado (o deja el RUT vacío para consumidor final).
+                </p>
               )}
+              {receptorObligatorioPendiente ? (
+                <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.45 }}>
+                  Sobre ~{fmt(umbralReceptor)} necesitas identificar al receptor (RUT y nombre) — Res. 44/2025.
+                </div>
+              ) : total > 0 ? (
+                <p style={{ marginTop: 7, fontSize: 9, color: "var(--text3)", lineHeight: 1.45 }}>
+                  Para este monto el receptor es <strong style={{ color: "var(--text2)" }}>consumidor final</strong>: identificarlo es opcional (bajo ~{fmt(umbralReceptor)}, Res. 44/2025).
+                </p>
+              ) : null}
             </section>
 
             <section className="ed-card-quiet">
@@ -1363,7 +1512,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <Field label={tipoDte === 39 || tipoDte === 33 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
               </div>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-                <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Forma de pago</span>
+                <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Método de pago</span>
                 <select value={formaPago} onChange={(e) => updateActiveDraft({ formaPago: e.target.value as FormaPago })}
                   style={{ width: "100%", height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", padding: "0 9px", fontSize: 11, outline: "none" }}>
                   {FORMAS_PAGO.map((fp) => <option key={fp} value={fp}>{fp}</option>)}
@@ -1393,7 +1542,22 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             {lockBlocksEmission && activeEmissionLock && (usesSiiLocal || usesSimpleApi) && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45 }}>
                 <span className="ed-label" style={{ color: "var(--amber)" }}>{emissionLock?.business_mode ? "Equipo" : "Emisión en curso"}</span><br />
-                {activeEmissionLock.mensaje ?? "Hay una emisión en curso para esta cuenta. Intenta nuevamente cuando termine."}
+                {activeEmissionLock.mensaje ?? "Otra persona de tu cuenta está emitiendo. Intenta nuevamente cuando termine."}
+              </div>
+            )}
+
+            {/* Tu propio candado pegado de un intento anterior (no bloquea a nadie más):
+                un click lo cancela y podés emitir de nuevo — sin esperar el TTL. */}
+            {myStaleLock && !lockBlocksEmission && (usesSiiLocal || usesSimpleApi) && (
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  <span className="ed-label" style={{ color: "var(--amber)" }}>Emisión anterior pegada</span><br />
+                  Quedó un intento tuyo sin cerrar. Si viste un folio en el SII, usá <strong>Recuperar emisión SII</strong> (abajo) en vez de re-emitir. Si no salió nada, cancélalo y emite de nuevo.
+                </div>
+                <button type="button" onClick={() => { void cancelStaleLock(); }}
+                  style={{ alignSelf: "flex-start", height: 30, borderRadius: 8, border: "1px solid rgba(245,158,11,.4)", background: "rgba(245,158,11,.12)", color: "var(--amber)", padding: "0 12px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+                  Cancelar y emitir de nuevo
+                </button>
               </div>
             )}
 
@@ -1413,8 +1577,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                     No encuentro la extensión del SII en este navegador. Instálala o actívala desde <strong>Empresa → Configuración de emisión</strong> (ahí están los pasos), y vuelve a intentar.
                   </div>
                 )}
-                {total > 0 && (
-                  <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {/* Siempre visible (antes exigía total>0: tras recargar la página el
+                    borrador muere, total=0, y el rescate desaparecía justo cuando
+                    más se necesitaba — auditoría: crítico). */}
+                <details style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <summary style={{ cursor: "pointer", fontSize: 9, fontWeight: 800, color: "var(--text)" }}>
                       Recuperar emisión SII
                     </summary>
@@ -1446,8 +1612,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                       </button>
                     </div>
                     </div>
-                  </details>
-                )}
+                </details>
               </div>
             )}
 
@@ -1507,9 +1672,33 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
 
             <div style={{ marginTop: "auto", paddingTop: 2 }}>
-              <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
-                {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorObligatorioPendiente ? "Identifica al comprador (RUT y razón social)." : "Ingresa detalle y monto."}
-              </div>
+              {siiWorkerPendiente ? (
+                RESET_SAFE_STATUSES.has(localWorker?.status ?? "") ? (
+                  <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
+                    Emisión SII en curso: {WORKER_STATUS_LABELS[localWorker?.status ?? ""] ?? "procesando"}. ¿Quedó pegada?{" "}
+                    <button type="button" onClick={resetStuckSiiEmission} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>cancélala</button>{" "}y vuelve a emitir.
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
+                    Hay una emisión SII sin resolver ({WORKER_STATUS_LABELS[localWorker?.status ?? ""] ?? "en proceso"}). No vuelvas a emitir: usa <strong>Recuperar emisión SII</strong> (a la izquierda) para rescatar el folio.
+                    {/* Salida para el estado fantasma: si el servidor YA liberó la
+                        emisión (lock inexistente), quedarse aquí era un callejón sin
+                        salida en la sesión. Con lock liberado + rescate a mano, cancelar
+                        es razonable — con advertencia explícita de revisar el folio. */}
+                    {emissionLock?.ok === true && emissionLock.locked !== true && (
+                      <>
+                        {" "}Si la ventana del SII no mostró ningún folio, puedes{" "}
+                        <button type="button" onClick={resetStuckSiiEmission} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>cancelarla</button>
+                        {" "}y volver a emitir.
+                      </>
+                    )}
+                  </div>
+                )
+              ) : (
+                <div style={{ marginBottom: 7, fontSize: 9, color: "var(--text2)", textAlign: "center" }}>
+                  {canSubmit ? "Listo para emitir." : rutReceptorInvalido ? "Corrige el RUT del receptor." : receptorNombrePendiente ? "Con RUT, indica también el nombre." : receptorObligatorioPendiente ? "Identifica al receptor (RUT y nombre)." : "Ingresa detalle y monto."}
+                </div>
+              )}
               <button onClick={() => { void handlePrimaryEmit(); }} disabled={primaryDisabled} style={{ width: "100%", minHeight: 38, fontSize: 11, padding: "8px 14px", borderRadius: 10, border: "none", cursor: primaryDisabled ? "not-allowed" : "pointer", fontWeight: 800, background: "#E8553E", color: "#fff", opacity: primaryDisabled ? 0.45 : 1, boxShadow: !primaryDisabled ? "0 10px 26px rgba(232,85,62,.24)" : "none" }}>
                 {primaryLabel}
               </button>
@@ -1518,8 +1707,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         </div>
       </div>
 
-      {/* Pre-vuelo: confirmación SIEMPRE antes de emitir (patrón modal de EmitirTabContent). */}
-      {confirmOpen && (
+      {/* Pre-vuelo: confirmación SIEMPRE antes de emitir (patrón modal de EmitirTabContent).
+          Se PORTALEA a document.body: el .ed-overlay usa backdrop-filter, que lo vuelve el
+          bloque contenedor de los position:fixed → sin portal el modal se ancla al panel y se
+          rompe (y hay backdrop-filters anidados). Portal = fixed real al viewport. */}
+      {confirmOpen && createPortal((
         <div onClick={() => { if (!emitBusy) setConfirmOpen(false); }}
           style={{ position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
@@ -1555,10 +1747,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
-      {/* Autorización legal (primera emisión real por proveedor) — mismo lenguaje visual. */}
-      {legalPrompt && (
+      {/* Autorización legal (primera emisión real por proveedor) — mismo lenguaje visual.
+          Portaleado a document.body por la misma razón que el pre-vuelo (backdrop-filter del overlay). */}
+      {legalPrompt && createPortal((
         <div onClick={() => resolveLegalPrompt(false)}
           style={{ position: "fixed", inset: 0, zIndex: 210, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
@@ -1586,7 +1779,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
     </div>
   );

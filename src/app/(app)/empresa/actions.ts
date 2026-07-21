@@ -19,7 +19,13 @@ export interface DatosEmisor {
   comuna?: string | null;
   email_sii?: string | null;
   tipo_contribuyente?: string;
+  /** Default de operación del contribuyente: semilla para auto-clasificar la 1ª
+   *  cartola (p2p_cripto/forex_divisas/servicios/ventas/mixto). null = la IA decide. */
+  operacion_hint_default?: string | null;
 }
+
+// Mismos valores que documentos_subidos.tipo_operacion_hint (DocumentoHint).
+const HINTS_OPERACION_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 
 export type BoletasEmisionProveedor = "mock" | "sii_local" | "simpleapi";
 export type FacturasEmisionProveedor = "mock" | "simpleapi";
@@ -158,6 +164,13 @@ export async function setDatosEmisor(
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
   if (datos.tipo_contribuyente !== undefined) update.tipo_contribuyente = datos.tipo_contribuyente;
+  if (datos.operacion_hint_default !== undefined) {
+    const h = datos.operacion_hint_default;
+    if (h !== null && !HINTS_OPERACION_VALIDOS.has(h)) {
+      return { error: "Tipo de operación por defecto inválido" };
+    }
+    update.operacion_hint_default = h; // null = sin default (la IA decide)
+  }
 
   const { error } = await sb
     .from("empresas")

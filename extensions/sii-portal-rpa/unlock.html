@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Desbloquear para emitir</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #18181B; --card: rgba(255,255,255,.05); --border: rgba(255,255,255,.10);
+      --text: #ededed; --muted: rgba(255,255,255,.55); --faint: rgba(255,255,255,.34);
+      --accent: #e8553e; --accent-hover: #f06a55; --green: #40c48d; --red: #e8553e;
+      --glow: 0 0 26px -6px rgba(232,85,62,.4);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-size: 13px; -webkit-font-smoothing: antialiased;
+      padding: 20px; display: grid; gap: 14px;
+    }
+    h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+    p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .lock { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+    label { display: grid; gap: 6px; font-size: 12px; font-weight: 500; }
+    input {
+      width: 100%; border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255,255,255,.03); color: var(--text); font: inherit; font-size: 13px;
+      padding: 10px 12px; transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232,85,62,.15); }
+    button {
+      width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: #fff;
+      cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; padding: 11px 16px;
+      box-shadow: var(--glow); transition: background .2s ease, opacity .2s ease;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: .55; cursor: wait; box-shadow: none; }
+    .status { font-size: 12px; min-height: 16px; }
+    .status.ok { color: var(--green); font-weight: 600; }
+    .status.err { color: var(--red); font-weight: 600; }
+    .hint { color: var(--faint); font-size: 11px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="lock">🔒 Desbloqueo para emitir</div>
+  <h1>Ingresa tu clave local</h1>
+  <p>Tu clave desbloquea la bóveda cifrada de este equipo por 10 minutos. La emisión continúa sola al desbloquear. Tu clave nunca sale de la extensión.</p>
+  <form id="form">
+    <label>
+      <span>Clave local (passphrase)</span>
+      <input type="password" id="pin" autocomplete="current-password" placeholder="Tu clave local" autofocus>
+    </label>
+    <div class="status" id="status"></div>
+    <button type="submit" id="btn">Desbloquear y continuar</button>
+  </form>
+  <div class="hint">Si prefieres, también puedes iniciar sesión a mano en la ventana del SII.</div>
+  <script src="unlock.js"></script>
+</body>
+</html>

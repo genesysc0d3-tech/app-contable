@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clasificarBoleta } from "./clasificador-tipo";
+import { clasificarBoleta, decidirTipoDteAuto } from "./clasificador-tipo";
 
 const empresaAuto = { giro: null, razon_social: "Test SpA", tipo_contribuyente: "auto" };
 const mov = (descripcion: string, monto = 50_000) => ({ descripcion, monto, fecha: "2026-06-11", receptor_nombre: null });
@@ -97,5 +97,114 @@ describe("clasificarBoleta — ángulos heurísticos", () => {
     // Pero una glosa afecta-por-naturaleza (servicio) con empresa afecta sí queda afecta.
     const r2 = clasificarBoleta(mov("servicio de asesoría"), { ...empresaAuto, tipo_contribuyente: "afecto" });
     expect(r2.tipo_dte).toBe(39);
+  });
+});
+
+// Guardarraíl del CABLE de auto-clasificación (processor.ts): el cable persiste
+// tipo_dte al vuelo para que la cartola no nazca 100% pendiente, PERO nunca sobre
+// un no_boletar. Estos tests fijan que el clasificador caza los no-ventas claros
+// (aunque venga un hint fuerte) y que sí resuelve la transferencia muda del P2P.
+describe("clasificarBoleta — guardarraíl del cable de auto-clasificación", () => {
+  it("caza los no-ventas CLAROS como no_boletar aunque venga hint fuerte", () => {
+    // El cable nunca persiste tipo sobre estos → nunca se emiten, ni con hint.
+    for (const g of [
+      "PRESTAMO DE JUAN",
+      "transferencia entre cuentas propias",
+      "CAPITAL ACCIONISTA 2025",
+      "APORTE INTEGRACION CAPITAL",
+      "aporte de capital socio",
+      "DEPOSITO A PLAZO 90 dias",
+      "sueldo liquidacion de remuneraciones",
+    ]) {
+      const r = clasificarBoleta(mov(g), empresaAuto, undefined, "p2p_cripto");
+      expect(r.sugerencia, g).toBe("no_boletar");
+      expect(r.tipo_dte, g).toBeNull();
+    }
+  });
+
+  it("el hint SÍ clasifica la transferencia P2P muda como venta exenta (caso del fundador)", () => {
+    // "TRANSF DE JUAN PEREZ" no tiene señal cripto en la glosa, pero el hint
+    // p2p_cripto la lleva a 41 — es exactamente lo que el cable persiste.
+    const r = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto, undefined, "p2p_cripto");
+    expect(r.sugerencia).not.toBe("no_boletar");
+    expect(r.tipo_dte).toBe(41);
+  });
+});
+
+describe("clasificarBoleta — default de operación de la CUENTA (bias beatable, no hint)", () => {
+  const empP2P = { ...empresaAuto, operacion_default: "p2p_cripto" as const };
+  const empVentas = { ...empresaAuto, operacion_default: "ventas" as const };
+
+  it("glosa muda + default p2p_cripto → 41 exenta (el caso del fundador, 1ª cartola)", () => {
+    const r = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empP2P);
+    expect(r.tipo_dte).toBe(41);
+    expect(r.confianza).toBeGreaterThanOrEqual(0.85); // auto-clasifica (no queda pendiente)
+  });
+
+  it("default 'ventas' (afecta) NO tapa una exención por ley (cripto): gana exenta", () => {
+    // Aunque la cuenta declare 'ventas', una venta claramente cripto es exenta por ley.
+    const r = clasificarBoleta(mov("venta USDT Binance P2P"), empVentas);
+    expect(r.tipo_dte).toBe(41);
+  });
+
+  it("default es BEATABLE: una glosa afecta contraria contesta al default exento y baja la confianza", () => {
+    // default p2p_cripto (exenta) vs glosa de servicio afecto: queda contestado, la
+    // confianza cae bajo el umbral de auto-persistencia (0.85) → va a revisar, NO se
+    // fuerza el tipo. (Con el short-circuit viejo se emitía 41 a ciegas.)
+    const r = clasificarBoleta(mov("servicio de asesoría profesional"), empP2P);
+    expect(r.confianza).toBeLessThan(0.85);
+  });
+
+  it("sin default ('auto') no cambia nada: glosa muda queda de baja confianza", () => {
+    const r = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto);
+    expect(r.confianza).toBeLessThan(0.85);
+  });
+
+  it("un no_boletar fuerte (préstamo) prevalece sobre el default de cuenta", () => {
+    const r = clasificarBoleta(mov("préstamo bancario cuota"), empP2P);
+    expect(r.sugerencia).toBe("no_boletar");
+    expect(r.tipo_dte).toBeNull();
+  });
+});
+
+describe("decidirTipoDteAuto — asimetría de seguridad del 39 (fabrica IVA)", () => {
+  const empP2P = { ...empresaAuto, operacion_default: "p2p_cripto" as const };
+  const empVentas = { ...empresaAuto, operacion_default: "ventas" as const };
+
+  it("41 auto: default p2p + glosa muda (el caso del fundador) → 41", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empP2P);
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBe(41);
+  });
+
+  it("39 BLOQUEADO: default 'ventas' (afecta) + glosa muda + emisor 'auto' → null (a revisar, no fabrica IVA)", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empVentas);
+    expect(c.tipo_dte).toBe(39); // el clasificador sugiere afecta…
+    // …pero el cable NO lo auto-persiste sin evidencia de glosa.
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
+  });
+
+  it("39 OK: la glosa corrobora afecta (servicio) → 39", () => {
+    const c = clasificarBoleta(mov("servicio de asesoría profesional"), empVentas);
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBe(39);
+  });
+
+  it("39 OK: emisor declarado 'afecto' (cobra IVA por definición) → 39 aunque la glosa sea muda", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), { ...empresaAuto, tipo_contribuyente: "afecto" });
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "afecto" })).toBe(39);
+  });
+
+  it("39 OK: hint AFECTA por-cartola explícito (ventas) → 39 (gesto del usuario en esa cartola)", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto, undefined, "ventas");
+    expect(decidirTipoDteAuto(c, { docHint: "ventas", tipoContribuyente: "auto" })).toBe(39);
+  });
+
+  it("exento → 41 (nunca 39)", () => {
+    const c = clasificarBoleta(mov("servicio de asesoría"), { ...empresaAuto, tipo_contribuyente: "exento" });
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "exento" })).toBe(41);
+  });
+
+  it("baja confianza sin hint (glosa muda, sin default) → null", () => {
+    const c = clasificarBoleta(mov("TRANSFERENCIA DE JUAN PEREZ"), empresaAuto);
+    expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
   });
 });

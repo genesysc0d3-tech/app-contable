@@ -5,7 +5,7 @@
  *   entrena con los datos). Confirmado leyendo comprobantes chilenos.
  * - Agrupado de varias imágenes de la misma operación: DeepSeek V4 Flash.
  *
- * Sin Mistral: todo bajo la suscripción Go que ya se paga. Cloudflare frente
+ * Sin OpenCode: todo bajo la suscripción Go que ya se paga. Cloudflare frente
  * a OpenCode responde 1010 sin firma de navegador → se manda User-Agent.
  */
 

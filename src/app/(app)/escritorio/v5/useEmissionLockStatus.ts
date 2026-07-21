@@ -33,6 +33,13 @@ interface EmissionLockState extends EmissionLockSource {
   activeLock: EmissionLockInfo | null;
   businessMode: boolean;
   lockedByOther: boolean;
+  // Bloqueo REAL: otra PERSONA (otra pestaña/compañero) está emitiendo. Tu propio job
+  // colgado (is_mine) NO cuenta como bloqueo — no debe encerrarte de tu cuenta; se
+  // cancela en un click. Solo esto debe deshabilitar el botón Emitir.
+  lockedByOtherUser: boolean;
+  // Tu propio candado quedó pegado de un job anterior (no el actual en vuelo): ofrecer
+  // cancelarlo para volver a emitir sin esperar el TTL.
+  myStaleLock: boolean;
   lockMessage: string;
 }
 
@@ -109,12 +116,18 @@ function deriveEmissionLockState(source: EmissionLockSource, enabled: boolean, c
       activeLock: null,
       businessMode: false,
       lockedByOther: false,
+      lockedByOtherUser: false,
+      myStaleLock: false,
       lockMessage: FALLBACK_LOCK_MESSAGE,
     };
   }
 
   const activeLock = source.status?.locked ? source.status.bloqueo ?? null : null;
   const lockedByOther = Boolean(activeLock?.job_id && activeLock.job_id !== currentJobId);
+  // Otro USUARIO emitiendo (is_mine === false): único bloqueo legítimo del botón.
+  const lockedByOtherUser = Boolean(activeLock && activeLock.is_mine === false);
+  // Mi propio candado pegado de un job anterior (no el actual): cancelable en un click.
+  const myStaleLock = Boolean(activeLock && activeLock.is_mine !== false && activeLock.job_id && activeLock.job_id !== currentJobId);
   const businessMode = Boolean(source.status?.business_mode);
 
   return {
@@ -122,6 +135,8 @@ function deriveEmissionLockState(source: EmissionLockSource, enabled: boolean, c
     activeLock,
     businessMode,
     lockedByOther,
+    lockedByOtherUser,
+    myStaleLock,
     lockMessage: activeLock?.mensaje ?? FALLBACK_LOCK_MESSAGE,
   };
 }

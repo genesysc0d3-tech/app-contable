@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useId } from "react";
+import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
+import EmitirLoteModal, { type LoteItemInput } from "./EmitirLoteModal";
+import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
 
 interface Item {
   id: string;
@@ -13,6 +16,13 @@ interface Item {
   fecha: string;
   receptor_nombre: string | null;
   receptor_rut: string | null;
+  receptor_direccion?: string | null;
+  receptor_comuna?: string | null;
+  receptor_email?: string | null;
+  receptor_telefono?: string | null;
+  medio_pago?: string | null;
+  // Glosa YA segura (resolverGlosa server-side) para armar el payload del lote real.
+  detalle?: string | null;
   monto_total: number;
   balde: "listas" | "por_revisar" | "bloqueadas";
   listo_emitir: boolean;
@@ -23,6 +33,7 @@ interface Item {
   confianza_clasif: number;
   razones: string[];
   documento_id: string | null;
+  documento_nombre?: string | null;
   documento_created_at: string | null;
 }
 
@@ -62,7 +73,7 @@ function errorAmable(code?: string, msg?: string): string {
   switch (code) {
     case "YA_EMITIDA": return "Ya tenía una boleta emitida.";
     case "RECEPTOR_RUT_OBLIGATORIO":
-    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA": return "Falta identificar al comprador (sobre 135 UF).";
+    case "RECEPTOR_RAZON_SOCIAL_OBLIGATORIA": return "Falta identificar al receptor (sobre 135 UF).";
     case "MEDIO_PAGO_OBLIGATORIO": return "Falta el medio de pago.";
     case "ESTADO_INVALIDO": return "Apruébala en Check antes de emitir.";
     case "PROVEEDOR_NO_IMPLEMENTADO": return "La emisión masiva aún no está disponible para tu proveedor. Usa Boleta única por ahora.";
@@ -149,13 +160,27 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
     () => initial && initial.totales.listas_emitir === 0 && (initial.totales.por_revisar ?? 0) > 0 ? "por_revisar" : "listas",
   );
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
-  const [cols, setCols] = useState<1 | 2>(() => {
-    if (typeof window === "undefined") return 1;
-    try { return localStorage.getItem("emitir-cols") === "2" ? 2 : 1; } catch { return 1; }
-  });
-  const setColumns = (n: 1 | 2) => { setCols(n); try { localStorage.setItem("emitir-cols", String(n)); } catch { /* noop */ } };
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [loteOpen, setLoteOpen] = useState(false);
+  // Reanudar un lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
+  // lotePendiente = los IDs que faltan (leídos de localStorage); loteResume = esos
+  // items re-hidratados del server para pasárselos al modal; null = emisión fresca.
+  const [lotePendiente, setLotePendiente] = useState<LotePendiente | null>(null);
+  const [loteResume, setLoteResume] = useState<LoteItemInput[] | null>(null);
+  const [loteResumeTotal, setLoteResumeTotal] = useState<number | null>(null);
+  const [resumiendo, setResumiendo] = useState(false);
+  useEffect(() => {
+    if (!empresaId) return;
+    const p = leerLotePendiente(empresaId);
+    if (!p) return;
+    // Lectura de localStorage post-montaje (no existe en SSR): se hace en effect a
+    // propósito, para no romper la hidratación (server y cliente-1er-render = null).
+    setLotePendiente(p);
+  }, [empresaId]);
+  // File-first: qué documentos están expandidos + qué popup de "por revisar" está abierta.
+  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
+  const [popupDoc, setPopupDoc] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<EmitirResult | null>(null);
   // Foto receptor/monto de lo enviado: el recibo de fallos la necesita aunque
   // la cola ya se haya recargado (reload() saca los items de `data`).
@@ -210,9 +235,34 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   // ítem fallaría después de confirmar. Se avisa antes y se bloquea el CTA.
   const proveedorBoletas = data?.totales.boletas_proveedor ?? null;
   const proveedorReal = proveedorBoletas === "sii_local" || proveedorBoletas === "simpleapi";
-  const proveedorNombre = proveedorBoletas === "sii_local" ? "SII Local" : proveedorBoletas === "simpleapi" ? "SimpleAPI" : null;
 
   const selectableItems = itemsList.filter(i => i.listo_emitir);
+
+  // File-first: agrupar la lista visible por DOCUMENTO (cartola/archivo). En vez de
+  // N filas sueltas, se ve el archivo y se expande. documento_id null → "sueltas".
+  const grupos = useMemo(() => {
+    const map = new Map<string, { docId: string | null; nombre: string; created: string | null; items: Item[] }>();
+    for (const it of itemsList) {
+      const key = it.documento_id ?? "__sueltas__";
+      let g = map.get(key);
+      if (!g) { g = { docId: it.documento_id, nombre: it.documento_nombre ?? "Movimientos sueltos", created: it.documento_created_at ?? null, items: [] }; map.set(key, g); }
+      g.items.push(it);
+    }
+    return [...map.values()];
+  }, [itemsList]);
+
+  // "Por revisar" (no-listas) por documento, desde TODOS los items (no el filtro) → popup.
+  const porRevisarByDoc = useMemo(() => {
+    const map = new Map<string, Item[]>();
+    for (const it of data?.items ?? []) {
+      if (it.balde === "listas") continue;
+      const key = it.documento_id ?? "__sueltas__";
+      const arr = map.get(key) ?? [];
+      arr.push(it);
+      map.set(key, arr);
+    }
+    return map;
+  }, [data]);
   const allSelected = selectableItems.length > 0 && selectableItems.every(i => selected.has(i.id));
 
   function toggleItem(id: string) {
@@ -285,12 +335,124 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
     return item.tipo_sugerido ?? 39;
   }
 
+  function toggleDoc(key: string) {
+    setExpandedDocs(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  // Selección a nivel documento: marca/desmarca todas las "listas" de esa cartola.
+  function toggleDocSelect(items: Item[]) {
+    const emitibles = items.filter(i => i.listo_emitir).map(i => i.id);
+    const todasSel = emitibles.length > 0 && emitibles.every(id => selected.has(id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (todasSel) emitibles.forEach(id => next.delete(id));
+      else emitibles.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  // Fila de un movimiento (la misma que había en el em-grid); ahora vive dentro del
+  // documento expandido.
+  function renderItem(item: Item) {
+    const isDisabled = !item.listo_emitir;
+    const isSelected = selected.has(item.id);
+    const tipo = activeTipo(item);
+    const isAfecta = tipo === 39;
+    return (
+      <div key={item.id} className={`em-item ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}>
+        <div className={`cb ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}
+          onClick={() => !isDisabled && toggleItem(item.id)}
+          style={isDisabled ? {} : {cursor:"pointer"}}
+        >{isSelected ? "✓" : ""}</div>
+        <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); else if (!isDisabled) toggleItem(item.id); }}
+          style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !isDisabled)) ? { cursor: "pointer" } : undefined}>
+          <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
+          <div className="sub">
+            {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
+          </div>
+          {item.motivo_no_listo && (
+            <div className="sub rn">
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {" "}{item.motivo_no_listo}
+              {nextActionLabel(item.motivo_code) && <><br />{nextActionLabel(item.motivo_code)}</>}
+            </div>
+          )}
+          {item.balde !== "listas" && item.documento_id && (
+            <div className="sub" style={{ color: "#E8553E", fontWeight: 600, marginTop: 2 }}>Resolver en Check →</div>
+          )}
+          {item.balde === "listas" && item.documento_id && (
+            <button onClick={(e) => { e.stopPropagation(); goToCheck(item); }} title="Corregir el tipo en Check"
+              style={{ fontSize: 10, fontWeight: 500, color: "var(--text2)", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 2, textAlign: "left", display: "block" }}>Corregir en Check →</button>
+          )}
+        </div>
+        <div className="tp" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          {item.balde === "por_revisar" ? (
+            <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: "var(--amber)", background: "rgba(245,158,11,.12)" }}>Falta tipo</span>
+          ) : (
+            <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "var(--accent)" : "var(--blue)", background: isAfecta ? "rgba(232,85,62,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
+          )}
+        </div>
+        <div className="mo">{fmt(item.monto_total)}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
-        {proveedorReal && (
-          <div style={{ margin: "0 0 10px", padding: "10px 12px", borderRadius: 11, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.2)", color: "var(--amber, #f59e0b)", fontSize: 11, lineHeight: 1.5 }}>
-            La emisión masiva aún no está disponible para tu proveedor ({proveedorNombre}). Emite con Boleta única por ahora.
+        {/* Reanudar lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
+            Re-hidrata contra los pendientes del server a nivel EMPRESA (endpoint sin
+            filtro de período): así reanudar no depende de qué mes muestre el calendario.
+            Lo ya emitido / en revisión salió de "pendientes" → no vuelve al lote; y solo
+            se descarta el rastro cuando el server confirma que ya no queda nada. */}
+        {lotePendiente && !loteOpen && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 10px", padding:"10px 13px", borderRadius:10, background:"color-mix(in srgb, var(--amber) 9%, transparent)", border:"1px solid color-mix(in srgb, var(--amber) 28%, transparent)" }}>
+            <span style={{fontSize:14}}>⏸</span>
+            <span style={{fontSize:11.5,color:"var(--text)",flex:1,lineHeight:1.4}}>
+              Quedó un lote a medias: faltan <b>{lotePendiente.remainingIds.length} de {lotePendiente.total}</b>. Retomá desde donde quedó.
+            </span>
+            <button disabled={resumiendo} onClick={async () => {
+              setResumiendo(true);
+              try {
+                const res = await fetch("/api/intermediaria/pendientes-emision");
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok || !json?.ok || !Array.isArray(json.items)) {
+                  toast("No pude cargar el lote para reanudar. Reintentá en un momento.", "error");
+                  return; // NO limpiar: el rastro sigue para reintentar
+                }
+                const byId = new Map((json.items as Array<LoteItemInput & { listo_emitir?: boolean }>).map((i) => [i.id, i] as const));
+                // Presentes = siguen pendientes en el server. Emitibles = además `listo_emitir`
+                // (nunca reanudar una que se volvió "por revisar": emitiría con tipo por defecto).
+                const presentes = lotePendiente.remainingIds.map((id) => byId.get(id)).filter(Boolean) as Array<LoteItemInput & { listo_emitir?: boolean }>;
+                const resume = presentes.filter((i) => i.listo_emitir !== false) as LoteItemInput[];
+                if (presentes.length === 0) {
+                  // El server (empresa-wide) confirma que ninguno sigue pendiente → ya
+                  // emitidas o en revisión. Ahora sí es seguro descartar el rastro.
+                  limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null);
+                  toast("Ese lote ya quedó emitido, no queda nada por reanudar.", "success");
+                  return;
+                }
+                if (resume.length === 0) {
+                  // Siguen pendientes pero ninguna está lista (volvieron a "por revisar").
+                  // No las emitimos a ciegas; el usuario las resuelve en Check. Quedan en la cola.
+                  limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null);
+                  toast("El resto del lote quedó en “por revisar”. Resolvelo en Check y emitilo de nuevo.", "error");
+                  return;
+                }
+                setLoteResume(resume); setLoteResumeTotal(lotePendiente.total); setLoteOpen(true);
+              } catch {
+                toast("No pude cargar el lote para reanudar. Reintentá en un momento.", "error");
+              } finally {
+                setResumiendo(false);
+              }
+            }}
+              style={{fontSize:11,fontWeight:700,color:"#fff",background:"var(--accent)",border:"none",borderRadius:8,padding:"7px 13px",cursor:resumiendo?"default":"pointer",opacity:resumiendo?0.6:1}}>{resumiendo ? "Cargando…" : `Reanudar ${lotePendiente.remainingIds.length} →`}</button>
+            <button onClick={() => { limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null); }}
+              style={{fontSize:10,fontWeight:600,color:"var(--text3)",background:"transparent",border:"none",cursor:"pointer"}}>Descartar</button>
           </div>
         )}
         {/* Pills */}
@@ -310,70 +472,62 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
                 {" "}Seleccionar todas ({selectableItems.length})
               </label>
             )}
-            <div title="Columnas" style={{ display: "flex", gap: 2, padding: 2, borderRadius: 8, background: "var(--bg-muted)", border: "1px solid var(--border)", flexShrink: 0 }}>
-              {([1, 2] as const).map((n) => (
-                <button key={n} type="button" onClick={() => setColumns(n)} title={n === 1 ? "Una columna" : "Dos columnas"}
-                  style={{ display: "grid", placeItems: "center", width: 24, height: 18, borderRadius: 6, border: "none", cursor: "pointer", background: cols === n ? "rgba(232,85,62,.16)" : "transparent", color: cols === n ? "#E8553E" : "var(--text2)", transition: "all .15s ease" }}>
-                  {n === 1 ? (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
-                  ) : (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="7" height="16" rx="1.5"/><rect x="13" y="4" width="7" height="16" rx="1.5"/></svg>
-                  )}
-                </button>
-              ))}
-            </div>
+            {grupos.length > 1 && (
+              <button type="button"
+                onClick={() => setExpandedDocs(prev => prev.size >= grupos.length ? new Set() : new Set(grupos.map(g => g.docId ?? "__sueltas__")))}
+                style={{ fontSize: 10, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 7, padding: "4px 9px", cursor: "pointer", flexShrink: 0 }}>
+                {expandedDocs.size >= grupos.length ? "Colapsar todo" : "Expandir todo"}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Items */}
+        {/* Items — agrupados por DOCUMENTO (file-first): ves el archivo, expandís al detalle. */}
         {itemsList.length === 0 ? (
           <EmitirEmpty />
         ) : (
-          <div className={`em-grid ${cols === 2 ? "cols2" : ""}`}>{itemsList.map(item => {
-            const isDisabled = !item.listo_emitir;
-            const isSelected = selected.has(item.id);
-            const tipo = activeTipo(item);
-            const isAfecta = tipo === 39;
-
-            return (
-              <div key={item.id} className={`em-item ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}>
-                <div className={`cb ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}
-                  onClick={() => !isDisabled && toggleItem(item.id)}
-                  style={isDisabled ? {} : {cursor:"pointer"}}
-                >{isSelected ? "✓" : ""}</div>
-                <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); else if (!isDisabled) toggleItem(item.id); }}
-                  style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !isDisabled)) ? { cursor: "pointer" } : undefined}>
-                  <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
-                  <div className="sub">
-                    {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            {grupos.map((g) => {
+              const key = g.docId ?? "__sueltas__";
+              const isOpen = expandedDocs.has(key);
+              const rev = porRevisarByDoc.get(key)?.length ?? 0;
+              const listas = g.items.filter(i => i.balde === "listas").length;
+              const monto = g.items.reduce((s, i) => s + i.monto_total, 0);
+              const emitibles = g.items.filter(i => i.listo_emitir);
+              const docSel = emitibles.length > 0 && emitibles.every(i => selected.has(i.id));
+              return (
+                <div key={key} style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--bg-muted)", overflow: "hidden" }}>
+                  <div onClick={() => toggleDoc(key)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", cursor: "pointer" }}>
+                    <span style={{ color: "var(--text3)", display: "flex", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .18s" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="9 6 15 12 9 18"/></svg>
+                    </span>
+                    {emitibles.length > 0 && (
+                      <div className={`cb ${docSel ? "sel" : ""}`} onClick={(e) => { e.stopPropagation(); toggleDocSelect(g.items); }} style={{ cursor: "pointer" }}>{docSel ? "✓" : ""}</div>
+                    )}
+                    <span style={{ color: "var(--text2)", display: "flex", flexShrink: 0 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 3v5h5"/><path d="M6 3h8l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/></svg>
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nombre}</div>
+                      <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 1, display: "flex", gap: 8, alignItems: "center" }}>
+                        <span>{listas} {listas === 1 ? "lista" : "listas"}</span>
+                        {rev > 0 && (
+                          <button onClick={(e) => { e.stopPropagation(); setPopupDoc(key); }}
+                            style={{ color: "var(--amber)", fontWeight: 600, background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 10 }}>· {rev} por revisar →</button>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: "tabular-nums", textAlign: "right", flexShrink: 0 }}>{fmt(monto)}</div>
                   </div>
-                  {item.motivo_no_listo && (
-                    <div className="sub rn">
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                      {" "}{item.motivo_no_listo}
-                      {nextActionLabel(item.motivo_code) && <><br />{nextActionLabel(item.motivo_code)}</>}
+                  {isOpen && (
+                    <div style={{ padding: "2px 8px 8px", borderTop: "1px solid var(--border)" }}>
+                      {g.items.map(renderItem)}
                     </div>
                   )}
-                  {item.balde !== "listas" && item.documento_id && (
-                    <div className="sub" style={{ color: "#E8553E", fontWeight: 600, marginTop: 2 }}>Resolver en Check →</div>
-                  )}
-                  {item.balde === "listas" && item.documento_id && (
-                    <button onClick={(e) => { e.stopPropagation(); goToCheck(item); }} title="Corregir el tipo en Check"
-                      style={{ fontSize: 10, fontWeight: 500, color: "var(--text2)", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 2, textAlign: "left", display: "block" }}>Corregir en Check →</button>
-                  )}
                 </div>
-                <div className="tp" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                  {item.balde === "por_revisar" ? (
-                    // Sin decisión humana aún → no afirmar un tipo (evita contradecir a Check).
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: "var(--amber)", background: "rgba(245,158,11,.12)" }}>Falta tipo</span>
-                  ) : (
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", color: isAfecta ? "var(--accent)" : "var(--blue)", background: isAfecta ? "rgba(232,85,62,.13)" : "rgba(91,156,246,.13)" }}>{isAfecta ? "Afecta · con IVA" : "Exenta · sin IVA"}</span>
-                  )}
-                </div>
-                <div className="mo">{fmt(item.monto_total)}</div>
-              </div>
-            );
-          })}</div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -389,17 +543,68 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
             </div>
           )}
           <div className="r">
-            <button className="emit" onClick={() => setConfirmOpen(true)} disabled={emitiendo || selectedCount === 0 || lockedByOther || proveedorReal}
-              title={proveedorReal ? `La emisión masiva aún no está disponible para tu proveedor (${proveedorNombre}). Emite con Boleta única por ahora.` : undefined}>
+            <button className="emit" onClick={() => (proveedorReal ? setLoteOpen(true) : setConfirmOpen(true))} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{proveedorReal ? "Masivo no disponible" : lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? "Selecciona boletas" : `Emitir ${selectedCount}`}
+              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? "Selecciona boletas" : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>
+      )}
+
+      {/* Popup "por revisar" de un documento: las que la IA no dio por listas. */}
+      {popupDoc && (() => {
+        const revItems = porRevisarByDoc.get(popupDoc) ?? [];
+        const nombre = grupos.find(g => (g.docId ?? "__sueltas__") === popupDoc)?.nombre
+          ?? revItems[0]?.receptor_nombre ?? "Documento";
+        // Portal a document.body + z-index alto: sin esto el popup se ancla al panel
+        // (ancestro transformado) y la card de plan / paneles del escritorio se le
+        // colaban encima. Mismo patrón que EmitirLoteModal / EditorAmpliado.
+        return createPortal(
+          <div onClick={() => setPopupDoc(null)} style={{ position: "fixed", inset: 0, zIndex: 215, display: "grid", placeItems: "center", padding: 20, background: "rgba(6,7,10,.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "min(760px,96vw)", maxHeight: "82vh", display: "flex", flexDirection: "column", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Por revisar</div>
+                  <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{nombre} · la IA no está segura de {revItems.length}</div>
+                </div>
+                <button onClick={() => setPopupDoc(null)} style={{ width: 26, height: 26, border: "none", background: "var(--bg-muted)", color: "var(--text2)", borderRadius: 7, cursor: "pointer", fontSize: 12 }}>✕</button>
+              </div>
+              <div style={{ overflowY: "auto", padding: "10px 12px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8, alignContent: "start" }}>
+                {revItems.map((it) => (
+                  <div key={it.id} style={{ padding: "9px 10px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.receptor_nombre || it.descripcion || "Sin nombre"}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmt(it.monto_total)}</div>
+                    </div>
+                    {it.motivo_no_listo && <div style={{ fontSize: 9, color: "var(--amber)", marginTop: 5, lineHeight: 1.4 }}>⚠ {it.motivo_no_listo}</div>}
+                    {it.documento_id && (
+                      <button onClick={() => { goToCheck(it); setPopupDoc(null); }}
+                        style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10, fontWeight: 600, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 7, padding: "6px 11px", cursor: "pointer", paddingTop: 6 }}>Resolver en Check →</button>
+                    )}
+                  </div>
+                ))}
+                {revItems.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "24px 0", color: "#5fd98a", fontSize: 12 }}>✓ Nada por revisar en esta cartola.</div>}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
+
+      {/* Carril REAL (SII local): el motor masivo sale encima de la pestaña. */}
+      {loteOpen && (
+        <EmitirLoteModal
+          items={loteResume ?? selectedItems}
+          empresaId={empresaId ?? ""}
+          empresaRut={null}
+          totalOriginal={loteResume ? (loteResumeTotal ?? loteResume.length) : selectedItems.length}
+          onClose={() => { setLoteOpen(false); setLoteResume(null); setLoteResumeTotal(null); setLotePendiente(leerLotePendiente(empresaId ?? "")); }}
+          onDone={() => { setSelected(new Set()); setLoteResume(null); setLoteResumeTotal(null); reload(); setLotePendiente(leerLotePendiente(empresaId ?? "")); }}
+        />
       )}
 
       {/* F1 — confirmar (pre-vuelo) · emitiendo · recibo, en una sola superficie */}

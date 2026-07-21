@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPendientesEmision } from "@/lib/intermediario/pendientes-emision";
+import { computeGuardarailEmision } from "@/lib/intermediario/guardarail-emision";
 import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import type { ActividadItem } from "./ActividadView";
@@ -263,8 +264,18 @@ export async function fetchMesaDateDependent(
     boletas_proveedor: boletasProveedor,
   };
 
+  // Guardarraíl de emisión: pendientes por MES DE VENTA (agnóstico al rango visible).
+  // Cuelga de MesaDateDependent → se refresca con reloadMesa como el resto. Best-effort:
+  // si falla, la tarjeta/orbe simplemente no aparece (nunca rompe la mesa).
+  const guardarail = await computeGuardarailEmision(
+    supabase, empresaId,
+    { giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente },
+    nowChile,
+  ).catch((e) => { console.error("[mesa] guardarail de emisión falló", e); return null; });
+
   return {
     selDate, workMode,
+    guardarail,
     propuestas: propsData.data ?? [],
     propuestasTotal,
     propuestasTruncadas,

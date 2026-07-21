@@ -43,6 +43,9 @@ export interface EmpresaContext {
   giro?: string | null;
   razon_social?: string;
   tipo_contribuyente?: string | null;
+  /** Default de operación declarado por la cuenta (p2p_cripto/servicios/…). Entra
+   *  como BIAS de desempate (beatable), NO como el hint por-cartola (autoritativo). */
+  operacion_default?: DocumentoHint;
 }
 
 export interface PatronContext {
@@ -78,7 +81,9 @@ function angleGlosa(descripcion: string | null | undefined): AngleResult {
     return { veredicto: "no_boletar", peso: 0.85, razon: "Devolución / reverso" };
   if (/\b(pr[eé]stamo|mutuo|cr[eé]dito recibido|cr[eé]dito hipotecario|cuota cr[eé]dito)\b/.test(desc))
     return { veredicto: "no_boletar", peso: 0.80, razon: "Préstamo / crédito recibido" };
-  if (/\b(aporte (de )?capital|aporte socio|inversi[oó]n inicial|capital social)\b/.test(desc))
+  // Aporte de capital (NO es venta). Cubre variantes con palabra intermedia
+  // ("aporte integración capital") y "capital accionista/social".
+  if (/\b(aporte\s+(?:de\s+)?(?:integraci[oó]n\s+)?capital|aporte socio|inversi[oó]n inicial|capital (social|accionista))\b/.test(desc))
     return { veredicto: "no_boletar", peso: 0.85, razon: "Aporte de capital" };
   if (/\b(sueldo|liquidaci[oó]n de remu|salario|remuneraci[oó]n|finiquito)\b/.test(desc))
     return { veredicto: "no_boletar", peso: 0.75, razon: "Remuneración / sueldo" };
@@ -136,6 +141,17 @@ function angleGlosa(descripcion: string | null | undefined): AngleResult {
     return { veredicto: "afecta", peso: 0.35, razon: "Transferencia recibida (default afecta)" };
 
   return { veredicto: "neutral", peso: 0, razon: "" };
+}
+
+/**
+ * True si la glosa marca fuertemente NO_BOLETAR (transf cuenta propia, préstamo,
+ * devolución, sueldo, aporte de capital, DAP) con peso ≥ 0.7 — el mismo umbral
+ * con que un no_boletar prevalece en el ensemble incluso sobre el hint. Se usa
+ * para NO propagar un tipo aprendido sobre un movimiento no comercial.
+ */
+export function detectaNoBoletar(descripcion: string | null | undefined): boolean {
+  const g = angleGlosa(descripcion);
+  return g.veredicto === "no_boletar" && g.peso >= 0.7;
 }
 
 // ============================================================
@@ -293,6 +309,24 @@ export function clasificarBoleta(
   }
   // Si es "auto", no hay biés. El clasificador decide libremente.
 
+  // Default de operación de la CUENTA (el cliente declaró a qué se dedica). Es un
+  // BIAS de desempate, MÁS DÉBIL que un hint por-cartola: no corta el ensemble, así
+  // que una glosa contraria o una exención por ley le ganan. Sirve para que la 1ª
+  // cartola de glosa muda ("Transf de Juan") caiga clasificada, sin forzar el tipo
+  // sobre una venta atípica del tipo contrario (esa queda contestada → a revisar).
+  // Mismo guard asimétrico que arriba: un default "afecta" no puede tapar exención
+  // por ley ni a un contribuyente exento.
+  const defaultAngle = angleHint(empresa.operacion_default ?? null);
+  if (defaultAngle.veredicto === "exenta") {
+    votos.exenta += 0.85;
+  } else if (
+    defaultAngle.veredicto === "afecta" &&
+    !exencionPorLey &&
+    empresa.tipo_contribuyente !== "exento"
+  ) {
+    votos.afecta += 0.85;
+  }
+
   // Priorizo el hint del usuario en las razones (lo ven primero)
   const allAngles = [hintAngle, glosa, giro, pat];
 
@@ -321,4 +355,38 @@ export function clasificarBoleta(
     razones: allAngles.filter((r) => r.veredicto !== "neutral").map((r) => r.razon),
     angulos: { glosa, giro, patron: pat },
   };
+}
+
+// ============================================================
+// Política de AUTO-PERSISTENCIA de tipo_dte (el "cable" al clasificar)
+// ============================================================
+
+/**
+ * Decide si una clasificación es lo bastante firme para NACER con tipo_dte (auto-
+ * clasificada, sin decisión humana pendiente) o si va a revisión. Pura y testeable.
+ *
+ * ASIMETRÍA DE SEGURIDAD (hallazgo de la revisión adversarial): un 39 (afecta) mal
+ * puesto FABRICA IVA (el SII lo cobra); un 41 (exenta) mal puesto no. Por eso el 41
+ * mantiene la regla normal (hint por-cartola o confianza ≥ 0.85), pero un 39 AUTO
+ * exige evidencia real de que es afecta:
+ *   - el emisor se declaró 'afecto' (cobra IVA por definición) → 39 OK; o
+ *   - la GLOSA de la propia transacción dice afecta (evidencia transaccional); o
+ *   - hay un hint AFECTA por-cartola explícito (servicios/ventas, gesto del usuario).
+ * Un bias de EMPRESA/CUENTA (operacion_hint_default) con glosa MUDA NO alcanza para
+ * un 39: cae a revisión. El caso p2p del fundador (→41) no se toca.
+ */
+export function decidirTipoDteAuto(
+  clasif: ClasificacionResult,
+  opts: { docHint: DocumentoHint; tipoContribuyente?: string | null },
+): 39 | 41 | null {
+  if (opts.tipoContribuyente === "exento") return 41;
+  const firme = opts.docHint != null || clasif.confianza >= 0.85;
+  if (!firme) return null;
+  if (clasif.tipo_dte === 41) return 41;
+  if (clasif.tipo_dte !== 39) return null;
+  // A partir de acá el candidato es un 39 (afecta): exigir evidencia.
+  if (opts.tipoContribuyente === "afecto") return 39;
+  const glosaCorroboraAfecta = clasif.angulos.glosa.veredicto === "afecta";
+  const hintAfectaExplicito = opts.docHint === "servicios" || opts.docHint === "ventas";
+  return glosaCorroboraAfecta || hintAfectaExplicito ? 39 : null;
 }

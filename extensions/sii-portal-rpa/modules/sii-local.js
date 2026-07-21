@@ -1,5 +1,7 @@
 "use strict";
 
+import { isRutValido } from "./rut.js";
+
 export const SII_START_URL = "https://eboleta.sii.cl/emitir/";
 
 export const SII_CAPABILITIES = [
@@ -29,5 +31,9 @@ export function validateSiiBoletaJob(job) {
   if (!job.expires_at || Number.isNaN(Date.parse(job.expires_at))) return "EXPIRES_AT_INVALID";
   if (Date.parse(job.expires_at) <= Date.now()) return "JOB_EXPIRED";
   if (job.learn_only !== true && job.auto_emit !== true) return "AUTO_EMIT_OR_LEARN_ONLY_REQUIRED";
+  // Emisión real: exigir RUT de empresa emisora VÁLIDO (DV módulo 11). Sin él no se
+  // puede garantizar por cuál empresa se emite → no abrir la ventana worker. learn_only
+  // no emite, así que no lo exige.
+  if (job.auto_emit === true && !isRutValido(job.emisor_rut)) return "EMISOR_RUT_INVALID";
   return null;
 }

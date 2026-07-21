@@ -162,7 +162,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
 
 /**
  * Convert ParsedLine[] to the AI layer's MovimientoExtraido-compatible shape
- * used by the bypass path. This is what we hand to Mistral when we skip
+ * used by the bypass path. This is what we hand to OpenCode when we skip
  * extraction and only ask for classification.
  */
 export function linesToPreExtracted(lines: ParsedLine[]): PreExtractedMovimiento[] {
@@ -179,8 +179,8 @@ export function linesToPreExtracted(lines: ParsedLine[]): PreExtractedMovimiento
 }
 
 /**
- * Serialize parsed lines into the text format that the processor & Mistral
- * receive. Self-describing: each line already carries its TIPO so Mistral
+ * Serialize parsed lines into the text format that the processor & OpenCode
+ * receive. Self-describing: each line already carries its TIPO so OpenCode
  * cannot invert entrada/salida.
  */
 export function serializeLines(lines: ParsedLine[], sheetName: string): string {
