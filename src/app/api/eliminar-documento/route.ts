@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { esRolEmision } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { deleteFromR2 } from "@/lib/r2";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 
 // Elimina un documento COMPLETO de la mesa: archivo físico (R2/Supabase, incluido
 // el álbum Telegram), movimientos, propuestas y la fila. Es el hermano duro de
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
   }
   // Eliminar es más destructivo que deshacer: mismos roles permitidos.
-  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+  if (!esRolEmision(usuario.rol)) {
     return NextResponse.json({ error: "Tu rol no permite eliminar documentos" }, { status: 403 });
   }
 
@@ -72,6 +74,25 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  // El estado del documento no basta: puede decir "error" (cancelado) mientras el
+  // job durable sigue 'running' e inserta filas. Cancelamos el job y, si estaba en
+  // vuelo, pedimos reintentar en vez de borrar bajo un worker activo (FK/zombie).
+  const eraVivo = await cancelDocumentProcessingJob(svc, documento_id);
+  if (eraVivo) {
+    const { data: jobRunning } = await svc
+      .from("document_processing_jobs")
+      .select("id")
+      .eq("documento_id", documento_id)
+      .eq("status", "running")
+      .maybeSingle();
+    if (jobRunning) {
+      return NextResponse.json(
+        { error: "El documento se está procesando en este momento. Intenta eliminarlo de nuevo en unos segundos." },
+        { status: 409 },
+      );
+    }
+  }
 
   const { data: movimientos } = await svc
     .from("movimientos_raw")

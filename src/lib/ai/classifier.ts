@@ -5,15 +5,15 @@ import type { MovimientoExtraido, PropuestaExtraida } from "./types";
 /**
  * Deterministic rules-based classifier.
  *
- * Runs BEFORE Mistral in the bypass path. For each movimiento, tries to
+ * Runs BEFORE OpenCode in the bypass path. For each movimiento, tries to
  * match a user rule (empresa_id set) first, then a global rule
  * (empresa_id NULL), in order of `prioridad` ascending. First match wins.
  *
  * Movimientos that don't match any rule are returned in `noClasificados`
- * for Mistral to handle as a fallback. Mistral-classified propuestas are
+ * for OpenCode to handle as a fallback. OpenCode-classified propuestas are
  * then capped at confianza ≤ 0.75 by the processor so they always land
  * in the "requires review" bucket — protecting the user from silent
- * Mistral mistakes that could matter for SII compliance.
+ * OpenCode mistakes that could matter for SII compliance.
  */
 
 export interface ClasificacionRegla {
@@ -28,6 +28,13 @@ export interface ClasificacionRegla {
   receptor_rut_default: string | null;
   confianza: number;
   prioridad: number;
+  /**
+   * DTE recordado de una decisión humana (39 afecta / 41 exenta / null = no
+   * forzar). Solo las reglas de USUARIO lo aprovechan: cuando matchean, la
+   * propuesta nace con tipo_dte persistido y el gate la manda directo a
+   * "listas" en vez de rebotar a Check (ver aprender-regla.ts).
+   */
+  tipo_dte: number | null;
 }
 
 export interface ClassifierResult {
@@ -36,6 +43,12 @@ export interface ClassifierResult {
     propuesta: PropuestaExtraida;
     regla_id: string;
     fuente: "regla_usuario" | "regla_global";
+    /**
+     * tipo_dte a persistir en la propuesta. Solo != null para reglas de
+     * usuario que lo recordaron; las globales (seed) lo dejan null para no
+     * cambiar su comportamiento (el gate sigue decidiendo por ellas).
+     */
+    tipo_dte: number | null;
   }>;
   noClasificados: Array<{
     movimiento_index: number;
@@ -146,7 +159,13 @@ function buildPropuestaFromRule(
     iva,
     total,
     confianza: rule.confianza,
-    notas: `Clasificado automáticamente por regla: "${rule.nombre}"`,
+    // notas = detalle IMPRIMIBLE en la boleta (máxima precedencia en resolverGlosa).
+    // NO metemos el nombre de la regla acá: sobre el umbral de identificación se
+    // imprimiría en el DTE y la regla aprendida lleva el nombre de la contraparte
+    // (tercero) → fuga de datos (misma clase que cerró PR #56). Sin nota, la glosa
+    // cae a la glosa común de la cartola o al genérico. El humano puede escribir
+    // su propio detalle después.
+    notas: null,
     spread_compra: null,
     spread_venta: null,
     spread_ganancia: null,
@@ -175,6 +194,9 @@ export function classifyWithRules(
         propuesta: buildPropuestaFromRule(mov, i, matchingRule),
         regla_id: matchingRule.id,
         fuente: matchingRule.empresa_id ? "regla_usuario" : "regla_global",
+        // Solo las reglas de usuario (empresa_id set) auto-pasan a listas con el
+        // tipo recordado. Las globales dejan tipo_dte null → el gate decide.
+        tipo_dte: matchingRule.empresa_id ? (matchingRule.tipo_dte ?? null) : null,
       });
     } else {
       noClasificados.push({ movimiento_index: i, movimiento: mov });

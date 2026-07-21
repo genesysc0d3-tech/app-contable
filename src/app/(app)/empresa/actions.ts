@@ -19,7 +19,13 @@ export interface DatosEmisor {
   comuna?: string | null;
   email_sii?: string | null;
   tipo_contribuyente?: string;
+  /** Default de operación del contribuyente: semilla para auto-clasificar la 1ª
+   *  cartola (p2p_cripto/forex_divisas/servicios/ventas/mixto). null = la IA decide. */
+  operacion_hint_default?: string | null;
 }
+
+// Mismos valores que documentos_subidos.tipo_operacion_hint (DocumentoHint).
+const HINTS_OPERACION_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 
 export type BoletasEmisionProveedor = "mock" | "sii_local" | "simpleapi";
 export type FacturasEmisionProveedor = "mock" | "simpleapi";
@@ -158,6 +164,13 @@ export async function setDatosEmisor(
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
   if (datos.tipo_contribuyente !== undefined) update.tipo_contribuyente = datos.tipo_contribuyente;
+  if (datos.operacion_hint_default !== undefined) {
+    const h = datos.operacion_hint_default;
+    if (h !== null && !HINTS_OPERACION_VALIDOS.has(h)) {
+      return { error: "Tipo de operación por defecto inválido" };
+    }
+    update.operacion_hint_default = h; // null = sin default (la IA decide)
+  }
 
   const { error } = await sb
     .from("empresas")
@@ -187,10 +200,15 @@ export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: strin
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id")
+    .select("empresa_id, rol")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+  // Borrar el logo es editar la identidad del emisor: mismo gate que setDatosEmisor
+  // (owner/admin) — un 'viewer' no debe poder borrarlo.
+  if (!ROLES_GESTION_MIEMBROS.has(String(usuario.rol))) {
+    return { error: "Tu rol no permite editar los datos de la empresa" };
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

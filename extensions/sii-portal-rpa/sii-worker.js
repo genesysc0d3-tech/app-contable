@@ -117,6 +117,21 @@
     }
   }
 
+  // Aviso INMEDIATO al librero de que el EMITIR real ya se cliqueó, sin esperar la
+  // confirmación de 16s. Arma el candado anti-doble-emisión al instante y protege el
+  // folio aunque el content script muera después (puerto cerrado). Fire-and-forget.
+  function notifyFinalEmitClicked() {
+    try {
+      chrome.runtime.sendMessage({
+        source: EXT_SOURCE,
+        type: "APP_CONTABLE_SII_FINAL_EMIT_CLICKED",
+        job_id: currentJobId,
+      }, () => { void chrome.runtime.lastError; });
+    } catch {
+      // Sin conexión: el librero igual infiere post-emit por el cierre de puerto.
+    }
+  }
+
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -314,7 +329,12 @@
     ].filter(Boolean).join(" "));
   }
 
-  function setControlValue(control, value) {
+  function setControlValue(control, value, opts) {
+    // blur: Vuetify/Vue corren la VALIDACIÓN del campo al perder el foco (y el SII
+    // dispara el lookup del RUT del receptor). Necesario para el RUT del receptor;
+    // NOCIVO para la glosa ("Detalle"), donde el blur reinicia la validación y borra
+    // el valor recién escrito → por eso es opcional (default on, off para la glosa).
+    const withBlur = opts?.blur !== false;
     const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value");
     automationClickInProgress = true;
     try {
@@ -322,6 +342,10 @@
       else control.value = value;
       control.dispatchEvent(new Event("input", { bubbles: true }));
       control.dispatchEvent(new Event("change", { bubbles: true }));
+      if (withBlur) {
+        control.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+        control.dispatchEvent(new Event("blur", { bubbles: true }));
+      }
     } finally {
       automationClickInProgress = false;
     }
@@ -558,16 +582,196 @@
       }) || null;
   }
 
-  // El contador puede operar varias empresas en e-Boleta (selector superior):
-  // antes de emitir se verifica que el RUT emisor visible sea el del job.
-  function assertEmisorRut(job) {
-    const want = String(job?.emisor_rut || "").replace(/[^0-9kK]/g, "").toUpperCase();
-    if (!want) return;
-    const rutsVisibles = (pageText().match(/\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dkK]/g) || [])
-      .map((r) => r.replace(/[^0-9kK]/g, "").toUpperCase());
-    if (rutsVisibles.length > 0 && !rutsVisibles.includes(want)) {
-      throw new Error(`El portal SII tiene seleccionada otra empresa. Elige el emisor RUT ${job.emisor_rut} en el selector superior y reintenta.`);
+  // --- RUT canónico (espejo de modules/rut.js — el content-script NO importa ESM;
+  // misma lógica y mismos vectores de test). La regla del emisor exige comparación
+  // EXACTA sobre "CUERPO-DV", nunca substring. ---
+  function normalizeRut(value) {
+    if (value == null) return null;
+    const s = String(value).trim().toUpperCase().replace(/[^0-9K]/g, "");
+    if (s.length < 2) return null;
+    const dv = s.slice(-1);
+    let cuerpo = s.slice(0, -1);
+    if (!/^[0-9]+$/.test(cuerpo)) return null;
+    cuerpo = cuerpo.replace(/^0+/, "") || "0";
+    if (cuerpo.length < 1 || cuerpo.length > 8) return null;
+    if (!/^[0-9K]$/.test(dv)) return null;
+    return cuerpo + "-" + dv;
+  }
+  function extractRutTokens(text) {
+    if (text == null) return [];
+    const out = [];
+    const seen = new Set();
+    const matches = String(text).match(/\b\d{1,2}(?:\.?\d{3}){2}\s*-?\s*[0-9kK]\b/g) || [];
+    for (const m of matches) {
+      const canon = normalizeRut(m);
+      if (canon && !seen.has(canon)) { seen.add(canon); out.push(canon); }
     }
+    return out;
+  }
+
+  // ¿Está abierto el dropdown de emisor (la lista desplegada en el body)?
+  function emisorMenuOpen() {
+    return Array.from(document.querySelectorAll(".v-menu__content"))
+      .some((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
+  }
+
+  // Cierra cualquier dropdown abierto (Escape) para no dejar el portal "sucio" — clave
+  // ante un error a mitad de la selección de empresa.
+  async function closeEmisorDropdown() {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  // Lee el RUT del EMISOR ACTIVO desde el .v-select__selections del selector superior.
+  // EXCLUYE cualquier selección que esté dentro de un menú desplegado (.v-menu__content):
+  // con el dropdown abierto, leer la lista causaba el "salto" CONSTANZA↔MV que colgaba
+  // la emisión en cuentas multi-empresa. Devuelve canónico o null.
+  function readActiveEmisorRut() {
+    for (const sel of document.querySelectorAll(".v-select__selections")) {
+      if (sel.closest(".v-menu__content")) continue; // no leer la lista desplegada
+      const toks = extractRutTokens(sel.textContent || "");
+      if (toks.length) return toks[0];
+    }
+    return null;
+  }
+
+  // Espera a que el emisor activo se ESTABILICE: mismo RUT en ≥2 lecturas seguidas, con
+  // el dropdown CERRADO. Cambiar de empresa re-renderiza el portal y el valor oscila unos
+  // instantes; leer durante ese re-render era la causa del congelamiento. Acotado por
+  // timeout → NUNCA cuelga (devuelve la última lectura como último recurso).
+  async function waitStableEmisorRut(timeoutMs = 6000) {
+    const start = Date.now();
+    let prev = null;
+    let stable = 0;
+    while (Date.now() - start < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (emisorMenuOpen()) { prev = null; stable = 0; continue; }
+      const cur = readActiveEmisorRut();
+      if (cur && cur === prev) { stable += 1; if (stable >= 2) return cur; }
+      else { stable = 0; }
+      prev = cur;
+    }
+    return readActiveEmisorRut();
+  }
+
+  // ¿El portal está recargando la lista de empresas ("Cargando Emisores…")? Cambiar de
+  // empresa dispara ese re-render; leer/actuar DURANTE él era la causa del cuelgue.
+  function emisoresCargando() {
+    return /Cargando Emisores/i.test(document.body?.innerText || document.body?.textContent || "");
+  }
+  // Espera a que el portal termine de cargar la empresa (sin "Cargando Emisores" y con un
+  // emisor legible). Acotado por timeout: no cuelga.
+  async function waitEmisoresReady(timeoutMs = 9000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (!emisoresCargando() && readActiveEmisorRut()) return;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  // Un intento de abrir el dropdown, encontrar la empresa objetivo (match EXACTO por RUT,
+  // 0 o >1 = THROW) y clickearla. Devuelve tras cerrar el dropdown; el caller confirma.
+  async function selectEmisorOnce(objetivo, rutObjetivo) {
+    const emisorSelect = Array.from(document.querySelectorAll(".v-select"))
+      .find((vs) => extractRutTokens(vs.querySelector(".v-select__selections")?.textContent || "").length > 0);
+    if (!emisorSelect) throw new Error("No encontré el selector de emisor en el portal. Selecciónalo a mano arriba y reintenta.");
+    await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
+    let options = [];
+    for (let i = 0; i < 24; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const menu = Array.from(document.querySelectorAll(".v-menu__content"))
+        .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
+      if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
+    }
+    if (!options.length) throw new Error("No pude abrir la lista de empresas del portal. Selecciona la empresa a mano arriba y reintenta.");
+    const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
+    if (candidatos.length !== 1) {
+      throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala a mano arriba y reintenta.`);
+    }
+    await clickElement(candidatos[0]);
+    await closeEmisorDropdown();
+  }
+
+  // SELECCIÓN ACTIVA del emisor (cuentas multi-empresa). Espera a que el portal esté
+  // listo, y si la empresa activa no es la objetivo la cambia — con REINTENTOS: cambiar de
+  // empresa re-renderiza el portal ("Cargando Emisores") y a veces la selección no "toma"
+  // al primer intento. Match EXACTO por RUT; confirma ESTABLE que quedó la correcta antes
+  // de seguir. Fail-CLOSED: si tras varios intentos no queda la objetivo → THROW (nunca
+  // emite bajo la equivocada). Todo acotado: no cuelga. Fallback: elegir a mano + Reintentar.
+  async function selectEmisorByRut(rutObjetivo) {
+    const objetivo = normalizeRut(rutObjetivo);
+    if (!objetivo) throw new Error("Sin RUT de empresa objetivo: no puedo seleccionar el emisor. Abortado por seguridad.");
+    await waitEmisoresReady();
+    if ((await waitStableEmisorRut(1500)) === objetivo) return; // ya está la correcta y estable
+
+    let ultimo = null;
+    for (let intento = 0; intento < 3; intento += 1) {
+      try {
+        await selectEmisorOnce(objetivo, rutObjetivo);
+        await waitEmisoresReady(); // esperar a que el portal recargue para la empresa nueva
+        ultimo = await waitStableEmisorRut();
+        if (ultimo === objetivo) return; // ✓ quedó estable en la objetivo
+      } catch (error) {
+        await closeEmisorDropdown();
+        if (intento === 2) throw error; // último intento: propagar el mensaje concreto
+      }
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+    throw new Error(`Intenté seleccionar ${rutObjetivo} varias veces pero el emisor activo quedó en ${ultimo || "ilegible"}. Elige la empresa a mano en el selector de arriba y aprieta Reintentar.`);
+  }
+
+  // Verifica (fail-CLOSED) que el EMISOR ACTIVO del portal sea EXACTO al del job. Ante
+  // cualquier duda (sin RUT objetivo, emisor activo no legible, o distinto) → THROW.
+  // Preferimos NO emitir a emitir bajo el emisor equivocado (incidente tributario). Corre
+  // ANTES del modal, con el selector superior visible.
+  function assertEmisorRut(job) {
+    const objetivo = normalizeRut(job?.emisor_rut);
+    if (!objetivo) {
+      throw new Error("Sin RUT de empresa emisora en el trabajo: no puedo confirmar por cuál empresa emitir. Abortado por seguridad.");
+    }
+    const activo = readActiveEmisorRut();
+    if (!activo) {
+      throw new Error(`No pude leer el emisor activo del portal para confirmar que es ${job.emisor_rut}. Selecciona el emisor arriba y reintenta.`);
+    }
+    if (activo !== objetivo) {
+      throw new Error(`El emisor activo del portal es ${activo}, no ${job.emisor_rut}. Elige la empresa correcta en el selector superior y reintenta.`);
+    }
+  }
+
+  // Última compuerta JUSTO antes del EMITIR: si el emisor activo cambió a otro legible
+  // distinto del objetivo (re-render, reset del portal), abortar. Suave ante "no legible"
+  // por si el modal tapa el selector — la verificación dura ya corrió antes (arriba).
+  function assertEmisorNoCambio(job) {
+    const objetivo = normalizeRut(job?.emisor_rut);
+    if (!objetivo) return;
+    const activo = readActiveEmisorRut();
+    if (activo && activo !== objetivo) {
+      throw new Error(`El emisor cambió en el portal (ahora ${activo}, no ${job.emisor_rut}). Abortado antes de emitir; revisa el selector y reintenta.`);
+    }
+  }
+
+  // Espera (best-effort) a que el botón EMITIR se HABILITE — el SII lo deshabilita un
+  // instante mientras valida el receptor (lookup del RUT). NO bloquea: apenas está
+  // habilitado, o al agotar el timeout, retorna y el caller lo clickea igual. Antes
+  // esto LANZABA si creía el botón deshabilitado → el robot NUNCA apretaba EMITIR con
+  // receptor (bug). Si de verdad quedara deshabilitado, el click es no-op y el bucle
+  // de confirmación de 16s lo detecta; nunca inventa un folio.
+  async function waitFinalEmitEnabled(timeoutMs = 12000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const dlg = activeEmitDialog();
+      const btn = dlg && Array.from(dlg.querySelectorAll("button")).reverse()
+        .find((b) => normalizeText(b.innerText || b.textContent || b.getAttribute("value")) === "EMITIR");
+      if (btn) {
+        const disabled = btn.disabled
+          || btn.getAttribute("aria-disabled") === "true"
+          || (typeof btn.className === "string" && /v-btn--disabled/.test(btn.className));
+        if (!disabled) return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    // Timeout: seguimos igual — no bloqueamos el EMITIR (la detección de "disabled"
+    // puede dar falso positivo en Vuetify).
   }
 
   async function clickFinalEmitInDialog(dialog) {
@@ -730,6 +934,9 @@
       folio,
       folio_confidence: captured?.confidence ?? "none",
       folio_evidence: captured?.evidence ?? null,
+      // RUT del emisor ACTIVO del portal al momento de capturar: permite al server
+      // detectar si la boleta salió bajo otra empresa que la registrada en la app.
+      emisor_rut_activo: readActiveEmisorRut(),
       tipo_dte: job?.tipo_dte ?? null,
       fecha_emision: job?.fecha_emision ?? null,
       estado: strongFolio ? "emitida_capturada" : folio ? "resultado_requiere_revision" : "resultado_no_detectado",
@@ -823,10 +1030,31 @@
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
     if (!buttonByText("EMITIR")) throw new Error("Pantalla e-Boleta no lista");
 
-    // Verificación de emisor antes de tocar nada (cuentas multi-empresa).
+    // Cuentas multi-empresa: dejar seleccionada la EMPRESA correcta antes de nada.
+    // Cambiar el emisor puede refrescar el portal para esa empresa, así que esperamos a
+    // que el EMITIR vuelva a estar listo. Luego verificación fail-closed del emisor activo.
+    await selectEmisorByRut(job?.emisor_rut);
+    for (let i = 0; i < 20 && !buttonByText("EMITIR"); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    if (!buttonByText("EMITIR")) throw new Error("La pantalla e-Boleta no volvió a estar lista tras seleccionar la empresa.");
     assertEmisorRut(job);
 
     renderOverlay("LOCKED_AUTOMATION", "Preparando e-Boleta. No escribas ni hagas click.");
+
+    // Cinturón anti-concatenación: si el pad trae un botón de borrado, limpiarlo
+    // antes de teclear (inofensivo con el display en cero). La garantía dura es el
+    // reload pre-retry del librero (background.js), que deja la calculadora virgen;
+    // sin ambas, un reintento tecleaba el monto ENCIMA del anterior y podía emitir
+    // una boleta real por los dos montos pegados.
+    for (const clearText of ["C", "CE", "AC", "BORRAR"]) {
+      const clearBtn = buttonByText(clearText);
+      if (clearBtn) {
+        await clickElement(clearBtn);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        break;
+      }
+    }
 
     for (const digit of amount) {
       await clickButtonText(digit);
@@ -873,31 +1101,55 @@
       renderOverlay("LOCKED_AUTOMATION", "Escribiendo la glosa de la boleta.");
       let glosaOk = false;
       if (await enableDialogToggle("Detalle")) {
-        for (let i = 0; i < 12 && !glosaOk; i += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          const glosaInput = findGlosaInput();
-          if (glosaInput) {
-            setControlValue(glosaInput, glosa);
-            await new Promise((resolve) => setTimeout(resolve, 150));
-            glosaOk = normalizeText(glosaInput.value) === normalizeText(glosa);
-          }
+        // 1) Esperar a que el campo aparezca (el toggle lo despliega con animación).
+        //    Antes escribíamos a ciegas y el spin de 12 intentos era el "se demora".
+        let glosaInput = null;
+        for (let i = 0; i < 8 && !glosaInput; i += 1) {
+          glosaInput = findGlosaInput();
+          if (!glosaInput) await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+        // 2) Escribir SIN blur (el blur borraba el valor) y verificar RE-CONSULTANDO el
+        //    input (Vuetify puede re-renderizar el nodo). Corta apenas queda escrito.
+        for (let i = 0; i < 4 && !glosaOk && glosaInput; i += 1) {
+          setControlValue(glosaInput, glosa, { blur: false });
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          const check = findGlosaInput() || glosaInput;
+          glosaOk = normalizeText(check.value) === normalizeText(glosa);
+          if (!glosaOk) glosaInput = check;
         }
       }
       if (!glosaOk) await setDialogToggle("Detalle", false);
     }
 
-    // Receptor opcional: solo si el job lo trae (legal sin receptor < $180.000).
-    if (job?.receptor?.rut) {
+    // Receptor OPCIONAL — espejo del formulario SII: RUT, Nombre, Dirección, E-mail,
+    // Teléfono. Cada campo se escribe solo si el job lo trae (best-effort: si el SII no
+    // muestra ese input, se salta sin romper — NO relanza, para no reintroducir fragilidad).
+    // Se activa si viene CUALQUIER dato del receptor, no solo el RUT (todos opcionales).
+    const r = job?.receptor || {};
+    if (r.rut || r.razon_social || r.direccion || r.email || r.telefono) {
       renderOverlay("LOCKED_AUTOMATION", "Completando datos del receptor.");
       const toggled = await enableDialogToggle("Receptor");
       if (toggled) {
         await new Promise((resolve) => setTimeout(resolve, 300));
-        const rutInput = findDialogControl(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/);
-        if (rutInput) setControlValue(rutInput, String(job.receptor.rut));
-        if (job.receptor.razon_social) {
-          const nombreInput = findDialogControl(/NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/);
-          if (nombreInput) setControlValue(nombreInput, String(job.receptor.razon_social));
-        }
+        const fill = (pattern, value) => {
+          if (!value) return;
+          const input = findDialogControl(pattern);
+          if (input) setControlValue(input, String(value));
+        };
+        // ORDEN CRÍTICO: el RUT PRIMERO. Al escribirlo, el SII hace un lookup async y,
+        // si el RUT NO está registrado, muestra "No hay información registrada... indique
+        // su nombre" y BORRA el campo Nombre. Por eso hay que esperar a que ese lookup
+        // termine ANTES de escribir el nombre — si no, el lookup lo pisa y queda vacío,
+        // y sin nombre el SII no habilita EMITIR (era el bug del cuelgue con receptor).
+        fill(/RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/, r.rut);
+        if (r.rut) await new Promise((resolve) => setTimeout(resolve, 1800));
+        // Nombre DESPUÉS del lookup (para que no lo borre). El SII lo EXIGE cuando el RUT
+        // no está registrado; la app ya obliga a ponerlo si hay RUT.
+        fill(/NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/, r.razon_social);
+        fill(/DIRECCION.*RECEPTOR|RECEPTOR.*DIRECCION/, r.direccion);
+        fill(/(E-?MAIL|CORREO).*RECEPTOR|RECEPTOR.*(E-?MAIL|CORREO)/, r.email);
+        fill(/(TELEFONO|FONO|CELULAR).*RECEPTOR|RECEPTOR.*(TELEFONO|FONO|CELULAR)/, r.telefono);
+        await new Promise((resolve) => setTimeout(resolve, 400)); // asentar la validación
       }
     }
 
@@ -906,10 +1158,22 @@
       return;
     }
 
-    renderOverlay("LOCKED_AUTOMATION", "Emitiendo boleta final en SII.");
-    dialog = activeEmitDialog();
+    renderOverlay("LOCKED_AUTOMATION", "Validando datos y emitiendo boleta en SII.");
+    // Esperar a que el SII habilite EMITIR (deshabilitado mientras valida el receptor:
+    // lookup del RUT, e-mail/teléfono). Convierte el cuelgue silencioso en éxito (si solo
+    // faltaba asentarse) o error claro (si un dato del receptor no pasa). PRE-emit.
+    await waitFinalEmitEnabled();
+    dialog = activeEmitDialog(); // re-capturar: el modal pudo re-renderizarse al validar
     if (!dialog) throw new Error("Modal Emitir e-Boleta cerrado antes de emitir; no se presiono el EMITIR final.");
+    assertEmisorNoCambio(job); // ÚLTIMA COMPUERTA: aborta si el emisor cambió (THROW aquí = ANTES de notifyFinalEmitClicked → job reintentable, sin folio, sin doble emisión)
     await clickFinalEmitInDialog(dialog);
+    notifyFinalEmitClicked(); // arma el candado en el librero AL INSTANTE (no espera los 16s)
+    // ⚠️ ZONA POST-EMIT: el EMITIR real YA se cliqueó. Cualquier fallo de aquí en
+    // adelante puede significar un folio emitido en el SII pero aún sin confirmar.
+    // Marcamos el error con finalEmitClicked para que el librero (background.js) NO
+    // cierre el trabajo ni permita re-emitir, y pase a CAPTURA: así nunca se pierde
+    // el folio ni se emite dos veces. (No cambia CÓMO se detecta/cliquea el EMITIR.)
+    try {
     await new Promise((resolve) => setTimeout(resolve, 2500));
     await clickFirstAvailable(["ACEPTAR", "CONFIRMAR", "SÍ", "CONTINUAR"]);
 
@@ -930,9 +1194,14 @@
       return false;
     })();
     if (!emitConfirmed) {
-      throw new Error("Cliqué EMITIR pero el SII no confirmó la boleta (revisa método de pago u otra validación). No se marcará como emitida.");
+      throw new Error("Cliqué EMITIR pero el SII no confirmó la boleta (revisa método de pago u otra validación). Buscaré el folio para no perderlo.");
     }
     renderOverlay("LOCKED_AUTOMATION", "Boleta emitida en SII. Capturando folio y respaldo.");
+    } catch (error) {
+      const tagged = error instanceof Error ? error : new Error(String(error));
+      tagged.finalEmitClicked = true;
+      throw tagged;
+    }
   }
 
   async function captureResultWhenReady(job) {
@@ -999,7 +1268,12 @@
     if (message.type === "APP_CONTABLE_SII_FILL_AND_EMIT") {
       fillAndEmit(message.job)
         .then(() => sendResponse({ ok: true }))
-        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+        .catch((error) => sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          // El librero usa esto para NO cerrar el trabajo ni re-emitir tras el emit real.
+          final_emit_clicked: error?.finalEmitClicked === true,
+        }));
       return true;
     }
     if (message.type === "APP_CONTABLE_SII_ATTEMPT_AUTOLOGIN") {

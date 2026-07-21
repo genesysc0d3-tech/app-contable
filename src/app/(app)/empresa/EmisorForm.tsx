@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useId, isValidElement, cloneElement, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
 import { formatRut, validarRut, cleanRut } from "@/lib/sii/validation";
@@ -36,6 +36,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
   const [tipoContribuyente, setTipoContribuyente] = useState(
     inicial.tipo_contribuyente ?? "auto"
   );
+  // "" = sin default (la IA decide). Semilla para auto-clasificar la 1ª cartola.
+  const [operacionHint, setOperacionHint] = useState(inicial.operacion_hint_default ?? "");
 
   // Errores inline: el RUT se valida recién al salir del campo (touched), no
   // por keystroke; razón social se marca cuando la validación del submit falla.
@@ -53,6 +55,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
     comuna: inicial.comuna ?? "",
     email_sii: inicial.email_sii ?? "",
     tipo_contribuyente: inicial.tipo_contribuyente ?? "auto",
+    operacion_hint_default: inicial.operacion_hint_default ?? null,
   });
 
   // Validación + guardado compartidos por el submit del form y por submitRef
@@ -72,6 +75,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
       comuna,
       email_sii: emailSii,
       tipo_contribuyente: tipoContribuyente,
+      operacion_hint_default: operacionHint || null,
     };
 
     // Dirty-check ANTES de validar: si nada cambió respecto del último guardado,
@@ -84,7 +88,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
       datos.direccion === prev.direccion &&
       datos.comuna === prev.comuna &&
       datos.email_sii === prev.email_sii &&
-      datos.tipo_contribuyente === prev.tipo_contribuyente;
+      datos.tipo_contribuyente === prev.tipo_contribuyente &&
+      (datos.operacion_hint_default ?? null) === (prev.operacion_hint_default ?? null);
     if (opts?.soloSiCambio && sinCambios) return true;
 
     const rutInvalido = !!rut && !validarRut(rut);
@@ -294,7 +299,10 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
                   )}
                 </div>
               ) : (
-                <div onClick={() => logoInputRef.current?.click()} style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "var(--accent, #E8553E)", overflow: "hidden", textAlign: "center" }}>
+                <div role="button" tabIndex={logoPending ? -1 : 0} aria-label="Subir logo de la empresa (PNG o WebP transparente)"
+                  onClick={() => logoInputRef.current?.click()}
+                  onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !logoPending) { e.preventDefault(); logoInputRef.current?.click(); } }}
+                  style={{ width: compact ? 118 : 150, minHeight: compact ? 54 : 66, borderRadius: compact ? 12 : 16, border: "1px dashed rgba(232,85,62,0.30)", background: "rgba(232,85,62,0.055)", display: "flex", alignItems: "center", justifyContent: "center", padding: compact ? 6 : 8, cursor: logoPending ? "wait" : "pointer", color: "var(--accent, #E8553E)", overflow: "hidden", textAlign: "center" }}>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 750, lineHeight: 1.2 }}>
                     <span>{logoPending ? "Subiendo…" : "Subir logo"}</span>
                     <span style={{ color: logoStatus && logoStatus !== "Logo guardado" ? "var(--red, #ef4444)" : "var(--text3, #697080)", fontSize: 11, fontWeight: 600 }}>{logoStatus ?? "PNG/WebP transparente"}</span>
@@ -543,6 +551,49 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
         </div>
       </div>
 
+      {/* CARD 3: TIPO DE OPERACIÓN HABITUAL — semilla para clasificar la 1ª cartola */}
+      <div style={{
+        borderRadius: compact ? 14 : 18,
+        border: "1px solid var(--border, rgba(255,255,255,.06))",
+        background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
+        padding: compact ? 12 : 24,
+        boxShadow: "inset 0 1px 0 var(--border, rgba(255,255,255,.06))",
+      }}>
+        <div style={{ marginBottom: compact ? 8 : 12 }}>
+          <div style={{
+            fontSize: compact ? 12 : 13, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--text, #e8eaf0)",
+          }}>
+            Tipo de operación habitual
+          </div>
+          <div style={{ marginTop: 2, fontSize: 11, color: "var(--text2, #8b92a3)" }}>
+            Ayuda a clasificar tu primera cartola, antes de que la app aprenda tus movimientos.
+            Podés cambiarlo por cartola al subirla.
+          </div>
+        </div>
+
+        <select
+          value={operacionHint}
+          onChange={(e) => setOperacionHint(e.target.value)}
+          style={{
+            width: "100%",
+            borderRadius: 12,
+            border: "1px solid var(--border, rgba(255,255,255,.06))",
+            background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
+            color: "var(--text, #e8eaf0)",
+            padding: compact ? "9px 10px" : "12px 12px",
+            fontSize: compact ? 12 : 13, fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <option value="">Sin definir — la app decide en cada venta</option>
+          <option value="p2p_cripto">P2P / Cripto (exenta)</option>
+          <option value="forex_divisas">Forex / Divisas (exenta)</option>
+          <option value="servicios">Servicios</option>
+          <option value="ventas">Venta de productos</option>
+          <option value="mixto">Mixto (varios tipos)</option>
+        </select>
+      </div>
+
       {/* SUBMIT */}
       {!compact && (
         <button
@@ -606,9 +657,28 @@ function Field({
   style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
+  // Asocia label ↔ input (htmlFor/id) y anuncia el error (aria-invalid + aria-describedby
+  // + role="alert") para lectores de pantalla. Si el child es un elemento simple, se le
+  // inyectan los ids/aria; si no, degrada sin romper.
+  const autoId = useId();
+  const msgId = `${autoId}-msg`;
+  let control = children;
+  if (isValidElement(children)) {
+    const child = children as ReactElement<Record<string, unknown>>;
+    const childId = (child.props.id as string | undefined) ?? autoId;
+    control = cloneElement(child, {
+      id: childId,
+      "aria-invalid": error ? true : undefined,
+      "aria-describedby": (error || hint) ? msgId : child.props["aria-describedby"],
+    });
+  }
+  const controlId = isValidElement(children)
+    ? ((children as ReactElement<Record<string, unknown>>).props.id as string | undefined) ?? autoId
+    : undefined;
+
   return (
     <div style={style}>
-      <label style={{
+      <label htmlFor={controlId} style={{
         display: "flex",
         alignItems: "center",
         gap: 4,
@@ -621,14 +691,14 @@ function Field({
         {required && <span style={{ color: "var(--accent, #E8553E)" }}>*</span>}
       </label>
 
-      {children}
+      {control}
 
       {error ? (
-        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--red, #ef4444)" }}>
+        <p id={msgId} role="alert" style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--red, #ef4444)" }}>
           {error}
         </p>
       ) : hint ? (
-        <p style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--text3, #697080)" }}>
+        <p id={msgId} style={{ marginTop: compact ? 4 : 8, fontSize: compact ? 11 : 12, fontWeight: 500, lineHeight: 1.35, color: "var(--text3, #697080)" }}>
           {hint}
         </p>
       ) : null}

@@ -7,13 +7,15 @@ import type { PreExtractedMovimiento } from "./parsers/types";
  * Delegates to the layered orchestrator (adapter cache → heuristic → named
  * → legacy fallback). Always returns a content string plus, when a
  * deterministic layer succeeded, a list of pre-extracted movimientos the
- * processor can use to bypass Mistral extraction entirely.
+ * processor can use to bypass OpenCode extraction entirely.
  *
  * Optional `documento_id` enables parser_logs auditing for that document.
+ * `empresa_id` aísla el cache de adapters por tenant (no aplicar el mapeo manual
+ * de otra empresa al mismo formato de banco).
  */
 export async function parseExcel(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string }
+  opts?: { documento_id?: string; empresa_id?: string }
 ): Promise<{
   content: string;
   preExtracted: PreExtractedMovimiento[] | null;

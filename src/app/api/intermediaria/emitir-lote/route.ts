@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
+import { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -30,7 +32,6 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 const CONCURRENCY = 1; // secuencial — folios en orden
 
 // Roles que pueden emitir documentos tributarios (viewer solo consulta).
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 interface BatchItem {
   propuesta_id: string;
@@ -90,11 +91,15 @@ export async function POST(request: Request) {
       }
     }
   }
-  const ids = Array.isArray(body.items)
+  const idsRaw = Array.isArray(body.items)
     ? body.items.map((i) => i.id).filter((x): x is string => typeof x === "string")
     : Array.isArray(body.propuesta_ids)
       ? body.propuesta_ids.filter((x) => typeof x === "string")
       : [];
+  // Dedupe: un id repetido en el payload procesaría la misma propuesta dos veces
+  // (la 2ª quemaría un folio y chocaría con el índice único → DB_INSERT_FAIL). El
+  // índice tipoPorId conserva el primer tipo enviado para cada id.
+  const ids = Array.from(new Set(idsRaw));
   if (ids.length === 0) {
     return NextResponse.json({ ok: false, error: "SIN_PROPUESTAS" }, { status: 400 });
   }
@@ -107,6 +112,7 @@ export async function POST(request: Request) {
     .from("propuestas_ia")
     .select(`
       id, tipo_propuesto, tipo_dte, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
+      receptor_email, receptor_telefono,
       medio_pago, notas, monto_neto, iva, total, estado,
       cliente_id,
       clientes(id, nombre, rut),
@@ -116,7 +122,10 @@ export async function POST(request: Request) {
     .in("id", ids);
 
   if (pErr) {
-    return NextResponse.json({ ok: false, error: "QUERY_FAILED", detalle: pErr.message }, { status: 500 });
+    // No exponer el error crudo de Postgres al cliente (fuga de detalles internos);
+    // se registra server-side y el cliente recibe un mensaje genérico.
+    console.error("[emitir-lote] QUERY_FAILED", pErr.message);
+    return NextResponse.json({ ok: false, error: "QUERY_FAILED", detalle: "No se pudieron leer las propuestas. Intenta de nuevo." }, { status: 500 });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -221,7 +230,7 @@ export async function POST(request: Request) {
     }
     // "exenta" incluida (ya estaba en pendientes-emision): un contribuyente exento
     // emite DTE 41; el tipo_dte real lo decide clasificarBoleta abajo, no este tipo.
-    const TIPOS_EMITIBLES = ["boleta", "exenta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"];
+    // TIPOS_EMITIBLES viene de la fuente única (misma lista que la cola de pendientes).
     if (!TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
       results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como boleta` });
       continue;
@@ -269,17 +278,20 @@ export async function POST(request: Request) {
     // humana persistida (p.tipo_dte, Paso P) → clasificación → 39. Antes ignoraba
     // p.tipo_dte y coercía a 39 AFECTA una propuesta con 41 ya persistido (auditoría #7).
     const tipoPersistido = p.tipo_dte === 39 || p.tipo_dte === 41 ? (p.tipo_dte as 39 | 41) : undefined;
-    const tipoDte = (tipoPorId.get(pid) ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
+    let tipoDte = (tipoPorId.get(pid) ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
+    // Un contribuyente EXENTO no puede emitir afecta (39): fabricaría IVA inexistente.
+    // El override de la UI o un tipo persistido no mandan sobre la naturaleza fiscal
+    // del emisor (misma regla que la normalización afecta→exenta del insert).
+    if (empresa.tipo_contribuyente === "exento") tipoDte = 41;
     const proveedorEfectivo = providerForTipoDte(emisionConfig, tipoDte);
 
     // Payload canónico (glosa/receptor/medio) vía el armador único — MISMA regla
     // que boleta única. Glosa: detalle editado (notas) › glosa común de la cartola
-    // (si activa) › glosa del banco. Medio: el de la propuesta o el default del carril.
+    // (si activa) › genérico por tipo. NUNCA la glosa cruda del banco (dato de terceros).
     const payload = armarBoletaPayload({
       tipoDte,
       total,
       notas: p.notas,
-      glosaBanco: mov?.descripcion,
       glosaComun: docNode?.glosa_comun,
       glosaComunActiva: docNode?.glosa_activa,
       receptorRut: receptor_rut,
@@ -376,6 +388,10 @@ export async function POST(request: Request) {
         receptor_razon_social: payload.receptor_razon_social ?? null,
         receptor_direccion: payload.receptor_direccion ?? null,
         receptor_comuna: payload.receptor_comuna ?? null,
+        // Contacto del receptor (para enviarle la boleta) — no van en el XML fiscal;
+        // se guardan en el registro. Hermanos de dirección/comuna, desde la propuesta.
+        receptor_email: p.receptor_email ?? null,
+        receptor_telefono: p.receptor_telefono ?? null,
         medio_pago: payload.medio_pago ?? MEDIO_PAGO_LOTE,
         monto_neto: validation.totales.neto,
         monto_exento: validation.totales.exento,
@@ -505,5 +521,8 @@ export async function POST(request: Request) {
 }
 
 export const dynamic = "force-dynamic";
+// Hasta 200 boletas secuenciales pueden tardar: sin un tope explícito, un corte a
+// mitad deja el lock de emisión colgado y la respuesta perdida. 300s = tope de Vercel.
+export const maxDuration = 300;
 // Use CONCURRENCY in case we want to parallelize later
 void CONCURRENCY;

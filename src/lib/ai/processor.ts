@@ -11,6 +11,7 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import {
@@ -20,14 +21,17 @@ import {
   type ClasificacionRegla,
 } from "./classifier";
 import { recordOpsEvent } from "../ops/events";
+import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validation";
 
 /** Extended propuesta with SII traceability fields used internally. */
 type EnrichedPropuesta = PropuestaExtraida & {
-  __fuente?: "regla_usuario" | "regla_global" | "mistral";
+  __fuente?: "regla_usuario" | "regla_global" | "ia_opencode";
   __regla_id?: string | null;
+  /** tipo_dte recordado por una regla de usuario (39/41); null = el gate decide. */
+  __tipo_dte?: number | null;
 };
 
-const MISTRAL_MAX_CONFIANZA = 0.75; // Cap Mistral classifications — never auto-approve
+const IA_MESA_MAX_CONFIANZA = 0.75; // Cap de la IA de la mesa (OpenCode) — nunca auto-aprueba
 
 const CHUNK_SIZE = 100;
 const MAX_RETRIES = 3;
@@ -36,13 +40,22 @@ const DB_BATCH_SIZE = 100;
 const MIN_CONFIANZA = 0.6;
 // Pre-stageo: una tx nace "listo" (staged, NO emitido) solo si supera este umbral Y
 // viene de una regla REAL (regla_id presente). El clasificador IA (OpenCode) está
-// capado en MISTRAL_MAX_CONFIANZA (0.75, nombre legacy) y el atajo "template" (asume boleta @0.95 sin match)
+// capado en IA_MESA_MAX_CONFIANZA (0.75) y el atajo "template" (asume boleta @0.95 sin match)
 // NO lleva regla_id → ninguno de esos auto-stagea: quedan "pendiente" para que el
 // usuario los prepare con un gesto de bulk deliberado. El Aprobar atómico
 // (aprobarCartola) sigue siendo el único gatillo hacia Emitir. Banda ALTA=0.85 del visor.
 const AUTO_STAGE_THRESHOLD = 0.85;
 
-/** Sanitize a value that should be numeric but Mistral may return as "null" string */
+// tipo_propuesto que representan una VENTA emitible (boleta) — el cable de
+// auto-clasificación solo persiste tipo_dte para estos. Deja fuera gasto/
+// no_comercial/impuesto/cotización/remuneración/dividendo/interés/etc. (no son
+// ventas → no boleta, aunque la empresa sea exenta).
+const TIPOS_VENTA_AUTO = new Set([
+  "boleta", "factura", "exenta", "factura_afecta", "factura_exenta",
+  "compraventa_crypto", "transferencia_p2p", "operacion_forex", "arriendo", "comision",
+]);
+
+/** Sanitize a value that should be numeric but OpenCode may return as "null" string */
 function toNum(val: unknown): number | null {
   if (val === null || val === undefined || val === "null" || val === "") return null;
   const n = Number(val);
@@ -61,7 +74,7 @@ function normTipo(val: string | null | undefined): string {
   if (!val) return "no_comercial";
   const s = val.trim().toLowerCase();
   if (VALID_TIPOS.has(s)) return s;
-  // Common Mistral variations
+  // Common OpenCode variations
   if (s.includes("crypto") || s.includes("bitcoin") || s.includes("usdt")) return "compraventa_crypto";
   if (s.includes("p2p") || s.includes("transferencia")) return "transferencia_p2p";
   if (s.includes("forex") || s.includes("divisa")) return "operacion_forex";
@@ -161,7 +174,7 @@ async function processChunkWithRetry(
 
 /**
  * Bypass-mode chunk: the movimientos are already extracted deterministically
- * by the parser. We only ask Mistral to classify each one. The returned
+ * by the parser. We only ask OpenCode to classify each one. The returned
  * movimientos in ChunkResult echo the input (never modified) so the
  * downstream code works unchanged.
  */
@@ -180,7 +193,7 @@ async function classifyChunkWithRetry(
     try {
       const response = await provider.classifyMovimientos(chunkMovs, systemPrompt);
       // Propuestas with movimiento_index referencing position WITHIN this chunk.
-      // If Mistral dropped or mis-indexed some, we fill with defaults so every
+      // If OpenCode dropped or mis-indexed some, we fill with defaults so every
       // movimiento has a corresponding propuesta.
       const propuestasByIdx = new Map<number, PropuestaExtraida>();
       for (const p of response.propuestas) {
@@ -191,11 +204,11 @@ async function classifyChunkWithRetry(
       const completed: PropuestaExtraida[] = chunkMovs.map((m, i) => {
         const existing = propuestasByIdx.get(i);
         if (existing) {
-          // Force total to match the deterministic monto — never let Mistral
+          // Force total to match the deterministic monto — never let OpenCode
           // alter the amount.
           return { ...existing, movimiento_index: i, total: m.monto };
         }
-        // Fallback: if Mistral didn't return a propuesta for this index,
+        // Fallback: if OpenCode didn't return a propuesta for this index,
         // synthesize a neutral one so nothing is lost.
         return {
           movimiento_index: i,
@@ -206,7 +219,7 @@ async function classifyChunkWithRetry(
           iva: 0,
           total: m.monto,
           confianza: 0.4,
-          notas: "fallback: Mistral no devolvió propuesta para este índice",
+          notas: "fallback: OpenCode no devolvió propuesta para este índice",
           spread_compra: null,
           spread_venta: null,
           spread_ganancia: null,
@@ -259,6 +272,49 @@ async function insertInBatches<T extends Record<string, unknown>>(
   return { ids: allIds, error: null };
 }
 
+/**
+ * Idempotencia del reproceso: procesarDocumento reinserta TODOS los movimientos
+ * del documento, así que un reintento del job (fallo a mitad, watchdog que re-encola
+ * un 'running' colgado, o Deshacer→Reprocesar) duplicaría las filas —y en bypass,
+ * que no deduplica, terminaría en boletas dobles del mismo pago. Antes de insertar,
+ * limpiamos lo que este mismo documento ya haya dejado.
+ *
+ * GUARDA DE PLATA: si alguna propuesta previa del documento ya tiene una boleta
+ * emitida (propuesta_id, ON DELETE SET NULL), NO limpiamos —borrarla orfanaría un
+ * folio real del SII. Eso no debería pasar (los guardas de deshacer/emitir lo
+ * bloquean antes), pero si ocurre se aborta el reproceso en vez de corromper.
+ */
+async function limpiarInsercionesPrevias(
+  documentoId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = getServiceClient();
+  const { data: movsPrevios } = await supabase
+    .from("movimientos_raw")
+    .select("id")
+    .eq("documento_id", documentoId);
+  const movIds = (movsPrevios ?? []).map((m) => m.id);
+  if (movIds.length === 0) return { ok: true };
+
+  const { data: propsPrevias } = await supabase
+    .from("propuestas_ia")
+    .select("id")
+    .in("movimiento_id", movIds);
+  const propIds = (propsPrevias ?? []).map((p) => p.id);
+
+  if (propIds.length > 0) {
+    const { count } = await supabase
+      .from("boletas_emitidas")
+      .select("id", { count: "exact", head: true })
+      .in("propuesta_id", propIds);
+    if ((count ?? 0) > 0) {
+      return { ok: false, error: "REPROCESO_CON_BOLETA_EMITIDA" };
+    }
+    await supabase.from("propuestas_ia").delete().in("movimiento_id", movIds);
+  }
+  await supabase.from("movimientos_raw").delete().eq("documento_id", documentoId);
+  return { ok: true };
+}
+
 export async function procesarDocumento(
   documentoId: string,
   empresaId: string,
@@ -276,7 +332,7 @@ export async function procesarDocumento(
   // bien dirección y montos. Nunca va en el system prompt global (compartido).
   const { data: emp } = await supabase
     .from("empresas")
-    .select("razon_social, rut, giro, tipo_contribuyente")
+    .select("razon_social, rut, giro, tipo_contribuyente, operacion_hint_default")
     .eq("id", empresaId)
     .maybeSingle();
   const { data: identidades } = await supabase
@@ -284,6 +340,28 @@ export async function procesarDocumento(
     .select("valor")
     .eq("empresa_id", empresaId);
   const aliasList = (identidades ?? []).map((i) => i.valor).filter(Boolean);
+  // Hint de la cartola (el usuario la marcó "toda P2P cripto"/"forex"/etc.): señal
+  // fuerte para decidir tipo_dte al clasificar cuando la glosa es muda ("Transf de
+  // Juan"). Junto con empresa exenta, es lo que permite que la cartola no nazca
+  // 100% "pendiente" (ver el cable de auto-clasificación en el insert de propuestas).
+  const { data: docRow } = await supabase
+    .from("documentos_subidos")
+    .select("tipo_operacion_hint")
+    .eq("id", documentoId)
+    .maybeSingle();
+  const HINTS_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
+  const docHint: DocumentoHint =
+    docRow?.tipo_operacion_hint && HINTS_VALIDOS.has(docRow.tipo_operacion_hint)
+      ? (docRow.tipo_operacion_hint as DocumentoHint)
+      : null;
+  // Default de operación de la CUENTA (el cliente declaró a qué se dedica). Semilla
+  // para que la 1ª cartola no nazca 100% "pendiente" cuando no hay hint por documento
+  // ni reglas aprendidas. Entra como BIAS de empresa (beatable), NO como el hint por
+  // cartola: una glosa contraria o exención por ley le gana (ver clasificarBoleta).
+  const empHintDefault: DocumentoHint =
+    emp?.operacion_hint_default && HINTS_VALIDOS.has(emp.operacion_hint_default)
+      ? (emp.operacion_hint_default as DocumentoHint)
+      : null;
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
       `- Razón social: «${emp.razon_social}» | RUT: ${redactPiiHabilitado() ? maskRut(emp.rut) : emp.rut}` +
@@ -299,10 +377,22 @@ export async function procesarDocumento(
     .update({ estado: "procesando" })
     .eq("id", documentoId);
 
+  // Reproceso idempotente: borra lo que este documento haya dejado en un intento
+  // anterior antes de reinsertar (evita movimientos/propuestas duplicados en los
+  // reintentos del job). Aborta si ya hay una boleta emitida colgando (ver helper).
+  const limpieza = await limpiarInsercionesPrevias(documentoId);
+  if (!limpieza.ok) {
+    await supabase
+      .from("documentos_subidos")
+      .update({ estado: "error", progreso_ia: { error: "No se puede reprocesar: el documento ya tiene boletas emitidas." } })
+      .eq("id", documentoId);
+    return { movimientos_total: 0, error: limpieza.error };
+  }
+
   try {
     // Build the chunked work units. In bypass mode we first try to classify
     // each movimiento with deterministic rules (user rules + global rules).
-    // Only the leftover unmatched movimientos are sent to Mistral for
+    // Only the leftover unmatched movimientos are sent to OpenCode for
     // classification, capped at confianza 0.75 so they always require review.
     type MovChunk = { movs: MovimientoExtraido[] };
     type TextChunk = { text: string[] };
@@ -315,11 +405,12 @@ export async function procesarDocumento(
       propuesta: PropuestaExtraida;
       regla_id: string;
       fuente: "regla_usuario" | "regla_global";
+      tipo_dte: number | null;
     };
     const ruleClassifications = new Map<number, RuleClassification>();
-    // Maps the position of each mov inside the flat forMistral array back
+    // Maps the position of each mov inside the flat forIA array back
     // to its original index in preExtracted.
-    const origIndexByMistralIdx: number[] = [];
+    const origIndexByIAIdx: number[] = [];
 
     // Result containers (used by both bypass and non-bypass paths)
     const allMovimientos: MovimientoExtraido[] = [];
@@ -338,6 +429,7 @@ export async function procesarDocumento(
           propuesta: c.propuesta,
           regla_id: c.regla_id,
           fuente: c.fuente,
+          tipo_dte: c.tipo_dte,
         });
       }
 
@@ -372,24 +464,24 @@ export async function procesarDocumento(
           });
         }
 
-        // No Mistral chunks needed
+        // No OpenCode chunks needed
         console.log(
           `[template] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${ruleResult.noClasificados.length} como boleta (template)`
         );
       } else {
-      // 2. Chunk only the leftover movs for Mistral classification
-      const forMistral: MovimientoExtraido[] = [];
+      // 2. Chunk only the leftover movs for OpenCode classification
+      const forIA: MovimientoExtraido[] = [];
       for (const nc of ruleResult.noClasificados) {
-        origIndexByMistralIdx.push(nc.movimiento_index);
-        forMistral.push(nc.movimiento);
+        origIndexByIAIdx.push(nc.movimiento_index);
+        forIA.push(nc.movimiento);
       }
 
       console.log(
-        `[bypass+rules] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${forMistral.length} a Mistral`
+        `[bypass+rules] ${ruleResult.clasificados.length}/${movs.length} por reglas, ${forIA.length} a OpenCode`
       );
 
-      for (let i = 0; i < forMistral.length; i += CHUNK_SIZE) {
-        movChunks.push({ movs: forMistral.slice(i, i + CHUNK_SIZE) });
+      for (let i = 0; i < forIA.length; i += CHUNK_SIZE) {
+        movChunks.push({ movs: forIA.slice(i, i + CHUNK_SIZE) });
       }
       }
 
@@ -437,7 +529,7 @@ export async function procesarDocumento(
         completedCount++;
         totalMovsFound += r.movimientos.length;
 
-        // Audit logging — save chunk input + Mistral response
+        // Audit logging — save chunk input + OpenCode response
         try {
           const chunkInputPreview = bypassMode
             ? JSON.stringify(movChunks[r.index]?.movs.slice(0, 3) ?? []).slice(0, 5000)
@@ -475,7 +567,7 @@ export async function procesarDocumento(
 
     // Combine results. In bypass+rules mode, allMovimientos is the original
     // preExtracted list, and allPropuestas merges rule classifications +
-    // Mistral classifications (capped at MISTRAL_MAX_CONFIANZA).
+    // clasificaciones de la IA de la mesa (capadas a IA_MESA_MAX_CONFIANZA).
     let totalTokensInput = 0;
     let totalTokensOutput = 0;
     let modelo = "";
@@ -496,11 +588,12 @@ export async function procesarDocumento(
           movimiento_index: origIdx,
           __fuente: rc.fuente,
           __regla_id: rc.regla_id,
+          __tipo_dte: rc.tipo_dte,
         });
       }
 
-      // Add Mistral classifications, remapping chunk-local → original index
-      // and capping confianza. Synthesize a neutral fallback if Mistral
+      // Add OpenCode classifications, remapping chunk-local → original index
+      // and capping confianza. Synthesize a neutral fallback if OpenCode
       // dropped an index so nothing is lost.
       for (let ci = 0; ci < results.length; ci++) {
         const r = results[ci];
@@ -516,19 +609,19 @@ export async function procesarDocumento(
         }
 
         for (let localIdx = 0; localIdx < chunkMovCount; localIdx++) {
-          const origIdx = origIndexByMistralIdx[chunkStart + localIdx];
+          const origIdx = origIndexByIAIdx[chunkStart + localIdx];
           if (origIdx == null) continue;
           const p = propuestasByLocalIdx.get(localIdx);
           if (p) {
             allPropuestas.push({
               ...p,
               movimiento_index: origIdx,
-              confianza: Math.min(p.confianza ?? 0.5, MISTRAL_MAX_CONFIANZA),
-              __fuente: "mistral",
+              confianza: Math.min(p.confianza ?? 0.5, IA_MESA_MAX_CONFIANZA),
+              __fuente: "ia_opencode",
               __regla_id: null,
             });
           } else {
-            // Mistral dropped this index — add a fallback with low confidence
+            // OpenCode dropped this index — add a fallback with low confidence
             const mov = allMovimientos[origIdx];
             allPropuestas.push({
               movimiento_index: origIdx,
@@ -540,11 +633,11 @@ export async function procesarDocumento(
               iva: 0,
               total: mov.monto,
               confianza: 0.4,
-              notas: "Fallback: Mistral no devolvió propuesta para este movimiento",
+              notas: "Fallback: OpenCode no devolvió propuesta para este movimiento",
               spread_compra: null,
               spread_venta: null,
               spread_ganancia: null,
-              __fuente: "mistral",
+              __fuente: "ia_opencode",
               __regla_id: null,
             });
           }
@@ -568,7 +661,7 @@ export async function procesarDocumento(
           allPropuestas.push({
             ...p,
             movimiento_index: p.movimiento_index + offset,
-            __fuente: "mistral",
+            __fuente: "ia_opencode",
             __regla_id: null,
           });
         }
@@ -579,7 +672,7 @@ export async function procesarDocumento(
       }
     }
 
-    // Filter out movimientos with null/empty required fields (Mistral sometimes
+    // Filter out movimientos with null/empty required fields (OpenCode sometimes
     // returns nulls for summary rows, totals, or headers in cartolas)
     const validIndices: number[] = [];
     for (let i = 0; i < allMovimientos.length; i++) {
@@ -699,7 +792,7 @@ export async function procesarDocumento(
       }
     }
 
-    // Classify n_documento: simple heuristic instead of Mistral calls
+    // Classify n_documento: simple heuristic instead of OpenCode calls
     // RUT pattern: 1-2 digits + dot + 3 digits + dot + 3 digits + dash + 1 digit/K
     // or without dots: 7-8 digits + dash + 1 digit/K
     function isRutPattern(ndoc: string): boolean {
@@ -948,7 +1041,9 @@ export async function procesarDocumento(
       originalToNewIndex.set(origIdx, newIdx);
     });
 
-    // Auto-detect clients from propuesta descriptions/receptor data
+    // Auto-detect clients from propuesta descriptions/receptor data. Bajo umbral
+    // NO se auto-crea el cliente (contraparte no consentida; el contador confirmó
+    // que no hay necesidad tributaria de conservarla — RCV/F29/F22 no la usan).
     const clienteCache = await detectAndCreateClients(
       supabase,
       empresaId,
@@ -976,20 +1071,81 @@ export async function procesarDocumento(
           const tipoBase = normTipo(p.tipo_propuesto);
           const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp?.tipo_contribuyente);
           const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp?.tipo_contribuyente);
+          // ── Cable de auto-clasificación de tipo_dte ──────────────────────────
+          // Persistir tipo_dte apaga `sinDecisionHumana` en el gate (la propuesta
+          // nace en "listas", no rebota a Check). Solo cuando la decisión es
+          // DETERMINISTA — no un guess de la IA: (1) regla de usuario, (2) empresa
+          // EXENTA (siempre 41), (3) hint de la cartola, o (4) glosa inequívoca.
+          // Gated a VENTAS de entrada y NUNCA sobre no_boletar (guardarraíl:
+          // préstamo/cuenta propia/sueldo se apartan aunque la cartola sea cripto).
+          // Reusa el MISMO clasificarBoleta del gate downstream (coherente).
+          const empExento = emp?.tipo_contribuyente === "exento";
+          const clasifTipo = clasificarBoleta(
+            { descripcion: mov?.descripcion ?? "", monto: total ?? 0, fecha: mov?.fecha ?? "", receptor_nombre: p.receptor_nombre },
+            { giro: emp?.giro, razon_social: emp?.razon_social, tipo_contribuyente: emp?.tipo_contribuyente, operacion_default: empHintDefault },
+            undefined,
+            docHint,
+          );
+          // GUARDARRAÍL DURO: nunca persistir tipo_dte sobre un no_boletar
+          // (préstamo/cuenta propia/sueldo/aporte capital/devolución) ni sobre una
+          // SALIDA. Vale para TODOS los orígenes (regla de usuario, auto o exento):
+          // aunque una regla vieja o el hint digan otra cosa, un no_boletar no
+          // recibe tipo ni se emite.
+          const puedePersistirTipo =
+            mov?.tipo_flujo === "entrada" && clasifTipo.sugerencia !== "no_boletar";
+          // El AUTO determinista solo corre sobre tipos de VENTA (no gasto/impuesto/
+          // etc.). La glosa muda ("TRANSF DE JUAN") es EL caso a resolver por el
+          // hint+exento — no se puede exigir señal de glosa sin matar justo eso. La
+          // defensa contra no-ventas es el guardarraíl no_boletar (arriba) + la
+          // revisión humana de "Listas". Los no-ventas claros (aporte capital,
+          // préstamo, cuenta propia, DAP) los caza angleGlosa como no_boletar.
+          const esVentaCandidata =
+            puedePersistirTipo && TIPOS_VENTA_AUTO.has(tipoBase);
+          // Política de auto-persistencia (pura, testeable): el default de cuenta NO
+          // cortocircuita (una glosa contraria baja la confianza → revisar), y un 39
+          // (afecta, fabrica IVA) exige evidencia real, no solo el bias de cuenta con
+          // glosa muda. El hint por-cartola (docHint) y el exento sí son autoritativos.
+          const tipoDteAuto: 39 | 41 | null =
+            !esVentaCandidata ? null
+              : decidirTipoDteAuto(clasifTipo, { docHint, tipoContribuyente: emp?.tipo_contribuyente });
+          // Precedencia: la regla de usuario manda (si pasa el guardarraíl); si no,
+          // el auto. El emisor exento se fuerza a 41 (nunca 39).
+          const tipoDtePersist: 39 | 41 | null =
+            !puedePersistirTipo ? null
+              : enriched.__tipo_dte === 39 || enriched.__tipo_dte === 41
+                ? (exentoFinal || empExento ? 41 : enriched.__tipo_dte)
+                : tipoDteAuto;
+          // Auto-clasificado (determinista, sin regla) → sube la confianza a
+          // bulk-elegible (BULK_MIN_CONFIANZA 0.8) para que "Poner listas (N)" las
+          // tome. NO auto-stagea: el estado sigue la regla de abajo (queda
+          // "pendiente" salvo regla_id), respetando el gesto de bulk deliberado.
+          const confianzaFinal =
+            tipoDteAuto != null && enriched.__regla_id == null
+              ? Math.max(confianza ?? 0, 0.9)
+              : confianza;
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
             tipo_propuesto: tipoNorm,
-            receptor_nombre: p.receptor_nombre || null,
-            receptor_rut: p.receptor_rut || null,
+            tipo_dte: tipoDtePersist,
+            // Minimización por monto (Ley 19.628 + Res. 44/2025): solo se guarda la
+            // identidad del tercero cuando la emisión PODRÍA exigirla. Se usa el PISO
+            // conservador (RECEPTOR_OBLIGATORIO_DESDE), no la UF viva: la emisión puede
+            // caer a ese piso si mindicador.cl no responde, así que nunca minimizamos
+            // algo que la emisión luego demandaría (evita bloquear la boleta sin dato).
+            receptor_nombre: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.receptor_nombre || null) : null,
+            receptor_rut: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.receptor_rut || null) : null,
             monto_neto: exentoFinal ? total : toNum(p.monto_neto),
             iva: exentoFinal ? 0 : toNum(p.iva),
             total,
-            confianza,
-            // notas = detalle/glosa del humano; NO marcadores internos (se filtran a la
-            // glosa de la boleta vía armar-boleta.ts). La baja confianza ya vive en la
-            // columna `confianza` — la UI la marca desde ahí, no desde notas.
-            notas: p.notas || null,
+            confianza: confianzaFinal,
+            // notas = detalle/glosa; se imprime en la boleta (máxima precedencia en
+            // resolverGlosa). Bajo umbral se descarta la nota GENERADA por la IA: el
+            // modelo puede colar el nombre/RUT del tercero en el texto libre y saldría
+            // impreso en el DTE (misma fuga que cerró PR #56, por otra columna). El
+            // usuario puede escribir su propio detalle después (ruta consentida). Sobre
+            // umbral se conserva (la identidad ahí es legítima/exigida).
+            notas: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.notas || null) : null,
             // Auto-stage a "listo" SOLO con clasificación real por regla (regla_id).
             // El atajo template (boleta @0.95 sin match) nace "pendiente": el usuario
             // hace un gesto de bulk antes de que quede a un click del SII.
@@ -1000,8 +1156,13 @@ export async function procesarDocumento(
             spread_compra: toNum(p.spread_compra),
             spread_venta: toNum(p.spread_venta),
             spread_ganancia: toNum(p.spread_ganancia),
-            cliente_id: clienteId,
-            fuente_clasificacion: enriched.__fuente ?? "mistral",
+            // cliente_id también se minimiza bajo umbral: aunque no se auto-cree un
+            // cliente, resolveClienteId podría enlazar a uno existente (creado por una
+            // operación SOBRE umbral en el mismo lote, o pre-registrado) y la emisión
+            // resucita la identidad vía `p.receptor_rut ?? cliente?.rut`. La normalización
+            // exenta ya se calculó con el clienteId local (no depende del campo guardado).
+            cliente_id: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? clienteId : null,
+            fuente_clasificacion: enriched.__fuente ?? "ia_opencode",
             regla_id: enriched.__regla_id ?? null,
           };
         });
@@ -1117,6 +1278,12 @@ async function detectAndCreateClients(
   for (const p of propuestas) {
     const mov = movimientos[p.movimiento_index];
     if (!mov) continue;
+
+    // Minimización (Ley 19.628): bajo umbral no se identifica al tercero, así que
+    // no se auto-crea un cliente con su RUT (ni el extraído por IA ni el hallado
+    // por regex en la glosa). Sobre umbral sí (la emisión lo exige). Un RUT que
+    // aparezca en al menos UNA operación sobre umbral sí se crea.
+    if (!receptorObligatorio(toNum(p.total) ?? 0, RECEPTOR_OBLIGATORIO_DESDE)) continue;
 
     // Try receptor_rut first (from AI extraction)
     const rutFromPropuesta = p.receptor_rut

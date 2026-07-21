@@ -57,7 +57,7 @@ export interface AIProvider {
   /**
    * Classify a batch of already-extracted movimientos.
    * Used by the pre-extracted bypass path: the parser did deterministic
-   * extraction so we only need Mistral to assign tipo_propuesto, receptor,
+   * extraction so we only need OpenCode to assign tipo_propuesto, receptor,
    * confianza, etc. — never touching fechas/montos.
    */
   classifyMovimientos?(

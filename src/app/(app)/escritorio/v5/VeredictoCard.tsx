@@ -207,16 +207,24 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   // que la cola de Emitir la lea en vez de re-adivinarla.
   const commit = async (action: () => Promise<unknown>, okMsg: string, tipoDte?: 39 | 41 | null) => {
     setBusy(true);
-    if (ov || tipoDte !== undefined) {
-      await editarPropuesta(propuesta.id, {
-        ...(ov ? { tipo_propuesto: ov.tipo, monto_neto: ov.neto, iva: ov.iva, total: ov.total } : {}),
-        ...(tipoDte !== undefined ? { tipo_dte: tipoDte } : {}),
-      });
+    try {
+      if (ov || tipoDte !== undefined) {
+        const e = (await editarPropuesta(propuesta.id, {
+          ...(ov ? { tipo_propuesto: ov.tipo, monto_neto: ov.neto, iva: ov.iva, total: ov.total } : {}),
+          ...(tipoDte !== undefined ? { tipo_dte: tipoDte } : {}),
+        })) as { error?: string } | undefined;
+        // Si el guardado del tipo/override falla, NO aprobar con los datos viejos.
+        if (e?.error) { toast(e.error, "error"); return; }
+      }
+      const r = (await action()) as { error?: string } | undefined;
+      if (r && r.error) toast(r.error, "error"); else toast(okMsg);
+      onAction();
+    } catch {
+      // Un throw de la server action dejaba el botón busy para siempre (sin finally).
+      toast("Error de conexión — intenta de nuevo", "error");
+    } finally {
+      setBusy(false);
     }
-    const r = (await action()) as { error?: string } | undefined;
-    if (r && r.error) toast(r.error, "error"); else toast(okMsg);
-    onAction();
-    setBusy(false);
   };
   const aprobar = () => commit(() => aprobarPropuesta(propuesta.id, selClienteId || null), "Aprobada", isAfecta ? 39 : 41);
   const registrar = () => commit(() => aprobarPropuesta(propuesta.id, null), "Registrada", null);
@@ -287,7 +295,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: "0.7em" }}>
                   <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
-                    {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["boleta", "Afecta · con IVA · 39", "var(--green)"]] as const).map(([k, lbl, c]) => {
+                    {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["boleta", "Afecta · con IVA · 39", "var(--accent)"]] as const).map(([k, lbl, c]) => {
                       const active = k === "boleta" ? isAfecta : !isAfecta;
                       return (
                         <button key={k} onClick={() => { if (!active || conflicto) setTipo(k); }} disabled={busy}

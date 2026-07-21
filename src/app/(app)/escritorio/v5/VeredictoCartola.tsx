@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileXls, FilePdf, FileCsv, FileImage, File as FileGenerico, type Icon } from "@phosphor-icons/react";
 import { fmt, type Propuesta } from "./revisar-shared";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
 // para el conjunto: izquierda = el archivo, centro = agregados (nº tx · total · split
@@ -70,8 +71,7 @@ export default function VeredictoCartola({
     const t = p.tipo_dte;
     if (t === 41) return true;
     if (t === 39) return false;
-    const tp = p.tipo_propuesto ?? "";
-    return tp === "exenta" || tp === "compraventa_crypto" || tp === "operacion_forex";
+    return esTipoPropuestoExento(p.tipo_propuesto);
   };
   const exentas = tipoMix?.exentas ?? propuestas.filter(esExenta).length;
   const afectas = tipoMix?.afectas ?? propuestas.filter((p) => !esExenta(p)).length;
@@ -142,7 +142,7 @@ export default function VeredictoCartola({
         {/* Split exenta/afecta (readout, no toggle) */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {exentas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(91,156,246,.13)", color: "var(--blue)" }}>Exenta · {exentas}</span>}
-          {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(34,197,94,.13)", color: "var(--green)" }}>Afecta · {afectas}</span>}
+          {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(232,85,62,.13)", color: "var(--accent)" }}>Afecta · {afectas}</span>}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 12, fontSize: "1.02em", color: "var(--text2)" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--green)" }} />{listas} listas</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: pendientes > 0 ? "var(--amber)" : "var(--text3)" }} />{pendientes} pendientes</span>
@@ -158,13 +158,14 @@ export default function VeredictoCartola({
         {confirming && puedeAprobar ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.55em" }}>
             <div style={{ fontSize: "0.82em", color: "var(--text2)", lineHeight: 1.45, textAlign: "center" }}>
-              Vas a emitir <b style={{ color: "var(--text)" }}>{listas}</b>
+              Vas a dejar <b style={{ color: "var(--text)" }}>{listas}</b> listas en <b style={{ color: "var(--text)" }}>Emitir</b>
               {afectasListas > 0 && <> · afecta {afectasListas}</>}
               {exentasListas > 0 && <> · exenta {exentasListas}</>}
               <br />total <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
+              <br /><span style={{ fontSize: "0.92em", color: "var(--text3)" }}>El envío al SII se confirma en la pestaña Emitir.</span>
             </div>
             <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Confirmar emisión
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar y enviar a Emitir
             </button>
             <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
           </div>

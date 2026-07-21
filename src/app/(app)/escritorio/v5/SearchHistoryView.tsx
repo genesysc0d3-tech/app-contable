@@ -62,7 +62,7 @@ const RANGE_FILTERS: { key: Exclude<DatePreset, "all" | "day">; label: string }[
 
 const TIPO_BADGE: Record<number, { label: string; color: string; bg: string }> = {
   39: { label: "AFE", color: "var(--accent)", bg: "rgba(232,85,62,.12)" },
-  41: { label: "EXE", color: "#3B82F6", bg: "rgba(59,130,246,.12)" },
+  41: { label: "EXE", color: "var(--blue)", bg: "rgba(59,130,246,.12)" },
   61: { label: "NC", color: "#7C3AED", bg: "rgba(124,58,237,.12)" },
 };
 

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { esRolEmision } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { recordCuentaAudit } from "@/lib/audit/account";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -24,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
   }
   // Deshacer borra propuestas/movimientos (destructivo): 'viewer' queda fuera.
-  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+  if (!esRolEmision(usuario.rol)) {
     return NextResponse.json({ error: "Tu rol no permite deshacer documentos" }, { status: 403 });
   }
 
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
   // Verify document belongs to user's empresa
   const { data: documento } = await supabase
     .from("documentos_subidos")
-    .select("id, empresa_id")
+    .select("id, empresa_id, nombre_archivo")
     .eq("id", documento_id)
     .eq("empresa_id", usuario.empresa_id)
     .single();
@@ -51,6 +54,25 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  // Si el worker está procesando el documento en este momento, borrar sus filas
+  // ahora choca con los inserts en vuelo (FK / zombie). Se cancela el job; si
+  // estaba 'running', se pide reintentar cuando termine en vez de borrar a ciegas.
+  const eraVivo = await cancelDocumentProcessingJob(svc, documento_id);
+  if (eraVivo) {
+    const { data: jobRunning } = await svc
+      .from("document_processing_jobs")
+      .select("id")
+      .eq("documento_id", documento_id)
+      .eq("status", "running")
+      .maybeSingle();
+    if (jobRunning) {
+      return NextResponse.json(
+        { error: "El documento se está procesando en este momento. Intenta deshacer de nuevo en unos segundos." },
+        { status: 409 },
+      );
+    }
+  }
 
   // Delete in FK order: propuestas → movimientos → ia_uso → reset documento
   // First get movimiento IDs for this document
@@ -83,17 +105,25 @@ export async function POST(request: Request) {
       }
     }
     // Delete propuestas linked to these movimientos
-    await svc.from("propuestas_ia").delete().in("movimiento_id", movIds);
+    const { error: propDelErr } = await svc.from("propuestas_ia").delete().in("movimiento_id", movIds);
+    if (propDelErr) {
+      // No dejar el documento a medias: si el borrado falla, abortamos ANTES de
+      // resetear a 'subido' (antes se ignoraba y el estado quedaba inconsistente).
+      return NextResponse.json({ error: "No se pudo deshacer. Intenta de nuevo." }, { status: 500 });
+    }
   }
 
   // Delete movimientos
-  await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
+  const { error: movDelErr } = await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
+  if (movDelErr) {
+    return NextResponse.json({ error: "No se pudo deshacer. Intenta de nuevo." }, { status: 500 });
+  }
 
   // Delete ia_uso
   await svc.from("ia_uso").delete().eq("documento_id", documento_id);
 
   // Reset document state to "subido" (not delete — keep file in Storage)
-  await svc
+  const { error: resetErr } = await svc
     .from("documentos_subidos")
     .update({
       estado: "subido",
@@ -101,6 +131,21 @@ export async function POST(request: Request) {
       progreso_ia: null,
     })
     .eq("id", documento_id);
+  if (resetErr) {
+    return NextResponse.json({ error: "No se pudo deshacer. Intenta de nuevo." }, { status: 500 });
+  }
+
+  // Rastro de auditoría (antes deshacer no dejaba registro pese a ser destructivo).
+  await recordCuentaAudit({
+    sb: svc,
+    empresaId: usuario.empresa_id,
+    usuarioId: user.id,
+    accion: "documento_deshecho",
+    recursoTipo: "documento",
+    recursoId: documento_id,
+    resumen: `Documento "${documento.nombre_archivo}" deshecho (${movIds.length} movimientos)`,
+    metadata: { nombre_archivo: documento.nombre_archivo, movimientos: movIds.length },
+  });
 
   return NextResponse.json({ ok: true });
 }

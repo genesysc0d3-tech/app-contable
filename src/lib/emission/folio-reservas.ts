@@ -4,7 +4,10 @@ import type { Database, Tables } from "@/lib/database.types";
 type Sb = SupabaseClient<Database>;
 type FolioReserva = Tables<"folio_reservas">;
 type ReservaEstado = "reservado" | "generado" | "usado" | "liberado" | "fallido" | "vencido";
-type JobCloseEstado = "completed" | "failed" | "cancelled" | "expired";
+// 'revision_pendiente' (boleta "a medias") NO mapea a ninguna transición de la
+// reserva → deja la reserva intacta (no la libera: el folio pudo consumirse). En la
+// práctica solo ocurre en sii_local, que no usa folio_reservas (early return).
+type JobCloseEstado = "completed" | "failed" | "cancelled" | "expired" | "revision_pendiente";
 
 const SIMPLEAPI_TIPOS = new Set([33, 34, 39, 41]);
 

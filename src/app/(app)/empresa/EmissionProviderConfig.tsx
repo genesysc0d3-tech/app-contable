@@ -114,6 +114,34 @@ export default function EmissionProviderConfig({
     window.postMessage({ source: "app-contable", type: "APP_CONTABLE_OPEN_EXTENSION_OPTIONS", protocol_version: 1 }, window.location.origin);
   }
 
+  const [revoking, setRevoking] = useState(false);
+  // Kill-switch alcanzable desde cualquier dispositivo (incl. el teléfono): revoca
+  // la llave del servidor en TODOS los equipos. La bóveda local queda inservible sin
+  // ella. Úsalo si pierdes un equipo o cierras un computador compartido.
+  async function revokeVaultEverywhere() {
+    if (!window.confirm("Esto desconecta tu clave del SII en TODOS tus equipos. Tendrás que volver a conectarla (RUT + Clave Tributaria) la próxima vez que emitas. Úsalo si perdiste un equipo. ¿Continuar?")) return;
+    setRevoking(true);
+    try {
+      const res = await fetch("/api/extension/revoke", { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        toast(json.error === "NO_AUTH" ? "Inicia sesión para revocar." : "No se pudo revocar. Intenta de nuevo.", "error");
+        return;
+      }
+      // Además, limpia la bóveda local de ESTE equipo si la extensión está presente
+      // (mensaje dedicado que el bridge sí relaya; CLEAR está gateado a páginas de
+      // la extensión). El WS ya fue revocado arriba: sin él, lo local es inservible.
+      if (extensionStatus === "ready") {
+        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_VAULT_LOCAL_WIPE", protocol_version: 1 }, window.location.origin);
+      }
+      toast("Clave del SII desconectada en todos tus equipos.", "success");
+    } catch {
+      toast("Error de red al revocar.", "error");
+    } finally {
+      setRevoking(false);
+    }
+  }
+
   function save(next: EmissionProviderState) {
     const previous = state;
     setState(next);
@@ -202,6 +230,32 @@ export default function EmissionProviderConfig({
           onOpenOptions={openExtensionOptions}
           onRefresh={refreshMotorStatus}
         />
+
+        {/* Seguridad de la clave del SII: cómo se protege + kill-switch remoto.
+            Transparencia (Ley 21.719 Art. 14 ter) + revocación (Art. 14 sexies). */}
+        <section style={{
+          marginBottom: 16, borderRadius: 14,
+          border: "1px solid var(--border, rgba(255,255,255,.06))",
+          background: "color-mix(in srgb, var(--text, #e8eaf0) 3%, transparent)",
+          padding: "14px 16px",
+          display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--text, #e8eaf0)" }}>Seguridad de tu clave del SII</div>
+            <p style={{ margin: "5px 0 0", fontSize: 11, lineHeight: 1.5, color: "var(--text3, #697080)" }}>
+              Tu Clave Tributaria se cifra solo en tu equipo; nunca llega a nuestros servidores. Se desbloquea sola con tu sesión mientras la tengas iniciada. Si pierdes un computador, desconéctala desde aquí (o desde tu teléfono): la clave quedará inservible en todos tus equipos.
+            </p>
+          </div>
+          <button type="button" onClick={() => { void revokeVaultEverywhere(); }} disabled={revoking}
+            style={{
+              border: "1px solid color-mix(in srgb, var(--red, #ef4444) 40%, transparent)",
+              borderRadius: 999, background: "color-mix(in srgb, var(--red, #ef4444) 10%, transparent)",
+              color: "var(--red, #ef4444)", padding: "9px 14px", fontSize: 11, fontWeight: 850,
+              cursor: revoking ? "wait" : "pointer", opacity: revoking ? 0.6 : 1, whiteSpace: "nowrap",
+            }}>
+            {revoking ? "Desconectando…" : "Desconectar en todos mis equipos"}
+          </button>
+        </section>
 
         <ProviderGroup
           title="Boletas"

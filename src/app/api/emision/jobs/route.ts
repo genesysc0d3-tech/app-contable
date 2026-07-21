@@ -11,13 +11,16 @@ import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { CURRENT_EMISSION_AUTHORIZATION_VERSION, getEmissionAuthorizationStatus } from "@/lib/emission/authorizations";
+import { validarRut } from "@/lib/sii/validation";
+import { guardTipoDteEmisor } from "@/lib/sii/tipo-dte-emisor-guard";
 
 type Provider = "sii_local" | "simpleapi";
-type CloseEstado = "failed" | "cancelled";
+type CloseEstado = "failed" | "cancelled" | "revision_pendiente";
 type ServiceDb = SupabaseClient<Database>;
 
 const TIPOS_SII_LOCAL = new Set([39, 41]);
 const TIPOS_SIMPLEAPI = new Set([33, 34, 39, 41]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function cleanText(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -34,7 +37,11 @@ function cleanTipoDte(value: unknown) {
 }
 
 function cleanCloseEstado(value: unknown): CloseEstado {
-  return value === "failed" ? "failed" : "cancelled";
+  // 'revision_pendiente' = boleta "a medias" (posible folio real): sella el job para
+  // bloquear la re-emisión. 'failed' = pre-emit seguro. Default 'cancelled'.
+  if (value === "failed") return "failed";
+  if (value === "revision_pendiente") return "revision_pendiente";
+  return "cancelled";
 }
 
 function cleanStatus(value: unknown) {
@@ -154,7 +161,7 @@ export async function POST(request: Request) {
 
   const { data: empresa, error: empresaError } = await guard.service
     .from("empresas")
-    .select("rut")
+    .select("rut, tipo_contribuyente")
     .eq("id", guard.empresaId)
     .maybeSingle();
   if (empresaError) {
@@ -174,8 +181,15 @@ export async function POST(request: Request) {
   }
 
   const expectedEmisorRut = cleanText(empresa?.rut) ?? cleanText(payload.expected_emisor_rut);
-  if (provider === "sii_local" && !expectedEmisorRut) {
-    return NextResponse.json({ ok: false, error: "EMPRESA_SIN_RUT" }, { status: 422 });
+  if (provider === "sii_local") {
+    // Fuente de verdad del emisor: sin RUT no se puede garantizar por cuál empresa se
+    // emite. Fail-closed en 2 niveles: ausente, o presente con DV (módulo 11) inválido.
+    if (!expectedEmisorRut) {
+      return NextResponse.json({ ok: false, error: "EMPRESA_SIN_RUT" }, { status: 422 });
+    }
+    if (!validarRut(expectedEmisorRut)) {
+      return NextResponse.json({ ok: false, error: "EMISOR_RUT_INVALID", detalle: expectedEmisorRut }, { status: 422 });
+    }
   }
 
   try {
@@ -213,6 +227,79 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMISSION_AUTHORIZATION_QUERY_FAILED" }, { status: 500 });
   }
 
+  // Motor masivo: el job del lote apunta a la propuesta que va a emitir, para que
+  // el folio real quede enlazado a ella. Fail-closed: un id ajeno (o inexistente)
+  // enlazaría el folio a la propuesta de OTRO contribuyente → integridad rota. La
+  // boleta única no manda propuesta_id (queda null, como hoy).
+  const propuestaId = cleanText(payload.propuesta_id);
+  if (propuestaId) {
+    if (!UUID_RE.test(propuestaId)) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_ID_INVALID" }, { status: 422 });
+    }
+    const { data: prop, error: propErr } = await guard.service
+      .from("propuestas_ia")
+      .select("id, empresa_id")
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (propErr) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_QUERY_FAILED", detalle: propErr.message }, { status: 500 });
+    }
+    if (!prop || prop.empresa_id !== guard.empresaId) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_NO_PERTENECE" }, { status: 422 });
+    }
+
+    // CANDADO ANTI-DOBLE-FOLIO — fail-closed ANTES de tocar el portal (defensa
+    // temprana; el lock por cuenta y el UNIQUE de boletas_emitidas son las redes
+    // duras posteriores). El carril mock ya hace este chequeo; el real faltaba.
+    // (a) ¿la propuesta YA tiene boleta vigente? (carrera única↔lote / 2 pestañas)
+    const { data: yaBoleta } = await guard.service
+      .from("boletas_emitidas")
+      .select("id")
+      .eq("propuesta_id", propuestaId)
+      .neq("estado", "anulada")
+      .limit(1)
+      .maybeSingle();
+    if (yaBoleta) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida." }, { status: 409 });
+    }
+    // (b1) ¿quedó "a medias" (lápida)? Bloqueo INCONDICIONAL hasta recuperar el folio.
+    const { data: enRevision } = await guard.service
+      .from("emision_jobs")
+      .select("job_id")
+      .eq("propuesta_id", propuestaId)
+      .eq("estado", "revision_pendiente")
+      .limit(1)
+      .maybeSingle();
+    if (enRevision) {
+      return NextResponse.json({ ok: false, error: "REVISION_PENDIENTE", detalle: "Esta boleta quedó a medias en el SII. Recupera su folio antes de re-emitir." }, { status: 409 });
+    }
+    // (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
+    // bloquear una propuesta para siempre si un intento crasheó pre-emit.
+    const { data: enVuelo } = await guard.service
+      .from("emision_jobs")
+      .select("job_id")
+      .eq("propuesta_id", propuestaId)
+      .in("estado", ["created", "running"])
+      .gt("expires_at", new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+    if (enVuelo) {
+      return NextResponse.json({ ok: false, error: "EMISION_EN_CURSO", detalle: "Ya hay una emisión en curso para esta boleta." }, { status: 409 });
+    }
+  }
+
+  // GUARD TRIBUTARIO — un emisor exento no puede emitir afecta (39). Fail-closed:
+  // rechaza y enruta a Check (NO normaliza en silencio: en el carril real la UI
+  // mostraría "Afecta" mientras emite 41 → descuadre). El mock sí normaliza (arma
+  // todo el payload, es seguro allá).
+  const guardTipo = guardTipoDteEmisor(tipoDte as 39 | 41, empresa?.tipo_contribuyente ?? null);
+  if (!guardTipo.ok) {
+    return NextResponse.json(
+      { ok: false, error: guardTipo.code, detalle: "Tu empresa es exenta: esta venta no puede emitirse como afecta (con IVA). Cámbiala a exenta en Revisar." },
+      { status: 422 },
+    );
+  }
+
   const lock = await acquireCuentaEmissionLock({
     sb: guard.service,
     cuentaId: guard.cuentaId,
@@ -221,6 +308,7 @@ export async function POST(request: Request) {
     provider,
     origin: cleanText(payload.origin) ?? "emision_directa",
     expectedEmisorRut,
+    propuestaId,
     ttlSeconds: provider === "sii_local" ? 15 * 60 : 5 * 60,
   });
 
@@ -374,7 +462,8 @@ export async function DELETE(request: Request) {
   }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
-  if (["completed", "failed", "cancelled", "expired"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado });
+  // Ya sellado (incluye la lápida 'revision_pendiente'): un DELETE repetido no re-procesa.
+  if (["completed", "failed", "cancelled", "expired", "revision_pendiente"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado });
 
   const estado = cleanCloseEstado(payload.estado);
   await releaseCuentaEmissionLock({ sb: service.service, cuentaId: job.cuenta_id, jobId: job.job_id, estado });
@@ -408,7 +497,7 @@ export async function PATCH(request: Request) {
 
   const { data: job, error } = await service.service
     .from("emision_jobs")
-    .select("job_id, cuenta_id, usuario_id, estado")
+    .select("job_id, cuenta_id, usuario_id, estado, provider")
     .eq("job_id", jobId)
     .maybeSingle();
   if (error) {
@@ -431,10 +520,16 @@ export async function PATCH(request: Request) {
 
   const now = new Date().toISOString();
   const estado = cleanStatus(payload.estado ?? payload.status);
+  // El heartbeat renueva la ventana del job: un RPA lento (SII lento, 2FA,
+  // reintentos de PDF, cadencia humana del motor masivo) mantiene vivo el job
+  // mientras siga latiendo. Sin esto, un job de sii_local muere a los 15 min y
+  // el resultado —una boleta REAL ya emitida— se rechaza y se pierde.
+  const ttlSeconds = job.provider === "sii_local" ? 15 * 60 : 5 * 60;
+  const nuevaExpiracion = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
-    .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now })
+    .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
     .eq("job_id", job.job_id);
   if (updateJobError) {
     await recordOpsError({
@@ -455,7 +550,7 @@ export async function PATCH(request: Request) {
 
   const { error: updateLockError } = await service.service
     .from("emision_locks")
-    .update({ estado_visible: estado, heartbeat_at: now })
+    .update({ estado_visible: estado, heartbeat_at: now, locked_until: nuevaExpiracion })
     .eq("cuenta_id", job.cuenta_id)
     .eq("job_id", job.job_id);
   if (updateLockError) {

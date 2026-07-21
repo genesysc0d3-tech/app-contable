@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -7,7 +8,6 @@ import { getDevSupportMode } from "@/lib/dev/support-mode";
 
 type Sb = SupabaseClient<Database>;
 
-const ROLES_EMISION = new Set(["owner", "admin", "contador"]);
 
 export type AccountGuardResult =
   | {

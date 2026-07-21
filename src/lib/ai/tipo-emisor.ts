@@ -10,7 +10,7 @@
 // puntualmente, ese tipo específico ya es exento y NO se toca.
 //
 // Se aplica en el insert de propuestas_ia (processor.ts), único punto por donde pasan
-// los 3 carriles (atajo template + Mistral + reglas), así que corrige badge/split/
+// los 3 carriles (atajo template + OpenCode + reglas), así que corrige badge/split/
 // confirmación de una sola vez. Es PURO (sin I/O) para poder testearlo.
 //
 // NO toca: gasto_egreso / no_comercial (no son ventas), boleta_honorarios (BHE, va

@@ -1,37 +1,47 @@
 import { describe, it, expect } from "vitest";
-import { resolverGlosa, armarBoletaPayload, GLOSA_FALLBACK } from "./armar-boleta";
+import { resolverGlosa, armarBoletaPayload, GLOSA_FALLBACK, GLOSA_FALLBACK_EXENTA } from "./armar-boleta";
 
-describe("resolverGlosa — precedencia editado › común › banco", () => {
+describe("resolverGlosa — precedencia editado › común › genérico (NUNCA banco)", () => {
   it("el detalle editado (notas) manda sobre todo", () => {
     expect(resolverGlosa({
       notas: "Venta de USDT vía P2P",
       glosaComun: "Venta de criptomonedas",
       glosaComunActiva: true,
-      glosaBanco: "Transf. de Fulano",
-    })).toBe("Venta de USDT vía P2P");
+    }, 41)).toBe("Venta de USDT vía P2P");
   });
 
   it("sin notas, usa la glosa común SOLO si está activa", () => {
-    expect(resolverGlosa({ glosaComun: "Venta de criptomonedas", glosaComunActiva: true, glosaBanco: "Transf. de Fulano" }))
+    expect(resolverGlosa({ glosaComun: "Venta de criptomonedas", glosaComunActiva: true }, 41))
       .toBe("Venta de criptomonedas");
-    // glosa común presente pero desactivada → cae al banco
-    expect(resolverGlosa({ glosaComun: "Venta de criptomonedas", glosaComunActiva: false, glosaBanco: "Transf. de Fulano" }))
-      .toBe("Transf. de Fulano");
+    // común presente pero DESACTIVADA → genérico por tipo (nunca el banco)
+    expect(resolverGlosa({ glosaComun: "Venta de criptomonedas", glosaComunActiva: false }, 41))
+      .toBe(GLOSA_FALLBACK_EXENTA);
   });
 
-  it("sin notas ni común activa, usa la glosa del banco", () => {
-    expect(resolverGlosa({ glosaBanco: "Transf. de Fulano" })).toBe("Transf. de Fulano");
+  it("sin notas ni común activa → genérico por tipo (41 exenta, 39 afecta)", () => {
+    expect(resolverGlosa({}, 41)).toBe(GLOSA_FALLBACK_EXENTA);
+    expect(resolverGlosa({}, 39)).toBe(GLOSA_FALLBACK);
+    expect(resolverGlosa({})).toBe(GLOSA_FALLBACK); // sin tipo → neutro
   });
 
-  it("todo vacío → fallback, nunca glosa vacía", () => {
-    expect(resolverGlosa({})).toBe(GLOSA_FALLBACK);
-    expect(resolverGlosa({ notas: "   ", glosaComun: "  ", glosaComunActiva: true, glosaBanco: "" })).toBe(GLOSA_FALLBACK);
+  it("todo vacío/espacios → genérico, nunca glosa vacía", () => {
+    expect(resolverGlosa({ notas: "   ", glosaComun: "  ", glosaComunActiva: true }, 39)).toBe(GLOSA_FALLBACK);
   });
 
   it("recorta a 80 caracteres (campo Detalle del SII)", () => {
-    const larga = "x".repeat(200);
-    expect(resolverGlosa({ notas: larga })).toHaveLength(80);
-    expect(resolverGlosa({ glosaBanco: larga })).toHaveLength(80);
+    expect(resolverGlosa({ notas: "x".repeat(200) })).toHaveLength(80);
+  });
+});
+
+describe("PROTECCIÓN DE DATOS: la glosa NUNCA expone datos de terceros", () => {
+  it("la descripción cruda del banco (nombre/RUT de quien pagó) no puede llegar a la boleta", () => {
+    // Antes existía un fallback a la glosa del banco. Se eliminó: la única forma de
+    // describir es `notas` (que el usuario escribe) o la glosa común (que el usuario
+    // fija). Sin ninguna, sale un genérico — jamás "TRANSFERENCIA DE JUAN PEREZ ...".
+    const nombre = armarBoletaPayload({ tipoDte: 41, total: 1_000_000 }).detalles[0]!.nombre;
+    expect(nombre).toBe(GLOSA_FALLBACK_EXENTA);
+    expect(nombre).not.toMatch(/\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]/); // sin RUT de tercero
+    expect(nombre.toUpperCase()).not.toContain("TRANSFER");
   });
 });
 
@@ -39,7 +49,7 @@ describe("armarBoletaPayload — BoletaInput canónico", () => {
   const base = { tipoDte: 41 as const, total: 1_000_000 };
 
   it("arma detalles con la glosa resuelta y el monto redondeado", () => {
-    const p = armarBoletaPayload({ ...base, total: 1_000_000.4, notas: "Venta USDT", glosaBanco: "Transf" });
+    const p = armarBoletaPayload({ ...base, total: 1_000_000.4, notas: "Venta USDT" });
     expect(p.detalles).toEqual([{ nombre: "Venta USDT", monto: 1_000_000 }]);
     expect(p.monto_total).toBe(1_000_000);
     expect(p.tipo_dte).toBe(41);
@@ -57,15 +67,13 @@ describe("armarBoletaPayload — BoletaInput canónico", () => {
   it("medio de pago: el de la propuesta manda sobre el default del carril", () => {
     expect(armarBoletaPayload({ ...base, medioPago: "Efectivo" }, { medioPagoDefault: "Transferencia Electrónica" }).medio_pago)
       .toBe("Efectivo");
-    // sin medio en la propuesta → default del carril
     expect(armarBoletaPayload({ ...base }, { medioPagoDefault: "Transferencia Electrónica" }).medio_pago)
       .toBe("Transferencia Electrónica");
-    // sin nada → undefined (validarBoleta decide si lo exige por monto)
     expect(armarBoletaPayload({ ...base }).medio_pago).toBeUndefined();
   });
 
-  it("comportamiento histórico preservado: sin notas ni común, glosa = banco", () => {
-    const p = armarBoletaPayload({ ...base, glosaBanco: "Transf. Juan Ignacio Manzor Miranda" }, { medioPagoDefault: "Transferencia Electrónica" });
-    expect(p.detalles[0]!.nombre).toBe("Transf. Juan Ignacio Manzor Miranda");
+  it("genérico por tipo: 41 → exenta, 39 → servicio", () => {
+    expect(armarBoletaPayload({ tipoDte: 41, total: 100 }).detalles[0]!.nombre).toBe(GLOSA_FALLBACK_EXENTA);
+    expect(armarBoletaPayload({ tipoDte: 39, total: 100 }).detalles[0]!.nombre).toBe(GLOSA_FALLBACK);
   });
 });

@@ -19,6 +19,23 @@ const BASE_URL = "https://opencode.ai/zen/go/v1";
 const COST_PER_MILLION_INPUT = 0;
 const COST_PER_MILLION_OUTPUT = 0;
 
+/**
+ * Extrae y parsea el objeto JSON del contenido del modelo, tolerando lo que emiten
+ * los modelos de razonamiento aun sin json_object estricto: bloques <think>…</think>
+ * (minimax) y cercas markdown ```json … ```. Si no hay JSON, lanza (lo captura el
+ * retry del pipeline). deepseek-v4-flash pone su razonamiento en `reasoning_content`
+ * aparte, así que su `content` ya viene limpio; esto cubre además a los otros.
+ */
+export function parseJsonFromContent<T>(content: string): T {
+  let t = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start >= 0 && end > start) t = t.slice(start, end + 1);
+  return JSON.parse(t) as T;
+}
+
 interface OpenCodeGoMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -64,10 +81,18 @@ export class OpenCodeGoProvider implements AIProvider {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          // NO se fuerza response_format: json_object. Los modelos de razonamiento
+          // (deepseek-v4-flash) revientan el upstream ("Upstream request failed") al
+          // exigirles JSON puro + un prompt complejo — no pueden razonar y a la vez
+          // estar forzados a puro JSON. El prompt ya pide JSON; extraemos el objeto
+          // del contenido con parseJsonFromContent (tolera <think> y cercas markdown).
           model: this.model,
           messages,
-          response_format: { type: "json_object" },
           temperature: 0.1,
+          // Los modelos de razonamiento gastan MUCHOS tokens en reasoning_content, que
+          // cuenta contra el output. Sin techo alto, el JSON de respuesta se trunca y el
+          // parseo falla. Damos aire para razonamiento + respuesta.
+          max_tokens: 16000,
         }),
         signal: controller.signal,
       });
@@ -99,7 +124,7 @@ export class OpenCodeGoProvider implements AIProvider {
       ? choice.message.content
       : "";
 
-    const result: AIExtractionResult = JSON.parse(text);
+    const result = parseJsonFromContent<AIExtractionResult>(text);
 
     return {
       result,
@@ -125,7 +150,7 @@ export class OpenCodeGoProvider implements AIProvider {
     const text = typeof choice?.message?.content === "string"
       ? choice.message.content
       : "";
-    const parsed = JSON.parse(text) as { propuestas?: PropuestaExtraida[] };
+    const parsed = parseJsonFromContent<{ propuestas?: PropuestaExtraida[] }>(text);
     const propuestas = Array.isArray(parsed.propuestas) ? parsed.propuestas : [];
 
     return {

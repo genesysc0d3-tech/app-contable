@@ -64,3 +64,6 @@ SESSION_NOTES.md
 .vercel/token
 .supabase/token
 .git/.git-credentials-local
+
+# Reporte del harness de tokenización (contiene glosas reales con PII)
+artifacts/runs/tokenize-*.json

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
+import { esRolEmision } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { recordCuentaAudit } from "@/lib/audit/account";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,7 +17,7 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) return NextResponse.json({ error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
-  if (!new Set(["owner", "admin", "contador"]).has(String(usuario.rol))) {
+  if (!esRolEmision(usuario.rol)) {
     return NextResponse.json({ error: "ROL_SIN_PERMISO" }, { status: 403 });
   }
 
@@ -35,5 +40,25 @@ export async function POST(request: Request) {
     .eq("empresa_id", usuario.empresa_id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Cancelar el JOB durable, no solo el documento: sin esto el worker sigue
+  // 'queued'/'running', re-procesa y revive los datos (documento zombie).
+  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (svcUrl && svcKey) {
+    const svc = createServiceClient<Database>(svcUrl, svcKey);
+    await cancelDocumentProcessingJob(svc, body.documento_id).catch(() => {});
+    // Rastro de auditoría (antes cancelar no dejaba registro).
+    await recordCuentaAudit({
+      sb: svc,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      accion: "documento_cancelado",
+      recursoTipo: "documento",
+      recursoId: body.documento_id,
+      resumen: "Procesamiento de documento cancelado por el usuario",
+    }).catch(() => {});
+  }
+
   return NextResponse.json({ ok: true });
 }

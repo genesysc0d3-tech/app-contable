@@ -6,6 +6,7 @@ import EmitirDirectaView from "./EmitirDirectaView";
 import DropzoneUpload from "./DropzoneUpload";
 import GlowWrap from "./GlowWrap";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
+import { useToast } from "@/components/Toast";
 import { chileDateString } from "@/lib/chile-date";
 
 function todayStr() {
@@ -17,7 +18,34 @@ type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
-  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
+  const { lockedByOtherUser, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
+  const { toast } = useToast();
+  // openRef: el listener siempre-montado lee el estado actual del modal sin re-suscribirse.
+  const openRef = useRef(open);
+  useEffect(() => { openRef.current = open; }, [open]);
+
+  // Aviso "✓ emitida" SIEMPRE montado (el botón vive fijo en la barra; el modal es
+  // condicional). El window.postMessage del bridge llega a la PÁGINA aunque el modal
+  // esté cerrado, así el aviso ya no se pierde al cerrarlo. El REFRESCO de la mesa lo
+  // hace el sensor central Realtime de MesaController (el INSERT en boletas_emitidas),
+  // no este listener; acá solo mostramos la confirmación cuando el modal no está para
+  // hacerlo. Dedup por job para no repetir el toast ante reentrega/mensaje duplicado.
+  const handledJobsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    function onEmissionResult(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { source?: string; type?: string; job_id?: string | null; result?: { folio?: number; folio_confidence?: string; persisted?: { ok?: boolean } } } | undefined;
+      if (data?.source !== "app-contable-extension" || data.type !== "APP_CONTABLE_SII_JOB_RESULT") return;
+      const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && data.result.persisted?.ok === true);
+      if (!emitted) return;
+      const jobKey = String(data.job_id ?? data.result?.folio ?? "");
+      if (handledJobsRef.current.has(jobKey)) return;
+      handledJobsRef.current.add(jobKey);
+      if (!openRef.current) toast(`Boleta #${data.result?.folio} emitida y guardada.`, "success");
+    }
+    window.addEventListener("message", onEmissionResult);
+    return () => window.removeEventListener("message", onEmissionResult);
+  }, [toast]);
 
   function closeWithSavedPulse(saved = false) {
     setOpen(false);
@@ -28,7 +56,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
 
   function openIfAvailable() {
     if (readOnlyReason) return;
-    if (lockedByOther) return;
+    if (lockedByOtherUser) return;
     setOpen(true);
   }
 
@@ -79,7 +107,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       `}</style>
 
       <div className="sp">
-        <button className="sparkle-button" onClick={openIfAvailable} disabled={lockedByOther || Boolean(readOnlyReason)}>
+        <button className="sparkle-button" onClick={openIfAvailable} disabled={lockedByOtherUser || Boolean(readOnlyReason)}>
           <span className="spark" />
           <span className="backdrop" />
           <span className="sparkle-label">
@@ -88,7 +116,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="sparkle-title">EMITIR BOLETA ÚNICA</span>
-              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOther ? "Emisión bloqueada" : "Boleta manual, una a la vez")}</span>
+              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOtherUser ? "Emisión bloqueada" : "Boleta manual, una a la vez")}</span>
             </span>
             <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
               <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
@@ -121,7 +149,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
         </span>
       </div>
 
-      {(lockedByOther || readOnlyReason) && (
+      {(lockedByOtherUser || readOnlyReason) && (
         <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(245,158,11,.18)", background: "rgba(245,158,11,.08)", color: "var(--amber)", fontSize: 9, lineHeight: 1.35 }}>
           <strong style={{ display: "block", marginBottom: 2, fontSize: 9, textTransform: "uppercase", letterSpacing: ".05em" }}>{readOnlyReason ? "Solo lectura" : businessMode ? "Equipo" : "Emisión en curso"}</strong>
           {readOnlyReason ?? lockMessage}

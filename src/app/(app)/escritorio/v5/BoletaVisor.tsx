@@ -30,7 +30,7 @@ const ESTADO_META: Record<string, { label: string; color: string; bg: string }> 
 };
 
 const TIPO_META: Record<number, { label: string; color: string }> = {
-  39: { label: "Afecta · con IVA · 39", color: "var(--green)" },
+  39: { label: "Afecta · con IVA · 39", color: "var(--accent)" },
   41: { label: "Exenta · sin IVA · 41", color: "var(--blue)" },
   61: { label: "Nota de crédito · 61", color: "#c084fc" },
 };
@@ -82,7 +82,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
         <div style={{ fontSize: "3em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.04em", lineHeight: 1 }}>{fmt(boleta.monto_total)}</div>
         <div style={divider} />
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: "1.24em" }}>
-          <span style={{ flexShrink: 0, color: "var(--text3)" }}>Glosa</span>
+          <span style={{ flexShrink: 0, color: "var(--text3)" }}>Detalle</span>
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: glosa === SIN_INFO ? "var(--text3)" : "var(--text)" }} title={glosa}>{glosa}</span>
         </div>
         <div style={divider} />

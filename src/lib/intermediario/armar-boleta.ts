@@ -11,17 +11,22 @@
  * esas reglas para que TODOS los carriles produzcan el mismo `BoletaInput`
  * (el contrato que ya valida `validarBoleta` y persiste cada endpoint).
  *
- * PURA (sin I/O) → testeable sin Supabase ni red. Aditiva: si no hay detalle
- * editado ni glosa común, cae a la glosa del banco → las boletas históricas no
- * cambian de comportamiento.
+ * PURA (sin I/O) → testeable sin Supabase ni red.
+ *
+ * PROTECCIÓN DE DATOS (rev. 2026-07-05): la glosa NUNCA cae a la descripción cruda
+ * del banco. Esa glosa trae nombre + RUT de un TERCERO ("TRANSFERENCIA DE JUAN PEREZ
+ * 12.345.678-9") que no es cliente ni consintió — imprimirlo en el DTE viola la
+ * minimización (Ley 19.628, ya vigente) y describe quién pagó, no qué se vendió. Si
+ * no hay detalle editado ni glosa común, se usa un genérico neutro por tipo.
  */
 
 import type { BoletaInput } from "../sii/validation";
 
 /** Glosa impresa máx. 80 chars (campo Detalle del DTE en el SII). */
 const GLOSA_MAX = 80;
-/** Último recurso: nunca se emite una boleta con glosa vacía. */
+/** Genérico neutro cuando no hay detalle ni glosa común. Nunca la glosa del banco. */
 export const GLOSA_FALLBACK = "Servicio prestado";
+export const GLOSA_FALLBACK_EXENTA = "Venta exenta";
 
 export type GlosaFuentes = {
   /** Detalle que el humano editó a mano (máxima precedencia). */
@@ -29,22 +34,18 @@ export type GlosaFuentes = {
   /** Glosa común de la cartola (aplica a todo el lote si está activa). */
   glosaComun?: string | null;
   glosaComunActiva?: boolean | null;
-  /** Glosa cruda del movimiento bancario (fallback). */
-  glosaBanco?: string | null;
 };
 
 /**
- * Precedencia de la glosa de la boleta (decisión del fundador 2026-07-02):
- *   detalle editado (`notas`)  ›  glosa común de la cartola (si activa)  ›  glosa del banco.
- * Recorta a 80 y nunca devuelve vacío.
+ * Precedencia de la glosa de la boleta:
+ *   detalle editado (`notas`)  ›  glosa común de la cartola (si activa)  ›  genérico por tipo.
+ * NUNCA la glosa cruda del banco (dato personal de terceros). Recorta a 80, nunca vacío.
  */
-export function resolverGlosa(f: GlosaFuentes): string {
+export function resolverGlosa(f: GlosaFuentes, tipoDte?: 39 | 41): string {
   const notas = f.notas?.trim();
   if (notas) return notas.slice(0, GLOSA_MAX);
   if (f.glosaComunActiva && f.glosaComun?.trim()) return f.glosaComun.trim().slice(0, GLOSA_MAX);
-  const banco = f.glosaBanco?.trim();
-  if (banco) return banco.slice(0, GLOSA_MAX);
-  return GLOSA_FALLBACK;
+  return tipoDte === 41 ? GLOSA_FALLBACK_EXENTA : GLOSA_FALLBACK;
 }
 
 export type PropuestaEmisionData = GlosaFuentes & {
@@ -81,7 +82,7 @@ export function armarBoletaPayload(d: PropuestaEmisionData, opts?: ArmarOpts): B
     receptor_direccion: d.receptorDireccion?.trim() || undefined,
     receptor_comuna: d.receptorComuna?.trim() || undefined,
     medio_pago: d.medioPago?.trim() || opts?.medioPagoDefault || undefined,
-    detalles: [{ nombre: resolverGlosa(d), monto: total }],
+    detalles: [{ nombre: resolverGlosa(d, d.tipoDte), monto: total }],
     monto_total: total,
   };
 }

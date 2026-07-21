@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import type { Tables } from "@/lib/database.types";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
@@ -268,7 +269,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   empresaTipoContribuyente?: string | null; compact?: boolean;
 }) {
   const { toast } = useToast();
-  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; medio_pago?: string | null };
+  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; receptor_email?: string | null; receptor_telefono?: string | null; medio_pago?: string | null };
 
   // Cliente
   const [selClienteId, setSelClienteId] = useState(propuesta.cliente_id ?? "");
@@ -298,12 +299,11 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   // sugerencia de la empresa. Un default de empresa 'afecto'/'auto' NUNCA puede pisar
   // una exención POR LEY (cripto/forex/P2P, Of. SII 963/2018): eso fabricaría IVA
   // inexistente sobre una venta exenta (el footgun que el clasificador ya prohíbe).
-  const EXENTOS_POR_TIPO = ["exenta", "factura_exenta", "compraventa_crypto", "transferencia_p2p", "operacion_forex"];
   const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : EXENTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "exenta"
+        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
           : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipoContribuyente === "exento" ? "exenta"
               : empresaTipoContribuyente === "afecto" ? "afecta"
@@ -320,12 +320,14 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const [razon, setRazon] = useState<string>(propuesta.receptor_nombre ?? "");
   const [direccion, setDireccion] = useState<string>(extra.receptor_direccion ?? "");
   const [comuna, setComuna] = useState<string>(extra.receptor_comuna ?? "");
+  const [email, setEmail] = useState<string>(extra.receptor_email ?? "");
+  const [telefono, setTelefono] = useState<string>(extra.receptor_telefono ?? "");
   const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
   // Progresivos (gobernados por 135 UF): bajo el umbral el receptor va escondido tras
   // un link; dirección/comuna detrás de "más datos" (nunca obligatorias). Se abren si
   // ya traen dato o si el usuario los despliega.
   const [showReceptorManual, setShowReceptorManual] = useState(false);
-  const [showMasDatos, setShowMasDatos] = useState<boolean>(!!(extra.receptor_direccion || extra.receptor_comuna));
+  const [showMasDatos, setShowMasDatos] = useState<boolean>(!!(extra.receptor_direccion || extra.receptor_comuna || extra.receptor_email || extra.receptor_telefono));
 
   const isAfecta = tipo === "afecta";
   const neto = isAfecta ? Math.round(total / 1.19) : total;
@@ -337,7 +339,9 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());
   // Sobre 135 UF el medio de pago es tan obligatorio como el RUT (Res. Ex. SII 44/2025).
   const medioOk = !requiereReceptor || !!medioPago.trim();
-  const puedeStagear = noBoletea || (total > 0 && !conflicto && rutValido && receptorOk && medioOk && !!detalle.trim());
+  // Detalle OPCIONAL (igual que el flujo masivo): el SII no exige glosa detallada en
+  // una boleta a consumidor final; si va vacío, sale un genérico limpio (resolverGlosa).
+  const puedeStagear = noBoletea || (total > 0 && !conflicto && rutValido && receptorOk && medioOk);
   const tieneReceptorData = !!rutTrim || !!razon.trim() || !!medioPago.trim() || !!direccion.trim() || !!comuna.trim();
   const receptorAbierto = requiereReceptor || showReceptorManual || tieneReceptorData;
 
@@ -358,12 +362,20 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           total: Math.round(total), monto_neto: neto, iva,
           receptor_rut: rutTrim || null, receptor_nombre: razon.trim() || null,
           receptor_direccion: direccion.trim() || null, receptor_comuna: comuna.trim() || null,
+          receptor_email: email.trim() || null, receptor_telefono: telefono.trim() || null,
           medio_pago: medioPago.trim() || null, notas: detalle.trim() || null,
         };
     const e = await editarPropuesta(propuesta.id, patch);
     if (e?.error) { toast(e.error, "error"); setBusy(false); return; }
     const r = await ponerListo([propuesta.id], cid || null);
-    if (r.error) toast(r.error, "error"); else toast("Lista");
+    // Aprender-al-clasificar: si al resolver este movimiento la app acomodó a los
+    // hermanos de la misma contraparte en la cartola, lo mostramos (el "momento
+    // mágico"). Si solo aprendió la regla para la próxima, un aviso más suave.
+    const ap = e && "aprendizaje" in e ? e.aprendizaje : null;
+    if (r.error) toast(r.error, "error");
+    else if (ap && ap.propagadas > 0) toast(`Lista · acomodé ${ap.propagadas} más de la misma contraparte`);
+    else if (ap && (ap.creada || ap.actualizada)) toast("Lista · aprendí esta contraparte");
+    else toast("Lista");
     onAction();
     setBusy(false);
     onClose();
@@ -390,7 +402,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
         <span style={{color:confCol,fontSize:11,fontWeight:700}}>{conf}%</span>
         {!compact && <TermHint width={250}>Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada.</TermHint>}
-        <span style={{marginLeft:"auto",fontSize:8,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"46%"}} title={propuesta.movimientos_raw.descripcion}>banco: {propuesta.movimientos_raw.descripcion}</span>
+        <span style={{marginLeft:"auto",fontSize:8,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"46%"}} title={propuesta.movimientos_raw.descripcion}>del banco (no se imprime): {propuesta.movimientos_raw.descripcion}</span>
       </div>
 
       {noBoletea ? (
@@ -399,7 +411,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si fue una venta tuya, cambia el tipo en Emitir.
           </div>
           <div style={{marginBottom:8}}>
-            <label style={lbl}>Detalle</label>
+            <label style={lbl}>Detalle (opcional)</label>
             <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} style={inp} />
           </div>
         </>
@@ -408,7 +420,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           {/* Detalle — única fila full-width: es la glosa que se imprime (máx 80 chars) */}
           <div style={{marginBottom:8}}>
             <label style={{...lbl,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-              <span>Detalle</span>
+              <span>Detalle (opcional)</span>
               <span style={{fontWeight:600,color:detalle.length>=80?"var(--red)":"var(--text3)"}}>{detalle.length}/80</span>
             </label>
             <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} placeholder="Qué se vendió o prestó (se imprime en la boleta)" style={inp} />
@@ -419,7 +431,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             <div>
               <label style={lbl}>Tipo</label>
               <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
-                {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--green)"]] as const).map(([k,l,c])=>{
+                {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--accent)"]] as const).map(([k,l,c])=>{
                   const active = tipo===k;
                   return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:9,fontWeight:700,padding:"6px 12px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}
@@ -434,30 +446,32 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             </div>
           </div>
 
-          {/* Comprador + forma de pago: progresivo por 135 UF (el 95% de las tx no lo necesita) */}
+          {/* Receptor + forma de pago: progresivo por 135 UF (el 95% de las tx no lo necesita) */}
           {receptorAbierto ? (
             <div style={{marginBottom:8}}>
-              <label style={lbl}>Comprador{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
+              <label style={lbl}>Receptor{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:6}}>
-                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
-                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" style={inp} />
-                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
+                <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" aria-label="RUT del receptor" aria-invalid={!rutValido || undefined} style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
+                <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" aria-label="Nombre o razón social del receptor" style={inp} />
+                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
                   <option value="">Medio de pago…</option>
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              {!rutValido && <div style={{fontSize:10,color:"var(--red)",marginTop:2}}>RUT no válido</div>}
+              {!rutValido && <div role="alert" style={{fontSize:10,color:"var(--red)",marginTop:2}}>RUT no válido</div>}
               {showMasDatos ? (
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
                   <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />
                   <input value={comuna} onChange={e=>setComuna(e.target.value)} placeholder="Comuna (opcional)" style={inp} />
+                  <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail (opcional)" type="email" style={inp} />
+                  <input value={telefono} onChange={e=>setTelefono(e.target.value)} placeholder="Teléfono (opcional)" type="tel" style={inp} />
                 </div>
               ) : (
-                <button onClick={()=>setShowMasDatos(true)} style={{...linkBtn,marginTop:4}}>+ dirección y comuna</button>
+                <button onClick={()=>setShowMasDatos(true)} style={{...linkBtn,marginTop:4}}>+ dirección, comuna y contacto</button>
               )}
             </div>
           ) : (
-            <button onClick={()=>setShowReceptorManual(true)} style={{...linkBtn,marginBottom:8}}>+ identificar comprador (opcional)</button>
+            <button onClick={()=>setShowReceptorManual(true)} style={{...linkBtn,marginBottom:8}}>+ identificar receptor (opcional)</button>
           )}
         </>
       )}
@@ -473,7 +487,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         </select>
         <div style={{flex:1}} />
         <button onClick={handleAprobar} disabled={busy || !puedeStagear}
-          title={!puedeStagear ? "Completa el detalle, el monto y —sobre 135 UF— RUT, nombre y medio de pago" : undefined}
+          title={!puedeStagear ? "Falta el monto y —sobre 135 UF— RUT, nombre y medio de pago del receptor" : undefined}
           style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"var(--green)",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {busy ? "..." : "Poner listo"}

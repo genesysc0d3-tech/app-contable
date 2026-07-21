@@ -1,10 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { aprenderReglaDesdeResolucion, type AprenderResultado } from "@/lib/ai/aprender-regla";
 
 const BATCH_SIZE = 50;
 
@@ -35,8 +37,7 @@ async function getEmpresaAndService() {
   // TODAS las acciones de este archivo MUTAN (aprobar/editar/rechazar/poner listo/
   // crear cliente). Aprobar/editar propuestas es un acto tributario: 'viewer' queda
   // fuera, igual que en las rutas de emisión (ROLES_EMISION). Gate único acá.
-  const ROLES_ESCRITURA = new Set(["owner", "admin", "contador"]);
-  if (!ROLES_ESCRITURA.has(String(usuario.rol))) {
+  if (!ROLES_EMISION.has(String(usuario.rol))) {
     return { error: "Tu rol no permite esta acción" } as const;
   }
 
@@ -180,6 +181,8 @@ export async function editarPropuesta(
     receptor_rut?: string | null;
     receptor_direccion?: string | null;
     receptor_comuna?: string | null;
+    receptor_email?: string | null;
+    receptor_telefono?: string | null;
     medio_pago?: string | null;
     monto_neto?: number;
     iva?: number;
@@ -207,6 +210,8 @@ export async function editarPropuesta(
   if (campos.receptor_rut !== undefined) update.receptor_rut = strField(campos.receptor_rut);
   if (campos.receptor_direccion !== undefined) update.receptor_direccion = strField(campos.receptor_direccion);
   if (campos.receptor_comuna !== undefined) update.receptor_comuna = strField(campos.receptor_comuna);
+  if (campos.receptor_email !== undefined) update.receptor_email = strField(campos.receptor_email);
+  if (campos.receptor_telefono !== undefined) update.receptor_telefono = strField(campos.receptor_telefono);
   if (campos.medio_pago !== undefined) update.medio_pago = strField(campos.medio_pago);
   if (campos.notas !== undefined) update.notas = strField(campos.notas);
   if (campos.moneda_origen !== undefined) update.moneda_origen = strField(campos.moneda_origen);
@@ -229,6 +234,36 @@ export async function editarPropuesta(
     update.monto_moneda_origen = campos.monto_moneda_origen === null ? null : numField(campos.monto_moneda_origen);
   }
 
+  // Snapshot previo para aprender-al-clasificar: si esta edición fija tipo_dte
+  // (39/41) sobre una propuesta que aún NO tenía decisión humana, guardamos la
+  // glosa/flujo/cartola para enseñar la regla después del update. Se lee ANTES
+  // porque el update sobreescribe el tipo_dte previo.
+  let previo:
+    | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null }
+    | null = null;
+  if (campos.tipo_dte === 39 || campos.tipo_dte === 41) {
+    const { data: p } = await ctx.sb
+      .from("propuestas_ia")
+      .select("tipo_dte, movimiento_id")
+      .eq("empresa_id", ctx.empresaId)
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (p && p.tipo_dte == null && p.movimiento_id) {
+      const { data: m } = await ctx.sb
+        .from("movimientos_raw")
+        .select("descripcion, tipo_flujo, documento_id")
+        .eq("id", p.movimiento_id)
+        .maybeSingle();
+      if (m && (m.tipo_flujo === "entrada" || m.tipo_flujo === "salida")) {
+        previo = {
+          descripcion: m.descripcion ?? "",
+          tipo_flujo: m.tipo_flujo,
+          documento_id: m.documento_id,
+        };
+      }
+    }
+  }
+
   const doUpdate = () => ctx.sb
     .from("propuestas_ia")
     .update(update, { count: "exact" })
@@ -246,10 +281,28 @@ export async function editarPropuesta(
   }
   if (error) return { error: error.message };
   if (!count) return { error: "No se pudo editar — el estado de la propuesta no lo permite" };
+
+  // Aprender-al-clasificar: solo si tipo_dte REALMENTE se persistió (no lo botó
+  // el fallback de arriba) y era la primera decisión humana (previo != null).
+  // Best-effort: aprenderReglaDesdeResolucion nunca lanza; un fallo acá no rompe
+  // la edición ya guardada.
+  const tipoDtePersistida = "tipo_dte" in update && (update.tipo_dte === 39 || update.tipo_dte === 41);
+  let aprendizaje: AprenderResultado | null = null;
+  if (previo && tipoDtePersistida) {
+    aprendizaje = await aprenderReglaDesdeResolucion(ctx.sb, {
+      empresaId: ctx.empresaId,
+      userId: ctx.userId,
+      documentoId: previo.documento_id,
+      descripcion: previo.descripcion,
+      tipoFlujo: previo.tipo_flujo,
+      tipoDte: update.tipo_dte as 39 | 41,
+    });
+  }
+
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true };
+  return { ok: true, aprendizaje };
 }
 
 export async function aprobarTodas(
@@ -397,10 +450,31 @@ export async function editarMovimientoPropuesta(
 
   const sb = ctx.sb;
 
+  // Guard de estado (igual que editarPropuesta, auditoría #21): NO mutar una propuesta
+  // 'aprobado' ya comprometida a Emitir, ni resucitar rechazadas/emitidas. Sin esto se
+  // podía cambiar monto/receptor de una propuesta en cola justo antes de emitir-lote,
+  // que usa mov.monto y receptor_rut como fallback → burla la re-aprobación.
+  const { data: prop } = await sb
+    .from("propuestas_ia")
+    .select("estado")
+    .eq("empresa_id", ctx.empresaId)
+    .eq("id", propuestaId)
+    .maybeSingle();
+  if (!prop) return { error: "Propuesta no encontrada" };
+  if (!["pendiente", "editado", "listo"].includes(prop.estado)) {
+    return { error: "No se puede editar — el estado de la propuesta no lo permite" };
+  }
+
+  // Validación de monto en runtime (la server action es un endpoint público; el tipo
+  // TS no limita el payload).
+  if (campos.monto !== undefined && !Number.isFinite(Number(campos.monto))) {
+    return { error: "Monto inválido" };
+  }
+
   if (campos.descripcion !== undefined || campos.monto !== undefined) {
     const movUpdate: Record<string, string | number> = {};
     if (campos.descripcion !== undefined) movUpdate.descripcion = campos.descripcion.trim();
-    if (campos.monto !== undefined) movUpdate.monto = campos.monto;
+    if (campos.monto !== undefined) movUpdate.monto = Number(campos.monto);
     const { error: movErr } = await sb
       .from("movimientos_raw")
       .update(movUpdate)
@@ -409,22 +483,23 @@ export async function editarMovimientoPropuesta(
     if (movErr) return { error: movErr.message };
   }
 
-  const propUpdate: Record<string, string | number | null> = {};
+  // Cualquier edición de campos emitibles degrada la propuesta a 'editado' → exige
+  // re-aprobación antes de emitir (coherente con editarPropuesta).
+  const propUpdate: Record<string, string | number | null> = { estado: "editado" };
   if (campos.tipo_propuesto !== undefined) propUpdate.tipo_propuesto = campos.tipo_propuesto;
   if (campos.receptor_nombre !== undefined) propUpdate.receptor_nombre = campos.receptor_nombre;
   if (campos.receptor_rut !== undefined) propUpdate.receptor_rut = campos.receptor_rut;
   if (campos.notas !== undefined) propUpdate.notas = campos.notas;
 
-  if (Object.keys(propUpdate).length > 0) {
-    const { error: propErr, count } = await sb
-      .from("propuestas_ia")
-      .update(propUpdate, { count: "exact" })
-      .eq("empresa_id", ctx.empresaId)
-      .eq("id", propuestaId);
+  const { error: propErr, count } = await sb
+    .from("propuestas_ia")
+    .update(propUpdate, { count: "exact" })
+    .eq("empresa_id", ctx.empresaId)
+    .eq("id", propuestaId)
+    .in("estado", ["pendiente", "editado", "listo"]);
 
-    if (propErr) return { error: propErr.message };
-    if (!count) return { error: "No se pudo editar la propuesta" };
-  }
+  if (propErr) return { error: propErr.message };
+  if (!count) return { error: "No se pudo editar — el estado de la propuesta no lo permite" };
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");

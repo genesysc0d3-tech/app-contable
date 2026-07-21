@@ -68,8 +68,13 @@ export async function solicitarRecuperacion(formData: FormData) {
  * Burden of proof (Ley 19.628; Ley 21.719 Art. 12 cuando rija): la carga de probar el
  * consentimiento es nuestra. Se escribe con service-role en `consentimientos`. Best-effort:
  * si falla no bloquea el registro (el usuario ya marcó el checkbox obligatorio).
+ *
+ * NO exportada a propósito: este módulo es "use server", así que un export la volvería
+ * un endpoint POST público que insertaría filas de consentimiento forjadas
+ * (user_id/email/ip arbitrarios) con service-role SIN autenticación. Solo la llama
+ * signUp con el userId real recién creado.
  */
-export async function registrarConsentimiento(userId: string, email: string): Promise<void> {
+async function registrarConsentimiento(userId: string, email: string): Promise<void> {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

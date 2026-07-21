@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { editarPropuesta } from "../../revisar/actions";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { fmt, type Propuesta } from "./revisar-shared";
 import GaleriaComprobante from "./GaleriaComprobante";
 
@@ -25,19 +26,18 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   onClose: (saved: boolean) => void;
 }) {
   const { toast } = useToast();
-  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; medio_pago?: string | null };
+  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; receptor_email?: string | null; receptor_telefono?: string | null; medio_pago?: string | null };
 
   // Tipo: lo decide PRIMERO la clasificación de la propuesta (tipo_dte persistido →
   // tipo_propuesto) y SOLO como desempate la sugerencia de la empresa. Un default de
   // empresa 'afecto' NUNCA puede pisar una exención POR LEY (cripto/forex/P2P,
   // Of. SII 963/2018): eso fabricaría IVA inexistente sobre una venta exenta.
   // Misma derivación que ExpandedDetail (revisar-shared). Siempre editable (sin lock).
-  const EXENTOS_POR_TIPO = ["exenta", "factura_exenta", "compraventa_crypto", "transferencia_p2p", "operacion_forex"];
   const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : EXENTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "exenta"
+        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
           : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipo === "exento" ? "exenta"
               : empresaTipo === "afecto" ? "afecta"
@@ -51,6 +51,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const [razon, setRazon] = useState<string>(propuesta.receptor_nombre ?? "");
   const [direccion, setDireccion] = useState<string>(extra.receptor_direccion ?? "");
   const [comuna, setComuna] = useState<string>(extra.receptor_comuna ?? "");
+  const [email, setEmail] = useState<string>(extra.receptor_email ?? "");
+  const [telefono, setTelefono] = useState<string>(extra.receptor_telefono ?? "");
   const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
   const [busy, setBusy] = useState(false);
 
@@ -62,7 +64,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const rutTrim = rut.trim();
   const rutValido = !rutTrim || validarRut(rutTrim);
   const receptorOk = !requiereReceptor || (!!rutTrim && validarRut(rutTrim) && !!razon.trim());
-  const bloqueado = total <= 0 || conflicto || !rutValido || !receptorOk || !detalle.trim();
+  // Detalle OPCIONAL (igual que el flujo masivo): vacío → genérico limpio (resolverGlosa).
+  const bloqueado = total <= 0 || conflicto || !rutValido || !receptorOk;
 
   // ── Imagen(es) del comprobante ── foto suelta o álbum de Telegram. El zoom/pan
   // y las flechas viven en GaleriaComprobante (un solo lugar para visor y editor).
@@ -142,6 +145,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
       receptor_nombre: razon.trim() || null,
       receptor_direccion: direccion.trim() || null,
       receptor_comuna: comuna.trim() || null,
+      receptor_email: email.trim() || null,
+      receptor_telefono: telefono.trim() || null,
       medio_pago: medioPago || null,
       notas: detalle.trim() || null,
     }) as { error?: string } | undefined;
@@ -193,7 +198,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
             {/* Tipo (editable — sin lock) */}
             <div>
               <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
-                {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["afecta", "Afecta · con IVA · 39", "var(--green)"]] as const).map(([k, lbl, c]) => {
+                {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["afecta", "Afecta · con IVA · 39", "var(--accent)"]] as const).map(([k, lbl, c]) => {
                   const active = tipo === k;
                   return (
                     <button key={k} onClick={() => setTipo(k)}
@@ -205,10 +210,11 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
 
             {/* Detalle + monto */}
             <div>
-              <label style={label}>Detalle</label>
-              <textarea value={detalle} onChange={(e) => setDetalle(e.target.value)} rows={2}
+              <label style={label}>Detalle (opcional)</label>
+              <textarea value={detalle} onChange={(e) => setDetalle(e.target.value.slice(0, 80))} rows={2} maxLength={80}
                 placeholder="Qué se vendió o prestó (se imprime en la boleta)"
                 style={{ ...field, resize: "none", lineHeight: 1.5 }} />
+              <div style={{ fontSize: 10, color: detalle.length >= 80 ? "var(--red)" : "var(--text3)", marginTop: 3, textAlign: "right" }}>{detalle.length}/80</div>
               <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 10 }}>
                 <span style={{ fontSize: 26, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em" }}>$</span>
                 <input type="number" value={total} onChange={(e) => setTotal(Math.round(Number(e.target.value) || 0))}
@@ -234,6 +240,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
                 <input value={razon} onChange={(e) => setRazon(e.target.value)} placeholder="Razón social / nombre" style={field} />
                 <input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={field} />
                 <input value={comuna} onChange={(e) => setComuna(e.target.value)} placeholder="Comuna (opcional)" style={field} />
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail (opcional)" type="email" style={field} />
+                <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono (opcional)" type="tel" style={field} />
               </div>
             </div>
 
