@@ -8,6 +8,7 @@ import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import EmitirLoteModal, { type LoteItemInput } from "./EmitirLoteModal";
+import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
 
 interface Item {
@@ -404,6 +405,9 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   return (
     <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
+        {/* Recordatorio de la extensión: el carril real (sii_local) emite vía la
+            extensión local, así que si falta la avisamos acá antes de intentar emitir. */}
+        {proveedorBoletas === "sii_local" && <InstalarExtension />}
         {/* Reanudar lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
             Re-hidrata contra los pendientes del server a nivel EMPRESA (endpoint sin
             filtro de período): así reanudar no depende de qué mes muestre el calendario.

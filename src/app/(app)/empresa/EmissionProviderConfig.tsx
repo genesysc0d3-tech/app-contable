@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type CSSProperties } from "react";
 import { useToast } from "@/components/Toast";
 import { setEmisionConfig, type BoletasEmisionProveedor, type FacturasEmisionProveedor } from "./actions";
+import { EXTENSION_STORE_URL } from "@/lib/extension";
 
 export interface EmissionProviderState {
   boletasProveedor: BoletasEmisionProveedor;
@@ -396,8 +397,17 @@ function LocalMotorPanel({
             Actualizar
           </button>
           {missing ? (
-            <button type="button" onClick={() => setShowInstall((v) => !v)} style={smallButtonStyle(false, true)}>
-              Instalar extensión
+            <button
+              type="button"
+              onClick={() => {
+                // Publicada (env seteada) → derecho a la Chrome Web Store; si no,
+                // despliega los pasos de carga manual (fase beta sin publicar).
+                if (EXTENSION_STORE_URL) window.open(EXTENSION_STORE_URL, "_blank", "noopener,noreferrer");
+                else setShowInstall((v) => !v);
+              }}
+              style={smallButtonStyle(false, true)}
+            >
+              Instalar extensión{EXTENSION_STORE_URL ? " →" : ""}
             </button>
           ) : (
             <button type="button" onClick={onOpenOptions} disabled={!ready} style={smallButtonStyle(!ready, true)}>
@@ -407,7 +417,7 @@ function LocalMotorPanel({
         </div>
       </div>
 
-      {missing && showInstall && (
+      {missing && showInstall && !EXTENSION_STORE_URL && (
         <div style={{
           marginTop: 12,
           borderRadius: 12,
