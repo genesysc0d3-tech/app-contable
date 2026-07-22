@@ -64,7 +64,10 @@ Declarar el uso de datos así:
 
 Marcar las 3 casillas obligatorias (no se vende, no se usa fuera del propósito, no para solvencia/publicidad).
 
-**URL de política de privacidad** (obligatoria): hospedar el texto de `privacidad-extension.md` (ver abajo) en una URL pública — p.ej. `https://app-contable-five.vercel.app/legal/extension` — y pegarla acá. Si ya existe la política de privacidad general de App Contable, se puede enlazar esa y sumarle la sección de la extensión.
+**URL de política de privacidad** (obligatoria): ya está hospedada y en vivo →
+**`https://app-contable-five.vercel.app/legal/extension`**. Pegá esa URL. (El texto fuente
+está en `privacidad-extension.md`; la página vive en `src/app/legal/extension/page.tsx` y
+difiere RUT/domicilio de la SpA igual que la política general, así que no bloquea la beta.)
 
 ## 5. Después de publicar (¡importante!)
 1. Copiá la URL de la ficha (algo como `https://chromewebstore.google.com/detail/<id>`).
