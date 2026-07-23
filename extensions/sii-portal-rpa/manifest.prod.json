@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "App Contable - Motor Local SII",
-  "description": "Worker local visible para emitir boletas en Portal SII/MiPyme y devolver respaldo a App Contable.",
+  "name": "MassTest — Motor Local",
+  "description": "Motor local para emitir tus boletas electrónicas del SII (Portal / e-Boleta) por tu cuenta, desde tu propio equipo.",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
   "options_page": "options.html",
   "action": {
-    "default_title": "App Contable Motor Local",
+    "default_title": "MassTest Motor Local",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icon-16.png",
