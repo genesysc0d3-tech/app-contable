@@ -784,6 +784,7 @@ export type Database = {
       documentos_subidos: {
         Row: {
           album_imagenes: Json | null
+          archivo_hash: string | null
           created_at: string
           empresa_id: string
           estado: string
@@ -802,6 +803,7 @@ export type Database = {
         }
         Insert: {
           album_imagenes?: Json | null
+          archivo_hash?: string | null
           created_at?: string
           empresa_id: string
           estado?: string
@@ -820,6 +822,7 @@ export type Database = {
         }
         Update: {
           album_imagenes?: Json | null
+          archivo_hash?: string | null
           created_at?: string
           empresa_id?: string
           estado?: string

@@ -661,6 +661,13 @@ export async function procesarDocumento(
           allPropuestas.push({
             ...p,
             movimiento_index: p.movimiento_index + offset,
+            // Cap de confianza de la IA (mismo que el bypass, línea ~619): toda
+            // propuesta de OpenCode se capa a ≤IA_MESA_MAX_CONFIANZA para que SIEMPRE
+            // caiga al bucket de revisión y no entre al gesto "Poner listas". Antes
+            // solo se aplicaba en bypass; el carril legacy (PDF/OCR/Excel sin parser)
+            // pasaba la confianza cruda (hasta 0.95) → propuestas de IA pura entraban
+            // como alta confianza, justo lo que el cap debía impedir.
+            confianza: Math.min(p.confianza ?? 0.5, IA_MESA_MAX_CONFIANZA),
             __fuente: "ia_opencode",
             __regla_id: null,
           });
@@ -708,10 +715,15 @@ export async function procesarDocumento(
     if (totalAbonos > 0 && validMovimientos.length >= 5) {
       const threshold = totalAbonos * 0.5;
       const saldoFilter = new Set<number>();
+      // SIN descripcion: la glosa cruda de la cartola lleva PII de terceros (RUT,
+      // nombres) y NO puede escribirse en ops_events (Ley 21.719). monto + fecha
+      // bastan para que el humano ubique el movimiento en la cartola.
+      const saldoDescartados: { monto: number; fecha: string }[] = [];
       for (let i = 0; i < validMovimientos.length; i++) {
         const monto = toNum(validMovimientos[i].monto) ?? 0;
         if (monto > threshold) {
           saldoFilter.add(i);
+          saldoDescartados.push({ monto, fecha: String(validMovimientos[i].fecha ?? "") });
         }
       }
       if (saldoFilter.size > 0) {
@@ -726,6 +738,23 @@ export async function procesarDocumento(
         validPropuestas = validPropuestas
           .filter((p) => saldoRemap.has(p.movimiento_index))
           .map((p) => ({ ...p, movimiento_index: saldoRemap.get(p.movimiento_index)! }));
+      }
+      // Rastro del filtro anti-saldo: antes botaba estos movimientos EN SILENCIO. El
+      // filtro suele acertar (es el saldo mal extraído), pero puede dar un falso
+      // positivo (una venta grande legítima en una cartola de tx chicas) → se
+      // registra en ops para que un humano lo cace. No se re-inserta: solo visible.
+      if (saldoDescartados.length > 0) {
+        await recordOpsEvent({
+          sb: supabase,
+          severity: "warn",
+          source: "ia",
+          eventName: "anti_saldo_descartado",
+          summary: `Filtro anti-saldo descartó ${saldoDescartados.length} movimiento(s) grande(s) (>50% de los abonos). Revisa si alguno es una venta real.`,
+          empresaId,
+          resourceType: "documento",
+          resourceId: documentoId,
+          metadata: { descartados: saldoDescartados, total_abonos: totalAbonos, umbral: threshold },
+        });
       }
     }
 

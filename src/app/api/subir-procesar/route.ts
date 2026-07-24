@@ -8,6 +8,7 @@ import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
 import { defaultStorageProvider, subirDocumentoR2 } from "@/lib/storage";
+import { createHash } from "crypto";
 
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
@@ -43,6 +44,30 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(validated.base64, "base64");
 
+  // Dedup por hash: re-subir la MISMA cartola (error humano común) duplicaba el
+  // 100% de los movimientos — el carril bypass salta el dedup por-movimiento y no
+  // había chequeo de hash de archivo. Si este archivo EXACTO ya se procesó para
+  // esta empresa, devolvemos el documento existente (idempotente) en vez de crear
+  // otro y re-procesar → cero duplicados. Solo bloquea los estados DONE: un upload
+  // en error / en curso / stuck se puede re-subir sin problema.
+  const archivoHash = createHash("sha256").update(buffer).digest("hex");
+  const { data: yaProcesado } = await supabase
+    .from("documentos_subidos")
+    .select("id")
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("archivo_hash", archivoHash)
+    .in("estado", ["procesado", "completado"])
+    .limit(1)
+    .maybeSingle();
+  if (yaProcesado) {
+    return NextResponse.json({
+      ok: true,
+      documento_id: yaProcesado.id,
+      ya_procesado: true,
+      message: "Este archivo ya se subió y procesó antes; no se volvió a subir (evita duplicar movimientos).",
+    });
+  }
+
   const { data: doc, error: docError } = await supabase
     .from("documentos_subidos")
     .insert({
@@ -51,6 +76,7 @@ export async function POST(request: Request) {
       tipo: validated.tipo,
       storage_path: "memoria",
       estado: "subido",
+      archivo_hash: archivoHash,
     })
     .select()
     .single();

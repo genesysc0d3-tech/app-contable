@@ -5,7 +5,7 @@
 // traza), luego confirmación liviana por tanda. Estados: idle → emitiendo →
 // terminada | requiere_revision | detenida (+ pausa por error/tope).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { chileDateString } from "@/lib/chile-date";
 import { recoverLatestFolio, type RecoverLatestResult } from "@/lib/emission/recover-latest";
@@ -45,6 +45,12 @@ export default function EmitirLoteModal({
   const { progreso, pausa, corriendo, jobIdRevision, iniciar, detener, responderPausa } = useEmisionLote({ empresaId, empresaRut });
   const [modo, setModo] = useState<"idle" | "legal" | "verificando">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Snapshot de la lista con la que ARRANCÓ el lote: el runner procesa este
+  // snapshot estable (iniciar(loteItems)), pero el prop `items` se ENCOGE en vivo
+  // por el Realtime de MesaController (cada boleta emitida sale de pendientes). El
+  // rastro de reanudación DEBE cortar sobre el snapshot, no sobre el prop reactivo,
+  // o slice(procesadas) se corre y pierde boletas por reanudar.
+  const itemsAlIniciarRef = useRef<LoteItemInput[] | null>(null);
 
   const hoy = useMemo(() => chileDateString(new Date()), []);
   const total = useMemo(() => items.reduce((s, i) => s + i.monto_total, 0), [items]);
@@ -75,7 +81,7 @@ export default function EmitirLoteModal({
     try {
       const res = await fetch("/api/emision/authorizations?provider=sii_local");
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json?.ok && json?.authorized) { setModo("idle"); void iniciar(loteItems); return; }
+      if (res.ok && json?.ok && json?.authorized) { setModo("idle"); itemsAlIniciarRef.current = items; void iniciar(loteItems); return; }
       if (!res.ok && json?.error && json.error !== "EMISSION_AUTHORIZATION_REQUIRED") {
         setError(json.detalle ?? json.error ?? "No se pudo revisar la autorización."); setModo("idle"); return;
       }
@@ -97,7 +103,7 @@ export default function EmitirLoteModal({
       if (!res.ok || !json?.ok || !json?.authorized) {
         setError(json?.detalle ?? json?.error ?? "No se pudo registrar la autorización."); setModo("legal"); return;
       }
-      setModo("idle"); void iniciar(loteItems);
+      setModo("idle"); itemsAlIniciarRef.current = items; void iniciar(loteItems);
     } catch {
       setError("Error de red al autorizar."); setModo("legal");
     }
@@ -115,13 +121,16 @@ export default function EmitirLoteModal({
   // al reabrir se re-hidratan contra los pendientes del server. Se borra al terminar
   // o detener; un cierre duro NO llega acá → el rastro queda para reanudar.
   useEffect(() => {
-    if (terminalLimpio) { limpiarLotePendiente(empresaId); return; }
+    if (terminalLimpio) { itemsAlIniciarRef.current = null; limpiarLotePendiente(empresaId); return; }
     if (!progreso) return;
     // corriendo = cierre en vuelo; requiere_revision = freno por "a medias" (H-1):
     // en ambos, lo que falta (slice tras la ya-procesada) debe quedar reanudable.
+    // Se corta sobre el SNAPSHOT congelado al iniciar (no el prop `items`, que el
+    // Realtime encoge), para que slice(procesadas) no se corra ni pierda boletas.
     if (corriendo || fase === "requiere_revision") {
-      const remainingIds = items.slice(progreso.procesadas).map((i) => i.id);
-      guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? items.length });
+      const base = itemsAlIniciarRef.current ?? items;
+      const remainingIds = base.slice(progreso.procesadas).map((i) => i.id);
+      guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? base.length });
     }
   }, [progreso, corriendo, fase, terminalLimpio, empresaId, items, totalOriginal]);
 

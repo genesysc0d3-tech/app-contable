@@ -1076,10 +1076,20 @@
       await selectFirstVuetifyOption("elija sucursal");
     }
 
-    // Tipo de boleta: el select muestra el valor por defecto; lo abrimos por
-    // el slot que contiene "Boleta" y elegimos el tipo deseado (afecta/exenta).
+    // Tipo de boleta: el select muestra el valor por defecto; lo abrimos por el
+    // slot que contiene "Boleta" y elegimos el tipo deseado (afecta/exenta).
+    // FAIL-CLOSED (igual que el método de pago): si NO se logra confirmar el tipo,
+    // abortamos ANTES del EMITIR. Emitir con el tipo por defecto del portal puede
+    // sacar una venta EXENTA (41) como AFECTA real en el SII (o al revés): el
+    // usuario queda debiendo IVA por una venta exenta mientras la app la registró
+    // como 41. El tipo es tan requerido como el pago — no se puede fallar en
+    // silencio. selectVuetifyOption devuelve true si el tipo ya está seleccionado
+    // (default correcto), así que esto NO aborta de más.
     const wantedType = job?.tipo_dte === 41 ? "Boleta exenta" : "Boleta afecta";
-    await selectVuetifyOption("Boleta", wantedType);
+    const tipoOk = await selectVuetifyOption("Boleta", wantedType);
+    if (!tipoOk) {
+      throw new Error(`No pude confirmar el tipo de boleta (${wantedType}) en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.`);
+    }
 
     // Método de pago: el SII NO registra la boleta sin él. Si no se logra
     // seleccionar, abortamos antes del EMITIR para no clickear un form inválido.

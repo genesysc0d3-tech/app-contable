@@ -391,40 +391,41 @@ async function backfillFolioSinJobVivo(
   if (existing) { await liftRevisionTombstone(sb, args.propuestaId); return { ok: true, boletaId: existing.id, already: true }; }
 
   const totals = totalsFor(args.tipoDte, args.montoTotal, args.totales);
+  const backfillRow = {
+    empresa_id: args.empresaId,
+    // Enlace propuesta ↔ folio también en la ruta de recuperación (job cerrado):
+    // sin esto la boleta respaldada quedaría sin enlace y su propuesta seguiría
+    // "pendiente" → el orbe la marcaría y re-emitirla generaría un folio nuevo.
+    propuesta_id: args.propuestaId ?? null,
+    tipo_dte: args.tipoDte,
+    folio: args.folio,
+    fecha_emision: args.fechaEmision,
+    emisor_rut: empresa.rut,
+    emisor_razon_social: empresa.razon_social,
+    emisor_giro: empresa.giro,
+    emisor_direccion: empresa.direccion,
+    emisor_comuna: empresa.comuna,
+    monto_neto: totals.monto_neto,
+    monto_exento: totals.monto_exento,
+    iva: totals.iva,
+    monto_total: args.montoTotal,
+    detalles: [{ nro_lin: 1, nombre: "Servicio prestado", qty: 1, monto: args.montoTotal }],
+    xml_dte: `sii-local://boleta/${args.tipoDte}/${args.folio}`,
+    ted: `sii-local://ted/${args.tipoDte}/${args.folio}`,
+    track_id: `sii-local-recovery:${args.jobId ?? "manual"}:${args.tipoDte}:${args.folio}`,
+    estado: "aceptado",
+    emision_proveedor: "sii_local",
+    emision_sandbox: false,
+    proveedor_respuesta: {
+      origen: "backfill_job_cerrado",
+      job_id: args.jobId,
+      pdf_pendiente: true,
+      recuperado_en: new Date().toISOString(),
+    },
+  };
   const { data: boleta, error } = await sb
     .from("boletas_emitidas")
-    .insert({
-      empresa_id: args.empresaId,
-      // Enlace propuesta ↔ folio también en la ruta de recuperación (job cerrado):
-      // sin esto la boleta respaldada quedaría sin enlace y su propuesta seguiría
-      // "pendiente" → el orbe la marcaría y re-emitirla generaría un folio nuevo.
-      propuesta_id: args.propuestaId ?? null,
-      tipo_dte: args.tipoDte,
-      folio: args.folio,
-      fecha_emision: args.fechaEmision,
-      emisor_rut: empresa.rut,
-      emisor_razon_social: empresa.razon_social,
-      emisor_giro: empresa.giro,
-      emisor_direccion: empresa.direccion,
-      emisor_comuna: empresa.comuna,
-      monto_neto: totals.monto_neto,
-      monto_exento: totals.monto_exento,
-      iva: totals.iva,
-      monto_total: args.montoTotal,
-      detalles: [{ nro_lin: 1, nombre: "Servicio prestado", qty: 1, monto: args.montoTotal }],
-      xml_dte: `sii-local://boleta/${args.tipoDte}/${args.folio}`,
-      ted: `sii-local://ted/${args.tipoDte}/${args.folio}`,
-      track_id: `sii-local-recovery:${args.jobId ?? "manual"}:${args.tipoDte}:${args.folio}`,
-      estado: "aceptado",
-      emision_proveedor: "sii_local",
-      emision_sandbox: false,
-      proveedor_respuesta: {
-        origen: "backfill_job_cerrado",
-        job_id: args.jobId,
-        pdf_pendiente: true,
-        recuperado_en: new Date().toISOString(),
-      },
-    })
+    .insert(backfillRow)
     .select("id").single();
 
   if (error || !boleta) {
@@ -433,6 +434,27 @@ async function backfillFolioSinJobVivo(
       .from("boletas_emitidas").select("id")
       .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio).maybeSingle();
     if (raced) { await liftRevisionTombstone(sb, args.propuestaId); return { ok: true, boletaId: raced.id, already: true }; }
+    // Doble folio para la MISMA propuesta (choque con idx_boletas_propuesta_unica_
+    // vigente, NO con el folio): registrar el folio B DESACOPLADO (propuesta_id
+    // null) para que no quede invisible + alerta ops crítica. Mismo patrón que el
+    // POST principal. No se levanta la lápida: el folio A ya bloquea la re-emisión
+    // (PROPUESTA_YA_EMITIDA); la alerta lo marca para revisión humana.
+    if (args.propuestaId) {
+      const { data: propViva } = await sb
+        .from("boletas_emitidas").select("id, folio")
+        .eq("empresa_id", args.empresaId).eq("propuesta_id", args.propuestaId).neq("estado", "anulada").maybeSingle();
+      if (propViva && String(propViva.folio) !== String(args.folio)) {
+        const { data: boletaB } = await sb
+          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null }).select("id").single();
+        await recordOpsEvent({
+          sb, severity: "critical", source: "sii-local", eventName: "doble_folio_propuesta",
+          summary: `Doble folio para una propuesta (recuperación): folios ${propViva.folio} y ${args.folio}`,
+          empresaId: args.empresaId, resourceType: "emision_job", resourceId: args.jobId ?? null,
+          metadata: { tipo_dte: args.tipoDte, folio_a: propViva.folio, folio_b: args.folio, propuesta_id: args.propuestaId, boleta_b_id: boletaB?.id ?? null },
+        });
+        if (boletaB) return { ok: true, boletaId: boletaB.id, already: false };
+      }
+    }
     return { ok: false, error: error?.message ?? "INSERT_FAILED" };
   }
   await liftRevisionTombstone(sb, args.propuestaId);
@@ -616,7 +638,13 @@ export async function POST(request: Request) {
       has_fecha_emision: Boolean(fechaEmision),
       has_strong_evidence: hasStrongEvidence,
     });
-    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    // Si HAY folio pero la evidencia es débil, el SII PUDO emitir (post-emit
+    // incierto) → sella 'revision_pendiente' (lápida), NO 'failed'. Así el candado
+    // de cuenta se MANTIENE para la boleta única (locks.ts mantiene el lock en
+    // revision_pendiente sin propuesta_id) y bloquea la re-emisión → evita el doble
+    // folio. Sin folio = pre-emit seguro → 'failed' (la propuesta se puede re-emitir).
+    const selloInsuf = folio ? "revision_pendiente" : "failed";
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: selloInsuf });
     return NextResponse.json({ ok: false, error: "RESULTADO_SII_INSUFICIENTE" }, { status: 422 });
   }
 
@@ -626,7 +654,11 @@ export async function POST(request: Request) {
     .eq("id", empresaId)
     .single();
   if (!empresa?.rut || !empresa?.razon_social) {
-    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    // Folio REAL ya emitido (pasó el check de evidencia fuerte) que no se puede
+    // persistir por falta de datos de la empresa → sella 'revision_pendiente' (que
+    // RETIENE el candado de la boleta única, ver locks.ts) en vez de 'failed', que
+    // lo soltaría y abriría la re-emisión tras un reload → doble folio.
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: folio ? "revision_pendiente" : "failed" });
     await recordSiiLocalFailure(sb, job, "EMPRESA_SIN_DATOS_FISCALES", "Empresa sin datos fiscales para persistir SII local");
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
@@ -663,7 +695,11 @@ export async function POST(request: Request) {
         .eq("id", existing.id);
       if (updateErr) {
         await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "pdf_metadata_update_failed", error: updateErr.message, result });
-        await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+        // Rama `existing`: la boleta con este folio YA está registrada; solo falló el
+        // update de metadata del PDF. Igual que las otras ramas post-folio, con folio
+        // presente se sella 'revision_pendiente' (retiene el candado de la boleta
+        // única) y NO 'failed' (que lo soltaría → doble folio tras un reload).
+        await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: folio ? "revision_pendiente" : "failed" });
         await recordSiiLocalFailure(sb, job, "PDF_METADATA_UPDATE_FAILED", "No se pudo actualizar metadata PDF de boleta SII local existente", {
           boleta_id: existing.id,
           detalle: updateErr.message,
@@ -748,38 +784,39 @@ export async function POST(request: Request) {
     page: result?.page ? { url: result.page.url, title: result.page.title } : null,
   };
 
+  const boletaInsert = {
+    empresa_id: empresaId,
+    // Motor masivo: enlaza el folio real a la propuesta que lo originó. Boleta
+    // única → null. El índice UNIQUE parcial de propuesta_id bloquea el doble.
+    propuesta_id: job.propuesta_id ?? null,
+    tipo_dte: tipoDte,
+    folio,
+    fecha_emision: fechaEmision,
+    emisor_rut: empresa.rut,
+    emisor_razon_social: empresa.razon_social,
+    emisor_giro: empresa.giro,
+    emisor_direccion: empresa.direccion,
+    emisor_comuna: empresa.comuna,
+    receptor_rut: cleanText(receptor?.rut),
+    receptor_razon_social: cleanText(receptor?.razon_social),
+    receptor_direccion: cleanText(receptor?.direccion),
+    receptor_comuna: cleanText(receptor?.comuna),
+    monto_neto: totals.monto_neto,
+    monto_exento: totals.monto_exento,
+    iva: totals.iva,
+    monto_total: montoTotal,
+    detalles,
+    xml_dte: `sii-local://boleta/${tipoDte}/${folio}`,
+    ted: `sii-local://ted/${tipoDte}/${folio}`,
+    track_id: trackId,
+    estado: "aceptado",
+    emision_proveedor: "sii_local",
+    emision_sandbox: false,
+    proveedor_respuesta: safeJson(proveedorRespuesta),
+  };
   const { data: boleta, error: insertErr } = await sb
     .from("boletas_emitidas")
-    .insert({
-      empresa_id: empresaId,
-      // Motor masivo: enlaza el folio real a la propuesta que lo originó. Boleta
-      // única → null. El índice UNIQUE parcial de propuesta_id bloquea el doble.
-      propuesta_id: job.propuesta_id ?? null,
-      tipo_dte: tipoDte,
-      folio,
-      fecha_emision: fechaEmision,
-      emisor_rut: empresa.rut,
-      emisor_razon_social: empresa.razon_social,
-      emisor_giro: empresa.giro,
-      emisor_direccion: empresa.direccion,
-      emisor_comuna: empresa.comuna,
-      receptor_rut: cleanText(receptor?.rut),
-      receptor_razon_social: cleanText(receptor?.razon_social),
-      receptor_direccion: cleanText(receptor?.direccion),
-      receptor_comuna: cleanText(receptor?.comuna),
-      monto_neto: totals.monto_neto,
-      monto_exento: totals.monto_exento,
-      iva: totals.iva,
-      monto_total: montoTotal,
-      detalles,
-      xml_dte: `sii-local://boleta/${tipoDte}/${folio}`,
-      ted: `sii-local://ted/${tipoDte}/${folio}`,
-      track_id: trackId,
-      estado: "aceptado",
-      emision_proveedor: "sii_local",
-      emision_sandbox: false,
-      proveedor_respuesta: safeJson(proveedorRespuesta),
-    })
+    .insert(boletaInsert)
     .select("id, folio, monto_total, estado, track_id, fecha_emision")
     .single();
 
@@ -799,6 +836,46 @@ export async function POST(request: Request) {
       await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
       await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
       return NextResponse.json({ ok: true, boleta_id: raceWinner.id, folio, estado: raceWinner.estado, already_exists: true });
+    }
+    // Segunda causa del insertErr (no la carrera de folio): idx_boletas_propuesta_
+    // unica_vigente — la MISMA propuesta ya tiene una boleta viva con OTRO folio
+    // (doble emisión en el portal: se recuperó el folio A y ahora llega el folio B).
+    // La búsqueda por folio de arriba no lo encuentra. El folio B es REAL: no puede
+    // quedar invisible (subdeclaración + riesgo de re-emisión). Lo registramos
+    // DESACOPLADO de la propuesta (propuesta_id null — el slot ya lo tiene el folio
+    // A) para que sea visible, y alertamos a ops en CRÍTICO: un doble folio en el
+    // portal necesita ojo humano.
+    if (job.propuesta_id) {
+      const { data: propViva } = await sb
+        .from("boletas_emitidas")
+        .select("id, folio")
+        .eq("empresa_id", empresaId)
+        .eq("propuesta_id", job.propuesta_id)
+        .neq("estado", "anulada")
+        .maybeSingle();
+      if (propViva && String(propViva.folio) !== String(folio)) {
+        const { data: boletaB } = await sb
+          .from("boletas_emitidas")
+          .insert({ ...boletaInsert, propuesta_id: null })
+          .select("id, folio, estado")
+          .single();
+        await recordOpsEvent({
+          sb,
+          severity: "critical",
+          source: "sii-local",
+          eventName: "doble_folio_propuesta",
+          summary: `Doble folio para una propuesta (el portal emitió dos veces): folios ${propViva.folio} y ${folio}`,
+          usuarioId: job.usuario_id,
+          resourceType: "emision_job",
+          resourceId: job.job_id,
+          metadata: { tipo_dte: tipoDte, folio_a: propViva.folio, folio_b: folio, propuesta_id: job.propuesta_id, boleta_b_id: boletaB?.id ?? null },
+        });
+        if (boletaB) {
+          await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "doble_folio_registrado", result });
+          await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
+          return NextResponse.json({ ok: true, boleta_id: boletaB.id, folio, estado: boletaB.estado, doble_folio: true });
+        }
+      }
     }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "insert_failed", error: insertErr?.message ?? "DB_INSERT_FAILED", result });
     await recordCuentaAudit({
@@ -822,7 +899,10 @@ export async function POST(request: Request) {
       folio,
       detalle: insertErr?.message,
     });
-    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
+    // Folio REAL emitido pero el insert de la boleta falló → 'revision_pendiente'
+    // (retiene el candado de la boleta única) en vez de 'failed'. Sin esto el candado
+    // se soltaba y un reload permitía re-emitir → doble folio.
+    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: folio ? "revision_pendiente" : "failed" });
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
   }
 

@@ -193,7 +193,7 @@ export async function POST(request: Request) {
   const job = jobGate.job;
   const empresaId = job.empresa_id;
 
-  if (!tipoDte || !folio || !montoTotal || !fechaEmision || !trackId || !xmlDte || !pdfBase64) {
+  if (!tipoDte || !folio || !montoTotal || !fechaEmision || !trackId || !xmlDte) {
     if (job) {
       await recordCuentaAudit({
         sb,
@@ -241,13 +241,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: reserva.error, detalle: reserva.detalle }, { status: reserva.status });
   }
 
-  if (result?.pdf?.content_type !== "application/pdf") {
-    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
-    await recordSimpleApiFailure(sb, job, "PDF_CONTENT_TYPE_INVALID", "SimpleAPI entrego PDF con content-type invalido", {
-      content_type: result?.pdf?.content_type,
-    });
-    return NextResponse.json({ ok: false, error: "PDF_CONTENT_TYPE_INVALID" }, { status: 422 });
-  }
   if (!validDteXml({ xml: xmlDte, tipoDte, folio, total: montoTotal })) {
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
     await recordSimpleApiFailure(sb, job, "XML_DTE_INVALID", "XML DTE SimpleAPI no calza con folio/tipo/monto", { tipo_dte: tipoDte, folio });
@@ -273,27 +266,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
   }
 
-  const pdfBuffer = Buffer.from(pdfBase64, "base64");
-  const invalidPdf = validatePdfBuffer(pdfBuffer);
-  if (invalidPdf) {
-    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
-    await recordSimpleApiFailure(sb, job, invalidPdf, "PDF SimpleAPI invalido", { tipo_dte: tipoDte, folio });
-    return NextResponse.json({ ok: false, error: invalidPdf }, { status: 422 });
-  }
-
-  const storagePath = storagePathFor({ empresaId, tipoDte, folio });
-  const { error: uploadErr } = await sb.storage.from("documentos").upload(storagePath, pdfBuffer, {
-    contentType: "application/pdf",
-    upsert: true,
-  });
-  if (uploadErr) {
-    await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "failed" });
-    await recordSimpleApiFailure(sb, job, "PDF_UPLOAD_FAILED", "No se pudo guardar PDF SimpleAPI", {
-      tipo_dte: tipoDte,
-      folio,
-      storage_error: uploadErr.message,
+  // EL FOLIO YA ESTÁ ACEPTADO POR EL SII (checks de arriba: reserva de folio + XML
+  // válido + aceptación de envío/DTE). A partir de acá el FOLIO MANDA: la boleta se
+  // registra sí o sí. El PDF es secundario — si está ausente, es inválido, o no se
+  // puede subir, la boleta queda igual registrada con pdf_pendiente. Es el mismo
+  // principio del carril sii-local ("el PDF jamás bloquea el registro"): perder un
+  // PDF adjunto NO puede hacer perder un folio real aceptado por el SII. Antes acá
+  // se sellaba 'failed' y el DTE quedaba invisible → el usuario re-emitía y quemaba
+  // un segundo folio por la misma venta.
+  let storagePath: string | null = null;
+  let pdfPendiente = true;
+  const pdfBuffer = pdfBase64 ? Buffer.from(pdfBase64, "base64") : null;
+  const pdfContentTypeOk = result?.pdf?.content_type === "application/pdf";
+  const invalidPdf = pdfBuffer ? validatePdfBuffer(pdfBuffer) : "PDF_AUSENTE";
+  if (pdfBuffer && pdfContentTypeOk && !invalidPdf) {
+    const candidatePath = storagePathFor({ empresaId, tipoDte, folio });
+    // El upload puede fallar de DOS formas: devolver { error } (quota/RLS/HTTP 5xx)
+    // o LANZAR — storage-js re-lanza los errores de transporte (fetch failed / reset
+    // de conexión, realista en serverless de Vercel) porque no llevan isStorageError.
+    // Ambas se tratan igual: NUNCA una falla de PDF puede impedir registrar un folio
+    // ya aceptado por el SII.
+    let uploadErr: { message?: string } | null = null;
+    try {
+      const { error } = await sb.storage.from("documentos").upload(candidatePath, pdfBuffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+      uploadErr = error;
+    } catch (e) {
+      uploadErr = { message: e instanceof Error ? e.message : String(e) };
+    }
+    if (uploadErr) {
+      await recordOpsEvent({
+        sb, severity: "warn", source: "simpleapi", eventName: "simpleapi_pdf_pendiente",
+        summary: "PDF SimpleAPI no se pudo subir; folio registrado igual", usuarioId: job.usuario_id,
+        resourceType: "emision_job", resourceId: job.job_id,
+        metadata: { tipo_dte: tipoDte, folio, storage_error: uploadErr.message },
+      });
+    } else {
+      storagePath = candidatePath;
+      pdfPendiente = false;
+    }
+  } else {
+    await recordOpsEvent({
+      sb, severity: "warn", source: "simpleapi", eventName: "simpleapi_pdf_pendiente",
+      summary: "PDF SimpleAPI ausente/inválido; folio registrado igual", usuarioId: job.usuario_id,
+      resourceType: "emision_job", resourceId: job.job_id,
+      metadata: { tipo_dte: tipoDte, folio, content_type: result?.pdf?.content_type, motivo: String(invalidPdf) || "CONTENT_TYPE" },
     });
-    return NextResponse.json({ ok: false, error: "PDF_UPLOAD_FAILED", detalle: uploadErr.message }, { status: 502 });
   }
 
   const { data: existing } = await sb
@@ -310,11 +330,13 @@ export async function POST(request: Request) {
     envio: safeJson(result?.envio),
     consulta_dte: safeJson(result?.consultaDte),
     envio_xml: cleanText(result?.envioXml),
-    pdf: {
-      storage_path: storagePath,
-      filename: cleanText(result?.pdf?.filename) ?? `simpleapi-${tipoDte}-${folio}.pdf`,
-      content_type: "application/pdf",
-    },
+    pdf: storagePath
+      ? {
+          storage_path: storagePath,
+          filename: cleanText(result?.pdf?.filename) ?? `simpleapi-${tipoDte}-${folio}.pdf`,
+          content_type: "application/pdf",
+        }
+      : { pendiente: true },
   };
 
   if (existing) {
@@ -370,7 +392,7 @@ export async function POST(request: Request) {
     .single();
 
   if (insertErr || !boleta) {
-    await sb.storage.from("documentos").remove([storagePath]);
+    if (storagePath) await sb.storage.from("documentos").remove([storagePath]);
     await recordCuentaAudit({
       sb,
       cuentaId: job.cuenta_id,
@@ -396,26 +418,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "DB_INSERT_FAILED", detalle: insertErr?.message }, { status: 500 });
   }
 
+  // La fila documentos_subidos apunta al PDF almacenado → solo se crea si el PDF se
+  // guardó. Con pdf_pendiente el folio ya quedó en boletas_emitidas (la fuente de
+  // verdad); el puntero se puede crear cuando el PDF se recupere.
   const receptorLabel = cleanText(payload.draft?.receptor_razon_social) ?? "cliente sin identificar";
-  await sb.from("documentos_subidos").insert({
-    empresa_id: empresaId,
-    nombre_archivo: `DTE SimpleAPI #${boleta.folio} - ${receptorLabel}`,
-    tipo: "dte_simpleapi",
-    storage_path: storagePath,
-    estado: "procesado",
-    movimientos_detectados: 1,
-    created_at: new Date().toISOString(),
-    progreso_ia: {
-      origen: "simpleapi_extension",
-      proveedor: "simpleapi",
-      boleta_id: boleta.id,
-      folio: boleta.folio,
-      tipo_dte: tipoDte,
-      monto_total: boleta.monto_total,
-      receptor: receptorLabel,
-      track_id: boleta.track_id,
-    },
-  });
+  if (storagePath) {
+    await sb.from("documentos_subidos").insert({
+      empresa_id: empresaId,
+      nombre_archivo: `DTE SimpleAPI #${boleta.folio} - ${receptorLabel}`,
+      tipo: "dte_simpleapi",
+      storage_path: storagePath,
+      estado: "procesado",
+      movimientos_detectados: 1,
+      created_at: new Date().toISOString(),
+      progreso_ia: {
+        origen: "simpleapi_extension",
+        proveedor: "simpleapi",
+        boleta_id: boleta.id,
+        folio: boleta.folio,
+        tipo_dte: tipoDte,
+        monto_total: boleta.monto_total,
+        receptor: receptorLabel,
+        track_id: boleta.track_id,
+      },
+    });
+  }
 
   await recordCuentaAudit({
     sb,
@@ -435,7 +462,7 @@ export async function POST(request: Request) {
   });
   await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
 
-  return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id });
+  return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id, pdf_pendiente: pdfPendiente });
 }
 
 export const dynamic = "force-dynamic";
