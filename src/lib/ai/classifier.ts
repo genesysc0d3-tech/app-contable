@@ -143,10 +143,11 @@ function buildPropuestaFromRule(
   const receptor_nombre =
     rule.receptor_nombre_default ?? inferReceptorNombre(mov);
   const total = mov.monto;
-  // Check if rule tipo_propuesto has IVA (factura_afecta, boleta_honorarios)
-  const hasIva =
-    rule.tipo_propuesto === "factura_afecta" ||
-    rule.tipo_propuesto === "boleta_honorarios";
+  // IVA SOLO en factura afecta. La boleta de honorarios (BHE) NO lleva IVA: su
+  // total es el bruto y el impuesto asociado es una RETENCIÓN que retiene el
+  // pagador, no IVA — computarle IVA 19% contradice la ley (antes se incluía acá,
+  // partía mal el neto/iva de toda propuesta de honorarios).
+  const hasIva = rule.tipo_propuesto === "factura_afecta";
   const monto_neto = hasIva ? Math.round(total / 1.19) : total;
   const iva = hasIva ? total - monto_neto : 0;
 

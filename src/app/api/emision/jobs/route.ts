@@ -462,10 +462,18 @@ export async function DELETE(request: Request) {
   }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
-  // Ya sellado (incluye la lápida 'revision_pendiente'): un DELETE repetido no re-procesa.
-  if (["completed", "failed", "cancelled", "expired", "revision_pendiente"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado });
-
   const estado = cleanCloseEstado(payload.estado);
+  // Idempotencia + no re-procesar, CON una excepción crítica: la carrera
+  // CAPTURE_DEBUG puede sellar 'failed' un job que en verdad emitió (evidencia
+  // débil post-EMITIR). Un terminal PERMISIVO ('failed'/'cancelled'/'expired')
+  // DEBE poder recibir la lápida 'revision_pendiente' para bloquear la re-emisión
+  // (que quemaría el folio). Los estados PROTECTORES (registrada/lápida) no se
+  // tocan. El guard de releaseCuentaEmissionLock refuerza esto a nivel DB.
+  const yaProtegido = job.estado === "completed" || job.estado === "revision_pendiente";
+  const permisivoTerminal = job.estado === "failed" || job.estado === "cancelled" || job.estado === "expired";
+  if (yaProtegido || (permisivoTerminal && estado !== "revision_pendiente")) {
+    return NextResponse.json({ ok: true, estado: job.estado });
+  }
   await releaseCuentaEmissionLock({ sb: service.service, cuentaId: job.cuenta_id, jobId: job.job_id, estado });
   return NextResponse.json({ ok: true, estado });
 }
@@ -516,7 +524,11 @@ export async function PATCH(request: Request) {
   }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
-  if (["completed", "failed", "cancelled", "expired"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado, closed: true });
+  // 'revision_pendiente' (lápida) es un estado terminal PROTECTOR: un heartbeat
+  // NUNCA debe resucitarlo. Antes faltaba en esta lista → un latido tardío lo
+  // degradaba a 'running' (abajo), reabría su ventana, la lápida expiraba y la
+  // propuesta volvía a ser emitible → doble folio. Ahora se trata como cerrado.
+  if (["completed", "failed", "cancelled", "expired", "revision_pendiente"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado, closed: true });
 
   const now = new Date().toISOString();
   const estado = cleanStatus(payload.estado ?? payload.status);
@@ -530,7 +542,12 @@ export async function PATCH(request: Request) {
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
     .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
-    .eq("job_id", job.job_id);
+    .eq("job_id", job.job_id)
+    // Cinturón y tiradores: aunque el corte de arriba ya cubre los estados
+    // terminales, gateamos el UPDATE a solo activos para que ningún estado
+    // protector pueda ser degradado a 'running' por un latido que gane una carrera
+    // contra el sellado (SELECT :506 y UPDATE no son atómicos).
+    .in("estado", ["created", "running"]);
   if (updateJobError) {
     await recordOpsError({
       sb: service.service,

@@ -103,6 +103,24 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+      // INTEGRIDAD DE FOLIO: además de boletas ya registradas, bloquear si hay un
+      // job de emisión EN VUELO ('created'/'running') o una LÁPIDA
+      // 'revision_pendiente' (folio posiblemente emitido, aún sin registrar).
+      // Borrar la propuesta pone emision_jobs.propuesta_id en NULL (ON DELETE SET
+      // NULL): la lápida queda huérfana y reprocesar la cartola crea una propuesta
+      // nueva SIN candado → re-emisión de un folio ya quemado, o doble boleta
+      // cuando el job en vuelo aterrice.
+      const { count: jobsActivos } = await svc
+        .from("emision_jobs")
+        .select("job_id", { count: "exact", head: true })
+        .in("propuesta_id", propIds)
+        .in("estado", ["created", "running", "revision_pendiente"]);
+      if ((jobsActivos ?? 0) > 0) {
+        return NextResponse.json(
+          { error: "Esta boleta tiene una emisión en curso o quedó a medias en el SII. Espera a que termine o recupera su folio antes de deshacer." },
+          { status: 409 },
+        );
+      }
     }
     // Delete propuestas linked to these movimientos
     const { error: propDelErr } = await svc.from("propuestas_ia").delete().in("movimiento_id", movIds);
