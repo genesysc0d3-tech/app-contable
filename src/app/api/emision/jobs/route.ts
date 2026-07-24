@@ -13,6 +13,7 @@ import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { CURRENT_EMISSION_AUTHORIZATION_VERSION, getEmissionAuthorizationStatus } from "@/lib/emission/authorizations";
 import { validarRut } from "@/lib/sii/validation";
 import { guardTipoDteEmisor } from "@/lib/sii/tipo-dte-emisor-guard";
+import { verificarEmisionMasiva } from "@/lib/pagos/metering";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled" | "revision_pendiente";
@@ -285,6 +286,30 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (enVuelo) {
       return NextResponse.json({ ok: false, error: "EMISION_EN_CURSO", detalle: "Ya hay una emisión en curso para esta boleta." }, { status: 409 });
+    }
+
+    // GATE DE CUOTA DEL PLAN (crítica #1 de la auditoría). Las masivas (con
+    // propuesta_id) consumen el cupo del plan; las boletas ÚNICAS (sin propuesta_id)
+    // son ilimitadas y por eso quedan FUERA de este bloque. Antes el carril real solo
+    // miraba plan_activo (booleano) → un plan chico emitía masivas ILIMITADAS. Ahora
+    // el número lo manda el plan. El plan se activa a mano (cuentas.plan_activo +
+    // plan_codigo) aunque todavía no haya pago por MercadoPago: estadoCuota ya honra
+    // ese plan manual (planActivoManual). Una boleta por job → cantidad=1; el consumo
+    // se DERIVA de boletas_emitidas (no hay contador que mantener). dev_mode bypassa
+    // para las pruebas internas del operador.
+    const { data: devRow } = await guard.service
+      .from("usuarios")
+      .select("dev_mode")
+      .eq("id", guard.userId)
+      .maybeSingle();
+    const cuota = await verificarEmisionMasiva(guard.service, guard.empresaId, 1, {
+      devBypass: devRow?.dev_mode === true,
+    });
+    if (!cuota.ok) {
+      return NextResponse.json(
+        { ok: false, error: cuota.codigo, detalle: cuota.detalle, disponible: cuota.disponible },
+        { status: 402 },
+      );
     }
   }
 
