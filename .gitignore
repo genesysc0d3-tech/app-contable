@@ -61,6 +61,8 @@ SESSION_NOTES.md
 !/artifacts/runs/*.md
 /*.xlsx
 /~$*.xlsx
+# cartolas bancarias reales sueltas en la raíz (PII — nunca versionar)
+/*.pdf
 .vercel/token
 .supabase/token
 .git/.git-credentials-local

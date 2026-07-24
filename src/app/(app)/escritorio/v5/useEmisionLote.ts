@@ -127,7 +127,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     return () => window.removeEventListener("beforeunload", handler);
   }, [corriendo]);
 
-  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<{ jobId: string; expiresAt: string } | null> => {
+  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<{ jobId: string; expiresAt: string; emisorRut: string | null } | null> => {
     try {
       const res = await fetch("/api/emision/jobs", {
         method: "POST",
@@ -142,7 +142,16 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok || !json.job_id || !json.expires_at) return null;
-      return { jobId: json.job_id as string, expiresAt: json.expires_at as string };
+      // El server resuelve el emisor_rut autoritativo (empresa.rut de la DB) y lo
+      // devuelve en expected_emisor_rut. Lo usamos como fuente de verdad para el
+      // payload de la extensión, igual que la boleta única (EmitirDirectaView):
+      // sin esto el job viaja sin emisor_rut y la extensión lo rechaza fail-closed
+      // (EMISOR_RUT_INVALID) en TODAS las boletas del lote.
+      return {
+        jobId: json.job_id as string,
+        expiresAt: json.expires_at as string,
+        emisorRut: (json.expected_emisor_rut ?? null) as string | null,
+      };
     } catch {
       return null;
     }
@@ -188,7 +197,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         // 2. MISMO payload que boleta única (fuente única) — desde la propuesta.
         const boleta = buildBoletaJob({
           empresaId,
-          emisorRut: empresaRut ?? undefined,
+          emisorRut: job.emisorRut ?? empresaRut ?? undefined,
           tipoDte: full.tipoDte,
           monto: full.monto,
           fechaEmision: full.fechaEmision,

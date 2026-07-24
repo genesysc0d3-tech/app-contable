@@ -102,6 +102,15 @@ export async function POST(request: Request) {
     const neto = r.tipo_dte === 39 ? (r.monto_neto ?? Math.round(r.monto_total / 1.19)) : 0;
     const iva = r.tipo_dte === 39 ? (r.iva ?? (r.monto_total - neto)) : 0;
     const exento = r.tipo_dte === 41 ? (r.monto_exento ?? r.monto_total) : 0;
+    // DELIBERADO (auditoría 2026-07-24): el backfill NO enlaza propuesta_id ni
+    // levanta la lápida 'revision_pendiente' de ningún job — y así DEBE ser. El
+    // Resumen de Ventas del SII da (tipo, folio) pero NO a qué propuesta pertenece
+    // un folio, y la lápida no persiste un folio candidato → no existe match
+    // confiable. Levantar una lápida a ciegas re-habilitaría esa propuesta para
+    // re-emitir (doble folio), que es EXACTAMENTE lo que la lápida previene. La
+    // resolución de una propuesta "a medias" cuyo folio reaparece en el RCV queda
+    // como paso MANUAL (el modal de emisión ya tiene 'recover' dirigido por jobId),
+    // que es lo seguro. propuesta_id null aquí es correcto, no un olvido.
     const { error } = await sb.from("boletas_emitidas").insert({
       empresa_id: empresaId,
       tipo_dte: r.tipo_dte,

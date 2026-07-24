@@ -120,6 +120,21 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+      // INTEGRIDAD DE FOLIO (mismo guard que deshacer): bloquear si hay un job de
+      // emisión EN VUELO ('created'/'running') o una LÁPIDA 'revision_pendiente'.
+      // Borrar la propuesta orfanaría la lápida (propuesta_id → NULL) y permitiría
+      // re-emitir un folio ya quemado, o registrar doble cuando el job aterrice.
+      const { count: jobsActivos } = await svc
+        .from("emision_jobs")
+        .select("job_id", { count: "exact", head: true })
+        .in("propuesta_id", propIds)
+        .in("estado", ["created", "running", "revision_pendiente"]);
+      if ((jobsActivos ?? 0) > 0) {
+        return NextResponse.json(
+          { error: "Esta boleta tiene una emisión en curso o quedó a medias en el SII. Espera a que termine o recupera su folio antes de eliminar." },
+          { status: 409 },
+        );
+      }
     }
   }
 

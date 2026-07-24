@@ -636,7 +636,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }
   }
 
-  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" = "cancelled") {
+  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente" = "cancelled") {
     if (!jobId) return;
     try {
       await fetch("/api/emision/jobs", {
@@ -748,6 +748,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             : `${data.message ?? "Resultado SII recibido, pero falta guardar respaldo. No se marca como emitida."}${folio}${persistenceError}`,
         });
         setLocalWorkerLoading(false);
+        // LÁPIDA para la boleta ÚNICA (igual que el lote): si llegó un FOLIO pero no
+        // se confirmó emitida (evidencia débil o guardado fallido), el SII PUDO
+        // emitir → sellamos el job 'revision_pendiente' para BLOQUEAR la re-emisión
+        // (que quemaría el folio) hasta recuperarlo. Antes el job quedaba 'running' (o
+        // el server lo sellaba 'failed' vía CAPTURE_DEBUG) y la propuesta volvía a ser
+        // emitible tras el TTL. Solo con folio presente: sin folio no hubo emisión.
+        if (!emitted && data.result?.folio && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
+          closedJobIdsRef.current.add(data.job_id);
+          void closeEmissionJobEvent(data.job_id, "revision_pendiente");
+        }
         toast(emitted ? `Boleta emitida y guardada.${folio}` : "Boleta SII no quedó guardada en la app", emitted ? "success" : "error");
         router.refresh();
         return;

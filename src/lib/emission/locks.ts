@@ -79,14 +79,61 @@ export async function releaseCuentaEmissionLock(args: {
   estado?: "completed" | "failed" | "cancelled" | "expired" | "revision_pendiente";
 }) {
   const estado = args.estado ?? "completed";
-  await finalizeFolioReservaForJob({ sb: args.sb, jobId: args.jobId, estado });
-  await args.sb.from("emision_locks").delete().eq("cuenta_id", args.cuentaId).eq("job_id", args.jobId);
-  await args.sb
+
+  // El candado de cuenta se libera casi siempre (un release tardío no debe dejar la
+  // cuenta trabada). EXCEPCIÓN: la lápida 'revision_pendiente' de una boleta ÚNICA
+  // (sin propuesta_id). En la boleta única los guards server-side por propuesta_id
+  // (POST /api/emision/jobs) NO aplican → el candado de cuenta es la ÚNICA reja que
+  // le queda contra la re-emisión (doble folio). Se MANTIENE hasta el TTL: un
+  // re-POST choca con EMISION_BLOQUEADA y el usuario ve el panel de emisión sin
+  // resolver (→ Recuperar) en vez de re-emitir. El LOTE (con propuesta_id) SÍ lo
+  // libera: su reja es el guard por propuesta_id.
+  let mantenerCandado = false;
+  if (estado === "revision_pendiente") {
+    const { data: jobRow } = await args.sb
+      .from("emision_jobs")
+      .select("propuesta_id")
+      .eq("job_id", args.jobId)
+      .maybeSingle();
+    mantenerCandado = !jobRow?.propuesta_id;
+  }
+  if (!mantenerCandado) {
+    await args.sb.from("emision_locks").delete().eq("cuenta_id", args.cuentaId).eq("job_id", args.jobId);
+  }
+
+  // Transición de estado GUARDADA: el estado del job solo avanza hacia MÁS
+  // protección, nunca hacia menos. Orden de protección:
+  //   completed / revision_pendiente  → PROTEGEN (bloquean re-emitir la propuesta)
+  //   failed / cancelled / expired     → PERMISIVOS (permiten re-emitir)
+  // Esto arregla dos cosas de raíz:
+  //  (a) la lápida 'revision_pendiente' PUEDE sobrescribir un sello 'failed'
+  //      espurio (carrera CAPTURE_DEBUG: el job quedó 'failed' pero el folio pudo
+  //      emitirse) → sin esto la propuesta re-aparecía 'lista' y se re-emitía,
+  //      quemando el folio.
+  //  (b) un release TARDÍO no puede degradar un 'completed' ni una lápida ya
+  //      puesta (antes el update era incondicional).
+  const ALLOWED_FROM: Record<NonNullable<typeof args.estado>, string[]> = {
+    completed: ["created", "running", "failed", "cancelled", "expired", "revision_pendiente"],
+    revision_pendiente: ["created", "running", "failed", "cancelled", "expired"],
+    failed: ["created", "running"],
+    cancelled: ["created", "running"],
+    expired: ["created", "running"],
+  };
+  const { data: updated } = await args.sb
     .from("emision_jobs")
     .update({
       estado,
       estado_visible: estado,
       updated_at: new Date().toISOString(),
     })
-    .eq("job_id", args.jobId);
+    .eq("job_id", args.jobId)
+    .in("estado", ALLOWED_FROM[estado])
+    .select("estado")
+    .maybeSingle();
+
+  // La reserva de folio (SimpleAPI) se finaliza SOLO si la transición se aplicó:
+  // un release tardío ignorado no debe soltar/consumir una reserva ya finalizada.
+  if (updated) {
+    await finalizeFolioReservaForJob({ sb: args.sb, jobId: args.jobId, estado });
+  }
 }
