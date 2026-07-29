@@ -11,3 +11,11 @@ export const EXTENSION_STORE_URL = (process.env.NEXT_PUBLIC_EXTENSION_STORE_URL 
 
 /** Nombre visible de la extensión (para copys consistentes). */
 export const EXTENSION_NOMBRE = "App Contable Motor Local";
+
+/** ZIP público usado por la instalación manual durante la beta. */
+export const EXTENSION_ZIP_URL = "/descargas/masstest-motor-local.zip";
+export const EXTENSION_ZIP_FILENAME = "masstest-motor-local.zip";
+export const EXTENSION_ZIP_DOWNLOAD_PROPS = {
+  href: EXTENSION_ZIP_URL,
+  download: EXTENSION_ZIP_FILENAME,
+} as const;
