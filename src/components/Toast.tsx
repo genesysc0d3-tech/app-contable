@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useCallback, createContext, useContext } from "react";
-import { CheckCircle, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, XCircle, Info } from "@phosphor-icons/react";
 
 interface ToastItem {
   id: number;
   message: string;
-  type: "success" | "error";
+  type: "success" | "error" | "info";
 }
 
 const ToastContext = createContext<{
-  toast: (message: string, type?: "success" | "error") => void;
+  toast: (message: string, type?: "success" | "error" | "info") => void;
 }>({ toast: () => {} });
 
 export function useToast() {
@@ -20,13 +20,13 @@ export function useToast() {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const toast = useCallback((message: string, type: "success" | "error" = "success") => {
+  const toast = useCallback((message: string, type: "success" | "error" | "info" = "success") => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
-    // Los errores necesitan más tiempo de lectura que las confirmaciones
+    // Errores e info necesitan más tiempo de lectura que las confirmaciones.
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, type === "error" ? 6000 : 2000);
+    }, type === "error" ? 6000 : type === "info" ? 5000 : 2000);
   }, []);
 
   return (
@@ -42,6 +42,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             {t.type === "success" ? (
               <CheckCircle size={18} weight="fill" className="text-[#22C55E]" />
+            ) : t.type === "info" ? (
+              <Info size={18} weight="fill" className="text-[#3B82F6]" />
             ) : (
               <XCircle size={18} weight="fill" className="text-[#E8553E]" />
             )}
