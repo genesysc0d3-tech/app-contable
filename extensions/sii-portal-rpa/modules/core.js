@@ -2,7 +2,7 @@
 
 export const EXT_SOURCE = "app-contable-extension";
 export const PROTOCOL_VERSION = 1;
-export const EXTENSION_VERSION = "0.1.0";
+export const EXTENSION_VERSION = "0.1.1";
 
 export function isAllowedAppUrl(url) {
   try {

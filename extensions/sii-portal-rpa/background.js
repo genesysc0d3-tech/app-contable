@@ -10,6 +10,25 @@ const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEA
 
 const activeJobs = new Map();
 
+// Al INSTALAR la extensión, Chrome NO inyecta el content script (app-bridge.js) en
+// las pestañas que ya estaban abiertas → la app se queda en "extensión no detectada"
+// hasta que el usuario recargue a mano. En una instalación NUEVA recargamos las
+// pestañas de la app para que el puente se inyecte y la app la reconozca sola (el
+// "que se recargue sola"). En 'update' NO recargamos: el usuario podría estar
+// trabajando y perdería el estado; para ese caso la app re-chequea sola por polling
+// (useExtensionStatus). El host_permission de la app habilita tabs.query/reload.
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install") return;
+  chrome.tabs.query(
+    { url: ["https://app-contable-five.vercel.app/*", "http://localhost/*", "http://127.0.0.1/*"] },
+    (tabs) => {
+      for (const tab of tabs) {
+        if (typeof tab.id === "number") chrome.tabs.reload(tab.id).catch(() => {});
+      }
+    },
+  );
+});
+
 function statusMessage(jobId, status, message, recoverable = true) {
   return baseMessage({
     type: "APP_CONTABLE_SII_JOB_STATUS",

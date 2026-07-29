@@ -16,6 +16,8 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
   const [status, setStatus] = useState<ExtensionStatus>("checking");
   const [version, setVersion] = useState<string | null>(null);
   const pingRef = useRef<{ nonce: string; timeoutId: number } | null>(null);
+  // Espejo de `status` para leerlo dentro del intervalo de polling sin recrear el effect.
+  const statusRef = useRef<ExtensionStatus>("checking");
 
   // Solo postea el ping + arma el timeout (que puede pasar a "missing"). NO hace un
   // setState SÍNCRONO, así se puede invocar desde el effect de montaje sin violar
@@ -41,6 +43,11 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     postPing();
   }, [postPing]);
 
+  // Espejo de `status` en un ref para leerlo dentro del intervalo sin recrear el effect.
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.source !== window) return;
@@ -54,8 +61,17 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     }
     window.addEventListener("message", onMessage);
     postPing();
+    // Re-chequeo automático: al instalar la extensión, Chrome NO inyecta el puente en
+    // las pestañas ya abiertas, así que puede aparecer DESPUÉS del primer ping. Mientras
+    // no esté "ready", re-preguntamos cada 2,5s → apenas el puente existe (por el reload
+    // post-install de la extensión o una navegación), la app pasa SOLA a "conectada",
+    // sin que el usuario tenga que apretar "Actualizar".
+    const pollId = window.setInterval(() => {
+      if (statusRef.current !== "ready") postPing();
+    }, 2500);
     return () => {
       if (pingRef.current) window.clearTimeout(pingRef.current.timeoutId);
+      window.clearInterval(pollId);
       window.removeEventListener("message", onMessage);
     };
   }, [postPing]);
