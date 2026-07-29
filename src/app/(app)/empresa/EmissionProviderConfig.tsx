@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type CSSProperties } from "react";
 import { useToast } from "@/components/Toast";
 import { setEmisionConfig, type BoletasEmisionProveedor, type FacturasEmisionProveedor } from "./actions";
-import { EXTENSION_ZIP_DOWNLOAD_PROPS } from "@/lib/extension";
+import { EXTENSION_ZIP_DOWNLOAD_PROPS, EXTENSION_VERSION_ACTUAL } from "@/lib/extension";
 
 export interface EmissionProviderState {
   boletasProveedor: BoletasEmisionProveedor;
@@ -424,13 +424,14 @@ function LocalMotorPanel({
           color: "var(--text2, #8b92a3)",
         }}>
           <div style={{ fontWeight: 800, color: "var(--text, #e8eaf0)", marginBottom: 4 }}>
-            Instala la extensión App Contable Motor Local en este Chrome
+            Instala la extensión App Contable Motor Local (v{EXTENSION_VERSION_ACTUAL}) en este Chrome
           </div>
           <ol style={{ margin: 0, paddingLeft: 16 }}>
-            <li>Abre una pestaña nueva y entra a chrome://extensions</li>
+            <li>El archivo <b>.zip</b> ya se descargó al presionar «Instalar extensión». Descomprímelo (doble clic) → queda una <b>carpeta</b>.</li>
+            <li>En una pestaña nueva entra a <b>chrome://extensions</b> (solo Google Chrome, no Safari).</li>
             <li>Activa el «Modo de desarrollador» (arriba a la derecha).</li>
-            <li>Presiona «Cargar descomprimida» y elige la carpeta de la extensión que te entregamos.</li>
-            <li>Vuelve aquí y presiona «Actualizar».</li>
+            <li>Presiona «Cargar descomprimida» y elige la <b>carpeta</b> descomprimida (no el .zip).</li>
+            <li>Listo: la app se conecta sola. (Si no, presiona «Actualizar».)</li>
           </ol>
         </div>
       )}
@@ -438,7 +439,7 @@ function LocalMotorPanel({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginTop: 13 }}>
         <MotorStatusCard title="SII Local" status={ready ? "Activo" : "Pendiente"} detail="Boletas 39/41 vía Portal SII/e-Boleta local." active={ready} />
         <MotorStatusCard title="SimpleAPI" status={vaultReady ? "Bóveda lista" : "Bóveda pendiente"} detail={vaultDetail(vault)} active={vaultReady} />
-        <MotorStatusCard title="Versión" status={version ?? "-"} detail="Extensión App Contable Motor Local." active={ready} />
+        <MotorStatusCard title="Versión" status={version ?? "-"} detail={`Última disponible: v${EXTENSION_VERSION_ACTUAL}${version && version !== EXTENSION_VERSION_ACTUAL ? " · reinstala para actualizar" : ""}`} active={ready} />
       </div>
     </section>
   );
