@@ -70,6 +70,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
     if (!subibles.length) return;
     setUploading(true);
     let ok = 0;
+    let dup = 0;
     const subidos = new Set<string>();
     const fallidos = new Map<string, string>();
     for (const q of subibles) {
@@ -91,7 +92,13 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
           }),
         });
         const data = await res.json().catch(() => null);
-        if (data?.ok) { ok++; subidos.add(q.id); }
+        if (data?.ok) {
+          subidos.add(q.id);
+          // El server deduplica por hash de contenido: re-subir el MISMO archivo NO
+          // crea otro documento (evita duplicar movimientos/boletas). Se avisa aparte
+          // para que el usuario entienda por qué "no aparece nuevo" y ve el de antes.
+          if (data.ya_procesado) dup++; else ok++;
+        }
         else {
           fallidos.set(q.id,
             res.status === 413 ? "El archivo supera 10MB"
@@ -109,7 +116,16 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
     if (fallidos.size > 0) {
       toast(fallidos.size > 1 ? `${fallidos.size} archivos no se pudieron subir. Revisa la cola.` : "1 archivo no se pudo subir. Revisa la cola.", "error");
     }
-    if (ok > 0) { toast(`${ok} subido${ok > 1 ? "s" : ""}`); onUploaded?.(); }
+    if (dup > 0) {
+      toast(
+        dup > 1
+          ? `${dup} archivos ya los habías subido antes (mismo contenido): no se volvieron a subir para no duplicar.`
+          : "Ya habías subido este archivo antes (mismo contenido): no se volvió a subir para no duplicar — estás viendo el de esa vez.",
+        "info",
+      );
+    }
+    if (ok > 0) toast(`${ok} subido${ok > 1 ? "s" : ""}`);
+    if (ok > 0 || dup > 0) onUploaded?.();
   }
 
   const numSubibles = queue.filter(q => q.file.size <= MAX_PROCESAR_UPLOAD_BYTES).length;
