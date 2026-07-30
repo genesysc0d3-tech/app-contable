@@ -178,6 +178,24 @@
     loadFacturasFlag();
   });
 
+  // Validación local del DV del RUT (módulo 11). Espejo de modules/rut.js — NO se
+  // importa porque options.js es script clásico, no módulo. Evita conectar con un
+  // RUT mal tipeado (DV incorrecto) que recién fallaría al emitir en el SII.
+  function rutDvValido(value) {
+    const clean = String(value || "").replace(/[.\s-]/g, "").toUpperCase();
+    const m = clean.match(/^(\d{1,8})([\dK])$/);
+    if (!m) return false;
+    let suma = 0;
+    let mul = 2;
+    for (let i = m[1].length - 1; i >= 0; i -= 1) {
+      suma += parseInt(m[1][i], 10) * mul;
+      mul = mul === 7 ? 2 : mul + 1;
+    }
+    const resto = 11 - (suma % 11);
+    const dv = resto === 11 ? "0" : resto === 10 ? "K" : String(resto);
+    return m[2] === dv;
+  }
+
   elements.siiVaultForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const rut = elements.siiRut?.value || "";
@@ -189,6 +207,14 @@
     }
     if (!clave) {
       setDiag(elements.siiDiagnostic, "error", "Ingresa la Clave Tributaria.");
+      return;
+    }
+    if (!rutDvValido(rut)) {
+      setDiag(elements.siiDiagnostic, "error", "El RUT del SII no es válido — revisa el dígito verificador.");
+      return;
+    }
+    if (empresaRut.trim() && !rutDvValido(empresaRut)) {
+      setDiag(elements.siiDiagnostic, "error", "El «RUT de la empresa a emitir» no es válido — revisa el dígito verificador.");
       return;
     }
 
