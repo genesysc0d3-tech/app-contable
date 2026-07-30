@@ -157,12 +157,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     }
   }, [empresaRut]);
 
-  const closeJob = useCallback(async (jobId: string, estado: "failed" | "cancelled" | "revision_pendiente") => {
+  const closeJob = useCallback(async (jobId: string, estado: "failed" | "cancelled" | "revision_pendiente", motivo?: string) => {
     try {
       await fetch("/api/emision/jobs", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: jobId, estado }),
+        // CAJA NEGRA: el motivo del desenlace (último status del RPA / razón del fallo)
+        // viaja al server → status_message + ops_event, para diagnosticar sin consola.
+        body: JSON.stringify({ job_id: jobId, estado, status_message: motivo ? motivo.slice(0, 500) : null }),
       });
     } catch {
       // Best-effort: el lock igual expira por TTL server-side.
@@ -251,7 +253,8 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         //  - fallida  → 'failed' (pre-emit seguro, sin folio; se puede saltar).
         if (desenlace.estado === "revisar") setJobIdRevision(job.jobId);
         if (desenlace.estado !== "emitida") {
-          await closeJob(job.jobId, desenlace.estado === "revisar" ? "revision_pendiente" : "failed");
+          const motivo = "motivo" in desenlace ? desenlace.motivo : undefined;
+          await closeJob(job.jobId, desenlace.estado === "revisar" ? "revision_pendiente" : "failed", motivo);
         }
         return desenlace;
       },

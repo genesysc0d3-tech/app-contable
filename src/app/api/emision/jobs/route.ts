@@ -466,9 +466,15 @@ export async function DELETE(request: Request) {
   const jobId = cleanText(payload.job_id);
   if (!jobId) return NextResponse.json({ ok: false, error: "JOB_ID_REQUIRED" }, { status: 400 });
 
+  // CAJA NEGRA: el cliente manda el último mensaje de estado de la extensión como
+  // motivo del cierre. Es texto TÉCNICO del RPA (p.ej. "no pude abrir el SII",
+  // "login fallido") — NO PII de terceros. Se guarda para poder diagnosticar por
+  // qué falló una emisión sin depender de mirar la consola en la máquina del user.
+  const motivo = cleanText(payload.status_message)?.slice(0, 500) ?? null;
+
   const { data: job, error } = await service.service
     .from("emision_jobs")
-    .select("job_id, cuenta_id, usuario_id, estado")
+    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, provider, propuesta_id")
     .eq("job_id", jobId)
     .maybeSingle();
   if (error) {
@@ -500,6 +506,33 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true, estado: job.estado });
   }
   await releaseCuentaEmissionLock({ sb: service.service, cuentaId: job.cuenta_id, jobId: job.job_id, estado });
+
+  // CAJA NEGRA (observabilidad de fallos de emisión): guarda el motivo en el job y
+  // registra un ops_event en los cierres NO exitosos. Antes un fallo no dejaba
+  // rastro server-side (status_message null, sin evento) → imposible diagnosticar
+  // sin mirar la consola del navegador del usuario. Best-effort: nunca rompe el cierre.
+  if (estado === "failed" || estado === "revision_pendiente" || estado === "cancelled") {
+    try {
+      if (motivo) {
+        await service.service.from("emision_jobs").update({ status_message: motivo }).eq("job_id", job.job_id);
+      }
+      await recordOpsEvent({
+        sb: service.service,
+        severity: estado === "cancelled" ? "info" : "warn",
+        source: "emision",
+        eventName: `emission_job_${estado}`,
+        summary: `Emisión cerrada como ${estado}${motivo ? `: ${motivo}` : " (el cliente no reportó motivo)"}`,
+        cuentaId: job.cuenta_id,
+        empresaId: job.empresa_id,
+        usuarioId: user.id,
+        resourceType: "emision_job",
+        resourceId: job.job_id,
+        metadata: { estado, provider: job.provider, es_lote: Boolean(job.propuesta_id), motivo },
+      });
+    } catch {
+      // best-effort: la caja negra no debe romper el cierre del job
+    }
+  }
   return NextResponse.json({ ok: true, estado });
 }
 

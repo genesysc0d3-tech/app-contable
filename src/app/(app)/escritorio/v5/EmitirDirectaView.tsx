@@ -327,6 +327,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   useEffect(() => { localWorkerRef.current = localWorker; }, [localWorker]);
   // Jobs ya cerrados desde esta sesión: JOB_CLOSE se manda UNA vez por job.
   const closedJobIdsRef = useRef<Set<string>>(new Set());
+  // Último mensaje de estado de la extensión (para la CAJA NEGRA: se adjunta como
+  // motivo al cerrar un job fallido → queda en status_message + ops_event).
+  const lastStatusMsgRef = useRef<string | null>(null);
   const [simpleApiJobId, setSimpleApiJobId] = useState<string | null>(null);
   const [manualSiiFolio, setManualSiiFolio] = useState("");
   const [leyendoComprobante, setLeyendoComprobante] = useState(false);
@@ -642,7 +645,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       await fetch("/api/emision/jobs", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: jobId, estado }),
+        // CAJA NEGRA: adjunta el último mensaje de estado de la extensión como motivo
+        // → el server lo guarda en status_message + ops_event. Así un fallo deja rastro
+        // diagnosticable sin mirar la consola del navegador del usuario.
+        body: JSON.stringify({ job_id: jobId, estado, status_message: lastStatusMsgRef.current ?? null }),
       });
       setEmissionLock(null);
     } catch {
@@ -781,6 +787,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       }
 
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
+
+      // CAJA NEGRA: recordamos el último mensaje del RPA para adjuntarlo si el job
+      // termina fallido (el motivo real del fallo suele venir en el último status).
+      if (data.message) lastStatusMsgRef.current = String(data.message).slice(0, 500);
 
       void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
       setLocalWorker((current) => {
