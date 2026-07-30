@@ -106,7 +106,7 @@ const MSG = {
   noEnPlan:
     "🔒 <b>Telegram es parte del plan Pro.</b>\n" +
     "Tu plan actual no incluye comprobantes por Telegram.\n" +
-    "Actívalo en massDTE → Empresa → Plan y volvé a mandarme la foto.",
+    "Actívalo en massDTE → Empresa → Plan y vuelve a mandarme la foto.",
 };
 
 type Svc = ReturnType<typeof getServiceClient>;
@@ -366,7 +366,7 @@ async function handleCallback(cq: TelegramCallbackQuery) {
   if (accion === "ed") {
     const prop = await propuestaPorId(propId, empresaId);
     if (prop && messageId) {
-      const text = mensajeBoleta(prop, tipo).text + "\n\n¿Qué querés cambiar?";
+      const text = mensajeBoleta(prop, tipo).text + "\n\n¿Qué quieres cambiar?";
       const edited = await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbCampos(propId) });
       if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbCampos(propId) });
     }
@@ -671,7 +671,7 @@ async function mostrarPendientes(chatId: number) {
   if (!empresaId) { await say(chatId, MSG.noVinculado); return; }
   const props = await propuestasPendientesEmpresa(empresaId, 10);
   if (props.length === 0) {
-    await say(chatId, "✅ No tenés boletas pendientes para revisar por ahora.");
+    await say(chatId, "✅ No tienes boletas pendientes para revisar por ahora.");
     return;
   }
   const tipo = await tipoChat(empresaId);
@@ -769,7 +769,7 @@ function textoConfig(tipo: "afecto" | "exento"): string {
   return (
     "⚙️ <b>Configuración</b>\n\n" +
     `Tus boletas se generan como <b>${actual}</b> por defecto.\n` +
-    "Elige el tipo (también lo podés cambiar en massDTE → Empresa):"
+    "Elige el tipo (también lo puedes cambiar en massDTE → Empresa):"
   );
 }
 

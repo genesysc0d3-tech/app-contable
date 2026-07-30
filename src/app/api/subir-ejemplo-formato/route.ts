@@ -47,6 +47,6 @@ export async function POST(request: Request) {
     nombre: body.nombre,
     hojas: workbook.SheetNames,
     fingerprints,
-    mensaje: "Formato registrado. Ahora subí una cartola igual desde Subir y usa Mapear campos.",
+    mensaje: "Formato registrado. Ahora sube una cartola igual desde Subir y usa Mapear campos.",
   });
 }
