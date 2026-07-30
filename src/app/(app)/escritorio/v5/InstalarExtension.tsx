@@ -61,13 +61,13 @@ export default function InstalarExtension() {
       {!publicada && showSteps && (
         <div style={{ marginTop: 10, fontSize: 11, lineHeight: 1.6, color: "var(--text2, #8b92a3)" }}>
           <ol style={{ margin: 0, paddingLeft: 16 }}>
-            <li>Abrí una pestaña nueva en <b>chrome://extensions</b></li>
-            <li>Activá el «Modo de desarrollador» (arriba a la derecha).</li>
-            <li>«Cargar descomprimida» → elegí la carpeta de la extensión que te pasamos.</li>
+            <li>Abre una pestaña nueva en <b>chrome://extensions</b></li>
+            <li>Activa el «Modo de desarrollador» (arriba a la derecha).</li>
+            <li>«Cargar descomprimida» → elige la carpeta de la extensión que te pasamos.</li>
             <li>
-              Volvé acá y{" "}
+              Vuelve acá y{" "}
               <button type="button" onClick={recheck} style={{ background: "none", border: "none", padding: 0, color: "var(--accent, #E8553E)", fontWeight: 700, cursor: "pointer", fontSize: 11 }}>
-                reintentá la detección
+                reintenta la detección
               </button>.
             </li>
           </ol>
