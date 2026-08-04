@@ -395,6 +395,40 @@ export async function ponerListo(
   return { ok: true, count: listas };
 }
 
+// Edita SOLO la glosa (notas) de una boleta ya EN EMISIÓN ('aprobado') o 'listo', SIN
+// cambiar su estado. Nace del feedback del 1er contador de beta: una boleta aprobada
+// quedaba bloqueada para corregir el "Detalle" (editarPropuesta excluye 'aprobado' para
+// no burlar el candado de ponerListo). Esto es glosa-only: no degrada la boleta, no toca
+// la máquina de estados ni el candado de emisión. Fail-CLOSED si YA se emitió (folio
+// real): la glosa ya está en el SII, cambiar el `notas` en la app la desincronizaría.
+export async function editarGlosaEmitible(
+  propuestaId: string,
+  notas: string | null,
+): Promise<{ ok?: boolean; error?: string }> {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error };
+  const glosa = (notas ?? "").trim().slice(0, 80) || null;
+  const { data: yaEmitida } = await ctx.sb
+    .from("boletas_emitidas")
+    .select("id")
+    .eq("propuesta_id", propuestaId)
+    .neq("estado", "anulada")
+    .limit(1)
+    .maybeSingle();
+  if (yaEmitida) return { error: "Esta boleta ya se emitió: su detalle ya está en el SII y no se puede cambiar." };
+  const { error, count } = await ctx.sb
+    .from("propuestas_ia")
+    .update({ notas: glosa }, { count: "exact" })
+    .eq("id", propuestaId)
+    .eq("empresa_id", ctx.empresaId)
+    .in("estado", ["aprobado", "listo"]); // solo emitibles; NO cambia estado
+  if (error) return { error: error.message };
+  if (!count) return { error: "No se pudo guardar el detalle (la boleta ya no está en emisión)." };
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true };
+}
+
 // Aprobar cartola (atómico): promueve a Emitir TODAS las propuestas del documento
 // que quedaron en "listo" (estado 'listo' → 'aprobado'). Es el único gatillo hacia
 // Emitir para una cartola: nada cae en la cola hasta apretar esto.
