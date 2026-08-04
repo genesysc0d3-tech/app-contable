@@ -7,7 +7,7 @@
 
 import { useState, useEffect, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta } from "../../revisar/actions";
+import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta, editarGlosaEmitible } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
@@ -169,7 +169,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       {enEmision && <span style={{fontSize:8,fontWeight:800,color:"var(--blue)",flexShrink:0,letterSpacing:".05em"}}>EN EMISIÓN</span>}
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
                         {!enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
-                        {!enEmision && <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />}
+                        <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />{/* EN EMISIÓN: abre el editor solo-glosa (corregir el Detalle sin degradar la boleta) */}
                         {!enEmision && (
                           <span className="rs-reject">
                             <RowActionBtn type="reject" onClick={async () => {const r=await rechazarPropuesta(p.id);if(r.error) toast(r.error,"error");else toast("Rechazada");onAction();}} icon="✕" />
@@ -178,9 +178,12 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       </div>
                     </div>
 
-                    {/* Expanded detail */}
+                    {/* Expanded detail. EN EMISIÓN (aprobado) → editor SOLO-glosa (corregir el
+                        Detalle sin degradar la boleta); borrador → editor completo intacto. */}
                     {isExpanded && (
-                      <ExpandedDetail propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction} onClose={() => toggleRow(p.id)} empresaTipoContribuyente={empresaTipoContribuyente} />
+                      enEmision
+                        ? <GlosaEmitibleInline propuesta={p} onAction={onAction} onClose={() => toggleRow(p.id)} />
+                        : <ExpandedDetail propuesta={p} clientes={clientes} empresaId={empresaId} onAction={onAction} onClose={() => toggleRow(p.id)} empresaTipoContribuyente={empresaTipoContribuyente} />
                     )}
                   </div>
                 );
@@ -264,6 +267,53 @@ const PAGOS_INLINE = ["Efectivo", "Transferencia electrónica", "Débito", "Cré
 /* ─── Expanded Detail: el desplegable ES el editor. Mismos campos que el editor
    completo (tipo, detalle, monto, receptor, forma de pago) inline — sin popup
    aparte. "Poner listo" persiste los edits y stagea (lo que ves = lo que se emite). ─── */
+// Editor SOLO-glosa para una boleta EN EMISIÓN (aprobado). Corrige el "Detalle" que se
+// imprime, sin degradar la boleta ni sacarla de la cola de Emitir (server: editarGlosaEmitible).
+// Nace del feedback del 1er contador: la boleta aprobada quedaba sin forma de guardar la glosa.
+function GlosaEmitibleInline({ propuesta, onAction, onClose }: {
+  propuesta: Propuesta; onAction: () => void; onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [glosa, setGlosa] = useState<string>(propuesta.notas?.trim() ?? "");
+  const [busy, setBusy] = useState(false);
+  const guardar = async () => {
+    if (busy) return;
+    setBusy(true);
+    const r = await editarGlosaEmitible(propuesta.id, glosa.trim() || null);
+    setBusy(false);
+    if (r.error) { toast(r.error, "error"); return; }
+    toast("Detalle guardado");
+    onAction();
+    onClose();
+  };
+  return (
+    <div className="pc op" style={{ padding: "6px 16px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+      <label style={{ fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+        Detalle de la boleta (lo que se imprime en el SII)
+      </label>
+      <input
+        value={glosa}
+        onChange={(e) => setGlosa(e.target.value.slice(0, 80))}
+        onKeyDown={(e) => { if (e.key === "Enter") void guardar(); }}
+        maxLength={80}
+        placeholder="ej. Venta de productos"
+        autoFocus
+        style={{ width: "100%", fontSize: 11, padding: "6px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" }}
+      />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 8, color: "var(--text3)" }}>{glosa.length}/80 · sigue en emisión</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={onClose} style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "transparent", border: "none", cursor: "pointer", padding: "6px 10px" }}>Cancelar</button>
+          <button onClick={guardar} disabled={busy}
+            style={{ fontSize: 10, padding: "6px 18px", borderRadius: 7, border: "none", cursor: busy ? "default" : "pointer", fontWeight: 700, background: "var(--green)", color: "#0a1f12", opacity: busy ? 0.5 : 1 }}>
+            {busy ? "Guardando…" : "Guardar detalle"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClose, empresaTipoContribuyente, compact = false }: {
   propuesta: Propuesta; clientes: ClienteResumen[]; empresaId: string; onAction: () => void; onClose: () => void;
   empresaTipoContribuyente?: string | null; compact?: boolean;
