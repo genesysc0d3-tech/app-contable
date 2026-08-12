@@ -101,11 +101,23 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
     // declara string|number, pero con cellDates el runtime trae Date reales.
     const fechaVal = fechaRaw as unknown as Date | string | number;
     const isDate = fechaVal instanceof Date;
-    const fechaStr = isDate
+    let fechaStr = isDate
       ? `${fechaVal.getFullYear()}-${String(fechaVal.getMonth() + 1).padStart(2, "0")}-${String(fechaVal.getDate()).padStart(2, "0")}`
       : String(fechaRaw).trim();
 
-    if (!isDate && !fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))
+    // Fecha como número serial de Excel (algunos bancos exportan la celda como
+    // número, no texto ni Date): 46245 = 2026-08-11. Rango acotado a 2000–2100
+    // para no confundir montos con fechas.
+    const serial = typeof fechaVal === "number" && Number.isFinite(fechaVal)
+      ? Math.floor(fechaVal)
+      : /^\d{5}$/.test(fechaStr) ? parseInt(fechaStr, 10) : NaN;
+    const isSerial = !isDate && serial >= 36526 && serial <= 73050;
+    if (isSerial) {
+      const d = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
+      fechaStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    }
+
+    if (!isDate && !isSerial && !fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))
       continue;
 
     let tipo: ParsedLine["tipo"];
@@ -140,7 +152,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       monto = cargo || abono;
     }
 
-    const fecha = isDate ? fechaStr : normalizeDate(fechaRaw, cfg.date_format);
+    const fecha = isDate || isSerial ? fechaStr : normalizeDate(fechaRaw, cfg.date_format);
     const descripcion = String(r[c.descripcion] ?? "").trim();
     const n_documento =
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";
