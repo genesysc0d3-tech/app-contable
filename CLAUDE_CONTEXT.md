@@ -10,6 +10,12 @@ Después de cada merge a `dev`, actualizar este archivo con lo que se construyó
 
 ---
 
+**PR #91** — fix(mapeador): cuenta solo filas con datos. Caso real de beta (2026-08-11, cliente de Bit En SpA): cartola de 7 movimientos en hoja de 103 filas (74 vacías de relleno del banco); el mapeador decía "81 movimientos se van a importar" (`totalRows - firstDataRow`) y todos perseguimos 74 movimientos fantasma. `/api/parser/preview` ahora manda `nonEmptyBeyondPreview` (no-vacías más allá de las 30 del preview, contadas server-side); FieldMapper suma no-vacías visibles + ese campo (fallback legacy si no viene); la tabla de preview filtra filas vacías conservando el número de fila real. Verificado contra el archivo real (81→7; los totales del banco en el archivo confirman $630.000 = 7). Mismo incidente, fix operativo sin código: OpenCode movió `deepseek-v4-flash` a hosting China con opt-in manual (RegionError 403, issues #39845/#39872 de anomalyco/opencode) → `OPENCODE_GO_MODEL=minimax-m3` en Vercel + redeploy (aprobado en allowlist 21.719, zero-retention; NO se hizo el opt-in China). Pendiente producto: minimax rinde 3.200 requests vs 63.300 del flash en el plan Go — evaluar MiMo-V2.5 (30.100) verificando retención/hosting, o esperar que OpenCode reponga versión US.
+
+**PR #89** — feat(ux): botón Cerrar sesión en el header (lo cachó el contador en beta: no había forma de salir). 4° ícono `ha-btn` al final de la fila de acciones (buscador · empresa · tema · salir), llama la server action `signOut` existente. La fila vive en capa absolute → el calendario no se mueve; solo se ensanchó el slot 132→178px. Incluye fix repo-wide del gate de CI: advisories dompurify (GHSA-55q2-fjhq-7xh7) + nanoid (GHSA-2v37-7h3g-55p8) resueltos en lockfile (audit prod en 0). OJO: `npm audit fix --omit=dev` DESINSTALA devDeps — correr `npm install` después.
+
+---
+
 ## REGLA CRÍTICA — SIEMPRE TRABAJAR EN RAMAS
 
 **NUNCA trabajar directamente en `main` ni en `dev`** (excepto commits `docs:` de este archivo).
