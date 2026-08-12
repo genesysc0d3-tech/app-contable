@@ -213,7 +213,13 @@
       setDiag(elements.siiDiagnostic, "error", "El RUT del SII no es válido — revisa el dígito verificador.");
       return;
     }
-    if (empresaRut.trim() && !rutDvValido(empresaRut)) {
+    // Obligatorio: es el chequeo cruzado contra el RUT que manda la app por
+    // boleta (si difieren, no se emite). Vacío = candado anulado.
+    if (!empresaRut.trim()) {
+      setDiag(elements.siiDiagnostic, "error", "Ingresa el RUT de la empresa a emitir (el mismo de tu empresa en massDTE).");
+      return;
+    }
+    if (!rutDvValido(empresaRut)) {
       setDiag(elements.siiDiagnostic, "error", "El «RUT de la empresa a emitir» no es válido — revisa el dígito verificador.");
       return;
     }
@@ -380,6 +386,7 @@
       CAF_TIPO_DTE_MISMATCH: "El CAF cargado no corresponde al tipo de DTE seleccionado.",
       CAF_FOLIO_RANGE_EXHAUSTED: "El rango de folios del CAF está agotado.",
       SESSION_EXPIRED: "Inicia sesión en massDTE en este mismo Chrome (deja la pestaña abierta) y vuelve a intentar.",
+      EMPRESA_RUT_REQUIRED: "Ingresa el RUT de la empresa a emitir (el mismo de tu empresa en massDTE).",
     };
     return messages[code] || "No se pudo guardar la bóveda local.";
   }
