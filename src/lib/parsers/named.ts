@@ -12,7 +12,10 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
     if (!r) continue;
     const norm = r.map((c) => String(c ?? "").toLowerCase().trim());
 
-    const fechaIdx = norm.findIndex((c) => c === "fecha");
+    // "fecha" exacto o compuesto ("fecha transacción", "fecha movimiento"…).
+    // findIndex toma la primera: en cartolas con Fecha Transacción + Fecha
+    // Contable gana la de la transacción, que es la que corresponde al gasto.
+    const fechaIdx = norm.findIndex((c) => c === "fecha" || c.startsWith("fecha "));
 
     // Simple template format: Fecha + Glosa + Monto (no cargo/abono)
     const glosaIdx = norm.findIndex((c) => c === "glosa");
@@ -41,10 +44,10 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
     // Bank cartola format: Fecha + Descripción + Cargo + Abono
     const descIdx = norm.findIndex((c) => c.includes("descripci"));
     const cargoIdx = norm.findIndex(
-      (c) => c.includes("cargo") || c.includes("cheques") || c.includes("débito") || c.includes("debito")
+      (c) => c.includes("cargo") || c.includes("cheques") || c.includes("débito") || c.includes("debito") || c.includes("egreso")
     );
     const abonoIdx = norm.findIndex(
-      (c) => c.includes("abono") || c.includes("depósit") || c.includes("deposit") || c.includes("crédito") || c.includes("credito")
+      (c) => c.includes("abono") || c.includes("depósit") || c.includes("deposit") || c.includes("crédito") || c.includes("credito") || c.includes("ingreso")
     );
     const ndocIdx = norm.findIndex(
       (c) => c.includes("documento") || c === "n° documento" || c === "n documento"

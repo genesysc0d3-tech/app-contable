@@ -86,3 +86,27 @@ describe("detectByNames — detección por nombres de encabezado", () => {
     ).toBeNull();
   });
 });
+
+describe("detectByNames — formato 'Mis Movimientos' (Fecha Transacción + Egreso/Ingreso)", () => {
+  // Caso real de beta 2026-08-12: banco exporta "Fecha Transacción, Fecha
+  // Contable, Descripción, Egreso (-), Ingreso (+), Saldo" con fechas como
+  // números seriales de Excel.
+  const rows = [
+    [null, null, "Mis Movimientos"],
+    ["Fecha Transacción", "Fecha Contable", "Descripción", "Egreso (-)", "Ingreso (+)", "Saldo"],
+    [46245, 46245, "Comision Unica Por Plan", 6076, "", 798023],
+    [46245, 46246, "Transferencia recibida de", "", 40000, 804099],
+  ];
+
+  it("detecta el header y mapea egreso→cargo, ingreso→abono", () => {
+    const cfg = detectByNames(rows as never);
+    expect(cfg).not.toBeNull();
+    expect(cfg!.header_row).toBe(1);
+    expect(cfg!.skip_rows_before_data).toBe(2);
+    expect(cfg!.columns.fecha).toBe(0); // Fecha Transacción, no la Contable
+    expect(cfg!.columns.descripcion).toBe(2);
+    expect(cfg!.columns.cargo).toBe(3);
+    expect(cfg!.columns.abono).toBe(4);
+    expect(cfg!.columns.saldo).toBe(5);
+  });
+});
