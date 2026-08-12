@@ -75,6 +75,11 @@
     if (elements.siiEmpresaRut && !elements.siiEmpresaRut.value && status?.empresa_rut) {
       elements.siiEmpresaRut.value = status.empresa_rut;
     }
+    // Si hay una empresa fijada, el pliegue "Avanzado" se abre solo: config
+    // activa jamás debe quedar invisible.
+    if (elements.siiEmpresaRut?.value) {
+      elements.siiEmpresaRut.closest("details.adv-fold")?.setAttribute("open", "");
+    }
     elements.siiVaultRut.textContent = status?.has_rut ? "Configurado" : "Falta";
     elements.siiVaultClave.textContent = status?.has_clave ? "Configurada" : "Falta";
     elements.siiVaultEncrypted.textContent = status?.encrypted ? "Activo" : "Sin bóveda";
