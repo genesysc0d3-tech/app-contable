@@ -379,6 +379,7 @@
       CAF_INVALID: "El CAF no parece contener un rango de folios válido.",
       CAF_TIPO_DTE_MISMATCH: "El CAF cargado no corresponde al tipo de DTE seleccionado.",
       CAF_FOLIO_RANGE_EXHAUSTED: "El rango de folios del CAF está agotado.",
+      SESSION_EXPIRED: "Inicia sesión en massDTE en este mismo Chrome (deja la pestaña abierta) y vuelve a intentar.",
     };
     return messages[code] || "No se pudo guardar la bóveda local.";
   }
