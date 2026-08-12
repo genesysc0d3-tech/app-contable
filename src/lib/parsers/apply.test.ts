@@ -306,3 +306,41 @@ describe("serializeLines — texto autodescriptivo para el procesador/IA", () =>
     expect(out.trimEnd().endsWith("NO invertir.")).toBe(true);
   });
 });
+
+describe("applyAdapter — fechas como número serial de Excel", () => {
+  const cfg = {
+    header_row: 0,
+    skip_rows_before_data: 1,
+    date_format: "dd/mm/yyyy" as const,
+    number_format: "chilean" as const,
+    columns: { fecha: 0, descripcion: 1, n_documento: -1, cargo: 2, abono: 3, saldo: 4 },
+  };
+
+  it("convierte el serial a yyyy-mm-dd (46245 = 2026-08-11)", () => {
+    const lines = applyAdapter(
+      [
+        ["Fecha", "Descripción", "Egreso", "Ingreso", "Saldo"],
+        [46245, "Transferencia recibida", "", 40000, 804099],
+        [45292, "Abono antiguo", "", 1000, 1000],
+      ] as never,
+      cfg,
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[0].fecha).toBe("2026-08-11");
+    expect(lines[0].tipo).toBe("ENTRADA");
+    expect(lines[0].monto).toBe(40000);
+    expect(lines[1].fecha).toBe("2024-01-01");
+  });
+
+  it("números fuera del rango de fechas plausibles NO se tratan como fecha", () => {
+    const lines = applyAdapter(
+      [
+        ["Fecha", "Descripción", "Egreso", "Ingreso", "Saldo"],
+        [12345, "monto suelto en col fecha", "", 40000, 0],
+        [99999, "otro fuera de rango", "", 50000, 0],
+      ] as never,
+      cfg,
+    );
+    expect(lines).toHaveLength(0);
+  });
+});
