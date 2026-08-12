@@ -2,7 +2,8 @@ import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
-import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
+import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { subirDocumentoR2 } from "@/lib/storage";
 import {
   sendMessage,
@@ -1021,10 +1022,11 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
       await svc2.from("documentos_subidos").update({ estado: "procesando", progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram", album: true } as Json, album_imagenes: grouped as Json }).eq("id", doc.id);
       // delete-by-id (no por grupo): una foto que llegue entre la lectura y el borrado sobrevive en el buffer (la rescata el reaper).
       await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
-      // AWAIT (no fire-and-forget): si no, el worker se desengancha y el job queda colgado.
-      // La boleta se la manda el worker al chat (clasificarComprobanteTelegram con chat_id) →
-      // así el flujo del álbum queda en 2 pasos: "📸 Álbum recibido" + la boleta.
-      await processDocumentQueue({ sb: svc2, limit: 1, lockOwner: "telegram-album-kick" }).catch(() => {});
+      // Drenaje en invocación FRESCA vía /kick: el webhook ya gastó parte de sus
+      // 300s bajando fotos; el worker nuevo parte con presupuesto completo y, si el
+      // modelo es lento, hace yield con checkpoint y se encadena solo. La boleta la
+      // manda el worker al chat (clasificarComprobanteTelegram con chat_id).
+      await iniciarDrenaje("telegram-album-kick").catch(() => {});
     } catch {
       await svc2.from("documentos_subidos").update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar el álbum" } as Json }).eq("id", doc.id);
       await say(chatId, MSG.errorGuardar);

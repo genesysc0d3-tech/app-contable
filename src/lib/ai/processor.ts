@@ -315,12 +315,27 @@ async function limpiarInsercionesPrevias(
   return { ok: true };
 }
 
+/**
+ * Lanzada cuando el procesamiento agota su presupuesto de tiempo dentro de la
+ * invocación serverless. NO es un error: los chunks ya clasificados quedaron
+ * en el checkpoint de progreso_ia y el job debe reagendarse AL TIRO (sin
+ * backoff ni gastar intentos) para retomar donde quedó. Así el pipeline no
+ * depende de qué tan rápido sea el modelo de turno.
+ */
+export class ProcessorYieldError extends Error {
+  constructor(public loteActual: number, public totalLotes: number) {
+    super(`YIELD: presupuesto agotado en lote ${loteActual}/${totalLotes}; checkpoint guardado`);
+    this.name = "ProcessorYieldError";
+  }
+}
+
 export async function procesarDocumento(
   documentoId: string,
   empresaId: string,
   contenido: string,
   ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number },
-  preExtracted?: PreExtractedMovimiento[]
+  preExtracted?: PreExtractedMovimiento[],
+  opts?: { deadline?: number }
 ): Promise<{ movimientos_total: number; error?: string }> {
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
@@ -503,26 +518,58 @@ export async function procesarDocumento(
     let completedCount = 0;
     let totalMovsFound = 0;
 
-    const runBatch = async (start: number): Promise<ChunkResult[]> => {
+    // Checkpoint resumible: si un intento anterior dejó chunks clasificados en
+    // progreso_ia (yield por presupuesto, timeout de Vercel, watchdog), los
+    // reusamos y solo se llama a la IA por los que faltan. La clave ata el
+    // checkpoint al contenido exacto de ESTE intento — incluye cuántos movs
+    // van a la IA porque las reglas pueden cambiar entre reintentos (el
+    // usuario crea una regla) y eso re-particiona los chunks.
+    const movsEnChunks = movChunks.reduce((s, c) => s + c.movs.length, 0);
+    const checkpointClave = `${bypassMode ? "b" : "t"}:${totalLotes}:${contenido.length}:${movsEnChunks}`;
+    if (totalLotes > 0) {
+      const { data: docRow } = await supabase
+        .from("documentos_subidos")
+        .select("progreso_ia")
+        .eq("id", documentoId)
+        .maybeSingle();
+      const cp = (docRow?.progreso_ia as ProgresoIA | null)?.checkpoint;
+      if (cp?.clave === checkpointClave && Array.isArray(cp.chunks)) {
+        for (const c of cp.chunks) {
+          if (!c || typeof c.index !== "number" || c.index < 0 || c.index >= totalLotes || results[c.index]) continue;
+          results[c.index] = {
+            index: c.index,
+            movimientos: (c.movimientos ?? []) as MovimientoExtraido[],
+            propuestas: (c.propuestas ?? []) as PropuestaExtraida[],
+            tokens_input: 0,
+            tokens_output: 0,
+            modelo: "checkpoint",
+          };
+          completedCount++;
+          totalMovsFound += results[c.index].movimientos.length;
+        }
+        if (completedCount > 0) {
+          console.log(`[checkpoint] retomando: ${completedCount}/${totalLotes} lotes ya clasificados`);
+        }
+      }
+    }
+
+    const pendingIdx: number[] = [];
+    for (let i = 0; i < totalLotes; i++) if (!results[i]) pendingIdx.push(i);
+
+    const runBatch = async (indices: number[]): Promise<ChunkResult[]> => {
       if (bypassMode) {
-        const batch = movChunks.slice(start, start + MAX_CONCURRENT);
         return Promise.all(
-          batch.map((c, i) =>
-            classifyChunkWithRetry(start + i, c.movs, classifyPrompt)
-          )
+          indices.map((idx) => classifyChunkWithRetry(idx, movChunks[idx].movs, classifyPrompt))
         );
       } else {
-        const batch = textChunks.slice(start, start + MAX_CONCURRENT);
         return Promise.all(
-          batch.map((c, i) =>
-            processChunkWithRetry(start + i, c.text.join("\n"), systemPrompt, contextoEmpresa)
-          )
+          indices.map((idx) => processChunkWithRetry(idx, textChunks[idx].text.join("\n"), systemPrompt, contextoEmpresa))
         );
       }
     };
 
-    for (let start = 0; start < totalLotes; start += MAX_CONCURRENT) {
-      const batchResults = await runBatch(start);
+    for (let start = 0; start < pendingIdx.length; start += MAX_CONCURRENT) {
+      const batchResults = await runBatch(pendingIdx.slice(start, start + MAX_CONCURRENT));
 
       for (const r of batchResults) {
         results[r.index] = r;
@@ -562,7 +609,22 @@ export async function procesarDocumento(
         lote_actual: completedCount,
         total_lotes: totalLotes,
         movimientos_encontrados: totalMovsFound,
+        // Persistimos lo ya clasificado: un reintento retoma desde acá en vez
+        // de repartir de cero (clave = el pipeline es agnóstico a la velocidad
+        // del modelo de turno).
+        checkpoint: {
+          clave: checkpointClave,
+          chunks: results
+            .filter((r): r is ChunkResult => Boolean(r))
+            .map((r) => ({ index: r.index, movimientos: r.movimientos, propuestas: r.propuestas })),
+        },
       });
+
+      // Presupuesto de tiempo agotado y aún quedan lotes → yield: el job se
+      // reagenda al tiro y la próxima invocación continúa desde el checkpoint.
+      if (opts?.deadline && Date.now() > opts.deadline && completedCount < totalLotes) {
+        throw new ProcessorYieldError(completedCount, totalLotes);
+      }
     }
 
     // Combine results. In bypass+rules mode, allMovimientos is the original
