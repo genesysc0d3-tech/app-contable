@@ -48,6 +48,17 @@ function statusLabel(status: OpsSnapshot["status"]) {
   return "OK";
 }
 
+// El motivo real del evento vive en metadata (error_message del proveedor, motivo
+// del RPA…). Sin esto, el panel solo mostraba el summary genérico y para saber la
+// causa había que consultar ops_events por SQL.
+function eventMotivo(event: { metadata: Record<string, unknown> | null }): string | null {
+  const md = event.metadata;
+  if (!md) return null;
+  const raw = md.error_message ?? md.motivo ?? md.error ?? null;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  return raw.length > 220 ? `${raw.slice(0, 220)}…` : raw;
+}
+
 function severityColor(severity: string) {
   if (severity === "critical" || severity === "error") return C.accent;
   if (severity === "warn") return C.amber;
@@ -151,6 +162,11 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
                 </div>
                 <div style={{ marginTop: 4, color: C.text, fontSize: 12, fontWeight: 850 }}>{event.event_name}</div>
                 <div style={{ marginTop: 2, color: C.text2, fontSize: 12, lineHeight: 1.45 }}>{event.summary}</div>
+                {eventMotivo(event) && (
+                  <div style={{ marginTop: 3, color: C.text3, fontSize: 11, lineHeight: 1.45, fontFamily: "ui-monospace, monospace", wordBreak: "break-word" }}>
+                    {eventMotivo(event)}
+                  </div>
+                )}
               </div>
             ))}
           </div>
