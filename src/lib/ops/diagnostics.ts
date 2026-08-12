@@ -21,6 +21,7 @@ export type OpsLatestEvent = {
   summary: string;
   resource_type: string | null;
   resource_id: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
 
@@ -118,7 +119,7 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
       .lt("locked_at", new Date(now.getTime() - 15 * 60 * 1000).toISOString()),
     sb
       .from("ops_events")
-      .select("id, severity, source, event_name, summary, resource_type, resource_id, created_at")
+      .select("id, severity, source, event_name, summary, resource_type, resource_id, metadata, created_at")
       .order("created_at", { ascending: false })
       .limit(12),
   ]);
@@ -207,7 +208,14 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     checkedAt,
     metrics,
     findings,
-    latestEvents: latestEventsResult.data ?? [],
+    // metadata llega como Json (puede ser string/number); el panel solo sabe leer
+    // objetos, así que normalizamos lo demás a null.
+    latestEvents: (latestEventsResult.data ?? []).map((e) => ({
+      ...e,
+      metadata: e.metadata && typeof e.metadata === "object" && !Array.isArray(e.metadata)
+        ? (e.metadata as Record<string, unknown>)
+        : null,
+    })),
     queryErrors,
   };
 }
