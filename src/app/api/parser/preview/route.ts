@@ -54,6 +54,7 @@ export async function POST(request: Request) {
     name: string;
     rows: string[][];
     totalRows: number;
+    nonEmptyBeyondPreview: number;
     cols: number;
     fingerprint: string;
     suggested: AdapterConfig | null;
@@ -68,6 +69,13 @@ export async function POST(request: Request) {
     );
     const fingerprint = allRows.length > 0 ? computeFingerprint(allRows) : "";
     const cols = Math.max(0, ...preview.map((r) => r.length));
+    // Los bancos rellenan la hoja con filas vacías al final (una cartola de 7
+    // movimientos puede venir en 103 filas). El conteo de "movimientos a importar"
+    // debe ignorarlas; el cliente solo ve PREVIEW_ROWS, así que le contamos las no
+    // vacías del resto acá, donde tenemos la hoja completa.
+    const nonEmptyBeyondPreview = allRows
+      .slice(PREVIEW_ROWS)
+      .filter((r) => r.some((cell) => String(cell ?? "").trim() !== "")).length;
 
     // Run detectors against the FULL sheet (not just preview rows) for accuracy
     let suggested: AdapterConfig | null = null;
@@ -81,7 +89,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return { name, rows: preview, totalRows: allRows.length, cols, fingerprint, suggested, suggestedSource };
+    return { name, rows: preview, totalRows: allRows.length, nonEmptyBeyondPreview, cols, fingerprint, suggested, suggestedSource };
   });
 
   const primary = sheets.find((s) => s.totalRows > 0) ?? sheets[0] ?? null;
@@ -92,6 +100,7 @@ export async function POST(request: Request) {
     sheetName: primary.name,
     fingerprint: primary.fingerprint,
     totalRows: primary.totalRows,
+    nonEmptyBeyondPreview: primary.nonEmptyBeyondPreview,
     cols: primary.cols,
     rows: primary.rows,
     suggested: primary.suggested,
