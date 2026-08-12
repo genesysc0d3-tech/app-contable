@@ -13,6 +13,8 @@ type DateFmt = "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "unknown";
 interface Preview {
   sheetName: string; fingerprint: string; totalRows: number; cols: number;
   rows: string[][]; suggested: AdapterConfig | null; suggestedSource: "named" | "heuristic" | null;
+  /** Filas con datos más allá de las visibles del preview (el resto son relleno vacío del banco). */
+  nonEmptyBeyondPreview?: number;
 }
 
 interface FieldMapperProps { documentoId: string; onClose: () => void; onSaved?: () => void; }
@@ -167,7 +169,19 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, variant = "moda
   const findCol = useMemo(() => (role: Role) => roles.findIndex((r) => r === role), [roles]);
   const detected = preview?.suggested !== null && preview?.suggestedSource !== null;
   const totalMapped = roles.filter(r => r !== "ignorar").length;
-  const realRows = preview ? Math.max(0, preview.totalRows - firstDataRow) : 0;
+  // Movimientos reales a importar: filas CON datos desde firstDataRow. Los bancos
+  // rellenan la hoja con filas vacías al final (7 movimientos pueden venir en 103
+  // filas), así que contar totalRows - firstDataRow miente. Contamos las no vacías
+  // del preview visible + las que el server contó más allá del preview; si el
+  // server aún no manda ese campo (respuesta cacheada vieja), cae al conteo legacy.
+  const realRows = useMemo(() => {
+    if (!preview) return 0;
+    if (typeof preview.nonEmptyBeyondPreview !== "number") return Math.max(0, preview.totalRows - firstDataRow);
+    const enPreview = preview.rows
+      .slice(firstDataRow)
+      .filter((r) => r.some((cell) => String(cell ?? "").trim() !== "")).length;
+    return enPreview + preview.nonEmptyBeyondPreview;
+  }, [preview, firstDataRow]);
 
   const validationErr = useMemo(() => {
     if (!preview) return null;
@@ -252,7 +266,7 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, variant = "moda
         {loading && <div style={{ padding: 80, textAlign: "center", color: "#a4adba" }}><div style={{ height: 20, width: 200, margin: "0 auto 12px", borderRadius: 8, background: "rgba(255,255,255,.06)" }} /><p>Cargando...</p></div>}
         {error && <div style={{ padding: 80, textAlign: "center", color: "#ff7365" }}><Warning size={32} weight="fill" /><p>{error}</p></div>}
         {preview && <GridContent preview={preview} roles={roles} setRole={setRole} headerRow={headerRow}
-          firstDataRow={firstDataRow} layout={layout} columnLabels={columnLabels}
+          firstDataRow={firstDataRow} layout={layout} columnLabels={columnLabels} realRows={realRows}
           dateFormat={dateFormat} setDateFormat={setDateFormat} setLayout={setLayout}
           defaultFlujo={defaultFlujo} setDefaultFlujo={setDefaultFlujo}
           advancedOpen={advancedOpen} setAdvancedOpen={setAdvancedOpen}
@@ -314,27 +328,32 @@ export default function FieldMapper(props: FieldMapperProps) {
 function GridContent(props: {
   preview: Preview; roles: Role[]; setRole: (idx: number, role: Role) => void;
   headerRow: number; firstDataRow: number; layout: Layout; columnLabels: string[];
+  realRows: number;
   dateFormat: DateFmt; setDateFormat: (f: DateFmt) => void;
   setLayout: (l: Layout) => void; defaultFlujo: "entrada" | "salida";
   setDefaultFlujo: (f: "entrada" | "salida") => void;
   advancedOpen: boolean; setAdvancedOpen: (v: boolean) => void;
   ignoredOpen: boolean; setIgnoredOpen: (v: boolean) => void;
 }) {
-  const { preview, roles, setRole, headerRow, firstDataRow, layout, columnLabels,
+  const { preview, roles, setRole, headerRow, firstDataRow, layout, columnLabels, realRows,
     dateFormat, setDateFormat, setLayout, defaultFlujo, setDefaultFlujo,
     advancedOpen, setAdvancedOpen, ignoredOpen, setIgnoredOpen } = props;
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const ignoredRows = preview.rows.slice(0, Math.max(0, headerRow));
   const rangeBetween = preview.rows.slice(headerRow + 1, firstDataRow);
-  const dataPreview = preview.rows.slice(firstDataRow, Math.min(preview.rows.length, firstDataRow + 12));
-  const realRows = Math.max(0, preview.totalRows - firstDataRow);
+  // Muestra solo filas con datos: el relleno vacío al final de la hoja no aporta
+  // y hacía creer que había más movimientos de los reales.
+  const dataPreview = preview.rows
+    .slice(firstDataRow, Math.min(preview.rows.length, firstDataRow + 12))
+    .map((row, i) => ({ row, idx: firstDataRow + i }))
+    .filter(({ row }) => row.some((cell) => String(cell ?? "").trim() !== ""));
   const cols = preview.cols;
 
   const emptyCols = useMemo(() => {
     const s = new Set<number>();
     for (let c = 0; c < cols; c++) {
       const h = String(preview.rows[headerRow]?.[c] ?? "").trim();
-      const hasData = dataPreview.some(r => String(r[c] ?? "").trim() !== "");
+      const hasData = dataPreview.some(({ row }) => String(row[c] ?? "").trim() !== "");
       if (!h && !hasData) s.add(c);
     }
     return s;
@@ -404,9 +423,9 @@ function GridContent(props: {
               {dataPreview.length === 0 && (
                 <tr><td colSpan={cols + 1} style={{ padding: 24, textAlign: "center", color: "#6f7b8b", fontSize: 12 }}>No hay datos visibles</td></tr>
               )}
-              {dataPreview.map((row, ri) => (
-                <tr key={ri}>
-                  <td style={{ width: 40, textAlign: "center", padding: "9px 8px", color: "#6f7b8b", fontSize: 11, background: "rgba(255,255,255,.025)", borderBottom: "1px solid rgba(255,255,255,.06)", borderRight: "1px solid rgba(255,255,255,.07)" }}>{firstDataRow + ri}</td>
+              {dataPreview.map(({ row, idx }) => (
+                <tr key={idx}>
+                  <td style={{ width: 40, textAlign: "center", padding: "9px 8px", color: "#6f7b8b", fontSize: 11, background: "rgba(255,255,255,.025)", borderBottom: "1px solid rgba(255,255,255,.06)", borderRight: "1px solid rgba(255,255,255,.07)" }}>{idx}</td>
                   {Array.from({ length: cols }).map((_, c) => {
                     const isEmpty = emptyCols.has(c);
                     return (
