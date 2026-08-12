@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
+import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { recordOpsError } from "@/lib/ops/events";
 
 function cleanGroupedImages(value: unknown, args: { empresaId: string; documentoId: string }) {
@@ -98,19 +99,25 @@ export async function POST(request: Request) {
       progreso_ia: { estado: "queued", job_id: job.id },
     }).eq("id", documento.id);
 
-    processDocumentQueue({ sb: svc, limit: 1, lockOwner: "manual-reprocess-kick" }).catch((error) => {
-      void recordOpsError({
-        sb: svc,
-        severity: "error",
-        source: "ia",
-        eventName: "document_processing_reprocess_kick_failed",
-        summary: "No se pudo iniciar reprocesamiento oportunista",
-        empresaId: usuario.empresa_id,
-        usuarioId: user.id,
-        resourceType: "document_processing_job",
-        resourceId: job.id,
-        error,
-      });
+    // Kick protegido con after() + drenaje encadenado (ver drain.ts): si el
+    // modelo es lento, el trabajo sigue en invocaciones frescas vía /kick.
+    after(async () => {
+      try {
+        await iniciarDrenaje("manual-reprocess-kick");
+      } catch (error) {
+        await recordOpsError({
+          sb: svc,
+          severity: "error",
+          source: "ia",
+          eventName: "document_processing_reprocess_kick_failed",
+          summary: "No se pudo iniciar reprocesamiento oportunista",
+          empresaId: usuario.empresa_id,
+          usuarioId: user.id,
+          resourceType: "document_processing_job",
+          resourceId: job.id,
+          error,
+        });
+      }
     });
 
     return NextResponse.json({
@@ -138,3 +145,5 @@ export async function POST(request: Request) {
 }
 
 export const dynamic = "force-dynamic";
+
+export const maxDuration = 300;

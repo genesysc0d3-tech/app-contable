@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -6,7 +6,8 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
-import { enqueueDocumentProcessingJob, processDocumentQueue } from "@/lib/document-processing/queue";
+import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { defaultStorageProvider, subirDocumentoR2 } from "@/lib/storage";
 import { createHash } from "crypto";
 
@@ -184,21 +185,26 @@ export async function POST(request: Request) {
     progreso_ia: { estado: "queued", job_id: job.id },
   }).eq("id", doc.id);
 
-  // Kick oportunista: si la funcion serverless muere, el job durable queda y
-  // el cron lo retoma. No dependemos de esta promesa para no perder trabajo.
-  processDocumentQueue({ sb: svc, limit: 1, lockOwner: "upload-kick" }).catch((error) => {
-    void recordOpsError({
-      sb: svc,
-      severity: "error",
-      source: "upload",
-      eventName: "document_processing_kick_failed",
-      summary: "No se pudo iniciar procesamiento oportunista despues de upload",
-      empresaId: usuario.empresa_id,
-      usuarioId: user.id,
-      resourceType: "document_processing_job",
-      resourceId: job.id,
-      error,
-    });
+  // Kick protegido con after(): la plataforma mantiene viva la invocación
+  // hasta que el drenaje termine o se encadene a una invocación fresca vía
+  // /kick. Si aun así algo muere, el job durable queda y el cron lo retoma.
+  after(async () => {
+    try {
+      await iniciarDrenaje("upload-kick");
+    } catch (error) {
+      await recordOpsError({
+        sb: svc,
+        severity: "error",
+        source: "upload",
+        eventName: "document_processing_kick_failed",
+        summary: "No se pudo iniciar procesamiento oportunista despues de upload",
+        empresaId: usuario.empresa_id,
+        usuarioId: user.id,
+        resourceType: "document_processing_job",
+        resourceId: job.id,
+        error,
+      });
+    }
   });
 
   return NextResponse.json({
@@ -209,3 +215,5 @@ export async function POST(request: Request) {
     message: "Procesamiento encolado.",
   });
 }
+
+export const maxDuration = 300;

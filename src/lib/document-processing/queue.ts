@@ -5,13 +5,14 @@ import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { descargarDocumento } from "@/lib/storage";
-import { procesarDocumento } from "@/lib/ai/processor";
+import { procesarDocumento, ProcessorYieldError } from "@/lib/ai/processor";
 import { sanitizeOpsMetadata } from "@/lib/ops/sanitize";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_QUEUE_LIMIT,
   DOCUMENT_PIPELINE_VERSION,
+  JOB_TIME_BUDGET_MS,
   STALE_RUNNING_MS,
   documentJobIdempotencyKey,
   nextRetryAt,
@@ -288,11 +289,44 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
   return { contenido, preExtracted };
 }
 
+/**
+ * Yield por presupuesto de tiempo: NO es un fallo. El job vuelve a la cola AL
+ * TIRO (sin backoff) y SIN gastar intento — el checkpoint en progreso_ia (que
+ * acá no se toca) garantiza que la próxima invocación avanza en vez de repetir.
+ */
+async function markJobYielded(sb: Sb, job: DocumentProcessingJob, yieldInfo: ProcessorYieldError, now = new Date()) {
+  const { error } = await sb
+    .from("document_processing_jobs")
+    .update({
+      status: "retryable",
+      last_error: yieldInfo.message,
+      locked_at: null,
+      locked_by: null,
+      next_run_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq("id", job.id)
+    .eq("status", "running");
+  if (error) throw new Error(`JOB_YIELD_UPDATE_FAILED:${error.message}`);
+}
+
 async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, error: unknown, now = new Date()) {
   const attempts = job.attempts + 1;
   const retryable = attempts < job.max_attempts;
   const status: DocumentJobStatus = retryable ? "retryable" : "failed";
   const message = safeJobError(error);
+
+  // Preserva el checkpoint de chunks ya clasificados: un error transitorio
+  // (red, upstream) no debe obligar al reintento a repartir de cero.
+  const { data: docRow } = await sb
+    .from("documentos_subidos")
+    .select("progreso_ia")
+    .eq("id", job.documento_id)
+    .maybeSingle();
+  const progresoPrevio = docRow?.progreso_ia;
+  const checkpoint = progresoPrevio && typeof progresoPrevio === "object" && !Array.isArray(progresoPrevio)
+    ? (progresoPrevio as Record<string, Json>).checkpoint ?? null
+    : null;
 
   await sb
     .from("documentos_subidos")
@@ -304,6 +338,7 @@ async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, erro
         attempts,
         max_attempts: job.max_attempts,
         next_run_at: retryable ? nextRetryAt(attempts, now) : null,
+        ...(retryable && checkpoint ? { checkpoint } : {}),
       }),
     })
     .eq("id", job.documento_id);
@@ -366,7 +401,10 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum });
       movimientosTotal = r.movimientos_total;
     } else {
-      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined);
+      // Presupuesto de tiempo: si el modelo de turno es lento y no alcanza,
+      // el processor hace yield con checkpoint y seguimos en otra invocación.
+      const deadline = Date.now() + JOB_TIME_BUDGET_MS;
+      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined, { deadline });
       if (result.error) throw new Error(result.error);
       movimientosTotal = result.movimientos_total;
     }
@@ -402,6 +440,10 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
 
     return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: movimientosTotal };
   } catch (error) {
+    if (error instanceof ProcessorYieldError) {
+      await markJobYielded(sb, job, error, new Date());
+      return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, yielded: true };
+    }
     await markJobFailedOrRetryable(sb, job, error, now);
     return { ok: false as const, jobId: job.id, documentoId: job.documento_id, error: safeJobError(error) };
   }
@@ -425,7 +467,8 @@ export async function processDocumentQueue(args: ProcessQueueArgs = {}) {
     ok: true,
     recovered,
     claimed: claimed.length,
-    completed: results.filter((r) => r.ok).length,
+    completed: results.filter((r) => r.ok && !("yielded" in r && r.yielded)).length,
+    yielded: results.filter((r) => r.ok && "yielded" in r && r.yielded).length,
     failed_or_retryable: results.filter((r) => !r.ok).length,
     results,
   };

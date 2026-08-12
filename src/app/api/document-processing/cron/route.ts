@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { processDocumentQueue } from "@/lib/document-processing/queue";
+import { drainAndChain } from "@/lib/document-processing/drain";
 import { recordOpsError } from "@/lib/ops/events";
 
 function requireCronAuth(request: Request) {
@@ -13,9 +13,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const limit = Number(process.env.DOCUMENT_PROCESSING_QUEUE_LIMIT ?? "3");
-    const result = await processDocumentQueue({ limit, lockOwner: "vercel-cron" });
-    return NextResponse.json(result);
+    // Backstop diario (Hobby: crons 1 vez/día): drena con presupuesto y se
+    // encadena vía /kick si queda trabajo — no procesa todo en ESTA invocación.
+    const result = await drainAndChain({ lockOwner: "vercel-cron", depth: 0 });
+    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     await recordOpsError({
       severity: "critical",
@@ -29,3 +30,4 @@ export async function GET(request: Request) {
 }
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;

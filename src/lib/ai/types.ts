@@ -126,4 +126,16 @@ export interface ProgresoIA {
   duplicados_detalle?: DuplicadoDetalle[];
   falsos_duplicados_warning?: boolean;
   error?: string;
+  /**
+   * Checkpoint resumible por chunk: los lotes ya clasificados por la IA se
+   * persisten acá para que un reintento (yield por presupuesto de tiempo,
+   * timeout de Vercel, watchdog) retome donde quedó en vez de repartir de
+   * cero. `clave` ata el checkpoint al contenido exacto (modo+lotes+largo);
+   * si el contenido cambia, el checkpoint se ignora. Se limpia solo: el
+   * progreso final sobreescribe la columna completa sin este campo.
+   */
+  checkpoint?: {
+    clave: string;
+    chunks: { index: number; movimientos: unknown[]; propuestas: unknown[] }[];
+  };
 }
