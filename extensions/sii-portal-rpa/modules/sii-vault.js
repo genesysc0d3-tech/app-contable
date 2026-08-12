@@ -46,6 +46,16 @@ export async function rememberAppOrigin(origin) {
     try { await chrome.storage.session.set({ [APP_ORIGIN_KEY]: origin }); } catch { /* best-effort */ }
   }
 }
+// Origen de PRODUCCIÓN de la app (el mismo del manifest). El "aprendizaje" de
+// origen (rememberAppOrigin) solo importa en desarrollo (localhost); en
+// producción la dirección es una sola y conocida. Sin este fallback, un Chrome
+// recién abierto (storage.session vacío, sin pestaña de la app cargada) daba
+// APP_ORIGIN_DESCONOCIDO aunque el usuario tuviera su sesión iniciada — y el
+// mensaje mandaba a perseguir el problema equivocado (caso real de beta
+// 2026-08-12). Con el fallback, si de verdad falta la sesión el servidor
+// responde 401 y el usuario ve el mensaje correcto ("inicia sesión").
+const PROD_APP_ORIGIN = "https://app-contable-five.vercel.app";
+
 async function getAppOrigin(explicit) {
   if (typeof explicit === "string" && /^https?:\/\//.test(explicit)) return explicit;
   try {
@@ -53,7 +63,7 @@ async function getAppOrigin(explicit) {
     const o = s?.[APP_ORIGIN_KEY];
     if (typeof o === "string" && o) return o;
   } catch { /* fall through */ }
-  return null;
+  return PROD_APP_ORIGIN;
 }
 
 async function readSlot() {
@@ -143,7 +153,12 @@ async function saveSiiVault(payload, appOriginHint) {
   // 1) Registrar WS en el servidor (autenticado con la sesión de la app).
   const deviceId = await ensureDeviceId();
   const reg = await callVaultKey(appOrigin, { action: "register", device_id: deviceId });
-  if (!reg.ok) return { ok: false, error: reg.error || "VAULT_KEY_REGISTER_FAILED" };
+  // 401 = la app no tiene sesión iniciada en ESTE Chrome — mismo mapeo que el
+  // desbloqueo, para que el usuario vea la causa real y no un código críptico.
+  if (!reg.ok) {
+    if (reg.status === 401) return { ok: false, error: "SESSION_EXPIRED" };
+    return { ok: false, error: reg.error || "VAULT_KEY_REGISTER_FAILED" };
+  }
   const userId = reg.user_id;
   const wsBytes = base64ToBytes(reg.ws);
 

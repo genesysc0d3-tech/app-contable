@@ -18,7 +18,7 @@ export const EXTENSION_NOMBRE = "App Contable Motor Local";
  * `modules/core.js` (el test lo verifica). Se muestra en la UI de instalación para que
  * el usuario sepa cuál es la vigente y pueda comparar con la que tiene detectada.
  */
-export const EXTENSION_VERSION_ACTUAL = "0.1.2";
+export const EXTENSION_VERSION_ACTUAL = "0.1.3";
 
 /** ZIP público usado por la instalación manual durante la beta. */
 export const EXTENSION_ZIP_URL = "/descargas/masstest-motor-local.zip";
