@@ -33,17 +33,16 @@
             <span>Clave Tributaria</span>
             <span class="inp"><input type="password" id="sii-clave" autocomplete="current-password" placeholder="Tu clave del SII"><button type="button" class="eye" data-eye="sii-clave" aria-label="Mostrar clave">ver</button></span>
           </label>
-          <!-- Plegado a propósito: el usuario normal NO debe decidir nada acá — la
-               app define la empresa emisora en cada boleta. "(opcional)" a la vista
-               hacía dudar en pleno flujo crítico (caso real de beta 2026-08-12). -->
-          <details class="full adv-fold">
-            <summary>Avanzado: fijar una empresa emisora</summary>
-            <label class="full">
-              <span>RUT de la empresa a emitir</span>
-              <span class="inp"><input type="text" id="sii-empresa-rut" placeholder="Ej: 77.155.156-4"></span>
-              <span class="hint">Normalmente NO necesitas esto: la app define la empresa en cada boleta. Úsalo solo si quieres forzar que este equipo emita siempre por una persona jurídica específica.</span>
-            </label>
-          </details>
+          <!-- OBLIGATORIO a propósito (decisión fundador): chequeo cruzado contra el
+               RUT que manda la app en cada boleta. La persona lo escribe dos veces
+               por caminos independientes; si difieren, la extensión NO emite. Caza
+               un typo en el onboarding O acá — ya nos salvó de emitir por la
+               empresa equivocada una vez. -->
+          <label class="full">
+            <span>RUT de la empresa a emitir</span>
+            <span class="inp"><input type="text" id="sii-empresa-rut" placeholder="Ej: 77.155.156-4" required></span>
+            <span class="hint">El mismo RUT de tu empresa en massDTE. Es un chequeo de seguridad: si no coincide con el de la app, no se emite nada — así un error de tipeo nunca termina en una boleta por la empresa equivocada.</span>
+          </label>
           <label class="full">
             <span class="hint">Necesitas tener la app abierta con tu sesión iniciada para conectar: tu sesión es la que desbloquea la clave al emitir. Si cierras sesión o pierdes el equipo, revócala con «Eliminar / revocar».</span>
           </label>

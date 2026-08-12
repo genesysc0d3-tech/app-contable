@@ -139,7 +139,9 @@ function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "PAYLOAD_INVALID";
   if (typeof payload.rut !== "string" || !payload.rut.trim()) return "RUT_REQUIRED";
   if (typeof payload.clave !== "string" || !payload.clave) return "CLAVE_REQUIRED";
-  if (payload.empresa_rut && String(payload.empresa_rut).trim() && !isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
+  // Obligatorio (chequeo cruzado con el emisor_rut que manda la app por boleta).
+  if (typeof payload.empresa_rut !== "string" || !payload.empresa_rut.trim()) return "EMPRESA_RUT_REQUIRED";
+  if (!isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
   return null;
 }
 
