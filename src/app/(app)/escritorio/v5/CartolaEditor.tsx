@@ -38,6 +38,9 @@ const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision"];
 
 type FlatRow =
   | { kind: "header"; section: SectionKey; count: number }
+  // Subgrupo por TIPO dentro de Pendientes (pedido fundador: nada de revoltijo —
+  // todos los GASTO juntos, los EXE juntos…) con casilla maestra del grupo.
+  | { kind: "subheader"; section: SectionKey; sigla: string; label: string; color: string; bg: string; ids: string[]; count: number }
   | { kind: "tx"; section: SectionKey; p: Propuesta };
 
 const CSS = `
@@ -108,6 +111,24 @@ export default function CartolaEditor({
     [groups.pendientes],
   );
 
+  // Pendientes AGRUPADAS por tipo detectado (GASTO juntos, EXE juntos…): la
+  // decisión se toma por familias, no contra un revoltijo. Grupo más numeroso
+  // primero. El orden VISUAL resultante es el que usa el shift-rango.
+  const pendientesAgrupadas = useMemo(() => {
+    const por = new Map<string, { sigla: string; label: string; color: string; bg: string; items: Propuesta[] }>();
+    for (const p of groups.pendientes) {
+      const m = tipoMeta(p.tipo_propuesto);
+      let g = por.get(m.sigla);
+      if (!g) { g = { sigla: m.sigla, label: m.label, color: m.color, bg: m.bg, items: [] }; por.set(m.sigla, g); }
+      g.items.push(p);
+    }
+    return [...por.values()].sort((a, b) => b.items.length - a.items.length);
+  }, [groups.pendientes]);
+  const ordenVisualPendientes = useMemo(
+    () => pendientesAgrupadas.flatMap((g) => g.items.map((p) => p.id)),
+    [pendientesAgrupadas],
+  );
+
   // La selección solo puede contener filas que sigan pendientes (tras un refresh,
   // lo ya juzgado sale solo de la selección).
   const pendientesIds = useMemo(() => new Set(groups.pendientes.map((p) => p.id)), [groups.pendientes]);
@@ -125,7 +146,7 @@ export default function CartolaEditor({
       const next = new Set(prev);
       const last = lastSelRef.current;
       if (shift && last && last !== id) {
-        const orden = groups.pendientes.map((p) => p.id);
+        const orden = ordenVisualPendientes;
         const a = orden.indexOf(last);
         const b = orden.indexOf(id);
         if (a >= 0 && b >= 0) {
@@ -141,6 +162,19 @@ export default function CartolaEditor({
       lastSelRef.current = id;
       return next;
     });
+  }
+
+  // Seleccionar/deseleccionar un conjunto completo (grupo o todas): si ya están
+  // todas marcadas, las desmarca; si falta alguna, marca el conjunto entero.
+  // "Seleccionar todo y desmarcar una" queda natural con el Set.
+  function toggleConjunto(ids: string[]) {
+    setSel((prev) => {
+      const todas = ids.every((id) => prev.has(id));
+      const next = new Set(prev);
+      for (const id of ids) { if (todas) next.delete(id); else next.add(id); }
+      return next;
+    });
+    lastSelRef.current = null;
   }
 
   async function bulkSel(accion: "listo" | "sin_boleta") {
@@ -166,10 +200,20 @@ export default function CartolaEditor({
       const arr = groups[key];
       if (arr.length === 0) continue;
       rows.push({ kind: "header", section: key, count: arr.length });
-      if (expanded[key]) for (const p of arr) rows.push({ kind: "tx", section: key, p });
+      if (!expanded[key]) continue;
+      if (key === "pendientes" && pendientesAgrupadas.length > 1) {
+        for (const g of pendientesAgrupadas) {
+          rows.push({ kind: "subheader", section: key, sigla: g.sigla, label: g.label, color: g.color, bg: g.bg, ids: g.items.map((p) => p.id), count: g.items.length });
+          for (const p of g.items) rows.push({ kind: "tx", section: key, p });
+        }
+      } else if (key === "pendientes") {
+        for (const g of pendientesAgrupadas) for (const p of g.items) rows.push({ kind: "tx", section: key, p });
+      } else {
+        for (const p of arr) rows.push({ kind: "tx", section: key, p });
+      }
     }
     return rows;
-  }, [groups, expanded]);
+  }, [groups, expanded, pendientesAgrupadas]);
 
   // Mantener montadas las filas expandidas aunque salgan de la ventana virtual, para
   // no perder lo que el usuario esté tipeando en su detalle (ExpandedDetail = estado local).
@@ -191,12 +235,14 @@ export default function CartolaEditor({
   const virtualizer = useVirtualizer({
     count: flat.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (flat[i]?.kind === "header" ? 38 : 44),
+    estimateSize: (i) => (flat[i]?.kind === "tx" ? 44 : flat[i]?.kind === "subheader" ? 32 : 38),
     overscan: 8,
     rangeExtractor: keepExpandedMounted,
     getItemKey: (i) => {
       const r = flat[i];
-      return r.kind === "header" ? `h:${r.section}` : `t:${r.p.id}`;
+      if (r.kind === "header") return `h:${r.section}`;
+      if (r.kind === "subheader") return `s:${r.section}:${r.sigla}`;
+      return `t:${r.p.id}`;
     },
   });
 
@@ -288,6 +334,16 @@ export default function CartolaEditor({
             </button>
           );
         })}
+        {groups.pendientes.length > 0 && (
+          <button
+            onClick={() => toggleConjunto(ordenVisualPendientes)}
+            disabled={busyBulk}
+            title="Marca o desmarca todas las pendientes; después puedes des-clickear las que no van"
+            style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--border)", background: sel.size === groups.pendientes.length ? "color-mix(in srgb, var(--accent) 10%, transparent)" : "transparent", color: "var(--text2)", cursor: "pointer" }}
+          >
+            {sel.size === groups.pendientes.length ? "Ninguna" : `Seleccionar todas (${groups.pendientes.length})`}
+          </button>
+        )}
         <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text2)" }}>
           Total <b style={{ color: "var(--text)" }}>{fmt(total)}</b>
         </span>
@@ -338,6 +394,13 @@ export default function CartolaEditor({
                     onStageAll={row.section === "pendientes" ? stagePendientes : undefined}
                     stageableCount={row.section === "pendientes" ? pendElegibles : undefined}
                     busy={busyBulk}
+                  />
+                ) : row.kind === "subheader" ? (
+                  <SubGroupHeader
+                    sigla={row.sigla} label={row.label} color={row.color} bg={row.bg}
+                    count={row.count}
+                    marcadas={row.ids.filter((id) => sel.has(id)).length}
+                    onToggleGrupo={() => toggleConjunto(row.ids)}
                   />
                 ) : (
                   <div>
@@ -461,6 +524,35 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, selected = f
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Encabezado de subgrupo por tipo (dentro de Pendientes) ─── */
+function SubGroupHeader({ sigla, label, color, bg, count, marcadas, onToggleGrupo }: {
+  sigla: string; label: string; color: string; bg: string; count: number;
+  marcadas: number; onToggleGrupo: () => void;
+}) {
+  const todas = marcadas === count && count > 0;
+  const algunas = marcadas > 0 && !todas;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 16px", background: "color-mix(in srgb, var(--text) 3%, transparent)", borderBottom: "1px solid var(--border)" }}>
+      {/* Casilla maestra del grupo: marca/desmarca la familia entera; con parte
+          marcada muestra estado intermedio. "Todas menos una" = marcar todas y
+          des-clickear la que sobra. */}
+      <input
+        type="checkbox"
+        checked={todas}
+        ref={(el) => { if (el) el.indeterminate = algunas; }}
+        onChange={() => {}}
+        onClick={(e) => { e.stopPropagation(); onToggleGrupo(); }}
+        aria-label={`Seleccionar todo el grupo ${sigla}`}
+        style={{ width: 15, height: 15, flexShrink: 0, accentColor: "var(--accent)", cursor: "pointer" }}
+      />
+      <span style={{ fontSize: 7, fontWeight: 800, letterSpacing: ".04em", padding: "2px 6px", borderRadius: 8, background: bg, color }}>{sigla}</span>
+      <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text2)" }}>{label}</span>
+      <span style={{ fontSize: 9, color: "var(--text3)" }}>{count}</span>
+      {marcadas > 0 && <span style={{ marginLeft: "auto", fontSize: 8, fontWeight: 700, color: "var(--accent)" }}>{marcadas} seleccionada{marcadas === 1 ? "" : "s"}</span>}
     </div>
   );
 }
