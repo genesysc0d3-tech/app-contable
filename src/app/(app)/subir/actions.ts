@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { revalidatePath } from "next/cache";
+import { esMedioPagoValido } from "@/lib/sii/medios-pago";
 
 const HINTS_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 
@@ -47,6 +48,56 @@ export async function setDocumentoHint(
   if (!count) return { error: "Documento no encontrado o sin permisos" };
 
   revalidatePath("/subir");
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true };
+}
+
+/**
+ * Setea el método de pago de TODAS las boletas de un documento.
+ *
+ * El SII exige el método de pago en cada boleta; hoy solo se pide en las de
+ * sobre 135 UF y el resto sale como "Efectivo" (fallback del worker). En una
+ * cartola bancaria eso es incorrecto por definición: nada entra en efectivo
+ * (caso real de beta: 65 boletas emitidas como efectivo siendo transferencias).
+ * Una propuesta individual puede sobrescribirlo con su propio medio_pago.
+ */
+export async function setDocumentoMedioPago(
+  documentoId: string,
+  medioPago: string | null,
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" };
+
+  // Solo valores del selector del SII: un rótulo inventado haría abortar la
+  // emisión en el portal (el worker falla cerrado si no encuentra la opción).
+  const limpio = typeof medioPago === "string" ? medioPago.trim() : null;
+  if (limpio && !esMedioPagoValido(limpio)) {
+    return { error: "Método de pago no válido para el SII" };
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "Backend mal configurado" };
+  const sb = createServiceClient<Database>(url, key);
+
+  const { error, count } = await sb
+    .from("documentos_subidos")
+    .update({ medio_pago_comun: limpio || null }, { count: "exact" })
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("id", documentoId);
+
+  if (error) return { error: error.message };
+  if (!count) return { error: "Documento no encontrado o sin permisos" };
+
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   return { ok: true };

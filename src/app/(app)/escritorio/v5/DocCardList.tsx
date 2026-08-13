@@ -43,6 +43,7 @@ interface DocRaw {
   movimientos_detectados: number | null; created_at: string; progreso_ia: unknown;
   tipo_operacion_hint?: string | null;
   glosa_comun?: string | null;
+  medio_pago_comun?: string | null;
   glosa_activa?: boolean | null;
 }
 

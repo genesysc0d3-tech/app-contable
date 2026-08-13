@@ -8,6 +8,7 @@ import VisualizarArchivo from "./VisualizarArchivo";
 import FieldMapper, { FieldMapperBody, prefetchPreview } from "@/components/upload/FieldMapper";
 import HintSelector from "@/components/upload/HintSelector";
 import GlosaComunControl from "./GlosaComunControl";
+import MedioPagoControl from "./MedioPagoControl";
 import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import VeredictoCard from "./VeredictoCard";
 import VeredictoCartola from "./VeredictoCartola";
@@ -19,6 +20,18 @@ import { useMesaReload, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
+
+/**
+ * ¿Es una cartola bancaria? (varios movimientos venidos de un Excel/CSV del
+ * banco). Solo se usa para SUGERIR el método de pago: en una cartola la plata
+ * entró por el banco, así que "Efectivo" es incorrecto por definición. La
+ * decisión final siempre es del usuario — la app no la cambia sola.
+ */
+function esCartolaBancaria(doc: DocRow): boolean {
+  const tipo = (doc.tipo ?? "").toLowerCase();
+  const movs = doc.movimientos_detectados ?? 0;
+  return movs > 1 && (tipo === "excel" || tipo === "csv");
+}
 
 // Pestaña fusionada "Check de agregados": el árbol Finder es la navegación; el
 // VISOR (arriba, permanente y de altura fija) muestra el detalle del documento
@@ -316,6 +329,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   {selDoc.estado === "procesado" && (
                     <div style={{ padding: "0 16px 6px" }}>
                       <GlosaComunControl documentoId={selDoc.id} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} />
+                      <MedioPagoControl documentoId={selDoc.id} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />
                     </div>
                   )}
                   {pend.length === 0 && selDoc.estado === "error" ? (
@@ -411,6 +425,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
                     <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
                     <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} />
+                    <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />
                   </div>
                 )}
                 <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} />
