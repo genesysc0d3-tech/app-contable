@@ -316,17 +316,8 @@ async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, erro
   const status: DocumentJobStatus = retryable ? "retryable" : "failed";
   const message = safeJobError(error);
 
-  // Preserva el checkpoint de chunks ya clasificados: un error transitorio
-  // (red, upstream) no debe obligar al reintento a repartir de cero.
-  const { data: docRow } = await sb
-    .from("documentos_subidos")
-    .select("progreso_ia")
-    .eq("id", job.documento_id)
-    .maybeSingle();
-  const progresoPrevio = docRow?.progreso_ia;
-  const checkpoint = progresoPrevio && typeof progresoPrevio === "object" && !Array.isArray(progresoPrevio)
-    ? (progresoPrevio as Record<string, Json>).checkpoint ?? null
-    : null;
+  // El checkpoint NO se toca acá: vive en document_processing_jobs.checkpoint,
+  // así un error transitorio (red, upstream) no obliga a repartir de cero.
 
   await sb
     .from("documentos_subidos")
@@ -338,7 +329,6 @@ async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, erro
         attempts,
         max_attempts: job.max_attempts,
         next_run_at: retryable ? nextRetryAt(attempts, now) : null,
-        ...(retryable && checkpoint ? { checkpoint } : {}),
       }),
     })
     .eq("id", job.documento_id);
@@ -420,6 +410,8 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
         locked_at: null,
         locked_by: null,
         last_error: null,
+        // Trabajo terminado: el checkpoint ya no sirve y ocupa cientos de KB.
+        checkpoint: null,
         completed_at: completedAt,
         updated_at: completedAt,
       })

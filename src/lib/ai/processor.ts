@@ -124,6 +124,22 @@ async function updateProgreso(documentoId: string, progreso: ProgresoIA) {
     .eq("id", documentoId);
 }
 
+/** Checkpoint de lotes ya clasificados (vive en document_processing_jobs). */
+export type CheckpointIA = {
+  clave: string;
+  chunks: { index: number; movimientos: unknown[]; propuestas: unknown[] }[];
+};
+
+async function guardarCheckpoint(documentoId: string, checkpoint: CheckpointIA) {
+  const supabase = getServiceClient();
+  const { error } = await supabase
+    .from("document_processing_jobs")
+    .update({ checkpoint: checkpoint as never })
+    .eq("documento_id", documentoId);
+  // Si falla, el trabajo igual avanza: solo se pierde la capacidad de retomar.
+  if (error) console.error("[checkpoint] no se pudo guardar:", error.message);
+}
+
 function splitIntoChunks(lines: string[]): string[][] {
   const chunks: string[][] = [];
   for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
@@ -528,21 +544,24 @@ export async function procesarDocumento(
     let completedCount = 0;
     let totalMovsFound = 0;
 
-    // Checkpoint resumible: si un intento anterior dejó chunks clasificados en
-    // progreso_ia (yield por presupuesto, timeout de Vercel, watchdog), los
-    // reusamos y solo se llama a la IA por los que faltan. La clave ata el
-    // checkpoint al contenido exacto de ESTE intento — incluye cuántos movs
-    // van a la IA porque las reglas pueden cambiar entre reintentos (el
-    // usuario crea una regla) y eso re-particiona los chunks.
+    // Checkpoint resumible: si un intento anterior dejó chunks clasificados
+    // (yield por presupuesto, timeout, watchdog), los reusamos y solo se llama a
+    // la IA por los que faltan. Vive en document_processing_jobs.checkpoint —
+    // NO en progreso_ia, que es campo de UI y lo sobrescriben processOneJob, el
+    // catch de error y markJobFailedOrRetryable (por eso antes el checkpoint se
+    // borraba solo entre intentos y el documento nunca avanzaba). La clave ata
+    // el checkpoint al contenido exacto de ESTE intento — incluye cuántos movs
+    // van a la IA porque las reglas pueden cambiar entre reintentos (el usuario
+    // crea una regla) y eso re-particiona los chunks.
     const movsEnChunks = movChunks.reduce((s, c) => s + c.movs.length, 0);
     const checkpointClave = `${bypassMode ? "b" : "t"}:${totalLotes}:${contenido.length}:${movsEnChunks}`;
     if (totalLotes > 0) {
-      const { data: docRow } = await supabase
-        .from("documentos_subidos")
-        .select("progreso_ia")
-        .eq("id", documentoId)
+      const { data: jobRow } = await supabase
+        .from("document_processing_jobs")
+        .select("checkpoint")
+        .eq("documento_id", documentoId)
         .maybeSingle();
-      const cp = (docRow?.progreso_ia as ProgresoIA | null)?.checkpoint;
+      const cp = jobRow?.checkpoint as CheckpointIA | null;
       if (cp?.clave === checkpointClave && Array.isArray(cp.chunks)) {
         for (const c of cp.chunks) {
           if (!c || typeof c.index !== "number" || c.index < 0 || c.index >= totalLotes || results[c.index]) continue;
@@ -634,15 +653,16 @@ export async function procesarDocumento(
         lote_actual: completedCount,
         total_lotes: totalLotes,
         movimientos_encontrados: totalMovsFound,
-        // Persistimos lo ya clasificado: un reintento retoma desde acá en vez
-        // de repartir de cero (clave = el pipeline es agnóstico a la velocidad
-        // del modelo de turno).
-        checkpoint: {
-          clave: checkpointClave,
-          chunks: results
-            .filter((r): r is ChunkResult => Boolean(r))
-            .map((r) => ({ index: r.index, movimientos: r.movimientos, propuestas: r.propuestas })),
-        },
+      });
+
+      // Checkpoint junto al job (fuera de progreso_ia): un reintento retoma
+      // desde acá en vez de repartir de cero — el pipeline es agnóstico a la
+      // velocidad del modelo de turno.
+      await guardarCheckpoint(documentoId, {
+        clave: checkpointClave,
+        chunks: results
+          .filter((r): r is ChunkResult => Boolean(r))
+          .map((r) => ({ index: r.index, movimientos: r.movimientos, propuestas: r.propuestas })),
       });
 
       // Presupuesto de tiempo agotado y aún quedan lotes → yield: el job se
