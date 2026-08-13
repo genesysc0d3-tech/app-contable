@@ -33,7 +33,14 @@ type EnrichedPropuesta = PropuestaExtraida & {
 
 const IA_MESA_MAX_CONFIANZA = 0.75; // Cap de la IA de la mesa (OpenCode) — nunca auto-aprueba
 
-const CHUNK_SIZE = 100;
+// CHUNK_SIZE = cuántos movimientos van en UNA llamada al modelo. Medido contra
+// minimax-m3 (2026-08-13, cartola de 675 movs de AlphaCode que nunca terminaba):
+// con 100 el modelo agota los 16k tokens de salida y devuelve JSON TRUNCADO
+// (finish_reason="length") → el parseo falla → 3 reintentos de ~125s cada uno →
+// la función de Vercel muere a los 300s sin guardar checkpoint → el watchdog la
+// revive 12 min después → LOOP INFINITO. Con 40: ~85s y finish="stop" (completo).
+// Si se cambia de modelo, RE-MEDIR: este número depende de cuán verboso sea.
+const CHUNK_SIZE = 40;
 const MAX_RETRIES = 3;
 const MAX_CONCURRENT = 7;
 const DB_BATCH_SIZE = 100;
@@ -238,6 +245,9 @@ async function classifyChunkWithRetry(
       };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+      // Truncamiento: reintentar da el mismo corte y cada intento cuesta ~2 min
+      // (mata la invocación completa). Se corta al primer intento.
+      if ((lastError as Error & { truncado?: boolean }).truncado) break;
       if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, 1000 * attempt));
       }
@@ -568,8 +578,23 @@ export async function procesarDocumento(
       }
     };
 
+    // Cuánto tardó el último batch: sirve para NO lanzar uno que no quepa en el
+    // tiempo que queda. Antes el deadline se miraba solo DESPUÉS del batch, así
+    // que siempre se lanzaba uno más y la invocación moría a mitad de camino
+    // (sin checkpoint). Piso conservador para el primer batch del intento.
+    const RESERVA_MIN_MS = 90_000;
+    let ultimoBatchMs = 0;
+
     for (let start = 0; start < pendingIdx.length; start += MAX_CONCURRENT) {
+      if (opts?.deadline && start > 0) {
+        const reserva = Math.max(ultimoBatchMs, RESERVA_MIN_MS);
+        if (Date.now() + reserva > opts.deadline) {
+          throw new ProcessorYieldError(completedCount, totalLotes);
+        }
+      }
+      const batchT0 = Date.now();
       const batchResults = await runBatch(pendingIdx.slice(start, start + MAX_CONCURRENT));
+      ultimoBatchMs = Date.now() - batchT0;
 
       for (const r of batchResults) {
         results[r.index] = r;
