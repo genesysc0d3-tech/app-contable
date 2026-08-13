@@ -37,7 +37,7 @@ export async function getPendientesEmision(
     .select(`
       id, tipo_propuesto, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, notas, monto_neto, iva, total, estado, created_at, cliente_id,
       clientes(id, nombre, rut),
-      movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at, glosa_comun, glosa_activa))
+      movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at, glosa_comun, glosa_activa, medio_pago_comun))
     `)
     .eq("empresa_id", empresaId)
     .in("estado", estados)
@@ -139,7 +139,7 @@ export async function getPendientesEmision(
 
   const items = visibles.map((p: PropuestaRaw) => {
     const cliente = (Array.isArray(p.clientes) ? p.clientes[0] : p.clientes) as { id: string; nombre: string; rut: string | null } | null;
-    type DocNode = { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null; glosa_comun: string | null; glosa_activa: boolean | null };
+    type DocNode = { id: string; nombre_archivo: string; tipo_operacion_hint: string | null; created_at: string | null; glosa_comun: string | null; glosa_activa: boolean | null; medio_pago_comun: string | null };
     const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as {
       fecha: string; descripcion: string; monto: number;
       documentos_subidos?: DocNode | DocNode[] | null;
@@ -163,7 +163,7 @@ export async function getPendientesEmision(
         fecha,
         receptorRut: receptor_rut,
         receptorNombre: receptor_nombre,
-        medioPago: p.medio_pago ?? null,
+        medioPago: p.medio_pago ?? docArr?.medio_pago_comun ?? null,
         tipoDtePersistido: tipoDteById.get(p.id) ?? null,
         docHint,
         patron: {
@@ -198,7 +198,10 @@ export async function getPendientesEmision(
       receptor_comuna: total >= umbralIdentificacionClp ? (p.receptor_comuna ?? null) : null,
       receptor_email: total >= umbralIdentificacionClp ? (p.receptor_email ?? null) : null,
       receptor_telefono: total >= umbralIdentificacionClp ? (p.receptor_telefono ?? null) : null,
-      medio_pago: p.medio_pago ?? null,
+      // Precedencia: lo elegido en ESTA boleta manda; si no, el método de pago
+      // común del documento (una cartola bancaria = Transferencia). Si ambos
+      // faltan, el worker cae a "Efectivo" — que es justo lo que queremos evitar.
+      medio_pago: p.medio_pago ?? docArr?.medio_pago_comun ?? null,
       // Glosa YA SEGURA (misma política que el lote mock, resolverGlosa: editado ›
       // común › genérico, NUNCA la glosa cruda del banco). Solo viaja el string
       // final — las fuentes crudas (notas/glosa_comun) no salen del server.

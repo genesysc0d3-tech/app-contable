@@ -857,6 +857,7 @@ export type Database = {
           glosa_comun: string | null
           id: string
           media_group_id: string | null
+          medio_pago_comun: string | null
           movimientos_detectados: number | null
           nombre_archivo: string
           progreso_ia: Json | null
@@ -876,6 +877,7 @@ export type Database = {
           glosa_comun?: string | null
           id?: string
           media_group_id?: string | null
+          medio_pago_comun?: string | null
           movimientos_detectados?: number | null
           nombre_archivo: string
           progreso_ia?: Json | null
@@ -895,6 +897,7 @@ export type Database = {
           glosa_comun?: string | null
           id?: string
           media_group_id?: string | null
+          medio_pago_comun?: string | null
           movimientos_detectados?: number | null
           nombre_archivo?: string
           progreso_ia?: Json | null

@@ -119,7 +119,7 @@ export default async function V5Page({ searchParams }: {
       .order("folio",{ascending:false})
       .limit(1000),
     Promise.all([
-      supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa")
+      supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun")
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
       supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
         .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
