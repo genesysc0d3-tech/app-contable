@@ -458,7 +458,10 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
       {noBoletea ? (
         <>
           <div style={{fontSize:10,color:"var(--text2)",marginBottom:8,lineHeight:1.4}}>
-            Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si fue una venta tuya, cambia el tipo en Emitir.
+            {/* Copy corregido (feedback fundador): decía "cambia el tipo en Emitir",
+                pero a Emitir solo llegan aprobadas — el cambio se hace acá mismo
+                con el lápiz. Nunca apuntar a otra pestaña para un gesto local. */}
+            Este movimiento se registra pero {isGasto ? "es plata que salió (gasto): " : ""}no genera boleta. Si en realidad fue una venta tuya, ábrela con el lápiz ✎ y cámbiale el tipo a boleta (afecta o exenta).
           </div>
           <div style={{marginBottom:8}}>
             <label style={lbl}>Detalle (opcional)</label>
