@@ -86,7 +86,27 @@ export default function VeredictoCartola({
   const exentasListas = listasProps.filter(esExenta).length;
   // 'editado' es borrador (no emitible): cuenta como pendiente para que el
   // Aprobar atómico no lo deje atrás en silencio.
-  const pendientes = propuestas.filter((p) => p.estado === "pendiente" || p.estado === "editado").length;
+  const pendientesProps = propuestas.filter((p) => p.estado === "pendiente" || p.estado === "editado");
+  const pendientes = pendientesProps.length;
+  // Las salidas (gastos) NO llevan boleta: su resolución es RECHAZAR, no "dejar
+  // lista". El copy genérico "deja listas las N" inducía a boletear egresos
+  // (caso real de beta 2026-08-12: 21 salidas pendientes y la clienta buscando
+  // cómo ponerlas en lista).
+  const pendientesSalidas = pendientesProps.filter((p) => p.movimientos_raw?.tipo_flujo === "salida").length;
+  const guiaPendientes = pendientes === 0
+    ? null
+    : pendientesSalidas === pendientes
+      ? <>Tus {pendientes} pendientes son salidas (gastos): en <b>Editar</b> apriétales <b>Rechazar</b> — no llevan boleta</>
+      : pendientesSalidas > 0
+        ? <>Resuelve las {pendientes} pendientes en <b>Editar</b>: las ventas déjalas listas y a las salidas apriétales <b>Rechazar</b> (no llevan boleta)</>
+        : <>Deja listas las {pendientes} en <b>Editar</b> para aprobar</>;
+  const guiaPendientesTexto = pendientes === 0
+    ? undefined
+    : pendientesSalidas === pendientes
+      ? `Tus ${pendientes} pendientes son salidas (gastos): en Editar apriétales Rechazar — no llevan boleta. Con eso se habilita Aprobar.`
+      : pendientesSalidas > 0
+        ? `Resuelve las ${pendientes} pendientes en Editar: las ventas déjalas listas y a las salidas apriétales Rechazar (no llevan boleta).`
+        : `Deja listas las ${pendientes} pendientes en Editar para habilitar Aprobar`;
   const todasListas = count > 0 && pendientes === 0;
   // Solo se puede aprobar si de verdad hay algo staged (evita 'Aprobar 0' cuando la
   // cartola ya fue enviada entera a Emitir: pendientes===0 pero listas===0).
@@ -174,13 +194,13 @@ export default function VeredictoCartola({
             {/* Aprobar SIEMPRE visible: poner las tx listas en el popup Editar es la
                 palanca que lo habilita — esa es la barrera hacia Emitir. */}
             <button className="vcart-cb" onClick={() => setConfirming(true)} disabled={busy || !puedeAprobar}
-              title={!puedeAprobar ? (pendientes > 0 ? `Deja listas las ${pendientes} pendientes en Editar para habilitar Aprobar` : "No hay transacciones listas para aprobar") : undefined}
+              title={!puedeAprobar ? (pendientes > 0 ? guiaPendientesTexto : "No hay transacciones listas para aprobar") : undefined}
               style={{ background: "var(--accent)", color: "#fff", fontSize: "1.12em" }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar {listas}
             </button>
             {!puedeAprobar && (
               <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, marginTop: "-0.4em" }}>
-                {pendientes > 0 ? <>Deja listas las {pendientes} en <b>Editar</b> para aprobar</> : <>Todo enviado a Emitir</>}
+                {pendientes > 0 ? guiaPendientes : <>Todo enviado a Emitir</>}
               </div>
             )}
           </>
