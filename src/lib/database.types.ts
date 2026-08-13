@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       app_config: {
@@ -161,9 +186,9 @@ export type Database = {
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
-          receptor_telefono: string | null
           receptor_razon_social: string | null
           receptor_rut: string | null
+          receptor_telefono: string | null
           referencia_id: string | null
           ted: string
           tipo_dte: number
@@ -198,9 +223,9 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
-          receptor_telefono?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
+          receptor_telefono?: string | null
           referencia_id?: string | null
           ted: string
           tipo_dte: number
@@ -235,9 +260,9 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
-          receptor_telefono?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
+          receptor_telefono?: string | null
           referencia_id?: string | null
           ted?: string
           tipo_dte?: number
@@ -399,6 +424,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      config_global: {
+        Row: {
+          clave: string
+          updated_at: string
+          valor: Json
+        }
+        Insert: {
+          clave: string
+          updated_at?: string
+          valor: Json
+        }
+        Update: {
+          clave?: string
+          updated_at?: string
+          valor?: Json
+        }
+        Relationships: []
+      }
+      consentimientos: {
+        Row: {
+          aceptado_at: string
+          created_at: string
+          documento: string
+          email: string | null
+          id: string
+          ip: string | null
+          user_agent: string | null
+          user_id: string
+          version: string
+        }
+        Insert: {
+          aceptado_at?: string
+          created_at?: string
+          documento?: string
+          email?: string | null
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id: string
+          version: string
+        }
+        Update: {
+          aceptado_at?: string
+          created_at?: string
+          documento?: string
+          email?: string | null
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id?: string
+          version?: string
+        }
+        Relationships: []
       }
       creditos_uso: {
         Row: {
@@ -624,24 +703,6 @@ export type Database = {
           },
         ]
       }
-      config_global: {
-        Row: {
-          clave: string
-          valor: Json
-          updated_at: string
-        }
-        Insert: {
-          clave: string
-          valor: Json
-          updated_at?: string
-        }
-        Update: {
-          clave?: string
-          valor?: Json
-          updated_at?: string
-        }
-        Relationships: []
-      }
       cuentas: {
         Row: {
           created_at: string
@@ -693,6 +754,7 @@ export type Database = {
       document_processing_jobs: {
         Row: {
           attempts: number
+          checkpoint: Json | null
           completed_at: string | null
           created_at: string
           documento_id: string
@@ -715,6 +777,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          checkpoint?: Json | null
           completed_at?: string | null
           created_at?: string
           documento_id: string
@@ -737,6 +800,7 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          checkpoint?: Json | null
           completed_at?: string | null
           created_at?: string
           documento_id?: string
@@ -993,6 +1057,13 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emision_jobs_propuesta_id_fkey"
+            columns: ["propuesta_id"]
+            isOneToOne: false
+            referencedRelation: "propuestas_ia"
             referencedColumns: ["id"]
           },
           {
@@ -1308,6 +1379,44 @@ export type Database = {
           trial_inicio?: string | null
         }
         Relationships: []
+      }
+      extension_vault_keys: {
+        Row: {
+          created_at: string
+          device_id: string
+          last_used_at: string | null
+          revoked_at: string | null
+          usuario_id: string
+          version: number
+          ws_cifrado: string
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+          usuario_id: string
+          version?: number
+          ws_cifrado: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+          usuario_id?: string
+          version?: number
+          ws_cifrado?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extension_vault_keys_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       folio_reservas: {
         Row: {
@@ -1753,7 +1862,15 @@ export type Database = {
           tipo_doc?: string | null
           usage_count?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "parser_adapters_creado_por_empresa_id_fkey"
+            columns: ["creado_por_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       parser_logs: {
         Row: {
@@ -1956,9 +2073,9 @@ export type Database = {
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
-          receptor_telefono: string | null
           receptor_nombre: string | null
           receptor_rut: string | null
+          receptor_telefono: string | null
           regla_id: string | null
           spread_compra: number | null
           spread_ganancia: number | null
@@ -1986,9 +2103,9 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
-          receptor_telefono?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
+          receptor_telefono?: string | null
           regla_id?: string | null
           spread_compra?: number | null
           spread_ganancia?: number | null
@@ -2016,9 +2133,9 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
-          receptor_telefono?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
+          receptor_telefono?: string | null
           regla_id?: string | null
           spread_compra?: number | null
           spread_ganancia?: number | null
@@ -2952,8 +3069,10 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
-
