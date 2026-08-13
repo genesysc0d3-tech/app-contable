@@ -26,7 +26,9 @@ type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
 const SECTION_META: Record<SectionKey, { label: string; color: string }> = {
   pendientes: { label: "Pendientes", color: "var(--amber)" },
   listas: { label: "Listas", color: "var(--green)" },
-  rechazadas: { label: "Rechazadas", color: "var(--accent)" },
+  // "Sin boleta" (no "Rechazadas"): el ✕ es un JUICIO completado — típicamente un
+  // egreso que no lleva boleta — no una eliminación. La tx queda visible y tachada.
+  rechazadas: { label: "Sin boleta (juzgadas)", color: "var(--text3)" },
   emision: { label: "En emisión", color: "var(--blue)" },
 };
 const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision"];
@@ -191,7 +193,8 @@ export default function CartolaEditor({
     actingRef.current.add(p.id);
     try {
       const r = await rechazarPropuesta(p.id);
-      if (r.error) toast(r.error, "error"); else toast("Rechazada");
+      if (r.error) toast(r.error, "error");
+      else toast(p.movimientos_raw?.tipo_flujo === "salida" ? "Listo: egreso sin boleta (queda tachado, recuperable)" : "Marcada sin boleta (queda tachada, recuperable)");
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
@@ -338,7 +341,8 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore }: {
       <span style={{ transform: isOpen ? "rotate(90deg)" : "none", color: isOpen ? "var(--accent)" : "var(--text2)", fontSize: 10, transition: "transform .2s", flexShrink: 0 }}>▶</span>
       <span title={tm.label} style={{ flexShrink: 0, minWidth: 38, textAlign: "center", fontSize: 7, fontWeight: 800, letterSpacing: ".04em", padding: "2px 5px", borderRadius: 8, background: tm.bg, color: tm.color }}>{tm.sigla}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 10, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion}</div>
+        {/* Tachada = juicio completado (sin boleta), no eliminada: sigue a la vista. */}
+        <div style={{ fontSize: 10, fontWeight: 500, color: rechazada ? "var(--text3)" : "var(--text)", textDecoration: rechazada ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion}</div>
         {p.receptor_nombre && <div style={{ fontSize: 8, color: "var(--text2)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.receptor_nombre}</div>}
       </div>
       {/* Fecha bancaria = columna (dato), no agrupador */}
