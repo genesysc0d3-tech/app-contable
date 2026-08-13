@@ -124,8 +124,11 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
         <div style={{width:56,height:56,margin:"0 auto 14px",borderRadius:14,background:"var(--surface2)",border:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text3)"}}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
         </div>
-        <div style={{fontSize:14,fontWeight:600,color:"var(--text)",letterSpacing:"-.02em"}}>{loading ? "Revisando la mesa" : "Nada listo para emitir"}</div>
-        <div style={{marginTop:5,fontSize:12,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión…" : "Cuando una propuesta quede lista, aparecerá aquí."}</div>
+        {/* Vocabulario EXACTO del flujo: acá llegan las APROBADAS. Decir "lista"
+            confundía (caso real de beta: 73 listas sin aprobar y este texto le
+            confirmaba al usuario que "deberían" estar acá). */}
+        <div style={{fontSize:14,fontWeight:600,color:"var(--text)",letterSpacing:"-.02em"}}>{loading ? "Revisando la mesa" : "Nada aprobado para emitir"}</div>
+        <div style={{marginTop:5,fontSize:12,lineHeight:1.45,maxWidth:280}}>{loading ? "Buscando pendientes de emisión…" : "Acá aparecen las boletas aprobadas. ¿Tienes boletas «listas» en el Check de agregados? Apriétales «Aprobar» y llegan solas."}</div>
         {!loading && (
           <div style={{marginTop:8,fontSize:11,lineHeight:1.45,maxWidth:280,color:"var(--text3)"}}>
             Estás viendo solo el período del calendario. Si aprobaste en otra fecha, cambia el día, semana o mes arriba.
