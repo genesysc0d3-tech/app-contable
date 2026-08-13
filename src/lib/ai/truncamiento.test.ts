@@ -26,8 +26,8 @@ describe("respuesta truncada del modelo", () => {
     const { OpenCodeGoProvider } = await import("./providers/opencodego");
     const provider = new OpenCodeGoProvider();
     const movs = Array.from({ length: 100 }, (_, i) => ({
-      movimiento_index: i, fecha: "2026-08-01", monto: 1000, descripcion: `MOV ${i}`,
-      tipo_flujo: "entrada" as const, n_documento: "",
+      fecha: "2026-08-01", monto: 1000, descripcion: `MOV ${i}`,
+      tipo_flujo: "entrada" as const, origen: "cartola", n_documento: "",
     }));
 
     await expect(provider.classifyMovimientos!(movs)).rejects.toMatchObject({ truncado: true });
@@ -49,7 +49,7 @@ describe("respuesta truncada del modelo", () => {
     const { OpenCodeGoProvider } = await import("./providers/opencodego");
     const provider = new OpenCodeGoProvider();
     const r = await provider.classifyMovimientos!([
-      { movimiento_index: 0, fecha: "2026-08-01", monto: 1000, descripcion: "MOV", tipo_flujo: "entrada", n_documento: "" },
+      { fecha: "2026-08-01", monto: 1000, descripcion: "MOV", tipo_flujo: "entrada" as const, origen: "cartola", n_documento: "" },
     ]);
     expect(r.propuestas).toHaveLength(1);
     expect(r.finish_reason).toBe("stop");
