@@ -12,13 +12,13 @@
 //     headers + filas intercalados; solo se montan las ~15 filas visibles.
 //   · El Aprobar atómico del visor resumen sigue siendo el único gatillo a Emitir.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, defaultRangeExtractor } from "@tanstack/react-virtual";
 import {
   ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA, BULK_MIN_CONFIANZA,
   type Propuesta, type ClienteResumen,
 } from "./revisar-shared";
-import { ponerListo, rechazarPropuesta, restaurarPropuesta } from "../../revisar/actions";
+import { ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 
 type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
@@ -71,6 +71,11 @@ export default function CartolaEditor({
   });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [busyBulk, setBusyBulk] = useState(false);
+  // Selección múltiple estilo explorador (decisión fundador: el juicio en grupo
+  // lo hace el HUMANO marcando casillas — nada automático que propague un error
+  // de clasificación). Solo filas con juicio pendiente (pendiente/editado).
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const lastSelRef = useRef<string | null>(null);
   // Guard anti-doble-click por fila: sin esto, dos clics rápidos en ✓/✕/restaurar
   // disparaban la mutación dos veces.
   const actingRef = useRef<Set<string>>(new Set());
@@ -102,6 +107,56 @@ export default function CartolaEditor({
     () => groups.pendientes.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA).length,
     [groups.pendientes],
   );
+
+  // La selección solo puede contener filas que sigan pendientes (tras un refresh,
+  // lo ya juzgado sale solo de la selección).
+  const pendientesIds = useMemo(() => new Set(groups.pendientes.map((p) => p.id)), [groups.pendientes]);
+  useEffect(() => {
+    setSel((prev) => {
+      const next = new Set([...prev].filter((id) => pendientesIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pendientesIds]);
+
+  // Toggle con rango shift+click (como el explorador): el rango se calcula sobre
+  // el ORDEN visible de las pendientes.
+  function toggleSel(id: string, shift: boolean) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      const last = lastSelRef.current;
+      if (shift && last && last !== id) {
+        const orden = groups.pendientes.map((p) => p.id);
+        const a = orden.indexOf(last);
+        const b = orden.indexOf(id);
+        if (a >= 0 && b >= 0) {
+          const on = !next.has(id);
+          for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
+            if (on) next.add(orden[i]); else next.delete(orden[i]);
+          }
+          lastSelRef.current = id;
+          return next;
+        }
+      }
+      if (next.has(id)) next.delete(id); else next.add(id);
+      lastSelRef.current = id;
+      return next;
+    });
+  }
+
+  async function bulkSel(accion: "listo" | "sin_boleta") {
+    if (sel.size === 0 || busyBulk) return;
+    setBusyBulk(true);
+    try {
+      const ids = [...sel];
+      const r = accion === "listo" ? await ponerListo(ids) : await rechazarPropuestas(ids);
+      if (r.error) toast(r.error, "error");
+      else toast(accion === "listo"
+        ? `${r.count} marcadas listas`
+        : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+      setSel(new Set());
+      onAction();
+    } finally { setBusyBulk(false); }
+  }
 
   // Lista PLANA: header de sección + sus filas (si expandida). Una sola lista para
   // un solo virtualizer → sin scrollMargin por sección.
@@ -238,6 +293,29 @@ export default function CartolaEditor({
         </span>
       </div>
 
+      {/* ── Barra de selección (aparece con casillas marcadas): el juicio en grupo
+            es del humano — marca lo que ÉL decide y le aplica lista o sin boleta. ── */}
+      {sel.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--accent) 6%, transparent)", flexShrink: 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>{sel.size} seleccionada{sel.size === 1 ? "" : "s"}</span>
+          <span style={{ fontSize: 10, color: "var(--text3)" }}>shift+click = rango</span>
+          <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button onClick={() => bulkSel("listo")} disabled={busyBulk}
+              style={{ fontSize: 10, fontWeight: 800, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.1)", color: "var(--green)", cursor: "pointer" }}>
+              ✓ Poner en lista
+            </button>
+            <button onClick={() => bulkSel("sin_boleta")} disabled={busyBulk}
+              style={{ fontSize: 10, fontWeight: 800, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.1)", color: "var(--red)", cursor: "pointer" }}>
+              ✕ Sin boleta (egreso)
+            </button>
+            <button onClick={() => setSel(new Set())} disabled={busyBulk}
+              style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer" }}>
+              Limpiar
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* ── Scroll container: UNA lista plana virtualizada ── */}
       <div ref={scrollRef} className="ce-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
@@ -270,6 +348,8 @@ export default function CartolaEditor({
                       onStage={() => stageOne(row.p)}
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
+                      selected={sel.has(row.p.id)}
+                      onSelect={row.section === "pendientes" ? (shift: boolean) => toggleSel(row.p.id, shift) : undefined}
                     />
                     {expandedRows.has(row.p.id) && (
                       <ExpandedDetail
@@ -326,8 +406,11 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
 }
 
 /* ─── Fila de tx (colapsada) ─── */
-function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore }: {
+function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, selected = false, onSelect }: {
   p: Propuesta; isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
+  selected?: boolean;
+  /** Presente solo en filas con juicio pendiente: casilla de selección múltiple. */
+  onSelect?: (shift: boolean) => void;
 }) {
   const tm = tipoMeta(p.tipo_propuesto);
   const conf = Math.round((p.confianza ?? 0) * 100);
@@ -335,9 +418,17 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore }: {
   const enEmision = p.estado === "aprobado";
   const rechazada = p.estado === "rechazado" || p.estado === "descartado";
   return (
-    <div className="ce-row" onClick={onToggle}>
-      {/* 16px reservado para checkbox (selección múltiple — fase posterior) */}
-      <span style={{ width: 16, flexShrink: 0 }} />
+    <div className="ce-row" onClick={onToggle} style={selected ? { background: "color-mix(in srgb, var(--accent) 7%, transparent)" } : undefined}>
+      {/* Casilla estilo explorador: seleccionar para juzgar en grupo (shift = rango).
+          Solo en filas pendientes — el juicio en lote lo decide el humano. */}
+      {onSelect ? (
+        <input type="checkbox" checked={selected} onChange={() => {}}
+          onClick={(e) => { e.stopPropagation(); onSelect(e.shiftKey); }}
+          aria-label="Seleccionar para acción en grupo"
+          style={{ width: 16, height: 16, flexShrink: 0, accentColor: "var(--accent)", cursor: "pointer" }} />
+      ) : (
+        <span style={{ width: 16, flexShrink: 0 }} />
+      )}
       <span style={{ transform: isOpen ? "rotate(90deg)" : "none", color: isOpen ? "var(--accent)" : "var(--text2)", fontSize: 10, transition: "transform .2s", flexShrink: 0 }}>▶</span>
       <span title={tm.label} style={{ flexShrink: 0, minWidth: 38, textAlign: "center", fontSize: 7, fontWeight: 800, letterSpacing: ".04em", padding: "2px 5px", borderRadius: 8, background: tm.bg, color: tm.color }}>{tm.sigla}</span>
       <div style={{ flex: 1, minWidth: 0 }}>

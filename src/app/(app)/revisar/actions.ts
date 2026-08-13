@@ -156,6 +156,36 @@ export async function restaurarPropuesta(propuestaId: string) {
   return { ok: true };
 }
 
+/**
+ * Juicio "sin boleta" en LOTE (espejo de ponerListo): típicamente las salidas de
+ * una cartola — objetivamente egresos, no llevan boleta. Guard: solo desde
+ * pendiente/editado (jamás degrada una 'listo' staged ni toca 'aprobado').
+ */
+export async function rechazarPropuestas(
+  propuestaIds: string[]
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  let marcadas = 0;
+  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
+    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+    const { error, count } = await ctx.sb
+      .from("propuestas_ia")
+      .update({ estado: "rechazado" }, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch)
+      .in("estado", ["pendiente", "editado"]);
+    if (error) return { error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`, count: marcadas };
+    marcadas += count ?? 0;
+  }
+  if (marcadas === 0 && propuestaIds.length > 0) return { error: "No se marcó ninguna (¿ya estaban juzgadas?)", count: 0 };
+  revalidatePath("/revisar");
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: marcadas };
+}
+
 export async function rechazarPropuesta(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
