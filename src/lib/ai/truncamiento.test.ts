@@ -68,3 +68,25 @@ describe("CHUNK_SIZE medido contra el modelo real", () => {
     expect(size).toBeGreaterThan(0);
   });
 });
+
+describe("el YIELD no puede ser tratado como error (regresión 2026-08-13)", () => {
+  it("procesarDocumento re-lanza ProcessorYieldError antes de sobrescribir progreso_ia", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(new URL("./processor.ts", import.meta.url), "utf8");
+    // El guard debe estar ANTES del update que reemplaza progreso_ia (ese update
+    // borraba el checkpoint recién guardado → el documento reempezaba de cero).
+    const guard = src.indexOf("if (err instanceof ProcessorYieldError) throw err;");
+    const update = src.indexOf('estado: "error",\n        progreso_ia:');
+    expect(guard).toBeGreaterThan(-1);
+    expect(update).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(update);
+  });
+
+  it("markJobYielded no toca progreso_ia (el checkpoint debe sobrevivir)", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(new URL("../document-processing/queue.ts", import.meta.url), "utf8");
+    const fn = src.slice(src.indexOf("async function markJobYielded"), src.indexOf("async function markJobFailedOrRetryable"));
+    expect(fn).not.toContain("progreso_ia");
+    expect(fn).toContain('status: "retryable"');
+  });
+});

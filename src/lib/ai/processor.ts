@@ -1349,6 +1349,14 @@ export async function procesarDocumento(
 
     return { movimientos_total: insertados };
   } catch (err) {
+    // El YIELD no es un error: el checkpoint acaba de quedar guardado en
+    // progreso_ia y el job debe reagendarse para continuar. Si cayera en el
+    // manejo de abajo, este update SOBRESCRIBIRÍA progreso_ia y se llevaría el
+    // checkpoint puesto → el documento reempezaría de cero en cada intento y una
+    // cartola que no cabe en una invocación NUNCA terminaría (incidente
+    // 2026-08-13: 675 movs, 17 lotes, moría en el 14 y volvía al 0).
+    if (err instanceof ProcessorYieldError) throw err;
+
     const errorMsg = err instanceof Error ? err.message : String(err);
 
     await supabase
