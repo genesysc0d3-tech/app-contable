@@ -73,6 +73,8 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     documentJobsFailedResult,
     documentJobsStaleResult,
     latestEventsResult,
+    listasSinAprobarResult,
+    aprobadasResult,
   ] = await Promise.all([
     sb
       .from("documentos_subidos")
@@ -122,6 +124,22 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
       .select("id, severity, source, event_name, summary, resource_type, resource_id, metadata, created_at")
       .order("created_at", { ascending: false })
       .limit(12),
+    // Embudo: boletas "listo" creadas hace >30 min (sin updated_at en la tabla,
+    // created_at es el proxy disponible). Cruzado contra las aprobadas: una
+    // empresa con listas y CERO aprobadas probablemente no encontró el botón
+    // Aprobar (caso real de beta 2026-08-12: "Emitir dice que no hay ninguna
+    // propuesta" con 73 listas esperando).
+    sb
+      .from("propuestas_ia")
+      .select("empresa_id")
+      .eq("estado", "listo")
+      .lt("created_at", new Date(now.getTime() - 30 * 60 * 1000).toISOString())
+      .limit(2000),
+    sb
+      .from("propuestas_ia")
+      .select("empresa_id")
+      .eq("estado", "aprobado")
+      .limit(2000),
   ]);
 
   const metrics = {
@@ -137,8 +155,38 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
   };
 
   if (latestEventsResult.error) queryErrors.push(`ops_events_latest: ${latestEventsResult.error.message}`);
+  if (listasSinAprobarResult.error) queryErrors.push(`propuestas_listas: ${listasSinAprobarResult.error.message}`);
+  if (aprobadasResult.error) queryErrors.push(`propuestas_aprobadas: ${aprobadasResult.error.message}`);
+
+  // Empresas con boletas listas hace >30 min y ni UNA aprobada: señal de que el
+  // usuario quedó pegado en el paso Aprobar (Emitir le muestra vacío).
+  const listasPorEmpresa = new Map<string, number>();
+  for (const row of listasSinAprobarResult.data ?? []) {
+    if (row.empresa_id) listasPorEmpresa.set(row.empresa_id, (listasPorEmpresa.get(row.empresa_id) ?? 0) + 1);
+  }
+  const empresasConAprobadas = new Set((aprobadasResult.data ?? []).map((r) => r.empresa_id));
+  const empresasAtascadas = [...listasPorEmpresa.entries()]
+    .filter(([empresaId]) => !empresasConAprobadas.has(empresaId))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  let nombresAtascadas = new Map<string, string>();
+  if (empresasAtascadas.length > 0) {
+    const { data: empRows } = await sb
+      .from("empresas")
+      .select("id, razon_social")
+      .in("id", empresasAtascadas.map(([id]) => id));
+    nombresAtascadas = new Map((empRows ?? []).map((e) => [e.id, e.razon_social]));
+  }
 
   const findings: OpsFinding[] = [];
+  for (const [empresaId, listas] of empresasAtascadas) {
+    findings.push({
+      severity: "warn",
+      eventName: "embudo_listas_sin_aprobar",
+      summary: `${nombresAtascadas.get(empresaId) ?? empresaId} tiene ${listas} boleta(s) lista(s) hace más de 30 min y ninguna aprobada — probable atasco en el paso Aprobar (Emitir se le ve vacío)`,
+      metadata: { empresa_id: empresaId, listas, threshold_minutes: 30 },
+    });
+  }
   if (metrics.documentosAtascados > 0) {
     findings.push({
       severity: "critical",
