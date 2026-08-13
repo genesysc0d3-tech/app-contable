@@ -150,6 +150,18 @@ export class OpenCodeGoProvider implements AIProvider {
     const text = typeof choice?.message?.content === "string"
       ? choice.message.content
       : "";
+    // Truncamiento (finish_reason="length"): el modelo agotó max_tokens y el JSON
+    // viene cortado. Reintentar con el MISMO input da el mismo corte — se marca el
+    // error para que el caller no queme reintentos (cada uno cuesta ~2 min y mata
+    // la invocación). El arreglo real es bajar CHUNK_SIZE, no reintentar.
+    if (choice?.finish_reason === "length") {
+      const err = new Error(
+        `RESPUESTA_TRUNCADA: el modelo agotó max_tokens con ${movimientos.length} movimientos (JSON incompleto). Reduce CHUNK_SIZE.`,
+      );
+      (err as Error & { truncado?: boolean }).truncado = true;
+      throw err;
+    }
+
     const parsed = parseJsonFromContent<{ propuestas?: PropuestaExtraida[] }>(text);
     const propuestas = Array.isArray(parsed.propuestas) ? parsed.propuestas : [];
 
