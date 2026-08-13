@@ -89,4 +89,15 @@ describe("el YIELD no puede ser tratado como error (regresión 2026-08-13)", () 
     expect(fn).not.toContain("progreso_ia");
     expect(fn).toContain('status: "retryable"');
   });
+
+  it("el checkpoint vive en el job, NO en progreso_ia (que se sobrescribe)", async () => {
+    const fs = await import("node:fs");
+    const proc = fs.readFileSync(new URL("./processor.ts", import.meta.url), "utf8");
+    // Lectura y escritura van contra document_processing_jobs.checkpoint.
+    expect(proc).toContain('.from("document_processing_jobs")');
+    expect(proc).toContain("guardarCheckpoint");
+    // Y progreso_ia ya no lo transporta (processOneJob lo pisa al arrancar).
+    const tipos = fs.readFileSync(new URL("./types.ts", import.meta.url), "utf8");
+    expect(tipos).not.toMatch(/^\s*checkpoint\?:/m);
+  });
 });
