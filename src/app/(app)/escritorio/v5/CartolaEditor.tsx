@@ -78,6 +78,8 @@ export default function CartolaEditor({
   // lo hace el HUMANO marcando casillas — nada automático que propague un error
   // de clasificación). Solo filas con juicio pendiente (pendiente/editado).
   const [sel, setSel] = useState<Set<string>>(new Set());
+  // Subgrupos por tipo colapsados (pedido fundador: plegar familias enteras).
+  const [subColapsados, setSubColapsados] = useState<Set<string>>(new Set());
   const lastSelRef = useRef<string | null>(null);
   // Guard anti-doble-click por fila: sin esto, dos clics rápidos en ✓/✕/restaurar
   // disparaban la mutación dos veces.
@@ -204,7 +206,7 @@ export default function CartolaEditor({
       if (key === "pendientes" && pendientesAgrupadas.length > 1) {
         for (const g of pendientesAgrupadas) {
           rows.push({ kind: "subheader", section: key, sigla: g.sigla, label: g.label, color: g.color, bg: g.bg, ids: g.items.map((p) => p.id), count: g.items.length });
-          for (const p of g.items) rows.push({ kind: "tx", section: key, p });
+          if (!subColapsados.has(g.sigla)) for (const p of g.items) rows.push({ kind: "tx", section: key, p });
         }
       } else if (key === "pendientes") {
         for (const g of pendientesAgrupadas) for (const p of g.items) rows.push({ kind: "tx", section: key, p });
@@ -213,7 +215,7 @@ export default function CartolaEditor({
       }
     }
     return rows;
-  }, [groups, expanded, pendientesAgrupadas]);
+  }, [groups, expanded, pendientesAgrupadas, subColapsados]);
 
   // Mantener montadas las filas expandidas aunque salgan de la ventana virtual, para
   // no perder lo que el usuario esté tipeando en su detalle (ExpandedDetail = estado local).
@@ -401,6 +403,12 @@ export default function CartolaEditor({
                     count={row.count}
                     marcadas={row.ids.filter((id) => sel.has(id)).length}
                     onToggleGrupo={() => toggleConjunto(row.ids)}
+                    open={!subColapsados.has(row.sigla)}
+                    onToggle={() => setSubColapsados((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(row.sigla)) next.delete(row.sigla); else next.add(row.sigla);
+                      return next;
+                    })}
                   />
                 ) : (
                   <div>
@@ -529,14 +537,16 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, selected = f
 }
 
 /* ─── Encabezado de subgrupo por tipo (dentro de Pendientes) ─── */
-function SubGroupHeader({ sigla, label, color, bg, count, marcadas, onToggleGrupo }: {
+function SubGroupHeader({ sigla, label, color, bg, count, marcadas, onToggleGrupo, open, onToggle }: {
   sigla: string; label: string; color: string; bg: string; count: number;
   marcadas: number; onToggleGrupo: () => void;
+  open: boolean; onToggle: () => void;
 }) {
   const todas = marcadas === count && count > 0;
   const algunas = marcadas > 0 && !todas;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 16px", background: "color-mix(in srgb, var(--text) 3%, transparent)", borderBottom: "1px solid var(--border)" }}>
+    <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 16px", cursor: "pointer", background: "color-mix(in srgb, var(--text) 3%, transparent)", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ fontSize: 7, color: "var(--text3)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▶</span>
       {/* Casilla maestra del grupo: marca/desmarca la familia entera; con parte
           marcada muestra estado intermedio. "Todas menos una" = marcar todas y
           des-clickear la que sobra. */}
