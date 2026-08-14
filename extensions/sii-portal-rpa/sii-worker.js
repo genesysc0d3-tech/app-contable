@@ -532,11 +532,18 @@
     return dialogs.find((dialog) => /Emitir\s+e-Boleta/i.test(dialog.innerText || dialog.textContent || "")) || null;
   }
 
-  async function waitForEmitDialog(timeoutMs = 6000) {
+  // Espera el modal "Emitir e-Boleta" tras el primer EMITIR. UN SOLO reloj cubre las
+  // dos cosas que pueden pasar: (a) en montos altos el SII interpone la alerta
+  // "¿Desea continuar?" que TAPA el modal → en cada vuelta la confirmamos (SÍ) para
+  // que abra; (b) en montos bajos el modal abre directo → lo devolvemos. Así la
+  // espera de la alerta y la del modal NO se apilan en dos timeouts. 12s es holgado
+  // para conexiones lentas (alerta + apertura del modal) sin ser absurdo.
+  async function waitForEmitDialog(timeoutMs = 12000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const dialog = activeEmitDialog();
       if (dialog) return dialog;
+      await clickMontoAltoAlertIfPresent(); // best-effort; si no hay alerta, no hace nada
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     return null;
@@ -791,6 +798,30 @@
       return true;
     }
     return false;
+  }
+
+  // Alerta de monto alto (chequeo de UN SOLO TIRO — el loop lo pone quien llama, hoy
+  // waitForEmitDialog, para que la espera de la alerta y la del modal compartan UN
+  // ÚNICO reloj y no se apilen dos timeouts). Tras el PRIMER EMITIR (el de la
+  // calculadora), en montos altos el SII interpone un diálogo persistente "Está a
+  // punto de emitir una boleta por $X ¿Desea continuar?" con botones NO (rojo) / SÍ
+  // (verde). En montos bajos NO aparece: el modal de emisión abre directo (por eso
+  // antes andaba con $1). DOM real verificado en vivo 2026-08-14 (eboleta.sii.cl):
+  // contenedor .v-dialog--persistent; el SÍ es un <button> texto "SÍ" (con acento)
+  // clase v-btn ... success; el texto de la alerta está en document.body.innerText.
+  //
+  // Apretar SÍ NO emite: es el primer EMITIR (abre el formulario). La emisión real es
+  // el EMITIR del modal, con todas las compuertas intactas. Devuelve true si apretó
+  // SÍ. Match del SÍ SIN acento (SÍ→SI) para no fallar por el codepoint de la Í; jamás
+  // matchea "NO". Si no hay alerta, no hace nada y devuelve false (best-effort).
+  async function clickMontoAltoAlertIfPresent() {
+    const bodyText = normalizeSearchText(document.body?.innerText || document.body?.textContent || "");
+    if (!/DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/.test(bodyText)) return false;
+    const si = Array.from(document.querySelectorAll("button, .v-btn, [role='button']"))
+      .find((b) => b.offsetParent !== null && normalizeSearchText(b.innerText || b.textContent) === "SI");
+    if (!si) return false;
+    await clickElement(si);
+    return true;
   }
 
   function artifactLinks() {
@@ -1063,6 +1094,9 @@
     await new Promise((resolve) => setTimeout(resolve, 250));
     renderOverlay("LOCKED_AUTOMATION", "Abriendo formulario de e-Boleta.");
     await clickButtonText("EMITIR");
+    // waitForEmitDialog absorbe la alerta de monto alto (¿Desea continuar? → SÍ) en su
+    // propio loop: en montos altos la confirma para que abra el modal; en montos bajos
+    // no aparece y abre directo. Un solo timeout, sin esperas apiladas.
     let dialog = await waitForEmitDialog();
     if (!dialog) {
       throw new Error("El modal Emitir e-Boleta no se abrio; no se presiono el EMITIR final.");
