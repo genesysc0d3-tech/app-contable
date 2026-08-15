@@ -77,7 +77,7 @@
     overlay.style.background = locked ? "rgba(8, 10, 14, 0.18)" : "transparent";
     overlay.innerHTML = `
       <div style="margin:12px auto 0;max-width:760px;padding:12px 14px;border-radius:14px;background:${panelBackground};color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.16);pointer-events:auto;">
-        <div style="font-size:12px;font-weight:800;letter-spacing:.02em;">MassTest · Ventana segura SII</div>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.02em;">MassDTE · Ventana segura SII</div>
         <div style="font-size:12px;line-height:1.45;margin-top:4px;">${escapeHtml(message)}</div>
         <div style="font-size:10px;opacity:.78;margin-top:6px;">${helperText}</div>
         ${actions}
