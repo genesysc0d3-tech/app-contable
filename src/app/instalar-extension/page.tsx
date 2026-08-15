@@ -17,7 +17,7 @@ Reglas importantes:
 
 Empecemos por el paso 1.`;
 
-const ZIP_URL = "/descargas/masstest-motor-local.zip";
+const ZIP_URL = "/descargas/massdte-motor-local.zip";
 
 export default function InstalarExtensionPage() {
   const [copied, setCopied] = useState(false);
@@ -39,7 +39,7 @@ export default function InstalarExtensionPage() {
     <div className="eg-root">
       <style>{css}</style>
       <div className="eg-wrap">
-        <p className="eg-eyebrow">MassTest · Motor Local</p>
+        <p className="eg-eyebrow">MassDTE · Motor Local</p>
         <h1 className="eg-h1">Instala la extensión en 2 minutos</h1>
         <p className="eg-lead">
           Se hace <b>una sola vez</b>. Después emites tus boletas del SII directo desde la app,

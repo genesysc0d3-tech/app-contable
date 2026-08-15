@@ -11,11 +11,11 @@ import {
 
 describe("extension installer download", () => {
   it("points the install action to the public Motor Local ZIP", () => {
-    expect(EXTENSION_ZIP_URL).toBe("/descargas/masstest-motor-local.zip");
-    expect(EXTENSION_ZIP_FILENAME).toBe("masstest-motor-local.zip");
+    expect(EXTENSION_ZIP_URL).toBe("/descargas/massdte-motor-local.zip");
+    expect(EXTENSION_ZIP_FILENAME).toBe("massdte-motor-local.zip");
     expect(EXTENSION_ZIP_DOWNLOAD_PROPS).toEqual({
-      href: "/descargas/masstest-motor-local.zip",
-      download: "masstest-motor-local.zip",
+      href: "/descargas/massdte-motor-local.zip",
+      download: "massdte-motor-local.zip",
     });
   });
 
