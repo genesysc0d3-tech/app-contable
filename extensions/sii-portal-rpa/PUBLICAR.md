@@ -1,4 +1,4 @@
-# Publicar en la Chrome Web Store — App Contable Motor Local
+# Publicar en la Chrome Web Store — MassDTE — Motor Local
 
 Guía + textos listos para copiar/pegar en la [Developer Console](https://chrome.google.com/webstore/devconsole).
 Recomendación: **visibilidad "No listada"** (se instala con link, no aparece en búsquedas) para la beta.
@@ -11,17 +11,17 @@ Recomendación: **visibilidad "No listada"** (se instala con link, no aparece en
    Ese zip usa `manifest.prod.json` (sin localhost) y no incluye archivos de desarrollo.
 
 ## 1. Subir el paquete
-- En la consola: **Nuevo elemento** → subir `dist/extension/app-contable-motor-local-v0.1.0.zip`.
+- En la consola: **Nuevo elemento** → subir `dist/extension/massdte-motor-local-v0.1.5.zip`.
 
 ## 2. Ficha de la tienda (copiar/pegar)
 
-**Nombre:** `App Contable Motor Local`
+**Nombre:** `MassDTE — Motor Local`
 
 **Descripción corta (132 car. máx):**
 > Emite tus boletas electrónicas en el Portal del SII directamente desde App Contable, en tu propio computador.
 
 **Descripción larga:**
-> App Contable Motor Local es el complemento que emite tus boletas electrónicas de venta (afecta 39 / exenta 41) en el Portal del SII (eboleta.sii.cl), por tu cuenta y desde tu propio equipo, a partir de las propuestas que ya aprobaste en App Contable.
+> MassDTE — Motor Local es el complemento que emite tus boletas electrónicas de venta (afecta 39 / exenta 41) en el Portal del SII (eboleta.sii.cl), por tu cuenta y desde tu propio equipo, a partir de las propuestas que ya aprobaste en App Contable.
 >
 > Cómo funciona:
 > • App Contable te propone las boletas a partir de tus cartolas.
