@@ -1,8 +1,26 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { EXTENSION_STORE_URL, EXTENSION_ZIP_URL } from "@/lib/extension";
 
-const PROMPT = `Hola. Necesito que me ayudes, paso a paso y en lenguaje simple (no soy técnico), a instalar una extensión de Google Chrome que me pasó mi software de contabilidad. NO viene de la Chrome Web Store: la tengo como un archivo .zip que ya descargué.
+// Publicada en la Chrome Web Store (EXTENSION_STORE_URL seteada) → flujo de 1 clic
+// ("Añadir a Chrome", se auto-actualiza). Vacía → fallback beta: .zip + carga manual.
+const PUBLICADA = EXTENSION_STORE_URL.length > 0;
+
+const PROMPT_STORE = `Hola. Necesito que me ayudes, paso a paso y en lenguaje simple (no soy técnico), a instalar una extensión de Google Chrome desde la Chrome Web Store. Mi software de contabilidad me dio este link: ${EXTENSION_STORE_URL}
+
+Guíame de a un paso por vez y espera mi confirmación antes del siguiente:
+1) Abrir ese link en Google Chrome (no en Safari ni otro navegador).
+2) Apretar el botón azul "Añadir a Chrome" y confirmar en la ventanita que aparece.
+3) Verificar que la extensión quedó instalada (aparece el ícono arriba a la derecha o en el menú de extensiones, la pieza de puzzle).
+
+Reglas importantes:
+- NO me pidas contraseñas ni datos personales.
+- Solo guíame por los clics dentro de Chrome. Si un botón no aparece, ayúdame a encontrarlo. Pregúntame si uso Windows o Mac si lo necesitas.
+
+Empecemos por el paso 1.`;
+
+const PROMPT_ZIP = `Hola. Necesito que me ayudes, paso a paso y en lenguaje simple (no soy técnico), a instalar una extensión de Google Chrome que me pasó mi software de contabilidad. NO viene de la Chrome Web Store: la tengo como un archivo .zip que ya descargué.
 
 Guíame de a un paso por vez y espera mi confirmación antes del siguiente:
 1) Descomprimir el .zip en una carpeta.
@@ -17,7 +35,7 @@ Reglas importantes:
 
 Empecemos por el paso 1.`;
 
-const ZIP_URL = "/descargas/massdte-motor-local.zip";
+const PROMPT = PUBLICADA ? PROMPT_STORE : PROMPT_ZIP;
 
 export default function InstalarExtensionPage() {
   const [copied, setCopied] = useState(false);
@@ -40,41 +58,69 @@ export default function InstalarExtensionPage() {
       <style>{css}</style>
       <div className="eg-wrap">
         <p className="eg-eyebrow">MassDTE · Motor Local</p>
-        <h1 className="eg-h1">Instala la extensión en 2 minutos</h1>
+        <h1 className="eg-h1">{PUBLICADA ? "Instala la extensión en 1 minuto" : "Instala la extensión en 2 minutos"}</h1>
         <p className="eg-lead">
           Se hace <b>una sola vez</b>. Después emites tus boletas del SII directo desde la app,
           sin salir de tu computador.
         </p>
 
-        <a className="eg-download" href={ZIP_URL} download>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 15V3M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-          </svg>
-          Descargar extensión (.zip)
-        </a>
-        <p className="eg-meta">~2 minutos · una sola vez · funciona en Google Chrome</p>
+        {PUBLICADA ? (
+          <a className="eg-download" href={EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
+            Instalar desde Chrome
+          </a>
+        ) : (
+          <a className="eg-download" href={EXTENSION_ZIP_URL} download>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 15V3M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            Descargar extensión (.zip)
+          </a>
+        )}
+        <p className="eg-meta">
+          {PUBLICADA ? "~1 minuto · una sola vez · se actualiza sola · funciona en Google Chrome" : "~2 minutos · una sola vez · funciona en Google Chrome"}
+        </p>
 
         <hr className="eg-rule" />
 
         <h2 className="eg-h2">Los pasos</h2>
         <div className="eg-steps">
-          <Step n="1" title="Descomprime el archivo">
-            Clic derecho sobre el <code>.zip</code> que descargaste → <b>«Extraer todo»</b> (Windows)
-            o doble clic (Mac). Queda una <b>carpeta</b> — acuérdate dónde la dejaste.
-          </Step>
-          <Step n="2" title="Abre la página de extensiones">
-            En la barra de direcciones de Chrome, escribe <code>chrome://extensions</code> y aprieta Enter.
-          </Step>
-          <Step n="3" title="Activa el «Modo de desarrollador»">
-            Es un interruptor <b>arriba a la derecha</b>. Actívalo.
-          </Step>
-          <Step n="4" title="Carga la extensión">
-            Aprieta <b>«Cargar descomprimida»</b> y elige la <b>carpeta</b> que descomprimiste en el
-            paso 1 (la carpeta, <b>no</b> el&nbsp;.zip).
-          </Step>
-          <Step n="5" title="¡Listo!">
-            Ya aparece la extensión en la lista. No tienes que hacer nada más aquí.
-          </Step>
+          {PUBLICADA ? (
+            <>
+              <Step n="1" title="Abre la Chrome Web Store">
+                Aprieta el botón <b>«Instalar desde Chrome»</b> de arriba. Se abre la ficha de la extensión
+                en Google Chrome (tiene que ser Chrome, no Safari).
+              </Step>
+              <Step n="2" title="Añádela a Chrome">
+                Aprieta el botón azul <b>«Añadir a Chrome»</b> y confirma en la ventanita que aparece.
+              </Step>
+              <Step n="3" title="¡Listo!">
+                Ya está instalada y <b>se actualiza sola</b>. No tienes que hacer nada más aquí.
+              </Step>
+            </>
+          ) : (
+            <>
+              <Step n="1" title="Descomprime el archivo">
+                Clic derecho sobre el <code>.zip</code> que descargaste → <b>«Extraer todo»</b> (Windows)
+                o doble clic (Mac). Queda una <b>carpeta</b> — acuérdate dónde la dejaste.
+              </Step>
+              <Step n="2" title="Abre la página de extensiones">
+                En la barra de direcciones de Chrome, escribe <code>chrome://extensions</code> y aprieta Enter.
+              </Step>
+              <Step n="3" title="Activa el «Modo de desarrollador»">
+                Es un interruptor <b>arriba a la derecha</b>. Actívalo.
+              </Step>
+              <Step n="4" title="Carga la extensión">
+                Aprieta <b>«Cargar descomprimida»</b> y elige la <b>carpeta</b> que descomprimiste en el
+                paso 1 (la carpeta, <b>no</b> el&nbsp;.zip).
+              </Step>
+              <Step n="5" title="¡Listo!">
+                Ya aparece la extensión en la lista. No tienes que hacer nada más aquí.
+              </Step>
+            </>
+          )}
         </div>
 
         <div className="eg-connect">
