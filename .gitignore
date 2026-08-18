@@ -66,6 +66,8 @@ SESSION_NOTES.md
 .vercel/token
 .supabase/token
 .git/.git-credentials-local
+# Credenciales OAuth de la Chrome Web Store (publicar la extensión por API)
+.chromewebstore/
 
 # Reporte del harness de tokenización (contiene glosas reales con PII)
 artifacts/runs/tokenize-*.json
