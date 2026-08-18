@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type CSSProperties } from "react";
 import { useToast } from "@/components/Toast";
 import { setEmisionConfig, type BoletasEmisionProveedor, type FacturasEmisionProveedor } from "./actions";
-import { EXTENSION_ZIP_DOWNLOAD_PROPS, EXTENSION_VERSION_ACTUAL } from "@/lib/extension";
+import { EXTENSION_ZIP_DOWNLOAD_PROPS, EXTENSION_VERSION_ACTUAL, EXTENSION_STORE_URL, EXTENSION_NOMBRE } from "@/lib/extension";
 
 export interface EmissionProviderState {
   boletasProveedor: BoletasEmisionProveedor;
@@ -397,13 +397,27 @@ function LocalMotorPanel({
             Actualizar
           </button>
           {missing ? (
-            <a
-              {...EXTENSION_ZIP_DOWNLOAD_PROPS}
-              onClick={() => setShowInstall(true)}
-              style={{ ...smallButtonStyle(false, true), textDecoration: "none", whiteSpace: "nowrap" }}
-            >
-              Instalar extensión
-            </a>
+            // Publicada en la Chrome Web Store (EXTENSION_STORE_URL seteada) → un solo
+            // clic a la ficha ("Añadir a Chrome"); se auto-actualiza. Sin publicar →
+            // fallback: descarga el .zip y muestra los pasos de carga manual.
+            EXTENSION_STORE_URL ? (
+              <a
+                href={EXTENSION_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...smallButtonStyle(false, true), textDecoration: "none", whiteSpace: "nowrap" }}
+              >
+                Instalar extensión →
+              </a>
+            ) : (
+              <a
+                {...EXTENSION_ZIP_DOWNLOAD_PROPS}
+                onClick={() => setShowInstall(true)}
+                style={{ ...smallButtonStyle(false, true), textDecoration: "none", whiteSpace: "nowrap" }}
+              >
+                Instalar extensión
+              </a>
+            )
           ) : (
             <button type="button" onClick={onOpenOptions} disabled={!ready} style={smallButtonStyle(!ready, true)}>
               Configurar en extensión
@@ -424,7 +438,7 @@ function LocalMotorPanel({
           color: "var(--text2, #8b92a3)",
         }}>
           <div style={{ fontWeight: 800, color: "var(--text, #e8eaf0)", marginBottom: 4 }}>
-            Instala la extensión App Contable Motor Local (v{EXTENSION_VERSION_ACTUAL}) en este Chrome
+            Instala la extensión {EXTENSION_NOMBRE} (v{EXTENSION_VERSION_ACTUAL}) en este Chrome
           </div>
           <ol style={{ margin: 0, paddingLeft: 16 }}>
             <li>El archivo <b>.zip</b> ya se descargó al presionar «Instalar extensión». Descomprímelo (doble clic) → queda una <b>carpeta</b>.</li>
