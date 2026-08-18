@@ -75,6 +75,38 @@ difiere RUT/domicilio de la SpA igual que la política general, así que no bloq
    `NEXT_PUBLIC_EXTENSION_STORE_URL = <esa URL>`  (Production).
 3. Redeploy. A partir de ahí, los botones **"Instalar extensión"** de la app llevan directo a la store (antes mostraban los pasos manuales).
 
+## 6. Publicar actualizaciones por API (sin entrar a la consola)
+
+Ya publicada (ID `klblpnnmbbmicpbnhlkfceiiijppobfe`, publisher `4051ff7d-0488-45b6-b541-cb4605a7704a`),
+las versiones siguientes se suben con `scripts/publish-extension.sh`. Requiere una sola vez un
+refresh token OAuth de la cuenta del publisher, guardado en `.chromewebstore/credentials.json`
+(gitignoreado — nunca en el repo ni en el chat).
+
+**Setup (una vez, cuenta `genesysc0d3@gmail.com` — la del publisher, con 2FA activa):**
+1. Google Cloud Console → proyecto (p.ej. `massdte`) → **APIs y servicios → Biblioteca** → habilitar **Chrome Web Store API**.
+2. **Pantalla de consentimiento OAuth**: Externo, nombre `MassDTE publisher`, tu correo; en *Usuarios de prueba* agregar el mismo correo (evita la verificación de la app).
+3. **Credenciales → + Crear → ID de cliente OAuth → Aplicación web**; URI de redirección autorizada: `https://developers.google.com/oauthplayground`. Copiar `client_id` y `client_secret`.
+4. **OAuth Playground** (`developers.google.com/oauthplayground`) → ⚙️ *Use your own OAuth credentials* → pegar id/secret → scope `https://www.googleapis.com/auth/chromewebstore` → *Authorize APIs* (esa cuenta; si dice "no verificada": Avanzado → continuar) → *Exchange authorization code for tokens* → copiar **refresh_token**.
+5. Guardar:
+   ```bash
+   mkdir -p .chromewebstore && chmod 700 .chromewebstore
+   ```
+   `.chromewebstore/credentials.json`:
+   ```json
+   { "client_id": "…", "client_secret": "…", "refresh_token": "…",
+     "publisher_id": "4051ff7d-0488-45b6-b541-cb4605a7704a",
+     "extension_id": "klblpnnmbbmicpbnhlkfceiiijppobfe" }
+   ```
+
+**Publicar una versión nueva:**
+```bash
+bash scripts/publish-extension.sh 0.1.6      # bump (4 archivos en sync) + build + upload + publish
+DRY_RUN=1 bash scripts/publish-extension.sh  # solo build + verificar token
+```
+Después: commitear el bump (manifests + `modules/core.js` + `src/lib/extension.ts` + `public/descargas/*.zip`) por el flujo normal (PR → dev → main). Google revisa y publica sola; los usuarios se auto-actualizan.
+
+Notas verificadas (2026-08-17): el script usa la **API v1.1** (`www.googleapis.com/chromewebstore/v1.1`), que responde para este publisher; la v2 (`chromewebstore.googleapis.com/v2/...:fetchStatus`) daba 404 HTML — si v1.1 dejara de responder, migrar a v2 (endpoints comentados en el script). La store **rechaza versiones ≤ a la publicada** (`PKG_INVALID_VERSION_NUMBER`) — usar ese error como prueba inofensiva del token si hace falta. El refresh token del OAuth Playground puede caducar/revocarse (24 h o si se revoca la app en la cuenta) — si el script dice `invalid_grant`, repetir el paso 4 y sobreescribir `credentials.json`.
+
 ## Notas
 - La revisión de Google suele tardar días; puede tardar más por los permisos amplios + automatizar un portal de gobierno. Respondé claro que la extensión actúa **por cuenta del propio usuario, con su consentimiento**.
 - Para actualizar: subí una versión con `version` mayor en `manifest.prod.json`, re-corré el build y subí el nuevo zip. Los usuarios se auto-actualizan.
