@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // pdf-parse/pdfjs-dist cargan su worker (pdf.worker.mjs) por ruta relativa al
+  // módulo. Si Next los empaqueta, el worker no existe en el bundle y TODO PDF
+  // falla con "Setting up fake worker failed: Cannot find module …/pdf.worker.mjs".
+  // Se cargan como externos del servidor (require nativo desde node_modules).
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
   experimental: {
     optimizePackageImports: [
       "@phosphor-icons/react",
