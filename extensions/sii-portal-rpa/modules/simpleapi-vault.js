@@ -622,7 +622,7 @@ function isUnlocked() {
 }
 
 function isAllowedProxyOrigin(origin) {
-  return origin === "https://app-contable-five.vercel.app" || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin || "");
+  return origin === "https://app.massdte.cl" || origin === "https://app-contable-five.vercel.app" || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin || "");
 }
 
 function safeFilename(value) {

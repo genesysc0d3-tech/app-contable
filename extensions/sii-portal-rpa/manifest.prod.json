@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MassDTE — Motor Local",
   "description": "Motor local para emitir tus boletas electrónicas del SII (Portal / e-Boleta) por tu cuenta, desde tu propio equipo.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "minimum_chrome_version": "116",
   "options_page": "options.html",
   "action": {
@@ -26,6 +26,7 @@
     "https://www.sii.cl/*",
     "https://*.sii.cl/*",
     "https://eboleta.s3.amazonaws.com/*",
+    "https://app.massdte.cl/*",
     "https://app-contable-five.vercel.app/*"
   ],
   "background": {
@@ -35,6 +36,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://app.massdte.cl/*",
         "https://app-contable-five.vercel.app/*"
       ],
       "js": ["app-bridge.js"],

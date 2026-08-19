@@ -20,7 +20,7 @@ const activeJobs = new Map();
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason !== "install") return;
   chrome.tabs.query(
-    { url: ["https://app-contable-five.vercel.app/*", "http://localhost/*", "http://127.0.0.1/*"] },
+    { url: ["https://app.massdte.cl/*", "https://app-contable-five.vercel.app/*", "http://localhost/*", "http://127.0.0.1/*"] },
     (tabs) => {
       for (const tab of tabs) {
         if (typeof tab.id === "number") chrome.tabs.reload(tab.id).catch(() => {});
