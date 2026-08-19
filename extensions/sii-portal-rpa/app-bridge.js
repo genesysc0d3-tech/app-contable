@@ -16,7 +16,8 @@
   ]);
 
   function isAllowedOrigin(origin) {
-    return origin === "https://app-contable-five.vercel.app" || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+    // Transición de dominio: se aceptan el host nuevo (app.massdte.cl) y el viejo.
+    return origin === "https://app.massdte.cl" || origin === "https://app-contable-five.vercel.app" || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
   }
 
   function reportBridgeError(data, message) {
