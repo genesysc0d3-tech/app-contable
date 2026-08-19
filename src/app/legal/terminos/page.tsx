@@ -38,6 +38,27 @@ export default function TerminosPage() {
         </p>
       </LegalSection>
 
+      <LegalSection title="Emisor y responsabilidad">
+        <p>
+          El unico emisor de cada boleta o documento tributario ante el SII es el
+          usuario (su RUT, sus credenciales, sus folios). MassDTE es una
+          herramienta de apoyo que propone y automatiza pasos; la decision de
+          emitir es siempre del usuario y ninguna boleta se emite sin su accion.
+          MassDTE no responde por el contenido tributario de documentos emitidos
+          a partir de informacion ingresada, aprobada o corregida por el usuario.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Prueba gratis">
+        <p>
+          La prueba gratuita se otorga sin contraprestacion, con los limites de
+          dias y boletas vigentes al momento de activarla, y puede ajustarse o
+          retirarse por abuso. Al terminar la prueba no se realiza ningun cobro
+          automatico: contratar un plan es siempre una accion voluntaria del
+          usuario.
+        </p>
+      </LegalSection>
+
       <LegalSection title="Planes y pagos">
         <p>
           Los planes, cupos, add-ons y pagos se controlan por cuenta pagadora.
