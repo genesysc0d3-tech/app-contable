@@ -96,6 +96,13 @@ describe("app-bridge — dirección app → extensión", () => {
     expect(b.toPage).toHaveLength(0);
   });
 
+  it("acepta el DOMINIO NUEVO app.massdte.cl (transición de dominio, ambos hosts conviven)", () => {
+    const NUEVO = "https://app.massdte.cl";
+    const b2 = mountBridge({ pageOrigin: NUEVO });
+    b2.appPosts({ source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce: "n" }, NUEVO);
+    expect(b2.toBackground).toHaveLength(1); // ← el nuevo host se comunica igual que el viejo
+  });
+
   it("acepta localhost con puerto (dev)", () => {
     const b2 = mountBridge({ pageOrigin: LOCALHOST });
     b2.appPosts({ source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce: "y" }, LOCALHOST);
