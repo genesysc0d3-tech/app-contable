@@ -17,8 +17,15 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "App Contable",
-  description: "Contabilidad inteligente para Chile",
+  title: { default: "MassDTE", template: "%s | MassDTE" },
+  description: "De tu cartola bancaria a boletas electrónicas emitidas en el SII, en minutos. La IA clasifica, tú apruebas.",
+  openGraph: {
+    type: "website",
+    locale: "es_CL",
+    siteName: "MassDTE",
+    title: "MassDTE — Tu escritorio de boletas del SII",
+    description: "Sube tu cartola, revisa y emite el lote completo en el SII.",
+  },
 };
 
 export default function RootLayout({
