@@ -36,7 +36,7 @@ export default function InstalarExtension() {
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span aria-hidden style={{ fontSize: 15 }}>🧩</span>
         <span style={{ flex: 1, fontSize: 12, lineHeight: 1.4, color: "var(--text, #e8eaf0)" }}>
-          Para emitir en el SII necesitás la extensión <b>{EXTENSION_NOMBRE}</b> en este Chrome.
+          Para emitir en el SII necesitás la extensión <b>{EXTENSION_NOMBRE}</b> en este navegador (Chrome, Edge o Brave).
         </span>
         {publicada ? (
           <a

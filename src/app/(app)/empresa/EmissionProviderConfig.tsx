@@ -438,11 +438,11 @@ function LocalMotorPanel({
           color: "var(--text2, #8b92a3)",
         }}>
           <div style={{ fontWeight: 800, color: "var(--text, #e8eaf0)", marginBottom: 4 }}>
-            Instala la extensión {EXTENSION_NOMBRE} (v{EXTENSION_VERSION_ACTUAL}) en este Chrome
+            Instala la extensión {EXTENSION_NOMBRE} (v{EXTENSION_VERSION_ACTUAL}) en este navegador (Chrome, Edge o Brave)
           </div>
           <ol style={{ margin: 0, paddingLeft: 16 }}>
             <li>El archivo <b>.zip</b> ya se descargó al presionar «Instalar extensión». Descomprímelo (doble clic) → queda una <b>carpeta</b>.</li>
-            <li>En una pestaña nueva entra a <b>chrome://extensions</b> (solo Google Chrome, no Safari).</li>
+            <li>En una pestaña nueva entra a <b>chrome://extensions</b> (Chrome, Edge o Brave; no Safari).</li>
             <li>Activa el «Modo de desarrollador» (arriba a la derecha).</li>
             <li>Presiona «Cargar descomprimida» y elige la <b>carpeta</b> descomprimida (no el .zip).</li>
             <li>Listo: la app se conecta sola. (Si no, presiona «Actualizar».)</li>

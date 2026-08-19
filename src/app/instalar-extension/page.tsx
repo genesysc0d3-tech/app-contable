@@ -10,7 +10,7 @@ const PUBLICADA = EXTENSION_STORE_URL.length > 0;
 const PROMPT_STORE = `Hola. Necesito que me ayudes, paso a paso y en lenguaje simple (no soy técnico), a instalar una extensión de Google Chrome desde la Chrome Web Store. Mi software de contabilidad me dio este link: ${EXTENSION_STORE_URL}
 
 Guíame de a un paso por vez y espera mi confirmación antes del siguiente:
-1) Abrir ese link en Google Chrome (no en Safari ni otro navegador).
+1) Abrir ese link en Chrome, Edge o Brave (no en Safari).
 2) Apretar el botón azul "Añadir a Chrome" y confirmar en la ventanita que aparece.
 3) Verificar que la extensión quedó instalada (aparece el ícono arriba a la derecha o en el menú de extensiones, la pieza de puzzle).
 
@@ -80,7 +80,7 @@ export default function InstalarExtensionPage() {
           </a>
         )}
         <p className="eg-meta">
-          {PUBLICADA ? "~1 minuto · una sola vez · se actualiza sola · funciona en Google Chrome" : "~2 minutos · una sola vez · funciona en Google Chrome"}
+          {PUBLICADA ? "~1 minuto · una sola vez · se actualiza sola · Chrome, Edge o Brave" : "~2 minutos · una sola vez · Chrome, Edge o Brave"}
         </p>
 
         <hr className="eg-rule" />
@@ -91,7 +91,7 @@ export default function InstalarExtensionPage() {
             <>
               <Step n="1" title="Abre la Chrome Web Store">
                 Aprieta el botón <b>«Instalar desde Chrome»</b> de arriba. Se abre la ficha de la extensión
-                en Google Chrome (tiene que ser Chrome, no Safari).
+                en tu navegador (Chrome, Edge o Brave; no Safari).
               </Step>
               <Step n="2" title="Añádela a Chrome">
                 Aprieta el botón azul <b>«Añadir a Chrome»</b> y confirma en la ventanita que aparece.
