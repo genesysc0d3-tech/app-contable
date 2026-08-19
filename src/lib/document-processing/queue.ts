@@ -6,6 +6,7 @@ import { parseExcel } from "@/lib/parsers";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { descargarDocumento } from "@/lib/storage";
 import { procesarDocumento, ProcessorYieldError } from "@/lib/ai/processor";
+import { PdfProtegidoError, esErrorDeClavePdf, variantesClaveDesdeRut } from "./pdf-protegido";
 import { sanitizeOpsMetadata } from "@/lib/ops/sanitize";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import {
@@ -271,10 +272,7 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
   } else if (job.tipo === "pdf") {
-    const { PDFParse } = await import("pdf-parse");
-    const pdfParser = new PDFParse(new Uint8Array(fileBuffer));
-    const pdfData = await pdfParser.getText();
-    contenido = pdfData.text;
+    contenido = await leerTextoPdf(sb, job, fileBuffer);
   } else if (job.tipo === "imagen") {
     const { groupedText } = await ocrAndGroupImages([{
       base64: fileBuffer.toString("base64"),
@@ -287,6 +285,51 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
   }
 
   return { contenido, preExtracted };
+}
+
+/**
+ * Lee el texto de un PDF. Si está protegido con clave, prueba automáticamente
+ * variantes del RUT de la empresa (lo usual en bancos chilenos). Si ninguna
+ * abre el PDF, lanza PdfProtegidoError (definitivo, sin reintentos, mensaje
+ * humano). La clave solo vive en memoria durante la lectura.
+ */
+async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer): Promise<string> {
+  const { PDFParse } = await import("pdf-parse");
+  // pdf.js TRANSFIERE el buffer al worker (queda desprendido tras el 1er intento):
+  // cada intento necesita una copia fresca, si no el 2º tira DataCloneError.
+  const intentar = async (password?: string) => {
+    const data = new Uint8Array(fileBuffer); // copia por intento
+    const parser = new PDFParse(password ? { data, password } : { data });
+    try { return (await parser.getText()).text; } finally { await parser.destroy().catch(() => {}); }
+  };
+  try {
+    return await intentar();
+  } catch (error) {
+    if (!esErrorDeClavePdf(error)) throw error;
+  }
+  // PDF con clave: probar variantes del RUT de la empresa (nunca se persisten).
+  const { data: empresa } = await sb.from("empresas").select("rut").eq("id", job.empresa_id).maybeSingle();
+  for (const clave of variantesClaveDesdeRut(empresa?.rut)) {
+    try {
+      const texto = await intentar(clave);
+      await recordOpsEvent({
+        sb,
+        severity: "info",
+        source: "ia",
+        eventName: "pdf_protegido_abierto_con_rut",
+        summary: "Cartola PDF con clave abierta automáticamente con el RUT de la empresa",
+        empresaId: job.empresa_id,
+        usuarioId: job.usuario_id,
+        resourceType: "document_processing_job",
+        resourceId: job.id,
+        metadata: { documento_id: job.documento_id },
+      });
+      return texto;
+    } catch (error) {
+      if (!esErrorDeClavePdf(error)) throw error;
+    }
+  }
+  throw new PdfProtegidoError();
 }
 
 /**
@@ -363,6 +406,48 @@ async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, erro
   });
 }
 
+/**
+ * Fallo DEFINITIVO (p. ej. PDF con clave que no pudimos abrir): el job queda
+ * failed de inmediato, sin reintentos, y el documento en "error" con un mensaje
+ * humano que la UI muestra tal cual (MesaTab lee progreso_ia.error).
+ */
+async function markJobFailedDefinitivo(sb: Sb, job: DocumentProcessingJob, error: Error, now = new Date()) {
+  const message = error.message;
+  await sb
+    .from("documentos_subidos")
+    .update({
+      estado: "error",
+      progreso_ia: safeJson({ estado: "error", error: message, definitivo: true, attempts: job.attempts + 1, max_attempts: job.max_attempts }),
+    })
+    .eq("id", job.documento_id);
+  const { error: updateError } = await sb
+    .from("document_processing_jobs")
+    .update({
+      status: "failed",
+      attempts: job.attempts + 1,
+      last_error: message,
+      locked_at: null,
+      locked_by: null,
+      next_run_at: now.toISOString(),
+      completed_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq("id", job.id);
+  if (updateError) throw new Error(`JOB_FAILURE_UPDATE_FAILED:${updateError.message}`);
+  await recordOpsEvent({
+    sb,
+    severity: "warn",
+    source: "ia",
+    eventName: "document_processing_failed_definitivo",
+    summary: "Job de documento falló de forma definitiva (no reintentable)",
+    empresaId: job.empresa_id,
+    usuarioId: job.usuario_id,
+    resourceType: "document_processing_job",
+    resourceId: job.id,
+    metadata: { documento_id: job.documento_id, tipo: job.tipo, motivo: error.name },
+  });
+}
+
 async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
   const now = new Date();
   try {
@@ -435,6 +520,12 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
     if (error instanceof ProcessorYieldError) {
       await markJobYielded(sb, job, error, new Date());
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, yielded: true };
+    }
+    if (error instanceof PdfProtegidoError) {
+      // Definitivo: reintentar no sirve (la clave no va a aparecer sola). Se marca
+      // failed de una, con el mensaje humano, sin gastar intentos ni esperar backoff.
+      await markJobFailedDefinitivo(sb, job, error, now);
+      return { ok: false as const, jobId: job.id, documentoId: job.documento_id, error: error.message };
     }
     await markJobFailedOrRetryable(sb, job, error, now);
     return { ok: false as const, jobId: job.id, documentoId: job.documento_id, error: safeJobError(error) };

@@ -74,3 +74,5 @@ artifacts/runs/tokenize-*.json
 
 # Paquete de la extensión (binario, se regenera con scripts/build-extension.sh)
 dist/
+# Credenciales Mercado Pago (locales, se suben a Vercel por API)
+.mercadopago/
