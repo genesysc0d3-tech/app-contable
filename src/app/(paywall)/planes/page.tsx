@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -54,9 +55,13 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
   const planActual = planes.find((p) => p.codigo === cuota.plan) ?? null;
   const trial = cuota.trial;
 
-  // Plan que el usuario eligió en el landing (?plan=): se resalta ese; si no, "pro".
+  // Plan que el usuario eligió en el landing: llega por ?plan= (link directo) o por
+  // la cookie massdte_plan que dejó el registro (el onboarding ya no pasa por acá:
+  // va directo al escritorio, así que la cookie se lee recién cuando viene a pagar).
   const sp = await searchParams;
-  const planPedido = typeof sp.plan === "string" ? sp.plan.toLowerCase() : null;
+  const jar = await cookies();
+  const planCookie = (jar.get("massdte_plan")?.value ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24) || null;
+  const planPedido = typeof sp.plan === "string" ? sp.plan.toLowerCase() : planCookie;
   const recomendadoCodigo = planPedido && planes.some((p) => p.codigo === planPedido) ? planPedido : "pro";
 
   let aviso: string | null = null;

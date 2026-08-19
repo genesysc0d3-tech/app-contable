@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import V5Root from "./V5Root";
+import MpVueltaToast from "./MpVueltaToast";
 import GlowWrap from "./GlowWrap";
 import MesaController from "./MesaController";
 import { fetchMesaDateDependent } from "./mesa-data";
@@ -402,6 +404,8 @@ export default async function V5Page({ searchParams }: {
   );
 
   return (
+    <>
+    <Suspense fallback={null}><MpVueltaToast /></Suspense>
     <V5Root
       dashboardContent={dashboardContent}
       empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto", operacion_hint_default: usuario.empresas.operacion_hint_default ?? null }}
@@ -410,5 +414,6 @@ export default async function V5Page({ searchParams }: {
       empresaEmisionConfig={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}
       devMode={usuario.dev_mode === true}
     />
+    </>
   );
 }

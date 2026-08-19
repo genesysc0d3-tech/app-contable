@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -128,10 +127,11 @@ export async function crearEmpresa(formData: FormData) {
     return { error: "No se pudo crear la cuenta. Intenta de nuevo." };
   }
 
-  // Si el usuario eligió un plan en el landing (?plan= → cookie en registro), lo
-  // llevamos a /planes con ese plan resaltado y limpiamos la cookie.
-  const jar = await cookies();
-  const planElegido = (jar.get("massdte_plan")?.value ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
-  if (planElegido) jar.delete("massdte_plan");
-  redirect(planElegido ? `/planes?plan=${planElegido}` : "/planes");
+  // Producto primero (flujo "estilo Google/Stripe"): del onboarding se entra
+  // DIRECTO al escritorio. El trial (config_global.trial_habilitado) deja pasar
+  // sin plan y su reloj parte recién con la primera emisión masiva; /planes queda
+  // para cuando el usuario quiera contratar o el trial se acabe (requireActiveEmpresa
+  // lo manda ahí solo si no hay plan ni trial). La cookie massdte_plan (?plan= del
+  // landing) NO se borra: /planes la lee para preseleccionar cuando toque pagar.
+  redirect("/massdte");
 }
