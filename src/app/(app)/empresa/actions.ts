@@ -177,7 +177,13 @@ export async function setDatosEmisor(
     .update(update)
     .eq("id", usuario.empresa_id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    // 23505 = índice único empresas_rut_unico (RUT normalizado ya registrado).
+    if (error.code === "23505" || error.message?.includes("duplicate key")) {
+      return { error: "Ese RUT ya está registrado en otra cuenta." };
+    }
+    return { error: error.message };
+  }
 
   revalidatePath("/empresa");
   revalidatePath("/escritorio");
