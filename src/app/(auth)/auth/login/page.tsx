@@ -1,157 +1,22 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { signIn, signInWithGoogle } from "../actions";
-import BrandPanel from "../../BrandPanel";
+import { Suspense } from "react";
+import AuthCard from "../AuthCard";
 
+// La escena de fondo vive en el layout de /auth (persiste entre rutas); esta
+// página solo posiciona la tarjeta. Alternar a "Crear cuenta" NO navega: la
+// AuthCard cambia de modo en el lugar (y ajusta la URL con replaceState).
 export default function LoginPage() {
   return (
-    <Suspense fallback={<AuthFallback />}>
-      <LoginContent />
-    </Suspense>
+    <div className="relative z-10 min-h-svh flex items-center justify-center lg:justify-end px-4 py-4 lg:pr-[7vw]">
+      <Suspense fallback={<AuthFallback />}>
+        <AuthCard inicial="login" />
+      </Suspense>
+    </div>
   );
 }
 
-// Evita el flash negro mientras carga el contenido (useSearchParams exige Suspense).
+// Evita el flash mientras carga (useSearchParams exige Suspense).
 function AuthFallback() {
-  return (
-    <div className="mesh-bg flex-1 flex items-center justify-center min-h-screen">
-      <div className="h-8 w-8 rounded-full border-2 border-white/15 border-t-[#e8553e] animate-spin" />
-    </div>
-  );
-}
-
-function LoginContent() {
-  const searchParams = useSearchParams();
-  const next = safeNextPath(searchParams.get("next"));
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(formData: FormData) {
-    setLoading(true);
-    setError(null);
-    const result = await signIn(formData);
-    if (result?.error) {
-      setError(result.error);
-      setLoading(false);
-    }
-  }
-
-  async function handleGoogle() {
-    setLoading(true);
-    setError(null);
-    const result = await signInWithGoogle(next);
-    if (result?.error) {
-      setError(result.error);
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex-1 min-h-svh">
-      {/* Escena de fondo completa (boletas cayendo); la tarjeta flota encima */}
-      <BrandPanel />
-
-      <div className="relative z-10 min-h-svh flex items-center justify-center lg:justify-end px-4 py-4 lg:pr-[7vw]">
-      <div className="w-full max-w-[500px] space-y-[clamp(12px,2.4svh,24px)] relative rounded-[22px] border border-white/10 bg-[#0a0a0a]/80 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.45)] px-7 py-[clamp(18px,4.2svh,40px)] sm:px-12">
-        <div className="text-center">
-          <h1 className="text-[clamp(22px,3.2svh,30px)] font-bold">Iniciar sesión</h1>
-          <p className="text-white/50 mt-2 text-sm">
-            Tu escritorio de boletas del SII
-          </p>
-        </div>
-
-        <div className="space-y-[clamp(10px,1.8svh,16px)]">
-          {error && (
-            <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-[clamp(8px,1.6svh,12px)] text-sm text-red-300">
-              {error}
-            </div>
-          )}
-
-          <form action={handleSubmit} className="space-y-[clamp(8px,1.4svh,12px)]">
-            {next && <input type="hidden" name="next" value={next} />}
-            <div>
-              <label htmlFor="email" className="block text-sm text-white/70 mb-1">
-                Email
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
-                placeholder="tu@email.com"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm text-white/70 mb-1"
-              >
-                Contraseña
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                minLength={6}
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
-                placeholder="••••••••"
-              />
-              <div className="text-right mt-1.5">
-                <Link
-                  href={next ? `/auth/recuperar?next=${encodeURIComponent(next)}` : "/auth/recuperar"}
-                  className="text-xs text-white/40 hover:text-white/70 transition-colors"
-                >
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-[clamp(8px,1.6svh,12px)] text-sm font-semibold text-white transition-colors"
-            >
-              {loading ? "Entrando..." : "Entrar"}
-            </button>
-          </form>
-
-          {/* divisor sin fondo sólido: la tarjeta es translúcida */}
-          <div className="flex items-center gap-3 text-xs text-white/40">
-            <div className="flex-1 border-t border-white/10" />
-            <span>o</span>
-            <div className="flex-1 border-t border-white/10" />
-          </div>
-
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            className="w-full rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-sm font-medium text-white/90 transition-colors"
-          >
-            Continuar con Google
-          </button>
-        </div>
-
-        <p className="text-center text-sm text-white/40">
-          ¿No tienes cuenta?{" "}
-          <Link
-            href={next ? `/auth/registro?next=${encodeURIComponent(next)}` : "/auth/registro"}
-            className="text-[#e8553e] hover:text-[#e8553e]/80"
-          >
-            Crear cuenta
-          </Link>
-        </p>
-      </div>
-      </div>
-    </div>
-  );
-}
-
-function safeNextPath(value: string | null): string | null {
-  const next = String(value ?? "").trim();
-  if (!next.startsWith("/") || next.startsWith("//")) return null;
-  return next;
+  return <div className="h-8 w-8 rounded-full border-2 border-white/15 border-t-[#e8553e] animate-spin" />;
 }
