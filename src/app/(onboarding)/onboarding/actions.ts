@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { validarRut } from "@/lib/rut";
+import { formatRut, validarRut } from "@/lib/rut";
 
 function getServiceClient() {
   return createServiceClient<Database>(
@@ -49,9 +49,11 @@ export async function crearEmpresa(formData: FormData) {
   }
 
   // Create empresa
+  // RUT SIEMPRE formateado (XX.XXX.XXX-X): el índice único empresas_rut_unico
+  // normaliza por expresión, pero guardar canónico evita duplicados visuales.
   const { data: empresa, error: empresaError } = await admin
     .from("empresas")
-    .insert({ rut, razon_social, giro })
+    .insert({ rut: formatRut(rut), razon_social, giro })
     .select()
     .single();
 
