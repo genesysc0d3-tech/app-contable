@@ -78,9 +78,9 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
   }, []);
 
   return (
-    {/* Anclado ENTRE el logo (180px) y los botones (178px) en vez de centrado a
-        ciegas con left:50%: así es geométricamente imposible que los toque,
-        a cualquier ancho de ventana. Dentro de ese carril, centrado. */}
+    // Anclado ENTRE el logo (180px) y los botones (178px) en vez de centrado a
+    // ciegas con left:50%: geométricamente imposible que los toque a cualquier
+    // ancho de ventana. Dentro de ese carril, centrado.
     <div className="v5-calendar-wrap" style={{ position: "absolute", left: 188, right: 186, top: 0, height: 38, display: "flex", justifyContent: "center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
