@@ -3,24 +3,25 @@
    "a mitad de vuelo" con delays negativos sin verse rara; el vaivén con
    ladeo (paper) oscila aparte con su propio ritmo. */
 
+/* ESCENA de pantalla completa: el fondo es UNO solo (grid + glow + boletas
+   cayendo de borde a borde) y el formulario flota encima en su tarjeta —
+   sin mitades ni línea divisoria (feedback del fundador 2026-08-20). */
 .panel {
-  position: relative;
+  position: fixed;
+  inset: 0;
   overflow: hidden;
-  /* solo escritorio: bajo 1024px el login queda solo (el display:none del
-     module gana aunque Tailwind pierda la pelea de especificidad) */
-  display: none;
+  display: flex;
+  flex-direction: column;
   justify-content: space-between;
   padding: 52px 60px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(900px 520px at 20% -10%, rgba(232, 85, 62, 0.09), transparent 60%),
+    radial-gradient(1100px 620px at 22% -10%, rgba(232, 85, 62, 0.09), transparent 60%),
     #0b0a09;
 }
-@media (min-width: 1024px) {
-  .panel {
-    display: flex;
-    flex-direction: column;
-  }
+/* bajo 1024px la escena queda (boletas + fondo) pero el contenido de marca
+   se esconde: la tarjeta centrada es la protagonista */
+@media (max-width: 1023px) {
+  .brand, .tagline, .news { display: none; }
 }
 .panel::before {
   content: "";
@@ -156,7 +157,7 @@
   position: relative;
   z-index: 3;
   margin-top: 72px;
-  max-width: 480px;
+  max-width: 470px;
 }
 .tagline h1 {
   font-size: clamp(30px, 3vw, 42px);
@@ -184,6 +185,7 @@
 .news {
   position: relative;
   z-index: 3;
+  max-width: 470px;
   opacity: 0;
   animation: rise 0.7s ease 0.75s forwards;
 }
