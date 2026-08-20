@@ -11,13 +11,17 @@ const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEA
 const activeJobs = new Map();
 
 // ===== Auto-actualización silenciosa (estilo Chrome/VS Code) =====
-// Cada UPDATE_CHECK_MIN se le pide a Chrome un chequeo inmediato (sin esperar su
-// ciclo de ~5h). Cuando hay versión nueva descargada, se aplica con runtime.reload()
-// — pero JAMÁS a mitad de una emisión: si hay jobs activos se posterga y se
-// reintenta al cerrar cada job y en la próxima alarma. El usuario no ve nada.
-// (Chrome throttlea requestUpdateCheck si se abusa; 4h está bajo el límite.)
-const UPDATE_ALARM = "massdte-update-check";
+// Gatillo por USO, no por reloj: cada vez que la app le habla a la extensión
+// (el PING que ya existe) se le pide a Chrome un chequeo inmediato, con freno
+// de 10 min para no abusar (Chrome además throttlea el suyo). Mientras el
+// cliente sube su cartola y emite, la versión nueva se descarga por detrás y
+// se aplica con runtime.reload() — JAMÁS a mitad de una emisión: con jobs
+// activos se posterga y se reintenta al cerrar cada job. El usuario no ve nada.
+// Sin app abierta no hay pings, pero tampoco urgencia: el ciclo ~5h de Chrome
+// sigue corriendo solo. (Sin permiso 'alarms': puro event-driven.)
+const UPDATE_CHECK_FRENO_MS = 10 * 60 * 1000;
 let updateListo = false;
+let ultimoUpdateCheck = 0;
 
 function aplicarUpdateSiOcioso() {
   if (!updateListo) return;
@@ -30,9 +34,10 @@ chrome.runtime.onUpdateAvailable.addListener(() => {
   aplicarUpdateSiOcioso();
 });
 
-chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: 240, delayInMinutes: 10 });
-chrome.alarms.onAlarm.addListener((alarma) => {
-  if (alarma.name !== UPDATE_ALARM) return;
+function maybeCheckUpdate() {
+  const ahora = Date.now();
+  if (ahora - ultimoUpdateCheck < UPDATE_CHECK_FRENO_MS) return;
+  ultimoUpdateCheck = ahora;
   try {
     chrome.runtime.requestUpdateCheck((status) => {
       void chrome.runtime.lastError;
@@ -44,9 +49,9 @@ chrome.alarms.onAlarm.addListener((alarma) => {
       }
     });
   } catch {
-    // requestUpdateCheck no disponible (build vieja de Chrome): el ciclo normal ~5h manda.
+    // requestUpdateCheck no disponible: el ciclo normal ~5h de Chrome manda.
   }
-});
+}
 
 // Al INSTALAR la extensión, Chrome NO inyecta el content script (app-bridge.js) en
 // las pestañas que ya estaban abiertas → la app se queda en "extensión no detectada"
@@ -946,6 +951,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "APP_CONTABLE_EXTENSION_PING") {
+    // Un toque de la app = oportunidad de auto-update (frenado a 1 vez / 10 min).
+    maybeCheckUpdate();
     // La app está viva: si hay folios pendientes de entrega (pestaña cerrada
     // cuando terminó una emisión), reentregarlos ahora a ESTA pestaña — solo
     // los de la MISMA empresa que declara el ping.

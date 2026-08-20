@@ -24,8 +24,7 @@
   "permissions": [
     "tabs",
     "scripting",
-    "storage",
-    "alarms"
+    "storage"
   ],
   "host_permissions": [
     "https://www.sii.cl/*",
