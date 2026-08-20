@@ -61,12 +61,23 @@ function maybeCheckUpdate() {
 // trabajando y perdería el estado; para ese caso la app re-chequea sola por polling
 // (useExtensionStatus). El host_permission de la app habilita tabs.query/reload.
 chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason !== "install") return;
+  if (details.reason !== "install" && details.reason !== "update") return;
   chrome.tabs.query(
     { url: ["https://app.massdte.cl/*", "https://app-contable-five.vercel.app/*", "http://localhost/*", "http://127.0.0.1/*"] },
     (tabs) => {
       for (const tab of tabs) {
-        if (typeof tab.id === "number") chrome.tabs.reload(tab.id).catch(() => {});
+        if (typeof tab.id !== "number") continue;
+        if (details.reason === "install") {
+          // Instalación nueva: recarga completa (la pestaña nunca tuvo puente).
+          chrome.tabs.reload(tab.id).catch(() => {});
+        } else {
+          // AUTO-UPDATE silencioso: el puente viejo murió con la extensión —
+          // re-INYECTAR (no recargar: el cliente no pierde lo que estaba
+          // haciendo). Al próximo ping de la app, todo sigue como si nada.
+          chrome.scripting
+            .executeScript({ target: { tabId: tab.id }, files: ["app-bridge.js"] })
+            .catch(() => {});
+        }
       }
     },
   );
