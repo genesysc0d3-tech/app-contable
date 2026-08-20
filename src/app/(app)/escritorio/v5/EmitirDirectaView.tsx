@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
+import { extensionDesactualizada, mensajeExtensionDesactualizada } from "@/lib/extension";
 import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
@@ -1278,13 +1279,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
 
   function openLocalSiiWorker() {
     if (!canSubmit || localWorkerLoading) return;
-    if (extensionStatus === "ready") {
-      void sendLocalSiiJob();
-      return;
-    }
 
     setLocalWorkerLoading(true);
-    setExtensionStatus("checking");
+    if (extensionStatus !== "ready") setExtensionStatus("checking");
+    // SIEMPRE re-ping antes de despachar: además de detectar presencia, el PONG
+    // trae la versión — bajo el piso NO se emite (banner con cómo actualizar).
     pingLocalSiiExtension((message) => {
       if (!message) {
         setExtensionStatus("missing");
@@ -1293,6 +1292,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         return;
       }
       setExtensionStatus("ready");
+      if (extensionDesactualizada(message.extension_version)) {
+        setLocalWorkerLoading(false);
+        toast(mensajeExtensionDesactualizada(message.extension_version), "error");
+        return;
+      }
       void sendLocalSiiJob();
     }, empresaId);
   }
