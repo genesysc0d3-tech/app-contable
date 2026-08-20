@@ -8,7 +8,7 @@
 // este arnés lo habría cazado antes de empaquetar el zip.
 import { describe, it, expect, beforeEach } from "vitest";
 
-const PROD_ORIGIN = "https://app-contable-five.vercel.app";
+const PROD_ORIGIN = "https://app.massdte.cl"; // 0.1.7: dominio oficial (mudanza 2026-08-20)
 const RUT_PERSONA = "11.111.111-1"; // DV válido (módulo 11)
 const RUT_EMPRESA = "78.366.835-1"; // DV válido
 

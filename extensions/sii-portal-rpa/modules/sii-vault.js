@@ -54,7 +54,9 @@ export async function rememberAppOrigin(origin) {
 // mensaje mandaba a perseguir el problema equivocado (caso real de beta
 // 2026-08-12). Con el fallback, si de verdad falta la sesión el servidor
 // responde 401 y el usuario ve el mensaje correcto ("inicia sesión").
-const PROD_APP_ORIGIN = "https://app-contable-five.vercel.app";
+// 0.1.7 (mudanza 2026-08-20): el dominio oficial es app.massdte.cl; el host
+// viejo quedó en 308 hacia acá, así que este fallback apunta directo al nuevo.
+const PROD_APP_ORIGIN = "https://app.massdte.cl";
 
 async function getAppOrigin(explicit) {
   if (typeof explicit === "string" && /^https?:\/\//.test(explicit)) return explicit;
