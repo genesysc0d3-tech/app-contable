@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signUp, signInWithGoogle } from "../actions";
+import BrandPanel from "../../BrandPanel";
 import { POLICY_VERSION } from "@/lib/legal/version";
 
 export default function RegistroPage() {
@@ -63,16 +64,20 @@ function RegistroContent() {
   }
 
   return (
-    <div className="mesh-bg flex-1 flex items-center justify-center px-4 py-12 min-h-screen">
-      <div className="w-full max-w-sm space-y-6 relative">
+    <div className="flex-1 min-h-screen">
+      {/* Escena de fondo completa (boletas cayendo); la tarjeta flota encima */}
+      <BrandPanel />
+
+      <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-end px-4 py-12 lg:pr-[7vw]">
+      <div className="w-full max-w-[500px] space-y-6 relative rounded-[22px] border border-white/10 bg-[#0a0a0a]/80 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.45)] px-7 py-10 sm:px-12">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Crear cuenta</h1>
           <p className="text-white/50 mt-2 text-sm">
-            Empieza a automatizar tu contabilidad
+            Tu escritorio de boletas del SII
           </p>
         </div>
 
-        <div className="glass rounded-2xl p-6 space-y-4 glow-accent-soft">
+        <div className="space-y-4">
           {error && (
             <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
               {error}
@@ -149,13 +154,11 @@ function RegistroContent() {
             </button>
           </form>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-[#0a0a0a] px-2 text-white/40">o</span>
-            </div>
+          {/* divisor sin fondo sólido: la tarjeta es translúcida */}
+          <div className="flex items-center gap-3 text-xs text-white/40">
+            <div className="flex-1 border-t border-white/10" />
+            <span>o</span>
+            <div className="flex-1 border-t border-white/10" />
           </div>
 
           <button
@@ -177,6 +180,7 @@ function RegistroContent() {
             Iniciar sesión
           </Link>
         </p>
+      </div>
       </div>
     </div>
   );

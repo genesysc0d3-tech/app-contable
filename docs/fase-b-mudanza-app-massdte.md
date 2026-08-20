@@ -1,6 +1,8 @@
 # Fase B — mudar la app a app.massdte.cl (checklist ejecutable)
 
-Estado: **Paso 1 hecho** (2026-08-19). Pasos 2 y 3 pendientes.
+Estado: **Pasos 1 y 2 HECHOS** (2026-08-20). Paso 3 pendiente (al activar cobro real MP).
+
+Ejecutado 2026-08-20: site_url+allow_list Supabase, NEXT_PUBLIC_APP_URL (app+landing) + redeploys, 308 del host viejo, verificación completa (308→app.massdte.cl, landing apunta al nuevo). 0.1.7 PUBLICADA con PROD_APP_ORIGIN nuevo + auto-update. (c) Google OAuth: no se tocó Cloud Console — el flujo va por el callback de Supabase (sin cambio); si el login Google reclamara origen, agregar app.massdte.cl al cliente OAuth.
 
 ## Por qué en este orden
 La extensión tenía `app-contable-five.vercel.app` quemado (manifest + 5 archivos). Si la app

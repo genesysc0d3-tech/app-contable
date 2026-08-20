@@ -54,7 +54,7 @@ export default function BrandPanel() {
   }, []);
 
   return (
-    <div className={`${styles.panel} flex-1`}>
+    <div className={styles.panel} aria-hidden="true">
       <div className={styles.sky} aria-hidden="true">
         {BOLETAS.map((b, i) => (
           <div key={b.folio} className={styles.boleta} style={b.v as React.CSSProperties}>
