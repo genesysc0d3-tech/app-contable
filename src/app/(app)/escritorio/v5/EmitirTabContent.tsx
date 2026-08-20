@@ -97,6 +97,8 @@ function errorLoteAmable(code?: string, detalle?: string): string {
     case "EMISION_BLOQUEADA": return "Ya hay una emisión en curso en tu cuenta. Espera a que termine.";
     case "PLAN_INACTIVO":
     case "SIN_PLAN": return "Necesitas un plan activo para emitir. Actívalo en Planes.";
+    case "CUOTA_AGOTADA": return "Se acabó tu cupo de boletas masivas de este período.";
+    case "TRIAL_TERMINADO": return "Tu período de prueba terminó — contrata un plan para seguir emitiendo.";
     case "ROL_SIN_PERMISO": return "Tu rol no permite emitir documentos.";
     case "DEMASIADAS_PROPUESTAS": return "Son demasiadas de una vez (máximo 200 por lote).";
     case "SIN_PROPUESTAS": return "No hay nada seleccionado para emitir.";
@@ -189,6 +191,9 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
   // Foto receptor/monto de lo enviado: el recibo de fallos la necesita aunque
   // la cola ya se haya recargado (reload() saca los items de `data`).
   const [emitSnapshot, setEmitSnapshot] = useState<Record<string, { receptor: string; monto: number }>>({});
+  // Cupo/plan agotado: banner persistente con CTA a /planes (un toast se esfuma
+  // y "te sugiere pagar" no es "te lleva a pagar").
+  const [planCta, setPlanCta] = useState<string | null>(null);
   const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
 
   // Auto-refresh SILENCIOSO: la cola sigue al dato nuevo sin botón manual y sin que el
@@ -328,7 +333,14 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
       } else {
         // 'detalle' trae el copy humano del server (p.ej. metering); si solo viene el
         // código, errorLoteAmable lo traduce (nunca mostrar jerga al usuario).
-        toast(errorLoteAmable(json.error, json.detalle), "error");
+        const mensaje = errorLoteAmable(json.error, json.detalle);
+        // Errores de plan/cupo (402 del metering): banner persistente con CTA a
+        // Planes en vez de un toast que desaparece.
+        if (["SIN_PLAN", "PLAN_INACTIVO", "CUOTA_AGOTADA", "TRIAL_TERMINADO"].includes(json.error)) {
+          setPlanCta(mensaje);
+        } else {
+          toast(mensaje, "error");
+        }
         setConfirmOpen(false);
       }
     } catch { toast("Error al emitir lote", "error"); }
@@ -411,6 +423,18 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
         {/* Recordatorio de la extensión: el carril real (sii_local) emite vía la
             extensión local, así que si falta la avisamos acá antes de intentar emitir. */}
         {proveedorBoletas === "sii_local" && <InstalarExtension />}
+        {/* Plan/cupo agotado: el 402 del metering aterriza acá con su copy y un
+            botón real a Planes (no solo la sugerencia en texto). */}
+        {planCta && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 10px", padding:"10px 13px", borderRadius:10, background:"color-mix(in srgb, var(--accent) 8%, transparent)", border:"1px solid color-mix(in srgb, var(--accent) 26%, transparent)" }}>
+            <span style={{fontSize:14}}>⚡</span>
+            <span style={{fontSize:11.5,color:"var(--text)",flex:1,lineHeight:1.4}}>{planCta}</span>
+            <a href="/planes" style={{ flexShrink:0, fontSize:11.5, fontWeight:600, color:"#fff", background:"var(--accent)", padding:"6px 12px", borderRadius:8, textDecoration:"none" }}>
+              Ver planes
+            </a>
+            <button aria-label="Cerrar aviso" onClick={() => setPlanCta(null)} style={{ flexShrink:0, background:"none", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:13, padding:2 }}>✕</button>
+          </div>
+        )}
         {/* Reanudar lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
             Re-hidrata contra los pendientes del server a nivel EMPRESA (endpoint sin
             filtro de período): así reanudar no depende de qué mes muestre el calendario.
@@ -420,7 +444,7 @@ export default function EmitirTabContent({ initial = null, empresaId }: { initia
           <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 10px", padding:"10px 13px", borderRadius:10, background:"color-mix(in srgb, var(--amber) 9%, transparent)", border:"1px solid color-mix(in srgb, var(--amber) 28%, transparent)" }}>
             <span style={{fontSize:14}}>⏸</span>
             <span style={{fontSize:11.5,color:"var(--text)",flex:1,lineHeight:1.4}}>
-              Quedó un lote a medias: faltan <b>{lotePendiente.remainingIds.length} de {lotePendiente.total}</b>. Retomá desde donde quedó.
+              Quedó un lote a medias: faltan <b>{lotePendiente.remainingIds.length} de {lotePendiente.total}</b>. Retoma desde donde quedó.
             </span>
             <button disabled={resumiendo} onClick={async () => {
               setResumiendo(true);
