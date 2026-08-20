@@ -964,6 +964,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Autoactualización guiada: la app detectó versión bajo el piso → abrir
+  // chrome://extensions (una página web NO puede navegar a chrome://, la
+  // extensión sí) y de paso pedirle a Chrome el update check inmediato.
+  if (message?.type === "APP_CONTABLE_OPEN_EXTENSIONS_PAGE") {
+    try { chrome.runtime.requestUpdateCheck?.(() => void chrome.runtime.lastError); } catch { /* best effort */ }
+    chrome.tabs.create({ url: "chrome://extensions/?id=" + chrome.runtime.id }, () => {
+      sendResponse(baseMessage({
+        type: "APP_CONTABLE_OPEN_EXTENSIONS_PAGE_RESULT",
+        ok: !chrome.runtime.lastError,
+        error: chrome.runtime.lastError?.message ?? null,
+      }));
+    });
+    return true;
+  }
+
   if (message?.type === "APP_CONTABLE_SII_BOLETA_JOB") {
     const job = message.job;
     let jobAppOrigin = null;

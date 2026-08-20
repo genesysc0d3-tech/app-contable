@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useExtensionStatus } from "./useExtensionStatus";
-import { EXTENSION_STORE_URL, EXTENSION_NOMBRE } from "@/lib/extension";
+import { EXTENSION_STORE_URL, EXTENSION_NOMBRE, mensajeExtensionDesactualizada } from "@/lib/extension";
 
 /**
  * Aviso + CTA de instalación de la extensión, con detección automática:
@@ -14,11 +14,78 @@ import { EXTENSION_STORE_URL, EXTENSION_NOMBRE } from "@/lib/extension";
  *
  * Pensado para la pestaña Emitir (recordatorio antes de intentar emitir).
  */
+/**
+ * Banner de versión bajo el piso. El botón "Actualizar ahora" intenta que la
+ * EXTENSIÓN abra chrome://extensions (una página web no puede navegar a chrome://;
+ * la extensión sí, handler APP_CONTABLE_OPEN_EXTENSIONS_PAGE desde 0.1.7). Si la
+ * versión instalada no conoce ese mensaje (0.1.5/0.1.6), a los 700ms cae al plan B:
+ * copia "chrome://extensions" al portapapeles y muestra el paso a mano.
+ */
+function ExtensionDesactualizada({ version, recheck }: { version: string | null; recheck: () => void }) {
+  const [copiado, setCopiado] = useState(false);
+
+  function abrirPaginaExtensiones() {
+    let respondio = false;
+    function onMessage(event: MessageEvent) {
+      const data = event.data as { source?: string; type?: string };
+      if (event.source !== window || data?.source !== "app-contable-extension") return;
+      if (data.type === "APP_CONTABLE_OPEN_EXTENSIONS_PAGE_RESULT") respondio = true;
+    }
+    window.addEventListener("message", onMessage);
+    window.postMessage(
+      { source: "app-contable", type: "APP_CONTABLE_OPEN_EXTENSIONS_PAGE", protocol_version: 1 },
+      window.location.origin,
+    );
+    window.setTimeout(() => {
+      window.removeEventListener("message", onMessage);
+      if (respondio) return; // la extensión abrió chrome://extensions sola
+      void navigator.clipboard?.writeText("chrome://extensions").catch(() => {});
+      setCopiado(true);
+    }, 700);
+  }
+
+  return (
+    <div style={{ margin: "0 0 12px", padding: "11px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--amber, #f59e0b) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 30%, transparent)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span aria-hidden style={{ fontSize: 15 }}>⬆️</span>
+        <span style={{ flex: 1, fontSize: 12, lineHeight: 1.4, color: "var(--text, #e8eaf0)" }}>
+          {mensajeExtensionDesactualizada(version)}
+        </span>
+        <button
+          type="button"
+          onClick={abrirPaginaExtensiones}
+          style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--accent, #E8553E)", border: "none", borderRadius: 8, padding: "7px 13px", cursor: "pointer", whiteSpace: "nowrap" }}
+        >
+          Actualizar ahora
+        </button>
+        <button
+          type="button"
+          onClick={recheck}
+          style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: "var(--text, #e8eaf0)", background: "none", border: "1px solid color-mix(in srgb, var(--text, #e8eaf0) 25%, transparent)", borderRadius: 8, padding: "6px 11px", cursor: "pointer", whiteSpace: "nowrap" }}
+        >
+          Ya actualicé
+        </button>
+      </div>
+      {copiado && (
+        <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.5, color: "var(--text2, #8b92a3)" }}>
+          Copiamos <b>chrome://extensions</b> — pégalo en una pestaña nueva, busca «{EXTENSION_NOMBRE}» y aprieta <b>Actualizar</b> (arriba a la izquierda, con «Modo de desarrollador» activado se ve el botón).
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InstalarExtension() {
-  const { status, recheck } = useExtensionStatus();
+  const { status, version, desactualizada, recheck } = useExtensionStatus();
   const [showSteps, setShowSteps] = useState(false);
 
   if (status === "checking") return null;
+
+  // Conectada pero bajo el piso de compatibilidad: banner de bloqueo con las
+  // instrucciones de actualización (la emisión también lo rechaza en su gate).
+  if (status === "ready" && desactualizada) {
+    return <ExtensionDesactualizada version={version} recheck={recheck} />;
+  }
 
   if (status === "ready") {
     return (
@@ -36,7 +103,7 @@ export default function InstalarExtension() {
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span aria-hidden style={{ fontSize: 15 }}>🧩</span>
         <span style={{ flex: 1, fontSize: 12, lineHeight: 1.4, color: "var(--text, #e8eaf0)" }}>
-          Para emitir en el SII necesitás la extensión <b>{EXTENSION_NOMBRE}</b> en este navegador (Chrome, Edge o Brave).
+          Para emitir en el SII necesitas la extensión <b>{EXTENSION_NOMBRE}</b> en este navegador (Chrome, Edge o Brave).
         </span>
         {publicada ? (
           <a
