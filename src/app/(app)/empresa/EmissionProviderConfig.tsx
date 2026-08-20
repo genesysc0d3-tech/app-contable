@@ -64,7 +64,7 @@ export default function EmissionProviderConfig({
     const nonce = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
     const timeoutId = window.setTimeout(() => setExtensionStatus((current) => current === "checking" ? "missing" : current), 1200);
     pingRef.current = { nonce, timeoutId };
-    window.postMessage({ source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce }, window.location.origin);
+    window.postMessage({ source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce, ultima_version: EXTENSION_VERSION_ACTUAL }, window.location.origin);
   }
 
   useEffect(() => {

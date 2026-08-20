@@ -21,6 +21,23 @@ export function isAllowedAppUrl(url) {
   }
 }
 
+/**
+ * ¿`propia` está por debajo de `objetivo`? Comparación numérica por segmento
+ * ("0.1.10" > "0.1.9"). Dato ausente/raro → false (sin brecha conocida, no se
+ * gatilla ningún chequeo: la meta es NO llamar a Google salvo necesidad real).
+ */
+export function versionBajoObjetivo(propia, objetivo) {
+  if (typeof propia !== "string" || typeof objetivo !== "string") return false;
+  if (!/^\d+(\.\d+)*$/.test(propia) || !/^\d+(\.\d+)*$/.test(objetivo)) return false;
+  const a = propia.split(".").map(Number);
+  const b = objetivo.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d !== 0) return d < 0;
+  }
+  return false;
+}
+
 export function baseMessage(message) {
   return {
     source: EXT_SOURCE,

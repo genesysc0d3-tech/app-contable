@@ -1,6 +1,6 @@
 "use strict";
 
-import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl } from "./modules/core.js";
+import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl, versionBajoObjetivo } from "./modules/core.js";
 import { normalizeRut } from "./modules/rut.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
 import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, wipeLocalVault } from "./modules/sii-vault.js";
@@ -951,8 +951,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "APP_CONTABLE_EXTENSION_PING") {
-    // Un toque de la app = oportunidad de auto-update (frenado a 1 vez / 10 min).
-    maybeCheckUpdate();
+    // Auto-update SOLO con brecha conocida: la app manda en el ping cuál es la
+    // última versión publicada (constante que mantiene sincronizada un test).
+    // Si esta extensión ya la tiene, a Google no se le pide NADA — cero ruido.
+    // Con brecha, el chequeo va frenado a 1 vez / 10 min igual.
+    if (versionBajoObjetivo(EXTENSION_VERSION, message.ultima_version)) maybeCheckUpdate();
     // La app está viva: si hay folios pendientes de entrega (pestaña cerrada
     // cuando terminó una emisión), reentregarlos ahora a ESTA pestaña — solo
     // los de la MISMA empresa que declara el ping.

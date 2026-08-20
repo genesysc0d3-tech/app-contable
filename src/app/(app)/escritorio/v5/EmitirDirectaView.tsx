@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
-import { extensionDesactualizada, mensajeExtensionDesactualizada } from "@/lib/extension";
+import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, mensajeExtensionDesactualizada } from "@/lib/extension";
 import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
@@ -203,6 +203,7 @@ function pingLocalSiiExtension(onResult: (message: ExtensionPageMessage | null) 
     type: "APP_CONTABLE_EXTENSION_PING",
     protocol_version: 1,
     nonce,
+    ultima_version: EXTENSION_VERSION_ACTUAL,
     // La extensión reentrega folios pendientes SOLO a la empresa que declara el
     // ping (mismo valor que viaja en el job: empresa_id ?? "default").
     empresa_id: empresaId ?? "default",

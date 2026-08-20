@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { extensionDesactualizada, mensajeExtensionDesactualizada } from "@/lib/extension";
+import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, mensajeExtensionDesactualizada } from "@/lib/extension";
 
 export type ExtensionStatus = "checking" | "ready" | "missing";
 
@@ -39,7 +39,9 @@ export function verificarExtensionCompatible(): Promise<{ ok: boolean; motivo?: 
     }
     window.addEventListener("message", onMessage);
     window.postMessage(
-      { source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce },
+      // ultima_version: la extensión 0.1.7+ solo le pide update a Google si está
+      // POR DEBAJO de esto — al día = cero llamadas (idea del fundador).
+      { source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce, ultima_version: EXTENSION_VERSION_ACTUAL },
       window.location.origin,
     );
   });
@@ -74,7 +76,9 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     );
     pingRef.current = { nonce, timeoutId };
     window.postMessage(
-      { source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce },
+      // ultima_version: la extensión 0.1.7+ solo le pide update a Google si está
+      // POR DEBAJO de esto — al día = cero llamadas (idea del fundador).
+      { source: "app-contable", type: "APP_CONTABLE_EXTENSION_PING", protocol_version: 1, nonce, ultima_version: EXTENSION_VERSION_ACTUAL },
       window.location.origin,
     );
   }, []);
