@@ -1327,6 +1327,8 @@ export type Database = {
           rut: string
           tiene_certificado_sii: boolean
           tipo_contribuyente: string
+          ext_last_seen_at: string | null
+          ext_last_version: string | null
           trial_inicio: string | null
         }
         Insert: {
@@ -1353,6 +1355,8 @@ export type Database = {
           rut: string
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
+          ext_last_seen_at?: string | null
+          ext_last_version?: string | null
           trial_inicio?: string | null
         }
         Update: {
@@ -1379,6 +1383,8 @@ export type Database = {
           rut?: string
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
+          ext_last_seen_at?: string | null
+          ext_last_version?: string | null
           trial_inicio?: string | null
         }
         Relationships: []

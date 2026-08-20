@@ -37,6 +37,8 @@ function mountBridge({ pageOrigin = PROD_ORIGIN } = {}) {
       lastError: null,
       sendMessage: (msg, cb) => { toBackground.push({ msg, cb }); },
       onMessage: { addListener: (handler) => { runtimeHandler = handler; } },
+      // El bridge adjunta la versión (telemetría de flota) en el POST del resultado.
+      getManifest: () => ({ version: "9.9.9-test" }),
     },
   };
   const fakeFetch = (url, opts) => {

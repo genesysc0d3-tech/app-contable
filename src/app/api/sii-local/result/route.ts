@@ -13,6 +13,8 @@ import { cleanRut } from "@/lib/sii/validation";
 interface SiiLocalResultPayload {
   job_id?: string | null;
   recover_latest?: boolean;
+  /** Telemetría de flota: versión de la extensión que POSTea (bridge 0.1.7+). */
+  extension_version?: string | null;
   result?: {
     folio?: number | null;
     folio_confidence?: string | null;
@@ -476,6 +478,20 @@ export async function POST(request: Request) {
     payload = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
+  }
+
+  // Telemetría de flota (bridge 0.1.7+): anota qué versión corre esta empresa.
+  // Best-effort TOTAL: jamás puede frenar la persistencia de un folio real.
+  if (typeof payload.extension_version === "string" && /^\d+(\.\d+)*$/.test(payload.extension_version)) {
+    try {
+      const { data: u } = await sb.from("usuarios").select("empresa_id").eq("id", user.id).maybeSingle();
+      if (u?.empresa_id) {
+        await sb
+          .from("empresas")
+          .update({ ext_last_version: payload.extension_version, ext_last_seen_at: new Date().toISOString() })
+          .eq("id", u.empresa_id);
+      }
+    } catch { /* columnas sin migrar o fallo puntual: la telemetría espera */ }
   }
 
   let result = payload.result;

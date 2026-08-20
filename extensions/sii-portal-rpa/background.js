@@ -10,6 +10,44 @@ const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEA
 
 const activeJobs = new Map();
 
+// ===== Auto-actualización silenciosa (estilo Chrome/VS Code) =====
+// Cada UPDATE_CHECK_MIN se le pide a Chrome un chequeo inmediato (sin esperar su
+// ciclo de ~5h). Cuando hay versión nueva descargada, se aplica con runtime.reload()
+// — pero JAMÁS a mitad de una emisión: si hay jobs activos se posterga y se
+// reintenta al cerrar cada job y en la próxima alarma. El usuario no ve nada.
+// (Chrome throttlea requestUpdateCheck si se abusa; 4h está bajo el límite.)
+const UPDATE_ALARM = "massdte-update-check";
+let updateListo = false;
+
+function aplicarUpdateSiOcioso() {
+  if (!updateListo) return;
+  if (activeJobs.size > 0) return; // emisión en curso: ni tocarla
+  chrome.runtime.reload();
+}
+
+chrome.runtime.onUpdateAvailable.addListener(() => {
+  updateListo = true;
+  aplicarUpdateSiOcioso();
+});
+
+chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: 240, delayInMinutes: 10 });
+chrome.alarms.onAlarm.addListener((alarma) => {
+  if (alarma.name !== UPDATE_ALARM) return;
+  try {
+    chrome.runtime.requestUpdateCheck((status) => {
+      void chrome.runtime.lastError;
+      // El estado también llega por onUpdateAvailable; esto cubre el caso en que
+      // el service worker durmió y perdió el flag (updateListo no persiste).
+      if (status === "update_available") {
+        updateListo = true;
+        aplicarUpdateSiOcioso();
+      }
+    });
+  } catch {
+    // requestUpdateCheck no disponible (build vieja de Chrome): el ciclo normal ~5h manda.
+  }
+});
+
 // Al INSTALAR la extensión, Chrome NO inyecta el content script (app-bridge.js) en
 // las pestañas que ya estaban abiertas → la app se queda en "extensión no detectada"
 // hasta que el usuario recargue a mano. En una instalación NUEVA recargamos las
@@ -325,6 +363,8 @@ function closeWorker(state) {
   if (state.workerWindowId) {
     chrome.windows.remove(state.workerWindowId).catch(() => undefined);
   }
+  // Si un update quedó pendiente durante la emisión, este es el momento seguro.
+  aplicarUpdateSiOcioso();
 }
 
 function scheduleLearningScan(state, delayMs = 1500) {

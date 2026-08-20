@@ -73,7 +73,9 @@
       fetch("/api/sii-local/result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: message.job_id ?? null, result: message.result ?? null }),
+        // extension_version: telemetría de flota — el server anota qué versión
+        // corre cada empresa (ext_last_version) sin preguntarle a nadie.
+        body: JSON.stringify({ job_id: message.job_id ?? null, result: message.result ?? null, extension_version: chrome.runtime.getManifest().version }),
       })
         .then((response) => response.json().catch(() => ({ ok: false, error: "BAD_JSON" })))
         .then((persisted) => {
