@@ -208,7 +208,7 @@
 }
 .newsStage {
   position: relative;
-  height: 122px;
+  height: 138px;
 }
 .newsCard {
   position: absolute;
@@ -239,11 +239,21 @@
   font-weight: 600;
   line-height: 1.35;
   margin-bottom: 5px;
+  /* nunca escaparse de la caja: máximo 2 líneas */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .newsCard p {
   font-size: 13px;
   color: #9b938c;
   line-height: 1.45;
+  /* máximo 2 líneas — el detalle completo no es crítico */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .newsDots {
   display: flex;
