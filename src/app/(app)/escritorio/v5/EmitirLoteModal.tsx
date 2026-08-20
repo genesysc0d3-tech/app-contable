@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { chileDateString } from "@/lib/chile-date";
 import { recoverLatestFolio, type RecoverLatestResult } from "@/lib/emission/recover-latest";
 import { useEmisionLote, type ItemLoteEmision } from "./useEmisionLote";
+import { verificarExtensionCompatible } from "./useExtensionStatus";
 import { guardarLotePendiente, limpiarLotePendiente } from "@/lib/emission/lote-persist";
 
 export interface LoteItemInput {
@@ -78,6 +79,15 @@ export default function EmitirLoteModal({
   async function confirmar() {
     setError(null);
     setModo("verificando");
+    // Piso de versión de la extensión: una vieja emite "bien" hasta que algo
+    // cambia bajo sus pies (dominio, protocolo) — mejor frenar acá con
+    // instrucciones claras que fallar a mitad de lote.
+    const compat = await verificarExtensionCompatible();
+    if (!compat.ok) {
+      setError(compat.motivo ?? "La extensión del SII no está disponible.");
+      setModo("idle");
+      return;
+    }
     try {
       const res = await fetch("/api/emision/authorizations?provider=sii_local");
       const json = await res.json().catch(() => ({}));
