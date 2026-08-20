@@ -1,0 +1,279 @@
+/* Panel de marca del login: logo real + boletas cayendo + noticias SII.
+   Física en dos capas: la caída (wrapper) es lineal y se puede arrancar
+   "a mitad de vuelo" con delays negativos sin verse rara; el vaivén con
+   ladeo (paper) oscila aparte con su propio ritmo. */
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  /* solo escritorio: bajo 1024px el login queda solo (el display:none del
+     module gana aunque Tailwind pierda la pelea de especificidad) */
+  display: none;
+  justify-content: space-between;
+  padding: 52px 60px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(900px 520px at 20% -10%, rgba(232, 85, 62, 0.09), transparent 60%),
+    #0b0a09;
+}
+@media (min-width: 1024px) {
+  .panel {
+    display: flex;
+    flex-direction: column;
+  }
+}
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 26px 26px;
+  pointer-events: none;
+}
+
+.brand {
+  position: relative;
+  z-index: 3;
+}
+.brand img {
+  height: 28px;
+  width: auto;
+  display: block;
+  filter: invert(1);
+  opacity: 0;
+  animation: logoIn 1s ease 0.1s forwards;
+}
+@keyframes logoIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ===== boletas cayendo ===== */
+.sky {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  animation: skyIn 1.4s ease 0.2s forwards;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 14%, black 84%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, black 14%, black 84%, transparent 100%);
+}
+@keyframes skyIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.boleta {
+  position: absolute;
+  top: -200px;
+  opacity: var(--peak);
+  animation: fall linear infinite;
+  animation-duration: var(--falld);
+  animation-delay: var(--falloff);
+  left: var(--x);
+  scale: var(--depth, 1);
+  filter: blur(var(--haze, 0));
+}
+.paper {
+  width: 148px;
+  padding: 12px 14px 16px;
+  background: #171411;
+  border: 1px solid #2c2723;
+  border-radius: 8px 8px 0 0;
+  /* borde inferior dentado de papel */
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px),
+    93.75% 100%, 87.5% calc(100% - 7px), 81.25% 100%, 75% calc(100% - 7px),
+    68.75% 100%, 62.5% calc(100% - 7px), 56.25% 100%, 50% calc(100% - 7px),
+    43.75% 100%, 37.5% calc(100% - 7px), 31.25% 100%, 25% calc(100% - 7px),
+    18.75% 100%, 12.5% calc(100% - 7px), 6.25% 100%, 0 calc(100% - 7px));
+  animation: sway ease-in-out infinite alternate;
+  animation-duration: var(--swayd, 3.8s);
+  animation-delay: var(--swayoff, 0s);
+}
+@keyframes fall {
+  from { transform: translateY(0); }
+  to   { transform: translateY(125vh); }
+}
+@keyframes sway {
+  from { transform: translateX(calc(var(--sway) * -1)) rotate(var(--tilt)); }
+  to   { transform: translateX(var(--sway)) rotate(calc(var(--tilt) * -1)); }
+}
+
+.paperHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.paperTipo {
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+  color: #9b938c;
+  font-weight: 600;
+}
+.paperFolio {
+  font-size: 8px;
+  color: #e8553e;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.paperLine {
+  height: 4px;
+  border-radius: 2px;
+  background: #2c2723;
+  margin-bottom: 5px;
+}
+.paperFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 9px;
+}
+.paperTotal {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f5f2ef;
+  font-variant-numeric: tabular-nums;
+}
+.paperOk {
+  font-size: 8px;
+  color: #34d399;
+  font-weight: 700;
+}
+
+/* velo para que el texto respire sobre las boletas */
+.veil {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(11, 10, 9, 0.55) 0%, rgba(11, 10, 9, 0) 30%, rgba(11, 10, 9, 0) 55%, rgba(11, 10, 9, 0.72) 88%);
+}
+
+/* ===== tagline ===== */
+.tagline {
+  position: relative;
+  z-index: 3;
+  margin-top: 72px;
+  max-width: 480px;
+}
+.tagline h1 {
+  font-size: clamp(30px, 3vw, 42px);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  opacity: 0;
+  animation: rise 0.7s ease 0.35s forwards;
+}
+.tagline p {
+  margin-top: 14px;
+  color: #9b938c;
+  font-size: 16px;
+  line-height: 1.55;
+  opacity: 0;
+  animation: rise 0.7s ease 0.5s forwards;
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ===== noticias SII ===== */
+.news {
+  position: relative;
+  z-index: 3;
+  opacity: 0;
+  animation: rise 0.7s ease 0.75s forwards;
+}
+.newsLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9b938c;
+  margin-bottom: 14px;
+}
+.newsLabel::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e8553e;
+}
+.newsStage {
+  position: relative;
+  height: 122px;
+}
+.newsCard {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 18, 16, 0.88);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: none;
+}
+.newsCardActive {
+  opacity: 1;
+  transform: none;
+}
+.newsMeta {
+  font-size: 11.5px;
+  color: #e8553e;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 7px;
+}
+.newsCard h3 {
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: 5px;
+}
+.newsCard p {
+  font-size: 13px;
+  color: #9b938c;
+  line-height: 1.45;
+}
+.newsDots {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+}
+.newsDots i {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+.newsDots i.dotOn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #e8553e;
+  transform-origin: left;
+  animation: fillbar 6s linear forwards;
+}
+@keyframes fillbar {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel *, .panel::before {
+    animation: none !important;
+    transition: none !important;
+  }
+  .brand img, .tagline h1, .tagline p, .news { opacity: 1; }
+  .sky { display: none; }
+}

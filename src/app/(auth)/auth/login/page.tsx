@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signIn, signInWithGoogle } from "../actions";
+import BrandPanel from "./BrandPanel";
 
 export default function LoginPage() {
   return (
@@ -49,12 +50,16 @@ function LoginContent() {
   }
 
   return (
-    <div className="mesh-bg flex-1 flex items-center justify-center px-4 py-12 min-h-screen">
+    <div className="flex-1 flex min-h-screen">
+      {/* Panel de marca: solo escritorio (lg+); en móvil queda el login solo */}
+      <BrandPanel />
+
+      <div className="mesh-bg flex-1 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm space-y-6 relative">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Iniciar sesión</h1>
           <p className="text-white/50 mt-2 text-sm">
-            Contabilidad inteligente para Chile
+            Tu escritorio de boletas del SII
           </p>
         </div>
 
@@ -141,6 +146,7 @@ function LoginContent() {
             Crear cuenta
           </Link>
         </p>
+      </div>
       </div>
     </div>
   );
