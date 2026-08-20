@@ -78,9 +78,13 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
   }, []);
 
   return (
-    <div className="v5-calendar-wrap" style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)", height: 38, display: "flex", justifyContent: "center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
+    // Anclado ENTRE el logo (180px) y los botones (178px) en vez de centrado a
+    // ciegas con left:50%: geométricamente imposible que los toque a cualquier
+    // ancho de ventana. Dentro de ese carril, centrado.
+    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 188, right: 186, top: 0, height: 38, display: "flex", justifyContent: "center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
+        .v5-day-strip::-webkit-scrollbar{display:none;}
         .cal-mode-btn{transition:transform .24s cubic-bezier(.34,1.56,.64,1);}
         .cal-mode-btn:hover{transform:scale(1.07);}
         .cal-mode-btn:active{transform:scale(.98);}
@@ -89,7 +93,7 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
           .cal-mode-btn:hover{transform:none;}
         }
       `}</style>
-      <div style={{ background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
+      <div style={{ background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, maxWidth: "100%", height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
         <div style={{ padding: "0 6px", display: "flex", alignItems: "center", gap: 2 }}>
           <button type="button" onClick={() => navigate({ month: prevMonthParam, date: firstOfMonthParam(prevMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>‹</button>
           <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", flexShrink: 0, width: 100, textAlign: "center" }}>{monthName} {y}</span>
@@ -101,7 +105,11 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               <span>{isMonthMode ? "del mes" : isWeekMode ? "de la semana" : "del día"}</span>
             </span>
           </button>
-          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} style={{ display: "flex", gap: 1, overflow: "visible", width: 650, flexShrink: 0, paddingRight: 6 }}>
+          {/* La tira de días pierde el ancho rígido: en pantallas anchas mide sus
+              650px de siempre; cuando el carril se achica, se comprime y los días
+              se DESLIZAN (scroll horizontal, scrollbar oculta) en vez de invadir
+              los botones de la derecha. */}
+          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 650px", minWidth: 0, paddingRight: 6, scrollbarWidth: "none" }}>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
               const ds = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const isSel = day === selDay;
