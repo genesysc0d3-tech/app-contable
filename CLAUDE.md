@@ -9,7 +9,7 @@ App contable SaaS para Chile. IA procesa cartolas bancarias, clasifica movimient
 - Deploy: Vercel
 
 ## URLs
-- App: https://app-contable-five.vercel.app
+- App: https://app.massdte.cl (host viejo app-contable-five.vercel.app en 308)
 - GitHub: genesysc0d3-tech/app-contable (rama dev)
 - Supabase: aluuuyecwifaakehvcam
 
