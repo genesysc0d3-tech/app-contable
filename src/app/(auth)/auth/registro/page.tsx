@@ -64,27 +64,27 @@ function RegistroContent() {
   }
 
   return (
-    <div className="flex-1 min-h-screen">
+    <div className="flex-1 min-h-svh">
       {/* Escena de fondo completa (boletas cayendo); la tarjeta flota encima */}
       <BrandPanel />
 
-      <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-end px-4 py-12 lg:pr-[7vw]">
-      <div className="w-full max-w-[500px] space-y-6 relative rounded-[22px] border border-white/10 bg-[#0a0a0a]/80 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.45)] px-7 py-10 sm:px-12">
+      <div className="relative z-10 min-h-svh flex items-center justify-center lg:justify-end px-4 py-4 lg:pr-[7vw]">
+      <div className="w-full max-w-[500px] space-y-[clamp(12px,2.4svh,24px)] relative rounded-[22px] border border-white/10 bg-[#0a0a0a]/80 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.45)] px-7 py-[clamp(18px,4.2svh,40px)] sm:px-12">
         <div className="text-center">
-          <h1 className="text-3xl font-bold">Crear cuenta</h1>
+          <h1 className="text-[clamp(22px,3.2svh,30px)] font-bold">Crear cuenta</h1>
           <p className="text-white/50 mt-2 text-sm">
             Tu escritorio de boletas del SII
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-[clamp(10px,1.8svh,16px)]">
           {error && (
-            <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+            <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-[clamp(8px,1.6svh,12px)] text-sm text-red-300">
               {error}
             </div>
           )}
 
-          <form action={handleSubmit} className="space-y-3">
+          <form action={handleSubmit} className="space-y-[clamp(8px,1.4svh,12px)]">
             {next && <input type="hidden" name="next" value={next} />}
             <div>
               <label htmlFor="nombre" className="block text-sm text-white/70 mb-1">
@@ -95,7 +95,7 @@ function RegistroContent() {
                 name="nombre"
                 type="text"
                 required
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="Tu nombre"
               />
             </div>
@@ -108,7 +108,7 @@ function RegistroContent() {
                 name="email"
                 type="email"
                 required
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="tu@email.com"
               />
             </div>
@@ -125,7 +125,7 @@ function RegistroContent() {
                 type="password"
                 required
                 minLength={6}
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="Mínimo 6 caracteres"
               />
             </div>
@@ -148,7 +148,7 @@ function RegistroContent() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
+              className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-[clamp(8px,1.6svh,12px)] text-sm font-semibold text-white transition-colors"
             >
               {loading ? "Creando cuenta..." : "Crear cuenta"}
             </button>
@@ -165,7 +165,7 @@ function RegistroContent() {
             onClick={handleGoogle}
             disabled={loading || !consent}
             title={!consent ? "Primero acepta la Política de Privacidad y los Términos" : undefined}
-            className="w-full rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 border border-white/10 px-4 py-3 text-sm font-medium text-white/90 transition-colors"
+            className="w-full rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 border border-white/10 px-4 py-[clamp(8px,1.6svh,12px)] text-sm font-medium text-white/90 transition-colors"
           >
             Continuar con Google
           </button>

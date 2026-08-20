@@ -4,7 +4,7 @@
 // mesh-bg / glow-accent rindan sus variantes oscuras (coral).
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="dark min-h-screen flex flex-col bg-[#0a0a0a] text-white">
+    <div className="dark min-h-svh flex flex-col bg-[#0a0a0a] text-white">
       {children}
     </div>
   );
