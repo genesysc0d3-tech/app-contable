@@ -21,7 +21,12 @@
     "48": "icon-48.png",
     "128": "icon-128.png"
   },
-  "permissions": ["tabs", "scripting", "storage"],
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
   "host_permissions": [
     "https://www.sii.cl/*",
     "https://*.sii.cl/*",
@@ -43,7 +48,9 @@
         "http://localhost/*",
         "http://127.0.0.1/*"
       ],
-      "js": ["app-bridge.js"],
+      "js": [
+        "app-bridge.js"
+      ],
       "run_at": "document_start"
     },
     {
@@ -51,7 +58,9 @@
         "https://www.sii.cl/*",
         "https://*.sii.cl/*"
       ],
-      "js": ["sii-notif-suppress.js"],
+      "js": [
+        "sii-notif-suppress.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
@@ -60,7 +69,9 @@
         "https://www.sii.cl/*",
         "https://*.sii.cl/*"
       ],
-      "js": ["sii-worker.js"],
+      "js": [
+        "sii-worker.js"
+      ],
       "run_at": "document_idle"
     }
   ]
