@@ -29,6 +29,29 @@ export default function TerminosPage() {
         </p>
       </LegalSection>
 
+      <LegalSection title="Uso competitivo, ingenieria inversa e IA">
+        <p>
+          MassDTE se licencia para el uso propio del usuario, no para estudiarlo
+          como producto. Queda prohibido: (a) usar el servicio, su interfaz, sus
+          flujos o sus resultados para construir, entrenar o mejorar un producto
+          o servicio que compita con MassDTE; (b) realizar ingenieria inversa,
+          descompilar, extraer o &laquo;destilar&raquo; el funcionamiento del
+          sistema, incluyendo mediante herramientas de inteligencia artificial,
+          scraping, automatizacion de sesiones o captura sistematica de
+          pantallas, respuestas o comportamientos; (c) acceder al servicio por
+          cuenta o encargo de un competidor, o facilitar el acceso a uno; y
+          (d) sondear, escanear o probar la seguridad o los limites del sistema
+          fuera de un canal acordado con nosotros.
+        </p>
+        <p>
+          El incumplimiento faculta a MassDTE para suspender o terminar la
+          cuenta de inmediato, sin reembolso del periodo en curso, y para
+          ejercer las acciones legales que correspondan, incluida la proteccion
+          de sus secretos comerciales conforme a la ley chilena. Nos reservamos
+          el uso de mecanismos tecnicos de deteccion de estos usos.
+        </p>
+      </LegalSection>
+
       <LegalSection title="Emision y proveedores">
         <p>
           Algunas emisiones dependen del SII, configuraciones locales,
