@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { POLICY_VERSION } from "@/lib/legal/version";
@@ -32,7 +33,26 @@ function traducirErrorAuth(message: string): string {
   return "No se pudo completar. Intenta de nuevo.";
 }
 
+/** IP del cliente para rate-limit (server actions no reciben Request). */
+async function clientIp(): Promise<string> {
+  const h = await headers();
+  return (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+}
+
+/** Honeypot clásico: campo invisible que solo los bots rellenan. */
+function esBot(formData: FormData): boolean {
+  return String(formData.get("sitio_web") ?? "").trim().length > 0;
+}
+
 export async function signIn(formData: FormData) {
+  // Freno anti fuerza-bruta por IP+email (además del rate-limit de Supabase):
+  // 8 intentos por 5 minutos. In-memory por instancia — no es perfecto en
+  // serverless, pero Fluid reusa instancias y Supabase es la red de fondo.
+  const ip = await clientIp();
+  const email = String(formData.get("email") ?? "").toLowerCase().trim();
+  const rl = checkRateLimit({ key: rateLimitKey("login", ip, email), limit: 8, windowMs: 5 * 60 * 1000 });
+  if (!rl.ok) return { error: "Demasiados intentos — espera un momento" };
+
   const supabase = await createClient();
   const next = safeNextPath(formData.get("next"));
 
@@ -97,6 +117,16 @@ async function registrarConsentimiento(userId: string, email: string): Promise<v
 }
 
 export async function signUp(formData: FormData) {
+  // Honeypot: los humanos no ven el campo "sitio_web"; los bots lo rellenan.
+  // Respuesta genérica a propósito (no revelar el mecanismo).
+  if (esBot(formData)) return { error: "No se pudo completar. Intenta de nuevo." };
+  // Registro también con freno por IP: 5 cuentas / hora por IP es más que
+  // suficiente para humanos y corta el registro masivo automatizado.
+  {
+    const ip = await clientIp();
+    const rl = checkRateLimit({ key: rateLimitKey("signup", ip), limit: 5, windowMs: 60 * 60 * 1000 });
+    if (!rl.ok) return { error: "Demasiados intentos — espera un momento" };
+  }
   const supabase = await createClient();
   const next = safeNextPath(formData.get("next"));
   const origin = await getRequestOrigin();

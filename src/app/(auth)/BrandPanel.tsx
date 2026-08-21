@@ -87,7 +87,7 @@ export default function BrandPanel() {
           <br />
           Tus boletas salen.
         </h1>
-        <p>Emite el lote completo en el SII con tu propia clave, desde tu computador.</p>
+        <p>Emite el lote completo con tu propia clave, desde tu computador.</p>
       </div>
 
       <div className={styles.news}>
