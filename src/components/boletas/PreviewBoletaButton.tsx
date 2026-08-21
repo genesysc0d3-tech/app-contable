@@ -40,6 +40,10 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [b, setB] = useState<BoletaData | null>(null);
+  // URL blob de la boleta PERSONALIZADA (la cara con la marca del emisor).
+  // null = no disponible (sin PDF oficial del cual extraer el timbre) → se
+  // muestra el preview de datos de siempre.
+  const [persUrl, setPersUrl] = useState<string | null>(null);
 
   async function abrir(e: React.MouseEvent) {
     e.stopPropagation();
@@ -51,6 +55,17 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
       const j = await res.json();
       if (!res.ok || !j.ok) { toast(j.error ?? "Error al cargar la boleta", "error"); return; }
       setB(j.boleta as BoletaData);
+      // La personalizada en paralelo, tolerante a fallo (mock viejo sin PDF
+      // oficial, timbre no extraíble, etc. → preview de datos como siempre).
+      try {
+        const pres = await fetch(`/api/intermediaria/boleta/${id}/pdf-personalizada`, { cache: "no-store" });
+        if (pres.ok) {
+          const blob = await pres.blob();
+          setPersUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
+        } else {
+          setPersUrl(null);
+        }
+      } catch { setPersUrl(null); }
       setOpen(true);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Error al cargar la boleta", "error");
@@ -100,7 +115,12 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
               </button>
             </div>
 
-            {/* Cuerpo: recibo */}
+            {/* Cuerpo: la PERSONALIZADA es la protagonista cuando existe */}
+            {persUrl ? (
+              <div style={{ padding: 12, background: "var(--bg-muted)" }}>
+                <iframe title="Boleta personalizada" src={`${persUrl}#toolbar=0&navpanes=0`} style={{ width: "100%", height: "min(58vh, 520px)", border: "none", borderRadius: 10, background: "#fff" }} />
+              </div>
+            ) : (
             <div style={{ padding: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                 <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>Folio</span>
@@ -132,11 +152,28 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
                 Vista previa · datos de la boleta. El documento oficial está en el PDF.
               </div>
             </div>
+            )}
 
-            {/* Footer: descargar PDF original */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
-              <span style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600 }}>Descargar PDF original</span>
-              <DescargarBoletaButton id={id} />
+            {/* Footer: personalizada (primaria) + oficial SII */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "12px 16px", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+              {persUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const a = document.createElement("a");
+                    a.href = persUrl;
+                    a.download = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
+                    document.body.appendChild(a); a.click(); a.remove();
+                  }}
+                  style={{ border: "none", cursor: "pointer", background: "var(--accent, #E8553E)", color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10 }}
+                >
+                  ⤓ Descargar personalizada
+                </button>
+              )}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600 }}>{persUrl ? "PDF oficial del SII" : "Descargar PDF original"}</span>
+                <DescargarBoletaButton id={id} />
+              </span>
             </div>
           </div>
         </div>,
