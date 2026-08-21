@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       { source: "/legal", destination: "https://massdte.cl/confianza", permanent: true },
       { source: "/legal/privacidad", destination: "https://massdte.cl/privacidad", permanent: true },
       { source: "/legal/terminos", destination: "https://massdte.cl/terminos", permanent: true },
-      { source: "/legal/seguridad", destination: "https://massdte.cl/seguridad", permanent: true },
+      { source: "/legal/seguridad", destination: "https://massdte.cl/confianza", permanent: true },
       { source: "/legal/extension", destination: "https://massdte.cl/extension", permanent: true },
     ];
   },
