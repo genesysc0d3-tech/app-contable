@@ -22,6 +22,12 @@ export default function PrivacidadPage() {
           folios), ademas de datos de uso de la aplicacion. No tratamos datos sensibles (salud,
           biometricos) ni datos de ninos, ninas y adolescentes de forma intencionada.
         </p>
+        <p>
+          Origen: los datos los aportas tu directamente (registro, archivos que subes). Los datos
+          de terceros que aparezcan dentro de tus cartolas o comprobantes (por ejemplo, el nombre
+          de una contraparte bancaria) provienen de esos mismos archivos y se tratan solo para
+          prestarte el servicio, con minimizacion segun el monto de la operacion.
+        </p>
       </LegalSection>
 
       <LegalSection title="3. Finalidad y base de licitud">
@@ -73,7 +79,16 @@ export default function PrivacidadPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="8. Seguridad">
+      <LegalSection title="8. Cookies y almacenamiento local">
+        <p>
+          No usamos cookies de publicidad ni de seguimiento de terceros. La aplicacion utiliza
+          unicamente el almacenamiento necesario para mantener tu sesion iniciada y tus
+          preferencias de uso (por ejemplo, el tema visual). El sitio massdte.cl tampoco usa
+          cookies de rastreo.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="9. Seguridad">
         <p>
           Aplicamos medidas tecnicas y organizativas: TLS/HSTS, cifrado en reposo, hashing de
           contrasenas, aislamiento por cuenta (RLS) verificado con pruebas, logs de auditoria,
@@ -81,7 +96,7 @@ export default function PrivacidadPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="9. Cambios y reclamos">
+      <LegalSection title="10. Cambios y reclamos">
         <p>
           Podemos actualizar esta politica; publicaremos la version vigente con su fecha. Puedes
           reclamar ante la Agencia de Proteccion de Datos Personales de Chile.
