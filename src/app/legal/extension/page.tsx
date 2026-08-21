@@ -17,7 +17,7 @@ export default function PrivacidadExtensionPage() {
       <LegalSection title="1. Qué datos maneja la Extensión">
         <p>
           Tus credenciales del SII (RUT y Clave Tributaria) y, si usás emisión por certificado, la
-          contraseña del certificado, que ingresás vos en la Extensión; más su configuración local
+          contraseña del certificado, que ingresas tú en la Extensión; más su configuración local
           (proveedor de emisión, estado de la bóveda). La Extensión no recolecta tu historial de
           navegación, no lee cookies del SII hacia la app y no solicita permisos sobre
           &laquo;todos los sitios&raquo;.
@@ -30,7 +30,7 @@ export default function PrivacidadExtensionPage() {
           partida (envelope): la llave para descifrarlas está dividida en dos, y una mitad vive solo
           en el servidor de MassDTE, que la entrega únicamente a tu sesión iniciada con permiso de
           emisión. Sin iniciar sesión, lo guardado en tu equipo no puede descifrarse. MassDTE nunca
-          ve tus credenciales del SII en texto claro. Podés desconectar tu clave en todos tus
+          ve tus credenciales del SII en texto claro. Puedes desconectar tu clave en todos tus
           equipos en cualquier momento (kill-switch), lo que revoca la mitad del servidor y deja lo
           local inservible.
         </p>
@@ -62,7 +62,7 @@ export default function PrivacidadExtensionPage() {
 
       <LegalSection title="6. Tus derechos">
         <p>
-          Podés acceder, rectificar, eliminar y portar tus datos, y revocar la conexión de tu clave,
+          Puedes acceder, rectificar, eliminar y portar tus datos, y revocar la conexión de tu clave,
           a través del canal de soporte de MassDTE o desde la app (Ley 19.628 y Ley 21.719).
         </p>
       </LegalSection>
