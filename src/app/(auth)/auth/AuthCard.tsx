@@ -101,7 +101,7 @@ export default function AuthCard({ inicial }: { inicial: Modo }) {
               <h1 className="text-[clamp(22px,3.2svh,30px)] font-bold">
                 {modo === "login" ? "Iniciar sesión" : "Crear cuenta"}
               </h1>
-              <p className="text-white/50 mt-2 text-sm">Tu escritorio de boletas del SII</p>
+              <p className="text-white/50 mt-2 text-sm">Tu escritorio de boletas electrónicas</p>
             </div>
 
             <div className="space-y-[clamp(10px,1.8svh,16px)]">
@@ -141,6 +141,12 @@ export default function AuthCard({ inicial }: { inicial: Modo }) {
               ) : (
                 <form action={handleRegistro} className="space-y-[clamp(8px,1.4svh,12px)]">
                   {next && <input type="hidden" name="next" value={next} />}
+                  {/* Honeypot: invisible para humanos (aria-hidden + fuera de pantalla
+                      + sin tab); los bots lo rellenan y el server los rechaza. */}
+                  <div aria-hidden="true" style={{ position: "absolute", left: -9999, top: -9999, height: 0, overflow: "hidden" }}>
+                    <label htmlFor="sitio_web">Sitio web</label>
+                    <input id="sitio_web" name="sitio_web" type="text" tabIndex={-1} autoComplete="off" />
+                  </div>
                   <div>
                     <label htmlFor="nombre" className="block text-sm text-white/70 mb-1">Nombre</label>
                     <input id="nombre" name="nombre" type="text" required className={inputCls} placeholder="Tu nombre" />
