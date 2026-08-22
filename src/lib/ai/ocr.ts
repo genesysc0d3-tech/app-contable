@@ -10,6 +10,7 @@
  */
 
 import { requirePaidModel } from "./model-guard";
+import { fetchOpenCodeStreaming } from "./opencode-stream";
 import { assertApprovedDataProcessor } from "./egress";
 
 const OPENCODE_BASE = "https://opencode.ai/zen/go/v1";
@@ -45,36 +46,31 @@ async function openCodeChat(
   // procesador aprobado con retención cero.
   assertApprovedDataProcessor("opencodego", model);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  // Streaming SIEMPRE: el gateway de OpenCode corta las respuestas no-stream a
+  // los ~80s (regresión 2026-08-19). Timeout por inactividad, no total — ver
+  // opencode-stream.ts.
   try {
-    const res = await fetch(`${OPENCODE_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "User-Agent": BROWSER_UA,
-      },
-      body: JSON.stringify({
+    const data = await fetchOpenCodeStreaming({
+      url: `${OPENCODE_BASE}/chat/completions`,
+      apiKey,
+      idleTimeoutMs: timeoutMs,
+      extraHeaders: { "User-Agent": BROWSER_UA },
+      body: {
         model,
         temperature: 0.1,
         messages: [{ role: "user", content }],
-      }),
-      signal: controller.signal,
+      },
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`OpenCode ${model} ${res.status}: ${body.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content;
     return {
-      text: stripThink(typeof raw === "string" ? raw : ""),
-      tokens_input: data?.usage?.prompt_tokens ?? 0,
-      tokens_output: data?.usage?.completion_tokens ?? 0,
+      text: stripThink(data.content),
+      tokens_input: data.tokens_input,
+      tokens_output: data.tokens_output,
     };
-  } finally {
-    clearTimeout(timeout);
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`OpenCode ${model}: sin respuesta en ${timeoutMs}ms (timeout de inactividad)`);
+    }
+    throw err;
   }
 }
 

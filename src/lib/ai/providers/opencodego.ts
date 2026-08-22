@@ -13,6 +13,7 @@ import {
 } from "../prompt";
 import { requirePaidModel } from "../model-guard";
 import { assertApprovedDataProcessor } from "../egress";
+import { fetchOpenCodeStreaming } from "../opencode-stream";
 
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 
@@ -70,44 +71,39 @@ export class OpenCodeGoProvider implements AIProvider {
   private async fetchChat(
     messages: OpenCodeGoMessage[]
   ): Promise<OpenCodeGoResponse> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120_000);
+    // Streaming SIEMPRE: el gateway de OpenCode mata las respuestas no-stream a
+    // los ~80s (regresión 2026-08-19) y nuestros lotes generan por minutos.
+    // Detalle completo en opencode-stream.ts. El timeout es por inactividad.
+    const data = await fetchOpenCodeStreaming({
+      url: `${BASE_URL}/chat/completions`,
+      apiKey: this.apiKey,
+      body: {
+        // NO se fuerza response_format: json_object. Los modelos de razonamiento
+        // (deepseek-v4-flash) revientan el upstream ("Upstream request failed") al
+        // exigirles JSON puro + un prompt complejo — no pueden razonar y a la vez
+        // estar forzados a puro JSON. El prompt ya pide JSON; extraemos el objeto
+        // del contenido con parseJsonFromContent (tolera <think> y cercas markdown).
+        model: this.model,
+        messages,
+        temperature: 0.1,
+        // Los modelos de razonamiento gastan MUCHOS tokens en reasoning_content, que
+        // cuenta contra el output. Sin techo alto, el JSON de respuesta se trunca y el
+        // parseo falla. Damos aire para razonamiento + respuesta.
+        max_tokens: 16000,
+      },
+    });
 
-    try {
-      const res = await fetch(`${BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          // NO se fuerza response_format: json_object. Los modelos de razonamiento
-          // (deepseek-v4-flash) revientan el upstream ("Upstream request failed") al
-          // exigirles JSON puro + un prompt complejo — no pueden razonar y a la vez
-          // estar forzados a puro JSON. El prompt ya pide JSON; extraemos el objeto
-          // del contenido con parseJsonFromContent (tolera <think> y cercas markdown).
-          model: this.model,
-          messages,
-          temperature: 0.1,
-          // Los modelos de razonamiento gastan MUCHOS tokens en reasoning_content, que
-          // cuenta contra el output. Sin techo alto, el JSON de respuesta se trunca y el
-          // parseo falla. Damos aire para razonamiento + respuesta.
-          max_tokens: 16000,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(
-          `OpenCode Go API error ${res.status}: ${body.slice(0, 500)}`
-        );
-      }
-
-      return res.json();
-    } finally {
-      clearTimeout(timeout);
-    }
+    return {
+      choices: [{
+        message: { content: data.content },
+        finish_reason: data.finish_reason ?? "",
+      }],
+      usage: {
+        prompt_tokens: data.tokens_input,
+        completion_tokens: data.tokens_output,
+      },
+      model: data.model ?? this.model,
+    };
   }
 
   async extractMovimientos(
