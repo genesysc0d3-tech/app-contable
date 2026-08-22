@@ -109,7 +109,14 @@ export default function EmpresaBrand({
       )}
 
       {open && canSwitch && (
-        <div style={{ position: "absolute", left: 0, top: size + 10, zIndex: 90, width: "min(320px, calc(100vw - 28px))", padding: 8, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 var(--border)", color: "var(--text)" }}>
+        <div className="eb-pop" style={{ position: "absolute", left: 0, top: size + 10, zIndex: 90, width: `min(${agregando ? 340 : 320}px, calc(100vw - 28px))`, padding: 8, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 var(--border)", color: "var(--text)", whiteSpace: "normal", transformOrigin: "top left" }}>
+          {/* Entrada con resorte sutil; el nowrap del brand NO se hereda (los
+              textos del panel deben envolver, no escaparse del borde). */}
+          <style>{`
+            @keyframes ebPopIn{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+            .eb-pop{animation:ebPopIn .18s cubic-bezier(.22,1,.36,1) both;}
+            @media (prefers-reduced-motion: reduce){.eb-pop{animation:none;}}
+          `}</style>
           {agregando ? (
             <AgregarEmpresaForm
               onListo={(empresaId) => {
@@ -211,11 +218,11 @@ function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: stri
     onListo(r.empresa_id);
   }
 
-  const inputStyle = { width: "100%", boxSizing: "border-box" as const, padding: "8px 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", fontSize: 11 };
+  const inputStyle = { width: "100%", boxSizing: "border-box" as const, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", fontSize: 12, outline: "none", lineHeight: 1.3 };
   return (
-    <div style={{ padding: 4 }}>
-      <div style={{ padding: "4px 4px 10px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Agregar empresa</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ padding: 8 }}>
+      <div style={{ padding: "2px 2px 12px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".08em" }}>Agregar empresa</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div>
           <input value={rut} onChange={(e) => setRut(e.target.value)} onBlur={verificar}
             placeholder="RUT de la empresa (76.123.456-7)" style={inputStyle} autoFocus />
@@ -240,18 +247,18 @@ function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: stri
         {verif.estado !== "encontrada" && (
           <input value={razon} onChange={(e) => setRazon(e.target.value)} placeholder="Razón social" style={inputStyle} />
         )}
-        <div style={{ fontSize: 8.5, color: "var(--text3)", lineHeight: 1.4 }}>
-          Al crearla verás su mesa vacía. El logo, giro y demás datos se configuran
-          después en «Empresa». El RUT no se puede cambiar tras emitir la primera boleta.
+        <div style={{ fontSize: 9.5, color: "var(--text3)", lineHeight: 1.55, padding: "0 2px" }}>
+          Al crearla verás su mesa vacía; el logo y sus datos se configuran después
+          en «Empresa». El RUT queda fijo tras la primera boleta emitida.
         </div>
         {error && <div style={{ color: "var(--red)", fontSize: 9.5, lineHeight: 1.4 }}>{error}</div>}
         <div style={{ display: "flex", gap: 6 }}>
           <button type="button" onClick={onCancelar} disabled={enviando}
-            style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>
+            style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
             Cancelar
           </button>
           <button type="button" onClick={enviar} disabled={enviando || !rut || !razon || verif.estado === "dv_malo"}
-            style={{ flex: 2, padding: "8px 0", borderRadius: 8, border: 0, background: "var(--accent)", color: "#fff", fontSize: 10.5, fontWeight: 800, cursor: enviando ? "wait" : "pointer", opacity: enviando || !rut || !razon ? 0.6 : 1 }}>
+            style={{ flex: 2, padding: "10px 0", borderRadius: 10, border: 0, background: "var(--accent)", color: "#fff", fontSize: 11, fontWeight: 800, cursor: enviando ? "wait" : "pointer", opacity: enviando || !rut || !razon ? 0.55 : 1, transition: "opacity .15s" }}>
             {enviando ? "Creando…" : "Crear empresa"}
           </button>
         </div>
