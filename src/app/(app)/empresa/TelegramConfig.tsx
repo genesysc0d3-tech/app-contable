@@ -19,6 +19,10 @@ export default function TelegramConfig() {
   const [enPlan, setEnPlan] = useState(true);
   const [verificacionFallida, setVerificacionFallida] = useState(false);
   const [reintento, setReintento] = useState(0);
+  const [vinculadoPor, setVinculadoPor] = useState<string | null>(null);
+  const [vinculadoAt, setVinculadoAt] = useState<string | null>(null);
+  const [desconectando, setDesconectando] = useState(false);
+  const [confirmandoDesconexion, setConfirmandoDesconexion] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -32,6 +36,8 @@ export default function TelegramConfig() {
           setVinculado(v);
           setBotConfigured(d.botConfigured !== false);
           setEnPlan(d.enPlan !== false);
+          setVinculadoPor(typeof d.vinculadoPor === "string" ? d.vinculadoPor : null);
+          setVinculadoAt(typeof d.vinculadoAt === "string" ? d.vinculadoAt : null);
           if (v) setLink(null); // ya conectado: no dejar el botón "Abrir Telegram"
         })
         // Un fallo de red NO es "sin conectar": se marca como no verificado
@@ -55,6 +61,35 @@ export default function TelegramConfig() {
   function reintentarVerificacion() {
     setLoading(true);
     setReintento((n) => n + 1);
+  }
+
+  async function desconectar() {
+    // Dos toques: el primero arma la confirmación, el segundo corta de verdad
+    // (desconectar mata el canal de comprobantes — no puede ser un misclick).
+    if (!confirmandoDesconexion) {
+      setConfirmandoDesconexion(true);
+      return;
+    }
+    if (desconectando) return;
+    setDesconectando(true);
+    try {
+      const res = await fetch("/api/telegram/link", { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setVinculado(false);
+        setVinculadoPor(null);
+        setVinculadoAt(null);
+        setLink(null);
+        toast("Telegram desconectado");
+      } else {
+        toast("No se pudo desconectar", "error");
+      }
+    } catch {
+      toast("No se pudo desconectar", "error");
+    } finally {
+      setDesconectando(false);
+      setConfirmandoDesconexion(false);
+    }
   }
 
   async function conectar() {
@@ -148,18 +183,30 @@ export default function TelegramConfig() {
             }}>
               {conectado ? "✓" : ""}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 760, color: "var(--text, #e8eaf0)" }}>
-              {loading
-                ? "Cargando…"
-                : sinVerificar
-                ? "No se pudo verificar la conexión"
-                : !botConfigured
-                ? "Disponible próximamente"
-                : !enPlan
-                ? "Disponible en el plan Pro"
-                : conectado
-                ? "Telegram conectado — mándale fotos al bot"
-                : "Conecta tu Telegram para mandar comprobantes"}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 760, color: "var(--text, #e8eaf0)" }}>
+                {loading
+                  ? "Cargando…"
+                  : sinVerificar
+                  ? "No se pudo verificar la conexión"
+                  : !botConfigured
+                  ? "Disponible próximamente"
+                  : !enPlan
+                  ? "Disponible en el plan Pro"
+                  : conectado
+                  ? "Telegram conectado — mándale fotos al bot"
+                  : "Conecta tu Telegram para mandar comprobantes"}
+              </div>
+              {/* Quién y cuándo: un Telegram ajeno colgado de la empresa se
+                  detecta a la vista, no revisando la base. */}
+              {conectado && (vinculadoPor || vinculadoAt) && (
+                <div style={{ marginTop: 3, fontSize: 11, color: "var(--text3, #697080)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {[
+                    vinculadoPor ? `Conectado por ${vinculadoPor}` : null,
+                    vinculadoAt ? new Date(vinculadoAt).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" }) : null,
+                  ].filter(Boolean).join(" · ")}
+                </div>
+              )}
             </div>
           </div>
 
@@ -210,22 +257,42 @@ export default function TelegramConfig() {
                 Abrir Telegram →
               </a>
             ) : (
-              <button
-                type="button"
-                onClick={conectar}
-                disabled={generando}
-                style={{
-                  height: 36, borderRadius: 10,
-                  border: conectado ? "1px solid var(--border, rgba(255,255,255,.06))" : "none",
-                  background: conectado ? "color-mix(in srgb, var(--text, #e8eaf0) 5%, transparent)" : "var(--accent, #E8553E)",
-                  color: conectado ? "var(--text, #e8eaf0)" : "#fff",
-                  padding: "0 14px", fontSize: 12, fontWeight: 600,
-                  cursor: "pointer", opacity: generando ? 0.5 : 1,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {generando ? "Generando…" : conectado ? "Generar nuevo link" : "Conectar Telegram"}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {conectado && (
+                  <button
+                    type="button"
+                    onClick={desconectar}
+                    disabled={desconectando}
+                    style={{
+                      height: 36, borderRadius: 10,
+                      border: confirmandoDesconexion ? "1px solid color-mix(in srgb, var(--accent, #E8553E) 45%, transparent)" : "1px solid var(--border, rgba(255,255,255,.06))",
+                      background: confirmandoDesconexion ? "color-mix(in srgb, var(--accent, #E8553E) 12%, transparent)" : "transparent",
+                      color: confirmandoDesconexion ? "var(--accent, #E8553E)" : "var(--text3, #697080)",
+                      padding: "0 14px", fontSize: 12, fontWeight: 600,
+                      cursor: "pointer", opacity: desconectando ? 0.5 : 1,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {desconectando ? "Desconectando…" : confirmandoDesconexion ? "¿Seguro? Toca de nuevo" : "Desconectar"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={conectar}
+                  disabled={generando}
+                  style={{
+                    height: 36, borderRadius: 10,
+                    border: conectado ? "1px solid var(--border, rgba(255,255,255,.06))" : "none",
+                    background: conectado ? "color-mix(in srgb, var(--text, #e8eaf0) 5%, transparent)" : "var(--accent, #E8553E)",
+                    color: conectado ? "var(--text, #e8eaf0)" : "#fff",
+                    padding: "0 14px", fontSize: 12, fontWeight: 600,
+                    cursor: "pointer", opacity: generando ? 0.5 : 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {generando ? "Generando…" : conectado ? "Cambiar de Telegram" : "Conectar Telegram"}
+                </button>
+              </div>
             )
           )}
         </div>

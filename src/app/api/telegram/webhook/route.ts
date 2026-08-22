@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
+import { esRolEmision } from "@/lib/auth/roles";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { subirDocumentoR2 } from "@/lib/storage";
@@ -108,6 +109,14 @@ const MSG = {
     "🔒 <b>Telegram es parte del plan Pro.</b>\n" +
     "Tu plan actual no incluye comprobantes por Telegram.\n" +
     "Actívalo en massDTE → Empresa → Plan y vuelve a mandarme la foto.",
+  reemplazado:
+    "🔄 <b>Esta empresa se conectó desde otro Telegram.</b>\n" +
+    "Este chat quedó desconectado y ya no puede mandar comprobantes.\n" +
+    "Si no fuiste tú, revisa quién tiene acceso en massDTE → <b>Empresa → Bot de Telegram</b>.",
+  sinPermisos:
+    "🔒 <b>Este chat quedó desconectado.</b>\n" +
+    "La cuenta que lo vinculó ya no tiene permisos de emisión en esta empresa.\n" +
+    "Un usuario habilitado puede reconectarlo desde massDTE → <b>Empresa → Bot de Telegram</b>.",
 };
 
 type Svc = ReturnType<typeof getServiceClient>;
@@ -135,14 +144,54 @@ async function chatVinculado(chatId: number): Promise<boolean> {
   return (await empresaDelChat(chatId)) !== null;
 }
 
-/** empresa_id del chat si está vinculado y activo, si no null. */
+/**
+ * ¿El usuario que vinculó el chat sigue habilitado para operar esta empresa?
+ * El chat HEREDA los permisos de quien lo vinculó: si a esa persona la vetan,
+ * le bajan el rol o la sacan de la cuenta, el chat muere con ella (misma
+ * filosofía fail-closed del resto del circuito de emisión). Multiempresa
+ * Business: basta ser miembro activo de la cuenta dueña de la empresa (el
+ * titular puede tener otra empresa activa en la app sin perder su Telegram).
+ */
+async function vinculadorHabilitado(svc: Svc, usuarioId: string | null, empresaId: string): Promise<boolean> {
+  if (!usuarioId) return false; // vinculador borrado (FK set null) → chat huérfano, se corta
+  const { data: u } = await svc
+    .from("usuarios")
+    .select("empresa_id, rol, vetado")
+    .eq("id", usuarioId)
+    .maybeSingle();
+  if (!u || u.vetado === true || !esRolEmision(u.rol)) return false;
+  if (u.empresa_id === empresaId) return true;
+  const ctx = await contextoCuentaPorEmpresa(svc, empresaId);
+  if (!ctx) return false;
+  const { data: m } = await svc
+    .from("cuenta_usuarios")
+    .select("activo")
+    .eq("cuenta_id", ctx.cuentaId)
+    .eq("usuario_id", usuarioId)
+    .maybeSingle();
+  return Boolean(m?.activo);
+}
+
+/**
+ * empresa_id del chat si está vinculado, activo Y su vinculador sigue
+ * habilitado; si no, null. La revalidación corre en CADA uso del bot (no solo
+ * al vincular): un chat cuyo dueño perdió permisos se desactiva al tiro y se
+ * le avisa — antes quedaba emitiendo para siempre (hallazgo 2026-08-22).
+ */
 async function empresaDelChat(chatId: number): Promise<string | null> {
-  const { data } = await getServiceClient()
+  const svc = getServiceClient();
+  const { data } = await svc
     .from("telegram_chats")
-    .select("empresa_id, activo")
+    .select("empresa_id, activo, usuario_id")
     .eq("chat_id", chatId)
     .maybeSingle();
-  return data?.activo ? data.empresa_id : null;
+  if (!data?.activo) return null;
+  if (!(await vinculadorHabilitado(svc, data.usuario_id, data.empresa_id))) {
+    await svc.from("telegram_chats").update({ activo: false }).eq("chat_id", chatId);
+    await say(chatId, MSG.sinPermisos);
+    return null;
+  }
+  return data.empresa_id;
 }
 
 function pendingToken() {
@@ -800,6 +849,31 @@ async function vincularConToken(chatId: number, token: string) {
     return;
   }
 
+  // Regla: 1 empresa = 1 chat activo (índice único parcial en la base).
+  // Vincular un Telegram nuevo es un TAKEOVER explícito: los chats activos
+  // anteriores de la empresa se desactivan primero (libera el índice) y se
+  // les avisa — así nunca queda un tercero emitiendo en silencio.
+  const { data: anteriores } = await svc
+    .from("telegram_chats")
+    .select("chat_id")
+    .eq("empresa_id", linkToken.empresa_id)
+    .eq("activo", true)
+    .neq("chat_id", chatId);
+  const chatsAnteriores = (anteriores ?? []).map((c) => c.chat_id);
+  if (chatsAnteriores.length > 0) {
+    const { error: bajaError } = await svc
+      .from("telegram_chats")
+      .update({ activo: false })
+      .in("chat_id", chatsAnteriores);
+    if (bajaError) {
+      // Fail-closed: si no se pudo desactivar al anterior, NO se vincula el
+      // nuevo (el índice único además lo rechazaría con dos activos).
+      console.error("[telegram-webhook] baja de chats anteriores fallo:", bajaError.message);
+      await say(chatId, MSG.errorVincular);
+      return;
+    }
+  }
+
   const { error: upsertError } = await svc.from("telegram_chats").upsert(
     {
       chat_id: chatId,
@@ -818,6 +892,11 @@ async function vincularConToken(chatId: number, token: string) {
 
   await svc.from("telegram_link_tokens").update({ used_at: ahora }).eq("token", token);
   await say(chatId, MSG.bienvenida);
+  // Avisar a los desconectados DESPUÉS de consolidar el nuevo vínculo (si el
+  // upsert hubiera fallado, no queremos haber gritado un takeover que no fue).
+  for (const anterior of chatsAnteriores) {
+    try { await say(anterior, MSG.reemplazado); } catch { /* chat cerrado/bloqueado: da igual */ }
+  }
 }
 
 async function guardarYProcesarComprobanteTelegram(args: {
@@ -1038,16 +1117,14 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], r
   const svc = getServiceClient();
 
   // Chat no vinculado = CERO procesamiento (ni OCR ni storage): el costo
-  // y el abuso se cortan acá.
-  const { data: chat } = await svc
-    .from("telegram_chats")
-    .select("empresa_id, activo")
-    .eq("chat_id", chatId)
-    .maybeSingle();
-  if (!chat?.activo) {
+  // y el abuso se cortan acá. empresaDelChat además REVALIDA al vinculador
+  // (vetado/rol/miembro) y desactiva el chat si perdió permisos.
+  const empresaChat = await empresaDelChat(chatId);
+  if (!empresaChat) {
     await say(chatId, MSG.noVinculado);
     return;
   }
+  const chat = { empresa_id: empresaChat };
 
   // Gate de plan: Start no incluye Telegram. Único choke point (cubre foto suelta,
   // álbum y multiempresa) y corta el costo de OCR/storage antes de trabajar.
