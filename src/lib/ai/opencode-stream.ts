@@ -110,6 +110,18 @@ export async function fetchOpenCodeStreaming(args: {
     buffer += decoder.decode();
     if (buffer.trim()) consumeLine(buffer);
 
+    // Corte silencioso del gateway (2026-08-21, medido): a los ~49s el stream
+    // simplemente TERMINA a mitad de frase, sin finish_reason (incluso manda su
+    // chunk de costo). Devolver ese contenido a medias produce "Unexpected end
+    // of JSON input" aguas arriba y enmascara la causa real. Sin finish_reason
+    // = respuesta NO terminada → error explícito (retryable por el pipeline).
+    if (finishReason === null) {
+      throw new Error(
+        `OpenCode stream cortado por el gateway sin finish_reason (${content.length} chars recibidos). ` +
+        "Generación demasiado larga para el corte de ~49s — reducir el tamaño del lote.",
+      );
+    }
+
     return {
       content,
       finish_reason: finishReason,
