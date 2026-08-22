@@ -564,6 +564,29 @@ export async function processDocumentQueue(args: ProcessQueueArgs = {}) {
  * processOneJob impide que un job cancelado en vuelo termine como 'completed'.
  * Devuelve true si había un job vivo (queued/running/retryable) que se canceló.
  */
+/**
+ * ¿Cuánto falta (ms) para el próximo job pendiente (queued/retryable)?
+ * - 0 si ya está vencido, null si no hay ninguno dentro del horizonte.
+ * Lo usa el drenaje encadenado para NO morir cuando lo único que queda es un
+ * reintento con backoff a 1-2 min de futuro (incidente 2026-08-22: la cadena
+ * terminaba y la cartola quedaba a medias hasta el cron del día siguiente).
+ */
+export async function msHastaProximoJobPendiente(withinMs: number, sbArg?: Sb): Promise<number | null> {
+  const sb = sbArg ?? serviceClient();
+  if (!sb) return null;
+  const { data, error } = await sb
+    .from("document_processing_jobs")
+    .select("next_run_at")
+    .in("status", ["queued", "retryable"])
+    .order("next_run_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.next_run_at) return null;
+  const delta = new Date(data.next_run_at).getTime() - Date.now();
+  if (delta > withinMs) return null;
+  return Math.max(0, delta);
+}
+
 export async function cancelDocumentProcessingJob(sb: Sb, documentoId: string): Promise<boolean> {
   const now = new Date().toISOString();
   const { data } = await sb
