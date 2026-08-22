@@ -75,10 +75,14 @@ export default function EmpresaBrand({
     });
   }
 
+  // Con selector, el chevron (13px + gap) vive DENTRO del ancho del brand: si
+  // el logo ocupa el slot completo, la flecha se salía de la caja y chocaba con
+  // el calendario. Se le descuenta su espacio al logo, no al revés.
+  const logoWidth = canSwitch ? maxWidth - 21 : maxWidth;
   const brandContent = (
     <>
       {logoOk ? (
-        <span style={{ width: maxWidth, maxWidth, height: size, display: "flex", alignItems: "center", justifyContent: "flex-start", overflow: "visible", flexShrink: 0 }}>
+        <span style={{ width: logoWidth, maxWidth: logoWidth, height: size, display: "flex", alignItems: "center", justifyContent: "flex-start", overflow: "hidden", flexShrink: 0 }}>
           <LogoImage src={logoUrl} alt={`Logo de ${nombre}`} maxHeight={size} onError={() => setLogoOk(false)} />
         </span>
       ) : (
