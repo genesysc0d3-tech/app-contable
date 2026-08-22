@@ -197,10 +197,39 @@ export async function getDevSupportMode(): Promise<DevSupportMode | null> {
   };
 }
 
-export async function getDevSupportWriteBlock(): Promise<{ error: string } | null> {
+/**
+ * Gate de escritura del modo soporte. Solo-lectura por defecto; se abre
+ * ÚNICAMENTE con una intervención autorizada por el cliente (código de 6
+ * dígitos nacido en su canal, ventana de 1 hora — ver lib/dev/intervencion).
+ * Cada escritura permitida bajo intervención queda auditada una a una.
+ *
+ * `opts.nuncaEnIntervencion`: rutas que ni el permiso del cliente abre
+ * (pagos/checkout — plata del cliente jamás desde soporte).
+ */
+export async function getDevSupportWriteBlock(
+  accion?: string,
+  opts?: { nuncaEnIntervencion?: boolean },
+): Promise<{ error: string } | null> {
   const support = await getDevSupportMode();
-  if (support?.ok) return { error: "Modo soporte: solo lectura" };
-  return null;
+  if (!support?.ok) return null;
+  if (opts?.nuncaEnIntervencion) return { error: "Modo soporte: solo lectura" };
+
+  const { intervencionActiva } = await import("@/lib/dev/intervencion");
+  const intervencion = await intervencionActiva(support.sb, support.empresaId);
+  if (intervencion) {
+    const { recordCuentaAudit } = await import("@/lib/audit/account");
+    await recordCuentaAudit({
+      sb: support.sb,
+      empresaId: support.empresaId,
+      accion: "soporte_intervencion_escritura",
+      recursoTipo: "soporte_intervencion",
+      recursoId: intervencion.id,
+      resumen: `Escritura de soporte (${accion ?? "escritura"}) por ${support.operatorEmail}`,
+      metadata: { operador: support.operatorEmail, accion: accion ?? null },
+    });
+    return null;
+  }
+  return { error: "Modo soporte: solo lectura" };
 }
 
 export async function setDevSupportEmpresaCookie(empresaId: string) {

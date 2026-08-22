@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import EmisorForm from "../../empresa/EmisorForm";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
+import SoporteAccesoConfig from "../../empresa/SoporteAccesoConfig";
 import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
@@ -670,6 +671,13 @@ export default function EmpresaPopup({
                 sub: "Plan, uso y pagos",
                 done: false,
               },
+              {
+                n: 7,
+                icon: "M12 3l7 4v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V7l7-4z",
+                title: "Acceso de soporte",
+                sub: "Tú autorizas, tú cortas",
+                done: false,
+              },
             ].map((s, i) => (
               <button
                 key={i}
@@ -797,6 +805,7 @@ export default function EmpresaPopup({
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },
                   { key: "telegram", content: <TelegramConfig /> },
                   { key: "facturacion", content: <FacturacionUsoPanel /> },
+                  { key: "soporte", content: <SoporteAccesoConfig /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}
@@ -815,7 +824,7 @@ export default function EmpresaPopup({
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                {step < 5 ? (
+                {step < 6 ? (
                   <button className="ep-footer-btn primary" onClick={() => { void goToStep(step + 1); }}>
                     Siguiente ›
                   </button>

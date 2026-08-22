@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   // Modo soporte = solo lectura: reprocesar muta la mesa del cliente. Error
   // honesto en vez del "Documento no encontrado" fantasma (empresa cruzada).
-  const writeBlock = await getDevSupportWriteBlock();
+  const writeBlock = await getDevSupportWriteBlock("procesar_documento");
   if (writeBlock) return NextResponse.json({ ok: false, error: writeBlock.error }, { status: 403 });
 
   let body: Record<string, unknown>;

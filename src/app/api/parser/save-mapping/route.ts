@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   // Modo soporte = solo lectura: guardar un mapeo MUTA los datos del cliente.
   // Error honesto en vez del "Documento no encontrado" fantasma de antes.
-  const writeBlock = await getDevSupportWriteBlock();
+  const writeBlock = await getDevSupportWriteBlock("parser_save_mapping");
   if (writeBlock) return NextResponse.json({ error: writeBlock.error }, { status: 403 });
 
   const body = await request.json();

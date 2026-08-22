@@ -845,3 +845,74 @@ export async function cargarMesa(params: MesaParams): Promise<CargarMesaResult> 
     return { ok: false, error: error instanceof Error ? error.message : "CARGAR_MESA_FAILED" };
   }
 }
+
+/**
+ * El CLIENTE corta la intervención de soporte de su empresa (o descarta un
+ * código pendiente). Cualquier usuario autenticado de la empresa puede: es SU
+ * empresa y el permiso siempre es suyo.
+ */
+export async function revocarIntervencionSoporte(): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "NO_AUTH" };
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return { error: "USUARIO_SIN_EMPRESA" };
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "BACKEND_CONFIG_MISSING" };
+  const svc = createServiceClient<Database>(url, key);
+
+  const { terminarIntervencion } = await import("@/lib/dev/intervencion");
+  const res = await terminarIntervencion(svc, usuario.empresa_id);
+  if (res.habia) {
+    await recordCuentaAudit({
+      sb: svc,
+      empresaId: usuario.empresa_id,
+      usuarioId: user.id,
+      accion: "soporte_intervencion_revocada",
+      recursoTipo: "soporte_intervencion",
+      resumen: "El cliente revocó la intervención de soporte",
+    });
+  }
+  revalidatePath("/massdte");
+  return { ok: true };
+}
+
+export type EstadoIntervencionCliente =
+  | { estado: "ninguna" }
+  | { estado: "pendiente"; codigo: string; canjeableHasta: string }
+  | { estado: "activa"; expiraAt: string; autorizadaAt: string | null };
+
+/** Estado del acceso de soporte de la empresa del usuario (tarjeta Empresa → Acceso de soporte). */
+export async function estadoIntervencionCliente(): Promise<EstadoIntervencionCliente | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "NO_AUTH" };
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) return { error: "USUARIO_SIN_EMPRESA" };
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: "BACKEND_CONFIG_MISSING" };
+  const svc = createServiceClient<Database>(url, key);
+
+  const { estadoIntervencion, intervencionActiva } = await import("@/lib/dev/intervencion");
+  const estado = await estadoIntervencion(svc, usuario.empresa_id);
+  if (estado.estado === "pendiente") {
+    return { estado: "pendiente", codigo: estado.codigo, canjeableHasta: estado.canjeableHasta };
+  }
+  if (estado.estado === "activa") {
+    const row = await intervencionActiva(svc, usuario.empresa_id);
+    return { estado: "activa", expiraAt: estado.expiraAt, autorizadaAt: row?.canjeada_at ?? null };
+  }
+  return { estado: "ninguna" };
+}
