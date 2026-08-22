@@ -31,18 +31,34 @@ export async function GET() {
     .maybeSingle();
   datos.usuario = usuario ?? null;
 
-  const { data: empresa } = await guard.service
+  // TODAS las empresas de la cuenta, incluidas las desactivadas por downgrade
+  // (activa=false): el derecho de acceso/portabilidad no depende del plan — la
+  // interfaz puede ocultarlas, la exportación jamás.
+  let empresaIds = [guard.empresaId];
+  const { data: cuentaLink } = await guard.service
+    .from("cuenta_empresas")
+    .select("cuenta_id")
+    .eq("empresa_id", guard.empresaId)
+    .maybeSingle();
+  if (cuentaLink?.cuenta_id) {
+    const { data: vinculos } = await guard.service
+      .from("cuenta_empresas")
+      .select("empresa_id")
+      .eq("cuenta_id", cuentaLink.cuenta_id);
+    if (vinculos?.length) empresaIds = Array.from(new Set(vinculos.map((v) => v.empresa_id)));
+  }
+
+  const { data: empresas } = await guard.service
     .from("empresas")
     .select("*")
-    .eq("id", guard.empresaId)
-    .maybeSingle();
-  datos.empresa = empresa ?? null;
+    .in("id", empresaIds);
+  datos.empresas = empresas ?? [];
 
   for (const tabla of TABLAS_EMPRESA) {
     const { data, error } = await guard.service
       .from(tabla)
       .select("*")
-      .eq("empresa_id", guard.empresaId)
+      .in("empresa_id", empresaIds)
       .limit(5000);
     datos[tabla] = error ? { no_exportable: error.message } : (data ?? []);
   }

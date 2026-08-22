@@ -182,6 +182,26 @@ export async function contextoCuentaPorEmpresa(sb: Sb, empresaId: string): Promi
 }
 
 /**
+ * ¿La cuenta está en "elección de empresa operativa pendiente"? = downgrade a
+ * un plan SIN multiempresa con más empresas activas que el cupo, y el titular
+ * aún no elige (cuentas.empresa_operativa_elegida_at IS NULL). Mientras esté
+ * pendiente, las superficies de OPERACIÓN (subir cartolas, mesa) se bloquean
+ * para que la ventana no sea un plan Business gratis vía API.
+ */
+export async function eleccionEmpresaPendiente(sb: Sb, empresaId: string): Promise<boolean> {
+  const ctx = await contextoCuentaPorEmpresa(sb, empresaId);
+  if (!ctx || !ctx.planActivo) return false;
+  if (ctx.multiempresa) return false;
+  if (ctx.empresasActivas <= ctx.empresasIncluidas) return false;
+  const { data } = await sb
+    .from("cuentas")
+    .select("empresa_operativa_elegida_at")
+    .eq("id", ctx.cuentaId)
+    .maybeSingle();
+  return !data?.empresa_operativa_elegida_at;
+}
+
+/**
  * ¿La cuenta de esta empresa tiene Telegram en su plan? = (cupo base del plan +
  * addons 'telegram' activos) > 0. Mismo criterio que listarResumenCupos
  * (telegram.habilitado). NO importa metering (ciclo): el período se arma con

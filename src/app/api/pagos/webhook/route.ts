@@ -63,6 +63,31 @@ async function syncPlanActivo(sb: Sb, target: { cuentaId: string | null; empresa
       .update({ plan_codigo: plan, plan_activo: activo, updated_at: new Date().toISOString() })
       .eq("id", target.cuentaId);
     if (cuentaError) throw new Error(`No se pudo actualizar la cuenta: ${cuentaError.message}`);
+
+    // Re-upgrade a un plan multiempresa: las empresas desactivadas por el
+    // downgrade (motivo 'fuera_de_plan') REVIVEN solas — sus datos nunca se
+    // tocaron. Las desactivadas por soporte NO (motivo distinto). También se
+    // limpia la marca de elección única: la próxima bajada vuelve a preguntar.
+    if (activo) {
+      const { data: planRow } = await sb
+        .from("planes_config")
+        .select("multiempresa")
+        .eq("codigo", plan)
+        .maybeSingle();
+      if (planRow?.multiempresa === true) {
+        await sb
+          .from("cuenta_empresas")
+          .update({ activa: true, desactivada_motivo: null })
+          .eq("cuenta_id", target.cuentaId)
+          .eq("activa", false)
+          .eq("desactivada_motivo", "fuera_de_plan");
+        await sb
+          .from("cuentas")
+          .update({ empresa_operativa_elegida_at: null })
+          .eq("id", target.cuentaId);
+      }
+    }
+
     const empresaIds = await empresasActivasDeCuenta(sb, target.cuentaId);
     if (empresaIds.length > 0) {
       const { error: empresasError } = await sb.from("empresas").update({ plan_activo: activo, plan }).in("id", empresaIds);

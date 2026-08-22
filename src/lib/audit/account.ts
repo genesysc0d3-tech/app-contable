@@ -9,6 +9,7 @@ type Sb = SupabaseClient<Database>;
 export type CuentaAuditAction =
   | "empresa_activa_cambiada"
   | "empresa_adicional_creada"
+  | "empresa_operativa_elegida"
   | "persona_invitada"
   | "persona_agregada"
   | "propuesta_aprobada"

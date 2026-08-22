@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { eleccionEmpresaPendiente } from "@/lib/entitlements";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
@@ -32,6 +33,16 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!usuario) return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+
+  // Downgrade con elección de empresa operativa pendiente: la operación queda
+  // en pausa hasta que el titular elija (si no, esta API sería un Business
+  // gratis para quien le pegue con la cookie directo, saltándose el modal).
+  if (await eleccionEmpresaPendiente(supabase, usuario.empresa_id)) {
+    return NextResponse.json(
+      { error: "Tu cuenta cambió de plan y debe elegir su empresa operativa. Entra al escritorio para elegirla." },
+      { status: 403 },
+    );
+  }
 
   let body: { nombre?: string; base64?: string; tipo?: string; mime?: string };
   try {

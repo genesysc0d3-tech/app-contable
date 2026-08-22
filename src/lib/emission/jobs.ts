@@ -37,9 +37,15 @@ export async function requireEmisionJob(args: {
     return { ok: false, status: 409, error: "EMISION_JOB_CLOSED", job };
   }
 
+  // Fallas de CUENTA (empresa desactivada por downgrade, plan vencido) también
+  // adjuntan `job`: la ownership ya está verificada arriba (usuario_id) y un
+  // folio REAL emitido en el SII durante la ventana del cambio de plan debe
+  // poder registrarse por la red de seguridad de evidencia fuerte — "no emitir
+  // de nuevo" > "libro sin el folio". Abrir jobs NUEVOS sí queda bloqueado (el
+  // gate de apertura vive en requireAccountApiAccess).
   const acceso = await validarAccesoCuenta(args.sb, args.userId, job.empresa_id);
-  if (!acceso.ok) return { ok: false, status: 403, error: acceso.codigo };
-  if (!acceso.planActivo) return { ok: false, status: 402, error: "PLAN_INACTIVO" };
+  if (!acceso.ok) return { ok: false, status: 403, error: acceso.codigo, job };
+  if (!acceso.planActivo) return { ok: false, status: 402, error: "PLAN_INACTIVO", job };
   if (acceso.cuentaId !== job.cuenta_id) return { ok: false, status: 409, error: "EMISION_JOB_CUENTA_MISMATCH" };
 
   return { ok: true, job };
