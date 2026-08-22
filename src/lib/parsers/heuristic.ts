@@ -12,6 +12,25 @@ import { parseChileanNumber } from "./apply";
  * Returns null if no plausible cartola structure is detected. The caller
  * should then fall back to the next layer.
  */
+/**
+ * ¿La celda parece una fecha? Cubre las TRES formas en que llega una fecha
+ * desde XLSX (cellDates:true): Date nativo, serial de Excel (rango 2000-2099,
+ * mismo criterio que apply.ts), o texto dd/mm/yyyy · yyyy-mm-dd. Antes solo
+ * se aceptaba texto → una planilla con fechas REALES de Excel (el caso normal
+ * de una planilla casera) era invisible para todos los detectores y caía a
+ * la capa legacy → IA (bug cazado con la planilla M&E 2026-08-22).
+ */
+function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
+  if (cell == null) return false;
+  if (cell instanceof Date) return !Number.isNaN(cell.getTime());
+  if (typeof cell === "number") return cell >= 36526 && cell <= 73050;
+  const s = String(cell).trim();
+  if (!s) return false;
+  if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
+  // Date ya serializado a string (p.ej. "2026-08-08 00:00:00" o ISO)
+  return /^\d{4}-\d{2}-\d{2}[T ]/.test(s);
+}
+
 export function detectHeuristic(rows: Row[]): AdapterConfig | null {
   // Step 1: find the first run of >= 3 consecutive "transaction-looking" rows
   // (lowered from 5 to also accept smaller test cartolas)
@@ -103,10 +122,7 @@ function isTransactionRow(r: Row): boolean {
     if (cell == null) continue;
     const s = String(cell).trim();
     if (!s) continue;
-    if (
-      !hasDate &&
-      /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)
-    ) {
+    if (!hasDate && cellEsFecha(cell)) {
       hasDate = true;
     }
     if (!hasNumber) {
@@ -168,9 +184,7 @@ function inferColumns(sample: Row[]): InferredCols | null {
         continue;
       }
       nonEmpty++;
-      if (
-        /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)
-      ) {
+      if (cellEsFecha(cell)) {
         dates++;
         numSeries.push(0);
         continue;
@@ -242,6 +256,12 @@ function inferColumns(sample: Row[]): InferredCols | null {
         if (na > 0 || nb > 0) either++;
       }
       if (either < sample.length * 0.9) continue;
+      // Exclusividad DURA: en una cartola two_cols real cada fila tiene cargo
+      // XOR abono (both ≈ 0). Un par donde ambos suelen convivir NO es
+      // cargo/abono — es monto+comisión u otra cosa (una planilla casera con
+      // fechas nativas caía acá y two_cols le robaba el turno al carril
+      // transactions_log, extrayendo basura "validada": bug M&E 2026-08-22).
+      if (both > sample.length * 0.1) continue;
       // Score: maximize either, minimize both
       const score = either - both * 10;
       if (!bestPair || score > bestPair.score) {
@@ -313,10 +333,7 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
   for (let col = 0; col < ncols; col++) {
     let dates = 0;
     for (const r of sample) {
-      const s = String(r[col] ?? "").trim();
-      if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)) {
-        dates++;
-      }
+      if (cellEsFecha(r[col])) dates++;
     }
     if (dates / sample.length >= 0.8) {
       fechaCol = col;
@@ -455,10 +472,7 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
   for (let col = 0; col < ncols; col++) {
     let dates = 0;
     for (const r of sample) {
-      const s = String(r[col] ?? "").trim();
-      if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)) {
-        dates++;
-      }
+      if (cellEsFecha(r[col])) dates++;
     }
     if (dates / sample.length >= 0.8) {
       fechaCol = col;
@@ -487,7 +501,11 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
       descCol = col;
     }
   }
-  if (descCol < 0) return null;
+  // descripcion es OPCIONAL acá: la planilla casera "fecha + monto" pura (el
+  // libro de ventas de un microemprendedor, caso M&E) no trae glosa. Sin
+  // glosa el detector se pone MÁS exigente con el monto (≥90% de valores
+  // monetarios limpios en vez de 80%) — ante la duda, mapeo manual.
+  const montoRatioMinimo = descCol < 0 ? 0.9 : 0.8;
 
   // Find monto column: monetary values typically 1000 ≤ n ≤ 10^9 CLP.
   // Excludes phone numbers (~5.7×10^10), RUT-like values, IDs, etc.
@@ -521,7 +539,7 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
     }
     // Require at least 80% of values to be numeric AND in monetary range
     if (totalNumeric / sample.length < 0.8) continue;
-    if (inRangeCount / sample.length < 0.8) continue;
+    if (inRangeCount / sample.length < montoRatioMinimo) continue;
     if (looksLikeRut > 0) continue;
     // Score = avg value (favor more meaningful monetary columns)
     const avg = total / inRangeCount;
