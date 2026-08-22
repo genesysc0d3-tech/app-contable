@@ -349,7 +349,9 @@ type CrearEmpresaAdicionalResult =
 export async function crearEmpresaAdicional(input: {
   rut: string;
   razon_social: string;
-  giro: string;
+  /** Opcional: el flujo es alta mínima (RUT verificado + razón social) → mesa
+   *  vacía → el resto (giro, logo, dirección) se configura en «Empresa». */
+  giro?: string;
 }): Promise<CrearEmpresaAdicionalResult> {
   try {
     const ctx = await getUsuarioActivo();
@@ -388,11 +390,10 @@ export async function crearEmpresaAdicional(input: {
     const giro = (input.giro ?? "").trim().slice(0, 200);
     if (!validarRut(rutLimpio)) return { ok: false, error: "RUT_INVALIDO", detalle: "El RUT no es válido — revisa el dígito verificador" };
     if (!razon) return { ok: false, error: "RAZON_SOCIAL_REQUERIDA" };
-    if (!giro) return { ok: false, error: "GIRO_REQUERIDO" };
 
     const { data: empresa, error: empresaError } = await ctx.sb
       .from("empresas")
-      .insert({ rut: formatRut(rutLimpio), razon_social: razon, giro })
+      .insert({ rut: formatRut(rutLimpio), razon_social: razon, giro: giro || null })
       .select("id")
       .single();
     if (empresaError) {
