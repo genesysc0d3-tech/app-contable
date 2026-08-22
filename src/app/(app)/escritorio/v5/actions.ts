@@ -7,6 +7,7 @@ import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { empresasActivasDeCuenta, contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
 import { chileMonthUtcRange, clpConIva, estadoCuota, periodoActual } from "@/lib/pagos/metering";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { formatRut, validarRut } from "@/lib/rut";
 import { createClient } from "@/lib/supabase/server";
 import { getUfClp, getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { mpConfigurado } from "@/lib/pagos/mercadopago";
@@ -22,7 +23,7 @@ type EmpresaSelectorRow = {
 };
 
 type EmpresasSelectorResult =
-  | { ok: true; empresas: EmpresaSelectorRow[]; multiempresa: boolean }
+  | { ok: true; empresas: EmpresaSelectorRow[]; multiempresa: boolean; puedeAgregar: boolean }
   | { ok: false; error: string; detalle?: string };
 
 type CambiarEmpresaResult =
@@ -226,7 +227,7 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
     if (membresiasError) return { ok: false, error: "EMPRESAS_QUERY_FAILED", detalle: membresiasError.message };
 
     const ids = (membresias ?? []).map((row) => row.empresa_id);
-    if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false };
+    if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false, puedeAgregar: false };
 
     const { data: empresas, error: empresasError } = await ctx.sb
       .from("empresas")
@@ -250,10 +251,27 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
       });
     }
 
+    const multiempresa = await planPermiteMultiempresa(ctx.sb, acceso.plan);
+
+    // "+ Agregar empresa": titular de la cuenta pagadora + plan multiempresa +
+    // cupo libre. El server re-valida todo en crearEmpresaAdicional — esto es
+    // solo visibilidad del botón.
+    let puedeAgregar = false;
+    if (multiempresa && !ctx.supportMode) {
+      const [{ data: cuentaRow }, { data: membresiaTitular }, cuenta] = await Promise.all([
+        ctx.sb.from("cuentas").select("owner_usuario_id").eq("id", acceso.cuentaId).maybeSingle(),
+        ctx.sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", acceso.cuentaId).eq("usuario_id", ctx.userId).maybeSingle(),
+        contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId),
+      ]);
+      const esTitular = cuentaRow?.owner_usuario_id === ctx.userId || membresiaTitular?.es_titular === true;
+      puedeAgregar = esTitular && !!cuenta && cuenta.empresasActivas < cuenta.empresasIncluidas;
+    }
+
     return {
       ok: true,
       empresas: items,
-      multiempresa: await planPermiteMultiempresa(ctx.sb, acceso.plan),
+      multiempresa,
+      puedeAgregar,
     };
   } catch (error) {
     return { ok: false, error: "EMPRESAS_SELECTOR_FAILED", detalle: error instanceof Error ? error.message : undefined };
@@ -314,6 +332,103 @@ export async function cambiarEmpresaActiva(empresaId: string): Promise<CambiarEm
     return { ok: true, empresa_id: targetEmpresaId };
   } catch (error) {
     return { ok: false, error: "CAMBIO_EMPRESA_FAILED", detalle: error instanceof Error ? error.message : undefined };
+  }
+}
+
+type CrearEmpresaAdicionalResult =
+  | { ok: true; empresa_id: string }
+  | { ok: false; error: string; detalle?: string };
+
+/**
+ * Alta de una empresa ADICIONAL bajo la misma cuenta (plan Business/multiempresa).
+ * Solo el titular de la cuenta pagadora; gate por cupo (`empresas_incluidas`).
+ * El RUT queda escrito en piedra al primer documento emitido (trigger
+ * empresas_rut_inmutable) — por eso el caller pasa por el verificador de la
+ * nómina SII antes de llamar acá.
+ */
+export async function crearEmpresaAdicional(input: {
+  rut: string;
+  razon_social: string;
+  giro: string;
+}): Promise<CrearEmpresaAdicionalResult> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (ctx.supportMode) return { ok: false, error: "DEV_SUPPORT_READ_ONLY" };
+
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: acceso.codigo };
+    if (!acceso.planActivo) return { ok: false, error: "PLAN_INACTIVO" };
+
+    if (!(await planPermiteMultiempresa(ctx.sb, acceso.plan))) {
+      return { ok: false, error: "PLAN_SIN_MULTIEMPRESA", detalle: "Tu plan incluye una empresa. El plan Business permite hasta 3." };
+    }
+
+    // Solo la cuenta pagadora agrega RUTs (mismo criterio que persona adicional).
+    const [{ data: cuentaRow }, { data: membresia }] = await Promise.all([
+      ctx.sb.from("cuentas").select("owner_usuario_id").eq("id", acceso.cuentaId).maybeSingle(),
+      ctx.sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", acceso.cuentaId).eq("usuario_id", ctx.userId).maybeSingle(),
+    ]);
+    if (cuentaRow?.owner_usuario_id !== ctx.userId && membresia?.es_titular !== true) {
+      return { ok: false, error: "SOLO_TITULAR_CUENTA", detalle: "Solo la cuenta pagadora puede agregar empresas" };
+    }
+
+    const cuenta = await contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId);
+    if (!cuenta) return { ok: false, error: "CUENTA_NO_CONFIGURADA" };
+    if (cuenta.empresasActivas >= cuenta.empresasIncluidas) {
+      return {
+        ok: false,
+        error: "CUPO_EMPRESAS",
+        detalle: `Tu plan incluye ${cuenta.empresasIncluidas} empresa${cuenta.empresasIncluidas !== 1 ? "s" : ""}. Para agregar otra, escríbenos a soporte.`,
+      };
+    }
+
+    const rutLimpio = (input.rut ?? "").trim();
+    const razon = (input.razon_social ?? "").trim().slice(0, 200);
+    const giro = (input.giro ?? "").trim().slice(0, 200);
+    if (!validarRut(rutLimpio)) return { ok: false, error: "RUT_INVALIDO", detalle: "El RUT no es válido — revisa el dígito verificador" };
+    if (!razon) return { ok: false, error: "RAZON_SOCIAL_REQUERIDA" };
+    if (!giro) return { ok: false, error: "GIRO_REQUERIDO" };
+
+    const { data: empresa, error: empresaError } = await ctx.sb
+      .from("empresas")
+      .insert({ rut: formatRut(rutLimpio), razon_social: razon, giro })
+      .select("id")
+      .single();
+    if (empresaError) {
+      // 23505 = índice único empresas_rut_unico: ese RUT ya opera en massDTE.
+      if (empresaError.code === "23505") {
+        return { ok: false, error: "RUT_YA_REGISTRADO", detalle: "Ese RUT ya tiene una cuenta en massDTE. Si es tuyo, escríbenos a soporte." };
+      }
+      return { ok: false, error: "EMPRESA_INSERT_FAILED", detalle: empresaError.message };
+    }
+
+    const { error: linkError } = await ctx.sb
+      .from("cuenta_empresas")
+      .insert({ cuenta_id: acceso.cuentaId, empresa_id: empresa.id, es_principal: false, activa: true });
+    if (linkError) {
+      // No dejar una empresa huérfana sin vínculo a la cuenta.
+      await ctx.sb.from("empresas").delete().eq("id", empresa.id);
+      return { ok: false, error: "CUENTA_EMPRESA_LINK_FAILED", detalle: linkError.message };
+    }
+
+    await recordCuentaAudit({
+      sb: ctx.sb,
+      cuentaId: acceso.cuentaId,
+      empresaId: empresa.id,
+      usuarioId: ctx.userId,
+      accion: "empresa_adicional_creada",
+      recursoTipo: "empresa",
+      recursoId: empresa.id,
+      resumen: `Empresa adicional creada (${formatRut(rutLimpio)})`,
+      metadata: { rut: formatRut(rutLimpio), razon_social: razon },
+    });
+
+    revalidatePath("/massdte");
+    revalidatePath("/escritorio/v5");
+    return { ok: true, empresa_id: empresa.id };
+  } catch (error) {
+    return { ok: false, error: "EMPRESA_ADICIONAL_FAILED", detalle: error instanceof Error ? error.message : undefined };
   }
 }
 
