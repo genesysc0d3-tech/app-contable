@@ -71,6 +71,8 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
     setUploading(true);
     let ok = 0;
     let dup = 0;
+    let dupEnCurso = 0;
+    let dupError = 0;
     const subidos = new Set<string>();
     const fallidos = new Map<string, string>();
     for (const q of subibles) {
@@ -97,7 +99,11 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
           // El server deduplica por hash de contenido: re-subir el MISMO archivo NO
           // crea otro documento (evita duplicar movimientos/boletas). Se avisa aparte
           // para que el usuario entienda por qué "no aparece nuevo" y ve el de antes.
-          if (data.ya_procesado) dup++; else ok++;
+          if (data.ya_procesado) {
+            if (data.estado_previo === "procesando" || data.estado_previo === "subido") dupEnCurso++;
+            else if (data.estado_previo === "error") dupError++;
+            else dup++;
+          } else ok++;
         }
         else {
           fallidos.set(q.id,
@@ -124,8 +130,14 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
         "info",
       );
     }
+    if (dupEnCurso > 0) {
+      toast("Ese archivo ya se está procesando — dale un momento, no hace falta subirlo de nuevo.", "info");
+    }
+    if (dupError > 0) {
+      toast("Ese archivo ya está en la mesa con error. Aprieta ↻ Reintentar en su tarjeta en vez de subirlo de nuevo.", "info");
+    }
     if (ok > 0) toast(`${ok} subido${ok > 1 ? "s" : ""}`);
-    if (ok > 0 || dup > 0) onUploaded?.();
+    if (ok > 0 || dup > 0 || dupEnCurso > 0 || dupError > 0) onUploaded?.();
   }
 
   const numSubibles = queue.filter(q => q.file.size <= MAX_PROCESAR_UPLOAD_BYTES).length;

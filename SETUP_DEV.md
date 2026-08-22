@@ -22,7 +22,7 @@ cd app-contable
 Crear `.env.local` con:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://aluuuyecwifaakehvcam.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://xncnfrwarcrzgldalkzz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-public-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 AI_PROVIDER=mistral
@@ -30,7 +30,7 @@ MISTRAL_API_KEY=tu-mistral-key
 MISTRAL_MODEL=mistral-small-latest
 ```
 
-Las keys de Supabase se sacan de: https://supabase.com/dashboard/project/aluuuyecwifaakehvcam/settings/api
+Las keys de Supabase se sacan de: https://supabase.com/dashboard/project/xncnfrwarcrzgldalkzz/settings/api
 
 ### 3. Instalar y correr
 
