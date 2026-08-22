@@ -20,8 +20,11 @@ async function main() {
   // service role, que se salta RLS. Se niega a correr contra el proyecto de
   // producción salvo override explícito del operador. Esto es lo que impide que
   // un agente (o un `npm run cb4w` despistado) destruya datos de clientes.
-  const PROD_REF = "aluuuyecwifaakehvcam"; // ref del proyecto Supabase de prod
-  const targetingProd = supabaseUrl.includes(PROD_REF);
+  // Prod REAL (us-east-1, mudanza 2026-08-22) + el respaldo viejo (sa-east-1):
+  // AMBOS son intocables sin override. El respaldo guarda historia tributaria.
+  const PROD_REFS = ["xncnfrwarcrzgldalkzz", "aluuuyecwifaakehvcam"];
+  const PROD_REF = PROD_REFS.find((ref) => supabaseUrl.includes(ref)) ?? PROD_REFS[0];
+  const targetingProd = PROD_REFS.some((ref) => supabaseUrl.includes(ref));
   console.log("Target Supabase:", supabaseUrl || "(falta NEXT_PUBLIC_SUPABASE_URL)");
   if (targetingProd && process.env.MASSDTE_ALLOW_PROD_WIPE !== "1") {
     console.error(
