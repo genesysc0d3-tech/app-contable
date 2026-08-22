@@ -78,13 +78,14 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
   }, []);
 
   return (
-    // Anclado ENTRE el logo (180px) y los botones (178px) en vez de centrado a
+    // Anclado ENTRE el logo (137px reales: imagen 114 + chevron) y los botones
+    // (178px) en vez de centrado a
     // ciegas con left:50%: geométricamente imposible que los toque a cualquier
     // ancho de ventana. Dentro de ese carril, centrado.
     // "safe center": centrado cuando el reloj cabe completo; si el carril se
     // angosta, en vez de botar días por la derecha (mientras sobraba espacio
     // junto al logo), se alinea al inicio y usa TODO el carril. Nada más cambia.
-    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 188, right: 186, top: 0, height: 38, display: "flex", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
+    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, display: "flex", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
         .v5-day-strip::-webkit-scrollbar{display:none;}
@@ -94,14 +95,6 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
         @media (prefers-reduced-motion: reduce){
           .cal-mode-btn{transition:none;}
           .cal-mode-btn:hover{transform:none;}
-        }
-        /* Carril angosto: el botón de modo pierde su texto (queda el reloj, con
-           title) y devuelve ~65px a la tira de días — así el 30/31 no se botan.
-           En pantallas anchas no cambia NADA (container query, puro CSS). */
-        .v5-calendar-wrap{container-type:inline-size;}
-        @container (max-width: 952px){
-          .cal-mesa-txt{display:none;}
-          .cal-mode-btn{width:34px !important;}
         }
       `}</style>
       <div style={{ background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, maxWidth: "100%", height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
