@@ -340,12 +340,85 @@ export async function entrarModoClienteDev(
   return { ok: true };
 }
 
+/**
+ * Intervención con permiso del cliente (ver lib/dev/intervencion):
+ * solicitar genera el código EN EL CANAL DEL CLIENTE; canjear abre 1 hora de
+ * escritura auditada; terminar corta antes. Todas requieren modo soporte activo.
+ */
+export async function solicitarIntervencionDev(): Promise<
+  { ok: true; canal: "telegram" | "app" } | { error: string }
+> {
+  const support = await getDevSupportMode();
+  if (!support?.ok) return { error: "Modo soporte no activo" };
+  const { solicitarIntervencion } = await import("@/lib/dev/intervencion");
+  const res = await solicitarIntervencion(support.sb, support.empresaId, support.operatorEmail, null);
+  if (!res.ok) return { error: res.error };
+  await recordCuentaAudit({
+    sb: support.sb,
+    empresaId: support.empresaId,
+    usuarioId: support.operatorUserId,
+    accion: "soporte_intervencion_solicitada",
+    recursoTipo: "soporte_intervencion",
+    recursoId: res.id,
+    resumen: `Soporte pidió permiso de intervención (código enviado por ${res.canal})`,
+    metadata: { operador: support.operatorEmail, canal: res.canal },
+  });
+  revalidatePath("/massdte");
+  return { ok: true, canal: res.canal };
+}
+
+export async function canjearIntervencionDev(
+  codigo: string,
+): Promise<{ ok: true; expiraAt: string } | { error: string }> {
+  const support = await getDevSupportMode();
+  if (!support?.ok) return { error: "Modo soporte no activo" };
+  const { canjearIntervencion } = await import("@/lib/dev/intervencion");
+  const res = await canjearIntervencion(support.sb, support.empresaId, codigo);
+  if (!res.ok) return { error: res.error };
+  await recordCuentaAudit({
+    sb: support.sb,
+    empresaId: support.empresaId,
+    usuarioId: support.operatorUserId,
+    accion: "soporte_intervencion_autorizada",
+    recursoTipo: "soporte_intervencion",
+    recursoId: res.id,
+    resumen: `Cliente autorizó intervención de soporte por 1 hora (hasta ${res.expiraAt})`,
+    metadata: { operador: support.operatorEmail, expira_at: res.expiraAt },
+  });
+  revalidatePath("/massdte");
+  return { ok: true, expiraAt: res.expiraAt };
+}
+
+export async function terminarIntervencionDev(): Promise<{ ok: true } | { error: string }> {
+  const support = await getDevSupportMode();
+  if (!support?.ok) return { error: "Modo soporte no activo" };
+  const { terminarIntervencion } = await import("@/lib/dev/intervencion");
+  const res = await terminarIntervencion(support.sb, support.empresaId);
+  if (res.habia) {
+    await recordCuentaAudit({
+      sb: support.sb,
+      empresaId: support.empresaId,
+      usuarioId: support.operatorUserId,
+      accion: "soporte_intervencion_terminada",
+      recursoTipo: "soporte_intervencion",
+      resumen: "El operador terminó la intervención antes de la hora",
+      metadata: { operador: support.operatorEmail },
+    });
+  }
+  revalidatePath("/massdte");
+  return { ok: true };
+}
+
 export async function salirModoClienteDev(): Promise<{ ok: true } | { error: string }> {
   const gate = await gateOperador();
   if ("error" in gate) return gate;
 
   const support = await getDevSupportMode();
   if (support?.ok) {
+    // Salir del modo soporte SIEMPRE cierra la intervención: sin ventana
+    // viva colgando después de que el operador se fue.
+    const { terminarIntervencion } = await import("@/lib/dev/intervencion");
+    await terminarIntervencion(support.sb, support.empresaId).catch(() => null);
     const cuenta = await contextoCuentaPorEmpresa(gate.sb, support.empresaId).catch(() => null);
     await recordCuentaAudit({
       sb: gate.sb,
