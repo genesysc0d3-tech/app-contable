@@ -6,6 +6,7 @@ import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { POLICY_VERSION } from "@/lib/legal/version";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 function safeNextPath(value: FormDataEntryValue | string | null): string | null {
   const next = String(value ?? "").trim();
@@ -41,7 +42,14 @@ async function clientIp(): Promise<string> {
 
 /** Honeypot clásico: campo invisible que solo los bots rellenan. */
 function esBot(formData: FormData): boolean {
-  return String(formData.get("sitio_web") ?? "").trim().length > 0;
+  // "sitio_web" fue el nombre histórico del honeypot: el autofill de Chrome lo
+  // reconocía como "website" y lo rellenaba junto al form visible → humanos
+  // reales rechazados (clienta, 2026-08-21). El campo ahora se llama hp_x9q
+  // (sin semántica); se sigue leyendo el nombre viejo por si hay HTML cacheado.
+  return (
+    String(formData.get("hp_x9q") ?? "").trim().length > 0 ||
+    String(formData.get("sitio_web") ?? "").trim().length > 0
+  );
 }
 
 export async function signIn(formData: FormData) {
@@ -117,9 +125,20 @@ async function registrarConsentimiento(userId: string, email: string): Promise<v
 }
 
 export async function signUp(formData: FormData) {
-  // Honeypot: los humanos no ven el campo "sitio_web"; los bots lo rellenan.
-  // Respuesta genérica a propósito (no revelar el mecanismo).
-  if (esBot(formData)) return { error: "No se pudo completar. Intenta de nuevo." };
+  // Honeypot: los humanos no ven el campo; los bots lo rellenan. Respuesta
+  // genérica a propósito (no revelar el mecanismo) — pero SIEMPRE con evento
+  // ops: el caso clienta demostró que un rechazo silencioso e invisible en el
+  // server es indiagnosticable.
+  if (esBot(formData)) {
+    await recordOpsEvent({
+      severity: "warn",
+      source: "auth",
+      eventName: "signup_honeypot",
+      summary: "Registro rechazado por honeypot (bot o autofill)",
+      metadata: { ip: await clientIp() },
+    }).catch(() => {});
+    return { error: "No se pudo completar. Intenta de nuevo." };
+  }
   // Registro también con freno por IP: 5 cuentas / hora por IP es más que
   // suficiente para humanos y corta el registro masivo automatizado.
   {
