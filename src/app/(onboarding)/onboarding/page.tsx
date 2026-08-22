@@ -5,9 +5,42 @@ import { crearEmpresa } from "./actions";
 import { signOut } from "@/app/(auth)/auth/actions";
 import { createClient } from "@/lib/supabase/client";
 
+type VerifRut =
+  | { estado: "idle" | "buscando" }
+  | { estado: "encontrada"; razon: string; terminoGiro: string | null }
+  | { estado: "no_encontrada" }
+  | { estado: "dv_malo" };
+
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rut, setRut] = useState("");
+  const [razon, setRazon] = useState("");
+  const [verif, setVerif] = useState<VerifRut>({ estado: "idle" });
+
+  // Verificación en vivo contra la nómina pública de personas jurídicas del
+  // SII: al encontrar el RUT, la razón social se autocompleta y el usuario
+  // CONFIRMA viendo el nombre (el RUT queda inmutable tras la primera
+  // emisión). RUTs bajo ~50M son personas naturales: no están en la nómina y
+  // no se buscan (solo se valida el dígito).
+  async function verificarRut() {
+    const limpio = rut.replace(/[^0-9kK]/g, "");
+    const cuerpo = Number(limpio.slice(0, -1));
+    if (limpio.length < 7 || !Number.isFinite(cuerpo) || cuerpo < 50_000_000) {
+      setVerif({ estado: "idle" });
+      return;
+    }
+    setVerif({ estado: "buscando" });
+    try {
+      const res = await fetch(`/api/empresa/verificar-rut?rut=${encodeURIComponent(rut)}`);
+      const data = await res.json();
+      if (!data?.ok || data.dv_valido === false || data.dv_coincide === false) { setVerif({ estado: "dv_malo" }); return; }
+      if (data.encontrado) {
+        setVerif({ estado: "encontrada", razon: data.razon_social, terminoGiro: data.termino_giro ?? null });
+        setRazon((prev) => prev || data.razon_social);
+      } else setVerif({ estado: "no_encontrada" });
+    } catch { setVerif({ estado: "idle" }); }
+  }
   // Email de la sesión activa: quien entró con la cuenta equivocada (ej. otro
   // Google) necesita verlo y poder salir sin quedar atrapado en el onboarding.
   const [email, setEmail] = useState<string | null>(null);
@@ -58,9 +91,31 @@ export default function OnboardingPage() {
                 name="rut"
                 type="text"
                 required
+                value={rut}
+                onChange={(e) => setRut(e.target.value)}
+                onBlur={verificarRut}
                 className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="12.345.678-9"
               />
+              {verif.estado === "buscando" && (
+                <p className="mt-1.5 text-xs text-white/40">Buscando en el registro del SII…</p>
+              )}
+              {verif.estado === "encontrada" && (
+                <p className="mt-1.5 text-xs text-emerald-400/90 leading-relaxed">
+                  ✓ {verif.razon}
+                  {verif.terminoGiro && (
+                    <span className="block text-amber-400/90">⚠ Registra término de giro ({verif.terminoGiro}) ante el SII.</span>
+                  )}
+                </p>
+              )}
+              {verif.estado === "no_encontrada" && (
+                <p className="mt-1.5 text-xs text-white/40 leading-relaxed">
+                  No aparece en el registro público del SII. Si tu empresa es nueva es normal — revisa que el RUT esté bien y continúa.
+                </p>
+              )}
+              {verif.estado === "dv_malo" && (
+                <p className="mt-1.5 text-xs text-red-300">Ese RUT no cuadra — revisa los números y el dígito verificador.</p>
+              )}
             </div>
             <div>
               <label
@@ -74,6 +129,8 @@ export default function OnboardingPage() {
                 name="razon_social"
                 type="text"
                 required
+                value={razon}
+                onChange={(e) => setRazon(e.target.value)}
                 className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#e8553e]/60 transition-colors"
                 placeholder="Nombre legal de tu empresa"
               />

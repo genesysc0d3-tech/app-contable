@@ -104,6 +104,7 @@ export default async function V5Page({ searchParams }: {
   ]);
   const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
   const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
+  const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
 
   const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
 
@@ -349,7 +350,7 @@ export default async function V5Page({ searchParams }: {
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} size={38} maxWidth={180} /></span></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:180,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={180} /></span></div>}
           actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
