@@ -82,7 +82,10 @@ export default function EmpresaBrand({
   const brandContent = (
     <>
       {logoOk ? (
-        <span style={{ width: logoWidth, maxWidth: logoWidth, height: size, display: "flex", alignItems: "center", justifyContent: "flex-start", overflow: "hidden", flexShrink: 0 }}>
+        /* width fijo dejaba aire muerto entre el logo y el chevron (logo AlphaCode
+           a h38 mide ~114px, la caja medía 129): la caja ahora ABRAZA la imagen y
+           solo CAPEA en maxWidth. El chevron queda pegado al logo real. */
+        <span style={{ maxWidth: logoWidth, height: size, display: "flex", alignItems: "center", justifyContent: "flex-start", overflow: "hidden", flexShrink: 1, minWidth: 0 }}>
           <LogoImage src={logoUrl} alt={`Logo de ${nombre}`} maxHeight={size} onError={() => setLogoOk(false)} />
         </span>
       ) : (
