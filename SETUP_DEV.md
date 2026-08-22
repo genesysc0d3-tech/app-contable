@@ -8,7 +8,7 @@
 
 ## Repos
 - GitHub: `genesysc0d3-tech/app-contable`
-- Vercel: `genesysc0d3-1037s-projects/app-contable` → https://app-contable-five.vercel.app
+- Vercel: `genesysc0d3-1037s-projects/app-contable` → https://app.massdte.cl
 - Supabase: pedir acceso web a `genesysc0d3-tech` (el proyecto existe, pedir URL + keys)
 
 ## Setup local

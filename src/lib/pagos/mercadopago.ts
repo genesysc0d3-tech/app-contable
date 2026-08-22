@@ -16,7 +16,7 @@ import { getUfClp } from "@/lib/sii/uf";
 import { clpConIva, periodoActual } from "./metering";
 
 const MP_BASE = "https://api.mercadopago.com";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app-contable-five.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.massdte.cl";
 const UF_PERSONA_ADICIONAL = 0.2;
 
 export type MpError = { ok: false; error: string; detalle?: string };

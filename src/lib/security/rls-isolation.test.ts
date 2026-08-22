@@ -35,7 +35,8 @@ const B = {
 const bEmpresaId = process.env.RLS_TEST_B_EMPRESA_ID || "";
 
 // Guard: never let this run against an obvious production host by accident.
-const looksProd = /aluuuyecwifaakehvcam/.test(url);
+// Cubre la prod real (us-east-1) Y el respaldo viejo (sa-east-1).
+const looksProd = /xncnfrwarcrzgldalkzz|aluuuyecwifaakehvcam/.test(url);
 
 const configured =
   !!url &&
