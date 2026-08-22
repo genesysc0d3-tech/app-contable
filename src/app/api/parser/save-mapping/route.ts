@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
@@ -29,6 +30,11 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!usuario) return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+
+  // Modo soporte = solo lectura: guardar un mapeo MUTA los datos del cliente.
+  // Error honesto en vez del "Documento no encontrado" fantasma de antes.
+  const writeBlock = await getDevSupportWriteBlock();
+  if (writeBlock) return NextResponse.json({ error: writeBlock.error }, { status: 403 });
 
   const body = await request.json();
   const { documento_id, config, nombre, reprocess } = body as {

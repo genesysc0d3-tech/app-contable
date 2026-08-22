@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
+import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { detectHeuristic } from "@/lib/parsers/heuristic";
 import { detectByNames } from "@/lib/parsers/named";
@@ -27,11 +28,19 @@ export async function POST(request: Request) {
   const { documento_id } = await request.json();
   if (!documento_id) return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
 
-  const { data: documento } = await supabase
+  // Modo soporte (dev): la vista previa es LECTURA, así que el operador puede
+  // mirar el excel del cliente con la empresa del soporte (antes esta ruta
+  // buscaba con SU empresa → "Documento no encontrado" fantasma). Las rutas
+  // de ESCRITURA (save-mapping, procesar) siguen bloqueadas en solo-lectura.
+  const support = await getDevSupportMode();
+  const sb = support?.ok ? support.sb : supabase;
+  const empresaIdEfectiva = support?.ok ? support.empresaId : usuario.empresa_id;
+
+  const { data: documento } = await sb
     .from("documentos_subidos")
     .select("*")
     .eq("id", documento_id)
-    .eq("empresa_id", usuario.empresa_id)
+    .eq("empresa_id", empresaIdEfectiva)
     .single();
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   if (documento.tipo !== "excel") {
@@ -40,7 +49,7 @@ export async function POST(request: Request) {
 
   const provider = documento.storage_provider === "r2" ? "r2" : "supabase";
   const bajar = async (path: string): Promise<Buffer> => {
-    const { data, error } = await supabase.storage.from("documentos").download(path);
+    const { data, error } = await sb.storage.from("documentos").download(path);
     if (error || !data) throw new Error("no file");
     return Buffer.from(await data.arrayBuffer());
   };
