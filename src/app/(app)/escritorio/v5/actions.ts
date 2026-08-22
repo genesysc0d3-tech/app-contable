@@ -432,6 +432,119 @@ export async function crearEmpresaAdicional(input: {
   }
 }
 
+export type EleccionEmpresaEstado =
+  | { pendiente: false }
+  | { pendiente: true; esTitular: boolean; empresas: { id: string; nombre: string; rut: string | null }[] };
+
+/**
+ * ¿La cuenta debe elegir su empresa operativa? Pasa solo tras un downgrade
+ * Business→Pro con más empresas activas que el cupo y elección aún no hecha.
+ * Un Pro "de nacimiento" (1 empresa) jamás cumple la condición.
+ */
+export async function estadoEleccionEmpresa(): Promise<EleccionEmpresaEstado> {
+  const ctx = await getUsuarioActivo();
+  if (!ctx.ok || ctx.supportMode) return { pendiente: false };
+  const acceso = await resolverAccesoCuenta(ctx);
+  if (!acceso.ok || !acceso.planActivo) return { pendiente: false };
+  if (await planPermiteMultiempresa(ctx.sb, acceso.plan)) return { pendiente: false };
+
+  const cuenta = await contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId);
+  if (!cuenta || cuenta.empresasActivas <= cuenta.empresasIncluidas) return { pendiente: false };
+
+  const [{ data: cuentaRow }, { data: membresiaTitular }, { data: vinculos }] = await Promise.all([
+    ctx.sb.from("cuentas").select("owner_usuario_id, empresa_operativa_elegida_at").eq("id", acceso.cuentaId).maybeSingle(),
+    ctx.sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", acceso.cuentaId).eq("usuario_id", ctx.userId).maybeSingle(),
+    ctx.sb.from("cuenta_empresas").select("empresa_id").eq("cuenta_id", acceso.cuentaId).eq("activa", true),
+  ]);
+  if (cuentaRow?.empresa_operativa_elegida_at) return { pendiente: false };
+
+  const ids = (vinculos ?? []).map((v) => v.empresa_id);
+  const { data: empresas } = await ctx.sb.from("empresas").select("id, razon_social, rut").in("id", ids);
+  return {
+    pendiente: true,
+    esTitular: cuentaRow?.owner_usuario_id === ctx.userId || membresiaTitular?.es_titular === true,
+    empresas: (empresas ?? []).map((e) => ({ id: e.id, nombre: e.razon_social, rut: e.rut ?? null })),
+  };
+}
+
+/**
+ * Elección ÚNICA post-downgrade: el titular decide qué empresa sigue operativa.
+ * Las demás se desactivan (cuenta_empresas.activa=false, motivo 'fuera_de_plan')
+ * — la pieza que todos los gates existentes ya respetan. Nada se borra; volver
+ * a Business las reactiva solas (webhook). No hay re-elección: cambiarla =
+ * pasar por caja.
+ */
+export async function elegirEmpresaOperativa(empresaId: string): Promise<{ ok: true } | { ok: false; error: string; detalle?: string }> {
+  try {
+    const targetId = cleanId(empresaId);
+    if (!targetId) return { ok: false, error: "EMPRESA_INVALIDA" };
+
+    const estado = await estadoEleccionEmpresa();
+    if (!estado.pendiente) return { ok: false, error: "ELECCION_NO_PENDIENTE" };
+    if (!estado.esTitular) return { ok: false, error: "SOLO_TITULAR_CUENTA", detalle: "Solo la cuenta pagadora puede elegir la empresa operativa" };
+    if (!estado.empresas.some((e) => e.id === targetId)) return { ok: false, error: "EMPRESA_NO_DISPONIBLE" };
+
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok || ctx.supportMode) return { ok: false, error: "NO_AUTH" };
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: acceso.codigo };
+
+    // Consumir la elección única ATÓMICAMENTE: solo un request gana.
+    const { data: consumida } = await ctx.sb
+      .from("cuentas")
+      .update({ empresa_operativa_elegida_at: new Date().toISOString() })
+      .eq("id", acceso.cuentaId)
+      .is("empresa_operativa_elegida_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!consumida) return { ok: false, error: "ELECCION_YA_REALIZADA" };
+
+    const noElegidas = estado.empresas.filter((e) => e.id !== targetId).map((e) => e.id);
+    const { error: deactError } = await ctx.sb
+      .from("cuenta_empresas")
+      .update({ activa: false, desactivada_motivo: "fuera_de_plan" })
+      .eq("cuenta_id", acceso.cuentaId)
+      .in("empresa_id", noElegidas);
+    if (deactError) return { ok: false, error: "DESACTIVACION_FALLIDA", detalle: deactError.message };
+
+    // Todos los usuarios de la cuenta quedan parados en la empresa elegida.
+    const { data: miembros } = await ctx.sb
+      .from("cuenta_usuarios")
+      .select("usuario_id")
+      .eq("cuenta_id", acceso.cuentaId);
+    const usuarioIds = Array.from(new Set([ctx.userId, ...(miembros ?? []).map((m) => m.usuario_id)]));
+    await ctx.sb.from("usuarios").update({ empresa_id: targetId }).in("id", usuarioIds).neq("empresa_id", targetId);
+
+    // Trabajo de pipeline pendiente de las empresas desactivadas: cancelarlo
+    // (nadie lo va a revisar y consume IA). Lo emitido/histórico no se toca.
+    if (noElegidas.length > 0) {
+      await ctx.sb
+        .from("document_processing_jobs")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .in("empresa_id", noElegidas)
+        .in("status", ["queued", "retryable"]);
+    }
+
+    await recordCuentaAudit({
+      sb: ctx.sb,
+      cuentaId: acceso.cuentaId,
+      empresaId: targetId,
+      usuarioId: ctx.userId,
+      accion: "empresa_operativa_elegida",
+      recursoTipo: "empresa",
+      recursoId: targetId,
+      resumen: "Elección de empresa operativa tras downgrade",
+      metadata: { empresas_desactivadas: noElegidas },
+    });
+
+    revalidatePath("/massdte");
+    revalidatePath("/escritorio/v5");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: "ELECCION_FALLIDA", detalle: error instanceof Error ? error.message : undefined };
+  }
+}
+
 export async function listarEquipoBusiness(): Promise<EquipoBusinessResult> {
   try {
     const ctx = await getUsuarioActivo();

@@ -15,7 +15,8 @@ import TeamBusinessPanel from "./TeamBusinessPanel";
 import UsageCountersPanel from "./UsageCountersPanel";
 import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, RCVButton } from "./LeftQuickActions";
 import type { SearchItem } from "@/lib/tree-structure";
-import { listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
+import { estadoEleccionEmpresa, listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
+import EleccionEmpresaModal from "./EleccionEmpresaModal";
 import { chileDateString } from "@/lib/chile-date";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
@@ -97,10 +98,11 @@ export default async function V5Page({ searchParams }: {
   ]);
 
   const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
-  const [empresasSelector, equipoBusiness, resumenCupos] = await Promise.all([
+  const [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa] = await Promise.all([
     listarEmpresasSelector(),
     listarEquipoBusiness(),
     listarResumenCupos(),
+    estadoEleccionEmpresa(),
   ]);
   const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
   const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
@@ -407,6 +409,9 @@ export default async function V5Page({ searchParams }: {
   return (
     <>
     <Suspense fallback={null}><MpVueltaToast /></Suspense>
+    {eleccionEmpresa.pendiente && (
+      <EleccionEmpresaModal esTitular={eleccionEmpresa.esTitular} empresas={eleccionEmpresa.empresas} />
+    )}
     <V5Root
       dashboardContent={dashboardContent}
       empresaInicial={{ rut: usuario.empresas.rut, razon_social: usuario.empresas.razon_social, giro: usuario.empresas.giro, direccion: usuario.empresas.direccion, comuna: usuario.empresas.comuna, email_sii: usuario.empresas.email_sii, tipo_contribuyente: usuario.empresas.tipo_contribuyente ?? "auto", operacion_hint_default: usuario.empresas.operacion_hint_default ?? null }}

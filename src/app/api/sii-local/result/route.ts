@@ -549,9 +549,11 @@ export async function POST(request: Request) {
     // botones "Recuperar folio/PDF" funcionen aunque el job ya esté cerrado.
     const jobCerrado = jobGate.job;
     const evidenciaFuerte = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
+    // La red aplica a TODA falla del gate que venga con `job` adjunto (cerrado,
+    // expirado, empresa desactivada por downgrade, plan vencido): la ownership
+    // ya fue verificada en requireEmisionJob y la boleta en el SII es un hecho.
     if (
       jobCerrado &&
-      (jobGate.error === "EMISION_JOB_CLOSED" || jobGate.error === "EMISION_JOB_EXPIRED") &&
       folio && tipoDte && montoTotal && fechaEmision && evidenciaFuerte
     ) {
       const respaldo = await backfillFolioSinJobVivo(sb, {
