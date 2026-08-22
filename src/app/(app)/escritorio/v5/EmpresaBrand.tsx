@@ -172,7 +172,6 @@ export default function EmpresaBrand({
 function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: string) => void; onCancelar: () => void }) {
   const [rut, setRut] = useState("");
   const [razon, setRazon] = useState("");
-  const [giro, setGiro] = useState("");
   const [verif, setVerif] = useState<
     | { estado: "idle" | "buscando" }
     | { estado: "encontrada"; razon: string; terminoGiro: string | null }
@@ -206,7 +205,7 @@ function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: stri
     if (enviando) return;
     setError(null);
     setEnviando(true);
-    const r = await crearEmpresaAdicional({ rut, razon_social: razon, giro });
+    const r = await crearEmpresaAdicional({ rut, razon_social: razon });
     setEnviando(false);
     if (!r.ok) { setError(r.detalle ?? "No se pudo crear la empresa."); return; }
     onListo(r.empresa_id);
@@ -236,10 +235,14 @@ function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: stri
             <div style={{ marginTop: 4, fontSize: 9, color: "var(--red)" }}>Ese RUT no cuadra — revisa los números y el dígito verificador.</div>
           )}
         </div>
-        <input value={razon} onChange={(e) => setRazon(e.target.value)} placeholder="Razón social" style={inputStyle} />
-        <input value={giro} onChange={(e) => setGiro(e.target.value)} placeholder="Giro (ej: Comercio minorista)" style={inputStyle} />
+        {/* Razón social: la autocompleta el registro del SII; solo se pide a
+            mano si el RUT no aparece (empresa nueva / persona natural). */}
+        {verif.estado !== "encontrada" && (
+          <input value={razon} onChange={(e) => setRazon(e.target.value)} placeholder="Razón social" style={inputStyle} />
+        )}
         <div style={{ fontSize: 8.5, color: "var(--text3)", lineHeight: 1.4 }}>
-          El RUT no se puede cambiar después de emitir la primera boleta — confírmalo con calma.
+          Al crearla verás su mesa vacía. El logo, giro y demás datos se configuran
+          después en «Empresa». El RUT no se puede cambiar tras emitir la primera boleta.
         </div>
         {error && <div style={{ color: "var(--red)", fontSize: 9.5, lineHeight: 1.4 }}>{error}</div>}
         <div style={{ display: "flex", gap: 6 }}>
@@ -247,8 +250,8 @@ function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: stri
             style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>
             Cancelar
           </button>
-          <button type="button" onClick={enviar} disabled={enviando || !rut || !razon || !giro || verif.estado === "dv_malo"}
-            style={{ flex: 2, padding: "8px 0", borderRadius: 8, border: 0, background: "var(--accent)", color: "#fff", fontSize: 10.5, fontWeight: 800, cursor: enviando ? "wait" : "pointer", opacity: enviando || !rut || !razon || !giro ? 0.6 : 1 }}>
+          <button type="button" onClick={enviar} disabled={enviando || !rut || !razon || verif.estado === "dv_malo"}
+            style={{ flex: 2, padding: "8px 0", borderRadius: 8, border: 0, background: "var(--accent)", color: "#fff", fontSize: 10.5, fontWeight: 800, cursor: enviando ? "wait" : "pointer", opacity: enviando || !rut || !razon ? 0.6 : 1 }}>
             {enviando ? "Creando…" : "Crear empresa"}
           </button>
         </div>

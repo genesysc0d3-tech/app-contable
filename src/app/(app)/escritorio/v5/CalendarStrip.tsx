@@ -109,7 +109,10 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               650px de siempre; cuando el carril se achica, se comprime y los días
               se DESLIZAN (scroll horizontal, scrollbar oculta) en vez de invadir
               los botones de la derecha. */}
-          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 650px", minWidth: 0, paddingRight: 6, scrollbarWidth: "none" }}>
+          {/* Base 664px: 31 celdas × 20px + 30 gaps × 1px + 6px de padding = 656.
+              Con 650 el día 31 quedaba SIEMPRE mordido, incluso en pantalla ancha.
+              El shrink (0 1) sigue: en carriles angostos se comprime y desliza. */}
+          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 664px", minWidth: 0, paddingRight: 6, scrollbarWidth: "none" }}>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
               const ds = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const isSel = day === selDay;
