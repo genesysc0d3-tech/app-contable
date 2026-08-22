@@ -10,16 +10,30 @@ beforeEach(() => {
   process.env.OPENCODE_GO_MODEL = "minimax-m3";
 });
 
+// El provider ahora consume la API en streaming (SSE) — ver opencode-stream.ts.
+// Los mocks emiten el mismo contenido como chunks data: de un stream real.
+function sseMock(args: { content: string; finish: string; usage?: { prompt_tokens: number; completion_tokens: number } }) {
+  const lines = [
+    `data: ${JSON.stringify({ model: "minimax-m3", choices: [{ delta: { content: args.content } }] })}\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: args.finish }] })}\n`,
+    ...(args.usage ? [`data: ${JSON.stringify({ choices: [], usage: args.usage })}\n`] : []),
+    "data: [DONE]\n",
+  ];
+  return new Response(new ReadableStream<Uint8Array>({
+    start(c) {
+      const enc = new TextEncoder();
+      for (const l of lines) c.enqueue(enc.encode(l));
+      c.close();
+    },
+  }), { status: 200 });
+}
+
 describe("respuesta truncada del modelo", () => {
   it("finish_reason='length' lanza error marcado como truncado (no se reintenta)", async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        model: "minimax-m3",
-        usage: { prompt_tokens: 900, completion_tokens: 16000 },
-        choices: [{ finish_reason: "length", message: { content: '{"propuestas":[{"movimiento_ind' } }],
-      }),
+    const fetchMock = vi.fn(async () => sseMock({
+      content: '{"propuestas":[{"movimiento_ind',
+      finish: "length",
+      usage: { prompt_tokens: 900, completion_tokens: 16000 },
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -36,14 +50,10 @@ describe("respuesta truncada del modelo", () => {
   });
 
   it("finish_reason='stop' parsea normal", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        model: "minimax-m3",
-        usage: { prompt_tokens: 500, completion_tokens: 900 },
-        choices: [{ finish_reason: "stop", message: { content: '{"propuestas":[{"movimiento_index":0,"tipo_propuesto":"boleta","total":1000,"confianza":0.8}]}' } }],
-      }),
+    vi.stubGlobal("fetch", vi.fn(async () => sseMock({
+      content: '{"propuestas":[{"movimiento_index":0,"tipo_propuesto":"boleta","total":1000,"confianza":0.8}]}',
+      finish: "stop",
+      usage: { prompt_tokens: 500, completion_tokens: 900 },
     })));
 
     const { OpenCodeGoProvider } = await import("./providers/opencodego");
