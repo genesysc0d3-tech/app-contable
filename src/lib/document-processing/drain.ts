@@ -1,6 +1,6 @@
 import "server-only";
 
-import { processDocumentQueue } from "./queue";
+import { processDocumentQueue, msHastaProximoJobPendiente } from "./queue";
 import { DRAIN_BUDGET_MS, MAX_CHAIN_DEPTH } from "./state";
 import { recordOpsError } from "@/lib/ops/events";
 
@@ -116,18 +116,44 @@ export async function iniciarDrenaje(lockOwner: string): Promise<void> {
  * cada eslabón avanza al menos un batch, así que el tope nunca se alcanza en
  * un caso sano.
  */
+/** Horizonte de espera por backoff dentro del MISMO eslabón (cabe en los 300s
+ *  de la invocación: el drain usa ≤60s y esto ≤210s). */
+const BACKOFF_WAIT_MAX_MS = 210_000;
+
 export async function drainAndChain(args: {
   lockOwner: string;
   depth?: number;
   budgetMs?: number;
   processFn?: ProcessFn;
+  /** Inyectable para tests. */
+  probeFn?: typeof msHastaProximoJobPendiente;
 }): Promise<DrainResult & { encadenado: boolean }> {
   const depth = args.depth ?? 0;
+  const probeFn = args.probeFn ?? msHastaProximoJobPendiente;
   const r = await drainDocumentQueue(args);
   let encadenado = false;
-  const quedaTrabajo = r.presupuestoAgotado || r.yields > 0;
+  let quedaTrabajo = r.presupuestoAgotado || r.yields > 0;
+
+  // Incidente 2026-08-22 (cartola M&E, lote 21/23): un intento fallido agenda
+  // su reintento con backoff a 1-2 min de FUTURO → "nada reclamable ahora" →
+  // la cadena moría y el documento quedaba a medias hasta el cron del día
+  // siguiente. Si lo único pendiente es un backoff cercano, ESPERAMOS dentro
+  // de este mismo eslabón (la invocación tiene 300s de sobra) y encadenamos.
+  if (!quedaTrabajo && depth < MAX_CHAIN_DEPTH) {
+    const esperaMs = await probeFn(BACKOFF_WAIT_MAX_MS);
+    if (esperaMs !== null) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(esperaMs + 500, BACKOFF_WAIT_MAX_MS)));
+      quedaTrabajo = true;
+    }
+  }
+
   if (quedaTrabajo && depth < MAX_CHAIN_DEPTH) {
-    encadenado = await encadenarKick(depth + 1);
+    // La profundidad corta loops DEGENERADOS, no cartolas grandes: si este
+    // eslabón avanzó de verdad (completó, yieldeó o recuperó algo), el
+    // contador parte de nuevo. Solo eslabones consecutivos SIN progreso
+    // acumulan profundidad hasta el tope.
+    const progreso = r.completados + r.yields + r.recuperados > 0;
+    encadenado = await encadenarKick(progreso ? 1 : depth + 1);
     if (!encadenado && !process.env.CRON_SECRET) {
       // Dev local sin CRON_SECRET: seguimos inline (sin límite de 300s acá).
       const extra = await drainAndChain({ ...args, depth: depth + 1 });
