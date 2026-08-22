@@ -628,6 +628,7 @@ export type Database = {
       cuenta_empresas: {
         Row: {
           activa: boolean
+          desactivada_motivo: string | null
           created_at: string
           cuenta_id: string
           empresa_id: string
@@ -635,6 +636,7 @@ export type Database = {
         }
         Insert: {
           activa?: boolean
+          desactivada_motivo?: string | null
           created_at?: string
           cuenta_id: string
           empresa_id: string
@@ -642,6 +644,7 @@ export type Database = {
         }
         Update: {
           activa?: boolean
+          desactivada_motivo?: string | null
           created_at?: string
           cuenta_id?: string
           empresa_id?: string
@@ -705,6 +708,7 @@ export type Database = {
       }
       cuentas: {
         Row: {
+          empresa_operativa_elegida_at: string | null
           created_at: string
           id: string
           nombre: string
@@ -715,6 +719,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          empresa_operativa_elegida_at?: string | null
           created_at?: string
           id?: string
           nombre: string
@@ -725,6 +730,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          empresa_operativa_elegida_at?: string | null
           created_at?: string
           id?: string
           nombre?: string
