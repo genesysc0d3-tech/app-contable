@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { recordOpsError } from "@/lib/ops/events";
@@ -33,6 +34,11 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!usuario) return NextResponse.json({ ok: false, error: "Usuario sin empresa" }, { status: 403 });
+
+  // Modo soporte = solo lectura: reprocesar muta la mesa del cliente. Error
+  // honesto en vez del "Documento no encontrado" fantasma (empresa cruzada).
+  const writeBlock = await getDevSupportWriteBlock();
+  if (writeBlock) return NextResponse.json({ ok: false, error: writeBlock.error }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
