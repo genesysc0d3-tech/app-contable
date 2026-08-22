@@ -144,8 +144,13 @@ export default function AuthCard({ inicial }: { inicial: Modo }) {
                   {/* Honeypot: invisible para humanos (aria-hidden + fuera de pantalla
                       + sin tab); los bots lo rellenan y el server los rechaza. */}
                   <div aria-hidden="true" style={{ position: "absolute", left: -9999, top: -9999, height: 0, overflow: "hidden" }}>
-                    <label htmlFor="sitio_web">Sitio web</label>
-                    <input id="sitio_web" name="sitio_web" type="text" tabIndex={-1} autoComplete="off" />
+                    {/* Honeypot anti-bots. NUNCA nombrarlo con palabras que el
+                        autofill reconozca ("sitio_web"/"website" hacía que Chrome
+                        lo rellenara al autocompletar el form → humanos reales
+                        rechazados como bots — caso clienta 2026-08-21). Nombre
+                        sin semántica + label vacío = el autofill lo ignora. */}
+                    <label htmlFor="hp_x9q" aria-hidden="true"></label>
+                    <input id="hp_x9q" name="hp_x9q" type="text" tabIndex={-1} autoComplete="off" />
                   </div>
                   <div>
                     <label htmlFor="nombre" className="block text-sm text-white/70 mb-1">Nombre</label>
