@@ -391,6 +391,30 @@ export async function setCuentaPlan(
   if (error) return { error: error.message };
   if (!count) return { error: "Cuenta no encontrada" };
 
+  // Mismos invariantes que el webhook de pagos al activar un plan multiempresa
+  // (revisión adversarial 2026-08-22: el "Business manual" de /dev no los
+  // replicaba): revivir las empresas desactivadas por downgrade y resetear la
+  // marca de elección única — si no, la próxima bajada no vuelve a preguntar.
+  if (planActivo) {
+    const { data: planRow } = await gate.sb
+      .from("planes_config")
+      .select("multiempresa")
+      .eq("codigo", planCodigo)
+      .maybeSingle();
+    if (planRow?.multiempresa === true) {
+      await gate.sb
+        .from("cuenta_empresas")
+        .update({ activa: true, desactivada_motivo: null })
+        .eq("cuenta_id", cuentaId)
+        .eq("activa", false)
+        .eq("desactivada_motivo", "fuera_de_plan");
+      await gate.sb
+        .from("cuentas")
+        .update({ empresa_operativa_elegida_at: null })
+        .eq("id", cuentaId);
+    }
+  }
+
   await recordCuentaAudit({
     sb: gate.sb,
     cuentaId,
@@ -479,6 +503,131 @@ export async function setCuentaTrialCortesia(
 
   revalidatePath(`/dev/cuentas/${cuentaId}`);
   return { ok: true };
+}
+
+/**
+ * MIGRACIÓN DE EMPRESA entre cuentas (LEGO del fundador, 2026-08-22): los datos
+ * cuelgan de empresa_id y no se mueven jamás — esto re-apunta el ÚNICO vínculo
+ * cuenta_empresas hacia la cuenta destino. Solo operador, nunca cliente.
+ * Checklist de la revisión adversarial: destino con plan multiempresa efectivo
+ * y cupo (contando dormidas fuera_de_plan), cero emisiones a medio camino,
+ * cero pipeline en vuelo, sin suscripción viva en el origen (se cancela antes,
+ * a mano), Telegram de la empresa desconectado en el acto, auditoría en ambas
+ * cuentas. La resolución del login huérfano del origen es un paso HUMANO aparte
+ * (runbook): acá no se toca ningún usuario.
+ * Verificación de identidad previa (runbook, en el panel): unificación = la
+ * persona responde desde ambos correos; recuperación = $1 con código desde la
+ * cuenta bancaria de la empresa. Jamás pedir/almacenar cédulas.
+ */
+export async function migrarEmpresaACuenta(
+  empresaId: string,
+  cuentaDestinoId: string,
+  confirmacion: string,
+): Promise<{ ok: true; resumen: string } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof empresaId !== "string" || !UUID_RE.test(empresaId)) return { error: "Empresa inválida" };
+  if (typeof cuentaDestinoId !== "string" || !UUID_RE.test(cuentaDestinoId)) return { error: "Cuenta destino inválida" };
+  const sb = gate.sb;
+
+  const { data: empresa } = await sb.from("empresas").select("id, razon_social, rut").eq("id", empresaId).maybeSingle();
+  if (!empresa) return { error: "Empresa no encontrada" };
+  if (typeof confirmacion !== "string" || confirmacion.trim() !== empresa.razon_social.trim()) {
+    return { error: "La confirmación no coincide con la razón social exacta de la empresa" };
+  }
+
+  const { data: vinculo } = await sb
+    .from("cuenta_empresas")
+    .select("cuenta_id, activa, desactivada_motivo")
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+  if (!vinculo?.cuenta_id) return { error: "La empresa no tiene cuenta de origen (estado legacy — resolver a mano)" };
+  const origenId = vinculo.cuenta_id;
+  if (origenId === cuentaDestinoId) return { error: "La empresa ya pertenece a esa cuenta" };
+  if (!vinculo.activa) return { error: `La empresa está desactivada en su cuenta (motivo: ${vinculo.desactivada_motivo ?? "?"}) — reactivar/resolver antes de migrar` };
+
+  // Plan EFECTIVO del destino (la suscripción activa manda sobre cuentas.plan_codigo).
+  const { data: destino } = await sb
+    .from("cuentas")
+    .select("id, nombre, owner_usuario_id, plan_codigo, plan_activo")
+    .eq("id", cuentaDestinoId)
+    .maybeSingle();
+  if (!destino) return { error: "Cuenta destino no encontrada" };
+  const { data: suscDestino } = await sb
+    .from("suscripciones")
+    .select("plan_codigo")
+    .eq("cuenta_id", cuentaDestinoId)
+    .eq("estado", "activa")
+    .maybeSingle();
+  const planEfectivo = suscDestino?.plan_codigo ?? destino.plan_codigo;
+  const planVivo = Boolean(suscDestino) || destino.plan_activo === true;
+  if (!planEfectivo || !planVivo) return { error: "La cuenta destino no tiene un plan activo" };
+  const { data: planRow } = await sb
+    .from("planes_config")
+    .select("multiempresa, empresas_incluidas")
+    .eq("codigo", planEfectivo)
+    .maybeSingle();
+  if (planRow?.multiempresa !== true) return { error: `El plan del destino (${planEfectivo}) no es multiempresa — el modelo Pro = 1 empresa no se salta ni por soporte` };
+
+  // Cupo contando también las dormidas fuera_de_plan (reviven en el próximo upgrade).
+  const { count: cupoUsado } = await sb
+    .from("cuenta_empresas")
+    .select("empresa_id", { count: "exact", head: true })
+    .eq("cuenta_id", cuentaDestinoId)
+    .or("activa.eq.true,desactivada_motivo.eq.fuera_de_plan");
+  if ((cupoUsado ?? 0) + 1 > (planRow.empresas_incluidas ?? 1)) {
+    return { error: `Sin cupo en el destino: ${cupoUsado} empresa(s) (dormidas incluidas) de ${planRow.empresas_incluidas}` };
+  }
+
+  // Nada a medio camino: folios reales primero (revision_pendiente ES bloqueante).
+  const [jobs, locks, docJobs, reservas, suscOrigen] = await Promise.all([
+    sb.from("emision_jobs").select("job_id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["created", "running", "revision_pendiente"]),
+    sb.from("emision_locks").select("cuenta_id", { count: "exact", head: true }).eq("cuenta_id", origenId),
+    sb.from("document_processing_jobs").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("status", ["queued", "running", "retryable"]),
+    sb.from("folio_reservas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "pendiente"),
+    sb.from("suscripciones").select("id", { count: "exact", head: true }).eq("cuenta_id", origenId).in("estado", ["activa", "pendiente", "morosa", "pausada"]),
+  ]);
+  if ((jobs.count ?? 0) > 0) return { error: `Hay ${jobs.count} emisión(es) a medio camino (incluye revision_pendiente) — resolver antes` };
+  if ((locks.count ?? 0) > 0) return { error: "La cuenta origen tiene candados de emisión retenidos — resolver antes" };
+  if ((docJobs.count ?? 0) > 0) return { error: `Hay ${docJobs.count} documento(s) procesándose — esperar o cancelar antes` };
+  if ((reservas.count ?? 0) > 0) return { error: `Hay ${reservas.count} folio(s) reservado(s) pendiente(s) — resolver antes` };
+  if ((suscOrigen.count ?? 0) > 0) return { error: "La cuenta origen tiene una suscripción viva (cobraría por cero empresas) — cancelarla primero" };
+
+  // EL MOVE: un solo UPDATE atómico e idempotente (guard por cuenta origen).
+  const { count: movidas, error: movErr } = await sb
+    .from("cuenta_empresas")
+    .update({ cuenta_id: cuentaDestinoId, es_principal: false, activa: true, desactivada_motivo: null }, { count: "exact" })
+    .eq("empresa_id", empresaId)
+    .eq("cuenta_id", origenId);
+  if (movErr) return { error: `El move falló: ${movErr.message}` };
+  if (movidas !== 1) return { error: "El move no encontró el vínculo esperado (¿carrera?) — nada cambió, re-verificar" };
+
+  // Post-move (re-ejecutables): vínculo del titular destino, plan legacy de la
+  // empresa, Telegram fuera (se re-vincula desde la cuenta destino).
+  if (destino.owner_usuario_id) {
+    await sb.from("usuario_empresas").upsert(
+      { usuario_id: destino.owner_usuario_id, empresa_id: empresaId, rol: "titular" },
+      { onConflict: "usuario_id,empresa_id", ignoreDuplicates: true },
+    );
+  }
+  await sb.from("empresas").update({ plan: planEfectivo, plan_activo: true }).eq("id", empresaId);
+  const { count: tgCortados } = await sb
+    .from("telegram_chats")
+    .update({ activo: false }, { count: "exact" })
+    .eq("empresa_id", empresaId)
+    .eq("activo", true);
+
+  const meta = { empresa_id: empresaId, rut: empresa.rut, cuenta_origen: origenId, cuenta_destino: cuentaDestinoId, telegram_desconectados: tgCortados ?? 0, operador: gate.userId };
+  await recordCuentaAudit({ sb, cuentaId: cuentaDestinoId, empresaId, usuarioId: gate.userId, accion: "empresa_migrada_entrante", recursoTipo: "empresa", recursoId: empresaId, resumen: `Migración de soporte: «${empresa.razon_social}» llega desde otra cuenta`, metadata: meta }).catch(() => {});
+  await recordCuentaAudit({ sb, cuentaId: origenId, empresaId, usuarioId: gate.userId, accion: "empresa_migrada_saliente", recursoTipo: "empresa", recursoId: empresaId, resumen: `Migración de soporte: «${empresa.razon_social}» sale hacia otra cuenta`, metadata: meta }).catch(() => {});
+
+  revalidatePath("/dev/cuentas");
+  revalidatePath(`/dev/cuentas/${cuentaDestinoId}`);
+  revalidatePath(`/dev/cuentas/${origenId}`);
+  return {
+    ok: true,
+    resumen: `«${empresa.razon_social}» migrada a «${destino.nombre}». Telegram desconectados: ${tgCortados ?? 0}. Pendiente humano: resolver el login del origen (runbook) y avisar al cliente.`,
+  };
 }
 
 /**

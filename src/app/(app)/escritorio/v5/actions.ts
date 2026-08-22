@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { getDevSupportMode } from "@/lib/dev/support-mode";
+import { getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { empresasActivasDeCuenta, contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
 import { chileMonthUtcRange, clpConIva, estadoCuota, periodoActual } from "@/lib/pagos/metering";
 import { recordCuentaAudit } from "@/lib/audit/account";
@@ -305,7 +305,14 @@ export async function cambiarEmpresaActiva(empresaId: string): Promise<CambiarEm
     if (!target?.activa) return { ok: false, error: "EMPRESA_NO_DISPONIBLE" };
 
     if (ctx.supportMode) {
-      return { ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: "Modo soporte: solo lectura" };
+      // El operador cambia SU vista (cookie de soporte), jamás la empresa
+      // activa del cliente — el solo-lectura sobre datos del cliente se
+      // mantiene intacto. Antes esto rebotaba y el operador no podía navegar
+      // las empresas de una cuenta multiempresa.
+      await setDevSupportEmpresaCookie(targetEmpresaId);
+      revalidatePath("/massdte");
+      revalidatePath("/escritorio/v5");
+      return { ok: true, empresa_id: targetEmpresaId };
     }
 
     const { error: updateError } = await ctx.sb

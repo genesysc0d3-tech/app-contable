@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, type DevCuentaDetalle } from "@/lib/dev/account-360";
-import { DevLinkButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton } from "../DevCuentaActions";
+import { DevLinkButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
 
 const C = {
   bg: "#0f1014",
@@ -573,6 +573,10 @@ export default async function DevCuentaDetallePage({
             Cambia plan/estado a mano (test de tiers y ops: si la pasarela falla o hay downgrade). Si la cuenta tiene suscripción activa, su plan manda sobre esto.
             La cortesía habilita el trial para esta cuenta aunque el trial global esté apagado.
           </div>
+        </Section>
+
+        <Section title="Migrar empresa (soporte)">
+          <MigrarEmpresaForm cuentaId={cuentaId} />
         </Section>
 
         <Section title="Zona de peligro">
