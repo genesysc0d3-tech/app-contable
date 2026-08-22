@@ -5,6 +5,11 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { telegramHabilitadoEmpresa } from "@/lib/entitlements";
 import { esRolEmision } from "@/lib/auth/roles";
+import { sendMessage } from "@/lib/telegram/api";
+
+const MSG_DESCONECTADO_PANEL =
+  "🔌 <b>Este chat fue desconectado desde massDTE.</b>\n" +
+  "Para volver a usarlo, genera un link nuevo en <b>Empresa → Bot de Telegram</b>.";
 
 /**
  * Estado de vinculación del Telegram de la empresa del usuario autenticado.
@@ -34,14 +39,87 @@ export async function GET() {
 
   const enPlan = await telegramHabilitadoEmpresa(svc, usuario.empresa_id);
 
-  const { data: chat } = await svc
+  // order+limit en vez de maybeSingle: con 2+ filas activas maybeSingle ERRA y
+  // el panel mostraba "Sin conectar" mientras los chats seguían emitiendo por
+  // atrás. El índice único (migración 20260822170000) garantiza 1 activo, pero
+  // la lectura queda defensiva igual.
+  const { data: chats } = await svc
     .from("telegram_chats")
-    .select("chat_id")
+    .select("chat_id, vinculado_at, usuario_id")
     .eq("empresa_id", usuario.empresa_id)
     .eq("activo", true)
-    .maybeSingle();
+    .order("vinculado_at", { ascending: false })
+    .limit(1);
+  const chat = chats?.[0] ?? null;
 
-  return NextResponse.json({ botConfigured, vinculado: Boolean(chat), enPlan });
+  // Quién conectó y cuándo: el panel lo muestra para que el titular detecte
+  // al tiro un Telegram ajeno colgado de su empresa.
+  let vinculadoPor: string | null = null;
+  if (chat?.usuario_id) {
+    const { data: quien } = await svc
+      .from("usuarios")
+      .select("nombre, email")
+      .eq("id", chat.usuario_id)
+      .maybeSingle();
+    vinculadoPor = quien?.nombre || quien?.email || null;
+  }
+
+  return NextResponse.json({
+    botConfigured,
+    vinculado: Boolean(chat),
+    enPlan,
+    vinculadoPor,
+    vinculadoAt: chat?.vinculado_at ?? null,
+  });
+}
+
+/**
+ * Desconecta el Telegram activo de la empresa (mismo gate de rol que vincular:
+ * cortar el canal de comprobantes es un acto de emisión, no de viewer). Avisa
+ * al chat desconectado para que el takeover/corte nunca sea silencioso.
+ */
+export async function DELETE() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "NO_AUTH" }, { status: 401 });
+
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("empresa_id, rol, vetado")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.empresa_id) {
+    return NextResponse.json({ error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
+  }
+  if (usuario.vetado === true || !esRolEmision(usuario.rol)) {
+    return NextResponse.json({ error: "ROL_SIN_PERMISO" }, { status: 403 });
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return NextResponse.json({ error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
+  const svc = createServiceClient<Database>(url, key);
+
+  const { data: desconectados, error } = await svc
+    .from("telegram_chats")
+    .update({ activo: false })
+    .eq("empresa_id", usuario.empresa_id)
+    .eq("activo", true)
+    .select("chat_id");
+  if (error) {
+    console.error("[telegram-link] desconectar fallo:", error.message);
+    return NextResponse.json({ error: "DB_UPDATE_FAILED" }, { status: 500 });
+  }
+
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    for (const chat of desconectados ?? []) {
+      try {
+        await sendMessage(chat.chat_id, MSG_DESCONECTADO_PANEL, { html: true });
+      } catch { /* chat cerrado/bloqueado: la desconexión en la base ya está hecha */ }
+    }
+  }
+
+  return NextResponse.json({ ok: true, desconectados: (desconectados ?? []).length });
 }
 
 /**
