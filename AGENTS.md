@@ -62,7 +62,7 @@ npm run dev
 |---|---|
 | App (producción) | https://app-contable-five.vercel.app |
 | GitHub repo | genesysc0d3-tech/app-contable (rama `dev`) |
-| Supabase project | aluuuyecwifaakehvcam |
+| Supabase project | xncnfrwarcrzgldalkzz (us-east-1; viejo aluuuyecwifaakehvcam = respaldo hasta OK del fundador) |
 
 ---
 
@@ -74,7 +74,7 @@ npm run dev
 - Migraciones SQL en `supabase/migrations/` (respetar orden por fecha).
 - Tipado de base de datos en `src/lib/database.types.ts`.
 - Script de limpieza de datos de test: `scripts/limpiar-test.sql`. Conserva `parser_adapters`, `parser_logs`, `clasificacion_reglas`, `boletas_caf_mock`, `clientes`, `usuarios`, `empresas`, `propuestas_ia`, `movimientos_raw`, `documentos_subidos`. Borra solo `audit_chunks`, `ia_uso`, `creditos_uso`, `periodos_contables`.
-- Supabase MCP está configurado para el proyecto `aluuuyecwifaakehvcam`: úsalo como fallback para migraciones, advisors y dry-runs SQL cuando el CLI/pooler o env vars locales bloqueen. El MCP no expone `SUPABASE_SERVICE_ROLE_KEY` ni borra objetos de Storage; para `scripts/limpiar-test-storage.mjs --commit` sigue siendo obligatorio exportar `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sin leer `.env.local`.
+- Supabase MCP está configurado para el proyecto viejo `aluuuyecwifaakehvcam` (prod real hoy = `xncnfrwarcrzgldalkzz`): úsalo como fallback para migraciones, advisors y dry-runs SQL cuando el CLI/pooler o env vars locales bloqueen. El MCP no expone `SUPABASE_SERVICE_ROLE_KEY` ni borra objetos de Storage; para `scripts/limpiar-test-storage.mjs --commit` sigue siendo obligatorio exportar `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sin leer `.env.local`.
 
 ---
 
