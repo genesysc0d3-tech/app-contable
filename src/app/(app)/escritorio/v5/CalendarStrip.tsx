@@ -81,7 +81,10 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
     // Anclado ENTRE el logo (180px) y los botones (178px) en vez de centrado a
     // ciegas con left:50%: geométricamente imposible que los toque a cualquier
     // ancho de ventana. Dentro de ese carril, centrado.
-    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 188, right: 186, top: 0, height: 38, display: "flex", justifyContent: "center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
+    // "safe center": centrado cuando el reloj cabe completo; si el carril se
+    // angosta, en vez de botar días por la derecha (mientras sobraba espacio
+    // junto al logo), se alinea al inicio y usa TODO el carril. Nada más cambia.
+    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 188, right: 186, top: 0, height: 38, display: "flex", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
         .v5-day-strip::-webkit-scrollbar{display:none;}
@@ -109,9 +112,11 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               650px de siempre; cuando el carril se achica, se comprime y los días
               se DESLIZAN (scroll horizontal, scrollbar oculta) en vez de invadir
               los botones de la derecha. */}
-          {/* Base 664px: 31 celdas × 20px + 30 gaps × 1px + 6px de padding = 656.
-              Con 650 el día 31 quedaba SIEMPRE mordido, incluso en pantalla ancha.
-              El shrink (0 1) sigue: en carriles angostos se comprime y desliza. */}
+          {/* El mes SIEMPRE cabe: las celdas son elásticas (20px de base, se
+              comprimen hasta 13px cuando el carril se angosta) en vez de fijas
+              con scroll — así el 31 nunca desaparece. El dock se re-mide solo
+              (medir() usa anchos reales al entrar el mouse y al redimensionar).
+              El overflow queda solo como último recurso bajo ~450px de carril. */}
           <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 664px", minWidth: 0, paddingRight: 6, scrollbarWidth: "none" }}>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
               const ds = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
