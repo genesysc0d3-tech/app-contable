@@ -60,7 +60,7 @@ npm run dev
 
 | Recurso | URL |
 |---|---|
-| App (producción) | https://app-contable-five.vercel.app |
+| App (producción) | https://app.massdte.cl |
 | GitHub repo | genesysc0d3-tech/app-contable (rama `dev`) |
 | Supabase project | xncnfrwarcrzgldalkzz (us-east-1; viejo aluuuyecwifaakehvcam = respaldo hasta OK del fundador) |
 
@@ -74,7 +74,7 @@ npm run dev
 - Migraciones SQL en `supabase/migrations/` (respetar orden por fecha).
 - Tipado de base de datos en `src/lib/database.types.ts`.
 - Script de limpieza de datos de test: `scripts/limpiar-test.sql`. Conserva `parser_adapters`, `parser_logs`, `clasificacion_reglas`, `boletas_caf_mock`, `clientes`, `usuarios`, `empresas`, `propuestas_ia`, `movimientos_raw`, `documentos_subidos`. Borra solo `audit_chunks`, `ia_uso`, `creditos_uso`, `periodos_contables`.
-- Supabase MCP está configurado para el proyecto viejo `aluuuyecwifaakehvcam` (prod real hoy = `xncnfrwarcrzgldalkzz`): úsalo como fallback para migraciones, advisors y dry-runs SQL cuando el CLI/pooler o env vars locales bloqueen. El MCP no expone `SUPABASE_SERVICE_ROLE_KEY` ni borra objetos de Storage; para `scripts/limpiar-test-storage.mjs --commit` sigue siendo obligatorio exportar `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sin leer `.env.local`.
+- Supabase MCP usa token de CUENTA (sin --project-ref: ve ambos proyectos; prod real = `xncnfrwarcrzgldalkzz`, viejo `aluuuyecwifaakehvcam` = respaldo NO tocar): úsalo como fallback para migraciones, advisors y dry-runs SQL cuando el CLI/pooler o env vars locales bloqueen. El MCP no expone `SUPABASE_SERVICE_ROLE_KEY` ni borra objetos de Storage; para `scripts/limpiar-test-storage.mjs --commit` sigue siendo obligatorio exportar `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sin leer `.env.local`.
 
 ---
 
@@ -326,22 +326,22 @@ _Esta sección la actualiza la IA al final de cada sesión de trabajo._
 - `bash scripts/supabase-local-token.sh migration list`: OK; remoto muestra
   `20260621010000`.
 - `npm run build`: OK con fixes de soporte de matriz de roles.
-- Vercel produccion redeploy OK; alias `https://app-contable-five.vercel.app`
+- Vercel produccion redeploy OK; alias `https://app.massdte.cl`
   actualizado.
-- `npm run audit:roles -- --base-url=https://app-contable-five.vercel.app
+- `npm run audit:roles -- --base-url=https://app.massdte.cl
   --state=/tmp/e2e-state-vercel.json` con `AUDIT_NONDEV_STATE` temporal:
   OK, 0 hallazgos. Business checked con Equipo visible y `business_mode=true`;
   Pro/Start checked con Equipo oculto y `business_mode=false`; no-dev no ve
   `/dev/cuentas`.
 - `npm run build`: OK con soporte app-wide.
 - Vercel produccion redeploy OK (`dpl_BpXBLWhKSDrdvMTRnEEUsA14HGcR`); alias
-  `https://app-contable-five.vercel.app` actualizado.
+  `https://app.massdte.cl` actualizado.
 - `AUDIT_NONDEV_STATE=/tmp/e2e-state-nondev.json npm run audit:app --
-  --base-url=https://app-contable-five.vercel.app
+  --base-url=https://app.massdte.cl
   --state=/tmp/e2e-state-vercel.json --expect-dev`: OK, 0 hallazgos. Rutas
   soporte Start/Pro/Business 6/6, escrituras bloqueadas con
   `DEV_SUPPORT_READ_ONLY`, no-dev termina en login.
-- `npm run audit:locks -- --base-url=https://app-contable-five.vercel.app
+- `npm run audit:locks -- --base-url=https://app.massdte.cl
   --state=/tmp/e2e-state-vercel.json`: OK, 0 hallazgos. Creo job temporal
   `sii_local`, confirmo lock activo, `PATCH estado_visible=audit_probe`, UI de
   `/massdte` con bloqueo visible, `DELETE cancelled` y `locked=false` final.
@@ -480,6 +480,6 @@ git push origin dev
 npx vercel --prod --yes
 ```
 
-URL de producción: https://app-contable-five.vercel.app
+URL de producción: https://app.massdte.cl
 
 <!-- END:project-context -->
