@@ -2317,6 +2317,48 @@ export type Database = {
         }
         Relationships: []
       }
+      soporte_intervenciones: {
+        Row: {
+          canal: string
+          canjeable_hasta: string
+          canjeada_at: string | null
+          codigo: string
+          creada_at: string
+          empresa_id: string
+          expira_at: string | null
+          id: string
+          motivo: string | null
+          operador_email: string
+          revocada_at: string | null
+        }
+        Insert: {
+          canal?: string
+          canjeable_hasta: string
+          canjeada_at?: string | null
+          codigo: string
+          creada_at?: string
+          empresa_id: string
+          expira_at?: string | null
+          id?: string
+          motivo?: string | null
+          operador_email: string
+          revocada_at?: string | null
+        }
+        Update: {
+          canal?: string
+          canjeable_hasta?: string
+          canjeada_at?: string | null
+          codigo?: string
+          creada_at?: string
+          empresa_id?: string
+          expira_at?: string | null
+          id?: string
+          motivo?: string | null
+          operador_email?: string
+          revocada_at?: string | null
+        }
+        Relationships: []
+      }
       suscripciones: {
         Row: {
           clp_ultimo_cobro: number | null

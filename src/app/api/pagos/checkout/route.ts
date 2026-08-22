@@ -19,7 +19,8 @@ const ROLES_PAGO = new Set(["owner", "admin"]);
 export async function POST(request: Request) {
   const opsContext: { usuarioId?: string; empresaId?: string; cuentaId?: string; tipo?: string; plan?: string } = {};
   try {
-    const supportBlock = await getDevSupportWriteBlock();
+    // Plata del cliente: ni la intervención autorizada abre esta ruta.
+    const supportBlock = await getDevSupportWriteBlock("pagos_checkout", { nuncaEnIntervencion: true });
     if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
 
     const supabase = await createClient();

@@ -314,6 +314,33 @@ async function handleMessage(msg: TelegramMessage) {
     return;
   }
 
+  // El cliente corta (o rechaza) la intervención de soporte desde el chat —
+  // el mismo canal por donde le llegó el código de permiso.
+  if (text === "/revocar") {
+    const empresaId = await empresaDelChat(chatId);
+    if (!empresaId) {
+      await say(chatId, MSG.noVinculado);
+      return;
+    }
+    const svcRevocar = getServiceClient();
+    const { terminarIntervencion } = await import("@/lib/dev/intervencion");
+    const res = await terminarIntervencion(svcRevocar, empresaId);
+    if (res.habia) {
+      const { recordCuentaAudit } = await import("@/lib/audit/account");
+      await recordCuentaAudit({
+        sb: svcRevocar,
+        empresaId,
+        accion: "soporte_intervencion_revocada",
+        recursoTipo: "soporte_intervencion",
+        resumen: "El cliente revocó la intervención de soporte desde Telegram",
+      });
+      await say(chatId, "✂️ <b>Listo, corté el acceso de soporte.</b>\nNadie puede tocar tus datos.");
+    } else {
+      await say(chatId, "✅ No hay ningún acceso de soporte activo ni pendiente. Todo tranquilo.");
+    }
+    return;
+  }
+
   if (text === "/cancelar") {
     await clearPendingEdit(chatId);
     await say(chatId, "✅ Cancelé la edición pendiente. No voy a aplicar el próximo texto a una boleta vieja.");
