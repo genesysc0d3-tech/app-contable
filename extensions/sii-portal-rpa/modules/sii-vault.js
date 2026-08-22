@@ -141,9 +141,13 @@ function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "PAYLOAD_INVALID";
   if (typeof payload.rut !== "string" || !payload.rut.trim()) return "RUT_REQUIRED";
   if (typeof payload.clave !== "string" || !payload.clave) return "CLAVE_REQUIRED";
-  // Obligatorio (chequeo cruzado con el emisor_rut que manda la app por boleta).
-  if (typeof payload.empresa_rut !== "string" || !payload.empresa_rut.trim()) return "EMPRESA_RUT_REQUIRED";
-  if (!isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
+  // 0.1.8: empresa_rut ya no se pide en la UI (la app es la fuente única del
+  // emisor, con RUT inmutable server-side). Se acepta si viene (vaults viejos)
+  // pero solo como metadato: nada lo usa para decidir emisión.
+  if (payload.empresa_rut !== undefined && payload.empresa_rut !== null) {
+    if (typeof payload.empresa_rut !== "string") return "EMPRESA_RUT_INVALID";
+    if (payload.empresa_rut.trim() && !isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
+  }
   return null;
 }
 

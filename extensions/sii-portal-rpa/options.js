@@ -7,7 +7,6 @@
     siiVaultForm: document.getElementById("sii-vault-form"),
     siiRut: document.getElementById("sii-rut"),
     siiClave: document.getElementById("sii-clave"),
-    siiEmpresaRut: document.getElementById("sii-empresa-rut"),
     siiPin: document.getElementById("sii-pin"),
     siiVaultRut: document.getElementById("sii-vault-rut"),
     siiVaultClave: document.getElementById("sii-vault-clave"),
@@ -72,9 +71,6 @@
 
   function renderSiiStatus(status) {
     // Prefill del RUT de empresa guardado (sin pisar lo que el usuario esté tipeando).
-    if (elements.siiEmpresaRut && !elements.siiEmpresaRut.value && status?.empresa_rut) {
-      elements.siiEmpresaRut.value = status.empresa_rut;
-    }
     elements.siiVaultRut.textContent = status?.has_rut ? "Configurado" : "Falta";
     elements.siiVaultClave.textContent = status?.has_clave ? "Configurada" : "Falta";
     elements.siiVaultEncrypted.textContent = status?.encrypted ? "Activo" : "Sin bóveda";
@@ -200,7 +196,6 @@
     event.preventDefault();
     const rut = elements.siiRut?.value || "";
     const clave = elements.siiClave?.value || "";
-    const empresaRut = elements.siiEmpresaRut?.value || "";
     if (!rut.trim()) {
       setDiag(elements.siiDiagnostic, "error", "Ingresa el RUT del SII.");
       return;
@@ -213,23 +208,17 @@
       setDiag(elements.siiDiagnostic, "error", "El RUT del SII no es válido — revisa el dígito verificador.");
       return;
     }
-    // Obligatorio: es el chequeo cruzado contra el RUT que manda la app por
-    // boleta (si difieren, no se emite). Vacío = candado anulado.
-    if (!empresaRut.trim()) {
-      setDiag(elements.siiDiagnostic, "error", "Ingresa el RUT de la empresa a emitir (el mismo de tu empresa en massDTE).");
-      return;
-    }
-    if (!rutDvValido(empresaRut)) {
-      setDiag(elements.siiDiagnostic, "error", "El «RUT de la empresa a emitir» no es válido — revisa el dígito verificador.");
-      return;
-    }
+    // 0.1.8: ya NO se pide el RUT de la empresa acá. La app es la única fuente
+    // (empresas.rut quedó INMUTABLE tras la primera emisión — trigger en DB) y
+    // cada job trae su emisor_rut; el worker además verifica el emisor ACTIVO
+    // del portal antes de emitir. Menos fricción, mismo candado, sin doble tipeo.
 
     elements.saveSiiVault.disabled = true;
     setDiag(elements.siiDiagnostic, "info", "Cifrando y conectando tu clave del SII…");
     // v2: sin passphrase. La clave se cifra localmente con una llave aleatoria y se
     // conecta a tu sesión de la app (se desbloquea sola al emitir). Debes tener la
     // app abierta y con sesión iniciada para conectar.
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave, empresa_rut: empresaRut } }, (response) => {
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave } }, (response) => {
       elements.saveSiiVault.disabled = false;
       if (chrome.runtime.lastError || !response?.ok) {
         const err = response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED";

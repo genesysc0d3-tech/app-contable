@@ -99,14 +99,13 @@ describe("conectar clave — errores con causa real", () => {
     expect(r.error).toBe("SESSION_EXPIRED");
   });
 
-  it("RUT de empresa vacío → EMPRESA_RUT_REQUIRED (el chequeo cruzado es obligatorio)", async () => {
+  it("RUT de empresa vacío → OK (0.1.8: la app es la fuente única del emisor)", async () => {
     const r = await vault.handleSiiVaultMessage({
       type: "APP_CONTABLE_SII_VAULT_SAVE",
       payload: { ...PAYLOAD, empresa_rut: "  " },
     });
-    expect(r.ok).toBe(false);
-    expect(r.error).toBe("EMPRESA_RUT_REQUIRED");
-    expect(fetches.length).toBe(0); // ni siquiera toca el servidor
+    // 0.1.8: el campo desapareció de la UI; vacío o ausente ya no es error.
+    expect(r.error).not.toBe("EMPRESA_RUT_REQUIRED");
   });
 
   it("RUT de empresa con dígito verificador malo → EMPRESA_RUT_INVALID", async () => {

@@ -1,9 +1,8 @@
 "use strict";
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl, versionBajoObjetivo } from "./modules/core.js";
-import { normalizeRut } from "./modules/rut.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { SII_VAULT_CAPABILITIES, getSiiEmpresaRutDefault, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, wipeLocalVault } from "./modules/sii-vault.js";
+import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, wipeLocalVault } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
 const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEAPI_CAPABILITIES];
@@ -1044,27 +1043,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const job = message.job;
     let jobAppOrigin = null;
     try { jobAppOrigin = new URL(sender.url).origin; } catch { jobAppOrigin = null; }
-    // RUT de empresa configurado en la extensión: SOLO rellena cuando el job no trae
-    // emisor; si AMBOS existen y difieren, se ABORTA con mensaje claro (fail-closed).
-    // Antes el config pisaba en silencio al de la app: la boleta salía en el SII a
-    // nombre de una empresa y la app la registraba bajo otra — libros divergentes
-    // sin aviso (auditoría: crítico). No emitir > emitir por la empresa equivocada.
-    getSiiEmpresaRutDefault()
-      .then((configEmpresaRut) => {
-        if (configEmpresaRut) {
-          const jobRut = normalizeRut(job?.emisor_rut);
-          const cfgRut = normalizeRut(configEmpresaRut);
-          if (jobRut && cfgRut && jobRut !== cfgRut) {
-            sendResponse(statusMessage(
-              job?.job_id ?? null,
-              "error",
-              `La extensión está configurada para emitir por la empresa ${configEmpresaRut}, pero tu empresa en la app es ${job.emisor_rut}. No emití nada. Corrige el RUT en la configuración de la extensión (o déjalo vacío para usar el de la app) y vuelve a intentar.`,
-              true,
-            ));
-            return;
-          }
-          if (!jobRut) job.emisor_rut = configEmpresaRut;
-        }
+    // 0.1.8: sin RUT de empresa en la config. La app es la fuente única del
+    // emisor (empresas.rut es INMUTABLE tras la primera boleta — trigger en la
+    // base), cada job viaja con emisor_rut y el worker verifica el emisor
+    // ACTIVO del portal antes de emitir (selectEmisorByRut, fail-closed). El
+    // doble tipeo del RUT ya no aporta seguridad y bloqueaba multiempresa.
+    Promise.resolve()
+      .then(() => {
         const validationError = validateSiiBoletaJob(job);
         if (validationError) {
           sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
