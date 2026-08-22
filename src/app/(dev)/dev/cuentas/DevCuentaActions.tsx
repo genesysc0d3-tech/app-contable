@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, purgarCuenta } from "../actions";
+import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, purgarCuenta, migrarEmpresaACuenta } from "../actions";
 
 const C = {
   border: "rgba(255,255,255,.08)",
@@ -257,5 +257,53 @@ export function TrialCortesiaToggle({ cuentaId, cortesia }: { cuentaId: string; 
       <input type="checkbox" checked={on} disabled={estado === "loading"} onChange={toggle} />
       Trial de cortesía {estado === "error" ? <span style={{ color: C.accent }}>· error</span> : on ? <span style={{ color: "#22c55e" }}>· activo</span> : null}
     </label>
+  );
+}
+
+/**
+ * Migración de empresa hacia ESTA cuenta (LEGO: re-apunta el vínculo; los datos
+ * no se mueven). Corre el checklist adversarial completo en el server. Antes de
+ * usar: verificar identidad según el runbook — unificación = responde desde
+ * ambos correos; recuperación = $1 con código desde el banco de la empresa.
+ * Nunca pedir cédulas.
+ */
+export function MigrarEmpresaForm({ cuentaId }: { cuentaId: string }) {
+  const router = useRouter();
+  const [empresaId, setEmpresaId] = useState("");
+  const [confirmacion, setConfirmacion] = useState("");
+  const [estado, setEstado] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [mensaje, setMensaje] = useState<string | null>(null);
+
+  async function migrar() {
+    if (estado === "loading") return;
+    setEstado("loading");
+    setMensaje(null);
+    const res = await migrarEmpresaACuenta(empresaId.trim(), cuentaId, confirmacion);
+    if ("error" in res) { setEstado("error"); setMensaje(res.error); return; }
+    setEstado("ok");
+    setMensaje(res.resumen);
+    router.refresh();
+  }
+
+  const inp = { border: `1px solid ${C.border}`, background: C.muted, color: C.text, borderRadius: 7, padding: "8px 10px", fontSize: 12, width: "100%", maxWidth: 360 } as const;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontSize: 11, color: C.text2, maxWidth: 460, lineHeight: 1.5 }}>
+        Verificación previa (runbook): unificación → responde desde ambos correos; recuperación → $1 con
+        código desde el banco de la empresa. El server valida cupo, plan multiempresa, cero emisiones a
+        medio camino y suscripción del origen. El login del origen se resuelve aparte, a mano.
+      </span>
+      <input value={empresaId} onChange={(e) => { setEmpresaId(e.target.value); setEstado("idle"); }} placeholder="ID (uuid) de la empresa a traer" style={inp} />
+      <input value={confirmacion} onChange={(e) => { setConfirmacion(e.target.value); setEstado("idle"); }} placeholder="Razón social EXACTA de la empresa (confirmación)" style={inp} />
+      <button
+        type="button"
+        onClick={migrar}
+        disabled={!empresaId.trim() || !confirmacion.trim() || estado === "loading"}
+        style={{ border: `1px solid ${C.border}`, background: C.muted, color: C.text, borderRadius: 7, padding: "8px 12px", fontSize: 11, fontWeight: 800, letterSpacing: ".03em", cursor: estado === "loading" ? "wait" : "pointer", alignSelf: "flex-start" }}
+      >
+        {estado === "loading" ? "Migrando..." : "Traer empresa a esta cuenta"}
+      </button>
+      {mensaje && <span style={{ fontSize: 11, color: estado === "ok" ? "#4ade80" : C.accent, maxWidth: 460, lineHeight: 1.5 }}>{mensaje}</span>}
+    </div>
   );
 }

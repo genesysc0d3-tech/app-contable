@@ -44,6 +44,25 @@ export async function purgarCuentaCompleta(sb: Sb, cuentaId: string): Promise<Pu
   if (ceErr) throw new Error(`No se pudieron leer empresas de la cuenta: ${ceErr.message}`);
   const empresaIds = (ce ?? []).map((r) => r.empresa_id).filter((x): x is string => !!x);
 
+  // FRENO DURO (revisión adversarial 2026-08-22): una empresa con boletas
+  // emitidas en el SII es historia tributaria con retención obligatoria de 6
+  // años (Código Tributario) — la purga JAMÁS puede llevársela en cascada,
+  // ni por typo del operador ni por una migración que quedó a medias. Estas
+  // cuentas se cierran con criterio humano (anonimizar/retener), no con purga.
+  for (const batch of enBloques(empresaIds, CHUNK)) {
+    const { count, error } = await sb
+      .from("boletas_emitidas")
+      .select("id", { count: "exact", head: true })
+      .in("empresa_id", batch);
+    if (error) throw new Error(`No se pudo verificar boletas emitidas: ${error.message}`);
+    if ((count ?? 0) > 0) {
+      throw new Error(
+        `PURGA_BLOQUEADA: la cuenta tiene ${count} boleta(s) emitida(s) en el SII (retención 6 años). ` +
+        "No se puede purgar; el cierre de esta cuenta requiere criterio humano.",
+      );
+    }
+  }
+
   // 2. Documentos de esas empresas (para ubicar las filas huérfanas de PII).
   const docIds: string[] = [];
   for (const batch of enBloques(empresaIds, CHUNK)) {

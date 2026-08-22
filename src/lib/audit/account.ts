@@ -10,6 +10,8 @@ export type CuentaAuditAction =
   | "empresa_activa_cambiada"
   | "empresa_adicional_creada"
   | "empresa_operativa_elegida"
+  | "empresa_migrada_entrante"
+  | "empresa_migrada_saliente"
   | "persona_invitada"
   | "persona_agregada"
   | "propuesta_aprobada"
