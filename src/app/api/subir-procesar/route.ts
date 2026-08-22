@@ -52,20 +52,34 @@ export async function POST(request: Request) {
   // otro y re-procesar → cero duplicados. Solo bloquea los estados DONE: un upload
   // en error / en curso / stuck se puede re-subir sin problema.
   const archivoHash = createHash("sha256").update(buffer).digest("hex");
-  const { data: yaProcesado } = await supabase
+  // 2026-08-22 (incidente clienta M&E): el bloqueo era solo para estados DONE, así
+  // que ante un error de IA la gente re-subía el mismo archivo una y otra vez → 4
+  // copias del mismo documento en la mesa. Ahora se bloquea CUALQUIER duplicado
+  // vivo: si está en curso se espera, si está en error se usa ↻ Reintentar en su
+  // tarjeta. Única excepción: un doc en error SIN archivo guardado (falló el
+  // storage) es un cascarón — ahí sí se permite subir de nuevo.
+  const { data: yaExiste } = await supabase
     .from("documentos_subidos")
-    .select("id")
+    .select("id, estado, storage_path")
     .eq("empresa_id", usuario.empresa_id)
     .eq("archivo_hash", archivoHash)
-    .in("estado", ["procesado", "completado"])
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (yaProcesado) {
+  const esCascaron = yaExiste?.estado === "error" &&
+    (!yaExiste.storage_path || yaExiste.storage_path === "memoria");
+  if (yaExiste && !esCascaron) {
+    const enCurso = yaExiste.estado === "procesando" || yaExiste.estado === "subido";
     return NextResponse.json({
       ok: true,
-      documento_id: yaProcesado.id,
+      documento_id: yaExiste.id,
       ya_procesado: true,
-      message: "Este archivo ya se subió y procesó antes; no se volvió a subir (evita duplicar movimientos).",
+      estado_previo: yaExiste.estado,
+      message: enCurso
+        ? "Este archivo ya se está procesando; no se subió de nuevo."
+        : yaExiste.estado === "error"
+          ? "Este archivo ya está en la mesa con error; usa ↻ Reintentar en su tarjeta."
+          : "Este archivo ya se subió y procesó antes; no se volvió a subir (evita duplicar movimientos).",
     });
   }
 

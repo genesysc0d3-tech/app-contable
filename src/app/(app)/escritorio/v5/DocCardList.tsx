@@ -328,6 +328,19 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       {armado?.docId === doc.id && armado.accion === "reprocesar" ? "¿Seguro? Reprocesar" : "↻ Reprocesar"}
                     </button>
                   )}
+                  {/* Reintentar: la IA falló (error) o el archivo lleva mucho pegado
+                      (procesando). Un solo click — no hay nada que perder: el server
+                      re-encola con force y JAMÁS interrumpe un job corriendo de verdad
+                      (guard en enqueue: running se respeta). */}
+                  {!isBoletaUnica && (doc.estado === "error" || doc.estado === "procesando") && (
+                    <button className="ht"
+                      title={doc.estado === "error"
+                        ? "Vuelve a procesar este archivo. Útil cuando el error fue un problema temporal (la IA no respondió)."
+                        : "Si lleva mucho rato pegado, esto lo re-encola sin perder el avance guardado. No interrumpe un procesamiento que sí avanza."}
+                      onClick={() => callApi("/api/procesar-documento", doc.id)}>
+                      ↻ Reintentar
+                    </button>
+                  )}
                   {!isBoletaUnica && !frozen && (doc.estado === "procesado" || doc.estado === "error") && (
                     <button className="ud" onClick={() => confirmarDosPasos(doc.id, "deshacer", "/api/deshacer-documento")}>
                       {armado?.docId === doc.id && armado.accion === "deshacer" ? "¿Seguro? Deshacer" : "↩ Deshacer"}
