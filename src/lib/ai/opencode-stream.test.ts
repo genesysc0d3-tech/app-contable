@@ -58,8 +58,18 @@ describe("fetchOpenCodeStreaming — parser SSE del gateway OpenCode", () => {
     ).rejects.toThrow(/OpenCode Go API error 500/);
   });
 
+  it("stream cortado sin finish_reason (corte silencioso del gateway) lanza error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse([
+      'data: {"choices":[{"delta":{"content":"{\\"json\\": a med"}}]}\n',
+      'data: {"choices":[],"cost":"0"}\n',
+    ])));
+    await expect(
+      fetchOpenCodeStreaming({ url: "http://x", apiKey: "k", body: {} }),
+    ).rejects.toThrow(/cortado por el gateway/);
+  });
+
   it("manda stream:true y stream_options en el body", async () => {
-    const spy = vi.fn(async () => sseResponse(['data: {"choices":[{"delta":{"content":"x"}}]}\n']));
+    const spy = vi.fn(async () => sseResponse(['data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}\n']));
     vi.stubGlobal("fetch", spy);
     await fetchOpenCodeStreaming({ url: "http://x", apiKey: "k", body: { model: "m" } });
     const sent = JSON.parse((spy.mock.calls[0] as unknown[])[1] ? ((spy.mock.calls[0] as unknown[])[1] as RequestInit).body as string : "{}");

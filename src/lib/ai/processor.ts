@@ -40,7 +40,13 @@ const IA_MESA_MAX_CONFIANZA = 0.75; // Cap de la IA de la mesa (OpenCode) — nu
 // la función de Vercel muere a los 300s sin guardar checkpoint → el watchdog la
 // revive 12 min después → LOOP INFINITO. Con 40: ~85s y finish="stop" (completo).
 // Si se cambia de modelo, RE-MEDIR: este número depende de cuán verboso sea.
-const CHUNK_SIZE = 40;
+//
+// 2026-08-21: el gateway de OpenCode ahora CORTA toda generación a los ~49s
+// (streaming incluido, sin finish_reason — ver opencode-stream.ts). Con 40 el
+// lote tardaba ~85s → truncado siempre. 15 movimientos ≈ ~30s de generación:
+// margen holgado bajo el corte. Más llamadas por cartola, pero cada una corta
+// y completa — el pipeline encadenado ya está hecho para eso.
+const CHUNK_SIZE = 15;
 const MAX_RETRIES = 3;
 const MAX_CONCURRENT = 7;
 const DB_BATCH_SIZE = 100;
