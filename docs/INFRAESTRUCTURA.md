@@ -1,7 +1,7 @@
 # Inventario de infraestructura — massdte
 
 Mapa de todo lo que está enchufado al producto: qué hace cada proveedor, dónde
-viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-22.
+viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 
 > **Regla**: si agregas un proveedor nuevo, agrégalo acá el mismo día. Este
 > archivo es la única defensa contra perderle el hilo a la infraestructura.
@@ -29,7 +29,7 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-22.
 | Landing | `massdte.cl` → Vercel |
 | App | `app.massdte.cl` → Vercel |
 | Host viejo | `app-contable-five.vercel.app` → 308 al oficial |
-| MX (correo) | **ninguno todavía** |
+| MX (correo) | `send.massdte.cl` → Resend (envío). El **raíz sigue libre** para el buzón |
 
 ⚠️ Como el DNS vive en Vercel, cualquier servicio que exija nameservers propios
 (p.ej. Cloudflare Email Routing) obligaría a mover el DNS de producción. Evitar.
@@ -85,8 +85,9 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-22.
 |---|---|---|
 | **Telegram `@massdte_bot`** | VIVO | Clientes mandan fotos de comprobantes. Webhook `app.massdte.cl/api/telegram/webhook`. env `TELEGRAM_*`. **Un solo chat activo por empresa** |
 | **Telegram bot de ops** | PENDIENTE | Código listo; falta crearlo en BotFather |
-| **Correo saliente de la app** | ⚠️ **PROBLEMA ABIERTO** | Usa el SMTP prestado de Supabase, tope **2 correos/hora**. Rebota registros de clientes reales sin dejar rastro |
-| **Correo con dominio propio** | POR HACER | Plan: ImprovMX (recibir `soporte@`/`hola@`) + Resend (enviar `no-reply@` desde Supabase) |
+| **Resend** (correo saliente) | ✅ ACTIVO desde 2026-08-23 | Dominio `massdte.cl` verificado, región us-east-1. Envía desde `no-reply@massdte.cl`. DNS en `send.massdte.cl` (MX+SPF) y `resend._domainkey` (DKIM), puestos por su integración con Vercel. API key en `.resend/token` (restringida a solo envío). **Los Logs de Resend son la visibilidad de entrega que antes no existía** |
+| **SMTP de Supabase** | ✅ apunta a Resend | `smtp.resend.com:465`, usuario `resend`. Tope subido de 2 a **100 correos/hora** |
+| **Buzón `soporte@` / `hola@`** | POR HACER | Necesita MX en el dominio RAÍZ (los de Resend van en `send.`, no chocan). Candidatos: ImprovMX, o el "Enable Receiving" de Resend si sirve para reenviar |
 
 ---
 
@@ -121,6 +122,7 @@ Ninguna está en el repo (todas ignoradas por git):
 .supabase/massdte-us.dbpass      → password de la base de producción
 .chromewebstore/credentials.json → publicar la extensión
 .mercadopago/                    → credenciales de PRUEBA de MP
+.resend/token                    → API key de Resend (solo envío)
 .env.local                       → apunta a la base de PRODUCCIÓN (ojo)
 ```
 
@@ -139,4 +141,4 @@ conocidos sin override explícito).
 | **OpenCode** | No se procesan cartolas nuevas. Lo ya procesado sigue accesible |
 | **R2** | No se ven PDFs ni se suben archivos pesados |
 | **Telegram** | Solo el canal de comprobantes por chat |
-| **Correo (Supabase)** | Nadie puede registrarse ni recuperar clave. **Ya está degradado hoy** |
+| **Resend** | Nadie puede registrarse ni recuperar clave |
