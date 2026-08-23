@@ -129,6 +129,10 @@ Ninguna está en el repo (todas ignoradas por git):
 .resend/token                    → API key de Resend (solo envío)
 .improvmx/token                  → API key de ImprovMX (alias del correo entrante)
 
+> **Todo lo hecho el 2026-08-23 está en `docs/bitacora-2026-08-23.md`** — correo,
+> respaldo, auditoría del clasificador y de la tokenización, y las correcciones
+> de cumplimiento. Empieza por ahí si estás retomando.
+
 **Identidad de git en estos repos (2026-08-23).** Ambos repos llevan
 `git config --local` apuntando a `genesysc0d3-tech <genesysc0d3@gmail.com>`.
 
