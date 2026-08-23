@@ -29,7 +29,7 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 | Landing | `massdte.cl` → Vercel |
 | App | `app.massdte.cl` → Vercel |
 | Host viejo | `app-contable-five.vercel.app` → 308 al oficial |
-| MX (correo) | `send.massdte.cl` → Resend (envío). El **raíz sigue libre** para el buzón |
+| MX (correo) | `send.massdte.cl` → Resend (**envío**). Raíz `@` → ImprovMX `mx1/mx2.improvmx.com` (**recepción**), puesto el 2026-08-23. Los dos no chocan: cada uno en su nivel |
 
 ⚠️ Como el DNS vive en Vercel, cualquier servicio que exija nameservers propios
 (p.ej. Cloudflare Email Routing) obligaría a mover el DNS de producción. Evitar.
@@ -87,7 +87,8 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 | **Telegram bot de ops** | PENDIENTE | Código listo; falta crearlo en BotFather |
 | **Resend** (correo saliente) | ✅ ACTIVO desde 2026-08-23 | Dominio `massdte.cl` verificado, región us-east-1. Envía desde `no-reply@massdte.cl`. DNS en `send.massdte.cl` (MX+SPF) y `resend._domainkey` (DKIM), puestos por su integración con Vercel. API key en `.resend/token` (restringida a solo envío). **Los Logs de Resend son la visibilidad de entrega que antes no existía** |
 | **SMTP de Supabase** | ✅ apunta a Resend | `smtp.resend.com:465`, usuario `resend`. Tope subido de 2 a **100 correos/hora** |
-| **Buzón `soporte@` / `hola@`** | POR HACER | Necesita MX en el dominio RAÍZ (los de Resend van en `send.`, no chocan). Candidatos: ImprovMX, o el "Enable Receiving" de Resend si sirve para reenviar |
+| **ImprovMX** (correo entrante) | ⏳ DNS listo, falta la cuenta | MX de raíz ya apuntando (2026-08-23). Plan gratis: **1 dominio, 25 alias, 5 destinos por alias, 500 reenvíos/día, sin SMTP** (no lo necesitamos: el envío lo hace Resend). Solo reenvía, no guarda nada. Falta que el fundador cree la cuenta y agregue `massdte.cl` |
+| **Buzón `soporte@` / `hola@`** | ⏳ pendiente de la cuenta | Diseño acordado: **un Gmail dedicado a massdte** recibe todos los alias del dominio, separados por **filtros de Gmail sobre el campo `Para:`** (la etiqueta sola no hace nada — etiqueta el filtro). Dejar un filtro de red `Para: massdte.cl` para cazar los que lleguen en copia oculta. El "enviar como" desde Gmail usa el SMTP de Resend, y **exige que el reenvío funcione primero** (Gmail manda el código de verificación a esa dirección) |
 
 ---
 
