@@ -41,10 +41,16 @@ export function redactForAI(text: string | null | undefined): string {
 }
 
 /**
- * ¿Minimización PII activa hacia el LLM? (auditoría #26). Env AI_REDACT_PII=1.
- * Default OFF: el clasificador interno necesita la glosa/RUT crudos y su exactitud
- * está validada bit-a-bit con datos reales — prender esto exige re-validar. Queda
- * en código como interruptor para beta sin cambios grandes con clientes ya activos.
+ * ¿Enmascarado extra hacia el LLM? Env AI_REDACT_PII=1, default OFF.
+ *
+ * YA NO ES EL CONTROL PRINCIPAL. Desde que la tokenización quedó cableada en
+ * processor.ts, la identidad de terceros se sustituye SIEMPRE, sin depender de
+ * ninguna variable de entorno — que era justo el defecto de este flag: un
+ * interruptor apagado por defecto que nadie iba a encender con clientes reales.
+ *
+ * Se conserva a propósito como palanca de emergencia en caliente: si algún día
+ * hay que endurecer el egreso sin esperar un despliegue, esto se prende. Nunca
+ * se retira el freno viejo en el mismo despliegue que estrena el nuevo.
  */
 export function redactPiiHabilitado(): boolean {
   return process.env.AI_REDACT_PII === "1";
