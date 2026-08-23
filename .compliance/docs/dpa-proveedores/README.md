@@ -21,12 +21,18 @@ pregunta. Eso es esto.
 
 | Proveedor | Archivo | sha256 (16) | Origen |
 |---|---|---|---|
-| Supabase | `supabase-dpa-2026-08-23.html` | `0f459b1a3a53f733` | <https://supabase.com/legal/dpa> |
-| Vercel | `vercel-dpa-2026-08-23.html` | `c1960bb74341043a` | <https://vercel.com/legal/dpa> |
-| Cloudflare | `cloudflare-dpa-2026-08-23.html` | `bba0e8aef6ad959a` | <https://www.cloudflare.com/cloudflare-customer-dpa/> |
-| Resend | `resend-dpa-2026-08-23.html` | `f69d306f6b2b21df` | <https://resend.com/legal/dpa> |
+| Supabase | `supabase-dpa-2026-08-23.txt` | `9683f9bd9f872466` | <https://supabase.com/legal/dpa> |
+| Vercel | `vercel-dpa-2026-08-23.txt` | `54df81fe70f0b594` | <https://vercel.com/legal/dpa> |
+| Cloudflare | `cloudflare-dpa-2026-08-23.txt` | `8d4bd428bc8b3a2b` | <https://www.cloudflare.com/cloudflare-customer-dpa/> |
+| Resend | `resend-dpa-2026-08-23.txt` | `a824b5ee405a51c6` | <https://resend.com/legal/dpa> |
 
 El hash permite acreditar que la copia no se alteró después de capturarla.
+
+**Se guardan como texto, no como HTML, y no es por gusto.** La primera versión
+guardó el HTML original de cada sitio y eso **rompió el build**: Tailwind escanea
+todo el proyecto buscando clases, se comió las del marcado ajeno, y generó CSS
+pidiendo una imagen (`/static/texture-btn.png`) que solo existe en el sitio de
+Resend. Un documento de terceros dentro del árbol del proyecto no es inerte.
 
 ## Los que NO están acá, y por qué
 
