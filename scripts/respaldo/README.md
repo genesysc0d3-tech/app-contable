@@ -21,7 +21,8 @@ Esto lo cubre desde el Mac mini, que está encendido 24/7.
 
 ```bash
 brew install postgresql@17 rclone      # pg_dump 17: Supabase corre 17.6
-brew services start postgresql@17      # hace falta para la verificación
+# NO hace falta 'brew services': el guión levanta su propia instancia de
+# verificación en el puerto 5433, aislada del Postgres que ya tengas.
 mkdir -p ~/.massdte-respaldo && chmod 700 ~/.massdte-respaldo
 # crear ~/.massdte-respaldo/config (chmod 600) con:
 #   PGURL R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET
@@ -31,7 +32,7 @@ sed "s|\$HOME|$HOME|g" cl.massdte.respaldo.plist > ~/Library/LaunchAgents/cl.mas
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cl.massdte.respaldo.plist
 ```
 
-## Las cuatro trampas que costaron encontrar
+## Las seis trampas que costaron encontrar
 
 1. **`pg_dump` 16 NO puede volcar un servidor 17.** Supabase corre 17.6; el
    Homebrew por defecto trae 16. Sin `postgresql@17` esto falla todas las noches.
@@ -44,6 +45,17 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cl.massdte.respaldo.plis
 4. **Restaurar contra un Postgres que no es Supabase escupe errores esperados**
    (sus roles no existen, y 17.11 no conoce parámetros de 17.6). Se filtran por
    nombre, para que un error de verdad no se pierda entre el ruido conocido.
+5. **`LaunchAgent` no sirve para esto.** Las tareas de usuario solo corren con
+   una sesión iniciada; tras un corte de luz el Mac arranca en la pantalla de
+   login y el respaldo simplemente no existe — y la alerta tampoco salta, porque
+   vive dentro del guión que no corre. Va como **`LaunchDaemon`** de sistema con
+   `UserName`, que arranca sin sesión. Mismo problema tenía el Postgres local:
+   por eso el guión **levanta su propia instancia** en vez de depender de
+   `brew services`.
+6. **La regional rompe Postgres en macOS, dos veces.** Una sesión remota llega
+   con `LC_*` que `initdb` no acepta; y aunque el cluster se cree, el servidor
+   muere al arrancar con `postmaster became multithreaded during startup`. Hay
+   que forzar `LC_ALL=C` **en los dos** pasos.
 
 ## Restaurar de verdad
 
