@@ -4,10 +4,13 @@
  * Dos controles, ambos puros y testeables:
  *  1) redactForAI / clienteToken: MINIMIZACIÓN (Art. 3) — antes de mandar texto a
  *     una IA, se enmascara RUT, números de cuenta y nombres de persona, y la
- *     identidad del receptor se reemplaza por un token estable no reversible
- *     ("mismo cliente" sin exponer quién).
+ *     identidad del receptor se reemplaza por un token estable ("mismo cliente"
+ *     sin exponer quién). OJO: ese token es SEUDÓNIMO, no anónimo — ver la nota
+ *     sobre reversibilidad en clienteToken.
  *  2) assertApprovedDataProcessor: gate FAIL-CLOSED (Art. 15 bis, encargado) —
- *     solo procesadores con DPA / retención cero verificada pueden recibir datos
+ *     solo los procesadores de la allowlist pueden recibir datos. OJO: la
+ *     allowlist es una decisión NUESTRA, no un contrato firmado. Ver la nota de
+ *     PROCESADORES_APROBADOS antes de citar este gate como garantía jurídica.
  *     personales; lo desconocido se rechaza.
  *
  * Diseñado para F3 (2ª opinión) y cualquier ruta nueva que mande datos a una IA
@@ -59,7 +62,21 @@ export function maskRut(rut: string | null | undefined): string {
   return `••.•••.${m[1].padStart(3, "0")}-${m[2]}`;
 }
 
-/** Token estable y NO reversible (FNV-1a) para agrupar "mismo cliente" sin exponer identidad. */
+/**
+ * Token estable para agrupar "mismo cliente" sin escribir el RUT.
+ *
+ * ⚠️ ES SEUDÓNIMO, NO ANÓNIMO. Decía "no reversible" y era falso: FNV-1a de 32
+ * bits, sin sal ni clave, sobre un espacio de ~29 millones de RUT chilenos. Una
+ * auditoría lo revirtió por fuerza bruta en 9 segundos, con preimagen ÚNICA —
+ * o sea recupera el RUT exacto, sin ambigüedad.
+ *
+ * Consecuencia legal (Art. 2 f Ley 21.719: identificable "directa o
+ * INDIRECTAMENTE... con los medios que razonablemente se podrían usar"): este
+ * token sigue siendo dato personal. No lo cites como anonimización.
+ *
+ * Hoy no tiene llamadores en producción. Antes de usarlo en una ruta nueva hay
+ * que pasarlo a HMAC con clave del servidor.
+ */
 export function clienteToken(seed: string | null | undefined): string {
   const s = String(seed ?? "").trim().toLowerCase();
   if (!s) return "anon";
@@ -73,6 +90,11 @@ export function clienteToken(seed: string | null | undefined): string {
 
 // Allowlist de procesadores aprobados como encargados con RETENCIÓN CERO (DPA
 // verificado, en el RAT). Formato "<provider>:<model>". Fail-closed.
+// Allowlist de destinos permitidos. Es un control TÉCNICO nuestro —restringe a
+// dónde puede salir un dato— y no acredita nada sobre el destinatario: a la
+// fecha NO hay DPA ni cláusulas modelo suscritas con este proveedor. La
+// no-retención está declarada en su documentación de producto, no en un
+// contrato. Ver .compliance/docs/21719-evaluacion-proveedor-ia.md.
 const PROCESADORES_APROBADOS = new Set<string>([
   "opencodego:deepseek-v4-flash",
   "opencodego:minimax-m3",
