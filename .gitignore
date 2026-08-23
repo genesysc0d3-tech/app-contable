@@ -76,3 +76,6 @@ artifacts/runs/tokenize-*.json
 dist/
 # Credenciales Mercado Pago (locales, se suben a Vercel por API)
 .mercadopago/
+
+# Credenciales Resend (correo)
+.resend/
