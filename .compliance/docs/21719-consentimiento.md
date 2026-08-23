@@ -3,7 +3,7 @@
 > Art. 12 Ley 21.719: el consentimiento debe ser **previo, libre, específico, informado e inequívoco**, por **acto afirmativo** (casilla NO premarcada) y **revocable** por un medio expedito, gratuito y permanente.
 
 ## 1. Aviso corto (junto al formulario de registro)
-> Tus datos (nombre, correo y la información de tus cartolas/comprobantes) los trata AlphaCode SpA para prestarte el servicio de procesamiento contable y emisión de documentos tributarios. Puedes ejercer tus derechos en [COMPLETAR correo]. Más detalles en nuestra [Política de Privacidad](/legal/privacidad).
+> Tus datos (nombre, correo y la información de tus cartolas/comprobantes) los trata AlphaCode SpA para prestarte el servicio de procesamiento contable y emisión de documentos tributarios. Puedes ejercer tus derechos en privacidad@massdte.cl. Más detalles en nuestra [Política de Privacidad](/legal/privacidad).
 
 ## 2. Consentimiento (checkbox, NO premarcado)
 > ☐ Acepto que AlphaCode SpA trate mis datos para prestar el servicio, según su [Política de Privacidad](/legal/privacidad).
