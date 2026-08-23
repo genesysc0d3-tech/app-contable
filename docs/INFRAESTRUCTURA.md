@@ -128,6 +128,20 @@ Ninguna está en el repo (todas ignoradas por git):
 .mercadopago/                    → credenciales de PRUEBA de MP
 .resend/token                    → API key de Resend (solo envío)
 .improvmx/token                  → API key de ImprovMX (alias del correo entrante)
+
+**Identidad de git en estos repos (2026-08-23).** Ambos repos llevan
+`git config --local` apuntando a `genesysc0d3-tech <genesysc0d3@gmail.com>`.
+
+Antes heredaban la config global del Mac (`Honter <o.cuellaralarcon@gmail.com>`),
+que GitHub asocia a una cuenta personal distinta. Vercel no la tiene en su equipo
+→ **rechazaba construir las vistas previa** de las ramas y devolvía un enlace de
+invitación al equipo en vez de un error entendible. Producción nunca se vio
+afectada porque los commits de `main` nacen del squash-merge, que GitHub atribuye
+a la cuenta del token (genesys, que sí está en el equipo). De ahí que un repo
+desplegara bien y no mostrara previas nunca.
+
+⚠️ `--local` vive en `.git/config` y **no se commitea**: al clonar de nuevo hay
+que repetirlo, o vuelve el mismo síntoma.
 .env.local                       → apunta a la base de PRODUCCIÓN (ojo)
 ```
 
