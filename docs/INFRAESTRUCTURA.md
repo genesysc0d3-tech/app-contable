@@ -1,0 +1,142 @@
+# Inventario de infraestructura — massdte
+
+Mapa de todo lo que está enchufado al producto: qué hace cada proveedor, dónde
+viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-22.
+
+> **Regla**: si agregas un proveedor nuevo, agrégalo acá el mismo día. Este
+> archivo es la única defensa contra perderle el hilo a la infraestructura.
+
+---
+
+## 1. Identidad de la empresa
+
+| | |
+|---|---|
+| Razón social | **AlphaCode SpA** — RUT 78.448.088-7 |
+| Domicilio | Apoquindo 6410 Of 605, Las Condes |
+| Correo corporativo | `alphacode.chile@gmail.com` |
+| Producto | **massdte** (marca; la SpA puede tener más productos) |
+| Solo desarrollo | `genesysc0d3` — nunca de cara al cliente |
+
+---
+
+## 2. Dominio y DNS
+
+| | |
+|---|---|
+| Registrador | **NIC.cl** — ahí se compró `massdte.cl` |
+| DNS / Nameservers | **Vercel** (`ns1/ns2.vercel-dns.com`) — NO están en NIC.cl |
+| Landing | `massdte.cl` → Vercel |
+| App | `app.massdte.cl` → Vercel |
+| Host viejo | `app-contable-five.vercel.app` → 308 al oficial |
+| MX (correo) | **ninguno todavía** |
+
+⚠️ Como el DNS vive en Vercel, cualquier servicio que exija nameservers propios
+(p.ej. Cloudflare Email Routing) obligaría a mover el DNS de producción. Evitar.
+
+---
+
+## 3. Infraestructura
+
+| Servicio | Para qué | Credenciales |
+|---|---|---|
+| **Vercel** | Hosting de la app y el landing, crons, env vars | `.vercel/token` |
+| **Supabase** | Base de datos, Auth y Storage. Proyecto **`xncnfrwarcrzgldalkzz`** (us-east-1) | `.supabase/token`, `.supabase/massdte-us.dbpass` |
+| **Supabase (viejo)** | `aluuuyecwifaakehvcam` (sa-east-1) = **respaldo sellado**, signups y Google apagados. NO borrar sin permiso | mismo token |
+| **Cloudflare R2** | Archivos pesados (PDFs de boletas, nómina SII). Cliente en `src/lib/r2.ts` | env `R2_*` |
+| **GitHub** | `genesysc0d3-tech/app-contable` y `web-massdte` | credenciales locales aisladas del repo |
+
+---
+
+## 4. Inteligencia artificial
+
+| Servicio | Para qué | Notas |
+|---|---|---|
+| **OpenCode** (gateway Go) | Clasificar movimientos y OCR de comprobantes | env `OPENCODE_GO_API_KEY`, `OPENCODE_GO_MODEL`. Corta streams a ~49s → cliente con streaming + chunks de 15 |
+
+---
+
+## 5. Emisión al SII
+
+| Pieza | Qué hace | Dónde |
+|---|---|---|
+| **Extensión Chrome** | Motor local que emite por el portal del SII con la clave del usuario | Chrome Web Store (no listada), ID `klblpnnmbbmicpbnhlkfceiiijppobfe`. Credenciales de publicación en `.chromewebstore/` |
+| **Bóveda cifrada** | Guarda la clave SII del cliente (llave partida) | env `EXTENSION_VAULT_WRAP_SECRET` |
+| **SimpleAPI** | Carril alternativo con certificado `.pfx` | configurable por empresa |
+| **Portal SII (AlphaCode)** | Facturas 33 manuales de la propia empresa | clave SII propia |
+
+---
+
+## 6. Pagos
+
+| Servicio | Estado | Notas |
+|---|---|---|
+| **MercadoPago** | Production ON, webhook verificado en `app.massdte.cl/api/pagos/webhook` | env `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`. **Rechaza débito y prepago para recurrencia** → no sirve como carril principal |
+| **MercadoPago Empresas** | Cuenta de depósito de AlphaCode SpA | es el destino configurado en Reveniu |
+| **Global66 Enterprise** | Cuenta de empresa | alternativa de depósito |
+| **Reveniu** | Cuenta creada, en configuración | carril candidato: UF nativa + débito Redcompra + API abierta |
+| **Transbank** | Afiliación iniciada | contacto técnico Osvaldo Cuellar |
+
+---
+
+## 7. Comunicación
+
+| Canal | Estado | Notas |
+|---|---|---|
+| **Telegram `@massdte_bot`** | VIVO | Clientes mandan fotos de comprobantes. Webhook `app.massdte.cl/api/telegram/webhook`. env `TELEGRAM_*`. **Un solo chat activo por empresa** |
+| **Telegram bot de ops** | PENDIENTE | Código listo; falta crearlo en BotFather |
+| **Correo saliente de la app** | ⚠️ **PROBLEMA ABIERTO** | Usa el SMTP prestado de Supabase, tope **2 correos/hora**. Rebota registros de clientes reales sin dejar rastro |
+| **Correo con dominio propio** | POR HACER | Plan: ImprovMX (recibir `soporte@`/`hola@`) + Resend (enviar `no-reply@` desde Supabase) |
+
+---
+
+## 8. Google
+
+| Servicio | Para qué |
+|---|---|
+| **Google Cloud Console** | Cliente OAuth del "Continuar con Google". Redirect: `https://xncnfrwarcrzgldalkzz.supabase.co/auth/v1/callback` |
+
+---
+
+## 9. Tareas automáticas (crons de Vercel)
+
+| Hora UTC | Ruta | Qué hace |
+|---|---|---|
+| 12:00 | `/api/pagos/cron` | Cobranza: morosos y re-anclaje a la UF |
+| 12:30 | `/api/ops/cron` | Alertas de operación |
+| 12:45 | `/api/document-processing/cron` | Reintenta documentos atascados |
+| 03:00 | `/api/audit/cron` | Retención y anonimización |
+
+Protegidos con `CRON_SECRET`.
+
+---
+
+## 10. Dónde viven las credenciales locales
+
+Ninguna está en el repo (todas ignoradas por git):
+
+```
+.vercel/token                    → API de Vercel
+.supabase/token                  → Management API de Supabase
+.supabase/massdte-us.dbpass      → password de la base de producción
+.chromewebstore/credentials.json → publicar la extensión
+.mercadopago/                    → credenciales de PRUEBA de MP
+.env.local                       → apunta a la base de PRODUCCIÓN (ojo)
+```
+
+⚠️ `.env.local` apunta a producción. Los scripts destructivos tienen freno
+propio (`scripts/reset-db.js` se niega a correr contra los dos proyectos
+conocidos sin override explícito).
+
+---
+
+## 11. Si algo se cae — impacto
+
+| Se cae | Qué pasa |
+|---|---|
+| **Supabase** | La app entera. Es el punto único de falla real |
+| **Vercel** | La app entera |
+| **OpenCode** | No se procesan cartolas nuevas. Lo ya procesado sigue accesible |
+| **R2** | No se ven PDFs ni se suben archivos pesados |
+| **Telegram** | Solo el canal de comprobantes por chat |
+| **Correo (Supabase)** | Nadie puede registrarse ni recuperar clave. **Ya está degradado hoy** |
