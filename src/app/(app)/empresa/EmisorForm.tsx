@@ -546,7 +546,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
           fontSize: compact ? 10 : 11, lineHeight: 1.4,
           color: "var(--text3, #697080)",
         }}>
-          massdte emite boletas de venta electrónicas. Las boletas de honorarios (profesionales
+          MassDTE emite boletas de venta electrónicas. Las boletas de honorarios (profesionales
           independientes) se emiten en sii.cl — esta app no las reemplaza.
         </div>
       </div>
