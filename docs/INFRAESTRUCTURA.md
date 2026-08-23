@@ -29,7 +29,10 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 | Landing | `massdte.cl` → Vercel |
 | App | `app.massdte.cl` → Vercel |
 | Host viejo | `app-contable-five.vercel.app` → 308 al oficial |
-| MX (correo) | `send.massdte.cl` → Resend (envío). El **raíz sigue libre** para el buzón |
+| MX (correo) | `send.massdte.cl` → Resend (**envío**). Raíz `@` → ImprovMX `mx1/mx2.improvmx.com` (**recepción**), puesto el 2026-08-23. Los dos no chocan: cada uno en su nivel |
+| SPF raíz | `v=spf1 include:spf.improvmx.com -all` — lo exige ImprovMX para validar. **No afecta a Resend**, que se verifica por `send.massdte.cl` + DKIM |
+| DMARC | `p=reject; sp=reject; adkim=s; aspf=r; rua+ruf=dmarc@massdte.cl`. `aspf` pasó de estricto a **relajado** el 2026-08-23: con estricto el SPF nunca alineaba (el retorno vive en `send.`, el remitente en la raíz) y el correo se sostenía solo del DKIM — una sola pata bajo `p=reject`, o sea si el DKIM fallaba los correos **desaparecían**. Ahora alinean los dos |
+| Carril de marketing | `novedades.massdte.cl`, dominio Resend **separado** con su propia llave DKIM. Verificado 2026-08-23. Remitente `equipo@novedades.massdte.cl`, `Reply-To: novedades@massdte.cl`. Existe para que una campaña que se llene de quejas de spam **no arrastre a los correos de sistema** — la reputación se pega al dominio que firma, y por eso no basta con cambiar de dirección. Tiene su propio `_dmarc.novedades` para verle la salud aparte |
 
 ⚠️ Como el DNS vive en Vercel, cualquier servicio que exija nameservers propios
 (p.ej. Cloudflare Email Routing) obligaría a mover el DNS de producción. Evitar.
@@ -87,7 +90,8 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 | **Telegram bot de ops** | PENDIENTE | Código listo; falta crearlo en BotFather |
 | **Resend** (correo saliente) | ✅ ACTIVO desde 2026-08-23 | Dominio `massdte.cl` verificado, región us-east-1. Envía desde `no-reply@massdte.cl`. DNS en `send.massdte.cl` (MX+SPF) y `resend._domainkey` (DKIM), puestos por su integración con Vercel. API key en `.resend/token` (restringida a solo envío). **Los Logs de Resend son la visibilidad de entrega que antes no existía** |
 | **SMTP de Supabase** | ✅ apunta a Resend | `smtp.resend.com:465`, usuario `resend`. Tope subido de 2 a **100 correos/hora** |
-| **Buzón `soporte@` / `hola@`** | POR HACER | Necesita MX en el dominio RAÍZ (los de Resend van en `send.`, no chocan). Candidatos: ImprovMX, o el "Enable Receiving" de Resend si sirve para reenviar |
+| **ImprovMX** (correo entrante) | ✅ ACTIVO desde 2026-08-23 | Cuenta bajo `genesysc0d3@gmail.com` (infra, igual que GitHub/Vercel/Supabase). Dominio `massdte.cl` validado: MX, SPF y DMARC en verde. Plan gratis: **1 dominio, 25 alias, 5 destinos por alias, 500 reenvíos/día, sin SMTP** (no lo necesitamos: el envío lo hace Resend). Solo reenvía, no guarda nada. API key en `.improvmx/token`. ⚠️ Al agregar un dominio, ImprovMX crea solo un alias comodín `*` apuntando a la cuenta con la que entraste — hay que repuntarlo o el correo de clientes cae en la cuenta de desarrollo |
+| **Buzón `@massdte.cl`** | ✅ 8 alias activos | Destino: **`massdte.chile@gmail.com`**, un Gmail dedicado al producto (aparte del de la SpA y del de dev). Alias: `hola@` (aún no es cliente), `soporte@` (ya es cliente y algo se rompió), `cobros@` (plata/facturas de AlphaCode), `no-reply@` (red para los que responden los automáticos), `datos@` (canal ARCO Ley 21.719), `privacidad@` (canal ARCO Ley 21.719, declarado en las páginas legales del landing), `novedades@` (respuestas de campañas), `dmarc@` (reportes XML, filtro que archiva sin pasar por la bandeja), `osvaldo@` y `matias@` (personales), más el comodín `*`. El nombre a mostrar sigue la **relación**, no la marca: función para `soporte@`/`cobros@`/`privacidad@`, gente para `hola@` (Equipo MassDTE), marca pelada para lo automático, nombre propio para las personales. Se separan por **filtros de Gmail sobre el campo `Para:`** (la etiqueta sola no hace nada — etiqueta el filtro). Dejar un filtro de red `Para: massdte.cl` para cazar los que lleguen en copia oculta. El "enviar como" desde Gmail usa el SMTP de Resend, y **exige que el reenvío funcione primero** (Gmail manda el código de verificación a esa dirección) |
 
 ---
 
@@ -123,6 +127,7 @@ Ninguna está en el repo (todas ignoradas por git):
 .chromewebstore/credentials.json → publicar la extensión
 .mercadopago/                    → credenciales de PRUEBA de MP
 .resend/token                    → API key de Resend (solo envío)
+.improvmx/token                  → API key de ImprovMX (alias del correo entrante)
 .env.local                       → apunta a la base de PRODUCCIÓN (ojo)
 ```
 
