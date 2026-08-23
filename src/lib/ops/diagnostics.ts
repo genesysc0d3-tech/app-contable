@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { OpsSeverity } from "@/lib/ops/events";
+import { isR2Configured, r2ObjetoMasNuevo } from "@/lib/r2";
 
 type Sb = SupabaseClient<Database>;
 
@@ -54,6 +55,65 @@ function countFrom(result: { count: number | null; error: { message: string } | 
     return 0;
   }
   return result.count ?? 0;
+}
+
+/**
+ * Vigila que los respaldos de la base sigan llegando a R2.
+ *
+ * El respaldo lo hace un Mac mini en la casa del fundador (Supabase Free no
+ * trae respaldos: ni diarios ni PITR). Ese guión se avisa a sí mismo cuando
+ * falla, pero NO puede avisar de lo único que de verdad importa: que no haya
+ * corrido. Si el mini se apaga, se queda sin internet o alguien desinstala la
+ * tarea, el silencio se ve idéntico a "todo bien".
+ *
+ * Por eso el vigilante corre acá, en Vercel: fuera de la casa, fuera de la
+ * máquina, y sin nada en común con lo que vigila.
+ *
+ * Un respaldo diario sano tiene menos de 26 horas (24 + margen). Sobre 48
+ * significa que se saltó al menos un día entero.
+ */
+const RESPALDO_PREFIJO = "respaldos-db/";
+const RESPALDO_HORAS_WARN = 26;
+const RESPALDO_HORAS_CRITICO = 48;
+
+export async function revisarRespaldos(): Promise<OpsFinding[]> {
+  // Sin R2 configurado no hay nada que vigilar (entornos locales, previews).
+  if (!isR2Configured()) return [];
+  let ultimo: Awaited<ReturnType<typeof r2ObjetoMasNuevo>>;
+  try {
+    ultimo = await r2ObjetoMasNuevo(RESPALDO_PREFIJO);
+  } catch (error) {
+    return [{
+      severity: "warn",
+      eventName: "respaldo_db_no_verificable",
+      summary: `No se pudo consultar R2 para verificar los respaldos: ${error instanceof Error ? error.message : "error desconocido"}`,
+    }];
+  }
+
+  if (!ultimo) {
+    return [{
+      severity: "critical",
+      eventName: "respaldo_db_inexistente",
+      summary: "No hay NINGÚN respaldo de la base en R2. Supabase Free no tiene respaldos propios, así que ahora mismo no hay de dónde restaurar.",
+      metadata: { prefijo: RESPALDO_PREFIJO },
+    }];
+  }
+
+  const horas = (Date.now() - ultimo.modificado.getTime()) / 3_600_000;
+  if (horas < RESPALDO_HORAS_WARN) return [];
+
+  const critico = horas >= RESPALDO_HORAS_CRITICO;
+  return [{
+    severity: critico ? "critical" : "warn",
+    eventName: "respaldo_db_atrasado",
+    summary: `El último respaldo de la base tiene ${Math.floor(horas)} horas (${ultimo.key}). ${critico ? "Se saltó al menos un día completo — revisar el Mac mini." : "Debería llegar uno cada 24 h."}`,
+    metadata: {
+      key: ultimo.key,
+      horas: Math.floor(horas),
+      bytes: ultimo.bytes,
+      modificado: ultimo.modificado.toISOString(),
+    },
+  }];
 }
 
 export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsSnapshot> {
@@ -179,6 +239,9 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
   }
 
   const findings: OpsFinding[] = [];
+  // El vigilante de respaldos entra acá para reutilizar el mismo cron, la misma
+  // autenticación y el mismo canal de alerta que el resto de operaciones.
+  findings.push(...(await revisarRespaldos()));
   for (const [empresaId, listas] of empresasAtascadas) {
     findings.push({
       severity: "warn",
