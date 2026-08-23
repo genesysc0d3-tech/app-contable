@@ -105,6 +105,26 @@ c) que la seudonimización se desactive, se degrade o sea evadida por una ruta n
 d) que se incorpore un modelo o proveedor fuera de la lista aprobada;
 e) que se pretenda procesar datos sensibles por esta vía.
 
+**Sobre los encargados que no ofrecen DPA y no lo van a ofrecer.** Verificado el
+2026-08-23: los proveedores de infraestructura (Supabase, Vercel, Cloudflare,
+Resend) **sí** tienen contrato de tratamiento, y se incorpora automáticamente al
+aceptar sus términos —*"Acceptance of the Agreement shall have the same effect as
+signing the SCCs"*—, así que el mandato escrito del Art. 8° de la Ley 19.628 está
+satisfecho para ellos sin trámite adicional.
+
+Quedan dos que no: **OpenCode** y **Telegram**. Ninguno ofrece contrato de
+tratamiento a clientes de autoservicio, y no hay vía para obtenerlo. La decisión
+del responsable es **declararlos expresamente en los Términos y Condiciones
+(§5.1) y que el usuario los acepte**, junto con los controles compensatorios de
+la sección 5. Sin ellos el servicio no puede prestarse: OpenCode es quien lee las
+cartolas, y Telegram es un canal que el usuario elige — la aplicación funciona
+sin él.
+
+Se deja constancia de que **el consentimiento del usuario no alcanza a los
+terceros** cuyos datos aparecen en sus cartolas: ellos no contrataron nada. Para
+ese grupo la base es el interés legítimo del Art. 13 d), con la ponderación
+escrita en `21719-rat.md`, y la mitigación es la seudonimización previa al envío.
+
 **Gestiones en paralelo:** (i) requerimiento formal por escrito y con acuse a `help@anoma.ly`
 pidiendo regiones por modelo y contrato de tratamiento; (ii) evaluación de un proveedor
 alternativo que sí ofrezca ambos, como plan de contingencia.

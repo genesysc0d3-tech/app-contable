@@ -18,7 +18,8 @@ AlphaCode SpA, RUT 78.448.088-7, Av. Apoquindo 6410 Of. 605, Las Condes, Santiag
 | ImprovMX | EE.UU./internacional | email en tránsito (no almacena) | correo entrante | PENDIENTE |
 | Google (Gmail) | EE.UU./internacional | buzón de soporte y de ejercicio de derechos | recepción | Términos de consumidor. PENDIENTE evaluar cuenta con DPA |
 | Telegram | internacional | imágenes de comprobantes | recepción | [verificar mecanismo] |
-| Mercado Pago | Latam/internacional | datos de pago, email | cobro | DPA/política MP. PENDIENTE |
+| Mercado Pago | Latam/internacional | datos de pago, email | cobro | **TRANSITORIO** — se reemplaza por Reveniu (en construcción). No se gestiona DPA con un proveedor que sale |
+| Telegram | internacional | imágenes de comprobantes que el usuario decide enviar | recepción opcional | **NO ofrece DPA** (servicio de consumo). Declarado en los T&C §5.1 y aceptado por el usuario. Canal OPCIONAL: la app funciona sin él |
 
 ## 3. Mecanismo de transferencia
 Las partes adoptan las **Cláusulas Contractuales Modelo** del Ministerio de Economía como garantía adecuada (Ley 21.719). No basta el DPA estándar del proveedor por sí solo; estas cláusulas (o adecuación / normas corporativas vinculantes / consentimiento del titular) deben respaldar la transferencia.
