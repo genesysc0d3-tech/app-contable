@@ -1,0 +1,145 @@
+#!/bin/bash
+#
+# Respaldo nocturno de la base de producción de massdte.
+#
+# Corre en el Mac mini (encendido 24/7). Vuelca Supabase, RESTAURA el volcado
+# en un Postgres local y compara los conteos: si no calzan, el respaldo se
+# considera fallido aunque el archivo exista. Un volcado que nunca se restauró
+# es un archivo, no un respaldo.
+#
+# Avisa por correo SOLO cuando algo falla. El silencio significa que anduvo.
+#
+set -uo pipefail
+
+CONF="$HOME/.massdte-respaldo/config"
+DEST="$HOME/Respaldos/massdte"
+LOG="$HOME/.massdte-respaldo/respaldo.log"
+LOCK="$HOME/.massdte-respaldo/.corriendo"
+PGBIN="/opt/homebrew/opt/postgresql@17/bin"
+RETENCION_DIAS=14
+# Tablas cuyo conteo debe coincidir entre el origen y la restauración.
+TABLAS_TESTIGO="propuestas_ia movimientos_raw documentos_subidos clasificacion_reglas empresas usuarios"
+
+STAMP=$(date +%Y-%m-%d)
+ARCHIVO="$DEST/massdte-$STAMP.sql.gz"
+TMPSQL=""
+DBTMP="verif_respaldo_$$"
+
+log(){ printf '%s  %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+
+# Único punto de salida por error: avisa y termina.
+morir(){
+  local motivo="$1"
+  log "FALLÓ: $motivo"
+  avisar "$motivo"
+  limpiar
+  exit 1
+}
+
+limpiar(){
+  [ -n "$TMPSQL" ] && rm -f "$TMPSQL"
+  "$PGBIN/dropdb" --if-exists "$DBTMP" 2>/dev/null
+  rm -f "$LOCK"
+}
+
+avisar(){
+  local motivo="$1"
+  [ -z "${RESEND_KEY:-}" ] && return 0
+  local cuerpo
+  cuerpo=$(printf '<p>El respaldo de la base de <b>producción</b> no se completó.</p><p><b>Motivo:</b> %s</p><p>Equipo: %s · Fecha: %s</p><p>Últimas líneas del registro:</p><pre style="background:#f4f4f5;padding:12px;border-radius:8px;font-size:12px;overflow:auto">%s</pre>' \
+    "$motivo" "$(scutil --get LocalHostName 2>/dev/null || hostname)" "$(date '+%F %T')" "$(tail -12 "$LOG" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g')")
+  # curl y NO python: Cloudflare le devuelve 403 a urllib (error 1010). Se
+  # descubrió probando la alerta a propósito — por eso las alertas se prueban.
+  local cuerpo_json
+  cuerpo_json=$(python3 -c 'import json,sys; print(json.dumps({
+    "from": "MassDTE <no-reply@massdte.cl>",
+    "to": [sys.argv[1]],
+    "subject": "El respaldo de la base FALLO",
+    "html": sys.argv[2],
+  }))' "$ALERTA_A" "$cuerpo")
+  local codigo
+  codigo=$(curl -s -o /tmp/aviso.out -w '%{http_code}' -X POST "https://api.resend.com/emails" \
+    -H "Authorization: Bearer $RESEND_KEY" -H "Content-Type: application/json" \
+    --data "$cuerpo_json" 2>/dev/null)
+  if [ "$codigo" = "200" ]; then
+    log "aviso enviado"
+  else
+    log "EL AVISO NO SALIO (HTTP $codigo): $(head -c 200 /tmp/aviso.out 2>/dev/null)"
+  fi
+}
+
+# ── arranque ───────────────────────────────────────────────────────────────
+[ -f "$CONF" ] || { echo "sin config en $CONF"; exit 1; }
+# shellcheck disable=SC1090
+source "$CONF"
+mkdir -p "$DEST" "$(dirname "$LOG")"
+
+# Un candado con el PID adentro: si el proceso ya no existe, el candado es basura
+# de una corrida que se murió y no debe bloquear la de hoy.
+if [ -f "$LOCK" ]; then
+  if kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
+    log "otra corrida sigue viva, salgo"; exit 0
+  fi
+  log "candado huérfano, lo piso"
+fi
+echo $$ > "$LOCK"
+trap limpiar EXIT
+log "== inicio =="
+
+# ── 1. volcar ──────────────────────────────────────────────────────────────
+TMPSQL=$(mktemp "/tmp/massdte-dump.XXXXXX.sql")
+"$PGBIN/pg_dump" "$PGURL" --no-owner --no-privileges \
+  --schema=public --schema=auth --schema=storage \
+  -f "$TMPSQL" 2>>"$LOG" || morir "pg_dump devolvió error"
+[ -s "$TMPSQL" ] || morir "el volcado salió vacío"
+log "volcado: $(du -h "$TMPSQL" | cut -f1)"
+
+# ── 2. verificar restaurando de verdad ─────────────────────────────────────
+"$PGBIN/createdb" "$DBTMP" 2>>"$LOG" || morir "no pude crear la base de verificación (¿está corriendo postgresql@17?)"
+# Restaurar contra un Postgres que no es Supabase escupe errores ESPERADOS
+# (sus roles no existen acá, y 17.11 no conoce parámetros de 17.6). Se filtran
+# para que un error DE VERDAD no se pierda entre el ruido conocido.
+"$PGBIN/psql" -q -d "$DBTMP" -v ON_ERROR_STOP=0 -f "$TMPSQL" 2>&1 >/dev/null \
+  | grep -vE 'unrecognized configuration parameter|schema "public" already exists|role "(authenticated|anon|service_role|supabase[a-z_]*|postgres)" does not exist|no privileges (were|could be) granted' \
+  >> "$LOG"
+
+desajustes=""
+for t in $TABLAS_TESTIGO; do
+  origen=$("$PGBIN/psql" "$PGURL" -tAc "select count(*) from public.$t" 2>/dev/null || echo "x")
+  copia=$("$PGBIN/psql" -d "$DBTMP" -tAc "select count(*) from public.$t" 2>/dev/null || echo "x")
+  if [ "$origen" != "$copia" ]; then
+    desajustes="$desajustes $t(origen=$origen restaurado=$copia)"
+  else
+    log "  ✓ $t: $origen filas"
+  fi
+done
+[ -n "$desajustes" ] && morir "la restauración no calza:$desajustes"
+log "restauración verificada"
+
+# ── 3. comprimir y guardar ─────────────────────────────────────────────────
+gzip -c "$TMPSQL" > "$ARCHIVO" || morir "falló la compresión"
+rm -f "$TMPSQL"; TMPSQL=""
+log "guardado: $ARCHIVO ($(du -h "$ARCHIVO" | cut -f1))"
+
+# ── 4. segunda copia en R2 ─────────────────────────────────────────────────
+if [ -n "${R2_ACCOUNT_ID:-}" ]; then
+  RCLONE_CONFIG=/dev/null \
+  rclone --config /dev/null copy "$ARCHIVO" ":s3:$R2_BUCKET/respaldos-db/" \
+    --s3-provider Cloudflare \
+    --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+    --s3-access-key-id "$R2_ACCESS_KEY_ID" \
+    --s3-secret-access-key "$R2_SECRET_ACCESS_KEY" \
+    --s3-no-check-bucket 2>>"$LOG" || morir "no pude subir a R2"
+  log "subido a R2"
+fi
+
+# ── 5. rotar: 14 días, salvando el primero de cada mes ─────────────────────
+find "$DEST" -name 'massdte-*.sql.gz' -mtime "+$RETENCION_DIAS" | while read -r viejo; do
+  case "$(basename "$viejo")" in
+    *-01.sql.gz) log "conservo mensual: $(basename "$viejo")" ;;
+    *) rm -f "$viejo"; log "rotado: $(basename "$viejo")" ;;
+  esac
+done
+
+log "== fin OK — $(ls -1 "$DEST"/massdte-*.sql.gz 2>/dev/null | wc -l | tr -d ' ') respaldos guardados =="
+exit 0
