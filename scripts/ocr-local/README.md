@@ -45,13 +45,18 @@ y cuesta $0.
 4. **Aplicar la migración** de `ocr_jobs` a la base (por Management API, como el
    resto — ver memoria `project_soporte_intervencion`).
 
-5. **launchd**: edita `cl.massdte.ocr.plist` (rutas + `DATABASE_URL`), luego:
+5. **launchd** — es **LaunchDaemon**, no Agent: arranca al bootear en la sesión 0
+   SIN que nadie inicie sesión, igual que el respaldo, así sobrevive un apagón
+   solo (sin auto-login). Se comprobó que Vision funciona headless en la sesión 0
+   de este mini M1. Corre como el usuario `clau` (menor privilegio), no root.
    ```bash
-   cp cl.massdte.ocr.plist ~/Library/LaunchAgents/
-   launchctl load ~/Library/LaunchAgents/cl.massdte.ocr.plist
+   sudo cp /Users/clau/massdte-ocr/cl.massdte.ocr.plist /Library/LaunchDaemons/
+   sudo chown root:wheel /Library/LaunchDaemons/cl.massdte.ocr.plist
+   sudo chmod 644 /Library/LaunchDaemons/cl.massdte.ocr.plist
+   sudo launchctl bootstrap system /Library/LaunchDaemons/cl.massdte.ocr.plist
    ```
-   Es **LaunchAgent** (tu usuario), no Daemon: Vision necesita correr como
-   usuario, no como root.
+   Con `pmset autorestart 1` (reencender tras corte) + `sleep 0` (no dormir), el
+   mini aguanta un apagón sin intervención.
 
 ## Probar
 
