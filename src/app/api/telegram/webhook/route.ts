@@ -1,6 +1,18 @@
 import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import {
+  abrirSesion,
+  sesionDe,
+  elegirEmpresa as sesionElegirEmpresa,
+  elegirMesa as sesionElegirMesa,
+  cerrarSesion,
+  recordarMensaje,
+  tocarSesion,
+  fijarDocumento,
+  type EmpresaOpcion,
+  type Sesion,
+} from "@/lib/telegram/sesion";
 import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
 import { esRolEmision } from "@/lib/auth/roles";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
@@ -65,6 +77,11 @@ import {
 
 const MAX_FOTO_BYTES = 6 * 1024 * 1024;
 const TOPE_DIARIO = 50;
+// Fotos que se usan de UN álbum. Un comprobante P2P real son 2-4 capturas (Binance,
+// el banco propio, el del cliente). Telegram permite álbumes de 10, y cada foto de
+// más es una subida a R2 + una llamada de OCR por la MISMA venta: multiplica el
+// costo por 10 sin agregar información. Se corta antes de bajar la foto.
+const MAX_FOTOS_ALBUM = 4;
 
 const MSG = {
   instruccionesVincular:
@@ -92,6 +109,9 @@ const MSG = {
   topeDiario:
     `🌙 Llegaste al tope de <b>${TOPE_DIARIO} comprobantes</b> por hoy.\n` +
     "Mañana seguimos — los de hoy ya quedaron en Agregados.",
+  demasiadasFotos:
+    `📸 Máximo <b>${MAX_FOTOS_ALBUM} imágenes</b> por comprobante.\n` +
+    "No procesé ninguna. Elige las que muestran la operación y mándamelas de nuevo.",
   muyGrande:
     "📦 Esa foto pesa más de <b>6 MB</b> y no la puedo procesar.\n" +
     "Mándala un poco más liviana (un screenshot normal basta).",
@@ -102,6 +122,35 @@ const MSG = {
   recibidoElegirEmpresa:
     "📥 <b>Recibí el comprobante.</b>\n" +
     "¿Para qué empresa lo cargo?",
+  sesionSaludo:
+    "👋 <b>Hola.</b> ¿Con qué empresa vamos a trabajar?",
+  sesionElegirMesa: (empresa: string) =>
+    `🏢 Elegiste <b>${empresa}</b>.\n¿Qué vamos a hacer?`,
+  sesionMandaFotos: (mesa: string) =>
+    `📸 Dale, mándame las imágenes del comprobante para la <b>${mesa}</b>.\n` +
+    `Hasta <b>${MAX_FOTOS_ALBUM}</b>, y con eso armo la propuesta.`,
+  sesionRecibida: (n: number) =>
+    `📸 Recibí <b>${n} de ${MAX_FOTOS_ALBUM}</b> imágenes.\n\n` +
+    "¿Las proceso, o falta alguna?",
+  sesionTope: (n: number) =>
+    `📸 Recibí <b>${n} de ${MAX_FOTOS_ALBUM}</b> — es el máximo por comprobante.\n\n` +
+    "Las proceso ahora.",
+  sesionSinFotos:
+    "📸 Todavía no me llega ninguna imagen. Mándamelas y las proceso.",
+  sesionProcesando:
+    "⏳ <b>Procesando…</b> te muestro la boleta en unos segundos.",
+  sesionCancelada:
+    "✅ Listo, cancelado. Cuando quieras, escríbeme y partimos de nuevo.",
+  sesionVencida:
+    "⌛ Pasó mucho rato y cerré la sesión.\nEscríbeme y partimos de nuevo.",
+  sesionFacturaAunNo:
+    "🧾 Las facturas todavía no están listas — muy pronto.\nPor ahora te puedo dejar la boleta.",
+  sesionListo: (mesa: string, monto: string, cuando: string) =>
+    `✅ <b>Listo: ${mesa} ${monto}</b>\n` +
+    `${cuando} — quedó en tu mesa.\n\n` +
+    "Recuerda revisarla en la app para emitirla.",
+  fotoSinSesion:
+    "👋 <b>Hola.</b> Antes de la foto necesito saber dos cosas.\n¿Con qué empresa vamos a trabajar?",
   soloFotos:
     "📸 Solo proceso <b>fotos de comprobantes</b>.\n" +
     "Mándame la foto y la dejo en Agregados, lista para boletear.",
@@ -222,6 +271,331 @@ function kbElegirEmpresa(token: string, opciones: TelegramEmpresaOpcion[], selec
       callback_data: `tgemp:${token}:${index}`,
     }]),
   };
+}
+
+// --- Flujo con sesión: hola → empresa → mesa → fotos ------------------------
+//
+// Se pregunta ANTES de recibir fotos. Así la sesión —y no el `media_group_id`
+// que arma Telegram— es la que dice qué imágenes son el MISMO comprobante, sin
+// depender de si el usuario las mandó de una o una por una.
+
+/** Botones de empresa + Cancelar. Con UNA empresa igual se muestra el botón. */
+function kbSesionEmpresas(token: string, opciones: EmpresaOpcion[]): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      ...opciones.map((e, i) => [{
+        text: [e.rut, e.nombre].filter(Boolean).join(" - ") || "Empresa",
+        callback_data: `ses:emp:${token}:${i}`,
+      }]),
+      [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
+    ],
+  };
+}
+
+/**
+ * Boleta / Factura / Cancelar.
+ *
+ * Factura se MUESTRA pero apagada: su mesa todavía no existe (no hay columna de
+ * mesa ni carril de emisión 33/34). Se enciende sola cuando exista, sin tocar el
+ * bot de nuevo — el esquema ya acepta mesa='factura'.
+ */
+function kbSesionMesa(token: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: "🧾 Boleta", callback_data: `ses:mesa:${token}:boleta` }],
+      [{ text: "📄 Factura (pronto)", callback_data: `ses:mesa:${token}:factura` }],
+      [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
+    ],
+  };
+}
+
+/**
+ * Botón para cerrar la fase de fotos.
+ *
+ * Antes se cerraba con una ventana de silencio de 3 s, o sea ADIVINANDO que el
+ * usuario ya había terminado: si se demoraba en mandar la tercera, se procesaba
+ * sin ella. Ahora lo dice él. Es un toque más, pero el bot deja de suponer.
+ */
+function kbSesionProcesar(token: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: "✅ Procesar", callback_data: `ses:go:${token}` }],
+      [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
+    ],
+  };
+}
+
+/**
+ * Arranca (o reinicia) el flujo: muestra las empresas del chat.
+ * `textoInicial` cambia si el disparador fue un saludo o una foto suelta.
+ */
+async function iniciarSesionChat(chatId: number, textoInicial: string): Promise<void> {
+  const svc = getServiceClient();
+  const empresaChat = await empresaDelChat(chatId);
+  if (!empresaChat) {
+    await say(chatId, MSG.noVinculado);
+    return;
+  }
+  if (!(await telegramHabilitadoEmpresa(svc, empresaChat))) {
+    await say(chatId, MSG.noEnPlan);
+    return;
+  }
+
+  // Business con varias empresas → todas; si no, la del chat (igual con botón).
+  const multi = await empresasParaTelegramMultiempresa(svc, empresaChat).catch(() => null);
+  let opciones: EmpresaOpcion[] = multi?.empresas ?? [];
+  if (opciones.length === 0) {
+    const { data } = await svc
+      .from("empresas")
+      .select("id, rut, razon_social")
+      .eq("id", empresaChat)
+      .maybeSingle();
+    opciones = [{ id: empresaChat, rut: data?.rut ?? null, nombre: data?.razon_social ?? null }];
+  }
+
+  const sesion = await abrirSesion(svc, chatId, opciones);
+  if (!sesion) {
+    await say(chatId, MSG.errorGuardar);
+    return;
+  }
+  const msg = await sendMessage(chatId, textoInicial, {
+    html: true,
+    replyMarkup: kbSesionEmpresas(sesion.token, opciones),
+  });
+  if (msg?.message_id) await recordarMensaje(svc, chatId, msg.message_id);
+}
+
+/**
+ * Recibe UNA foto dentro de una sesión abierta.
+ *
+ * No cierra nada por tiempo: sube la imagen al buffer y actualiza el contador
+ * con el botón "Procesar". El usuario decide cuándo terminó, que es la única
+ * forma de no adivinar. Al llegar al tope se procesa solo, porque ya no puede
+ * mandar más.
+ */
+async function recibirFotoSesion(chatId: number, sesion: Sesion, foto: TelegramPhotoSize): Promise<void> {
+  const svc = getServiceClient();
+  const empresaId = sesion.empresa_id!;
+  const grupo = `ses_${sesion.token}`;
+
+  const { data: bufRow, error: bufErr } = await svc
+    .from("telegram_album_buffer")
+    .insert({ empresa_id: empresaId, media_group_id: grupo, image: { pending: true } as Json })
+    .select("id, created_at")
+    .single();
+  if (bufErr || !bufRow) { await say(chatId, MSG.errorGuardar); return; }
+
+  // Rango por antigüedad (no un count a secas): las fotos de un álbum llegan en
+  // webhooks distintos y un contador compartido haría que dos se descartaran
+  // mutuamente.
+  const { count: previas } = await svc
+    .from("telegram_album_buffer")
+    .select("id", { count: "exact", head: true })
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", grupo)
+    .lt("created_at", bufRow.created_at);
+  const posicion = (previas ?? 0) + 1;
+
+  if (posicion > MAX_FOTOS_ALBUM) {
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    if (posicion === MAX_FOTOS_ALBUM + 1) await say(chatId, MSG.demasiadasFotos);
+    return;
+  }
+
+  // Subir la imagen. Si falla, se saca del buffer para que el contador no mienta.
+  try {
+    const foto64 = await getFileBase64(foto.file_id);
+    if (foto64.size > MAX_FOTO_BYTES) {
+      await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      await say(chatId, MSG.muyGrande);
+      return;
+    }
+    const nombre = nombreComprobanteTelegram();
+    const up = await subirDocumentoR2(
+      empresaId,
+      `${grupo}_${nombre}`,
+      Buffer.from(foto64.base64, "base64"),
+      foto64.mime,
+    );
+    await svc
+      .from("telegram_album_buffer")
+      .update({ image: { path: up.key, mime: foto64.mime, name: nombre } as Json })
+      .eq("id", bufRow.id);
+  } catch {
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    await say(chatId, MSG.errorGuardar);
+    return;
+  }
+
+  await tocarSesion(svc, chatId);
+
+  if (posicion >= MAX_FOTOS_ALBUM) {
+    // Tope: ya no puede mandar más, no tiene sentido preguntarle.
+    await say(chatId, MSG.sesionTope(posicion));
+    await procesarSesion(chatId, sesion);
+    return;
+  }
+
+  // Se EDITA el mismo mensaje para que el contador no llene el chat de globos.
+  const texto = MSG.sesionRecibida(posicion);
+  const teclado = kbSesionProcesar(sesion.token);
+  const editado = sesion.message_id
+    ? await editMessageText(chatId, sesion.message_id, texto, { html: true, replyMarkup: teclado })
+    : false;
+  if (!editado) {
+    const msg = await sendMessage(chatId, texto, { html: true, replyMarkup: teclado });
+    if (msg?.message_id) await recordarMensaje(svc, chatId, msg.message_id);
+  }
+}
+
+/**
+ * Cierra la fase de fotos: crea el documento con TODAS las imágenes del buffer y
+ * lo encola como UNA venta. El worker manda la propuesta al chat.
+ */
+async function procesarSesion(chatId: number, sesion: Sesion): Promise<void> {
+  const svc = getServiceClient();
+  const empresaId = sesion.empresa_id!;
+  const grupo = `ses_${sesion.token}`;
+
+  const { data: filas } = await svc
+    .from("telegram_album_buffer")
+    .select("id, image")
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", grupo);
+
+  // Solo las que terminaron de subir (tienen `path`); las pendientes se ignoran.
+  const imagenes: { path: string; mime?: string; name?: string }[] = [];
+  for (const f of filas ?? []) {
+    const img = f.image;
+    if (!img || typeof img !== "object" || Array.isArray(img)) continue;
+    const reg = img as Record<string, unknown>;
+    if (typeof reg.path !== "string") continue;
+    imagenes.push({
+      path: reg.path,
+      mime: typeof reg.mime === "string" ? reg.mime : undefined,
+      name: typeof reg.name === "string" ? reg.name : undefined,
+    });
+  }
+  if (imagenes.length === 0) { await say(chatId, MSG.sesionSinFotos); return; }
+
+  if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
+    await say(chatId, MSG.topeDiario);
+    return;
+  }
+
+  const nombre = nombreComprobanteTelegram();
+  const { data: doc } = await svc
+    .from("documentos_subidos")
+    .insert({
+      empresa_id: empresaId,
+      nombre_archivo: imagenes.length > 1 ? `Álbum ${nombre}` : `Telegram ${nombre}`,
+      tipo: "imagen",
+      storage_path: imagenes[0].path,
+      storage_provider: "r2",
+      estado: "procesando",
+      media_group_id: grupo,
+      fuente_datos: "telegram",
+      album_imagenes: imagenes as unknown as Json,
+      progreso_ia: { estado: "queued", origen: "telegram", album: imagenes.length > 1 } as Json,
+    })
+    .select("id")
+    .single();
+  if (!doc) { await say(chatId, MSG.errorGuardar); return; }
+
+  // Solo la primera vez: si dos toques de "Procesar" llegan juntos, el segundo no
+  // vuelve a encolar.
+  if (!(await fijarDocumento(svc, chatId, sesion.token, doc.id))) {
+    await svc.from("documentos_subidos").delete().eq("id", doc.id);
+    return;
+  }
+
+  try {
+    const job = await enqueueDocumentProcessingJob(svc, {
+      documentoId: doc.id,
+      empresaId,
+      usuarioId: null,
+      tipo: "imagen",
+      storagePath: imagenes[0].path,
+      metadata: { grouped_images: imagenes, origen: "telegram", album: imagenes.length > 1, chat_id: chatId },
+    });
+    await svc
+      .from("documentos_subidos")
+      .update({ progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram" } as Json })
+      .eq("id", doc.id);
+    await svc.from("telegram_album_buffer").delete().in("id", (filas ?? []).map((f) => f.id));
+    await iniciarDrenaje("telegram-sesion-kick").catch(() => {});
+  } catch {
+    await svc
+      .from("documentos_subidos")
+      .update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar" } as Json })
+      .eq("id", doc.id);
+    await say(chatId, MSG.errorGuardar);
+  }
+}
+
+/** Callbacks del flujo: ses:emp / ses:mesa / ses:cancel. */
+async function handleSesionCallback(
+  chatId: number,
+  messageId: number | undefined,
+  callbackId: string,
+  data: string,
+): Promise<void> {
+  const svc = getServiceClient();
+  const [, accion, token, valor] = data.split(":");
+
+  const sesion: Sesion | null = await sesionDe(svc, chatId);
+  if (!sesion || sesion.token !== token) {
+    // Botón de un menú viejo: la sesión ya venció o fue reemplazada.
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionVencida, { html: true });
+    await answerCallbackQuery(callbackId, "Esa sesión ya no está activa.");
+    return;
+  }
+
+  if (accion === "cancel") {
+    await cerrarSesion(svc, chatId);
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionCancelada, { html: true });
+    await answerCallbackQuery(callbackId, "Cancelado");
+    return;
+  }
+
+  if (accion === "emp") {
+    const elegida = await sesionElegirEmpresa(svc, chatId, token, Number(valor));
+    if (!elegida) { await answerCallbackQuery(callbackId, "No encontré esa empresa."); return; }
+    const nombre = [elegida.empresa.rut, elegida.empresa.nombre].filter(Boolean).join(" - ") || "esa empresa";
+    if (messageId) {
+      await editMessageText(chatId, messageId, MSG.sesionElegirMesa(nombre), {
+        html: true,
+        replyMarkup: kbSesionMesa(token),
+      });
+    }
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "go") {
+    if (sesion.estado === "procesando") { await answerCallbackQuery(callbackId, "Ya lo estoy procesando"); return; }
+    await answerCallbackQuery(callbackId, "Procesando…");
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionProcesando, { html: true });
+    await procesarSesion(chatId, sesion);
+    return;
+  }
+
+  if (accion === "mesa") {
+    // La mesa de facturas no existe todavía: se avisa y la sesión sigue en pie
+    // para que pueda elegir boleta sin empezar de nuevo.
+    if (valor === "factura") {
+      await answerCallbackQuery(callbackId, "Facturas: muy pronto");
+      await say(chatId, MSG.sesionFacturaAunNo);
+      return;
+    }
+    const lista = await sesionElegirMesa(svc, chatId, token, "boleta");
+    if (!lista) { await answerCallbackQuery(callbackId, "No pude continuar."); return; }
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionMandaFotos("boleta"), { html: true });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  await answerCallbackQuery(callbackId);
 }
 
 async function empresasParaTelegramMultiempresa(svc: Svc, empresaId: string): Promise<{ cuentaId: string; empresas: TelegramEmpresaOpcion[] } | null> {
@@ -367,11 +741,20 @@ async function handleMessage(msg: TelegramMessage) {
   }
 
   if (msg.photo?.length) {
-    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id);
+    // Sin sesión abierta la foto NO se procesa (ni OCR ni storage): se abre el
+    // flujo y se le pide lo que falta. Es la puerta de entrada más probable —
+    // a las 11 de la noche nadie escribe "hola", pega la captura y ya.
+    const sesion = await sesionDe(getServiceClient(), chatId);
+    if (!sesion?.empresa_id || !sesion.mesa) {
+      await iniciarSesionChat(chatId, MSG.fotoSinSesion);
+      return;
+    }
+    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id, sesion);
     return;
   }
 
-  await say(chatId, MSG.soloFotos);
+  // Cualquier texto suelto (un "hola", un "buenas") arranca el flujo.
+  await iniciarSesionChat(chatId, MSG.sesionSaludo);
 }
 
 // --- Botones (callback_query): aprobar / editar / volver / config ---
@@ -384,6 +767,11 @@ async function handleCallback(cq: TelegramCallbackQuery) {
 
   const empresaId = await empresaDelChat(chatId);
   if (!empresaId) { await answerCallbackQuery(cq.id, "Tu Telegram no está conectado."); return; }
+
+  if (data.startsWith("ses:")) {
+    await handleSesionCallback(chatId, messageId, cq.id, data);
+    return;
+  }
 
   if (data.startsWith("tgemp:")) {
     await handleEmpresaComprobanteCallback(chatId, messageId, cq.id, data);
@@ -431,6 +819,22 @@ async function handleCallback(cq: TelegramCallbackQuery) {
         await markMensajeEstado(chatId, messageId, "aprobado");
       }
     }
+    // Cierre del flujo: decirle DÓNDE quedó y que todavía falta emitirla — el bot
+    // deja propuesta, no emite. Y se cierra la sesión: el comprobante terminó.
+    if (status === "aprobado" && prop) {
+      const svcCierre = getServiceClient();
+      const sesion = await sesionDe(svcCierre, chatId);
+      const monto = typeof prop.total === "number"
+        ? "$" + Math.round(prop.total).toLocaleString("es-CL")
+        : "";
+      const cuando = new Intl.DateTimeFormat("es-CL", {
+        timeZone: "America/Santiago",
+        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+      }).format(new Date());
+      await say(chatId, MSG.sesionListo(sesion?.mesa ?? "boleta", monto, cuando));
+      if (sesion) await cerrarSesion(svcCierre, chatId);
+    }
+
     const answer =
       status === "aprobado" ? "✅ Aprobada — está en Agregados" :
       status === "ya_aprobado" ? "Ya estaba aprobada" :
@@ -1028,6 +1432,24 @@ async function guardarYProcesarComprobanteTelegram(args: {
 // Una foto de un álbum (v1: chats de una empresa). Sube a R2, deja su imagen en el
 // buffer e intenta ser el "creador" (único por empresa+media_group_id). El creador
 // espera un debounce a que lleguen las hermanas y encola UN job multi-imagen = 1 venta.
+/**
+ * ¿Este álbum fue rechazado por pasarse del tope de fotos?
+ *
+ * La marca vive en el `documentos_subidos` del álbum (índice único por
+ * empresa+media_group_id), no en el buffer: así también BLOQUEA que una foto
+ * tardía cree un álbum nuevo con las sobras del rechazado.
+ */
+async function albumRechazado(svc: Svc, empresaId: string, mediaGroupId: string): Promise<boolean> {
+  const { data } = await svc
+    .from("documentos_subidos")
+    .select("progreso_ia")
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", mediaGroupId)
+    .maybeSingle();
+  const prog = data?.progreso_ia;
+  return Boolean(prog && typeof prog === "object" && !Array.isArray(prog) && (prog as Record<string, unknown>).error === "album_excede_tope");
+}
+
 async function recibirAlbumFoto(chatId: number, empresaId: string, foto: TelegramPhotoSize, mediaGroupId: string) {
   const svc = getServiceClient();
 
@@ -1043,9 +1465,37 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   const { data: bufRow, error: bufErr } = await svc
     .from("telegram_album_buffer")
     .insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { pending: true } as Json })
-    .select("id")
+    .select("id, created_at")
     .single();
   if (bufErr || !bufRow) return;
+
+  // Tope de fotos por álbum. Se rankea por antigüedad (cada foto cuenta las que
+  // llegaron ANTES que ella) en vez de un count() a secas: las fotos del álbum
+  // llegan en webhooks distintos y concurrentes, y un count compartido haría que
+  // dos se descartaran mutuamente. Rankear sólo puede admitir una de más ante un
+  // empate exacto de created_at, nunca perder una que iba dentro del tope.
+  const { count: fotosPrevias } = await svc
+    .from("telegram_album_buffer")
+    .select("id", { count: "exact", head: true })
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", mediaGroupId)
+    .lt("created_at", bufRow.created_at);
+  if ((fotosPrevias ?? 0) >= MAX_FOTOS_ALBUM) {
+    // Se RECHAZA el álbum entero, no se recortan las primeras 4: procesar un
+    // subconjunto silencioso emitiría una propuesta sobre evidencia parcial sin
+    // que nadie sepa qué quedó afuera. Telegram manda las fotos del álbum en
+    // serie (espera el 200 de cada una), así que para cuando llega la 5ª el
+    // documento creador ya existe y la marca lo alcanza.
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    await svc
+      .from("documentos_subidos")
+      .update({ estado: "error", progreso_ia: { estado: "error", error: "album_excede_tope" } as Json })
+      .eq("empresa_id", empresaId)
+      .eq("media_group_id", mediaGroupId);
+    // Un solo aviso por álbum: lo manda la PRIMERA que se pasa del tope.
+    if ((fotosPrevias ?? 0) === MAX_FOTOS_ALBUM) await say(chatId, MSG.demasiadasFotos);
+    return;
+  }
 
   // Intentar ser el creador (índice único por empresa+media_group_id). Instantáneo;
   // el storage_path real se completa tras la subida en after().
@@ -1082,6 +1532,13 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   await (async () => {
     const svc2 = getServiceClient();
 
+    // Si una foto posterior ya rechazó el álbum, esta no se sube: el corte tiene
+    // que pasar ANTES de R2 y del OCR, que es lo que cuesta.
+    if (await albumRechazado(svc2, empresaId, mediaGroupId)) {
+      await svc2.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      return;
+    }
+
     // (TODAS las fotos) descargar + subir ESTA foto a R2 y completar su fila del buffer.
     try {
       const foto64 = await getFileBase64(foto.file_id);
@@ -1112,6 +1569,12 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
         .eq("media_group_id", mediaGroupId);
       filas = (data ?? []) as Array<{ id: string; image: Json; created_at: string }>;
       if (filas.length === 0) return;
+      // Rechazado a mitad de la ventana: limpiar el buffer y NO encolar. El doc
+      // ya quedó en error y el aviso al chat lo mandó la foto que se pasó.
+      if (await albumRechazado(svc2, empresaId, mediaGroupId)) {
+        await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
+        return;
+      }
       const conPath = (img: Json) => Boolean(img && typeof img === "object" && !Array.isArray(img) && (img as Record<string, unknown>).path);
       const todasSubidas = filas.every((f) => conPath(f.image));
       const ultima = Math.max(...filas.map((f) => new Date(f.created_at).getTime()));
@@ -1140,7 +1603,13 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   })();
 }
 
-async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number, mediaGroupId?: string) {
+async function recibirComprobante(
+  chatId: number,
+  photos: TelegramPhotoSize[],
+  receivedAt?: number,
+  mediaGroupId?: string,
+  sesion?: Sesion,
+) {
   const svc = getServiceClient();
 
   // Chat no vinculado = CERO procesamiento (ni OCR ni storage): el costo
@@ -1164,6 +1633,21 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], r
   const foto = photos[photos.length - 1];
   if ((foto.file_size ?? 0) > MAX_FOTO_BYTES) {
     await say(chatId, MSG.muyGrande);
+    return;
+  }
+
+  // Con sesión abierta la empresa YA la eligió el usuario, así que no hay nada
+  // que preguntar. Y todas las fotos se agrupan por el TOKEN de la sesión en vez
+  // del media_group_id de Telegram: así da lo mismo si las mandó de una o una
+  // por una — lo que las une es que el usuario abrió un comprobante, no cómo las
+  // empaquetó la app. De paso, el tope de 4 pasa a ser del comprobante.
+  if (sesion?.empresa_id && sesion.mesa) {
+    if (sesion.empresa_id !== chat.empresa_id) {
+      // Multiempresa: la sesión manda, pero solo dentro de la misma cuenta.
+      const permitida = sesion.opciones.some((o) => o.id === sesion.empresa_id);
+      if (!permitida) { await say(chatId, MSG.sinPermisos); return; }
+    }
+    await recibirFotoSesion(chatId, sesion, foto);
     return;
   }
 

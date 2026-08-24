@@ -2901,6 +2901,70 @@ export type Database = {
           },
         ]
       }
+      telegram_sesiones: {
+        Row: {
+          chat_id: number
+          created_at: string
+          documento_id: string | null
+          empresa_id: string | null
+          estado: string
+          expires_at: string
+          mesa: string | null
+          message_id: number | null
+          opciones: Json
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          expires_at: string
+          mesa?: string | null
+          message_id?: number | null
+          opciones?: Json
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          expires_at?: string
+          mesa?: string | null
+          message_id?: number | null
+          opciones?: Json
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_sesiones_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: true
+            referencedRelation: "telegram_chats"
+            referencedColumns: ["chat_id"]
+          },
+          {
+            foreignKeyName: "telegram_sesiones_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_sesiones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transacciones: {
         Row: {
           contraparte: string | null
