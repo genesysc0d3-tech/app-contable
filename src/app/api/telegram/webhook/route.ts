@@ -133,6 +133,10 @@ const MSG = {
     "⌛ Pasó mucho rato y cerré la sesión.\nEscríbeme y partimos de nuevo.",
   sesionFacturaAunNo:
     "🧾 Las facturas todavía no están listas — muy pronto.\nPor ahora te puedo dejar la boleta.",
+  sesionListo: (mesa: string, monto: string, cuando: string) =>
+    `✅ <b>Listo: ${mesa} ${monto}</b>\n` +
+    `${cuando} — quedó en tu mesa.\n\n` +
+    "Recuerda revisarla en la app para emitirla.",
   fotoSinSesion:
     "👋 <b>Hola.</b> Antes de la foto necesito saber dos cosas.\n¿Con qué empresa vamos a trabajar?",
   soloFotos:
@@ -611,6 +615,22 @@ async function handleCallback(cq: TelegramCallbackQuery) {
         await markMensajeEstado(chatId, messageId, "aprobado");
       }
     }
+    // Cierre del flujo: decirle DÓNDE quedó y que todavía falta emitirla — el bot
+    // deja propuesta, no emite. Y se cierra la sesión: el comprobante terminó.
+    if (status === "aprobado" && prop) {
+      const svcCierre = getServiceClient();
+      const sesion = await sesionDe(svcCierre, chatId);
+      const monto = typeof prop.total === "number"
+        ? "$" + Math.round(prop.total).toLocaleString("es-CL")
+        : "";
+      const cuando = new Intl.DateTimeFormat("es-CL", {
+        timeZone: "America/Santiago",
+        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+      }).format(new Date());
+      await say(chatId, MSG.sesionListo(sesion?.mesa ?? "boleta", monto, cuando));
+      if (sesion) await cerrarSesion(svcCierre, chatId);
+    }
+
     const answer =
       status === "aprobado" ? "✅ Aprobada — está en Agregados" :
       status === "ya_aprobado" ? "Ya estaba aprobada" :
