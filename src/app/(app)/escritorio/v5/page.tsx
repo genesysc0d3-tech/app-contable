@@ -241,7 +241,16 @@ export default async function V5Page({ searchParams }: {
 .dz-ctx-cta b{color:var(--text2)}
 .dz-ctx-priv{display:flex;gap:7px;font-size:10px;color:var(--text3);margin-top:10px;line-height:1.45}
 .dz-ctx-priv b{color:var(--text2)}
-.dz-ctx-rec{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:10.5px;color:var(--text2);cursor:pointer}
+/* Switch calcado del "Detalle" del visor (GlosaComunControl): 26x15 con la
+   bolita que se corre. Es una preferencia, no una selección — por eso switch y
+   no checkbox. */
+.dz-ctx-sw{display:inline-flex;align-items:center;gap:8px;margin-top:12px;border:none;background:transparent;cursor:pointer;font-size:10.5px;font-weight:600;color:var(--text3);padding:0;font-family:inherit;transition:color .15s}
+.dz-ctx-sw.on{color:#C4B5FD}
+.dz-ctx-sw:focus-visible{outline:2px solid #A78BFA;outline-offset:3px;border-radius:4px}
+.dz-ctx-sw-track{width:26px;height:15px;border-radius:999px;padding:2px;background:var(--bg-muted);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:flex-start;transition:background .15s,justify-content .15s;flex-shrink:0}
+.dz-ctx-sw.on .dz-ctx-sw-track{background:color-mix(in srgb,#A78BFA 35%,transparent);justify-content:flex-end}
+.dz-ctx-sw-knob{width:11px;height:11px;border-radius:50%;background:var(--text3);transition:background .15s}
+.dz-ctx-sw.on .dz-ctx-sw-knob{background:#A78BFA}
 .dz-ctx-pie{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 .dz-ctx-b{font-size:11.5px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:background .15s,color .15s}
 .dz-ctx-b:hover{background:var(--bg-muted);color:var(--text)}

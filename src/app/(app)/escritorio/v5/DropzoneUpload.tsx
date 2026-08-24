@@ -318,11 +318,15 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
                 pones, se reemplazan por seudónimos antes de salir.</span>
             </div>
 
-            <label className="dz-ctx-rec">
-              <input type="checkbox" checked={ctxRecordar}
-                onChange={(e) => setCtxRecordar(e.target.checked)} />
+            {/* Mismo switch que el "Detalle" del visor (GlosaComunControl): es una
+                preferencia que se prende o apaga, no un ítem que se selecciona —
+                y el checkbox crudo del navegador se veía pegado de otra app. */}
+            <button type="button" role="switch" aria-checked={ctxRecordar}
+              className={`dz-ctx-sw${ctxRecordar ? " on" : ""}`}
+              onClick={() => setCtxRecordar(v => !v)}>
+              <span className="dz-ctx-sw-track"><span className="dz-ctx-sw-knob" /></span>
               Usar esto también en mis próximas cartolas
-            </label>
+            </button>
 
             <div className="dz-ctx-pie">
               <button type="button" className="dz-ctx-b" onClick={() => setCtxId(null)}>Cancelar</button>
