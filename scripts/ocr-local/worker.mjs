@@ -59,7 +59,11 @@ function correrOcr(rutaImagen) {
       }
       try {
         const arr = JSON.parse(out);
-        resolve(Array.isArray(arr) ? arr[0] : arr);
+        const primero = Array.isArray(arr) ? arr[0] : arr;
+        if (!primero || typeof primero.text !== "string") {
+          return reject(new Error("el OCR no devolvió texto (imagen vacía o ilegible)"));
+        }
+        resolve(primero);
       } catch (e) {
         reject(new Error(`no pude parsear la salida del ocr: ${e.message}`));
       }

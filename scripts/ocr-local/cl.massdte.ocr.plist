@@ -4,15 +4,14 @@
 
   Instalar (en el mini, con TU usuario, NO sudo):
     cp cl.massdte.ocr.plist ~/Library/LaunchAgents/
-    launchctl load  ~/Library/LaunchAgents/cl.massdte.ocr.plist
-    launchctl start cl.massdte.ocr
+    launchctl load ~/Library/LaunchAgents/cl.massdte.ocr.plist
 
   Es LaunchAgent (no Daemon): corre como tu usuario, que es lo que necesita el
   framework Vision. KeepAlive lo reinicia si muere (o si el worker sale con
-  código 1 al caerse la conexión). Los secretos van en EnvironmentVariables o,
-  mejor, en un archivo aparte que el ProgramArguments cargue (ver README).
+  código 1 al caerse la conexión). El secreto NO va acá: run-worker.sh lo toma
+  de ~/.massdte-respaldo/config (el mismo del respaldo).
 
-  AJUSTA las rutas /RUTA/A/... y la DATABASE_URL antes de instalar.
+  Ajusta /Users/clau si el usuario del mini es otro.
 -->
 <plist version="1.0">
 <dict>
@@ -21,20 +20,9 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/node</string>
-    <string>/RUTA/A/scripts/ocr-local/worker.mjs</string>
+    <string>/bin/bash</string>
+    <string>/Users/clau/massdte-ocr/run-worker.sh</string>
   </array>
-
-  <key>WorkingDirectory</key>
-  <string>/RUTA/A/scripts/ocr-local</string>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>DATABASE_URL</key>
-    <string>postgresql://postgres.XXXX:PASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres</string>
-    <key>OCR_BIN</key>
-    <string>/RUTA/A/scripts/ocr-local/ocr</string>
-  </dict>
 
   <key>RunAtLoad</key>
   <true/>
