@@ -207,8 +207,8 @@ export default async function V5Page({ searchParams }: {
 .dz-icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 /* Botón de contexto para la IA. El degradado se ancla en el rojo de marca: un
    arcoíris genérico se ve pegado de otra app. */
-.dz-ia-btn{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:5px 9px;border-radius:7px;white-space:nowrap;cursor:pointer;border:1px solid color-mix(in srgb,#A78BFA 30%,transparent);background:color-mix(in srgb,#A78BFA 7%,transparent);color:var(--text2);flex-shrink:0;transition:border-color .15s,background .15s}
-.dz-ia-btn:hover{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent)}
+.dz-ia-btn{box-shadow:0 0 0 0 transparent;display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:5px 9px;border-radius:7px;white-space:nowrap;cursor:pointer;border:1px solid color-mix(in srgb,#A78BFA 30%,transparent);background:color-mix(in srgb,#A78BFA 7%,transparent);color:var(--text2);flex-shrink:0;transition:border-color .15s,background .15s,box-shadow .25s}
+.dz-ia-btn:hover{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent);box-shadow:0 0 16px -4px rgba(167,139,250,.55)}
 .dz-ia-btn:focus-visible{outline:2px solid #A78BFA;outline-offset:1px}
 .dz-ia-btn.puesto{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent);color:#C4B5FD}
 .dz-ia-sp{font-size:10px;background:linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -224,10 +224,23 @@ export default async function V5Page({ searchParams }: {
 /* Popup de contexto. Calca el overlay del modal de la app (.ed-overlay/.ed-panel):
    mismo velo con blur, mismo radio de 20px, misma superficie. */
 .dz-ctx-velo{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:dzFadeIn .2s ease both}
-.dz-ctx{width:min(440px,96vw);max-height:88vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px;box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);animation:dzPopIn .22s cubic-bezier(.2,.8,.3,1) both}
+.dz-ctx{width:min(440px,96vw);max-height:88vh;overflow-y:auto;padding:20px;border-radius:20px;border:1px solid transparent;background:linear-gradient(var(--surface),var(--surface)) padding-box,linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA,#A78BFA,#F59E0B,#E8553E) border-box;background-size:auto,320px 100%;background-repeat:repeat,repeat;box-shadow:0 30px 90px rgba(0,0,0,.45);animation:dzPopIn .22s cubic-bezier(.2,.8,.3,1) both,dzBorde 7s linear infinite,dzGlow 7s linear infinite}
 @keyframes dzFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes dzPopIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.dz-ctx-velo,.dz-ctx{animation:none}}
+/* Borde arcoíris. Mismo truco que el texto "IA": el degradado es palíndromo (los
+   bordes del tile calzan) y la animación desplaza EXACTAMENTE el ancho del tile,
+   así el loop no tiene costura. Lento (7s) para que acompañe sin distraer. */
+@keyframes dzBorde{from{background-position:0 0,0 0}to{background-position:0 0,320px 0}}
+/* Glow del mismo arcoíris, sincronizado con el borde (7s) y cerrando en el color
+   inicial para que el ciclo no tenga salto. La sombra negra se repite en cada
+   paso porque la animación reemplaza el box-shadow completo. */
+@keyframes dzGlow{
+0%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(232,85,62,.5)}
+25%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(245,158,11,.5)}
+50%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(167,139,250,.55)}
+75%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(96,165,250,.5)}
+100%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(232,85,62,.5)}}
+@media (prefers-reduced-motion:reduce){.dz-ctx-velo{animation:none}.dz-ctx{animation:none;box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(167,139,250,.5)}}
 .dz-ctx h4{font-size:14px;font-weight:700;margin:0 0 4px;color:var(--text)}
 .dz-ctx-ph{font-size:11.5px;color:var(--text2);margin:0 0 12px;line-height:1.45}
 .dz-ctx-ph b{color:var(--text)}
@@ -243,14 +256,16 @@ export default async function V5Page({ searchParams }: {
 .dz-ctx-priv b{color:var(--text2)}
 /* Switch calcado del "Detalle" del visor (GlosaComunControl): 26x15 con la
    bolita que se corre. Es una preferencia, no una selección — por eso switch y
-   no checkbox. */
-.dz-ctx-sw{display:inline-flex;align-items:center;gap:8px;margin-top:12px;border:none;background:transparent;cursor:pointer;font-size:10.5px;font-weight:600;color:var(--text3);padding:0;font-family:inherit;transition:color .15s}
+   no checkbox. La bolita se mueve con transform: justify-content NO anima,
+   salta de un lado al otro. */
+.dz-ctx-sw{display:inline-flex;align-items:center;gap:8px;margin-top:12px;border:none;background:transparent;cursor:pointer;font-size:10.5px;font-weight:600;color:var(--text3);padding:0;font-family:inherit;transition:color .2s ease}
 .dz-ctx-sw.on{color:#C4B5FD}
 .dz-ctx-sw:focus-visible{outline:2px solid #A78BFA;outline-offset:3px;border-radius:4px}
-.dz-ctx-sw-track{width:26px;height:15px;border-radius:999px;padding:2px;background:var(--bg-muted);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:flex-start;transition:background .15s,justify-content .15s;flex-shrink:0}
-.dz-ctx-sw.on .dz-ctx-sw-track{background:color-mix(in srgb,#A78BFA 35%,transparent);justify-content:flex-end}
-.dz-ctx-sw-knob{width:11px;height:11px;border-radius:50%;background:var(--text3);transition:background .15s}
-.dz-ctx-sw.on .dz-ctx-sw-knob{background:#A78BFA}
+.dz-ctx-sw-track{width:26px;height:15px;border-radius:999px;padding:2px;background:var(--bg-muted);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:flex-start;transition:background .22s ease,border-color .22s ease,box-shadow .22s ease;flex-shrink:0}
+.dz-ctx-sw.on .dz-ctx-sw-track{background:color-mix(in srgb,#A78BFA 35%,transparent);border-color:color-mix(in srgb,#A78BFA 45%,transparent);box-shadow:0 0 12px -2px rgba(167,139,250,.5)}
+.dz-ctx-sw-knob{width:11px;height:11px;border-radius:50%;background:var(--text3);transition:transform .22s cubic-bezier(.34,1.4,.5,1),background .22s ease}
+.dz-ctx-sw.on .dz-ctx-sw-knob{transform:translateX(9px);background:#A78BFA}
+@media (prefers-reduced-motion:reduce){.dz-ctx-sw-knob{transition:background .22s ease}}
 .dz-ctx-pie{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 .dz-ctx-b{font-size:11.5px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:background .15s,color .15s}
 .dz-ctx-b:hover{background:var(--bg-muted);color:var(--text)}

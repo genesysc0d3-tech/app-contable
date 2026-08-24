@@ -313,7 +313,14 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
             <div className="dz-ctx-cta"><b>{ctxTexto.length}</b> / {MAX_CONTEXTO} caracteres</div>
 
             <div className="dz-ctx-priv">
-              <span aria-hidden="true">🔒</span>
+              {/* SVG de trazo como el resto de los íconos de la app: el emoji de
+                  candado lo pinta el sistema operativo y se ve de otro producto. */}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                style={{ flexShrink: 0, marginTop: 1 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
               <span>Este texto lo lee el clasificador. <b>No escribas nombres ni RUTs</b> — si los
                 pones, se reemplazan por seudónimos antes de salir.</span>
             </div>
