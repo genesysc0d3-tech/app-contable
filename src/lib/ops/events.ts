@@ -12,6 +12,7 @@ export type OpsSource =
   | "pagos"
   | "pagos/webhook"
   | "pagos/cron"
+  | "pagos/flow"
   | "emision"
   | "sii-local"
   | "simpleapi"

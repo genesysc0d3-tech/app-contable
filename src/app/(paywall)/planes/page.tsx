@@ -10,6 +10,7 @@ import { getUfClp } from "@/lib/sii/uf";
 import { clpConIva, estadoCuota } from "@/lib/pagos/metering";
 import { Check, X, RefreshCw } from "lucide-react";
 import CheckoutButton from "./CheckoutButton";
+import { flowConfigurado } from "@/lib/pagos/flow";
 
 /**
  * /planes — paywall y catálogo de planes massDTE.
@@ -39,7 +40,7 @@ function Feat({ t, ok = true, strong = false }: { t: string; ok?: boolean; stron
   );
 }
 
-export default async function PlanesPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
+export default async function PlanesPage({ searchParams }: { searchParams: Promise<{ plan?: string; tarjeta?: string; cobro?: string }> }) {
   const usuario = await getUsuario();
   if (!usuario) redirect("/onboarding");
 
@@ -59,13 +60,23 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
   // la cookie massdte_plan que dejó el registro (el onboarding ya no pasa por acá:
   // va directo al escritorio, así que la cookie se lee recién cuando viene a pagar).
   const sp = await searchParams;
+  const porFlow = flowConfigurado();
   const jar = await cookies();
   const planCookie = (jar.get("massdte_plan")?.value ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24) || null;
   const planPedido = typeof sp.plan === "string" ? sp.plan.toLowerCase() : planCookie;
   const recomendadoCodigo = planPedido && planes.some((p) => p.codigo === planPedido) ? planPedido : "pro";
 
   let aviso: string | null = null;
-  if (cuota.suscripcionEstado === "morosa") aviso = "Tu suscripción está morosa — regulariza el pago para reactivar la emisión.";
+  // La vuelta de la pasarela manda sobre el resto del aviso: es lo que el
+  // cliente acaba de hacer y necesita saber cómo terminó. Sin esto vuelve a una
+  // página igual a la que dejó y no sabe si funcionó.
+  if (sp.cobro === "rechazado") {
+    aviso = "Tu tarjeta quedó registrada, pero el banco rechazó el primer cobro. Si es tarjeta de débito, revisa que tengas saldo y vuelve a intentar.";
+  } else if (sp.tarjeta === "rechazada" || sp.tarjeta === "error") {
+    aviso = "No se completó el registro de la tarjeta. Puedes intentarlo de nuevo — no se te cobró nada.";
+  } else if (sp.tarjeta === "ok") {
+    aviso = "Tu tarjeta quedó registrada. Elige un plan para activarlo.";
+  } else if (cuota.suscripcionEstado === "morosa") aviso = "Tu suscripción está morosa — regulariza el pago para reactivar la emisión.";
   else if (cuota.suscripcionEstado === "pausada") aviso = "Tu suscripción está pausada — reactívala para seguir emitiendo boletas.";
   else if (trial && trial.activo && trial.inicio) aviso = `Período de prueba activo — ${trial.diasRestantes} ${trial.diasRestantes === 1 ? "día restante" : "días restantes"} · ${trial.boletasUsadas} de ${trial.boletasMax} boletas usadas`;
   else if (trial && trial.activo && !trial.inicio) aviso = `Prueba gratis: tu primera emisión masiva activa ${trial.diasRestantes} días o ${trial.boletasMax} boletas, lo que ocurra primero.`;
@@ -163,7 +174,7 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
                 </ul>
 
                 <div style={{ marginTop: 18 }}>
-                  <CheckoutButton tipo="plan" plan={plan.codigo} actual={esActual} recommended={recommended} />
+                  <CheckoutButton tipo="plan" plan={plan.codigo} actual={esActual} recommended={recommended} inscribeTarjeta={porFlow} />
                 </div>
               </div>
             );

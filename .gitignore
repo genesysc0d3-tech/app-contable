@@ -79,3 +79,6 @@ dist/
 
 # Credenciales Resend (correo)
 .resend/
+
+# Llaves de Flow producción (locales, se suben a Vercel por API)
+.flow/
