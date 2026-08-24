@@ -8,6 +8,8 @@ import {
   elegirMesa as sesionElegirMesa,
   cerrarSesion,
   recordarMensaje,
+  tocarSesion,
+  fijarDocumento,
   type EmpresaOpcion,
   type Sesion,
 } from "@/lib/telegram/sesion";
@@ -127,6 +129,16 @@ const MSG = {
   sesionMandaFotos: (mesa: string) =>
     `📸 Dale, mándame las imágenes del comprobante para la <b>${mesa}</b>.\n` +
     `Hasta <b>${MAX_FOTOS_ALBUM}</b>, y con eso armo la propuesta.`,
+  sesionRecibida: (n: number) =>
+    `📸 Recibí <b>${n} de ${MAX_FOTOS_ALBUM}</b> imágenes.\n\n` +
+    "¿Las proceso, o falta alguna?",
+  sesionTope: (n: number) =>
+    `📸 Recibí <b>${n} de ${MAX_FOTOS_ALBUM}</b> — es el máximo por comprobante.\n\n` +
+    "Las proceso ahora.",
+  sesionSinFotos:
+    "📸 Todavía no me llega ninguna imagen. Mándamelas y las proceso.",
+  sesionProcesando:
+    "⏳ <b>Procesando…</b> te muestro la boleta en unos segundos.",
   sesionCancelada:
     "✅ Listo, cancelado. Cuando quieras, escríbeme y partimos de nuevo.",
   sesionVencida:
@@ -298,6 +310,22 @@ function kbSesionMesa(token: string): InlineKeyboardMarkup {
 }
 
 /**
+ * Botón para cerrar la fase de fotos.
+ *
+ * Antes se cerraba con una ventana de silencio de 3 s, o sea ADIVINANDO que el
+ * usuario ya había terminado: si se demoraba en mandar la tercera, se procesaba
+ * sin ella. Ahora lo dice él. Es un toque más, pero el bot deja de suponer.
+ */
+function kbSesionProcesar(token: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: "✅ Procesar", callback_data: `ses:go:${token}` }],
+      [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
+    ],
+  };
+}
+
+/**
  * Arranca (o reinicia) el flujo: muestra las empresas del chat.
  * `textoInicial` cambia si el disparador fue un saludo o una foto suelta.
  */
@@ -337,6 +365,174 @@ async function iniciarSesionChat(chatId: number, textoInicial: string): Promise<
   if (msg?.message_id) await recordarMensaje(svc, chatId, msg.message_id);
 }
 
+/**
+ * Recibe UNA foto dentro de una sesión abierta.
+ *
+ * No cierra nada por tiempo: sube la imagen al buffer y actualiza el contador
+ * con el botón "Procesar". El usuario decide cuándo terminó, que es la única
+ * forma de no adivinar. Al llegar al tope se procesa solo, porque ya no puede
+ * mandar más.
+ */
+async function recibirFotoSesion(chatId: number, sesion: Sesion, foto: TelegramPhotoSize): Promise<void> {
+  const svc = getServiceClient();
+  const empresaId = sesion.empresa_id!;
+  const grupo = `ses_${sesion.token}`;
+
+  const { data: bufRow, error: bufErr } = await svc
+    .from("telegram_album_buffer")
+    .insert({ empresa_id: empresaId, media_group_id: grupo, image: { pending: true } as Json })
+    .select("id, created_at")
+    .single();
+  if (bufErr || !bufRow) { await say(chatId, MSG.errorGuardar); return; }
+
+  // Rango por antigüedad (no un count a secas): las fotos de un álbum llegan en
+  // webhooks distintos y un contador compartido haría que dos se descartaran
+  // mutuamente.
+  const { count: previas } = await svc
+    .from("telegram_album_buffer")
+    .select("id", { count: "exact", head: true })
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", grupo)
+    .lt("created_at", bufRow.created_at);
+  const posicion = (previas ?? 0) + 1;
+
+  if (posicion > MAX_FOTOS_ALBUM) {
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    if (posicion === MAX_FOTOS_ALBUM + 1) await say(chatId, MSG.demasiadasFotos);
+    return;
+  }
+
+  // Subir la imagen. Si falla, se saca del buffer para que el contador no mienta.
+  try {
+    const foto64 = await getFileBase64(foto.file_id);
+    if (foto64.size > MAX_FOTO_BYTES) {
+      await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      await say(chatId, MSG.muyGrande);
+      return;
+    }
+    const nombre = nombreComprobanteTelegram();
+    const up = await subirDocumentoR2(
+      empresaId,
+      `${grupo}_${nombre}`,
+      Buffer.from(foto64.base64, "base64"),
+      foto64.mime,
+    );
+    await svc
+      .from("telegram_album_buffer")
+      .update({ image: { path: up.key, mime: foto64.mime, name: nombre } as Json })
+      .eq("id", bufRow.id);
+  } catch {
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    await say(chatId, MSG.errorGuardar);
+    return;
+  }
+
+  await tocarSesion(svc, chatId);
+
+  if (posicion >= MAX_FOTOS_ALBUM) {
+    // Tope: ya no puede mandar más, no tiene sentido preguntarle.
+    await say(chatId, MSG.sesionTope(posicion));
+    await procesarSesion(chatId, sesion);
+    return;
+  }
+
+  // Se EDITA el mismo mensaje para que el contador no llene el chat de globos.
+  const texto = MSG.sesionRecibida(posicion);
+  const teclado = kbSesionProcesar(sesion.token);
+  const editado = sesion.message_id
+    ? await editMessageText(chatId, sesion.message_id, texto, { html: true, replyMarkup: teclado })
+    : false;
+  if (!editado) {
+    const msg = await sendMessage(chatId, texto, { html: true, replyMarkup: teclado });
+    if (msg?.message_id) await recordarMensaje(svc, chatId, msg.message_id);
+  }
+}
+
+/**
+ * Cierra la fase de fotos: crea el documento con TODAS las imágenes del buffer y
+ * lo encola como UNA venta. El worker manda la propuesta al chat.
+ */
+async function procesarSesion(chatId: number, sesion: Sesion): Promise<void> {
+  const svc = getServiceClient();
+  const empresaId = sesion.empresa_id!;
+  const grupo = `ses_${sesion.token}`;
+
+  const { data: filas } = await svc
+    .from("telegram_album_buffer")
+    .select("id, image")
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", grupo);
+
+  // Solo las que terminaron de subir (tienen `path`); las pendientes se ignoran.
+  const imagenes: { path: string; mime?: string; name?: string }[] = [];
+  for (const f of filas ?? []) {
+    const img = f.image;
+    if (!img || typeof img !== "object" || Array.isArray(img)) continue;
+    const reg = img as Record<string, unknown>;
+    if (typeof reg.path !== "string") continue;
+    imagenes.push({
+      path: reg.path,
+      mime: typeof reg.mime === "string" ? reg.mime : undefined,
+      name: typeof reg.name === "string" ? reg.name : undefined,
+    });
+  }
+  if (imagenes.length === 0) { await say(chatId, MSG.sesionSinFotos); return; }
+
+  if ((await contarComprobantesTelegramHoy(empresaId)) > TOPE_DIARIO) {
+    await say(chatId, MSG.topeDiario);
+    return;
+  }
+
+  const nombre = nombreComprobanteTelegram();
+  const { data: doc } = await svc
+    .from("documentos_subidos")
+    .insert({
+      empresa_id: empresaId,
+      nombre_archivo: imagenes.length > 1 ? `Álbum ${nombre}` : `Telegram ${nombre}`,
+      tipo: "imagen",
+      storage_path: imagenes[0].path,
+      storage_provider: "r2",
+      estado: "procesando",
+      media_group_id: grupo,
+      fuente_datos: "telegram",
+      album_imagenes: imagenes as unknown as Json,
+      progreso_ia: { estado: "queued", origen: "telegram", album: imagenes.length > 1 } as Json,
+    })
+    .select("id")
+    .single();
+  if (!doc) { await say(chatId, MSG.errorGuardar); return; }
+
+  // Solo la primera vez: si dos toques de "Procesar" llegan juntos, el segundo no
+  // vuelve a encolar.
+  if (!(await fijarDocumento(svc, chatId, sesion.token, doc.id))) {
+    await svc.from("documentos_subidos").delete().eq("id", doc.id);
+    return;
+  }
+
+  try {
+    const job = await enqueueDocumentProcessingJob(svc, {
+      documentoId: doc.id,
+      empresaId,
+      usuarioId: null,
+      tipo: "imagen",
+      storagePath: imagenes[0].path,
+      metadata: { grouped_images: imagenes, origen: "telegram", album: imagenes.length > 1, chat_id: chatId },
+    });
+    await svc
+      .from("documentos_subidos")
+      .update({ progreso_ia: { estado: "queued", job_id: job.id, origen: "telegram" } as Json })
+      .eq("id", doc.id);
+    await svc.from("telegram_album_buffer").delete().in("id", (filas ?? []).map((f) => f.id));
+    await iniciarDrenaje("telegram-sesion-kick").catch(() => {});
+  } catch {
+    await svc
+      .from("documentos_subidos")
+      .update({ estado: "error", progreso_ia: { estado: "error", error: "No se pudo encolar" } as Json })
+      .eq("id", doc.id);
+    await say(chatId, MSG.errorGuardar);
+  }
+}
+
 /** Callbacks del flujo: ses:emp / ses:mesa / ses:cancel. */
 async function handleSesionCallback(
   chatId: number,
@@ -373,6 +569,14 @@ async function handleSesionCallback(
       });
     }
     await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "go") {
+    if (sesion.estado === "procesando") { await answerCallbackQuery(callbackId, "Ya lo estoy procesando"); return; }
+    await answerCallbackQuery(callbackId, "Procesando…");
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionProcesando, { html: true });
+    await procesarSesion(chatId, sesion);
     return;
   }
 
@@ -1443,7 +1647,7 @@ async function recibirComprobante(
       const permitida = sesion.opciones.some((o) => o.id === sesion.empresa_id);
       if (!permitida) { await say(chatId, MSG.sinPermisos); return; }
     }
-    await recibirAlbumFoto(chatId, sesion.empresa_id, foto, `ses_${sesion.token}`);
+    await recibirFotoSesion(chatId, sesion, foto);
     return;
   }
 
