@@ -11,8 +11,8 @@
  * operar apenas se pegue el token en Vercel.
  */
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
-import { getUfClp } from "@/lib/sii/uf";
+import type { Database } from "../database.types";
+import { getUfClp } from "../sii/uf";
 import { clpConIva, periodoActual } from "./metering";
 
 const MP_BASE = "https://api.mercadopago.com";

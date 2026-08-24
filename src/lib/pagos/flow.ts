@@ -30,6 +30,7 @@ import { chileDateString } from "../chile-date";
 import { getUfClp } from "../sii/uf";
 import { addOneMonth, clpConIva, periodoActual } from "./metering";
 import { syncPlanActivo } from "./activacion";
+import { cancelarPreapproval } from "./mercadopago";
 
 const BASES = {
   sandbox: "https://sandbox.flow.cl/api",
@@ -402,16 +403,37 @@ export async function crearSuscripcionFlow(
     .maybeSingle();
   if (!plan) return { ok: false, error: "PLAN_INVALIDO", detalle: `No existe el plan ${planCodigo}` };
 
-  // Una intención a la vez: si quedó una pendiente de un intento abandonado, se
-  // reemplaza. Las ACTIVAS no se tocan acá — solo cuando el cobro nuevo resulta
-  // (en activarSuscripcionFlow), para no dejar al cliente sin plan si abandona
-  // el formulario de la tarjeta a mitad de camino.
-  await db
+  // La base permite UNA sola suscripción viva por cuenta, de CUALQUIER
+  // proveedor (ux_suscripciones_cuenta_viva, anti doble-cobro). Así que antes
+  // de crear hay que retirar todo lo vivo — incluidas las de Mercado Pago que
+  // quedaron de la etapa anterior. La primera versión solo limpiaba pendientes
+  // de Flow y el insert chocaba con el candado en cuanto la cuenta traía una
+  // de MP colgando (pasó en producción con la cuenta de prueba).
+  //
+  // Si la previa es un preapproval de MP, se cancela ALLÁ primero; si MP no
+  // deja cancelarlo, se aborta igual que hacía el molde de MP: mejor no crear
+  // la nueva que dejar dos cobros recurrentes vivos.
+  const { data: previas } = await db
     .from("suscripciones")
-    .update({ estado: "cancelada", updated_at: new Date().toISOString() })
+    .select("id, proveedor, proveedor_ref")
     .eq("cuenta_id", cuentaId)
-    .eq("proveedor", "flow")
-    .eq("estado", "pendiente");
+    .in("estado", ["activa", "pendiente", "pausada", "morosa"]);
+  for (const prev of previas ?? []) {
+    if (prev.proveedor === "mercadopago" && prev.proveedor_ref) {
+      const cancel = await cancelarPreapproval(prev.proveedor_ref);
+      if (!cancel.ok) {
+        return {
+          ok: false,
+          error: "REEMPLAZO_FALLIDO",
+          detalle: `No se pudo cancelar la suscripción anterior en Mercado Pago: ${cancel.detalle ?? cancel.error}`,
+        };
+      }
+    }
+    await db
+      .from("suscripciones")
+      .update({ estado: "cancelada", updated_at: new Date().toISOString() })
+      .eq("id", prev.id);
+  }
 
   const { error: insErr } = await db.from("suscripciones").insert({
     cuenta_id: cuentaId,
@@ -420,7 +442,15 @@ export async function crearSuscripcionFlow(
     proveedor: "flow",
     estado: "pendiente",
   });
-  if (insErr) return { ok: false, error: "DB_ERROR", detalle: insErr.message };
+  if (insErr) {
+    // 23505 contra ux_suscripciones_cuenta_viva = otra viva se coló entre la
+    // limpieza y el insert (doble click, dos pestañas). Mensaje humano en vez
+    // del error crudo de Postgres que llegó a pintarse en la página de planes.
+    if (insErr.code === "23505") {
+      return { ok: false, error: "SUSCRIPCION_EN_CURSO", detalle: "Ya hay una contratación en curso para esta cuenta — recarga la página" };
+    }
+    return { ok: false, error: "DB_ERROR", detalle: insErr.message };
+  }
 
   return iniciarInscripcionTarjeta(cuentaId, email, nombre);
 }
