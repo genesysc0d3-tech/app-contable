@@ -224,22 +224,19 @@ export default async function V5Page({ searchParams }: {
 /* Popup de contexto. Calca el overlay del modal de la app (.ed-overlay/.ed-panel):
    mismo velo con blur, mismo radio de 20px, misma superficie. */
 .dz-ctx-velo{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:dzFadeIn .2s ease both}
-.dz-ctx{width:min(440px,96vw);max-height:88vh;overflow-y:auto;padding:20px;border-radius:20px;border:1px solid transparent;background:linear-gradient(var(--surface),var(--surface)) padding-box,linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA,#A78BFA,#F59E0B,#E8553E) border-box;background-size:auto,320px 100%;background-repeat:repeat,repeat;box-shadow:0 30px 90px rgba(0,0,0,.45);animation:dzPopIn .22s cubic-bezier(.2,.8,.3,1) both,dzBorde 7s linear infinite,dzGlow 7s linear infinite}
+.dz-ctx{width:min(440px,96vw);max-height:88vh;overflow-y:auto;padding:20px;border-radius:20px;border:1px solid var(--border);background:var(--surface);box-shadow:0 30px 90px rgba(0,0,0,.45);animation:dzPopIn .22s cubic-bezier(.2,.8,.3,1) both,dzGlow 7s linear infinite}
 @keyframes dzFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes dzPopIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
-/* Borde arcoíris. Mismo truco que el texto "IA": el degradado es palíndromo (los
-   bordes del tile calzan) y la animación desplaza EXACTAMENTE el ancho del tile,
-   así el loop no tiene costura. Lento (7s) para que acompañe sin distraer. */
-@keyframes dzBorde{from{background-position:0 0,0 0}to{background-position:0 0,320px 0}}
-/* Glow del mismo arcoíris, sincronizado con el borde (7s) y cerrando en el color
-   inicial para que el ciclo no tenga salto. La sombra negra se repite en cada
+/* Glow arcoíris: el color viaja por fuera del popup, pero el BORDE se queda
+   neutro como el resto de la app (el contorno de colores se veía cargado).
+   Cierra en el color inicial para que el ciclo no tenga salto. La sombra negra se repite en cada
    paso porque la animación reemplaza el box-shadow completo. */
 @keyframes dzGlow{
-0%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(232,85,62,.5)}
-25%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(245,158,11,.5)}
-50%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(167,139,250,.55)}
-75%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(96,165,250,.5)}
-100%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(232,85,62,.5)}}
+0%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(232,85,62,.5)}
+25%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(245,158,11,.5)}
+50%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(167,139,250,.55)}
+75%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(96,165,250,.5)}
+100%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(232,85,62,.5)}}
 @media (prefers-reduced-motion:reduce){.dz-ctx-velo{animation:none}.dz-ctx{animation:none;box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(167,139,250,.5)}}
 .dz-ctx h4{font-size:14px;font-weight:700;margin:0 0 4px;color:var(--text)}
 .dz-ctx-ph{font-size:11.5px;color:var(--text2);margin:0 0 12px;line-height:1.45}
