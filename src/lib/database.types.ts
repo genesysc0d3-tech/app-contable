@@ -1704,6 +1704,75 @@ export type Database = {
           },
         ]
       }
+      ocr_jobs: {
+        Row: {
+          created_at: string
+          documento_id: string | null
+          empresa_id: string | null
+          estado: string
+          id: string
+          intentos: number
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_intentos: number
+          metadata: Json
+          resultado: Json | null
+          storage_path: string
+          storage_provider: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          documento_id?: string | null
+          empresa_id: string | null
+          estado?: string
+          id?: string
+          intentos?: number
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_intentos?: number
+          metadata?: Json
+          resultado?: Json | null
+          storage_path: string
+          storage_provider?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          id?: string
+          intentos?: number
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_intentos?: number
+          metadata?: Json
+          resultado?: Json | null
+          storage_path?: string
+          storage_provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_jobs_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ops_events: {
         Row: {
           created_at: string
