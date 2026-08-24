@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// mercadopago.ts importa getUfClp desde el alias "@/lib/sii/uf" (import de
-// valor). Vitest no resuelve el alias "@/" salvo que esté mockeado, así que lo
-// stubeamos: mpConfigurado no lo usa, solo necesitamos que el módulo cargue.
-vi.mock("@/lib/sii/uf", () => ({ getUfClp: vi.fn(async () => 39_000) }));
+// getUfClp llega a la red al importarse en cadena; se stubea para que el
+// módulo cargue sin tocar nada externo (mpConfigurado no lo usa).
+vi.mock("../sii/uf", () => ({ getUfClp: vi.fn(async () => 39_000) }));
 
 import { mpConfigurado } from "./mercadopago";
 
