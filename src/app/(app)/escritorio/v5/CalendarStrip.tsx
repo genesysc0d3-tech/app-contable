@@ -85,7 +85,14 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
     // "safe center": centrado cuando el reloj cabe completo; si el carril se
     // angosta, en vez de botar días por la derecha (mientras sobraba espacio
     // junto al logo), se alinea al inicio y usa TODO el carril. Nada más cambia.
-    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, display: "flex", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 1 }}>
+    // `overflow:hidden` recorta el carril a lo ancho (es lo que impide invadir el
+    // logo y los botones), pero también recortaba el ZOOM del día bajo el cursor:
+    // el día crecía y quedaba cortado contra el borde de la caja. El padding
+    // vertical agranda la caja de recorte y el margen negativo devuelve el
+    // contenido a su sitio — visualmente idéntico, pero el zoom tiene aire.
+    // pointerEvents none/auto: ese aire extra se superpone a la barra de abajo y
+    // no debe robarle los clics.
+    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, paddingBlock: 16, marginBlock: -16, display: "flex", alignItems: "center", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 20, pointerEvents: "none" }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
         .v5-day-strip::-webkit-scrollbar{display:none;}
@@ -97,7 +104,7 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
           .cal-mode-btn:hover{transform:none;}
         }
       `}</style>
-      <div style={{ background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, maxWidth: "100%", height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
+      <div style={{ pointerEvents: "auto", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, maxWidth: "100%", height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
         <div style={{ padding: "0 6px", display: "flex", alignItems: "center", gap: 2 }}>
           <button type="button" onClick={() => navigate({ month: prevMonthParam, date: firstOfMonthParam(prevMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>‹</button>
           <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", flexShrink: 0, width: 100, textAlign: "center" }}>{monthName} {y}</span>
@@ -118,7 +125,7 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               con scroll — así el 31 nunca desaparece. El dock se re-mide solo
               (medir() usa anchos reales al entrar el mouse y al redimensionar).
               El overflow queda solo como último recurso bajo ~450px de carril. */}
-          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 664px", minWidth: 0, paddingRight: 6, scrollbarWidth: "none" }}>
+          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 664px", minWidth: 0, paddingRight: 6, paddingBlock: 14, marginBlock: -14, scrollbarWidth: "none" }}>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
               const ds = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const isSel = day === selDay;
