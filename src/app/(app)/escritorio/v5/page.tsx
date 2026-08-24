@@ -205,6 +205,48 @@ export default async function V5Page({ searchParams }: {
 .dz-icon-btn{width:28px;height:28px;border-radius:7px;border:none;cursor:pointer;font-size:14px;line-height:1;background:transparent;color:var(--text2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
 .dz-icon-btn:hover{background:var(--bg-muted);color:var(--text)}
 .dz-icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* Botón de contexto para la IA. El degradado se ancla en el rojo de marca: un
+   arcoíris genérico se ve pegado de otra app. */
+.dz-ia-btn{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:5px 9px;border-radius:7px;white-space:nowrap;cursor:pointer;border:1px solid color-mix(in srgb,#A78BFA 30%,transparent);background:color-mix(in srgb,#A78BFA 7%,transparent);color:var(--text2);flex-shrink:0;transition:border-color .15s,background .15s}
+.dz-ia-btn:hover{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent)}
+.dz-ia-btn:focus-visible{outline:2px solid #A78BFA;outline-offset:1px}
+.dz-ia-btn.puesto{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent);color:#C4B5FD}
+.dz-ia-sp{font-size:10px;background:linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA);-webkit-background-clip:text;background-clip:text;color:transparent}
+/* Loop sin costura: el degradado arranca y termina en el MISMO color (el tile
+   calza consigo mismo), el tile mide 160px fijos, y la animación desplaza
+   exactamente esos 160px. Con background-position en % el navegador lo calcula
+   contra (ancho caja - ancho imagen), que es negativo cuando la imagen es más
+   ancha — por eso el salto no caía en el tile y se veía el corte. */
+.dz-ia-word{font-weight:800;letter-spacing:.02em;background-image:linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA,#A78BFA,#F59E0B,#E8553E);background-size:160px 100%;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;color:transparent;animation:dz-ia-corre 5s linear infinite}
+@keyframes dz-ia-corre{from{background-position:0 0}to{background-position:160px 0}}
+@media (prefers-reduced-motion:reduce){.dz-ia-word{animation:none}}
+
+/* Popup de contexto. Calca el overlay del modal de la app (.ed-overlay/.ed-panel):
+   mismo velo con blur, mismo radio de 20px, misma superficie. */
+.dz-ctx-velo{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:dzFadeIn .2s ease both}
+.dz-ctx{width:min(440px,96vw);max-height:88vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px;box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);animation:dzPopIn .22s cubic-bezier(.2,.8,.3,1) both}
+@keyframes dzFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes dzPopIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.dz-ctx-velo,.dz-ctx{animation:none}}
+.dz-ctx h4{font-size:14px;font-weight:700;margin:0 0 4px;color:var(--text)}
+.dz-ctx-ph{font-size:11.5px;color:var(--text2);margin:0 0 12px;line-height:1.45}
+.dz-ctx-ph b{color:var(--text)}
+.dz-ctx-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+.dz-ctx-chip{font-size:10px;padding:5px 10px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:border-color .15s,background .15s,color .15s}
+.dz-ctx-chip:hover{border-color:color-mix(in srgb,#A78BFA 45%,transparent);color:var(--text)}
+.dz-ctx-chip.on{border-color:color-mix(in srgb,#A78BFA 45%,transparent);background:color-mix(in srgb,#A78BFA 13%,transparent);color:#C4B5FD}
+.dz-ctx-ta{width:100%;min-height:74px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 11px;color:var(--text);font-size:11.5px;line-height:1.55;font-family:inherit;resize:none;transition:border-color .15s}
+.dz-ctx-ta:focus{outline:none;border-color:color-mix(in srgb,#A78BFA 45%,transparent)}
+.dz-ctx-cta{font-size:10px;color:var(--text3);margin-top:7px}
+.dz-ctx-cta b{color:var(--text2)}
+.dz-ctx-priv{display:flex;gap:7px;font-size:10px;color:var(--text3);margin-top:10px;line-height:1.45}
+.dz-ctx-priv b{color:var(--text2)}
+.dz-ctx-rec{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:10.5px;color:var(--text2);cursor:pointer}
+.dz-ctx-pie{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.dz-ctx-b{font-size:11.5px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:background .15s,color .15s}
+.dz-ctx-b:hover{background:var(--bg-muted);color:var(--text)}
+.dz-ctx-b.p{background:linear-gradient(135deg,#8B5CF6,#6366F1);color:#fff;border:none}
+.dz-ctx-b.p:hover{filter:brightness(1.1)}
 .dz-txt h4{font-size:12px;font-weight:600}
 .dz-txt p{font-size:10px;color:var(--text2);margin-top:1px}
 .dz-fmts{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:9px;color:var(--text3);flex-wrap:wrap}

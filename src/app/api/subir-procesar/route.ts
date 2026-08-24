@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { nombre?: string; base64?: string; tipo?: string; mime?: string };
+  let body: { nombre?: string; base64?: string; tipo?: string; mime?: string; contexto?: string };
   try {
     body = await request.json();
   } catch {
@@ -100,6 +100,7 @@ export async function POST(request: Request) {
       empresa_id: usuario.empresa_id,
       nombre_archivo: validated.nombre,
       tipo: validated.tipo,
+      contexto_usuario: validated.contexto,
       storage_path: "memoria",
       estado: "subido",
       archivo_hash: archivoHash,
