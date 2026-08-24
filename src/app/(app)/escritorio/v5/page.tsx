@@ -200,6 +200,11 @@ export default async function V5Page({ searchParams }: {
 .dz:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:color-mix(in srgb,var(--lime) 40%,transparent)}
 .dz-icon{width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--lime) 6%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .dz-icon svg{width:16px;height:16px;color:var(--lime)}
+/* Acciones de cada archivo en cola (renombrar / quitar). Antes eran 16px con
+   fuente 8: casi invisibles y difíciles de apuntar. */
+.dz-icon-btn{width:28px;height:28px;border-radius:7px;border:none;cursor:pointer;font-size:14px;line-height:1;background:transparent;color:var(--text2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
+.dz-icon-btn:hover{background:var(--bg-muted);color:var(--text)}
+.dz-icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .dz-txt h4{font-size:12px;font-weight:600}
 .dz-txt p{font-size:10px;color:var(--text2);margin-top:1px}
 .dz-fmts{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:9px;color:var(--text3);flex-wrap:wrap}

@@ -193,12 +193,19 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
                     </>
                   )}
                 </div>
+                {/* 28px: a 16 con fuente 8 quedaban casi invisibles y por debajo del
+                    mínimo cómodo para apuntarles. Fondo en hover para que se note
+                    que son botones. */}
                 <button onClick={() => editingId === q.id ? saveName(q.id) : startEdit(q)}
-                  style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", fontSize: 8, background: "transparent", color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  className="dz-icon-btn"
+                  title={editingId === q.id ? "Guardar nombre" : "Renombrar archivo"}
+                  aria-label={editingId === q.id ? "Guardar nombre" : "Renombrar archivo"}>
                   ✎
                 </button>
                 <button onClick={() => removeFile(q.id)}
-                  style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", fontSize: 9, background: "transparent", color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  className="dz-icon-btn"
+                  title="Quitar de la lista"
+                  aria-label={`Quitar ${q.file.name} de la lista`}>
                   ✕
                 </button>
               </div>
