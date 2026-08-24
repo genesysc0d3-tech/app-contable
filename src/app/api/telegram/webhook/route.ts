@@ -1,6 +1,16 @@
 import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import {
+  abrirSesion,
+  sesionDe,
+  elegirEmpresa as sesionElegirEmpresa,
+  elegirMesa as sesionElegirMesa,
+  cerrarSesion,
+  recordarMensaje,
+  type EmpresaOpcion,
+  type Sesion,
+} from "@/lib/telegram/sesion";
 import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
 import { esRolEmision } from "@/lib/auth/roles";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
@@ -110,6 +120,21 @@ const MSG = {
   recibidoElegirEmpresa:
     "📥 <b>Recibí el comprobante.</b>\n" +
     "¿Para qué empresa lo cargo?",
+  sesionSaludo:
+    "👋 <b>Hola.</b> ¿Con qué empresa vamos a trabajar?",
+  sesionElegirMesa: (empresa: string) =>
+    `🏢 Elegiste <b>${empresa}</b>.\n¿Qué vamos a hacer?`,
+  sesionMandaFotos: (mesa: string) =>
+    `📸 Dale, mándame las imágenes del comprobante para la <b>${mesa}</b>.\n` +
+    `Hasta <b>${MAX_FOTOS_ALBUM}</b>, y con eso armo la propuesta.`,
+  sesionCancelada:
+    "✅ Listo, cancelado. Cuando quieras, escríbeme y partimos de nuevo.",
+  sesionVencida:
+    "⌛ Pasó mucho rato y cerré la sesión.\nEscríbeme y partimos de nuevo.",
+  sesionFacturaAunNo:
+    "🧾 Las facturas todavía no están listas — muy pronto.\nPor ahora te puedo dejar la boleta.",
+  fotoSinSesion:
+    "👋 <b>Hola.</b> Antes de la foto necesito saber dos cosas.\n¿Con qué empresa vamos a trabajar?",
   soloFotos:
     "📸 Solo proceso <b>fotos de comprobantes</b>.\n" +
     "Mándame la foto y la dejo en Agregados, lista para boletear.",
@@ -230,6 +255,139 @@ function kbElegirEmpresa(token: string, opciones: TelegramEmpresaOpcion[], selec
       callback_data: `tgemp:${token}:${index}`,
     }]),
   };
+}
+
+// --- Flujo con sesión: hola → empresa → mesa → fotos ------------------------
+//
+// Se pregunta ANTES de recibir fotos. Así la sesión —y no el `media_group_id`
+// que arma Telegram— es la que dice qué imágenes son el MISMO comprobante, sin
+// depender de si el usuario las mandó de una o una por una.
+
+/** Botones de empresa + Cancelar. Con UNA empresa igual se muestra el botón. */
+function kbSesionEmpresas(token: string, opciones: EmpresaOpcion[]): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      ...opciones.map((e, i) => [{
+        text: [e.rut, e.nombre].filter(Boolean).join(" - ") || "Empresa",
+        callback_data: `ses:emp:${token}:${i}`,
+      }]),
+      [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
+    ],
+  };
+}
+
+/**
+ * Boleta / Factura / Cancelar.
+ *
+ * Factura se MUESTRA pero apagada: su mesa todavía no existe (no hay columna de
+ * mesa ni carril de emisión 33/34). Se enciende sola cuando exista, sin tocar el
+ * bot de nuevo — el esquema ya acepta mesa='factura'.
+ */
+function kbSesionMesa(token: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: "🧾 Boleta", callback_data: `ses:mesa:${token}:boleta` }],
+      [{ text: "📄 Factura (pronto)", callback_data: `ses:mesa:${token}:factura` }],
+      [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
+    ],
+  };
+}
+
+/**
+ * Arranca (o reinicia) el flujo: muestra las empresas del chat.
+ * `textoInicial` cambia si el disparador fue un saludo o una foto suelta.
+ */
+async function iniciarSesionChat(chatId: number, textoInicial: string): Promise<void> {
+  const svc = getServiceClient();
+  const empresaChat = await empresaDelChat(chatId);
+  if (!empresaChat) {
+    await say(chatId, MSG.noVinculado);
+    return;
+  }
+  if (!(await telegramHabilitadoEmpresa(svc, empresaChat))) {
+    await say(chatId, MSG.noEnPlan);
+    return;
+  }
+
+  // Business con varias empresas → todas; si no, la del chat (igual con botón).
+  const multi = await empresasParaTelegramMultiempresa(svc, empresaChat).catch(() => null);
+  let opciones: EmpresaOpcion[] = multi?.empresas ?? [];
+  if (opciones.length === 0) {
+    const { data } = await svc
+      .from("empresas")
+      .select("id, rut, razon_social")
+      .eq("id", empresaChat)
+      .maybeSingle();
+    opciones = [{ id: empresaChat, rut: data?.rut ?? null, nombre: data?.razon_social ?? null }];
+  }
+
+  const sesion = await abrirSesion(svc, chatId, opciones);
+  if (!sesion) {
+    await say(chatId, MSG.errorGuardar);
+    return;
+  }
+  const msg = await sendMessage(chatId, textoInicial, {
+    html: true,
+    replyMarkup: kbSesionEmpresas(sesion.token, opciones),
+  });
+  if (msg?.message_id) await recordarMensaje(svc, chatId, msg.message_id);
+}
+
+/** Callbacks del flujo: ses:emp / ses:mesa / ses:cancel. */
+async function handleSesionCallback(
+  chatId: number,
+  messageId: number | undefined,
+  callbackId: string,
+  data: string,
+): Promise<void> {
+  const svc = getServiceClient();
+  const [, accion, token, valor] = data.split(":");
+
+  const sesion: Sesion | null = await sesionDe(svc, chatId);
+  if (!sesion || sesion.token !== token) {
+    // Botón de un menú viejo: la sesión ya venció o fue reemplazada.
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionVencida, { html: true });
+    await answerCallbackQuery(callbackId, "Esa sesión ya no está activa.");
+    return;
+  }
+
+  if (accion === "cancel") {
+    await cerrarSesion(svc, chatId);
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionCancelada, { html: true });
+    await answerCallbackQuery(callbackId, "Cancelado");
+    return;
+  }
+
+  if (accion === "emp") {
+    const elegida = await sesionElegirEmpresa(svc, chatId, token, Number(valor));
+    if (!elegida) { await answerCallbackQuery(callbackId, "No encontré esa empresa."); return; }
+    const nombre = [elegida.empresa.rut, elegida.empresa.nombre].filter(Boolean).join(" - ") || "esa empresa";
+    if (messageId) {
+      await editMessageText(chatId, messageId, MSG.sesionElegirMesa(nombre), {
+        html: true,
+        replyMarkup: kbSesionMesa(token),
+      });
+    }
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  if (accion === "mesa") {
+    // La mesa de facturas no existe todavía: se avisa y la sesión sigue en pie
+    // para que pueda elegir boleta sin empezar de nuevo.
+    if (valor === "factura") {
+      await answerCallbackQuery(callbackId, "Facturas: muy pronto");
+      await say(chatId, MSG.sesionFacturaAunNo);
+      return;
+    }
+    const lista = await sesionElegirMesa(svc, chatId, token, "boleta");
+    if (!lista) { await answerCallbackQuery(callbackId, "No pude continuar."); return; }
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionMandaFotos("boleta"), { html: true });
+    await answerCallbackQuery(callbackId);
+    return;
+  }
+
+  await answerCallbackQuery(callbackId);
 }
 
 async function empresasParaTelegramMultiempresa(svc: Svc, empresaId: string): Promise<{ cuentaId: string; empresas: TelegramEmpresaOpcion[] } | null> {
@@ -375,11 +533,20 @@ async function handleMessage(msg: TelegramMessage) {
   }
 
   if (msg.photo?.length) {
-    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id);
+    // Sin sesión abierta la foto NO se procesa (ni OCR ni storage): se abre el
+    // flujo y se le pide lo que falta. Es la puerta de entrada más probable —
+    // a las 11 de la noche nadie escribe "hola", pega la captura y ya.
+    const sesion = await sesionDe(getServiceClient(), chatId);
+    if (!sesion?.empresa_id || !sesion.mesa) {
+      await iniciarSesionChat(chatId, MSG.fotoSinSesion);
+      return;
+    }
+    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id, sesion);
     return;
   }
 
-  await say(chatId, MSG.soloFotos);
+  // Cualquier texto suelto (un "hola", un "buenas") arranca el flujo.
+  await iniciarSesionChat(chatId, MSG.sesionSaludo);
 }
 
 // --- Botones (callback_query): aprobar / editar / volver / config ---
@@ -392,6 +559,11 @@ async function handleCallback(cq: TelegramCallbackQuery) {
 
   const empresaId = await empresaDelChat(chatId);
   if (!empresaId) { await answerCallbackQuery(cq.id, "Tu Telegram no está conectado."); return; }
+
+  if (data.startsWith("ses:")) {
+    await handleSesionCallback(chatId, messageId, cq.id, data);
+    return;
+  }
 
   if (data.startsWith("tgemp:")) {
     await handleEmpresaComprobanteCallback(chatId, messageId, cq.id, data);
@@ -1207,7 +1379,13 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   })();
 }
 
-async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], receivedAt?: number, mediaGroupId?: string) {
+async function recibirComprobante(
+  chatId: number,
+  photos: TelegramPhotoSize[],
+  receivedAt?: number,
+  mediaGroupId?: string,
+  sesion?: Sesion,
+) {
   const svc = getServiceClient();
 
   // Chat no vinculado = CERO procesamiento (ni OCR ni storage): el costo
@@ -1231,6 +1409,21 @@ async function recibirComprobante(chatId: number, photos: TelegramPhotoSize[], r
   const foto = photos[photos.length - 1];
   if ((foto.file_size ?? 0) > MAX_FOTO_BYTES) {
     await say(chatId, MSG.muyGrande);
+    return;
+  }
+
+  // Con sesión abierta la empresa YA la eligió el usuario, así que no hay nada
+  // que preguntar. Y todas las fotos se agrupan por el TOKEN de la sesión en vez
+  // del media_group_id de Telegram: así da lo mismo si las mandó de una o una
+  // por una — lo que las une es que el usuario abrió un comprobante, no cómo las
+  // empaquetó la app. De paso, el tope de 4 pasa a ser del comprobante.
+  if (sesion?.empresa_id && sesion.mesa) {
+    if (sesion.empresa_id !== chat.empresa_id) {
+      // Multiempresa: la sesión manda, pero solo dentro de la misma cuenta.
+      const permitida = sesion.opciones.some((o) => o.id === sesion.empresa_id);
+      if (!permitida) { await say(chatId, MSG.sinPermisos); return; }
+    }
+    await recibirAlbumFoto(chatId, sesion.empresa_id, foto, `ses_${sesion.token}`);
     return;
   }
 
