@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LaunchAgent del worker de OCR en el Mac mini.
+
+  Instalar (en el mini, con TU usuario, NO sudo):
+    cp cl.massdte.ocr.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/cl.massdte.ocr.plist
+    launchctl start cl.massdte.ocr
+
+  Es LaunchAgent (no Daemon): corre como tu usuario, que es lo que necesita el
+  framework Vision. KeepAlive lo reinicia si muere (o si el worker sale con
+  código 1 al caerse la conexión). Los secretos van en EnvironmentVariables o,
+  mejor, en un archivo aparte que el ProgramArguments cargue (ver README).
+
+  AJUSTA las rutas /RUTA/A/... y la DATABASE_URL antes de instalar.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cl.massdte.ocr</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/RUTA/A/scripts/ocr-local/worker.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/RUTA/A/scripts/ocr-local</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DATABASE_URL</key>
+    <string>postgresql://postgres.XXXX:PASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres</string>
+    <key>OCR_BIN</key>
+    <string>/RUTA/A/scripts/ocr-local/ocr</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/massdte-ocr.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/massdte-ocr.err.log</string>
+</dict>
+</plist>

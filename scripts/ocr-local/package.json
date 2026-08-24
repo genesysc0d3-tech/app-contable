@@ -1,0 +1,14 @@
+{
+  "name": "massdte-ocr-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Worker de OCR local (Apple Vision) para el Mac mini",
+  "scripts": {
+    "start": "node worker.mjs",
+    "smoke": "node smoke-test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
