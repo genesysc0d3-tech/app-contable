@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { chileDateString } from "@/lib/chile-date";
-import { addDaysStr, clpConIva } from "@/lib/pagos/metering";
+import { addDaysStr, addOneMonth, clpConIva, periodoActual } from "@/lib/pagos/metering";
 import { actualizarMontoSuscripcion, mpConfigurado, obtenerRecurso } from "@/lib/pagos/mercadopago";
+import { cobrarCuenta, flowConfigurado, ordenDeCobro } from "@/lib/pagos/flow";
+import { syncPlanActivo } from "@/lib/pagos/activacion";
 import { getUfClp } from "@/lib/sii/uf";
 import { empresasActivasDeCuenta } from "@/lib/entitlements";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
@@ -70,6 +72,75 @@ export async function GET(request: Request) {
 
     const hoy = chileDateString();
     const corte = addDaysStr(hoy, -GRACIA_DIAS);
+
+    // (c) RENOVACIÓN FLOW — va ANTES de (a) a propósito: si hoy se logra
+    // cobrar, la suscripción no debe marcarse morosa en la misma corrida.
+    //
+    // Flow no cobra solo (no usamos sus planes: congelan el precio y el nuestro
+    // está en UF). El monto se calcula acá con la UF del día, la misma que va
+    // en la factura que le emitimos al cliente.
+    //
+    // La ventana de gracia hace de ventana de reintento: se intenta todos los
+    // días hasta que (a) la marque morosa. Y se reintentan TAMBIÉN las morosas,
+    // porque con débito el caso normal es "no había saldo el día 28 y sí lo hay
+    // el 30" — recuperarlas solas vale más que la prolijidad de no tocarlas.
+    let renovadas = 0;
+    let cobrosFallidos = 0;
+    if (flowConfigurado()) {
+      const { data: porRenovar } = await sb
+        .from("suscripciones")
+        .select("id, cuenta_id, empresa_id, plan_codigo, estado")
+        .eq("proveedor", "flow")
+        .in("estado", ["activa", "morosa"])
+        .lte("periodo_hasta", hoy);
+
+      if ((porRenovar ?? []).length > 0) {
+        const uf = await getUfClp();
+        const { data: planes } = await sb.from("planes_config").select("codigo, nombre, uf_mensual");
+        const porCodigo = new Map((planes ?? []).map((p) => [p.codigo, p]));
+
+        for (const s of porRenovar ?? []) {
+          const plan = porCodigo.get(s.plan_codigo);
+          if (!plan || !s.cuenta_id) continue;
+          const montoClp = clpConIva(plan.uf_mensual, uf);
+          const cobro = await cobrarCuenta(s.cuenta_id, {
+            montoClp,
+            concepto: `massDTE ${plan.nombre}`,
+            orden: ordenDeCobro(s.cuenta_id, periodoActual()),
+          });
+
+          if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") {
+            cobrosFallidos++;
+            await recordOpsEvent({
+              sb,
+              severity: "warn",
+              source: "pagos/cron",
+              eventName: "flow_renovacion_fallida",
+              summary: "No se pudo cobrar la renovación mensual en Flow",
+              cuentaId: s.cuenta_id,
+              resourceType: "suscripcion",
+              resourceId: s.id,
+              metadata: { plan_codigo: s.plan_codigo, monto_clp: montoClp, error: cobro.error, detalle: cobro.detalle },
+            });
+            continue;
+          }
+
+          await sb
+            .from("suscripciones")
+            .update({
+              estado: "activa",
+              clp_ultimo_cobro: montoClp,
+              periodo_hasta: addOneMonth(hoy),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", s.id);
+          // Una morosa que se recupera necesita que le vuelvan a encender el
+          // plan; una activa ya lo tiene y esto no le hace nada.
+          await syncPlanActivo(sb, { cuentaId: s.cuenta_id, empresaId: s.empresa_id }, s.plan_codigo, true);
+          renovadas++;
+        }
+      }
+    }
 
     // (a) Activas vencidas (más allá de la gracia) → morosas, plan apagado.
     const { data: vencidas, error: vencErr } = await sb
@@ -164,7 +235,7 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, hoy, morosas, desactivadas, actualizadas });
+    return NextResponse.json({ ok: true, hoy, renovadas, cobrosFallidos, morosas, desactivadas, actualizadas });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[pagos/cron]", msg);
