@@ -3,7 +3,7 @@
 > Art. 14 ter: el responsable debe ofrecer un medio para ejercer derechos.
 
 ## 1. Texto público ("Tus derechos")
-> Como titular de tus datos puedes ejercer: **acceso, rectificación, supresión, oposición, portabilidad y bloqueo**. Escríbenos a [COMPLETAR correo] o usa el formulario de tu cuenta. Responderemos dentro de los plazos legales y sin costo en los casos que la ley establece.
+> Como titular de tus datos puedes ejercer: **acceso, rectificación, supresión, oposición, portabilidad y bloqueo**. Escríbenos a privacidad@massdte.cl o usa el formulario de tu cuenta. Responderemos dentro de los plazos legales y sin costo en los casos que la ley establece.
 
 ## 2. Procedimiento interno (plazos verificados)
 1. **Recepción:** registrar la solicitud (titular, derecho, fecha) y verificar identidad.

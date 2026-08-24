@@ -1,6 +1,6 @@
 # Plan de Respuesta a Brechas de Datos Personales
 
-**Empresa:** AlphaCode SpA · **Responsable del plan:** Fundador · **Contacto:** [COMPLETAR]
+**Empresa:** AlphaCode SpA · **Responsable del plan:** Fundador · **Contacto:** privacidad@massdte.cl
 **Plazo legal:** notificar a la Agencia **sin dilaciones indebidas** (Art. 14 sexies; la ley NO fija 72 horas — eso es estándar GDPR, no chileno). Mantener además un **registro de las vulneraciones** (ver `21719-registro-vulneraciones.md`), aunque no se notifiquen.
 
 ## Roles
@@ -25,7 +25,7 @@ Causa raíz · medidas correctivas · **agregar el test/gate que lo habría evit
 
 ## Plantilla de aviso (borrador)
 > El [FECHA] detectamos [DESCRIPCIÓN]. Datos afectados: [CATEGORÍAS], ~[N] titulares.
-> Medidas adoptadas: [...]. Contacto: [COMPLETAR].
+> Medidas adoptadas: [...]. Contacto: privacidad@massdte.cl.
 
 ## Prevención (ya implementado)
 Backups (tooling listo), gates de secretos, `service_role` fuera de scripts de agente, guardas anti-wipe, aislamiento RLS probado, logs sanitizados, monitoreo `ops_events` + alertas. Ver `artifacts/docs/compliance/breach-procedure.md`.

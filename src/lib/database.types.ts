@@ -1704,6 +1704,75 @@ export type Database = {
           },
         ]
       }
+      ocr_jobs: {
+        Row: {
+          created_at: string
+          documento_id: string | null
+          empresa_id: string | null
+          estado: string
+          id: string
+          intentos: number
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_intentos: number
+          metadata: Json
+          resultado: Json | null
+          storage_path: string
+          storage_provider: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          documento_id?: string | null
+          empresa_id: string | null
+          estado?: string
+          id?: string
+          intentos?: number
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_intentos?: number
+          metadata?: Json
+          resultado?: Json | null
+          storage_path: string
+          storage_provider?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          id?: string
+          intentos?: number
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_intentos?: number
+          metadata?: Json
+          resultado?: Json | null
+          storage_path?: string
+          storage_provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_jobs_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ops_events: {
         Row: {
           created_at: string
@@ -2828,6 +2897,70 @@ export type Database = {
             columns: ["propuesta_id"]
             isOneToOne: false
             referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_sesiones: {
+        Row: {
+          chat_id: number
+          created_at: string
+          documento_id: string | null
+          empresa_id: string | null
+          estado: string
+          expires_at: string
+          mesa: string | null
+          message_id: number | null
+          opciones: Json
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          expires_at: string
+          mesa?: string | null
+          message_id?: number | null
+          opciones?: Json
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          expires_at?: string
+          mesa?: string | null
+          message_id?: number | null
+          opciones?: Json
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_sesiones_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: true
+            referencedRelation: "telegram_chats"
+            referencedColumns: ["chat_id"]
+          },
+          {
+            foreignKeyName: "telegram_sesiones_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_sesiones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]

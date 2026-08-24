@@ -127,8 +127,33 @@ describe("HARNESS tokenización — cartolas reales", () => {
     try { mkdirSync("artifacts/runs", { recursive: true }); } catch { /* noop */ }
     writeFileSync("artifacts/runs/tokenize-harness-report.json", JSON.stringify(reporte, null, 2));
 
-    // Gate innegociable de la compuerta: la clasificación NO cambia por tokenizar.
+    // ── LA COMPUERTA ─────────────────────────────────────────────────────
+    // Antes esto MEDÍA y no JUZGABA: escribía las fugas a un JSON y pasaba en
+    // verde igual. Una auditoría lo resumió bien — "un arnés que se auto-skipea
+    // no es una compuerta". Ahora cada número tiene su umbral y romperlo falla.
+
+    // 1) La clasificación no cambia por tokenizar.
     expect(invarianzaGlobalOk, "la tokenización cambió la clasificación determinista").toBe(true);
+
+    // 2) CERO RUT filtrados. Absoluto, sin umbral: un RUT es identificación
+    //    directa y no hay porcentaje aceptable.
+    for (const [archivo, r] of Object.entries(reporte)) {
+      const p = (r as { privacidad: { rutLeak: number } }).privacidad;
+      expect(p.rutLeak, `${archivo}: ${p.rutLeak} RUT salieron sin tokenizar`).toBe(0);
+    }
+
+    // 3) Cobertura de nombres ≥99% POR ARCHIVO, no en promedio.
+    //    El "100%" histórico era de una cartola sola; la otra daba 95% y el
+    //    promedio lo escondía. Se mide cada una por separado a propósito.
+    for (const [archivo, r] of Object.entries(reporte)) {
+      const p = (r as { privacidad: { nombresQueSobran: number; conTransferKw: number } }).privacidad;
+      if (p.conTransferKw === 0) continue;
+      const cobertura = 100 * (1 - p.nombresQueSobran / p.conTransferKw);
+      expect(
+        cobertura,
+        `${archivo}: cobertura ${cobertura.toFixed(1)}% (${p.nombresQueSobran} de ${p.conTransferKw} nombres siguen saliendo)`,
+      ).toBeGreaterThanOrEqual(99);
+    }
   }, 60000);
 });
 

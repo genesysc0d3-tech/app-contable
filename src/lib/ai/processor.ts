@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../database.types";
 import { getAIProvider } from "./provider";
+import { createVault, tokenizeForAI, rehydrateReceptor } from "./tokenize";
 import { getSystemPrompt, getClassifyOnlySystemPrompt } from "./prompt";
 import type {
   MovimientoExtraido,
@@ -220,7 +221,31 @@ async function classifyChunkWithRetry(
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await provider.classifyMovimientos(chunkMovs, systemPrompt);
+      // ── Seudonimización: la identidad de terceros no sale del país ──────
+      //
+      // La bóveda vive DENTRO del intento y muere con él. Nunca por cartola ni
+      // por job, y esa decisión no es de estilo: el checkpoint del pipeline se
+      // persiste en la base para reanudar en otra invocación, y una bóveda en
+      // memoria no sobrevive a eso. Si un token cruzara ese borde, la invocación
+      // siguiente lo rehidrataría contra una bóveda renumerada y le pegaría a la
+      // operación de una persona el RUT de otra. Con la bóveda por intento y la
+      // identidad re-pegada ANTES del return, nada tokenizado toca el checkpoint
+      // y el resto del pipeline ni se entera de que esto existe.
+      //
+      // Se tokeniza `n_documento` además de la glosa: ese campo suele traer un
+      // RUT (hay un isRutPattern más abajo que lo da por hecho) y va crudo al
+      // prompt, así que taparlo solo en la glosa dejaba el canal abierto.
+      //
+      // ALCANCE: solo el carril de BOLETAS. El de facturas va aparte y por
+      // diseño manda toda la información — ahí la identidad del receptor es un
+      // campo obligatorio del documento, no contexto prescindible.
+      const vault = createVault();
+      const movsParaIA = chunkMovs.map((m) => ({
+        ...m,
+        descripcion: tokenizeForAI(m.descripcion, vault),
+        n_documento: m.n_documento ? tokenizeForAI(m.n_documento, vault) : m.n_documento,
+      }));
+      const response = await provider.classifyMovimientos(movsParaIA, systemPrompt);
       // Propuestas with movimiento_index referencing position WITHIN this chunk.
       // If OpenCode dropped or mis-indexed some, we fill with defaults so every
       // movimiento has a corresponding propuesta.
@@ -255,10 +280,41 @@ async function classifyChunkWithRetry(
         };
       });
 
+      // Re-pegar la identidad real ANTES de salir de acá. Incluye `notas`, que
+      // se IMPRIME en la boleta: sin este saneo podría salir un documento
+      // tributario que dice literalmente "PER_3".
+      const rehidratadas = completed.map((prop) => {
+        const { receptor_nombre, receptor_rut } = rehydrateReceptor(
+          { receptor_nombre: prop.receptor_nombre ?? null, receptor_rut: prop.receptor_rut ?? null },
+          vault,
+        );
+        let notas = prop.notas ?? null;
+        if (notas && /PER_\d+/.test(notas)) {
+          notas = notas.replace(/PER_\d+/g, (t) => vault.toReal.get(t)?.nombre ?? "");
+          notas = notas.replace(/\s{2,}/g, " ").trim() || null;
+        }
+        return { ...prop, receptor_nombre, receptor_rut, notas };
+      });
+
+      // Fail-closed: si algo tokenizado sobrevivió, se reintenta; si persiste,
+      // el job falla y NO se escribe ninguna propuesta. Es preferible a que un
+      // marcador siga aguas abajo hacia una boleta.
+      const residuo = rehidratadas.find((p) =>
+        [p.receptor_nombre, p.receptor_rut, p.notas].some((v) => v && /PER_\d+|\[NUM\]/.test(String(v))),
+      );
+      if (residuo) {
+        throw new Error(
+          `marcador de seudonimización sin resolver en el chunk ${chunkIndex} (movimiento ${residuo.movimiento_index})`,
+        );
+      }
+
       return {
         index: chunkIndex,
+        // Los movimientos que salen son los ORIGINALES, jamás la copia
+        // tokenizada: la glosa cruda es lo que se persiste y de donde el resto
+        // del pipeline recupera identidad si el modelo no la devolvió.
         movimientos: chunkMovs,
-        propuestas: completed,
+        propuestas: rehidratadas,
         tokens_input: response.tokens_input,
         tokens_output: response.tokens_output,
         modelo: response.modelo,

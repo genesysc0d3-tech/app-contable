@@ -207,6 +207,46 @@ export function validarBoleta(
     errors.push({ code: "RUT_INVALIDO", message: `RUT receptor inválido: ${input.receptor_rut}` });
   }
 
+  // --- Marcadores de seudonimización: capa insaltable ---
+  //
+  // Antes de mandar texto a la IA se reemplaza la identidad de terceros por
+  // marcadores (PER_1, [NUM]) y se re-pega la real al volver. Si un marcador
+  // sobrevive hasta acá, algo falló en ese ciclo: la bóveda se perdió entre
+  // invocaciones, un lote se reanudó desde checkpoint, o el modelo devolvió un
+  // token que no existía.
+  //
+  // Una boleta emitida al SII es IRREVERSIBLE y este producto no tiene Nota de
+  // Crédito. Un receptor equivocado no se arregla: se atiende a mano, uno por
+  // uno, con un documento tributario real de por medio. Por eso esto ABORTA en
+  // vez de advertir, y por eso vive acá y no en el pipeline: es el último punto
+  // por el que pasa TODO lo que se emite, venga del carril que venga.
+  //
+  // El módulo de tokenización todavía no está cableado — este guardarraíl es
+  // deliberadamente previo. Cuando se cable, ya estará puesto.
+  const MARCADOR_SEUDONIMO = /\bPER_\d+\b|\[NUM\]/;
+  const camposIdentidad: Array<[string, string | undefined]> = [
+    ["receptor_razon_social", input.receptor_razon_social],
+    ["receptor_rut", input.receptor_rut],
+    ["receptor_direccion", input.receptor_direccion],
+    ["receptor_comuna", input.receptor_comuna],
+  ];
+  for (const [campo, valor] of camposIdentidad) {
+    if (valor && MARCADOR_SEUDONIMO.test(valor)) {
+      errors.push({
+        code: "MARCADOR_SEUDONIMO_SIN_RESOLVER",
+        message: `El campo ${campo} trae un marcador interno sin resolver. No se emite: el receptor podría no ser el correcto.`,
+      });
+    }
+  }
+  for (const [i, d] of (input.detalles ?? []).entries()) {
+    if (d.nombre && MARCADOR_SEUDONIMO.test(d.nombre)) {
+      errors.push({
+        code: "MARCADOR_SEUDONIMO_SIN_RESOLVER",
+        message: `Línea ${i + 1}: la glosa trae un marcador interno sin resolver. No se emite.`,
+      });
+    }
+  }
+
   // --- Tipo DTE consistente ---
   if (input.tipo_dte !== 39 && input.tipo_dte !== 41) {
     errors.push({ code: "TIPO_DTE_INVALIDO", message: "Solo se permite tipo 39 (afecta) o 41 (exenta) en este endpoint" });
