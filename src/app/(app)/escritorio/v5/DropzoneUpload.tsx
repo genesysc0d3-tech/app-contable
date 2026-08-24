@@ -9,7 +9,22 @@ import { MAX_PROCESAR_UPLOAD_BYTES } from "@/lib/upload/process-upload-validatio
 interface QueuedFile {
   id: string; file: File; category: FileCategory;
   customName: string; error?: string;
+  /** Lo que el dueño escribió sobre esta cartola. Viaja CON el archivo, así se
+   *  procesa bien a la primera y no hay que reprocesar. */
+  contexto?: string;
 }
+
+/** Tope corto a propósito: un párrafo largo confunde al modelo más que ayudar. */
+const MAX_CONTEXTO = 300;
+
+/** Puntos de partida, no categorías: bajan de la página en blanco y se editan. */
+const EJEMPLOS_CONTEXTO: { chip: string; texto: string }[] = [
+  { chip: "Vendo cripto P2P", texto: "Vendo USDT por P2P. Cada abono es una venta a una persona distinta." },
+  { chip: "Recibo y paso a terceros", texto: "Recibo plata para pasarla a terceros. Mi ingreso es solo la comisión que me quedo, no el total que entra." },
+  { chip: "Vendo por redes", texto: "Vendo productos por redes sociales. Cada transferencia es la compra de un cliente." },
+  { chip: "Servicios a clientes chicos", texto: "Presto servicios a varios clientes chicos. Cada abono es el pago de un servicio." },
+  { chip: "Hay préstamos que me devuelven", texto: "Algunos abonos son préstamos que me devuelven — esos no son venta." },
+];
 
 let idCounter = 0;
 
@@ -32,6 +47,11 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  // Popup de contexto: qué archivo, qué se está escribiendo, y si se guarda como
+  // default de la empresa para las próximas cartolas.
+  const [ctxId, setCtxId] = useState<string | null>(null);
+  const [ctxTexto, setCtxTexto] = useState("");
+  const [ctxRecordar, setCtxRecordar] = useState(false);
   const { toast } = useToast();
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
@@ -58,6 +78,27 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
   }
 
   function startEdit(f: QueuedFile) { setEditingId(f.id); setEditName(f.customName); }
+
+  function abrirContexto(f: QueuedFile) {
+    setCtxId(f.id);
+    setCtxTexto(f.contexto ?? "");
+    setCtxRecordar(false);
+  }
+
+  function guardarContexto() {
+    if (!ctxId) return;
+    const texto = ctxTexto.trim().slice(0, MAX_CONTEXTO);
+    setQueue(prev => prev.map(f => f.id === ctxId ? { ...f, contexto: texto || undefined } : f));
+    if (ctxRecordar) {
+      // Falla en silencio a propósito: no guardar el default no debe impedir subir.
+      void fetch("/api/empresa/contexto-default", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contexto: texto }),
+      }).catch(() => {});
+    }
+    setCtxId(null);
+  }
 
   function saveName(id: string) {
     setQueue(prev => prev.map(f => f.id === id ? { ...f, customName: editName || f.file.name } : f));
@@ -91,6 +132,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
             base64,
             tipo,
             mime,
+            contexto: q.contexto,
           }),
         });
         const data = await res.json().catch(() => null);
@@ -141,6 +183,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
   }
 
   const numSubibles = queue.filter(q => q.file.size <= MAX_PROCESAR_UPLOAD_BYTES).length;
+  const ctxArchivo = ctxId ? queue.find(q => q.id === ctxId) ?? null : null;
 
   return (
     <>
@@ -193,12 +236,29 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
                     </>
                   )}
                 </div>
+                {/* Contexto para el clasificador. Opcional: sin él todo funciona igual.
+                    Va ANTES de subir para que el texto viaje con el archivo y se
+                    procese bien a la primera, sin reprocesar. */}
+                <button onClick={() => abrirContexto(q)}
+                  className={`dz-ia-btn${q.contexto ? " puesto" : ""}`}
+                  title={q.contexto ? "Editar el contexto de este archivo" : "Contarle a la IA qué es esta cartola"}
+                  aria-label={q.contexto ? "Editar el contexto de este archivo" : "Contarle a la IA qué es esta cartola"}>
+                  <span className="dz-ia-sp" aria-hidden="true">✦</span>
+                  {q.contexto ? "con contexto" : <>más info a <span className="dz-ia-word">IA</span></>}
+                </button>
+                {/* 28px: a 16 con fuente 8 quedaban casi invisibles y por debajo del
+                    mínimo cómodo para apuntarles. Fondo en hover para que se note
+                    que son botones. */}
                 <button onClick={() => editingId === q.id ? saveName(q.id) : startEdit(q)}
-                  style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", fontSize: 8, background: "transparent", color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  className="dz-icon-btn"
+                  title={editingId === q.id ? "Guardar nombre" : "Renombrar archivo"}
+                  aria-label={editingId === q.id ? "Guardar nombre" : "Renombrar archivo"}>
                   ✎
                 </button>
                 <button onClick={() => removeFile(q.id)}
-                  style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", fontSize: 9, background: "transparent", color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  className="dz-icon-btn"
+                  title="Quitar de la lista"
+                  aria-label={`Quitar ${q.file.name} de la lista`}>
                   ✕
                 </button>
               </div>
@@ -219,6 +279,66 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
               style={{ padding: "7px 12px", border: "none", borderRadius: 6, background: "var(--surface2)", fontSize: 10, fontWeight: 600, color: "color-mix(in srgb, var(--text) 45%, transparent)", cursor: "pointer" }}>
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Popup de contexto. Encima del modal, no dentro: es una decisión cerrada
+          (entras, escribes, sales) y el botón de subir no se mueve de lugar. */}
+      {ctxArchivo && (
+        <div className="dz-ctx-velo" role="presentation" onClick={() => setCtxId(null)}>
+          <div className="dz-ctx" role="dialog" aria-modal="true" aria-labelledby="dz-ctx-t"
+            onClick={(e) => e.stopPropagation()}>
+            <h4 id="dz-ctx-t">¿Qué es esta plata?</h4>
+            <p className="dz-ctx-ph">
+              Una o dos frases sobre <b>{ctxArchivo.customName}</b>. Le sirve al clasificador
+              para no tratar como venta algo que no lo es.
+            </p>
+
+            <div className="dz-ctx-chips">
+              {EJEMPLOS_CONTEXTO.map((e) => (
+                <button key={e.chip} type="button"
+                  className={`dz-ctx-chip${ctxTexto.trim() === e.texto ? " on" : ""}`}
+                  onClick={() => setCtxTexto(e.texto)}>
+                  {e.chip}
+                </button>
+              ))}
+            </div>
+
+            <textarea className="dz-ctx-ta" value={ctxTexto} maxLength={MAX_CONTEXTO}
+              autoFocus
+              placeholder="Ej: vendo USDT por P2P, cada abono es una venta a una persona distinta."
+              onChange={(e) => setCtxTexto(e.target.value)} />
+
+            <div className="dz-ctx-cta"><b>{ctxTexto.length}</b> / {MAX_CONTEXTO} caracteres</div>
+
+            <div className="dz-ctx-priv">
+              {/* SVG de trazo como el resto de los íconos de la app: el emoji de
+                  candado lo pinta el sistema operativo y se ve de otro producto. */}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                style={{ flexShrink: 0, marginTop: 1 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <span>Este texto lo lee el clasificador. <b>No escribas nombres ni RUTs</b> — si los
+                pones, se reemplazan por seudónimos antes de salir.</span>
+            </div>
+
+            {/* Mismo switch que el "Detalle" del visor (GlosaComunControl): es una
+                preferencia que se prende o apaga, no un ítem que se selecciona —
+                y el checkbox crudo del navegador se veía pegado de otra app. */}
+            <button type="button" role="switch" aria-checked={ctxRecordar}
+              className={`dz-ctx-sw${ctxRecordar ? " on" : ""}`}
+              onClick={() => setCtxRecordar(v => !v)}>
+              <span className="dz-ctx-sw-track"><span className="dz-ctx-sw-knob" /></span>
+              Usar esto también en mis próximas cartolas
+            </button>
+
+            <div className="dz-ctx-pie">
+              <button type="button" className="dz-ctx-b" onClick={() => setCtxId(null)}>Cancelar</button>
+              <button type="button" className="dz-ctx-b p" onClick={guardarContexto}>Aceptar</button>
+            </div>
           </div>
         </div>
       )}

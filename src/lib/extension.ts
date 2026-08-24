@@ -26,8 +26,14 @@ export const EXTENSION_VERSION_ACTUAL = "0.1.8";
  * bloquear por "última" dejaría a todos los clientes tiesos durante las horas que
  * tarda el auto-update de Chrome tras cada publicación. Subirlo es una decisión
  * (p.ej. cuando una versión vieja deja de ser segura o compatible con el dominio).
+ *
+ * 0.1.8 (2026-08-24): bajo esta versión la extensión todavía exige tipear el "RUT
+ * de la empresa a emitir" y lo cruza contra el del job → una cuenta con DOS
+ * empresas falla siempre en una de las dos (incidente real de una clienta). No es
+ * cosmético: quien quede en 0.1.7 con multiempresa no puede emitir igual, así que
+ * conviene decírselo antes de que pierda el rato en vez de dejarlo intentar.
  */
-export const EXTENSION_VERSION_MINIMA = "0.1.6";
+export const EXTENSION_VERSION_MINIMA = "0.1.8";
 
 /** Compara versiones "x.y.z" numéricamente: <0 si a<b, 0 si iguales, >0 si a>b. */
 export function compararVersiones(a: string, b: string): number {

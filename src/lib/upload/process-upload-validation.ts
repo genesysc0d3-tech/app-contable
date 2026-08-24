@@ -1,6 +1,9 @@
 export type UploadTipo = "excel" | "pdf" | "csv" | "imagen";
 
 export const MAX_PROCESAR_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Tope del contexto escrito. Corto a propósito: un párrafo largo confunde al
+ *  modelo más de lo que ayuda, y limita lo que se puede colar por ahí. */
+export const MAX_CONTEXTO_CHARS = 300;
 
 const TIPO_CONFIG: Record<UploadTipo, { extensions: string[]; mimes: string[]; defaultMime: string }> = {
   excel: {
@@ -35,6 +38,8 @@ export type ValidatedProcesarUpload = {
   nombre: string;
   tipo: UploadTipo;
   contentType: string;
+  /** Lo que el dueño escribió sobre esta cartola (opcional, recortado). */
+  contexto: string | null;
 };
 
 export type InvalidProcesarUpload = {
@@ -89,6 +94,7 @@ export function validateProcesarUploadPayload(body: {
   base64?: unknown;
   tipo?: unknown;
   mime?: unknown;
+  contexto?: unknown;
 }): ValidatedProcesarUpload | InvalidProcesarUpload {
   const base64 = normalizeBase64(body.base64);
   if (!base64.ok) return base64;
@@ -110,6 +116,12 @@ export function validateProcesarUploadPayload(body: {
     return { ok: false, error: "MIME_NO_PERMITIDO", status: 415 };
   }
 
+  // Contexto: se RECORTA en vez de rechazar. Es opcional y un texto largo no es
+  // motivo para no subir la cartola. Los saltos de línea se aplanan porque el
+  // texto va a entrar dentro de un bloque del prompt.
+  const contextoRaw = typeof body.contexto === "string" ? body.contexto : "";
+  const contexto = contextoRaw.replace(/\s+/g, " ").trim().slice(0, MAX_CONTEXTO_CHARS) || null;
+
   return {
     ok: true,
     base64: base64.base64,
@@ -117,5 +129,6 @@ export function validateProcesarUploadPayload(body: {
     nombre,
     tipo,
     contentType: mime || config.defaultMime,
+    contexto,
   };
 }

@@ -855,6 +855,7 @@ export type Database = {
         Row: {
           album_imagenes: Json | null
           archivo_hash: string | null
+          contexto_usuario: string | null
           created_at: string
           empresa_id: string
           estado: string
@@ -875,6 +876,7 @@ export type Database = {
         Insert: {
           album_imagenes?: Json | null
           archivo_hash?: string | null
+          contexto_usuario?: string | null
           created_at?: string
           empresa_id: string
           estado?: string
@@ -895,6 +897,7 @@ export type Database = {
         Update: {
           album_imagenes?: Json | null
           archivo_hash?: string | null
+          contexto_usuario?: string | null
           created_at?: string
           empresa_id?: string
           estado?: string
@@ -1313,11 +1316,14 @@ export type Database = {
           boletas_emision_proveedor: string
           clave_sii: string | null
           comuna: string | null
+          contexto_usuario_default: string | null
           created_at: string
           direccion: string | null
           email_sii: string | null
           emision_baseapi_sandbox: boolean
           emision_proveedor: string
+          ext_last_seen_at: string | null
+          ext_last_version: string | null
           facturas_emision_proveedor: string
           giro: string | null
           id: string
@@ -1333,19 +1339,20 @@ export type Database = {
           rut: string
           tiene_certificado_sii: boolean
           tipo_contribuyente: string
-          ext_last_seen_at: string | null
-          ext_last_version: string | null
           trial_inicio: string | null
         }
         Insert: {
           boletas_emision_proveedor?: string
           clave_sii?: string | null
           comuna?: string | null
+          contexto_usuario_default?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          ext_last_seen_at?: string | null
+          ext_last_version?: string | null
           facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
@@ -1361,19 +1368,20 @@ export type Database = {
           rut: string
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
-          ext_last_seen_at?: string | null
-          ext_last_version?: string | null
           trial_inicio?: string | null
         }
         Update: {
           boletas_emision_proveedor?: string
           clave_sii?: string | null
           comuna?: string | null
+          contexto_usuario_default?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          ext_last_seen_at?: string | null
+          ext_last_version?: string | null
           facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
@@ -1389,8 +1397,6 @@ export type Database = {
           rut?: string
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
-          ext_last_seen_at?: string | null
-          ext_last_version?: string | null
           trial_inicio?: string | null
         }
         Relationships: []
