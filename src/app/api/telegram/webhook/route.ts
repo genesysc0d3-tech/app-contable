@@ -65,6 +65,11 @@ import {
 
 const MAX_FOTO_BYTES = 6 * 1024 * 1024;
 const TOPE_DIARIO = 50;
+// Fotos que se usan de UN álbum. Un comprobante P2P real son 2-4 capturas (Binance,
+// el banco propio, el del cliente). Telegram permite álbumes de 10, y cada foto de
+// más es una subida a R2 + una llamada de OCR por la MISMA venta: multiplica el
+// costo por 10 sin agregar información. Se corta antes de bajar la foto.
+const MAX_FOTOS_ALBUM = 4;
 
 const MSG = {
   instruccionesVincular:
@@ -92,6 +97,9 @@ const MSG = {
   topeDiario:
     `🌙 Llegaste al tope de <b>${TOPE_DIARIO} comprobantes</b> por hoy.\n` +
     "Mañana seguimos — los de hoy ya quedaron en Agregados.",
+  demasiadasFotos:
+    `📸 Máximo <b>${MAX_FOTOS_ALBUM} imágenes</b> por comprobante.\n` +
+    "No procesé ninguna. Elige las que muestran la operación y mándamelas de nuevo.",
   muyGrande:
     "📦 Esa foto pesa más de <b>6 MB</b> y no la puedo procesar.\n" +
     "Mándala un poco más liviana (un screenshot normal basta).",
@@ -1028,6 +1036,24 @@ async function guardarYProcesarComprobanteTelegram(args: {
 // Una foto de un álbum (v1: chats de una empresa). Sube a R2, deja su imagen en el
 // buffer e intenta ser el "creador" (único por empresa+media_group_id). El creador
 // espera un debounce a que lleguen las hermanas y encola UN job multi-imagen = 1 venta.
+/**
+ * ¿Este álbum fue rechazado por pasarse del tope de fotos?
+ *
+ * La marca vive en el `documentos_subidos` del álbum (índice único por
+ * empresa+media_group_id), no en el buffer: así también BLOQUEA que una foto
+ * tardía cree un álbum nuevo con las sobras del rechazado.
+ */
+async function albumRechazado(svc: Svc, empresaId: string, mediaGroupId: string): Promise<boolean> {
+  const { data } = await svc
+    .from("documentos_subidos")
+    .select("progreso_ia")
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", mediaGroupId)
+    .maybeSingle();
+  const prog = data?.progreso_ia;
+  return Boolean(prog && typeof prog === "object" && !Array.isArray(prog) && (prog as Record<string, unknown>).error === "album_excede_tope");
+}
+
 async function recibirAlbumFoto(chatId: number, empresaId: string, foto: TelegramPhotoSize, mediaGroupId: string) {
   const svc = getServiceClient();
 
@@ -1043,9 +1069,37 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   const { data: bufRow, error: bufErr } = await svc
     .from("telegram_album_buffer")
     .insert({ empresa_id: empresaId, media_group_id: mediaGroupId, image: { pending: true } as Json })
-    .select("id")
+    .select("id, created_at")
     .single();
   if (bufErr || !bufRow) return;
+
+  // Tope de fotos por álbum. Se rankea por antigüedad (cada foto cuenta las que
+  // llegaron ANTES que ella) en vez de un count() a secas: las fotos del álbum
+  // llegan en webhooks distintos y concurrentes, y un count compartido haría que
+  // dos se descartaran mutuamente. Rankear sólo puede admitir una de más ante un
+  // empate exacto de created_at, nunca perder una que iba dentro del tope.
+  const { count: fotosPrevias } = await svc
+    .from("telegram_album_buffer")
+    .select("id", { count: "exact", head: true })
+    .eq("empresa_id", empresaId)
+    .eq("media_group_id", mediaGroupId)
+    .lt("created_at", bufRow.created_at);
+  if ((fotosPrevias ?? 0) >= MAX_FOTOS_ALBUM) {
+    // Se RECHAZA el álbum entero, no se recortan las primeras 4: procesar un
+    // subconjunto silencioso emitiría una propuesta sobre evidencia parcial sin
+    // que nadie sepa qué quedó afuera. Telegram manda las fotos del álbum en
+    // serie (espera el 200 de cada una), así que para cuando llega la 5ª el
+    // documento creador ya existe y la marca lo alcanza.
+    await svc.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+    await svc
+      .from("documentos_subidos")
+      .update({ estado: "error", progreso_ia: { estado: "error", error: "album_excede_tope" } as Json })
+      .eq("empresa_id", empresaId)
+      .eq("media_group_id", mediaGroupId);
+    // Un solo aviso por álbum: lo manda la PRIMERA que se pasa del tope.
+    if ((fotosPrevias ?? 0) === MAX_FOTOS_ALBUM) await say(chatId, MSG.demasiadasFotos);
+    return;
+  }
 
   // Intentar ser el creador (índice único por empresa+media_group_id). Instantáneo;
   // el storage_path real se completa tras la subida en after().
@@ -1082,6 +1136,13 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
   await (async () => {
     const svc2 = getServiceClient();
 
+    // Si una foto posterior ya rechazó el álbum, esta no se sube: el corte tiene
+    // que pasar ANTES de R2 y del OCR, que es lo que cuesta.
+    if (await albumRechazado(svc2, empresaId, mediaGroupId)) {
+      await svc2.from("telegram_album_buffer").delete().eq("id", bufRow.id);
+      return;
+    }
+
     // (TODAS las fotos) descargar + subir ESTA foto a R2 y completar su fila del buffer.
     try {
       const foto64 = await getFileBase64(foto.file_id);
@@ -1112,6 +1173,12 @@ async function recibirAlbumFoto(chatId: number, empresaId: string, foto: Telegra
         .eq("media_group_id", mediaGroupId);
       filas = (data ?? []) as Array<{ id: string; image: Json; created_at: string }>;
       if (filas.length === 0) return;
+      // Rechazado a mitad de la ventana: limpiar el buffer y NO encolar. El doc
+      // ya quedó en error y el aviso al chat lo mandó la foto que se pasó.
+      if (await albumRechazado(svc2, empresaId, mediaGroupId)) {
+        await svc2.from("telegram_album_buffer").delete().in("id", filas.map((f) => f.id));
+        return;
+      }
       const conPath = (img: Json) => Boolean(img && typeof img === "object" && !Array.isArray(img) && (img as Record<string, unknown>).path);
       const todasSubidas = filas.every((f) => conPath(f.image));
       const ultima = Math.max(...filas.map((f) => new Date(f.created_at).getTime()));
