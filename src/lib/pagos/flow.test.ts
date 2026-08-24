@@ -119,24 +119,30 @@ describe("ordenDeCobro — el candado anti-doble-cobro", () => {
   const otra = "ffffffff-0000-0000-0000-000000000000";
 
   it("la misma cuenta y el mismo período dan SIEMPRE la misma orden", () => {
-    expect(ordenDeCobro(cuenta, "2026-09")).toBe(ordenDeCobro(cuenta, "2026-09"));
+    expect(ordenDeCobro(cuenta, "pro", "2026-09")).toBe(ordenDeCobro(cuenta, "pro", "2026-09"));
   });
 
   it("otro período da otra orden (si no, el mes 2 rebotaría contra el mes 1)", () => {
-    expect(ordenDeCobro(cuenta, "2026-09")).not.toBe(ordenDeCobro(cuenta, "2026-10"));
+    expect(ordenDeCobro(cuenta, "pro", "2026-09")).not.toBe(ordenDeCobro(cuenta, "pro", "2026-10"));
   });
 
   it("otra cuenta da otra orden (si no, un cliente bloquearía el cobro de otro)", () => {
-    expect(ordenDeCobro(cuenta, "2026-09")).not.toBe(ordenDeCobro(otra, "2026-09"));
+    expect(ordenDeCobro(cuenta, "pro", "2026-09")).not.toBe(ordenDeCobro(otra, "pro", "2026-09"));
+  });
+
+  it("otro plan da otra orden: subir de plan a mitad de mes SÍ se cobra", () => {
+    // Sin esto el cobro del plan nuevo rebotaba como "ya pagado" y el cliente
+    // se llevaba el plan caro gratis hasta el mes siguiente.
+    expect(ordenDeCobro(cuenta, "pro", "2026-09")).not.toBe(ordenDeCobro(cuenta, "business", "2026-09"));
   });
 
   it("no lleva azar: dos llamadas seguidas no divergen", () => {
-    const muestras = new Set(Array.from({ length: 50 }, () => ordenDeCobro(cuenta, "2026-09")));
+    const muestras = new Set(Array.from({ length: 50 }, () => ordenDeCobro(cuenta, "pro", "2026-09")));
     expect(muestras.size).toBe(1);
   });
 
   it("cabe holgado en el campo de Flow y no lleva caracteres raros", () => {
-    const orden = ordenDeCobro(cuenta, "2026-09");
+    const orden = ordenDeCobro(cuenta, "pro", "2026-09");
     expect(orden.length).toBeLessThanOrEqual(45);
     expect(orden).toMatch(/^[a-z0-9-]+$/);
   });

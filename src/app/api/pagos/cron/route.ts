@@ -106,7 +106,7 @@ export async function GET(request: Request) {
           const cobro = await cobrarCuenta(s.cuenta_id, {
             montoClp,
             concepto: `massDTE ${plan.nombre}`,
-            orden: ordenDeCobro(s.cuenta_id, periodoActual()),
+            orden: ordenDeCobro(s.cuenta_id, s.plan_codigo, periodoActual()),
           });
 
           if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") {

@@ -463,7 +463,7 @@ export async function activarSuscripcionFlow(
   const cobro = await cobrarCuenta(cuentaId, {
     montoClp,
     concepto: `massDTE ${plan.nombre}`,
-    orden: ordenDeCobro(cuentaId, periodo),
+    orden: ordenDeCobro(cuentaId, plan.codigo, periodo),
   });
   // COBRO_YA_PAGADO = este período ya se cobró (la plata entró en un intento
   // anterior cuya escritura no llegó). Se sigue adelante: cobrar de nuevo sería
@@ -487,11 +487,23 @@ export async function activarSuscripcionFlow(
 }
 
 /**
- * La orden que va a Flow. Lleva el período adentro a propósito: Flow rechaza
- * un `commerceOrder` repetido, así que esta forma convierte el "no cobrar dos
- * veces el mismo mes" en algo que hace cumplir la PASARELA y no nuestro
- * código. Un cron que corra dos veces choca allá, no acá.
+ * La orden que va a Flow. Flow rechaza un `commerceOrder` repetido, así que
+ * esta cadena convierte el "no cobrar dos veces lo mismo" en algo que hace
+ * cumplir la PASARELA y no nuestro código: un cron que corra dos veces choca
+ * allá, no acá.
+ *
+ * Lleva el PLAN además del período porque sin él un cambio de plan a mitad de
+ * mes rebotaba como "ya pagado" y el cliente se llevaba el plan caro gratis
+ * hasta el mes siguiente. Con el plan adentro, subir de plan es una orden
+ * distinta y sí se cobra; repetir el MISMO plan en el mismo mes sigue
+ * protegido, que es lo que se quería. (Lo cazó el e2e sintético, no la lectura.)
+ *
+ * ⚠️ ESTE FORMATO ES CONTRATO. Cambiarlo con clientes vivos le cobra DOS VECES
+ * el mes en curso a cada uno: Flow ve una orden que nunca pagó y la aprueba.
+ * Pasó en el e2e al cambiarlo a mitad de prueba — dos cargos, misma tarjeta,
+ * mismo mes. Si alguna vez hay que cambiarlo, hacerlo el día 1 y solo para
+ * suscripciones cuyo período ya se cobró.
  */
-export function ordenDeCobro(cuentaId: string, periodo: string): string {
-  return `md-${cuentaId.slice(0, 8)}-${periodo}`;
+export function ordenDeCobro(cuentaId: string, planCodigo: string, periodo: string): string {
+  return `md-${cuentaId.slice(0, 8)}-${planCodigo}-${periodo}`;
 }
