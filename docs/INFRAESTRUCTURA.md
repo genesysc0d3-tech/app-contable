@@ -74,10 +74,11 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 
 | Servicio | Estado | Notas |
 |---|---|---|
-| **MercadoPago** | Production ON, webhook verificado en `app.massdte.cl/api/pagos/webhook` | env `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`. **Rechaza débito y prepago para recurrencia** → no sirve como carril principal |
+| **Flow** ★ CARRIL PRINCIPAL | Llaves de producción en Vercel (2026-08-24, verificadas en vivo antes de subir); **se enciende con el próximo deploy de `main`** | Cuenta prod a nombre de ALPHA CODE SPA (`www.flow.cl`, correo alphacode.chile@gmail.com), sandbox APARTE en `sandbox.flow.cl`. env `FLOW_API_KEY`, `FLOW_SECRET_KEY`, `FLOW_ENV` (producción solo con la palabra exacta; typo → sandbox). Por debajo es **Transbank OneClick** → acepta crédito/débito/prepago. Comisión 3,19%+IVA (costo real 3,80% del ingreso neto; emite factura 33 → IVA recuperable). NO usamos sus planes (congelan precio, incompatible con UF): tarjeta inscrita una vez + `customer/charge` mensual desde nuestro cron. Callback `app.massdte.cl/api/pagos/flow/inscripcion` (exento de auth en proxy.ts). ⚠️ El formato del `commerceOrder` es CONTRATO: cambiarlo con clientes vivos cobra doble |
+| **MercadoPago** | Production ON, webhook verificado en `app.massdte.cl/api/pagos/webhook`; **queda de respaldo** (checkout usa Flow si está configurado) | env `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`. **Rechaza débito y prepago para recurrencia** → no sirve como carril principal |
 | **MercadoPago Empresas** | Cuenta de depósito de AlphaCode SpA | es el destino configurado en Reveniu |
 | **Global66 Enterprise** | Cuenta de empresa | alternativa de depósito |
-| **Reveniu** | Cuenta creada, en configuración | carril candidato: UF nativa + débito Redcompra + API abierta |
+| **Reveniu** | DESCARTADA 2026-08-24 | sandbox roto (login `origin_mismatch`, sin correo de confirmación, sin acceso a la API key). Regla aplicada: si no se puede probar, no se construye. ⚠️ Su llave de PRODUCCIÓN quedó expuesta en la config → rotarla o cerrar la cuenta |
 | **Transbank** | Afiliación iniciada | contacto técnico Osvaldo Cuellar |
 
 ---
@@ -126,6 +127,7 @@ Ninguna está en el repo (todas ignoradas por git):
 .supabase/massdte-us.dbpass      → password de la base de producción
 .chromewebstore/credentials.json → publicar la extensión
 .mercadopago/                    → credenciales de PRUEBA de MP
+.flow/production.json            → llaves de PRODUCCIÓN de Flow (se suben a Vercel con scripts/flow-env-vercel.mjs; las de sandbox van en .env.local)
 .resend/token                    → API key de Resend (solo envío)
 .improvmx/token                  → API key de ImprovMX (alias del correo entrante)
 
