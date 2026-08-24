@@ -1,0 +1,4 @@
+# El binario se compila en el mini con `swiftc -O -o ocr ocr.swift`
+ocr
+node_modules/
+package-lock.json

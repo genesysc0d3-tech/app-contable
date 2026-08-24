@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LaunchDaemon del worker de OCR en el Mac mini.
+
+  Es DAEMON (no Agent) a propósito: arranca al bootear, en la sesión 0, SIN que
+  nadie inicie sesión — igual que el respaldo. Así sobrevive un apagón solo, sin
+  auto-login. Se comprobó (2026-08-24) que Vision de Apple funciona headless en
+  la sesión 0 de este mini M1, así que no hace falta escritorio.
+
+  Corre como el usuario `clau` (UserName), no root: menor privilegio, y lee sus
+  archivos y su config del respaldo con normalidad. HOME se fija explícito porque
+  los Daemons no lo heredan.
+
+  Instalar (en el mini):
+    sudo cp /Users/clau/massdte-ocr/cl.massdte.ocr.plist /Library/LaunchDaemons/
+    sudo chown root:wheel /Library/LaunchDaemons/cl.massdte.ocr.plist
+    sudo chmod 644 /Library/LaunchDaemons/cl.massdte.ocr.plist
+    sudo launchctl bootstrap system /Library/LaunchDaemons/cl.massdte.ocr.plist
+
+  Ajusta /Users/clau si el usuario del mini es otro.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cl.massdte.ocr</string>
+
+  <key>UserName</key>
+  <string>clau</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/clau/massdte-ocr/run-worker.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/clau</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/massdte-ocr.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/massdte-ocr.err.log</string>
+</dict>
+</plist>

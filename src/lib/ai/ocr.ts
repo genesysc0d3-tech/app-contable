@@ -1,5 +1,10 @@
 /**
- * OCR de imágenes (screenshots/fotos de comprobantes) vía OpenCode Go.
+ * OCR de imágenes (screenshots/fotos de comprobantes).
+ *
+ * Dos carriles, en orden: primero el Mac mini (Apple Vision en local — la imagen
+ * no sale de la casa, ~350 ms, gratis; ver ocr-mini.ts), y si no está disponible
+ * se cae al remoto de abajo. Punto ÚNICO de OCR del producto: lo usan cartolas,
+ * Telegram y comprobantes sueltos, así que cambiar de motor se hace solo acá.
  *
  * - Lectura de imagen: MiniMax M3 (multimodal, modelo de pago de Go → no
  *   entrena con los datos). Confirmado leyendo comprobantes chilenos.
@@ -12,6 +17,7 @@
 import { requirePaidModel } from "./model-guard";
 import { fetchOpenCodeStreaming } from "./opencode-stream";
 import { assertApprovedDataProcessor } from "./egress";
+import { ocrConMini, ocrMiniHabilitado } from "./ocr-mini";
 
 const OPENCODE_BASE = "https://opencode.ai/zen/go/v1";
 const OCR_MODEL = process.env.OPENCODE_OCR_MODEL || "minimax-m3";
@@ -74,8 +80,40 @@ async function openCodeChat(
   }
 }
 
-/** Extrae texto de una imagen con MiniMax M3 (multimodal). */
-export async function ocrImage(imageBase64: string, mimeType: string, timeoutMs = 120_000): Promise<OcrResult> {
+/** De dónde viene la imagen, para que el mini pueda bajarla sin credenciales. */
+export interface OcrContexto {
+  empresaId?: string | null;
+  documentoId?: string | null;
+  storagePath?: string | null;
+  storageProvider?: string | null;
+}
+
+/**
+ * Extrae texto de una imagen.
+ *
+ * Primero intenta el mini (Vision local: la imagen no sale del país, ~350 ms,
+ * gratis). Si el carril está apagado, el mini no responde o falla, cae al
+ * proveedor remoto — un mini caído nunca puede dejar sin boleta a nadie.
+ */
+export async function ocrImage(
+  imageBase64: string,
+  mimeType: string,
+  timeoutMs = 120_000,
+  ctx?: OcrContexto,
+): Promise<OcrResult> {
+  if (ocrMiniHabilitado()) {
+    const local = await ocrConMini({
+      base64: imageBase64,
+      mimeType,
+      empresaId: ctx?.empresaId,
+      documentoId: ctx?.documentoId,
+      storagePath: ctx?.storagePath,
+      storageProvider: ctx?.storageProvider,
+    });
+    // El mini no consume tokens de ningún proveedor: por eso van en cero.
+    if (local) return { text: local.text, tokens_input: 0, tokens_output: 0 };
+  }
+
   return openCodeChat(OCR_MODEL, [
     { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
     { type: "text", text: OCR_PROMPT },
@@ -87,8 +125,15 @@ export async function ocrImage(imageBase64: string, mimeType: string, timeoutMs 
  * Devuelve el texto agrupado listo para el pipeline de clasificación.
  */
 export async function ocrAndGroupImages(
-  images: { base64: string; mimeType: string; fileName: string }[],
-  opts?: { skipGrouping?: boolean; ocrTimeoutMs?: number },
+  images: {
+    base64: string;
+    mimeType: string;
+    fileName: string;
+    /** Ruta en el storage: deja que el mini baje la imagen sin credenciales. */
+    storagePath?: string | null;
+    storageProvider?: string | null;
+  }[],
+  opts?: { skipGrouping?: boolean; ocrTimeoutMs?: number; contexto?: OcrContexto },
 ): Promise<{
   groupedText: string;
   totalTokensInput: number;
@@ -96,7 +141,11 @@ export async function ocrAndGroupImages(
 }> {
   const ocrResults = await Promise.all(
     images.map(async (img) => {
-      const result = await ocrImage(img.base64, img.mimeType, opts?.ocrTimeoutMs ?? 120_000);
+      const result = await ocrImage(img.base64, img.mimeType, opts?.ocrTimeoutMs ?? 120_000, {
+        ...opts?.contexto,
+        storagePath: img.storagePath ?? null,
+        storageProvider: img.storageProvider ?? null,
+      });
       return { fileName: img.fileName, ...result };
     })
   );
