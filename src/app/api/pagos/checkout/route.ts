@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { crearPersonaAdicionalCuenta, crearRefillCuenta, crearSuscripcion } from "@/lib/pagos/mercadopago";
+import { crearSuscripcionFlow, flowConfigurado } from "@/lib/pagos/flow";
 import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
@@ -71,7 +72,15 @@ export async function POST(request: Request) {
     if (body.tipo === "plan") {
       const plan = typeof body.plan === "string" ? body.plan.trim() : "";
       if (!plan) return NextResponse.json({ ok: false, error: "PLAN_REQUERIDO" }, { status: 400 });
-      result = await crearSuscripcion(cuenta.cuentaId, usuario.empresa_id, plan, user.email ?? "");
+      // Flow manda cuando está configurado. La diferencia para el usuario es
+      // que no va a "pagar" sino a INSCRIBIR su tarjeta: el primer cobro lo
+      // hacemos nosotros al volver. Mercado Pago queda de respaldo mientras
+      // convivan; su suscripción no acepta prepago ni Redcompra, que es justo
+      // la tarjeta de los clientes chicos.
+      const nombrePagador = user.user_metadata?.full_name ?? user.email ?? "Cliente massDTE";
+      result = flowConfigurado()
+        ? await crearSuscripcionFlow(cuenta.cuentaId, usuario.empresa_id, plan, user.email ?? "", String(nombrePagador))
+        : await crearSuscripcion(cuenta.cuentaId, usuario.empresa_id, plan, user.email ?? "");
     } else if (body.tipo === "refill") {
       result = await crearRefillCuenta(cuenta.cuentaId, usuario.empresa_id);
     } else if (body.tipo === "persona_adicional") {
@@ -94,7 +103,7 @@ export async function POST(request: Request) {
     }
 
     if (!result.ok) {
-      if (result.error === "MP_NO_CONFIGURADO") {
+      if (result.error === "MP_NO_CONFIGURADO" || result.error === "FLOW_NO_CONFIGURADO") {
         return NextResponse.json(
           { ok: false, error: "MP_NO_CONFIGURADO", detalle: "Pagos próximamente — escríbenos y activamos tu plan." },
           { status: 503 },

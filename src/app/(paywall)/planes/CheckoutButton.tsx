@@ -3,9 +3,14 @@
 import { useState, type ReactNode } from "react";
 
 /**
- * Botón de compra: pide el init_point a /api/pagos/checkout y redirige a
- * Mercado Pago. Si los pagos aún no están configurados (503), muestra el
- * mensaje "próximamente" sin romper la página.
+ * Botón de compra: pide la URL a /api/pagos/checkout y redirige a la pasarela.
+ * Si los pagos aún no están configurados (503), muestra "próximamente" sin
+ * romper la página.
+ *
+ * El copy es NEUTRO a propósito (no nombra la pasarela): con Flow el cliente no
+ * va a "pagar" sino a inscribir su tarjeta, y el nombre de la marca en el botón
+ * ya obligó a cambiarlo una vez. Lo que el cliente necesita saber es a qué va,
+ * no con quién.
  */
 export default function CheckoutButton({
   tipo,
@@ -13,12 +18,15 @@ export default function CheckoutButton({
   actual = false,
   label,
   recommended = false,
+  inscribeTarjeta = false,
 }: {
   tipo: "plan" | "refill" | "persona_adicional";
   plan?: string;
   actual?: boolean;
   label?: string;
   recommended?: boolean;
+  /** Flow: contratar = inscribir tarjeta para cargo automático, no pagar una vez. */
+  inscribeTarjeta?: boolean;
 }) {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState<ReactNode>(null);
@@ -92,8 +100,17 @@ export default function CheckoutButton({
           transition: "background .2s, border-color .2s, opacity .2s",
         }}
       >
-        {cargando ? "Abriendo Mercado Pago…" : label ?? (tipo === "plan" ? "Contratar con Mercado Pago" : "Comprar extra")}
+        {cargando ? "Abriendo…" : label ?? (tipo === "plan" ? "Contratar plan" : "Comprar extra")}
       </button>
+      {/* El cobro de validación de $50 se avisa ANTES de mandarlo, no después:
+          es un cargo real que aparece en su cartola y, sin aviso, llama. */}
+      {inscribeTarjeta && tipo === "plan" && !mensaje && (
+        <p style={{ fontSize: 10, color: "var(--muted)", textAlign: "center", margin: 0, lineHeight: 1.45 }}>
+          Registras tu tarjeta y se cobra el primer mes. Sirve crédito, débito o prepago.
+          <br />
+          Al registrarla se hace un cargo de $50 que se devuelve.
+        </p>
+      )}
       {mensaje && (
         <p style={{ fontSize: 10, color: "var(--muted)", textAlign: "center", margin: 0 }}>{mensaje}</p>
       )}

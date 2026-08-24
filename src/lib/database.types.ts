@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   graphql_public: {
     Tables: {
@@ -628,25 +628,25 @@ export type Database = {
       cuenta_empresas: {
         Row: {
           activa: boolean
-          desactivada_motivo: string | null
           created_at: string
           cuenta_id: string
+          desactivada_motivo: string | null
           empresa_id: string
           es_principal: boolean
         }
         Insert: {
           activa?: boolean
-          desactivada_motivo?: string | null
           created_at?: string
           cuenta_id: string
+          desactivada_motivo?: string | null
           empresa_id: string
           es_principal?: boolean
         }
         Update: {
           activa?: boolean
-          desactivada_motivo?: string | null
           created_at?: string
           cuenta_id?: string
+          desactivada_motivo?: string | null
           empresa_id?: string
           es_principal?: boolean
         }
@@ -708,8 +708,8 @@ export type Database = {
       }
       cuentas: {
         Row: {
-          empresa_operativa_elegida_at: string | null
           created_at: string
+          empresa_operativa_elegida_at: string | null
           id: string
           nombre: string
           owner_usuario_id: string | null
@@ -719,8 +719,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          empresa_operativa_elegida_at?: string | null
           created_at?: string
+          empresa_operativa_elegida_at?: string | null
           id?: string
           nombre: string
           owner_usuario_id?: string | null
@@ -730,8 +730,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          empresa_operativa_elegida_at?: string | null
           created_at?: string
+          empresa_operativa_elegida_at?: string | null
           id?: string
           nombre?: string
           owner_usuario_id?: string | null
@@ -1646,6 +1646,56 @@ export type Database = {
           },
         ]
       }
+      medios_pago: {
+        Row: {
+          ambiente: string
+          created_at: string
+          cuenta_id: string
+          estado: string
+          id: string
+          inscrito_at: string | null
+          marca: string | null
+          proveedor: string
+          proveedor_ref: string
+          ultimos4: string | null
+          updated_at: string
+        }
+        Insert: {
+          ambiente?: string
+          created_at?: string
+          cuenta_id: string
+          estado?: string
+          id?: string
+          inscrito_at?: string | null
+          marca?: string | null
+          proveedor: string
+          proveedor_ref: string
+          ultimos4?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ambiente?: string
+          created_at?: string
+          cuenta_id?: string
+          estado?: string
+          id?: string
+          inscrito_at?: string | null
+          marca?: string | null
+          proveedor?: string
+          proveedor_ref?: string
+          ultimos4?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medios_pago_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       movimientos_raw: {
         Row: {
           created_at: string
@@ -1731,7 +1781,7 @@ export type Database = {
         Insert: {
           created_at?: string
           documento_id?: string | null
-          empresa_id: string | null
+          empresa_id?: string | null
           estado?: string
           id?: string
           intentos?: number
@@ -2432,7 +2482,15 @@ export type Database = {
           operador_email?: string
           revocada_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "soporte_intervenciones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       suscripciones: {
         Row: {
