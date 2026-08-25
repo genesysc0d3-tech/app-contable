@@ -865,6 +865,7 @@ export type Database = {
           id: string
           media_group_id: string | null
           medio_pago_comun: string | null
+          mesa: string
           movimientos_detectados: number | null
           nombre_archivo: string
           progreso_ia: Json | null
@@ -886,6 +887,7 @@ export type Database = {
           id?: string
           media_group_id?: string | null
           medio_pago_comun?: string | null
+          mesa?: string
           movimientos_detectados?: number | null
           nombre_archivo: string
           progreso_ia?: Json | null
@@ -907,6 +909,7 @@ export type Database = {
           id?: string
           media_group_id?: string | null
           medio_pago_comun?: string | null
+          mesa?: string
           movimientos_detectados?: number | null
           nombre_archivo?: string
           progreso_ia?: Json | null
@@ -2199,12 +2202,14 @@ export type Database = {
           cliente_id: string | null
           confianza: number | null
           created_at: string
+          detalle: string | null
           empresa_id: string
           estado: string
           fuente_clasificacion: string | null
           id: string
           iva: number | null
           medio_pago: string | null
+          mesa: string
           moneda_origen: string | null
           monto_moneda_origen: number | null
           monto_neto: number | null
@@ -2213,6 +2218,7 @@ export type Database = {
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
+          receptor_giro: string | null
           receptor_nombre: string | null
           receptor_rut: string | null
           receptor_telefono: string | null
@@ -2229,12 +2235,14 @@ export type Database = {
           cliente_id?: string | null
           confianza?: number | null
           created_at?: string
+          detalle?: string | null
           empresa_id: string
           estado?: string
           fuente_clasificacion?: string | null
           id?: string
           iva?: number | null
           medio_pago?: string | null
+          mesa?: string
           moneda_origen?: string | null
           monto_moneda_origen?: number | null
           monto_neto?: number | null
@@ -2243,6 +2251,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
@@ -2259,12 +2268,14 @@ export type Database = {
           cliente_id?: string | null
           confianza?: number | null
           created_at?: string
+          detalle?: string | null
           empresa_id?: string
           estado?: string
           fuente_clasificacion?: string | null
           id?: string
           iva?: number | null
           medio_pago?: string | null
+          mesa?: string
           moneda_origen?: string | null
           monto_moneda_origen?: number | null
           monto_neto?: number | null
@@ -2273,6 +2284,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
