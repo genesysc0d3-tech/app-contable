@@ -6,9 +6,11 @@
  *
  * - UN solo campo de monto: VALOR TOTAL del documento. Nada de neto/IVA por
  *   fila — si el emisor es afecto, el sistema deriva neto e IVA por dentro.
- * - Mínima a propósito: el portal del SII autocompleta el receptor desde el
- *   RUT, así que Razón Social / Giro / Dirección / Comuna son OPCIONALES —
- *   sirven de respaldo para el caso persona natural sin giro (criterio 8).
+ * - Receptor COMPLETO y obligatorio (decisión del fundador 2026-08-25): una
+ *   factura sin razón social, giro, dirección y comuna del receptor no es una
+ *   factura. El portal del SII autocompleta desde el RUT, pero el documento
+ *   nace completo desde acá sin depender de ese autocompletado. Solo el Email
+ *   queda opcional (es contacto, no dato fiscal).
  * - CERO interpretación: cada fila ES una factura que el usuario decidió
  *   emitir. No pasa por IA ni clasificador — determinístico y con 0 tokens.
  * - Advertir sí, bloquear jamás (criterio 3): los problemas por fila salen
@@ -37,10 +39,10 @@ export interface FacturaFila {
   receptorRut: string;          // normalizado con formatRut
   detalle: string;
   totalClp: number;
-  receptorRazonSocial: string | null;
-  receptorGiro: string | null;
-  receptorDireccion: string | null;
-  receptorComuna: string | null;
+  receptorRazonSocial: string;
+  receptorGiro: string;
+  receptorDireccion: string;
+  receptorComuna: string;
   receptorEmail: string | null;
   advertencias: string[];
 }
@@ -124,15 +126,33 @@ export function parsePlantillaFacturas(rows: FilaCruda[]): { facturas: FacturaFi
     const total = parseMonto(col(r, c.total));
     if (total === null || total <= 0) { errores.push({ fila, error: `Valor total inválido: ${String(col(r, c.total) ?? "(vacío)")}` }); continue; }
 
+    // El receptor de una factura se identifica ENTERO — sin razón social,
+    // giro, dirección o comuna el documento no existe (decisión del fundador;
+    // el DL 825 exige la individualización del receptor en la factura).
+    const razon = texto(col(r, c.razon));
+    const giro = texto(col(r, c.giro));
+    const direccion = texto(col(r, c.direccion));
+    const comuna = texto(col(r, c.comuna));
+    const faltantes = [
+      !razon && "Razón Social",
+      !giro && "Giro",
+      !direccion && "Dirección",
+      !comuna && "Comuna",
+    ].filter(Boolean);
+    if (faltantes.length > 0) {
+      errores.push({ fila, error: `Faltan datos del receptor: ${faltantes.join(", ")}` });
+      continue;
+    }
+
     facturas.push({
       fila,
       receptorRut: formatRut(rutCrudo),
       detalle,
       totalClp: total,
-      receptorRazonSocial: texto(col(r, c.razon)),
-      receptorGiro: texto(col(r, c.giro)),
-      receptorDireccion: texto(col(r, c.direccion)),
-      receptorComuna: texto(col(r, c.comuna)),
+      receptorRazonSocial: razon!,
+      receptorGiro: giro!,
+      receptorDireccion: direccion!,
+      receptorComuna: comuna!,
       receptorEmail: texto(col(r, c.email)),
       advertencias: [],
     });

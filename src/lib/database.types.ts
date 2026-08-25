@@ -186,6 +186,7 @@ export type Database = {
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
+          receptor_giro: string | null
           receptor_razon_social: string | null
           receptor_rut: string | null
           receptor_telefono: string | null
@@ -223,6 +224,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
@@ -260,6 +262,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null

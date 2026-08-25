@@ -529,3 +529,137 @@ export function HeaderActionsRow() {
     </>
   );
 }
+
+/**
+ * FACTURA ÚNICA (criterio 5 de Matías): el hermano de la boleta única para la
+ * mesa Facturas. El usuario tipea el receptor COMPLETO (decisión del fundador:
+ * la factura individualiza a su receptor — solo el email es opcional), el
+ * detalle y el VALOR TOTAL; el sistema deriva neto/IVA según el emisor.
+ *
+ * Dos pasos contra el server, cero lógica duplicada: /factura-unica crea la
+ * cadena documento→movimiento→propuesta (nace aprobada: tipearla ES el gesto)
+ * y /emitir-lote la emite con la forma de pago elegida — mismos gates de
+ * cuota, locks y validaciones del carril masivo.
+ */
+export function FacturaUnicaAction({ readOnlyReason }: { readOnlyReason?: string }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [f, setF] = useState({ rut: "", razon: "", giro: "", direccion: "", comuna: "", email: "", detalle: "", total: "" });
+  // Criterio 7: forma de pago obligatoria y SIN default, también en la única.
+  const [formaPago, setFormaPago] = useState<"contado" | "credito" | null>(null);
+  const [folioListo, setFolioListo] = useState<number | null>(null);
+
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((v) => ({ ...v, [k]: e.target.value }));
+  const totalNum = Math.round(Number(f.total.replace(/[$.\s]/g, "")) || 0);
+  const completo = f.rut.trim() && f.razon.trim() && f.giro.trim() && f.direccion.trim() && f.comuna.trim() && f.detalle.trim() && totalNum > 0 && formaPago;
+
+  async function emitir() {
+    if (!completo || enviando) return;
+    setEnviando(true);
+    try {
+      const crear = await fetch("/api/intermediaria/factura-unica", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          receptor_rut: f.rut, razon_social: f.razon, giro: f.giro, direccion: f.direccion,
+          comuna: f.comuna, email: f.email || undefined, detalle: f.detalle, total: totalNum,
+        }),
+      });
+      const creada = await crear.json().catch(() => null);
+      if (!creada?.ok) {
+        toast(creada?.detalle ?? "No se pudo preparar la factura", "error");
+        setEnviando(false);
+        return;
+      }
+      const emitirRes = await fetch("/api/intermediaria/emitir-lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propuesta_ids: [creada.propuesta_id], forma_pago_lote: formaPago }),
+      });
+      const r = await emitirRes.json().catch(() => null);
+      const item = r?.resultados?.[0];
+      if (r?.ok && item?.ok) {
+        setFolioListo(item.folio ?? null);
+      } else {
+        toast(item?.error_message ?? r?.detalle ?? "No se pudo emitir la factura", "error");
+      }
+    } catch {
+      toast("No se pudo emitir — revisa tu conexión", "error");
+    }
+    setEnviando(false);
+  }
+
+  const inputSt: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 9, padding: "9px 10px", color: "var(--text)", fontSize: 12, fontFamily: "inherit" };
+  const labelSt: React.CSSProperties = { display: "block", fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text3)", margin: "10px 0 4px" };
+
+  return (
+    <>
+      <button type="button" onClick={() => { if (!readOnlyReason) { setOpen(true); setFolioListo(null); } }} disabled={Boolean(readOnlyReason)}
+        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 16px", border: 0, background: "transparent", color: "var(--text)", cursor: readOnlyReason ? "default" : "pointer", textAlign: "left", font: "inherit" }}>
+        <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(201,242,75,.1)", color: "var(--lime)", flexShrink: 0 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, letterSpacing: ".02em", color: "var(--lime)" }}>EMITIR FACTURA ÚNICA</span>
+          <span style={{ display: "block", fontSize: 10, color: "var(--text2)", marginTop: 1 }}>{readOnlyReason ?? "Factura manual, una a la vez"}</span>
+        </span>
+      </button>
+
+      {open && (
+        <div className="md-overlay" onClick={() => { if (!enviando) setOpen(false); }}>
+          <div className="md-panel" style={{ width: "min(560px, 94vw)", maxHeight: "92vh" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+              <button aria-label="Cerrar" onClick={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 16 }}>×</button>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em" }}>Factura única</h2>
+                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Receptor completo — la factura lo individualiza entero.</p>
+              </div>
+            </div>
+
+            {folioListo !== null ? (
+              <div style={{ padding: "28px 24px", textAlign: "center" }}>
+                <div style={{ fontSize: 34, fontWeight: 800, color: "var(--green)", letterSpacing: "-.03em" }}>#{folioListo}</div>
+                <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>Tu factura fue emitida correctamente.</div>
+                <div style={{ fontSize: 10, color: "var(--amber)", marginTop: 8 }}>● Modo de prueba: se simula, no se informa al SII.</div>
+                <button onClick={() => setOpen(false)} style={{ marginTop: 18, border: 0, borderRadius: 10, padding: "11px 22px", background: "var(--accent)", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", font: "inherit" }}>Listo</button>
+              </div>
+            ) : (
+              <div style={{ padding: "12px 20px 20px", overflowY: "auto" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
+                  <div><label style={labelSt}>RUT receptor</label><input style={inputSt} value={f.rut} onChange={set("rut")} placeholder="12.345.678-5" /></div>
+                  <div><label style={labelSt}>Razón social</label><input style={inputSt} value={f.razon} onChange={set("razon")} placeholder="Empresa SpA" /></div>
+                  <div><label style={labelSt}>Giro</label><input style={inputSt} value={f.giro} onChange={set("giro")} placeholder="Servicios informáticos" /></div>
+                  <div><label style={labelSt}>Comuna</label><input style={inputSt} value={f.comuna} onChange={set("comuna")} placeholder="Santiago" /></div>
+                </div>
+                <label style={labelSt}>Dirección</label><input style={inputSt} value={f.direccion} onChange={set("direccion")} placeholder="Av. Ejemplo 1234, of. 56" />
+                <label style={labelSt}>Email (opcional)</label><input style={inputSt} value={f.email} onChange={set("email")} placeholder="pagos@empresa.cl" />
+                <label style={labelSt}>Detalle</label><input style={inputSt} value={f.detalle} onChange={set("detalle")} placeholder="Asesoría mensual agosto" />
+                <label style={labelSt}>Valor total (con IVA si corresponde)</label><input style={inputSt} value={f.total} onChange={set("total")} placeholder="500.000" inputMode="numeric" />
+
+                <label style={labelSt}>Forma de pago</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {(["contado", "credito"] as const).map((fp) => (
+                    <button key={fp} type="button" onClick={() => setFormaPago(fp)}
+                      style={{ flex: 1, padding: "10px 12px", borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: "pointer", font: "inherit",
+                        border: formaPago === fp ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                        background: formaPago === fp ? "rgba(201,242,75,.08)" : "transparent",
+                        color: formaPago === fp ? "var(--lime)" : "var(--text2)" }}>
+                      {fp === "contado" ? "Contado" : "Crédito"}
+                    </button>
+                  ))}
+                </div>
+                {!formaPago && <div style={{ marginTop: 5, fontSize: 9.5, color: "var(--text3)" }}>Sin selección previa a propósito: tú decides cómo fue la operación.</div>}
+
+                <button onClick={emitir} disabled={!completo || enviando}
+                  style={{ width: "100%", marginTop: 16, border: 0, borderRadius: 10, padding: "12px 14px", background: completo && !enviando ? "#E8553E" : "var(--bg-muted)", color: completo && !enviando ? "#fff" : "var(--text3)", fontSize: 13, fontWeight: 800, cursor: completo && !enviando ? "pointer" : "not-allowed", font: "inherit" }}>
+                  {enviando ? "Emitiendo…" : "Emitir factura →"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
