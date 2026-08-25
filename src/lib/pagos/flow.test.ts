@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro, ordenDeRefill } from "./flow";
+import { firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro, ordenDeRefill, prorratearUpgrade } from "./flow";
 
 // La firma es la pieza que hay que poder probar sola: si está mal, TODA llamada
 // a Flow falla con el mismo error genérico y no se distingue de una llave
@@ -164,5 +164,41 @@ describe("ordenDeRefill — varios por mes, pero no por doble click", () => {
 
   it("no choca con la orden de la suscripción del mismo mes", () => {
     expect(ordenDeRefill(cuenta, "2026-09", 1)).not.toBe(ordenDeCobro(cuenta, "start", "2026-09"));
+  });
+});
+
+// El prorrateo del upgrade es plata que se le cobra al cliente: cada rama va
+// probada con números redondos que se puedan verificar a mano.
+describe("prorratearUpgrade — se cobra solo la diferencia por los días que faltan", () => {
+  // UF ficticia de 40.000 para que las cuentas salgan redondas:
+  // Start 0,5 → 20.000 neto; Pro 1,0 → 40.000 neto; dif neta 20.000 (23.800 con IVA).
+  const base = { ufViejo: 0.5, ufNuevo: 1.0, ufClp: 40_000 };
+
+  it("a mitad de período paga la mitad de la diferencia", () => {
+    // Período 24-08 → 24-09 (31 días); al 09-09 quedan 15.
+    const monto = prorratearUpgrade({ ...base, hoy: "2026-09-09", periodoHasta: "2026-09-24" });
+    expect(monto).toBe(Math.round(20_000 * 1.19 * (15 / 31)));
+  });
+
+  it("recién contratado paga casi la diferencia completa", () => {
+    const monto = prorratearUpgrade({ ...base, hoy: "2026-08-25", periodoHasta: "2026-09-24" });
+    expect(monto).toBe(Math.round(20_000 * 1.19 * (30 / 31)));
+  });
+
+  it("el último día paga casi nada, pero nunca negativo", () => {
+    expect(prorratearUpgrade({ ...base, hoy: "2026-09-24", periodoHasta: "2026-09-24" })).toBe(0);
+    expect(prorratearUpgrade({ ...base, hoy: "2026-09-30", periodoHasta: "2026-09-24" })).toBe(0);
+  });
+
+  it("usa el largo REAL del período (febrero no es un mes de 30)", () => {
+    // 24-01 → 24-02: 31 días de período; quedan 10 al 14-02.
+    const m = prorratearUpgrade({ ...base, hoy: "2026-02-14", periodoHasta: "2026-02-24" });
+    expect(m).toBe(Math.round(20_000 * 1.19 * (10 / 31)));
+  });
+
+  it("nunca cobra más que la diferencia del mes completo", () => {
+    // periodo_hasta corrupto muy en el futuro no puede inflar el cobro.
+    const m = prorratearUpgrade({ ...base, hoy: "2026-08-25", periodoHasta: "2027-08-24" });
+    expect(m).toBeLessThanOrEqual(Math.round(20_000 * 1.19));
   });
 });
