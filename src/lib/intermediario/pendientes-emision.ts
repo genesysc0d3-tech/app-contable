@@ -167,7 +167,15 @@ export async function getPendientesEmision(
       const advertencias: { code: string; msg: string }[] = [];
       if (!receptor_rut) bloqueos.push({ code: "RECEPTOR_RUT_OBLIGATORIO", msg: "La factura exige el RUT del receptor" });
       if (total <= 0) bloqueos.push({ code: "MONTO_TOTAL_INVALIDO", msg: "El total debe ser mayor a cero" });
-      if (!receptor_nombre) advertencias.push({ code: "SIN_RAZON_SOCIAL", msg: "Sin razón social — el SII la completa desde el RUT" });
+      // Receptor COMPLETO obligatorio (decisión del fundador): la factura
+      // individualiza a su receptor, no depende del autocompletado del SII.
+      const faltanF = [
+        !receptor_nombre && "razón social",
+        !(pf.receptor_giro ?? "").trim() && "giro",
+        !(p.receptor_direccion ?? "").trim() && "dirección",
+        !(p.receptor_comuna ?? "").trim() && "comuna",
+      ].filter(Boolean);
+      if (faltanF.length > 0) bloqueos.push({ code: "RECEPTOR_INCOMPLETO", msg: `Factura incompleta: falta ${faltanF.join(", ")}` });
       const balde = bloqueos.length > 0 ? "bloqueadas" : p.estado === "aprobado" ? "listas" : "por_revisar";
       return {
         id: p.id,

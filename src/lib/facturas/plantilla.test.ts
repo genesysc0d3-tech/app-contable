@@ -43,19 +43,30 @@ describe("parsePlantillaFacturas — filas buenas siguen, filas malas se reporta
     expect(f.receptorComuna).toBe("Santiago");
   });
 
-  it("solo RUT + detalle + total basta (el SII autocompleta el resto)", () => {
+  it("receptor incompleto NO pasa: la factura individualiza a su receptor", () => {
+    // Decisión del fundador 2026-08-25: razón social, giro, dirección y comuna
+    // son obligatorios — sin ellos el documento no existe.
     const { facturas, errores } = parsePlantillaFacturas(filas([RUT_OK2, "Venta", 50000]));
-    expect(errores).toEqual([]);
-    expect(facturas[0].receptorRazonSocial).toBeNull();
+    expect(facturas).toEqual([]);
+    expect(errores[0].error).toContain("Faltan datos del receptor");
+    expect(errores[0].error).toContain("Razón Social");
+  });
+
+  it("reporta EXACTAMENTE qué campo del receptor falta", () => {
+    const { errores } = parsePlantillaFacturas(filas(
+      [RUT_OK2, "Venta", 50000, "Empresa X SpA", "Servicios", "Calle 1", ""],
+    ));
+    expect(errores[0].error).toBe("Faltan datos del receptor: Comuna");
   });
 
   it("una fila mala NO mata el lote: se reporta con su número y las demás siguen", () => {
+    const R = ["Empresa X SpA", "Servicios", "Calle 1", "Santiago"];
     const { facturas, errores } = parsePlantillaFacturas(filas(
-      [RUT_OK, "Servicio A", 100000],
-      ["11111111-9", "RUT con DV malo", 50000],
-      [RUT_OK2, "", 70000],
-      [RUT_OK2, "Sin monto", "no es plata"],
-      [RUT_OK2, "Servicio B", 200000],
+      [RUT_OK, "Servicio A", 100000, ...R],
+      ["11111111-9", "RUT con DV malo", 50000, ...R],
+      [RUT_OK2, "", 70000, ...R],
+      [RUT_OK2, "Sin monto", "no es plata", ...R],
+      [RUT_OK2, "Servicio B", 200000, ...R],
     ));
     expect(facturas.map((f) => f.fila)).toEqual([2, 6]);
     expect(errores).toHaveLength(3);
@@ -65,20 +76,22 @@ describe("parsePlantillaFacturas — filas buenas siguen, filas malas se reporta
   });
 
   it("filas vacías y la fila de ejemplo de la plantilla se saltan sin error", () => {
+    const R = ["Empresa X SpA", "Servicios", "Calle 1", "Santiago"];
     const { facturas, errores } = parsePlantillaFacturas(filas(
       ["", "", ""],
-      ["Ej: 12.345.678-5", "Ejemplo de detalle", 100000],
-      [RUT_OK, "Real", 100000],
+      ["Ej: 12.345.678-5", "Ejemplo de detalle", 100000, ...R],
+      [RUT_OK, "Real", 100000, ...R],
     ));
     expect(errores).toEqual([]);
     expect(facturas).toHaveLength(1);
   });
 
   it("montos chilenos con puntos, con $ y numéricos dan lo mismo", () => {
+    const R = ["Empresa X SpA", "Servicios", "Calle 1", "Santiago"];
     const { facturas } = parsePlantillaFacturas(filas(
-      [RUT_OK, "A", "1.971.031"],
-      [RUT_OK, "B", "$1.971.031"],
-      [RUT_OK, "C", 1971031],
+      [RUT_OK, "A", "1.971.031", ...R],
+      [RUT_OK, "B", "$1.971.031", ...R],
+      [RUT_OK, "C", 1971031, ...R],
     ));
     expect(facturas.map((f) => f.totalClp)).toEqual([1_971_031, 1_971_031, 1_971_031]);
   });

@@ -285,6 +285,19 @@ export async function POST(request: Request) {
         results.push({ propuesta_id: pid, ok: false, error_code: "RECEPTOR_RUT_REQUERIDO", error_message: "La factura exige un RUT de receptor válido" });
         continue;
       }
+      // Receptor COMPLETO (decisión del fundador): sin individualización total
+      // del receptor la factura no sale — el server exige lo mismo que la
+      // plantilla y el veredicto, por si una propuesta vieja se cuela.
+      const faltanF = [
+        !receptor_razon_social?.trim() && "razón social",
+        !(p.receptor_giro ?? "").trim() && "giro",
+        !(p.receptor_direccion ?? "").trim() && "dirección",
+        !(p.receptor_comuna ?? "").trim() && "comuna",
+      ].filter(Boolean);
+      if (faltanF.length > 0) {
+        results.push({ propuesta_id: pid, ok: false, error_code: "RECEPTOR_INCOMPLETO", error_message: `Factura incompleta: falta ${faltanF.join(", ")}` });
+        continue;
+      }
       if (total <= 0) {
         results.push({ propuesta_id: pid, ok: false, error_code: "MONTO_INVALIDO", error_message: "El total de la factura debe ser mayor a cero" });
         continue;
@@ -343,6 +356,7 @@ export async function POST(request: Request) {
           emisor_comuna: empresa.comuna,
           receptor_rut,
           receptor_razon_social: receptor_razon_social ?? null,
+          receptor_giro: p.receptor_giro ?? null,
           receptor_direccion: p.receptor_direccion ?? null,
           receptor_comuna: p.receptor_comuna ?? null,
           receptor_email: p.receptor_email ?? null,
