@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { activarSuscripcionFlow, confirmarInscripcion } from "@/lib/pagos/flow";
+import { avisarContratacion } from "@/lib/pagos/avisos";
 import { recordOpsError } from "@/lib/ops/events";
 
 /**
@@ -54,6 +55,10 @@ async function procesar(token: string | null) {
     });
     return NextResponse.redirect(`${APP_URL}/planes?cobro=rechazado`, { status: 303 });
   }
+
+  // Correos DESPUÉS de la redirección lógica resuelta y fail-open: cobrar y
+  // no avisar es recuperable; no activar por culpa del aviso no.
+  await avisarContratacion(res.cuentaId ?? "", activacion.planCodigo, activacion.montoClp);
 
   return NextResponse.redirect(`${APP_URL}/massdte?plan=activo`, { status: 303 });
 }
