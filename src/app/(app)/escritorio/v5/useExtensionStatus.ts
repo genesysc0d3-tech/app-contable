@@ -108,15 +108,28 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     postPing();
     // Re-chequeo automático: al instalar la extensión, Chrome NO inyecta el puente en
     // las pestañas ya abiertas, así que puede aparecer DESPUÉS del primer ping. Mientras
-    // no esté "ready", re-preguntamos cada 2,5s → apenas el puente existe (por el reload
-    // post-install de la extensión o una navegación), la app pasa SOLA a "conectada",
-    // sin que el usuario tenga que apretar "Actualizar".
-    const pollId = window.setInterval(() => {
-      if (statusRef.current !== "ready") postPing();
-    }, 2500);
+    // no esté "ready", re-preguntamos cada 2,5s el primer minuto (instalación recién
+    // hecha se detecta al tiro) y después cada 15s (perf: quien no tiene la extensión
+    // no necesita 24 pings por minuto para siempre). Al volver a la pestaña
+    // (visibilitychange) se re-pregunta de inmediato — el momento típico post-install.
+    let pollTimer: number | null = null;
+    const pollStart = Date.now();
+    function scheduleNextPing() {
+      const delay = Date.now() - pollStart < 60000 ? 2500 : 15000;
+      pollTimer = window.setTimeout(() => {
+        if (statusRef.current !== "ready") postPing();
+        scheduleNextPing();
+      }, delay);
+    }
+    scheduleNextPing();
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && statusRef.current !== "ready") postPing();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       if (pingRef.current) window.clearTimeout(pingRef.current.timeoutId);
-      window.clearInterval(pollId);
+      if (pollTimer !== null) window.clearTimeout(pollTimer);
+      document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("message", onMessage);
     };
   }, [postPing]);

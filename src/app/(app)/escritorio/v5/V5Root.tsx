@@ -168,9 +168,68 @@ function DashboardHelpHarness({ onDisable }: { onDisable: () => void }) {
       return [[step1, step1b].filter(Boolean) as HTMLElement[], ...tabButtons.slice(0, 4)];
     }
 
-    function positionMarkers() {
+    // Perf: nada de setInterval. Reposicionamos solo cuando algo puede haberse
+    // movido (resize/scroll/cambio de tamaño/DOM nuevo) y con bail por igualdad
+    // para que en reposo el harness no re-renderice nunca.
+    let lastMarkers: Array<{ n: number; left: number; top: number; width?: number; height?: number; group?: boolean }> = [];
+    function markersIguales(a: typeof lastMarkers, b: typeof lastMarkers) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const x = a[i], y = b[i];
+        if (x.n !== y.n || x.left !== y.left || x.top !== y.top || x.width !== y.width || x.height !== y.height || x.group !== y.group) return false;
+      }
+      return true;
+    }
+
+    const hoverCleanups = new Map<HTMLElement, () => void>();
+    function syncHoverListeners(targets: ReturnType<typeof getTargets>) {
+      const vivos = new Set<HTMLElement>();
+      targets.forEach((target, i) => {
+        const step = i + 1;
+        const elements = Array.isArray(target) ? target : [target];
+        elements.forEach(el => {
+          if (!el) return;
+          vivos.add(el);
+          if (hoverCleanups.has(el)) return;
+          const enter = () => setHoveredStep(step);
+          const leave = () => setHoveredStep(current => current === step ? null : current);
+          el.addEventListener("mouseenter", enter);
+          el.addEventListener("mouseleave", leave);
+          el.addEventListener("focus", enter);
+          el.addEventListener("blur", leave);
+          hoverCleanups.set(el, () => {
+            el.removeEventListener("mouseenter", enter);
+            el.removeEventListener("mouseleave", leave);
+            el.removeEventListener("focus", enter);
+            el.removeEventListener("blur", leave);
+          });
+        });
+      });
+      hoverCleanups.forEach((cleanup, el) => {
+        if (!vivos.has(el)) { cleanup(); hoverCleanups.delete(el); }
+      });
+    }
+
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => scheduleSync()) : null;
+    const observados = new Set<HTMLElement>();
+    function syncResizeObserver(targets: ReturnType<typeof getTargets>) {
+      if (!resizeObserver) return;
+      const vivos = new Set<HTMLElement>();
+      targets.forEach(target => {
+        const elements = Array.isArray(target) ? target : [target];
+        elements.forEach(el => { if (el) vivos.add(el); });
+      });
+      vivos.forEach(el => { if (!observados.has(el)) { resizeObserver.observe(el); observados.add(el); } });
+      observados.forEach(el => { if (!vivos.has(el)) { resizeObserver.unobserve(el); observados.delete(el); } });
+    }
+
+    let disposed = false;
+    function sync() {
+      if (disposed) return;
       const targets = getTargets();
-      setMarkers(targets.flatMap((target, i) => {
+      syncHoverListeners(targets);
+      syncResizeObserver(targets);
+      const next = targets.flatMap((target, i) => {
         const n = i + 1;
         if (Array.isArray(target)) {
           if (target.length === 0) return [];
@@ -184,39 +243,35 @@ function DashboardHelpHarness({ onDisable }: { onDisable: () => void }) {
         if (!target) return [];
         const rect = target.getBoundingClientRect();
         return [{ n, left: rect.left + rect.width / 2, top: rect.top, width: rect.width, height: rect.height }];
-      }));
+      });
+      if (markersIguales(lastMarkers, next)) return;
+      lastMarkers = next;
+      setMarkers(next);
     }
 
-    const cleanups: Array<() => void> = [];
-    getTargets().forEach((target, i) => {
-      const step = i + 1;
-      const elements = Array.isArray(target) ? target : [target];
-      elements.forEach(el => {
-        if (!el) return;
-        const enter = () => setHoveredStep(step);
-        const leave = () => setHoveredStep(current => current === step ? null : current);
-        el.addEventListener("mouseenter", enter);
-        el.addEventListener("mouseleave", leave);
-        el.addEventListener("focus", enter);
-        el.addEventListener("blur", leave);
-        cleanups.push(() => {
-          el.removeEventListener("mouseenter", enter);
-          el.removeEventListener("mouseleave", leave);
-          el.removeEventListener("focus", enter);
-          el.removeEventListener("blur", leave);
-        });
-      });
-    });
+    // Coalescer: muchas señales en el mismo frame = un solo sync.
+    let rafId: number | null = null;
+    function scheduleSync() {
+      if (disposed || rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => { rafId = null; sync(); });
+    }
 
-    positionMarkers();
-    const id = window.setInterval(positionMarkers, 300);
-    window.addEventListener("resize", positionMarkers);
-    window.addEventListener("scroll", positionMarkers, true);
+    // Botones que aparecen/desaparecen después del primer render (tabs, sparkle
+    // tras cargar data): un MutationObserver de estructura reemplaza al polling.
+    const mutationObserver = new MutationObserver(() => scheduleSync());
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+
+    sync();
+    window.addEventListener("resize", scheduleSync);
+    window.addEventListener("scroll", scheduleSync, { capture: true, passive: true });
     return () => {
-      cleanups.forEach(cleanup => cleanup());
-      window.clearInterval(id);
-      window.removeEventListener("resize", positionMarkers);
-      window.removeEventListener("scroll", positionMarkers, true);
+      disposed = true;
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      mutationObserver.disconnect();
+      resizeObserver?.disconnect();
+      hoverCleanups.forEach(cleanup => cleanup());
+      window.removeEventListener("resize", scheduleSync);
+      window.removeEventListener("scroll", scheduleSync, true);
     };
   }, []);
 
