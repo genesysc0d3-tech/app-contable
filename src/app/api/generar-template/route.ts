@@ -10,14 +10,14 @@ export async function GET(request: Request) {
 
   const wb = XLSX.utils.book_new();
 
-  // Mesa Facturas: plantilla mínima por diseño (criterios de Matías): UN solo
-  // campo de monto = VALOR TOTAL, y el receptor casi entero es opcional porque
-  // el portal del SII lo autocompleta desde el RUT. Las columnas opcionales
-  // son el respaldo para persona natural sin giro.
+  // Mesa Facturas: UN solo campo de monto = VALOR TOTAL (criterio de Matías) y
+  // receptor COMPLETO obligatorio (decisión del fundador): la factura
+  // individualiza a su receptor — solo el Email es opcional (contacto, no
+  // dato fiscal).
   if (new URL(request.url).searchParams.get("mesa") === "factura") {
     const wsF = XLSX.utils.aoa_to_sheet([
       [...PLANTILLA_FACTURAS_HEADERS],
-      ["Ej: 12.345.678-5", "Asesoría mensual agosto", 500000, "(opcional — el SII lo completa)", "(opcional)", "(opcional)", "(opcional)", "(opcional)"],
+      ["Ej: 12.345.678-5", "Asesoría mensual agosto", 500000, "Empresa Ejemplo SpA", "Servicios informáticos", "Av. Ejemplo 1234, of. 56", "Santiago", "(opcional)"],
     ]);
     wsF["!cols"] = [{ wch: 16 }, { wch: 40 }, { wch: 13 }, { wch: 30 }, { wch: 22 }, { wch: 26 }, { wch: 14 }, { wch: 24 }];
     XLSX.utils.book_append_sheet(wb, wsF, "Facturas");
