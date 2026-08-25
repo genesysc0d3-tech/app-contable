@@ -138,17 +138,17 @@ const MSG = {
   sesionSinFotos:
     "📸 Todavía no me llega ninguna imagen. Mándamelas y las proceso.",
   sesionProcesando:
-    "⏳ <b>Procesando…</b> te muestro la boleta en unos segundos.",
+    "⏳ <b>Procesando…</b> te muestro la propuesta en unos segundos.",
   sesionCancelada:
     "✅ Listo, cancelado. Cuando quieras, escríbeme y partimos de nuevo.",
   sesionVencida:
     "⌛ Pasó mucho rato y cerré la sesión.\nEscríbeme y partimos de nuevo.",
-  sesionFacturaAunNo:
-    "🧾 Las facturas todavía no están listas — muy pronto.\nPor ahora te puedo dejar la boleta.",
   sesionListo: (mesa: string, monto: string, cuando: string) =>
     `✅ <b>Listo: ${mesa} ${monto}</b>\n` +
     `${cuando} — quedó en tu mesa.\n\n` +
-    "Recuerda revisarla en la app para emitirla.",
+    (mesa === "factura"
+      ? "La factura necesita los datos completos del receptor — complétalos en la app y la emites."
+      : "Recuerda revisarla en la app para emitirla."),
   fotoSinSesion:
     "👋 <b>Hola.</b> Antes de la foto necesito saber dos cosas.\n¿Con qué empresa vamos a trabajar?",
   soloFotos:
@@ -303,7 +303,7 @@ function kbSesionMesa(token: string): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [{ text: "🧾 Boleta", callback_data: `ses:mesa:${token}:boleta` }],
-      [{ text: "📄 Factura (pronto)", callback_data: `ses:mesa:${token}:factura` }],
+      [{ text: "📄 Factura", callback_data: `ses:mesa:${token}:factura` }],
       [{ text: "✖️ Cancelar", callback_data: `ses:cancel:${token}` }],
     ],
   };
@@ -490,6 +490,9 @@ async function procesarSesion(chatId: number, sesion: Sesion): Promise<void> {
       empresa_id: empresaId,
       nombre_archivo: imagenes.length > 1 ? `Álbum ${nombre}` : `Telegram ${nombre}`,
       tipo: "imagen",
+      // La mesa elegida en la sesión viaja con el documento: la propuesta cae
+      // en la mesa correcta del escritorio.
+      mesa: sesion.mesa === "factura" ? "factura" : "boleta",
       storage_path: imagenes[0].path,
       storage_provider: "r2",
       estado: "procesando",
@@ -516,7 +519,7 @@ async function procesarSesion(chatId: number, sesion: Sesion): Promise<void> {
       usuarioId: null,
       tipo: "imagen",
       storagePath: imagenes[0].path,
-      metadata: { grouped_images: imagenes, origen: "telegram", album: imagenes.length > 1, chat_id: chatId },
+      metadata: { grouped_images: imagenes, origen: "telegram", album: imagenes.length > 1, chat_id: chatId, mesa: sesion.mesa === "factura" ? "factura" : "boleta" },
     });
     await svc
       .from("documentos_subidos")
@@ -581,16 +584,10 @@ async function handleSesionCallback(
   }
 
   if (accion === "mesa") {
-    // La mesa de facturas no existe todavía: se avisa y la sesión sigue en pie
-    // para que pueda elegir boleta sin empezar de nuevo.
-    if (valor === "factura") {
-      await answerCallbackQuery(callbackId, "Facturas: muy pronto");
-      await say(chatId, MSG.sesionFacturaAunNo);
-      return;
-    }
-    const lista = await sesionElegirMesa(svc, chatId, token, "boleta");
+    const mesaElegida = valor === "factura" ? "factura" : "boleta";
+    const lista = await sesionElegirMesa(svc, chatId, token, mesaElegida);
     if (!lista) { await answerCallbackQuery(callbackId, "No pude continuar."); return; }
-    if (messageId) await editMessageText(chatId, messageId, MSG.sesionMandaFotos("boleta"), { html: true });
+    if (messageId) await editMessageText(chatId, messageId, MSG.sesionMandaFotos(mesaElegida), { html: true });
     await answerCallbackQuery(callbackId);
     return;
   }
