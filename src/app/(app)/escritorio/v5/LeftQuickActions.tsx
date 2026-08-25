@@ -17,6 +17,25 @@ function todayStr() {
 type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
 /**
+ * Perf: pausa las animaciones infinitas del sparkle cuando la tarjeta sale del
+ * viewport (scroll, overlay que tapa todo). Fuera de pantalla = invisible, así
+ * que pausar es pixel-idéntico; solo deja de gastar GPU/CPU en algo que nadie ve.
+ */
+function useFxViewportPause<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => {
+      el.setAttribute("data-fx-off", entry.isIntersecting ? "false" : "true");
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return ref;
+}
+
+/**
  * Estilos del sparkle button + overlay de emisión única. Compartidos entre la
  * boleta única y la factura única (misma tarjeta, mismo lenguaje visual) — el
  * fundador pidió explícitamente que la factura única siga el estilo de la
@@ -29,6 +48,9 @@ function SparkleFxStyles() {
         .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
         @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
         .sp{position:relative;z-index:0;width:100%;overflow:hidden}
+        /* Perf: las animaciones infinitas rotan en su propia capa (compositor, sin repintar) */
+        .spark,.spark:before{will-change:transform}
+        .sp[data-fx-off="true"] .spark,.sp[data-fx-off="true"] .spark:before{animation-play-state:paused}
         .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:var(--lime);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
         .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:#2f5a0d;outline:none}
         .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:var(--amber);cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
@@ -116,11 +138,13 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
     setOpen(true);
   }
 
+  const fxRef = useFxViewportPause<HTMLDivElement>();
+
   return (
     <>
       <SparkleFxStyles />
 
-      <div className="sp">
+      <div className="sp" ref={fxRef}>
         <button className="sparkle-button" onClick={openIfAvailable} disabled={lockedByOtherUser || Boolean(readOnlyReason)}>
           <span className="spark" />
           <span className="backdrop" />
@@ -185,6 +209,7 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
   const esFacturas = mesa === "factura";
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const fxRefMass = useFxViewportPause<HTMLDivElement>();
 
   function closeWithSavedPulse(label = "Archivo subido a Agregados") {
     setOpen(false);
@@ -209,6 +234,9 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
         .md-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
         .md-panel{width:min(720px,94vw);border-radius:20px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
         .mass-sp{position:relative;z-index:0;width:100%;overflow:hidden}
+        /* Perf: capa propia + pausa fuera de viewport (ver useFxViewportPause) */
+        .mass-spark,.mass-spark:before{will-change:transform}
+        .mass-sp[data-fx-off="true"] .mass-spark,.mass-sp[data-fx-off="true"] .mass-spark:before{animation-play-state:paused}
         .mass-sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:9;--accent-s:79%;--accent-l:58%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 79%) 68% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 79%) 58% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 34%) + 18%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid rgba(232,85,62,.10);border-radius:0;background:rgba(232,85,62,.06);color:var(--accent);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .24),inset 0 0 0 1px rgba(232,85,62,.04),0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc(var(--active) * 58%));transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
         .mass-sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:white;outline:none}
         .mass-sparkle-button:active{filter:brightness(.96);transition:.3s}
@@ -250,7 +278,7 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
         @keyframes mass-enter-from-left{0%,54%{opacity:0;transform:translate(-14px,0) scale(.7)}70%,100%{opacity:.62;transform:translate(1px,0) scale(.78)}}
       `}</style>
 
-      <div className="mass-sp">
+      <div className="mass-sp" ref={fxRefMass}>
         <button className="mass-sparkle-button" onClick={() => { if (!readOnlyReason) setOpen(true); }} disabled={Boolean(readOnlyReason)}>
           <span className="mass-spark" />
           <span className="mass-backdrop" />

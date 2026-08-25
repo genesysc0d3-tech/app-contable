@@ -52,12 +52,29 @@ function useEmissionLockPolling(options: {
 } = {}): EmissionLockSource {
   const enabled = options.enabled ?? true;
   const intervalMs = options.intervalMs ?? 5000;
+  // Perf: cadencia adaptativa. Cuando el estado IMPORTA en vivo (cuenta Business
+  // con equipo, o hay un candado activo) se sondea al ritmo pedido (5s). En reposo
+  // (cuenta sola, sin emisión) se baja a 30s + refresh inmediato al volver el foco
+  // — que es exactamente el momento en que un candado de otra pestaña se vuelve
+  // visible para el usuario. Nadie pierde el aviso; solo desaparece el ruido.
+  const idleIntervalMs = Math.max(intervalMs, 30000);
   const [status, setStatus] = useState<EmissionLockStatusResponse | null>(null);
   const [loading, setLoading] = useState(enabled);
 
+  // Bail por igualdad: la respuesta suele ser idéntica tick a tick; sin esto cada
+  // sondeo re-renderizaba a todos los consumidores del context aunque nada cambiara.
+  const aplicarStatus = useCallback((next: EmissionLockStatusResponse | null) => {
+    setStatus(prev => {
+      if (prev === next) return prev;
+      if (prev && next && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+      return next;
+    });
+    return next;
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!enabled) {
-      setStatus(null);
+      aplicarStatus(null);
       setLoading(false);
       return;
     }
@@ -65,39 +82,57 @@ function useEmissionLockPolling(options: {
     try {
       const res = await fetch("/api/emision/jobs", { cache: "no-store" });
       const json = (await res.json()) as EmissionLockStatusResponse;
-      setStatus(res.ok && json.ok ? json : null);
+      aplicarStatus(res.ok && json.ok ? json : null);
     } catch {
-      setStatus(null);
+      aplicarStatus(null);
     } finally {
       setLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, aplicarStatus]);
 
   useEffect(() => {
     if (!enabled) {
-      setStatus(null);
+      aplicarStatus(null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
+    let timer: number | null = null;
+
     async function load() {
       if (cancelled) return;
-      await refresh();
+      let vivo = false;
+      try {
+        const res = await fetch("/api/emision/jobs", { cache: "no-store" });
+        const json = (await res.json()) as EmissionLockStatusResponse;
+        const next = res.ok && json.ok ? json : null;
+        aplicarStatus(next);
+        vivo = Boolean(next?.business_mode || next?.locked);
+      } catch {
+        aplicarStatus(null);
+      } finally {
+        setLoading(false);
+      }
+      if (cancelled) return;
+      if (timer !== null) window.clearTimeout(timer); // colapsa cadenas si un focus se cruzó con un load en vuelo
+      timer = window.setTimeout(() => { void load(); }, vivo ? intervalMs : idleIntervalMs);
     }
 
     setLoading(true);
     void load();
-    const timer = window.setInterval(() => { void load(); }, intervalMs);
-    const onFocus = () => { void load(); };
+    const onFocus = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      void load();
+    };
     window.addEventListener("focus", onFocus);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== null) window.clearTimeout(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [enabled, intervalMs, refresh]);
+  }, [enabled, intervalMs, idleIntervalMs, aplicarStatus]);
 
   return useMemo(() => ({
     status,
