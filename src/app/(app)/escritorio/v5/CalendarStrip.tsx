@@ -88,11 +88,14 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
     // `overflow:hidden` recorta el carril a lo ancho (es lo que impide invadir el
     // logo y los botones), pero también recortaba el ZOOM del día bajo el cursor:
     // el día crecía y quedaba cortado contra el borde de la caja. El padding
+    // exige `content-box`: con el border-box global de Tailwind, paddingBlock:16
+    // se comía la altura por DENTRO de los 38px y el margen negativo subía el
+    // calendario 16px sobre el logo y los íconos (se vio en prod el 24-08).
     // vertical agranda la caja de recorte y el margen negativo devuelve el
     // contenido a su sitio — visualmente idéntico, pero el zoom tiene aire.
     // pointerEvents none/auto: ese aire extra se superpone a la barra de abajo y
     // no debe robarle los clics.
-    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, paddingBlock: 16, marginBlock: -16, display: "flex", alignItems: "center", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 20, pointerEvents: "none" }}>
+    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, boxSizing: "content-box", paddingBlock: 16, marginBlock: -16, display: "flex", alignItems: "center", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 20, pointerEvents: "none" }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
         .v5-day-strip::-webkit-scrollbar{display:none;}
