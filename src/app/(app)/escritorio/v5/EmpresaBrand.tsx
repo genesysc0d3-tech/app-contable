@@ -148,10 +148,14 @@ export default function EmpresaBrand({
                hermano; al salir, ambos vuelven. Misma curva que el resto del
                v5. Sin JS: es pura geometría del contenedor. */
             .eb-bofa{display:flex;gap:5px;flex-shrink:0}
-            .eb-bofa button{width:34px;height:26px;border-radius:8px;font-size:10px;font-weight:900;cursor:pointer;font-family:inherit;padding:0;transition:width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,font-size .28s cubic-bezier(.22,1,.36,1)}
+            .eb-bofa button{width:34px;height:26px;border-radius:8px;font-size:10px;font-weight:900;cursor:pointer;font-family:inherit;padding:0;overflow:hidden;white-space:nowrap;transition:width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,font-size .28s cubic-bezier(.22,1,.36,1)}
             .eb-bofa:hover button{width:22px;font-size:9px}
-            .eb-bofa:hover button:hover{width:52px;font-size:11px}
-            @media (prefers-reduced-motion: reduce){.eb-pop{animation:none;}.eb-bofa button{transition:background .2s,border-color .2s,color .2s}.eb-bofa:hover button{width:34px;font-size:10px}.eb-bofa:hover button:hover{width:34px}}
+            .eb-bofa:hover button:hover{width:64px;font-size:10px}
+            /* Al crecer, la sigla cede el lugar a la palabra completa. */
+            .eb-bofa .full{display:none}
+            .eb-bofa:hover button:hover .full{display:inline}
+            .eb-bofa:hover button:hover .sigla{display:none}
+            @media (prefers-reduced-motion: reduce){.eb-pop{animation:none;}.eb-bofa button{transition:background .2s,border-color .2s,color .2s}.eb-bofa:hover button{width:34px;font-size:10px}.eb-bofa:hover button:hover{width:34px}.eb-bofa:hover button:hover .full{display:none}.eb-bofa:hover button:hover .sigla{display:inline}}
           `}</style>
           {agregando ? (
             <AgregarEmpresaForm
@@ -191,12 +195,12 @@ export default function EmpresaBrand({
                       style={{
                         border: mesa === "boleta" ? "1px solid rgba(232,85,62,.5)" : "1px solid var(--border)",
                         background: mesa === "boleta" ? "rgba(232,85,62,.1)" : "transparent",
-                        color: mesa === "boleta" ? "var(--accent)" : "var(--text3)" }}>BO</button>
+                        color: mesa === "boleta" ? "var(--accent)" : "var(--text3)" }}><span className="sigla">BO</span><span className="full">Boleta</span></button>
                     <button type="button" onClick={() => cambiarMesa("factura")} title="Mesa facturas"
                       style={{
                         border: mesa === "factura" ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
                         background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent",
-                        color: mesa === "factura" ? "var(--lime)" : "var(--text3)" }}>FA</button>
+                        color: mesa === "factura" ? "var(--lime)" : "var(--text3)" }}><span className="sigla">FA</span><span className="full">Factura</span></button>
                   </span>
                 ) : (
                   <span />
