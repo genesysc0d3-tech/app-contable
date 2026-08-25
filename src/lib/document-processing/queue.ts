@@ -3,6 +3,7 @@ import "server-only";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
+import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { descargarDocumento } from "@/lib/storage";
 import { procesarDocumento, ProcessorYieldError } from "@/lib/ai/processor";
@@ -520,6 +521,12 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
     if (error instanceof ProcessorYieldError) {
       await markJobYielded(sb, job, error, new Date());
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, yielded: true };
+    }
+    if (error instanceof PlantillaFacturasEnCartolaError) {
+      // Definitivo: reintentar no cambia el archivo. El mensaje ya le dice al
+      // usuario dónde subirlo.
+      await markJobFailedDefinitivo(sb, job, error, now);
+      return { ok: false as const, jobId: job.id, documentoId: job.documento_id, error: error.message };
     }
     if (error instanceof PdfProtegidoError) {
       // Definitivo: reintentar no sirve (la clave no va a aparecer sola). Se marca
