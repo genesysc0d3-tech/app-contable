@@ -89,7 +89,7 @@ export async function GET(request: Request) {
     if (flowConfigurado()) {
       const { data: porRenovar } = await sb
         .from("suscripciones")
-        .select("id, cuenta_id, empresa_id, plan_codigo, estado")
+        .select("id, cuenta_id, empresa_id, plan_codigo, plan_siguiente, estado")
         .eq("proveedor", "flow")
         .in("estado", ["activa", "morosa"])
         .lte("periodo_hasta", hoy);
@@ -100,13 +100,16 @@ export async function GET(request: Request) {
         const porCodigo = new Map((planes ?? []).map((p) => [p.codigo, p]));
 
         for (const s of porRenovar ?? []) {
-          const plan = porCodigo.get(s.plan_codigo);
+          // Downgrade programado (modelo Anthropic): el plan barato entra
+          // recién acá, en la renovación — el caro ya estaba pagado entero.
+          const codigoACobrar = s.plan_siguiente ?? s.plan_codigo;
+          const plan = porCodigo.get(codigoACobrar);
           if (!plan || !s.cuenta_id) continue;
           const montoClp = clpConIva(plan.uf_mensual, uf);
           const cobro = await cobrarCuenta(s.cuenta_id, {
             montoClp,
             concepto: `massDTE ${plan.nombre}`,
-            orden: ordenDeCobro(s.cuenta_id, s.plan_codigo, periodoActual()),
+            orden: ordenDeCobro(s.cuenta_id, codigoACobrar, periodoActual()),
           });
 
           if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") {
@@ -120,7 +123,7 @@ export async function GET(request: Request) {
               cuentaId: s.cuenta_id,
               resourceType: "suscripcion",
               resourceId: s.id,
-              metadata: { plan_codigo: s.plan_codigo, monto_clp: montoClp, error: cobro.error, detalle: cobro.detalle },
+              metadata: { plan_codigo: codigoACobrar, monto_clp: montoClp, error: cobro.error, detalle: cobro.detalle },
             });
             continue;
           }
@@ -129,6 +132,8 @@ export async function GET(request: Request) {
             .from("suscripciones")
             .update({
               estado: "activa",
+              plan_codigo: codigoACobrar,
+              plan_siguiente: null,
               clp_ultimo_cobro: montoClp,
               periodo_hasta: addOneMonth(hoy),
               updated_at: new Date().toISOString(),
@@ -136,7 +141,7 @@ export async function GET(request: Request) {
             .eq("id", s.id);
           // Una morosa que se recupera necesita que le vuelvan a encender el
           // plan; una activa ya lo tiene y esto no le hace nada.
-          await syncPlanActivo(sb, { cuentaId: s.cuenta_id, empresaId: s.empresa_id }, s.plan_codigo, true);
+          await syncPlanActivo(sb, { cuentaId: s.cuenta_id, empresaId: s.empresa_id }, codigoACobrar, true);
           renovadas++;
         }
       }
