@@ -36,7 +36,10 @@ export async function computeGuardarailEmision(
   const pendientes = listas.map((i) => ({
     id: i.id,
     fechaVenta: i.fecha, // "YYYY-MM-DD" — fecha REAL de la venta (mov.fecha con fallback a created_at)
-    tipoDte: i.tipo_sugerido, // 39 | 41 (ya resuelto por evaluarEmision, incluye exento)
+    // El bucket de urgencia mira la naturaleza fiscal, no el documento: una
+    // factura afecta (33) urge como la boleta afecta (39) — es IVA del mismo
+    // período — y la exenta (34) como la 41.
+    tipoDte: (i.tipo_sugerido === 33 ? 39 : i.tipo_sugerido === 34 ? 41 : i.tipo_sugerido) as 39 | 41 | null,
     monto: i.monto_total,
   }));
 

@@ -29,8 +29,12 @@ export function receptorObligatorio(totalClp: number, umbralClp: number): boolea
   return totalClp > umbralClp;
 }
 
-export type DteAfecto = 39;
-export type DteExento = 41;
+// La factura afecta (33) y exenta (34) comparten la naturaleza fiscal de su
+// boleta hermana: mismo tratamiento de neto/IVA. validarBoleta sigue siendo
+// SOLO de boletas (chequea 39/41 explícito); estos alias tipan el resto del
+// stack (mock, folios, payloads), que siempre fue genérico de tipo_dte.
+export type DteAfecto = 33 | 39;
+export type DteExento = 34 | 41;
 export type DteNotaCredito = 61;
 export type TipoDTE = DteAfecto | DteExento | DteNotaCredito;
 
