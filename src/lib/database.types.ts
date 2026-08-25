@@ -2502,6 +2502,7 @@ export type Database = {
           id: string
           periodo_hasta: string | null
           plan_codigo: string
+          plan_siguiente: string | null
           proveedor: string
           proveedor_ref: string | null
           updated_at: string
@@ -2515,6 +2516,7 @@ export type Database = {
           id?: string
           periodo_hasta?: string | null
           plan_codigo: string
+          plan_siguiente?: string | null
           proveedor?: string
           proveedor_ref?: string | null
           updated_at?: string
@@ -2528,6 +2530,7 @@ export type Database = {
           id?: string
           periodo_hasta?: string | null
           plan_codigo?: string
+          plan_siguiente?: string | null
           proveedor?: string
           proveedor_ref?: string | null
           updated_at?: string
@@ -2550,6 +2553,13 @@ export type Database = {
           {
             foreignKeyName: "suscripciones_plan_codigo_fkey"
             columns: ["plan_codigo"]
+            isOneToOne: false
+            referencedRelation: "planes_config"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "suscripciones_plan_siguiente_fkey"
+            columns: ["plan_siguiente"]
             isOneToOne: false
             referencedRelation: "planes_config"
             referencedColumns: ["codigo"]

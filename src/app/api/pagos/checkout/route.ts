@@ -121,9 +121,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: result.error, detalle: result.detalle }, { status });
     }
 
-    // Dos formas de éxito: redirección a pasarela (url) o cobro directo a la
-    // tarjeta inscrita (cobrado) — el botón distingue por el campo.
+    // Tres formas de éxito: redirección a pasarela (url), cobro directo a la
+    // tarjeta inscrita (cobrado), o cambio programado a la renovación
+    // (programado, downgrades) — el botón distingue por el campo.
     if ("url" in result) return NextResponse.json({ ok: true, url: result.url });
+    if ("programado" in result) return NextResponse.json({ ok: true, programado: true, desde: result.desde });
     return NextResponse.json({ ok: true, cobrado: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -377,6 +377,29 @@ export async function estadoPago(flowOrder: string | number): Promise<FlowPagoSt
 // ─────────────────────── Ciclo de suscripción ────────────────────────────────
 
 /**
+ * Prorrateo de un upgrade (modelo Anthropic/Stripe): se cobra HOY solo la
+ * diferencia de precio por los días que faltan del período ya pagado; la
+ * fecha de renovación no se mueve. Función pura para poder probarla sola.
+ */
+export function prorratearUpgrade(args: {
+  ufViejo: number;
+  ufNuevo: number;
+  ufClp: number;
+  hoy: string;          // YYYY-MM-DD
+  periodoHasta: string; // YYYY-MM-DD (fin del período ya pagado)
+}): number {
+  const dia = 86_400_000;
+  const restantes = Math.max(0, Math.round((Date.parse(args.periodoHasta) - Date.parse(args.hoy)) / dia));
+  // El período pagado partió un mes antes de su vencimiento; su largo real
+  // (28-31 días) sale de esa resta y no de un "30" supuesto.
+  const inicio = new Date(args.periodoHasta + "T00:00:00Z");
+  inicio.setUTCMonth(inicio.getUTCMonth() - 1);
+  const total = Math.max(1, Math.round((Date.parse(args.periodoHasta) - inicio.getTime()) / dia));
+  const difNeto = (args.ufNuevo - args.ufViejo) * args.ufClp;
+  return Math.max(0, Math.round(difNeto * 1.19 * Math.min(1, restantes / total)));
+}
+
+/**
  * Contratar un plan con Flow. A diferencia de la pasarela anterior, acá NO se
  * paga en la vuelta: el pagador va a INSCRIBIR su tarjeta y el primer cobro lo
  * hacemos nosotros al volver (`activarSuscripcionFlow`).
@@ -392,17 +415,85 @@ export async function crearSuscripcionFlow(
   planCodigo: string,
   email: string,
   nombre: string,
-): Promise<{ ok: true; url: string } | FlowError> {
+): Promise<
+  | { ok: true; url: string }
+  | { ok: true; cobrado: true; montoClp: number }
+  | { ok: true; programado: true; desde: string }
+  | FlowError
+> {
   if (!flowConfigurado()) return { ok: false, error: "FLOW_NO_CONFIGURADO" };
 
   const db = serviceDb();
   const { data: plan } = await db
     .from("planes_config")
-    .select("codigo")
+    .select("codigo, nombre, uf_mensual")
     .eq("codigo", planCodigo)
     .eq("activo", true)
     .maybeSingle();
   if (!plan) return { ok: false, error: "PLAN_INVALIDO", detalle: `No existe el plan ${planCodigo}` };
+
+  // ── Cambio de plan sobre una suscripción Flow VIVA (modelo Anthropic) ──
+  // Subir: inmediato, cobrando SOLO la diferencia prorrateada por los días
+  // que faltan; la fecha de renovación no se mueve, y como la tarjeta ya está
+  // inscrita no se pasa por Transbank — un click.
+  // Bajar: no cambia nada hoy (el plan caro ya está pagado); queda programado
+  // para la próxima renovación vía `plan_siguiente`.
+  const { data: vivaFlow } = await db
+    .from("suscripciones")
+    .select("id, plan_codigo, empresa_id, periodo_hasta")
+    .eq("cuenta_id", cuentaId)
+    .eq("proveedor", "flow")
+    .eq("estado", "activa")
+    .maybeSingle();
+  const tarjeta = vivaFlow ? await tarjetaDeCuenta(cuentaId) : null;
+
+  if (vivaFlow && tarjeta && vivaFlow.periodo_hasta) {
+    if (vivaFlow.plan_codigo === plan.codigo) {
+      return { ok: false, error: "MISMO_PLAN", detalle: "Ya tienes ese plan activo" };
+    }
+    const { data: planViejo } = await db
+      .from("planes_config")
+      .select("uf_mensual")
+      .eq("codigo", vivaFlow.plan_codigo)
+      .maybeSingle();
+    if (!planViejo) return { ok: false, error: "PLAN_INVALIDO", detalle: "El plan actual no existe" };
+
+    if (plan.uf_mensual > planViejo.uf_mensual) {
+      const uf = await getUfClp();
+      const monto = prorratearUpgrade({
+        ufViejo: planViejo.uf_mensual,
+        ufNuevo: plan.uf_mensual,
+        ufClp: uf,
+        hoy: chileDateString(),
+        periodoHasta: vivaFlow.periodo_hasta,
+      });
+      if (monto > 0) {
+        const cobro = await cobrarCuenta(cuentaId, {
+          montoClp: monto,
+          concepto: `massDTE upgrade a ${plan.nombre} (prorrateado)`,
+          // El plan nuevo en la orden la hace distinta de la del mes ya pagado;
+          // repetir el MISMO upgrade en el período rebota en Flow (1605).
+          orden: `md-up-${cuentaId.slice(0, 8)}-${plan.codigo}-${vivaFlow.periodo_hasta}`,
+        });
+        if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") return cobro;
+      }
+      const { error: upErr } = await db
+        .from("suscripciones")
+        .update({ plan_codigo: plan.codigo, plan_siguiente: null, clp_ultimo_cobro: monto, updated_at: new Date().toISOString() })
+        .eq("id", vivaFlow.id);
+      if (upErr) return { ok: false, error: "DB_ERROR", detalle: upErr.message };
+      await syncPlanActivo(db, { cuentaId, empresaId: vivaFlow.empresa_id }, plan.codigo, true);
+      return { ok: true, cobrado: true, montoClp: monto };
+    }
+
+    // Downgrade: programado para la renovación. Sin cobro, sin tocar el plan vigente.
+    const { error: downErr } = await db
+      .from("suscripciones")
+      .update({ plan_siguiente: plan.codigo, updated_at: new Date().toISOString() })
+      .eq("id", vivaFlow.id);
+    if (downErr) return { ok: false, error: "DB_ERROR", detalle: downErr.message };
+    return { ok: true, programado: true, desde: vivaFlow.periodo_hasta };
+  }
 
   // La base permite UNA sola suscripción viva por cuenta, de CUALQUIER
   // proveedor (ux_suscripciones_cuenta_viva, anti doble-cobro). Así que antes
