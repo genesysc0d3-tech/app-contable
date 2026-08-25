@@ -168,7 +168,8 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
   );
 }
 
-export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyReason?: string }) {
+export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: string; readOnlyReason?: string; mesa?: "boleta" | "factura" }) {
+  const esFacturas = mesa === "factura";
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -245,8 +246,8 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="mass-title">SUBIR CARTOLAS</span>
-              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? "Subida masiva de cartolas"}</span>
+              <span className="mass-title">{esFacturas ? "SUBIR PLANTILLAS" : "SUBIR CARTOLAS"}</span>
+              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (esFacturas ? "Excel estructurado → facturas 33/34" : "Subida masiva de cartolas")}</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
               <g className="mass-doc mass-doc-new">
@@ -316,22 +317,22 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Carga masiva</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>Excel · PDF · CSV · Fotos</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>{esFacturas ? "Solo Excel (plantilla)" : "Excel · PDF · CSV · Fotos"}</span>
                 </div>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>MassDTE</h2>
-                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Sube cartolas bancarias y documentos para procesamiento masivo.</p>
+                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>{esFacturas ? "Sube tu plantilla de facturas — cada fila es una factura lista para revisar." : "Sube cartolas bancarias y documentos para procesamiento masivo."}</p>
               </div>
             </div>
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto" }}>
               <div className="sec" style={{ padding: 0 }}>
-                <DropzoneUpload onUploaded={handleUploaded} />
+                <DropzoneUpload onUploaded={handleUploaded} mesa={mesa} />
               </div>
             </div>
             <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "var(--surface)" }}>
               <div style={{ fontSize: 10, color: "var(--text2)" }}>
                 Descarga la plantilla para preparar tus datos.
               </div>
-              <a href="/api/generar-template" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "var(--accent)", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
+              <a href={esFacturas ? "/api/generar-template?mesa=factura" : "/api/generar-template"} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "var(--accent)", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
                 Plantilla Excel
               </a>
