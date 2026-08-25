@@ -22,6 +22,8 @@ export default function EmpresaBrand({
   size = 34,
   textSize = 18,
   maxWidth = 260,
+  mesa = "boleta",
+  empresaRut = null,
 }: {
   nombre: string;
   logoUrl: string;
@@ -31,6 +33,10 @@ export default function EmpresaBrand({
   size?: number;
   textSize?: number;
   maxWidth?: number;
+  /** Mesa activa del escritorio; el conmutador BO|FA vive en este popup. */
+  mesa?: "boleta" | "factura";
+  /** RUT de la empresa activa — la variante Start/Pro no lista empresas, muestra esto. */
+  empresaRut?: string | null;
 }) {
   const router = useRouter();
   const [logoOk, setLogoOk] = useState(Boolean(logoUrl));
@@ -39,9 +45,20 @@ export default function EmpresaBrand({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const rootRef = useRef<HTMLSpanElement>(null);
-  // El menú abre si hay más de una empresa (cambiar) O si el titular Business
-  // aún puede agregar la siguiente (aunque hoy tenga una sola).
-  const canSwitch = multiempresa && (empresas.length > 1 || puedeAgregar);
+  // Antes el menú abría solo con multiempresa. Ahora abre SIEMPRE: el
+  // conmutador de mesa (boletas|facturas) vive acá, también para Start/Pro
+  // (que en vez de lista de empresas muestra la suya con su RUT).
+  const puedeListarEmpresas = multiempresa && (empresas.length > 1 || puedeAgregar);
+  const canSwitch = true;
+
+  // Cambiar de mesa navega DE VERDAD (no replaceState): la mesa re-siembra
+  // todo su estado client-held desde el server, que es la única forma segura
+  // de cambiar de mundo (misma razón del remount por empresa).
+  function cambiarMesa(destino: "boleta" | "factura") {
+    setOpen(false);
+    if (destino === mesa) return;
+    window.location.assign(`/massdte?mesa=${destino}`);
+  }
 
   useEffect(() => {
     setLogoOk(Boolean(logoUrl));
@@ -101,6 +118,11 @@ export default function EmpresaBrand({
 
   return (
     <span ref={rootRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: logoOk ? 0 : 9, minWidth: 0, width: "fit-content", maxWidth, whiteSpace: "nowrap", flexShrink: 0, overflow: "visible" }}>
+      {/* Título de la mesa activa, sobre el logo — el usuario siempre sabe en
+          qué mundo está parado sin abrir nada. */}
+      <span aria-hidden style={{ position: "absolute", left: 1, top: -13, fontSize: 8, fontWeight: 850, letterSpacing: ".09em", textTransform: "uppercase", color: mesa === "factura" ? "var(--lime)" : "var(--text3)", pointerEvents: "none", whiteSpace: "nowrap" }}>
+        {mesa === "factura" ? "Mesa facturas" : "Mesa boletas"}
+      </span>
       {canSwitch ? (
         <button
           type="button"
@@ -137,28 +159,77 @@ export default function EmpresaBrand({
               onCancelar={() => setAgregando(false)}
             />
           ) : (<>
-          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Cambiar empresa</div>
+          {puedeListarEmpresas ? (<>
+          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Cambiar empresa · y mesa</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {empresas.map((empresa) => (
-              <button
+              <div
                 key={empresa.id}
-                type="button"
-                onClick={() => switchEmpresa(empresa.id)}
-                disabled={pending}
-                style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: empresa.activaActual ? "1px solid rgba(232,85,62,.22)" : "1px solid transparent", background: empresa.activaActual ? "rgba(232,85,62,.09)" : "transparent", color: "var(--text)", cursor: pending ? "wait" : empresa.activaActual ? "default" : "pointer", textAlign: "left" }}
+                style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: empresa.activaActual ? "1px solid rgba(232,85,62,.22)" : "1px solid transparent", background: empresa.activaActual ? "rgba(232,85,62,.09)" : "transparent", color: "var(--text)" }}
               >
-                <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: empresa.activaActual ? "rgba(232,85,62,.14)" : "var(--bg-muted)", color: empresa.activaActual ? "var(--accent)" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
-                  {empresa.nombre.slice(0, 2).toUpperCase()}
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.nombre}</span>
-                  <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.rut ?? "Empresa"}</span>
-                </span>
-                {empresa.activaActual && <span style={{ fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>}
-              </button>
+                <button type="button" onClick={() => switchEmpresa(empresa.id)} disabled={pending} style={{ display: "contents", border: 0, padding: 0, background: "transparent", color: "inherit", cursor: pending ? "wait" : empresa.activaActual ? "default" : "pointer", textAlign: "left", font: "inherit" }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: empresa.activaActual ? "rgba(232,85,62,.14)" : "var(--bg-muted)", color: empresa.activaActual ? "var(--accent)" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
+                    {empresa.nombre.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.nombre}</span>
+                    <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.rut ?? "Empresa"}</span>
+                  </span>
+                </button>
+                {/* El conmutador de mesa solo en la empresa ACTUAL: cambiar de
+                    empresa Y de mesa en un click sería adivinar la intención. */}
+                {empresa.activaActual ? (
+                  <span style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                    <button type="button" onClick={() => cambiarMesa("boleta")} title="Mesa boletas"
+                      style={{ width: 34, height: 26, borderRadius: 8, fontSize: 10, fontWeight: 900, cursor: "pointer", font: "inherit",
+                        border: mesa === "boleta" ? "1px solid rgba(232,85,62,.5)" : "1px solid var(--border)",
+                        background: mesa === "boleta" ? "rgba(232,85,62,.1)" : "transparent",
+                        color: mesa === "boleta" ? "var(--accent)" : "var(--text3)" }}>BO</button>
+                    <button type="button" onClick={() => cambiarMesa("factura")} title="Mesa facturas"
+                      style={{ width: 34, height: 26, borderRadius: 8, fontSize: 10, fontWeight: 900, cursor: "pointer", font: "inherit",
+                        border: mesa === "factura" ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                        background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent",
+                        color: mesa === "factura" ? "var(--lime)" : "var(--text3)" }}>FA</button>
+                  </span>
+                ) : (
+                  <span />
+                )}
+              </div>
             ))}
           </div>
-          {puedeAgregar && (
+          </>) : (<>
+          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Tu empresa</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, minHeight: 42, padding: "7px 8px", borderRadius: 9, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)" }}>
+            <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(232,85,62,.14)", color: "var(--accent)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{nombre.slice(0, 2).toUpperCase()}</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombre}</span>
+              <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)" }}>{empresaRut ?? ""}</span>
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>
+          </div>
+          <div style={{ padding: "12px 8px 7px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Mesa de trabajo</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <button type="button" onClick={() => cambiarMesa("boleta")}
+              style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 9px", borderRadius: 9, font: "inherit", cursor: "pointer", textAlign: "left",
+                border: mesa === "boleta" ? "1px solid rgba(232,85,62,.35)" : "1px solid var(--border)", background: mesa === "boleta" ? "rgba(232,85,62,.07)" : "transparent", color: "var(--text)" }}>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 11.5, fontWeight: 800 }}>Mesa Boletas</span>
+                <span style={{ display: "block", fontSize: 9, color: "var(--text3)" }}>cartolas → boletas 39/41</span>
+              </span>
+              {mesa === "boleta" && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>}
+            </button>
+            <button type="button" onClick={() => cambiarMesa("factura")}
+              style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 9px", borderRadius: 9, font: "inherit", cursor: "pointer", textAlign: "left",
+                border: mesa === "factura" ? "1px solid rgba(201,242,75,.4)" : "1px solid var(--border)", background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent", color: "var(--text)" }}>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 11.5, fontWeight: 800 }}>Mesa Facturas</span>
+                <span style={{ display: "block", fontSize: 9, color: "var(--text3)" }}>planillas → facturas 33/34</span>
+              </span>
+              {mesa === "factura" && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 850, color: "var(--lime)" }}>Actual</span>}
+            </button>
+          </div>
+          </>)}
+          {puedeListarEmpresas && puedeAgregar && (
             <button
               type="button"
               onClick={() => setAgregando(true)}

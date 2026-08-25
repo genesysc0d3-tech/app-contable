@@ -40,7 +40,8 @@ function tipoForFile(file: File): { tipo: string; mime: string } {
   return { tipo: "excel", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
 }
 
-export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void }) {
+export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUploaded?: () => void; mesa?: "boleta" | "factura" }) {
+  const esFacturas = mesa === "factura";
   const inputRef = useRef<HTMLInputElement>(null);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -133,6 +134,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
             tipo,
             mime,
             contexto: q.contexto,
+            mesa,
           }),
         });
         const data = await res.json().catch(() => null);
@@ -187,7 +189,7 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
 
   return (
     <>
-      <input ref={inputRef} type="file" accept=".xls,.xlsx,.pdf,.csv,.png,.jpg,.jpeg,.webp" multiple
+      <input ref={inputRef} type="file" accept={esFacturas ? ".xls,.xlsx" : ".xls,.xlsx,.pdf,.csv,.png,.jpg,.jpeg,.webp"} multiple
         style={{ display: "none" }} onChange={handleInput} />
 
       <div className="dz" role="button" tabIndex={uploading ? -1 : 0}
@@ -239,13 +241,15 @@ export default function DropzoneUpload({ onUploaded }: { onUploaded?: () => void
                 {/* Contexto para el clasificador. Opcional: sin él todo funciona igual.
                     Va ANTES de subir para que el texto viaje con el archivo y se
                     procese bien a la primera, sin reprocesar. */}
-                <button onClick={() => abrirContexto(q)}
+                {/* En facturas no hay IA que contextualizar: el pipeline es
+                    determinístico (cada fila ya es una factura decidida). */}
+                {!esFacturas && <button onClick={() => abrirContexto(q)}
                   className={`dz-ia-btn${q.contexto ? " puesto" : ""}`}
                   title={q.contexto ? "Editar el contexto de este archivo" : "Contarle a la IA qué es esta cartola"}
                   aria-label={q.contexto ? "Editar el contexto de este archivo" : "Contarle a la IA qué es esta cartola"}>
                   <span className="dz-ia-sp" aria-hidden="true">✦</span>
                   {q.contexto ? "con contexto" : <>más info a <span className="dz-ia-word">IA</span></>}
-                </button>
+                </button>}
                 {/* 28px: a 16 con fuente 8 quedaban casi invisibles y por debajo del
                     mínimo cómodo para apuntarles. Fondo en hover para que se note
                     que son botones. */}

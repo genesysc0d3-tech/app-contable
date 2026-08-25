@@ -51,7 +51,7 @@ function searchData(value: unknown): SearchData {
 }
 
 export default async function V5Page({ searchParams }: {
-  searchParams: Promise<{ date?: string; month?: string; view?: string }>;
+  searchParams: Promise<{ date?: string; month?: string; view?: string; mesa?: string }>;
 }) {
   const sessionUsuario = (await getUsuario())!;
   const support = await getDevSupportMode();
@@ -64,7 +64,9 @@ export default async function V5Page({ searchParams }: {
   const empresaId = usuario.empresa_id;
   const boletasProveedor = mapBoletasProveedor(usuario.empresas.boletas_emision_proveedor ?? usuario.empresas.emision_proveedor);
   const facturasProveedor = mapFacturasProveedor(usuario.empresas.facturas_emision_proveedor);
-  const { date: dateParam, month: monthParam, view } = await searchParams;
+  const { date: dateParam, month: monthParam, view, mesa: mesaQuery } = await searchParams;
+  // Solo "factura" exacto abre esa mesa; cualquier otra cosa cae a boleta.
+  const mesaParam: "boleta" | "factura" = mesaQuery === "factura" ? "factura" : "boleta";
 
   const supabase = supportMode ? supportMode.sb : await createClient();
 
@@ -75,7 +77,7 @@ export default async function V5Page({ searchParams }: {
     giro: usuario.empresas.giro,
     razon_social: usuario.empresas.razon_social,
     tipo_contribuyente: usuario.empresas.tipo_contribuyente,
-  }, { date: dateParam, month: monthParam, view });
+  }, { date: dateParam, month: monthParam, view, mesa: mesaParam });
 
   // Año/mes actuales EN CHILE (no UTC del server, que en Vercel corre): base
   // del mes RCV (resumen de ventas + visor), date-independiente del calendario.
@@ -409,7 +411,7 @@ export default async function V5Page({ searchParams }: {
           // fuerza remount para re-sembrar el estado client-held y el cache de rangos
           // (router.refresh NO re-siembra la mesa) — evita mostrar datos de la empresa
           // anterior en Check/Emitir/Boletas.
-          key={empresaId}
+          key={`${empresaId}:${mesaParam}`}
           initialMesa={mesaInicial}
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
@@ -420,7 +422,7 @@ export default async function V5Page({ searchParams }: {
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} /></span></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} /></span></div>}
           actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
@@ -437,9 +439,9 @@ export default async function V5Page({ searchParams }: {
 
             {/* EMITIR PANEL — massDTE arriba de boleta única */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
+              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} mesa={mesaParam} />
             </div></GlowWrap>
-             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+             {mesaParam === "boleta" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction
                 empresaTipo={usuario.empresas.tipo_contribuyente}
                 empresaId={empresaId}
@@ -453,7 +455,7 @@ export default async function V5Page({ searchParams }: {
                 empresaComuna={usuario.empresas.comuna}
                 readOnlyReason={supportReadOnlyReason}
               />
-            </div></GlowWrap>
+            </div></GlowWrap>}
             <div style={{display:"none"}}><RCVButton /></div>
             {equipoBusiness.ok && equipoBusiness.equipo && (
               <TeamBusinessPanel
