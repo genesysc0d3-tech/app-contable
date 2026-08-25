@@ -259,8 +259,8 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="mass-title">{esFacturas ? "SUBIR PLANTILLAS" : "SUBIR CARTOLAS"}</span>
-              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (esFacturas ? "Excel estructurado → facturas 33/34" : "Subida masiva de cartolas")}</span>
+              <span className="mass-title">{esFacturas ? "MASSDTE FACTURA" : "SUBIR CARTOLAS"}</span>
+              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (esFacturas ? "Plantilla obligatoria" : "Subida masiva de cartolas")}</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
               <g className="mass-doc mass-doc-new">
@@ -332,7 +332,7 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
                   <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Carga masiva</span>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>{esFacturas ? "Solo Excel (plantilla)" : "Excel · PDF · CSV · Fotos"}</span>
                 </div>
-                <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>MassDTE</h2>
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>{esFacturas ? "MassDTE Factura" : "MassDTE"}</h2>
                 <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>{esFacturas ? "Sube tu plantilla de facturas — cada fila es una factura lista para revisar." : "Sube cartolas bancarias y documentos para procesamiento masivo."}</p>
               </div>
             </div>
