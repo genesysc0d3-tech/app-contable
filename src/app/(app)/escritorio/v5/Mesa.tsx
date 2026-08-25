@@ -56,23 +56,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
           compactEmpty("subidos")
         )
       }
-      emitirContent={
-        mesa.mesaActiva === "factura" ? (
-          // El carril de emisión de facturas (RPA sobre el portal del SII) es
-          // la fase siguiente. Emitir facturas por el carril de BOLETAS
-          // mandaría el DTE equivocado — se cierra la puerta con honestidad.
-          <div style={{ textAlign: "center", padding: "28px 16px" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Emisión de facturas: en construcción</div>
-            <div style={{ fontSize: 10, color: "var(--text2)", maxWidth: 300, margin: "0 auto", lineHeight: 1.5 }}>
-              Ya puedes subir tu plantilla y revisar el lote. La emisión al SII
-              (con forma de pago Contado/Crédito por lote) llega en la próxima
-              actualización.
-            </div>
-          </div>
-        ) : (
-          <EmitirTabContent empresaId={empresaId} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />
-        )
-      }
+      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
       boletasContent={
         mesa.boletasCount === 0 ? (
           compactEmpty("boletas")

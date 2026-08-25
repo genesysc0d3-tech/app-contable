@@ -239,7 +239,7 @@ export async function fetchMesaDateDependent(
   // ── Pendientes de emisión (cola del tab Emitir) — depende de empresa, no del rango ──
   const pendientes = await getPendientesEmision(supabase, empresaId, {
     giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente,
-  }, { start: workStart, end: workEnd }).catch((e) => {
+  }, { start: workStart, end: workEnd }, { mesa: mesaActiva }).catch((e) => {
     // NUNCA tragar en silencio: una cola vacía por error se ve igual que "no hay
     // nada que emitir" y el usuario pierde boletas sin saberlo.
     console.error("[mesa] getPendientesEmision falló — la cola de Emitir queda vacía", e);

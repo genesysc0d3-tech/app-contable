@@ -26,8 +26,9 @@ export async function getPendientesEmision(
   empresaId: string,
   empresaCtx: EmpresaCtx,
   range?: { start: string; end: string },
-  opts?: { soloAprobado?: boolean },
+  opts?: { soloAprobado?: boolean; mesa?: "boleta" | "factura" },
 ) {
+  const mesaActiva: "boleta" | "factura" = opts?.mesa === "factura" ? "factura" : "boleta";
   // 'editado' es borrador (perdió el Aprobar) y NUNCA es emitible; la cola de Emitir
   // igual lo muestra en "por revisar". El guardarraíl, en cambio, cuenta SOLO lo
   // realmente emitible → soloAprobado excluye 'editado' de raíz.
@@ -35,13 +36,14 @@ export async function getPendientesEmision(
   let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, notas, monto_neto, iva, total, estado, created_at, cliente_id,
+      id, tipo_propuesto, tipo_dte, mesa, detalle, receptor_giro, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, notas, monto_neto, iva, total, estado, created_at, cliente_id,
       clientes(id, nombre, rut),
       movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at, glosa_comun, glosa_activa, medio_pago_comun))
     `)
     .eq("empresa_id", empresaId)
+    .eq("mesa", mesaActiva)
     .in("estado", estados)
-    .in("tipo_propuesto", TIPOS_EMITIBLES);
+    .in("tipo_propuesto", mesaActiva === "factura" ? ["factura_afecta", "factura_exenta"] : TIPOS_EMITIBLES);
   // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
   if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);
   const { data: propuestas, error: pErr } = await propsQuery.order("created_at", { ascending: false });
@@ -90,7 +92,7 @@ export async function getPendientesEmision(
   }
 
   // Paso P: decisión humana del tipo (degradado si la columna tipo_dte no está migrada).
-  const tipoDteById = new Map<string, 39 | 41>();
+  const tipoDteById = new Map<string, 33 | 34 | 39 | 41>();
   if (propIds.length > 0) {
     try {
       const { data: tdRows, error: tdErr } = await supabase
@@ -102,7 +104,7 @@ export async function getPendientesEmision(
       // falla (tdErr).
       if (!tdErr && tdRows) {
         for (const r of tdRows) {
-          if (r.tipo_dte === 39 || r.tipo_dte === 41) tipoDteById.set(r.id, r.tipo_dte);
+          if (r.tipo_dte === 39 || r.tipo_dte === 41 || r.tipo_dte === 33 || r.tipo_dte === 34) tipoDteById.set(r.id, r.tipo_dte);
         }
       }
     } catch { /* columna tipo_dte aún no migrada */ }
@@ -153,6 +155,49 @@ export async function getPendientesEmision(
     const receptor_nombre = p.receptor_nombre ?? cliente?.nombre ?? null;
     const recId = cliente?.id ?? p.receptor_nombre ?? "sin-receptor";
 
+    // FACTURA: veredicto propio, sin el motor de reglas de boletas (ese aplica
+    // NO_BOLETAR, minimización 135 UF y medio de pago — nada de eso rige acá:
+    // la factura SIEMPRE identifica al receptor, y la forma de pago es del
+    // LOTE, elegida en la revisión). Criterio 3: advertir sí, bloquear solo lo
+    // técnicamente inemitible.
+    if ((p as { mesa?: string }).mesa === "factura") {
+      const pf = p as PropuestaRaw & { tipo_dte?: number | null; detalle?: string | null; receptor_giro?: string | null };
+      const tipoFactura = pf.tipo_dte === 34 ? 34 : pf.tipo_dte === 33 ? 33 : (empresaCtxFull.tipo_contribuyente === "exento" ? 34 : 33);
+      const bloqueos: { code: string; msg: string }[] = [];
+      const advertencias: { code: string; msg: string }[] = [];
+      if (!receptor_rut) bloqueos.push({ code: "RECEPTOR_RUT_OBLIGATORIO", msg: "La factura exige el RUT del receptor" });
+      if (total <= 0) bloqueos.push({ code: "MONTO_TOTAL_INVALIDO", msg: "El total debe ser mayor a cero" });
+      if (!receptor_nombre) advertencias.push({ code: "SIN_RAZON_SOCIAL", msg: "Sin razón social — el SII la completa desde el RUT" });
+      const balde = bloqueos.length > 0 ? "bloqueadas" : p.estado === "aprobado" ? "listas" : "por_revisar";
+      return {
+        id: p.id,
+        descripcion: mov?.descripcion ?? "Sin descripción",
+        fecha,
+        receptor_rut,
+        receptor_nombre,
+        receptor_direccion: p.receptor_direccion ?? null,
+        receptor_comuna: p.receptor_comuna ?? null,
+        receptor_email: p.receptor_email ?? null,
+        receptor_telefono: p.receptor_telefono ?? null,
+        medio_pago: null,
+        detalle: (pf.detalle ?? "").trim() || "Servicios profesionales",
+        monto_total: total,
+        balde: balde as "listas" | "por_revisar" | "bloqueadas",
+        listo_emitir: balde === "listas",
+        bloqueos,
+        advertencias,
+        motivo_no_listo: balde !== "listas" ? (bloqueos[0]?.msg ?? "Falta aprobar en el Check") : null,
+        motivo_code: bloqueos.some((b) => b.code === "RECEPTOR_RUT_OBLIGATORIO") ? ("falta_receptor" as const) : bloqueos.length > 0 ? ("monto_invalido" as const) : null,
+        tipo_sugerido: tipoFactura,
+        sugerencia: "emitir" as const,
+        confianza_clasif: 1,
+        razones: [] as string[],
+        documento_id: docArr?.id ?? null,
+        documento_nombre: docArr?.nombre_archivo ?? null,
+        documento_created_at: docArr?.created_at ?? null,
+      };
+    }
+
     // Motor de reglas: única fuente de verdad (misma función para cola, backend y carril real).
     const verdict = evaluarEmision(
       {
@@ -164,7 +209,7 @@ export async function getPendientesEmision(
         receptorRut: receptor_rut,
         receptorNombre: receptor_nombre,
         medioPago: p.medio_pago ?? docArr?.medio_pago_comun ?? null,
-        tipoDtePersistido: tipoDteById.get(p.id) ?? null,
+        tipoDtePersistido: (() => { const t = tipoDteById.get(p.id); return t === 39 || t === 41 ? t : null; })(),
         docHint,
         patron: {
           cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,

@@ -8,6 +8,7 @@ import { validarBoleta } from "@/lib/sii/validation";
 import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { obtenerConfigEmision, providerForTipoDte, verificarCertificado } from "@/lib/intermediario/client";
 import { chileDateString } from "@/lib/chile-date";
+import { validarRut as validarRutFactura } from "@/lib/rut";
 import { clasificarBoleta, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
 import { armarBoletaPayload } from "@/lib/intermediario/armar-boleta";
 import { issueMockBoleta } from "@/lib/emission/mock";
@@ -77,16 +78,17 @@ export async function POST(request: Request) {
   // Body acepta:
   //   { propuesta_ids: string[] }  → todas como AFECTA (default histórico)
   //   { items: [{ id, tipo_dte: 39|41 }, ...] }  → tipo per propuesta
-  let body: { propuesta_ids?: string[]; items?: { id: string; tipo_dte?: 39 | 41 }[] } = {};
+  let body: { propuesta_ids?: string[]; items?: { id: string; tipo_dte?: 33 | 34 | 39 | 41 }[]; forma_pago_lote?: string } = {};
   try { body = await request.json(); } catch {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
   }
   // Normalizar a Map<id, tipo_dte>
-  const tipoPorId = new Map<string, 39 | 41>();
+  const tipoPorId = new Map<string, 33 | 34 | 39 | 41>();
   if (Array.isArray(body.items)) {
     for (const it of body.items) {
       if (typeof it.id === "string") {
-        const t = it.tipo_dte === 41 ? 41 : 39;
+        // 33/34 pasan tal cual (facturas); cualquier otra cosa cae a boleta 39.
+        const t = it.tipo_dte === 41 || it.tipo_dte === 33 || it.tipo_dte === 34 ? it.tipo_dte : 39;
         tipoPorId.set(it.id, t);
       }
     }
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
   const { data: propuestas, error: pErr } = await supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, tipo_dte, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
+      id, tipo_propuesto, tipo_dte, mesa, detalle, receptor_giro, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
       receptor_email, receptor_telefono,
       medio_pago, notas, monto_neto, iva, total, estado,
       cliente_id,
@@ -179,6 +181,28 @@ export async function POST(request: Request) {
   try {
 
   // Gate de cuota: las boletas masivas (con propuesta_id) consumen el cupo
+  // ── Lote de FACTURAS: reglas propias antes de cualquier gate ──
+  // No se mezclan mesas en un lote (una selección mixta emitiría DTEs de dos
+  // mundos con una sola forma de pago), y la forma de pago es OBLIGATORIA y
+  // SIN default (criterio 7 de Matías: el sistema no presupone la operación).
+  const hayFacturas = (propuestas ?? []).some((p) => p.mesa === "factura");
+  const hayBoletas = (propuestas ?? []).some((p) => p.mesa !== "factura");
+  if (hayFacturas && hayBoletas) {
+    lockEstado = "cancelled";
+    return NextResponse.json(
+      { ok: false, error: "MEZCLA_DE_MESAS", detalle: "El lote mezcla boletas y facturas — emite cada mesa por separado" },
+      { status: 400 },
+    );
+  }
+  const formaPagoLote = body.forma_pago_lote === "contado" ? "Contado" : body.forma_pago_lote === "credito" ? "Crédito" : null;
+  if (hayFacturas && !formaPagoLote) {
+    lockEstado = "cancelled";
+    return NextResponse.json(
+      { ok: false, error: "FORMA_PAGO_REQUERIDA", detalle: "Elige la forma de pago del lote (Contado o Crédito) antes de emitir" },
+      { status: 400 },
+    );
+  }
+
   // del plan/trial. dev_mode bypassa para pruebas internas.
   const gate = await verificarEmisionMasiva(sb, usuario.empresa_id, ids.length, { devBypass: usuario.dev_mode === true });
   if (!gate.ok) {
@@ -248,6 +272,129 @@ export async function POST(request: Request) {
     const docNested = mov?.documentos_subidos;
     const docNode = (Array.isArray(docNested) ? docNested[0] : docNested) ?? null;
     const docHintRaw = docNode?.tipo_operacion_hint ?? null;
+
+    // ── FACTURA (33/34): camino propio, sin el clasificador de boletas ──
+    // La propuesta nació de la plantilla con todo decidido (criterio 1: el
+    // sistema ejecuta). Carril mock por ahora; el RPA del portal es la fase 4.
+    if (p.mesa === "factura") {
+      const tipoFactura: 33 | 34 =
+        p.tipo_dte === 33 || p.tipo_dte === 34
+          ? (p.tipo_dte as 33 | 34)
+          : empresa.tipo_contribuyente === "exento" ? 34 : 33;
+      if (!receptor_rut || !validarRutFactura(receptor_rut)) {
+        results.push({ propuesta_id: pid, ok: false, error_code: "RECEPTOR_RUT_REQUERIDO", error_message: "La factura exige un RUT de receptor válido" });
+        continue;
+      }
+      if (total <= 0) {
+        results.push({ propuesta_id: pid, ok: false, error_code: "MONTO_INVALIDO", error_message: "El total de la factura debe ser mayor a cero" });
+        continue;
+      }
+      // Montos persistidos por el processor; si faltan, se derivan del total
+      // con la misma matemática (nunca inventar un neto distinto del que verá
+      // el portal).
+      const neto = tipoFactura === 33 ? (p.monto_neto ?? Math.round(total / 1.19)) : 0;
+      const iva = tipoFactura === 33 ? (p.iva ?? total - neto) : 0;
+      const exento = tipoFactura === 34 ? total : 0;
+      if (tipoFactura === 33 && iva <= 0) {
+        results.push({ propuesta_id: pid, ok: false, error_code: "AFECTA_IVA_CERO", error_message: "Una factura afecta no puede tener IVA $0 — revisa el monto o el tipo" });
+        continue;
+      }
+
+      const proveedorFactura = providerForTipoDte(emisionConfig, tipoFactura);
+      if (proveedorFactura !== "mock") {
+        results.push({ propuesta_id: pid, ok: false, error_code: "PROVEEDOR_NO_IMPLEMENTADO", error_message: "El carril real de facturas llega con la próxima actualización — por ahora solo modo de prueba" });
+        continue;
+      }
+
+      const detalleFactura = (p.detalle ?? p.notas ?? "").trim() || "Servicios profesionales";
+      const detallesF = [{ nombre: detalleFactura.slice(0, 80), cantidad: 1, precio_unitario: total, monto: total }];
+
+      const mockF = await issueMockBoleta({
+        sb,
+        empresaId: usuario.empresa_id,
+        empresa,
+        body: {
+          tipo_dte: tipoFactura,
+          receptor_rut,
+          receptor_razon_social: receptor_razon_social ?? undefined,
+          detalles: detallesF,
+        },
+        totales: { neto, iva, exento, total },
+        fechaEmision: fecha_emision,
+      });
+      if (!mockF.ok) {
+        results.push({ propuesta_id: pid, ok: false, error_code: mockF.codigo_rechazo ?? mockF.error, error_message: mockF.detalle ?? "El modo de prueba no pudo emitir la factura simulada" });
+        continue;
+      }
+
+      const { data: factura, error: insErrF } = await sb
+        .from("boletas_emitidas")
+        .insert({
+          empresa_id: usuario.empresa_id,
+          propuesta_id: pid,
+          tipo_dte: tipoFactura,
+          folio: mockF.folio,
+          caf_id: mockF.cafId,
+          fecha_emision,
+          emisor_rut: empresa.rut,
+          emisor_razon_social: empresa.razon_social,
+          emisor_giro: empresa.giro,
+          emisor_direccion: empresa.direccion,
+          emisor_comuna: empresa.comuna,
+          receptor_rut,
+          receptor_razon_social: receptor_razon_social ?? null,
+          receptor_direccion: p.receptor_direccion ?? null,
+          receptor_comuna: p.receptor_comuna ?? null,
+          receptor_email: p.receptor_email ?? null,
+          medio_pago: formaPagoLote,
+          monto_neto: neto,
+          monto_exento: exento,
+          iva,
+          monto_total: total,
+          detalles: detallesF as unknown as Json,
+          xml_dte: mockF.xmlDte,
+          ted: mockF.ted,
+          track_id: mockF.trackId,
+          estado: mockF.estadoPersistencia,
+          emision_proveedor: proveedorFactura,
+          emision_sandbox: true,
+        })
+        .select("id, folio, monto_total")
+        .single();
+      if (insErrF || !factura) {
+        results.push({ propuesta_id: pid, ok: false, error_code: "DB_INSERT_FAILED", error_message: insErrF?.message ?? "Error al guardar la factura" });
+        continue;
+      }
+
+      const tsF = new Date();
+      const anchorF = `${fecha_emision}T12:${String(tsF.getUTCMinutes()).padStart(2, "0")}:${String(tsF.getUTCSeconds()).padStart(2, "0")}.${String(tsF.getUTCMilliseconds()).padStart(3, "0")}Z`;
+      await sb.from("documentos_subidos").insert({
+        empresa_id: usuario.empresa_id,
+        nombre_archivo: `Factura #${factura.folio} - ${receptor_razon_social ?? receptor_rut}`,
+        tipo: "boleta_unica",
+        mesa: "factura",
+        storage_path: `boleta-lote://${factura.id}`,
+        estado: "procesado",
+        movimientos_detectados: 1,
+        created_at: anchorF,
+        progreso_ia: {
+          origen: "emision_lote",
+          proveedor: proveedorFactura,
+          sandbox: true,
+          propuesta_id: pid,
+          boleta_id: factura.id,
+          folio: factura.folio,
+          tipo_dte: tipoFactura,
+          monto_total: factura.monto_total,
+          receptor: receptor_razon_social ?? receptor_rut,
+          etiqueta: "Factura emitida",
+        },
+      });
+
+      results.push({ propuesta_id: pid, ok: true, folio: factura.folio, boleta_id: factura.id, monto_total: factura.monto_total });
+      continue;
+    }
+
     const clasif = clasificarBoleta(
       {
         descripcion: mov?.descripcion ?? "",
@@ -278,7 +425,11 @@ export async function POST(request: Request) {
     // humana persistida (p.tipo_dte, Paso P) → clasificación → 39. Antes ignoraba
     // p.tipo_dte y coercía a 39 AFECTA una propuesta con 41 ya persistido (auditoría #7).
     const tipoPersistido = p.tipo_dte === 39 || p.tipo_dte === 41 ? (p.tipo_dte as 39 | 41) : undefined;
-    let tipoDte = (tipoPorId.get(pid) ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
+    // El override de la UI solo aplica si es un tipo de BOLETA: un 33/34 colado
+    // en una propuesta de la mesa boletas no puede convertirla en factura.
+    const overrideUi = tipoPorId.get(pid);
+    const overrideBoleta = overrideUi === 39 || overrideUi === 41 ? overrideUi : undefined;
+    let tipoDte = (overrideBoleta ?? tipoPersistido ?? clasif.tipo_dte ?? 39) as 39 | 41;
     // Un contribuyente EXENTO no puede emitir afecta (39): fabricaría IVA inexistente.
     // El override de la UI o un tipo persistido no mandan sobre la naturaleza fiscal
     // del emisor (misma regla que la normalización afecta→exenta del insert).
