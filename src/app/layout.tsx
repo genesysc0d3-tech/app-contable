@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ThemeInitializer from "@/components/ThemeInitializer";
@@ -15,6 +15,17 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
 });
+
+// Safari hace zoom sobre los campos chicos del formulario de Transbank y al
+// volver a la app MANTIENE ese zoom: la página aparecía agrandada hasta que el
+// usuario la reseteaba a mano. maximum-scale=1 hace que Safari re-encuadre al
+// cargar. (iOS igual permite el pellizco del usuario — ignora maximum-scale
+// para el gesto desde iOS 10 — así que no bloquea a nadie.)
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   title: { default: "MassDTE", template: "%s | MassDTE" },
