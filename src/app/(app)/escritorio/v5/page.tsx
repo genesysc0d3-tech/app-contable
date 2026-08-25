@@ -13,7 +13,7 @@ import RegistrosToggleCard from "./RegistrosToggleCard";
 import EmpresaBrand from "./EmpresaBrand";
 import TeamBusinessPanel from "./TeamBusinessPanel";
 import UsageCountersPanel from "./UsageCountersPanel";
-import { EmisionDirectaAction, FacturaUnicaAction, MassDTEAction, HeaderActionsRow, RCVButton } from "./LeftQuickActions";
+import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, RCVButton } from "./LeftQuickActions";
 import type { SearchItem } from "@/lib/tree-structure";
 import { estadoEleccionEmpresa, listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import EleccionEmpresaModal from "./EleccionEmpresaModal";
@@ -442,7 +442,17 @@ export default async function V5Page({ searchParams }: {
               <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} mesa={mesaParam} />
             </div></GlowWrap>
              {mesaParam === "factura" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <FacturaUnicaAction readOnlyReason={supportReadOnlyReason} />
+              <EmisionDirectaAction
+                mesa="factura"
+                empresaTipo={usuario.empresas.tipo_contribuyente}
+                empresaId={empresaId}
+                empresaRut={usuario.empresas.rut}
+                empresaRazonSocial={usuario.empresas.razon_social}
+                empresaGiro={usuario.empresas.giro}
+                empresaDireccion={usuario.empresas.direccion}
+                empresaComuna={usuario.empresas.comuna}
+                readOnlyReason={supportReadOnlyReason}
+              />
             </div></GlowWrap>}
              {mesaParam === "boleta" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction

@@ -70,7 +70,8 @@ function SparkleFxStyles() {
   );
 }
 
-export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason, mesa = "boleta" }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string; mesa?: "boleta" | "factura" }) {
+  const esFacturas = mesa === "factura";
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
   const { lockedByOtherUser, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
@@ -128,8 +129,8 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="sparkle-title">EMITIR BOLETA ÚNICA</span>
-              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOtherUser ? "Emisión bloqueada" : "Boleta manual, una a la vez")}</span>
+              <span className="sparkle-title">{esFacturas ? "EMITIR FACTURA ÚNICA" : "EMITIR BOLETA ÚNICA"}</span>
+              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOtherUser ? "Emisión bloqueada" : esFacturas ? "Factura manual, una a la vez" : "Boleta manual, una a la vez")}</span>
             </span>
             <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
               <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
@@ -172,7 +173,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       {open && (
         <div className="ed-overlay">
           <div className="ed-panel">
-            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} onClose={closeWithSavedPulse} />
+            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} mesaFactura={esFacturas} onClose={closeWithSavedPulse} />
           </div>
         </div>
       )}
@@ -538,169 +539,6 @@ export function HeaderActionsRow() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
       </button>
     </div>
-    </>
-  );
-}
-
-/**
- * FACTURA ÚNICA (criterio 5 de Matías): el hermano de la boleta única para la
- * mesa Facturas. El usuario tipea el receptor COMPLETO (decisión del fundador:
- * la factura individualiza a su receptor — solo el email es opcional), el
- * detalle y el VALOR TOTAL; el sistema deriva neto/IVA según el emisor.
- *
- * Dos pasos contra el server, cero lógica duplicada: /factura-unica crea la
- * cadena documento→movimiento→propuesta (nace aprobada: tipearla ES el gesto)
- * y /emitir-lote la emite con la forma de pago elegida — mismos gates de
- * cuota, locks y validaciones del carril masivo.
- */
-export function FacturaUnicaAction({ readOnlyReason }: { readOnlyReason?: string }) {
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [enviando, setEnviando] = useState(false);
-  const [f, setF] = useState({ rut: "", razon: "", giro: "", direccion: "", comuna: "", email: "", detalle: "", total: "" });
-  // Criterio 7: forma de pago obligatoria y SIN default, también en la única.
-  const [formaPago, setFormaPago] = useState<"contado" | "credito" | null>(null);
-  const [folioListo, setFolioListo] = useState<number | null>(null);
-
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((v) => ({ ...v, [k]: e.target.value }));
-  const totalNum = Math.round(Number(f.total.replace(/[$.\s]/g, "")) || 0);
-  const completo = f.rut.trim() && f.razon.trim() && f.giro.trim() && f.direccion.trim() && f.comuna.trim() && f.detalle.trim() && totalNum > 0 && formaPago;
-
-  async function emitir() {
-    if (!completo || enviando) return;
-    setEnviando(true);
-    try {
-      const crear = await fetch("/api/intermediaria/factura-unica", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          receptor_rut: f.rut, razon_social: f.razon, giro: f.giro, direccion: f.direccion,
-          comuna: f.comuna, email: f.email || undefined, detalle: f.detalle, total: totalNum,
-        }),
-      });
-      const creada = await crear.json().catch(() => null);
-      if (!creada?.ok) {
-        toast(creada?.detalle ?? "No se pudo preparar la factura", "error");
-        setEnviando(false);
-        return;
-      }
-      const emitirRes = await fetch("/api/intermediaria/emitir-lote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propuesta_ids: [creada.propuesta_id], forma_pago_lote: formaPago }),
-      });
-      const r = await emitirRes.json().catch(() => null);
-      const item = r?.resultados?.[0];
-      if (r?.ok && item?.ok) {
-        setFolioListo(item.folio ?? null);
-      } else {
-        toast(item?.error_message ?? r?.detalle ?? "No se pudo emitir la factura", "error");
-      }
-    } catch {
-      toast("No se pudo emitir — revisa tu conexión", "error");
-    }
-    setEnviando(false);
-  }
-
-  const inputSt: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 9, padding: "9px 10px", color: "var(--text)", fontSize: 12, fontFamily: "inherit" };
-  const labelSt: React.CSSProperties = { display: "block", fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text3)", margin: "10px 0 4px" };
-
-  return (
-    <>
-      <SparkleFxStyles />
-      <div className="sp">
-        <button className="sparkle-button" onClick={() => { if (!readOnlyReason) { setOpen(true); setFolioListo(null); } }} disabled={Boolean(readOnlyReason)}>
-          <span className="spark" />
-          <span className="backdrop" />
-          <span className="sparkle-label">
-            <span className="sparkle-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="sparkle-title">EMITIR FACTURA ÚNICA</span>
-              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? "Factura manual, una a la vez"}</span>
-            </span>
-            <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
-              <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
-              <path className="receipt-line" d="M9 8h6" />
-              <path className="receipt-line" d="M9 11.5h5" />
-              <path className="receipt-line" d="M9 15h3.5" />
-              <circle className="receipt-dot" cx="15.7" cy="15" r="1" />
-            </svg>
-          </span>
-        </button>
-        <span className="particle-pen" aria-hidden="true">
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <svg key={i} className="particle" viewBox="0 0 15 15"
-              style={{
-                ["--x" as string]: [18, 34, 52, 70, 82, 24, 62, 42][i],
-                ["--y" as string]: [28, 70, 18, 64, 36, 48, 82, 10][i],
-                ["--size" as string]: [0.28, 0.18, 0.32, 0.2, 0.24, 0.16, 0.26, 0.22][i],
-                ["--duration" as string]: [1.7, 2.3, 1.9, 2.6, 2.1, 1.6, 2.4, 1.8][i],
-                ["--delay" as string]: [0.1, 0.35, 0.2, 0.55, 0.75, 0.42, 0.62, 0.28][i],
-                ["--origin-x" as string]: `${[900, 700, 1200, 800, 1000, 600, 1100, 750][i]}%`,
-                ["--origin-y" as string]: `${[800, 1100, 700, 900, 650, 1000, 850, 1200][i]}%`,
-              } as React.CSSProperties}>
-              <path d="M7.5 0l2 5.5L15 7.5l-5.5 2L7.5 15l-2-5.5L0 7.5l5.5-2L7.5 0z" />
-            </svg>
-          ))}
-        </span>
-      </div>
-
-      {open && (
-        <div className="ed-overlay" onClick={() => { if (!enviando) setOpen(false); }}>
-          <div className="ed-panel" style={{ width: "min(560px, 94vw)", maxHeight: "92vh", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-              <button aria-label="Cerrar" onClick={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 16 }}>×</button>
-              <div>
-                <h2 style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em" }}>Factura única</h2>
-                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Receptor completo — la factura lo individualiza entero.</p>
-              </div>
-            </div>
-
-            {folioListo !== null ? (
-              <div style={{ padding: "28px 24px", textAlign: "center" }}>
-                <div style={{ fontSize: 34, fontWeight: 800, color: "var(--green)", letterSpacing: "-.03em" }}>#{folioListo}</div>
-                <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>Tu factura fue emitida correctamente.</div>
-                <div style={{ fontSize: 10, color: "var(--amber)", marginTop: 8 }}>● Modo de prueba: se simula, no se informa al SII.</div>
-                <button onClick={() => setOpen(false)} style={{ marginTop: 18, border: 0, borderRadius: 10, padding: "11px 22px", background: "var(--accent)", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", font: "inherit" }}>Listo</button>
-              </div>
-            ) : (
-              <div style={{ padding: "12px 20px 20px", overflowY: "auto" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
-                  <div><label style={labelSt}>RUT receptor</label><input style={inputSt} value={f.rut} onChange={set("rut")} placeholder="12.345.678-5" /></div>
-                  <div><label style={labelSt}>Razón social</label><input style={inputSt} value={f.razon} onChange={set("razon")} placeholder="Empresa SpA" /></div>
-                  <div><label style={labelSt}>Giro</label><input style={inputSt} value={f.giro} onChange={set("giro")} placeholder="Servicios informáticos" /></div>
-                  <div><label style={labelSt}>Comuna</label><input style={inputSt} value={f.comuna} onChange={set("comuna")} placeholder="Santiago" /></div>
-                </div>
-                <label style={labelSt}>Dirección</label><input style={inputSt} value={f.direccion} onChange={set("direccion")} placeholder="Av. Ejemplo 1234, of. 56" />
-                <label style={labelSt}>Email (opcional)</label><input style={inputSt} value={f.email} onChange={set("email")} placeholder="pagos@empresa.cl" />
-                <label style={labelSt}>Detalle</label><input style={inputSt} value={f.detalle} onChange={set("detalle")} placeholder="Asesoría mensual agosto" />
-                <label style={labelSt}>Valor total (con IVA si corresponde)</label><input style={inputSt} value={f.total} onChange={set("total")} placeholder="500.000" inputMode="numeric" />
-
-                <label style={labelSt}>Forma de pago</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {(["contado", "credito"] as const).map((fp) => (
-                    <button key={fp} type="button" onClick={() => setFormaPago(fp)}
-                      style={{ flex: 1, padding: "10px 12px", borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: "pointer", font: "inherit",
-                        border: formaPago === fp ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
-                        background: formaPago === fp ? "rgba(201,242,75,.08)" : "transparent",
-                        color: formaPago === fp ? "var(--lime)" : "var(--text2)" }}>
-                      {fp === "contado" ? "Contado" : "Crédito"}
-                    </button>
-                  ))}
-                </div>
-                {!formaPago && <div style={{ marginTop: 5, fontSize: 9.5, color: "var(--text3)" }}>Sin selección previa a propósito: tú decides cómo fue la operación.</div>}
-
-                <button onClick={emitir} disabled={!completo || enviando}
-                  style={{ width: "100%", marginTop: 16, border: 0, borderRadius: 10, padding: "12px 14px", background: completo && !enviando ? "#E8553E" : "var(--bg-muted)", color: completo && !enviando ? "#fff" : "var(--text3)", fontSize: 13, fontWeight: 800, cursor: completo && !enviando ? "pointer" : "not-allowed", font: "inherit" }}>
-                  {enviando ? "Emitiendo…" : "Emitir factura →"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </>
   );
 }
