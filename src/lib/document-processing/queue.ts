@@ -492,10 +492,11 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       ? job.metadata as Record<string, Json>
       : {};
 
-    // Mesa FACTURA: pipeline determinístico propio (plantilla → propuestas),
-    // sin IA ni clasificador. Va ANTES de extractContentFromJob a propósito:
-    // ese camino es el de cartolas y su barrera rechazaría la plantilla.
-    if (meta.mesa === "factura") {
+    // Mesa FACTURA por PLANTILLA: pipeline determinístico propio. Va ANTES de
+    // extractContentFromJob a propósito (la barrera de cartolas la rechazaría).
+    // Telegram queda FUERA: sus fotos de la mesa factura siguen por su propio
+    // camino (OCR → propuesta de factura incompleta que se termina en el Check).
+    if (meta.mesa === "factura" && meta.origen !== "telegram") {
       if (job.tipo !== "excel") throw new Error("La mesa Facturas solo recibe la plantilla Excel");
       const { data: docRow } = await sb.from("documentos_subidos").select("storage_provider").eq("id", job.documento_id).maybeSingle();
       const provider = docRow?.storage_provider === "r2" ? "r2" : "supabase";
@@ -528,7 +529,7 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       // Álbum (multi-imagen) → IA (el parser determinístico es de 1 comprobante y se
       // confunde con varios montos). Foto suelta vía cola → determinístico-primero.
       const esAlbum = Array.isArray(meta.grouped_images) && meta.grouped_images.length > 1;
-      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum });
+      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum, mesa: meta.mesa === "factura" ? "factura" : "boleta" });
       movimientosTotal = r.movimientos_total;
     } else {
       // Presupuesto de tiempo: si el modelo de turno es lento y no alcanza,

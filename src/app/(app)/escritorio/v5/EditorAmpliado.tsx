@@ -26,7 +26,12 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   onClose: (saved: boolean) => void;
 }) {
   const { toast } = useToast();
-  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; receptor_email?: string | null; receptor_telefono?: string | null; medio_pago?: string | null };
+  const extra = propuesta as unknown as { receptor_direccion?: string | null; receptor_comuna?: string | null; receptor_email?: string | null; receptor_telefono?: string | null; medio_pago?: string | null; receptor_giro?: string | null; mesa?: string | null };
+  // Propuesta de FACTURA: el receptor se completa ENTERO acá (decisión del
+  // fundador) — el bot de Telegram y las plantillas cojas dejan la factura
+  // "incompleta" y este editor es donde se termina. El Giro solo existe en
+  // facturas (la boleta no lo usa).
+  const esFactura = extra.mesa === "factura" || propuesta.tipo_propuesto === "factura_afecta" || propuesta.tipo_propuesto === "factura_exenta";
 
   // Tipo: lo decide PRIMERO la clasificación de la propuesta (tipo_dte persistido →
   // tipo_propuesto) y SOLO como desempate la sugerencia de la empresa. Un default de
@@ -53,6 +58,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const [comuna, setComuna] = useState<string>(extra.receptor_comuna ?? "");
   const [email, setEmail] = useState<string>(extra.receptor_email ?? "");
   const [telefono, setTelefono] = useState<string>(extra.receptor_telefono ?? "");
+  const [giro, setGiro] = useState<string>(extra.receptor_giro ?? "");
   const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
   const [busy, setBusy] = useState(false);
 
@@ -144,6 +150,7 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
       receptor_rut: rutTrim || null,
       receptor_nombre: razon.trim() || null,
       receptor_direccion: direccion.trim() || null,
+      ...(esFactura ? { receptor_giro: giro.trim() || null } : {}),
       receptor_comuna: comuna.trim() || null,
       receptor_email: email.trim() || null,
       receptor_telefono: telefono.trim() || null,
@@ -238,8 +245,12 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
                   {!rutValido && <div style={{ fontSize: 10, color: "var(--red)", marginTop: 3 }}>RUT no válido</div>}
                 </div>
                 <input value={razon} onChange={(e) => setRazon(e.target.value)} placeholder="Razón social / nombre" style={field} />
-                <input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={field} />
-                <input value={comuna} onChange={(e) => setComuna(e.target.value)} placeholder="Comuna (opcional)" style={field} />
+                {esFactura && <input value={giro} onChange={(e) => setGiro(e.target.value)} placeholder="Giro (obligatorio en factura)"
+                  style={{ ...field, borderColor: !giro.trim() ? "var(--amber)" : "var(--border)" }} />}
+                <input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder={esFactura ? "Dirección (obligatoria en factura)" : "Dirección (opcional)"}
+                  style={{ ...field, borderColor: esFactura && !direccion.trim() ? "var(--amber)" : "var(--border)" }} />
+                <input value={comuna} onChange={(e) => setComuna(e.target.value)} placeholder={esFactura ? "Comuna (obligatoria en factura)" : "Comuna (opcional)"}
+                  style={{ ...field, borderColor: esFactura && !comuna.trim() ? "var(--amber)" : "var(--border)" }} />
                 <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail (opcional)" type="email" style={field} />
                 <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono (opcional)" type="tel" style={field} />
               </div>
