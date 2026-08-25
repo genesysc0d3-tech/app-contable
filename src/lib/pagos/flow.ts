@@ -40,6 +40,7 @@ const BASES = {
 export type FlowAmbiente = keyof typeof BASES;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.massdte.cl";
+const UF_PERSONA_ADICIONAL = 0.2;
 
 export type FlowError = { ok: false; error: string; detalle?: string; codigo?: number };
 
@@ -536,4 +537,141 @@ export async function activarSuscripcionFlow(
  */
 export function ordenDeCobro(cuentaId: string, planCodigo: string, periodo: string): string {
   return `md-${cuentaId.slice(0, 8)}-${planCodigo}-${periodo}`;
+}
+
+// ──────────────────────── Extras: REFILL y persona adicional ─────────────────
+
+/**
+ * La orden de un REFILL. A diferencia de la suscripción (una por mes), acá se
+ * permiten VARIOS por período — lo que hay que impedir es el doble click. El
+ * correlativo lo resuelve: dos clicks simultáneos calculan el mismo número, la
+ * segunda orden choca en Flow (1605) y el cliente compra UNO. El refill
+ * siguiente, ya con la fila del primero en la base, calcula el correlativo que
+ * viene y pasa limpio.
+ */
+export function ordenDeRefill(cuentaId: string, periodo: string, correlativo: number): string {
+  return `md-rf-${cuentaId.slice(0, 8)}-${periodo}-${correlativo}`;
+}
+
+/**
+ * REFILL cobrado directo a la tarjeta inscrita — sin redirección: el precio ya
+ * está impreso en el botón que el usuario apretó, y la gracia de tener la
+ * tarjeta en archivo es exactamente esta.
+ *
+ * Regla heredada del carril MP: exige suscripción activa (las boletas y el
+ * precio del REFILL salen del plan vigente).
+ */
+export async function comprarRefillFlow(
+  cuentaId: string,
+  empresaId: string,
+): Promise<{ ok: true; boletas: number; montoClp: number } | FlowError> {
+  if (!flowConfigurado()) return { ok: false, error: "FLOW_NO_CONFIGURADO" };
+
+  const db = serviceDb();
+  const { data: suscripcion } = await db
+    .from("suscripciones")
+    .select("plan_codigo")
+    .eq("cuenta_id", cuentaId)
+    .eq("estado", "activa")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!suscripcion) {
+    return { ok: false, error: "SIN_SUSCRIPCION_ACTIVA", detalle: "El extra requiere una suscripción activa" };
+  }
+
+  const { data: plan } = await db
+    .from("planes_config")
+    .select("nombre, refill_boletas, refill_clp_neto")
+    .eq("codigo", suscripcion.plan_codigo)
+    .maybeSingle();
+  if (!plan) return { ok: false, error: "PLAN_INVALIDO", detalle: "El plan de la suscripción no existe" };
+
+  const montoClp = Math.round(plan.refill_clp_neto * 1.19);
+  const periodo = periodoActual();
+
+  const { count } = await db
+    .from("refills")
+    .select("id", { count: "exact", head: true })
+    .eq("cuenta_id", cuentaId)
+    .eq("periodo", periodo);
+  const correlativo = (count ?? 0) + 1;
+  const orden = ordenDeRefill(cuentaId, periodo, correlativo);
+
+  const cobro = await cobrarCuenta(cuentaId, {
+    montoClp,
+    concepto: `massDTE extra +${plan.refill_boletas} boletas`,
+    orden,
+  });
+  // YA_PAGADO acá = el cobro de ESTE correlativo pasó pero su fila no se
+  // escribió (doble click, o caída entre cobro e insert). Se sigue al insert:
+  // registrar lo cobrado es lo correcto; cobrar de nuevo sería el error.
+  if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") return cobro;
+
+  const { error: refillError } = await db.from("refills").insert({
+    cuenta_id: cuentaId,
+    empresa_id: empresaId,
+    periodo,
+    boletas: plan.refill_boletas,
+    origen: "flow",
+    proveedor_ref: orden,
+  });
+  if (refillError) return { ok: false, error: "DB_ERROR", detalle: refillError.message };
+
+  return { ok: true, boletas: plan.refill_boletas, montoClp };
+}
+
+/** Persona adicional (solo Business), cobrada directo a la tarjeta inscrita. */
+export async function comprarPersonaAdicionalFlow(
+  cuentaId: string,
+): Promise<{ ok: true; montoClp: number } | FlowError> {
+  if (!flowConfigurado()) return { ok: false, error: "FLOW_NO_CONFIGURADO" };
+
+  const db = serviceDb();
+  const { data: cuenta } = await db
+    .from("cuentas")
+    .select("plan_codigo, plan_activo")
+    .eq("id", cuentaId)
+    .maybeSingle();
+  const { data: plan } = cuenta?.plan_codigo
+    ? await db.from("planes_config").select("nombre, equipo").eq("codigo", cuenta.plan_codigo).maybeSingle()
+    : { data: null };
+  if (!cuenta?.plan_activo || plan?.equipo !== true) {
+    return { ok: false, error: "EQUIPO_NO_DISPONIBLE", detalle: "Personas adicionales están disponibles en Business" };
+  }
+
+  const uf = await getUfClp();
+  const montoClp = clpConIva(UF_PERSONA_ADICIONAL, uf);
+  const periodo = periodoActual();
+
+  // El intent en cuenta_addons va ANTES del cobro (mismo diseño que MP): su
+  // índice único por período es el freno al doble click, y si el cobro falla
+  // el intent se cancela para no dejar la compra trabada.
+  const { data: intent, error: intentError } = await db
+    .from("cuenta_addons")
+    .insert({ cuenta_id: cuentaId, tipo: "persona_adicional", cantidad: 1, periodo, estado: "pendiente", origen: "flow" })
+    .select("id")
+    .single();
+  if (intentError) {
+    if (intentError.code === "23505") {
+      return { ok: false, error: "ADDON_PENDIENTE", detalle: "Ya hay una compra de persona adicional pendiente" };
+    }
+    return { ok: false, error: "DB_ERROR", detalle: intentError.message };
+  }
+
+  const cobro = await cobrarCuenta(cuentaId, {
+    montoClp,
+    concepto: `massDTE persona adicional (${plan.nombre})`,
+    orden: `md-pa-${cuentaId.slice(0, 8)}-${intent.id.slice(0, 8)}`,
+  });
+  if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") {
+    await db.from("cuenta_addons").update({ estado: "cancelado" }).eq("id", intent.id).eq("estado", "pendiente");
+    return cobro;
+  }
+
+  await db
+    .from("cuenta_addons")
+    .update({ estado: "activo", proveedor_ref: `flow-${cuentaId.slice(0, 8)}-${intent.id.slice(0, 8)}` })
+    .eq("id", intent.id);
+  return { ok: true, montoClp };
 }
