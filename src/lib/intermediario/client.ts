@@ -80,7 +80,7 @@ export async function verificarCertificado(
  */
 export async function asegurarFoliosDisponibles(
   empresaId: string,
-  tipoDte: 39 | 41 | 61,
+  tipoDte: 33 | 34 | 39 | 41 | 61,
 ): Promise<{ ok: boolean; solicitado?: boolean; error?: string }> {
   const sb = serviceClient();
 
