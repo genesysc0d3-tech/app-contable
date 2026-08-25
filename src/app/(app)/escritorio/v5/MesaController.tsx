@@ -59,9 +59,12 @@ export default function MesaController({
       date: patch.date ?? mesa.selDate,
       month: patch.month ?? `${mesa.calendar.y}-${mesa.calendar.m}`,
       view: patch.view ?? mesa.workMode,
+      // La mesa activa (boleta|factura) sobrevive a toda navegación del
+      // calendario: perderla devolvería al usuario a boletas en silencio.
+      mesa: mesa.mesaActiva,
     };
     // URL sigue siendo la verdad (para refresh/compartir) — sin navegar.
-    window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}`);
+    window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}&mesa=${params.mesa}`);
     const key = keyOf(params.view, params.date, params.month);
     const cached = cacheRef.current.get(key);
     if (cached) { setMesa(cached); broadcastMesa(cached); return; }
@@ -76,7 +79,7 @@ export default function MesaController({
   // COMPLETA (aprobar/emitir también altera los contadores de otros rangos
   // visitados) y re-siembra solo el rango actual.
   const reloadMesa = useCallback((opts?: { silent?: boolean }) => {
-    const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode };
+    const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode, mesa: mesa.mesaActiva };
     const run = async () => {
       cacheRef.current.clear();
       const res = await cargarMesa(params);
