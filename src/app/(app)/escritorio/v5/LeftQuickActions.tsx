@@ -16,6 +16,60 @@ function todayStr() {
 
 type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
+/**
+ * Estilos del sparkle button + overlay de emisión única. Compartidos entre la
+ * boleta única y la factura única (misma tarjeta, mismo lenguaje visual) — el
+ * fundador pidió explícitamente que la factura única siga el estilo de la
+ * boleta única, y la forma de garantizarlo es que sea EL MISMO CSS.
+ */
+function SparkleFxStyles() {
+  return (
+    <style>{`
+        .ed-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
+        .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
+        @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
+        .sp{position:relative;z-index:0;width:100%;overflow:hidden}
+        .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:var(--lime);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
+        .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:#2f5a0d;outline:none}
+        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:var(--amber);cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
+        .sparkle-button:active{filter:brightness(.96);transition:.3s}
+        .sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .22);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
+        .spark{position:absolute;inset:0;border-radius:inherit;rotate:0deg;overflow:hidden;mask:linear-gradient(white,transparent 50%);animation:flip calc(var(--spark) * 2) infinite steps(2,end);pointer-events:none}
+        .spark:before{content:"";position:absolute;width:200%;aspect-ratio:1;top:0;left:50%;z-index:-1;translate:-50% -15%;transform:rotate(-90deg);opacity:calc(var(--active) + .4);background:conic-gradient(from 0deg,transparent 0 340deg,white 360deg);transition:opacity var(--transition);animation:rotate var(--spark) linear infinite both}
+        .spark:after{content:"";position:absolute;inset:var(--cut);border-radius:inherit}
+        .backdrop{position:absolute;inset:var(--cut);background:var(--bg);border-radius:inherit;transition:background var(--transition);pointer-events:none}
+        .sparkle-label{position:relative;z-index:1;display:flex;align-items:center;gap:10px;width:100%}
+        .sparkle-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:rgba(180,240,39,.12);color:currentColor;flex-shrink:0;transition:background var(--transition),color var(--transition)}
+        .sparkle-button:is(:hover,:focus-visible) .sparkle-icon{background:hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .22);color:#2f5a0d}
+        .sparkle-title{font-size:12px;font-weight:700;color:currentColor;transition:color var(--transition)}
+        .sparkle-subtitle{font-size:9px;color:var(--text2);margin-top:1px;transition:color var(--transition)}
+        .sparkle-button:is(:hover,:focus-visible) .sparkle-subtitle{color:rgba(47,90,13,.72)}
+        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:var(--amber)}
+        .receipt-sparkle{inline-size:1.38em;translate:-8% -3%;flex-shrink:0;position:relative;z-index:1;color:currentColor;overflow:visible}
+        .receipt-sparkle .receipt-paper{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;filter:drop-shadow(0 0 calc(var(--active) * 8px) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .7));transform-box:fill-box;transform-origin:center;transition:stroke var(--transition),filter var(--transition)}
+        .receipt-sparkle .receipt-line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;opacity:.7;transform-origin:left;transition:opacity var(--transition)}
+        .receipt-sparkle .receipt-dot{fill:currentColor;opacity:.65;transition:opacity var(--transition)}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-paper{animation:receipt-float .9s ease both}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-line{animation:receipt-scan .75s ease both;opacity:.95}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(3){animation-delay:.08s}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(4){animation-delay:.16s}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-dot{animation:receipt-pop .55s ease both;opacity:1}
+        .particle-pen{position:absolute;width:200%;aspect-ratio:1;top:50%;left:50%;translate:-50% -50%;-webkit-mask:radial-gradient(white,transparent 65%);z-index:-1;opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
+        .particle{fill:white;width:calc(var(--size,.25) * 1rem);aspect-ratio:1;position:absolute;top:calc(var(--y) * 1%);left:calc(var(--x) * 1%);opacity:var(--alpha,1);animation:float-out calc(var(--duration,1) * 1s) calc(var(--delay) * -1s) infinite linear;transform-origin:var(--origin-x,1000%) var(--origin-y,1000%);z-index:-1;animation-play-state:var(--play-state,paused)}
+        .particle path{fill:hsl(0 0% 90%);stroke:none}
+        .particle:nth-of-type(even){animation-direction:reverse}
+        .sparkle-button:is(:hover,:focus-visible)~.particle-pen{--active:1;--play-state:running}
+        @keyframes bounce{35%,65%{scale:var(--scale)}}
+        @keyframes receipt-float{0%,100%{translate:0 0;rotate:0deg}45%{translate:0 -2px;rotate:-4deg}72%{translate:0 1px;rotate:2deg}}
+        @keyframes receipt-scan{0%{scale:0 1;opacity:.2}70%,100%{scale:1 1;opacity:.95}}
+        @keyframes receipt-pop{0%{scale:.4;opacity:.2}60%{scale:1.35;opacity:1}100%{scale:1;opacity:1}}
+        @keyframes flip{to{rotate:360deg}}
+        @keyframes rotate{to{transform:rotate(90deg)}}
+        @keyframes float-out{to{rotate:360deg}}
+      `}</style>
+  );
+}
+
 export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
@@ -63,49 +117,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
 
   return (
     <>
-      <style>{`
-        .ed-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
-        .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
-        @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
-        .sp{position:relative;z-index:0;width:100%;overflow:hidden}
-        .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:var(--lime);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
-        .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:#2f5a0d;outline:none}
-        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:var(--amber);cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
-        .sparkle-button:active{filter:brightness(.96);transition:.3s}
-        .sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .22);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
-        .spark{position:absolute;inset:0;border-radius:inherit;rotate:0deg;overflow:hidden;mask:linear-gradient(white,transparent 50%);animation:flip calc(var(--spark) * 2) infinite steps(2,end);pointer-events:none}
-        .spark:before{content:"";position:absolute;width:200%;aspect-ratio:1;top:0;left:50%;z-index:-1;translate:-50% -15%;transform:rotate(-90deg);opacity:calc(var(--active) + .4);background:conic-gradient(from 0deg,transparent 0 340deg,white 360deg);transition:opacity var(--transition);animation:rotate var(--spark) linear infinite both}
-        .spark:after{content:"";position:absolute;inset:var(--cut);border-radius:inherit}
-        .backdrop{position:absolute;inset:var(--cut);background:var(--bg);border-radius:inherit;transition:background var(--transition);pointer-events:none}
-        .sparkle-label{position:relative;z-index:1;display:flex;align-items:center;gap:10px;width:100%}
-        .sparkle-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:rgba(180,240,39,.12);color:currentColor;flex-shrink:0;transition:background var(--transition),color var(--transition)}
-        .sparkle-button:is(:hover,:focus-visible) .sparkle-icon{background:hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .22);color:#2f5a0d}
-        .sparkle-title{font-size:12px;font-weight:700;color:currentColor;transition:color var(--transition)}
-        .sparkle-subtitle{font-size:9px;color:var(--text2);margin-top:1px;transition:color var(--transition)}
-        .sparkle-button:is(:hover,:focus-visible) .sparkle-subtitle{color:rgba(47,90,13,.72)}
-        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:var(--amber)}
-        .receipt-sparkle{inline-size:1.38em;translate:-8% -3%;flex-shrink:0;position:relative;z-index:1;color:currentColor;overflow:visible}
-        .receipt-sparkle .receipt-paper{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;filter:drop-shadow(0 0 calc(var(--active) * 8px) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .7));transform-box:fill-box;transform-origin:center;transition:stroke var(--transition),filter var(--transition)}
-        .receipt-sparkle .receipt-line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;opacity:.7;transform-origin:left;transition:opacity var(--transition)}
-        .receipt-sparkle .receipt-dot{fill:currentColor;opacity:.65;transition:opacity var(--transition)}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-paper{animation:receipt-float .9s ease both}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-line{animation:receipt-scan .75s ease both;opacity:.95}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(3){animation-delay:.08s}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(4){animation-delay:.16s}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-dot{animation:receipt-pop .55s ease both;opacity:1}
-        .particle-pen{position:absolute;width:200%;aspect-ratio:1;top:50%;left:50%;translate:-50% -50%;-webkit-mask:radial-gradient(white,transparent 65%);z-index:-1;opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
-        .particle{fill:white;width:calc(var(--size,.25) * 1rem);aspect-ratio:1;position:absolute;top:calc(var(--y) * 1%);left:calc(var(--x) * 1%);opacity:var(--alpha,1);animation:float-out calc(var(--duration,1) * 1s) calc(var(--delay) * -1s) infinite linear;transform-origin:var(--origin-x,1000%) var(--origin-y,1000%);z-index:-1;animation-play-state:var(--play-state,paused)}
-        .particle path{fill:hsl(0 0% 90%);stroke:none}
-        .particle:nth-of-type(even){animation-direction:reverse}
-        .sparkle-button:is(:hover,:focus-visible)~.particle-pen{--active:1;--play-state:running}
-        @keyframes bounce{35%,65%{scale:var(--scale)}}
-        @keyframes receipt-float{0%,100%{translate:0 0;rotate:0deg}45%{translate:0 -2px;rotate:-4deg}72%{translate:0 1px;rotate:2deg}}
-        @keyframes receipt-scan{0%{scale:0 1;opacity:.2}70%,100%{scale:1 1;opacity:.95}}
-        @keyframes receipt-pop{0%{scale:.4;opacity:.2}60%{scale:1.35;opacity:1}100%{scale:1;opacity:1}}
-        @keyframes flip{to{rotate:360deg}}
-        @keyframes rotate{to{transform:rotate(90deg)}}
-        @keyframes float-out{to{rotate:360deg}}
-      `}</style>
+      <SparkleFxStyles />
 
       <div className="sp">
         <button className="sparkle-button" onClick={openIfAvailable} disabled={lockedByOtherUser || Boolean(readOnlyReason)}>
@@ -595,20 +607,49 @@ export function FacturaUnicaAction({ readOnlyReason }: { readOnlyReason?: string
 
   return (
     <>
-      <button type="button" onClick={() => { if (!readOnlyReason) { setOpen(true); setFolioListo(null); } }} disabled={Boolean(readOnlyReason)}
-        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 16px", border: 0, background: "transparent", color: "var(--text)", cursor: readOnlyReason ? "default" : "pointer", textAlign: "left", font: "inherit" }}>
-        <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(201,242,75,.1)", color: "var(--lime)", flexShrink: 0 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+      <SparkleFxStyles />
+      <div className="sp">
+        <button className="sparkle-button" onClick={() => { if (!readOnlyReason) { setOpen(true); setFolioListo(null); } }} disabled={Boolean(readOnlyReason)}>
+          <span className="spark" />
+          <span className="backdrop" />
+          <span className="sparkle-label">
+            <span className="sparkle-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="sparkle-title">EMITIR FACTURA ÚNICA</span>
+              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? "Factura manual, una a la vez"}</span>
+            </span>
+            <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
+              <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
+              <path className="receipt-line" d="M9 8h6" />
+              <path className="receipt-line" d="M9 11.5h5" />
+              <path className="receipt-line" d="M9 15h3.5" />
+              <circle className="receipt-dot" cx="15.7" cy="15" r="1" />
+            </svg>
+          </span>
+        </button>
+        <span className="particle-pen" aria-hidden="true">
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <svg key={i} className="particle" viewBox="0 0 15 15"
+              style={{
+                ["--x" as string]: [18, 34, 52, 70, 82, 24, 62, 42][i],
+                ["--y" as string]: [28, 70, 18, 64, 36, 48, 82, 10][i],
+                ["--size" as string]: [0.28, 0.18, 0.32, 0.2, 0.24, 0.16, 0.26, 0.22][i],
+                ["--duration" as string]: [1.7, 2.3, 1.9, 2.6, 2.1, 1.6, 2.4, 1.8][i],
+                ["--delay" as string]: [0.1, 0.35, 0.2, 0.55, 0.75, 0.42, 0.62, 0.28][i],
+                ["--origin-x" as string]: `${[900, 700, 1200, 800, 1000, 600, 1100, 750][i]}%`,
+                ["--origin-y" as string]: `${[800, 1100, 700, 900, 650, 1000, 850, 1200][i]}%`,
+              } as React.CSSProperties}>
+              <path d="M7.5 0l2 5.5L15 7.5l-5.5 2L7.5 15l-2-5.5L0 7.5l5.5-2L7.5 0z" />
+            </svg>
+          ))}
         </span>
-        <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, letterSpacing: ".02em", color: "var(--lime)" }}>EMITIR FACTURA ÚNICA</span>
-          <span style={{ display: "block", fontSize: 10, color: "var(--text2)", marginTop: 1 }}>{readOnlyReason ?? "Factura manual, una a la vez"}</span>
-        </span>
-      </button>
+      </div>
 
       {open && (
-        <div className="md-overlay" onClick={() => { if (!enviando) setOpen(false); }}>
-          <div className="md-panel" style={{ width: "min(560px, 94vw)", maxHeight: "92vh" }} onClick={(e) => e.stopPropagation()}>
+        <div className="ed-overlay" onClick={() => { if (!enviando) setOpen(false); }}>
+          <div className="ed-panel" style={{ width: "min(560px, 94vw)", maxHeight: "92vh", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
               <button aria-label="Cerrar" onClick={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 16 }}>×</button>
               <div>
