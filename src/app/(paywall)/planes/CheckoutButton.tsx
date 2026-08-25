@@ -61,11 +61,23 @@ export default function CheckoutButton({
         body: JSON.stringify(tipo === "plan" ? { tipo, plan } : { tipo }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; url?: string; error?: string; detalle?: string }
+        | { ok?: boolean; url?: string; cobrado?: boolean; error?: string; detalle?: string }
         | null;
       if (res.ok && data?.ok && data.url) {
         window.location.href = data.url;
         return; // mantiene "Abriendo…" mientras navega
+      }
+      if (res.ok && data?.ok && data.cobrado) {
+        // Cobro directo a la tarjeta inscrita: no hay pasarela a la que ir.
+        // Recarga para que la página muestre la cuota/el extra ya aplicado.
+        setMensaje("¡Listo! Cobrado a tu tarjeta registrada.");
+        setTimeout(() => window.location.reload(), 1400);
+        return;
+      }
+      if (data?.error === "SIN_TARJETA") {
+        setMensaje("No tienes una tarjeta registrada — contrata o renueva tu plan primero.");
+        setCargando(false);
+        return;
       }
       if (res.status === 503 || data?.error === "MP_NO_CONFIGURADO") {
         // TODO: cablear correo de soporte cuando exista la casilla (AlphaCode SpA).

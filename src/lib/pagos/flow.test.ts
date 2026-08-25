@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro } from "./flow";
+import { firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro, ordenDeRefill } from "./flow";
 
 // La firma es la pieza que hay que poder probar sola: si está mal, TODA llamada
 // a Flow falla con el mismo error genérico y no se distingue de una llave
@@ -145,5 +145,24 @@ describe("ordenDeCobro — el candado anti-doble-cobro", () => {
     const orden = ordenDeCobro(cuenta, "pro", "2026-09");
     expect(orden.length).toBeLessThanOrEqual(45);
     expect(orden).toMatch(/^[a-z0-9-]+$/);
+  });
+});
+
+// A diferencia de la suscripción (una por mes), los refills se permiten varios
+// por período: el correlativo separa compras legítimas y a la vez convierte el
+// doble click en la MISMA orden, que Flow rebota.
+describe("ordenDeRefill — varios por mes, pero no por doble click", () => {
+  const cuenta = "a1b2c3d4-0000-0000-0000-000000000000";
+
+  it("el mismo correlativo da la misma orden (doble click → rebote en Flow)", () => {
+    expect(ordenDeRefill(cuenta, "2026-09", 1)).toBe(ordenDeRefill(cuenta, "2026-09", 1));
+  });
+
+  it("el correlativo siguiente da otra orden (el 2º refill del mes SÍ se cobra)", () => {
+    expect(ordenDeRefill(cuenta, "2026-09", 1)).not.toBe(ordenDeRefill(cuenta, "2026-09", 2));
+  });
+
+  it("no choca con la orden de la suscripción del mismo mes", () => {
+    expect(ordenDeRefill(cuenta, "2026-09", 1)).not.toBe(ordenDeCobro(cuenta, "start", "2026-09"));
   });
 });

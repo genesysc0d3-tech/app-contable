@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { crearPersonaAdicionalCuenta, crearRefillCuenta, crearSuscripcion } from "@/lib/pagos/mercadopago";
-import { crearSuscripcionFlow, flowConfigurado } from "@/lib/pagos/flow";
+import { comprarPersonaAdicionalFlow, comprarRefillFlow, crearSuscripcionFlow, flowConfigurado } from "@/lib/pagos/flow";
 import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
@@ -82,7 +82,11 @@ export async function POST(request: Request) {
         ? await crearSuscripcionFlow(cuenta.cuentaId, usuario.empresa_id, plan, user.email ?? "", String(nombrePagador))
         : await crearSuscripcion(cuenta.cuentaId, usuario.empresa_id, plan, user.email ?? "");
     } else if (body.tipo === "refill") {
-      result = await crearRefillCuenta(cuenta.cuentaId, usuario.empresa_id);
+      // Con la tarjeta inscrita en Flow el extra se cobra AL TIRO, sin
+      // redirección: el precio ya está impreso en el botón que apretó.
+      result = flowConfigurado()
+        ? await comprarRefillFlow(cuenta.cuentaId, usuario.empresa_id)
+        : await crearRefillCuenta(cuenta.cuentaId, usuario.empresa_id);
     } else if (body.tipo === "persona_adicional") {
       const [{ data: cuentaRow }, { data: membresia }] = await Promise.all([
         supabase.from("cuentas").select("owner_usuario_id").eq("id", cuenta.cuentaId).maybeSingle(),
@@ -94,7 +98,9 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
-      result = await crearPersonaAdicionalCuenta(cuenta.cuentaId, usuario.empresa_id);
+      result = flowConfigurado()
+        ? await comprarPersonaAdicionalFlow(cuenta.cuentaId)
+        : await crearPersonaAdicionalCuenta(cuenta.cuentaId, usuario.empresa_id);
     } else {
       return NextResponse.json(
         { ok: false, error: "TIPO_INVALIDO", detalle: "tipo debe ser 'plan', 'refill' o 'persona_adicional'" },
@@ -111,11 +117,14 @@ export async function POST(request: Request) {
       }
       const status =
         result.error === "PLAN_INVALIDO" ? 400 :
-        result.error === "SIN_SUSCRIPCION_ACTIVA" || result.error === "ADDON_PENDIENTE" || result.error === "EQUIPO_NO_DISPONIBLE" ? 409 : 502;
+        result.error === "SIN_SUSCRIPCION_ACTIVA" || result.error === "ADDON_PENDIENTE" || result.error === "EQUIPO_NO_DISPONIBLE" || result.error === "SIN_TARJETA" ? 409 : 502;
       return NextResponse.json({ ok: false, error: result.error, detalle: result.detalle }, { status });
     }
 
-    return NextResponse.json({ ok: true, url: result.url });
+    // Dos formas de éxito: redirección a pasarela (url) o cobro directo a la
+    // tarjeta inscrita (cobrado) — el botón distingue por el campo.
+    if ("url" in result) return NextResponse.json({ ok: true, url: result.url });
+    return NextResponse.json({ ok: true, cobrado: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[pagos/checkout]", msg);
