@@ -78,7 +78,7 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 | **MercadoPago** | Production ON, webhook verificado en `app.massdte.cl/api/pagos/webhook`; **queda de respaldo** (checkout usa Flow si está configurado) | env `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`. **Rechaza débito y prepago para recurrencia** → no sirve como carril principal |
 | **MercadoPago Empresas** | Cuenta de depósito de AlphaCode SpA | es el destino configurado en Reveniu |
 | **Global66 Enterprise** | Cuenta de empresa | alternativa de depósito |
-| **Reveniu** | DESCARTADA 2026-08-24 | sandbox roto (login `origin_mismatch`, sin correo de confirmación, sin acceso a la API key). Regla aplicada: si no se puede probar, no se construye. ⚠️ Su llave de PRODUCCIÓN quedó expuesta en la config → rotarla o cerrar la cuenta |
+| **Reveniu** | MUERTA 2026-08-24 (decisión del fundador: "solo Flow") | sandbox roto; no re-proponer. La llave expuesta quedó como deuda consciente del fundador |
 | **Transbank** | Afiliación iniciada | contacto técnico Osvaldo Cuellar |
 
 ---
