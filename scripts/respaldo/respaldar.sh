@@ -16,6 +16,12 @@ DEST="$HOME/Respaldos/massdte"
 LOG="$HOME/.massdte-respaldo/respaldo.log"
 LOCK="$HOME/.massdte-respaldo/.corriendo"
 PGBIN="/opt/homebrew/opt/postgresql@17/bin"
+# Instancia PROPIA de Postgres 17 solo para verificar, en un puerto aparte: no
+# toca el postgresql@16 del equipo (que ocupa el 5432 y se usa para otras cosas),
+# y la levanta el propio guión — así no depende de launchd ni de que alguien
+# haya iniciado sesión después de un reinicio.
+VERIFDIR="$HOME/.massdte-respaldo/pg17"
+VERIFPORT=5433
 RETENCION_DIAS=14
 # Tablas cuyo conteo debe coincidir entre el origen y la restauración.
 TABLAS_TESTIGO="propuestas_ia movimientos_raw documentos_subidos clasificacion_reglas empresas usuarios"
@@ -38,7 +44,7 @@ morir(){
 
 limpiar(){
   [ -n "$TMPSQL" ] && rm -f "$TMPSQL"
-  "$PGBIN/dropdb" --if-exists "$DBTMP" 2>/dev/null
+  "$PGBIN/dropdb" -h 127.0.0.1 -p "${VERIFPORT:-5433}" --if-exists "$DBTMP" 2>/dev/null
   rm -f "$LOCK"
 }
 
@@ -68,6 +74,29 @@ avisar(){
   fi
 }
 
+# Levanta (o crea) la instancia de verificación. Idempotente.
+asegurar_postgres_verificacion(){
+  if "$PGBIN/pg_isready" -h 127.0.0.1 -p "$VERIFPORT" -q 2>/dev/null; then return 0; fi
+  if [ ! -f "$VERIFDIR/PG_VERSION" ]; then
+    log "creando la instancia de verificación en $VERIFDIR"
+    # LC_ALL=C y --no-locale: la sesión remota llega con una configuración
+    # regional que initdb no reconoce, y sin esto se niega a crear el cluster.
+    LC_ALL=C "$PGBIN/initdb" -D "$VERIFDIR" -U "$(whoami)" \
+      --no-locale --encoding=UTF8 >>"$LOG" 2>&1 || return 1
+  fi
+  # LC_ALL=C también AL ARRANCAR, no solo al crear: con una regional inválida
+  # macOS vuelve multihilo al postmaster y Postgres se niega a partir
+  # ("postmaster became multithreaded during startup").
+  LC_ALL=C LANG=C "$PGBIN/pg_ctl" -D "$VERIFDIR" \
+    -o "-p $VERIFPORT -k $VERIFDIR -c listen_addresses=127.0.0.1" \
+    -l "$VERIFDIR/servidor.log" start >>"$LOG" 2>&1 || return 1
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    "$PGBIN/pg_isready" -h 127.0.0.1 -p "$VERIFPORT" -q 2>/dev/null && return 0
+    sleep 1
+  done
+  return 1
+}
+
 # ── arranque ───────────────────────────────────────────────────────────────
 [ -f "$CONF" ] || { echo "sin config en $CONF"; exit 1; }
 # shellcheck disable=SC1090
@@ -95,18 +124,19 @@ TMPSQL=$(mktemp "/tmp/massdte-dump.XXXXXX.sql")
 log "volcado: $(du -h "$TMPSQL" | cut -f1)"
 
 # ── 2. verificar restaurando de verdad ─────────────────────────────────────
-"$PGBIN/createdb" "$DBTMP" 2>>"$LOG" || morir "no pude crear la base de verificación (¿está corriendo postgresql@17?)"
+asegurar_postgres_verificacion || morir "no pude levantar el Postgres 17 de verificación"
+"$PGBIN/createdb" -h 127.0.0.1 -p "$VERIFPORT" "$DBTMP" 2>>"$LOG" || morir "no pude crear la base de verificación"
 # Restaurar contra un Postgres que no es Supabase escupe errores ESPERADOS
 # (sus roles no existen acá, y 17.11 no conoce parámetros de 17.6). Se filtran
 # para que un error DE VERDAD no se pierda entre el ruido conocido.
-"$PGBIN/psql" -q -d "$DBTMP" -v ON_ERROR_STOP=0 -f "$TMPSQL" 2>&1 >/dev/null \
+"$PGBIN/psql" -q -h 127.0.0.1 -p "$VERIFPORT" -d "$DBTMP" -v ON_ERROR_STOP=0 -f "$TMPSQL" 2>&1 >/dev/null \
   | grep -vE 'unrecognized configuration parameter|schema "public" already exists|role "(authenticated|anon|service_role|supabase[a-z_]*|postgres)" does not exist|no privileges (were|could be) granted' \
   >> "$LOG"
 
 desajustes=""
 for t in $TABLAS_TESTIGO; do
   origen=$("$PGBIN/psql" "$PGURL" -tAc "select count(*) from public.$t" 2>/dev/null || echo "x")
-  copia=$("$PGBIN/psql" -d "$DBTMP" -tAc "select count(*) from public.$t" 2>/dev/null || echo "x")
+  copia=$("$PGBIN/psql" -h 127.0.0.1 -p "$VERIFPORT" -d "$DBTMP" -tAc "select count(*) from public.$t" 2>/dev/null || echo "x")
   if [ "$origen" != "$copia" ]; then
     desajustes="$desajustes $t(origen=$origen restaurado=$copia)"
   else
