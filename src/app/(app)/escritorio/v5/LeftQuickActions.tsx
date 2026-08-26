@@ -92,7 +92,7 @@ function SparkleFxStyles() {
   );
 }
 
-export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason, mesa = "boleta" }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string; mesa?: "boleta" | "factura" }) {
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason, mesa = "boleta" }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "sii_local" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string; mesa?: "boleta" | "factura" }) {
   const esFacturas = mesa === "factura";
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";

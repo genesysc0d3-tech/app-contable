@@ -309,7 +309,7 @@ export default function EmissionProviderConfig({
         {/* Facturas 33/34 DESACTIVADO para clientes (decisión founder 2026-07-04:
             el carril existe pero no está pulido — no se ofrece hasta pulirlo).
             Solo visible con dev_mode; NO borrar. */}
-        {devMode && <ProviderGroup title="Facturas" code="DTE 33/34" subtitle="Recomendado: SimpleAPI con certificado y CAF de facturas.">
+        {devMode && <ProviderGroup title="Facturas" code="DTE 33/34" subtitle="SII Local usa el portal gratuito del SII (la misma extensión de boletas).">
           {showMockFacturas && (
             <ProviderButton
               active={state.facturasProveedor === "mock"}
@@ -319,6 +319,14 @@ export default function EmissionProviderConfig({
               onClick={() => selectFacturas("mock")}
             />
           )}
+          <ProviderButton
+            active={state.facturasProveedor === "sii_local"}
+            title="SII Local (portal gratuito)"
+            description="Emite facturas 33/34 en el Sistema de Facturación Gratuito del SII, en la ventana segura de la extensión. Necesita la clave del certificado en la extensión."
+            disabled={pending}
+            confirming={confirmReal?.grupo === "facturas" && confirmReal.proveedor === "sii_local"}
+            onClick={() => selectFacturas("sii_local")}
+          />
           <ProviderButton
             active={state.facturasProveedor === "simpleapi"}
             title="SimpleAPI"

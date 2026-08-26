@@ -307,7 +307,7 @@ const RESET_SAFE_STATUSES = new Set([
   "retrying",
 ]);
 
-export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, mesaFactura = false, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; mesaFactura?: boolean; onClose?: (saved?: boolean) => void }) {
+export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, mesaFactura = false, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "sii_local" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; mesaFactura?: boolean; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   // Modo FACTURA ÚNICA (mesa Facturas): misma vista y mismo lenguaje —
