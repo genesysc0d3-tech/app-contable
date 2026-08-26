@@ -29,9 +29,12 @@ interface SiiLocalResultPayload {
     receptor?: {
       rut?: string | null;
       razon_social?: string | null;
+      giro?: string | null;
       direccion?: string | null;
       comuna?: string | null;
     } | null;
+    /** Facturas (33/34): forma de pago que quedó en el documento. */
+    forma_pago?: string | null;
     detalles?: Array<{ nombre?: string; cantidad?: number; monto_total?: number; monto?: number }>;
     totales?: {
       monto_total?: number | null;
@@ -236,8 +239,13 @@ function isAllowedSiiPdfUrl(value: string) {
   }
 }
 
+function esFactura(tipoDte: number) {
+  return tipoDte === 33 || tipoDte === 34;
+}
+
 function storagePathFor(args: { empresaId: string; tipoDte: number; folio: number }) {
-  return `${args.empresaId}/boletas-sii-local/${args.tipoDte}-${args.folio}.pdf`;
+  const carpeta = esFactura(args.tipoDte) ? "facturas-sii-local" : "boletas-sii-local";
+  return `${args.empresaId}/${carpeta}/${args.tipoDte}-${args.folio}.pdf`;
 }
 
 function validatePdfBuffer(buffer: Buffer) {
@@ -287,7 +295,7 @@ async function uploadExtensionPdf(
   const upload = await uploadPdfBuffer(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, buffer });
   return {
     ...upload,
-    filename: cleanText(args.pdf.filename) ?? `boleta-sii-${args.tipoDte}-${args.folio}.pdf`,
+    filename: cleanText(args.pdf.filename) ?? `${esFactura(args.tipoDte) ? "factura" : "boleta"}-sii-${args.tipoDte}-${args.folio}.pdf`,
     sourceUrl: sanitizeUrlForMetadata(cleanText(args.pdf.source_url)),
   };
 }
@@ -305,7 +313,7 @@ async function uploadSiiPdf(
   if (!contentType.toLowerCase().includes("pdf")) return { storagePath: null, error: "PDF_INVALID_CONTENT_TYPE", filename: null, sourceUrl: null };
 
   const upload = await uploadPdfBuffer(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, buffer });
-  return { ...upload, filename: `boleta-sii-${args.tipoDte}-${args.folio}.pdf`, sourceUrl: sanitizeUrlForMetadata(args.pdfUrl) };
+  return { ...upload, filename: `${esFactura(args.tipoDte) ? "factura" : "boleta"}-sii-${args.tipoDte}-${args.folio}.pdf`, sourceUrl: sanitizeUrlForMetadata(args.pdfUrl) };
 }
 
 async function uploadResultPdf(
@@ -326,9 +334,9 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
   const montoNeto = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { monto_neto?: unknown }).monto_neto : null);
   const iva = positiveInt(payloadTotals && typeof payloadTotals === "object" ? (payloadTotals as { iva?: unknown }).iva : null);
 
-  // Exenta: todo el total es exento (no hay neto/iva). El monto_exento del cliente se
-  // ignora — para una 41 siempre es el total.
-  if (tipoDte === 41) {
+  // Exenta (boleta 41 / factura 34): todo el total es exento (no hay neto/iva).
+  // El monto_exento del cliente se ignora — siempre es el total.
+  if (tipoDte === 41 || tipoDte === 34) {
     return { monto_neto: 0, iva: 0, monto_exento: total };
   }
 
@@ -370,7 +378,7 @@ async function backfillFolioSinJobVivo(
   sb: ServiceDb,
   args: {
     empresaId: string;
-    tipoDte: 39 | 41;
+    tipoDte: 33 | 34 | 39 | 41;
     folio: number;
     montoTotal: number;
     fechaEmision: string;
@@ -525,7 +533,10 @@ export async function POST(request: Request) {
   }
   const pdfInfo = extractSiiPdfInfo(result);
   const folio = positiveInt(result?.folio) ?? pdfInfo?.folio ?? null;
-  const tipoDte = result?.tipo_dte === 39 || result?.tipo_dte === 41 ? result.tipo_dte : null;
+  const tipoDte =
+    result?.tipo_dte === 39 || result?.tipo_dte === 41 || result?.tipo_dte === 33 || result?.tipo_dte === 34
+      ? result.tipo_dte
+      : null;
   const montoTotal = positiveInt(result?.monto_total ?? result?.totales?.monto_total);
   const fechaEmision = chileDate(result?.fecha_emision);
 
@@ -702,7 +713,7 @@ export async function POST(request: Request) {
             ...previousResponse,
             pdf: {
               storage_path: pdfUpload.storagePath,
-              filename: pdfUpload.filename ?? `boleta-sii-${tipoDte}-${folio}.pdf`,
+              filename: pdfUpload.filename ?? `${esFactura(tipoDte) ? "factura" : "boleta"}-sii-${tipoDte}-${folio}.pdf`,
               content_type: "application/pdf",
               source_url: pdfUpload.sourceUrl,
               provider: pdfUpload.provider,
@@ -785,7 +796,7 @@ export async function POST(request: Request) {
     folio_evidence: result?.folio_evidence ?? (pdfInfo?.folio ? { source: "sii_pdf_url", matched_text: `folio${pdfInfo.folio}` } : null),
     pdf: pdfUpload.storagePath ? {
       storage_path: pdfUpload.storagePath,
-      filename: pdfUpload.filename ?? `boleta-sii-${tipoDte}-${folio}.pdf`,
+      filename: pdfUpload.filename ?? `${esFactura(tipoDte) ? "factura" : "boleta"}-sii-${tipoDte}-${folio}.pdf`,
       content_type: "application/pdf",
       source_url: pdfUpload.sourceUrl,
       provider: pdfUpload.provider,
@@ -817,8 +828,11 @@ export async function POST(request: Request) {
     emisor_comuna: empresa.comuna,
     receptor_rut: cleanText(receptor?.rut),
     receptor_razon_social: cleanText(receptor?.razon_social),
+    receptor_giro: cleanText(receptor?.giro),
     receptor_direccion: cleanText(receptor?.direccion),
     receptor_comuna: cleanText(receptor?.comuna),
+    // Facturas: la forma de pago que quedó en el documento (Contado/Crédito).
+    medio_pago: cleanText(result?.forma_pago),
     monto_neto: totals.monto_neto,
     monto_exento: totals.monto_exento,
     iva: totals.iva,

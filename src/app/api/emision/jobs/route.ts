@@ -19,7 +19,10 @@ type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled" | "revision_pendiente";
 type ServiceDb = SupabaseClient<Database>;
 
-const TIPOS_SII_LOCAL = new Set([39, 41]);
+// sii_local emite boletas (39/41, e-Boleta) y facturas (33/34, Sistema de
+// Facturación Gratuito). Para facturas además rige providerForTipoDte: solo
+// pasan si la empresa tiene facturas_emision_proveedor = 'sii_local'.
+const TIPOS_SII_LOCAL = new Set([33, 34, 39, 41]);
 const TIPOS_SIMPLEAPI = new Set([33, 34, 39, 41]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -313,11 +316,11 @@ export async function POST(request: Request) {
     }
   }
 
-  // GUARD TRIBUTARIO — un emisor exento no puede emitir afecta (39). Fail-closed:
-  // rechaza y enruta a Check (NO normaliza en silencio: en el carril real la UI
-  // mostraría "Afecta" mientras emite 41 → descuadre). El mock sí normaliza (arma
-  // todo el payload, es seguro allá).
-  const guardTipo = guardTipoDteEmisor(tipoDte as 39 | 41, empresa?.tipo_contribuyente ?? null);
+  // GUARD TRIBUTARIO — un emisor exento no puede emitir afecta (boleta 39 ni
+  // factura 33). Fail-closed: rechaza y enruta a Check (NO normaliza en
+  // silencio: en el carril real la UI mostraría "Afecta" mientras emite exenta
+  // → descuadre). El mock sí normaliza (arma todo el payload, es seguro allá).
+  const guardTipo = guardTipoDteEmisor(tipoDte as 33 | 34 | 39 | 41, empresa?.tipo_contribuyente ?? null);
   if (!guardTipo.ok) {
     return NextResponse.json(
       { ok: false, error: guardTipo.code, detalle: "Tu empresa es exenta: esta venta no puede emitirse como afecta (con IVA). Cámbiala a exenta en Revisar." },
