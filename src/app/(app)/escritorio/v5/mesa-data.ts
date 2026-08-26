@@ -139,7 +139,7 @@ export async function fetchMesaDateDependent(
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr),
-    supabase.from("empresas").select("boletas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
+    supabase.from("empresas").select("boletas_emision_proveedor,facturas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd),
   ]);
   // Desborde del tope de propuestas: total real del rango vs lo servido.
@@ -179,9 +179,13 @@ export async function fetchMesaDateDependent(
   const boletasTotal = boletasCountRes.count ?? boletasRango.length;
   // Proveedor de boletas de la empresa (misma normalización que obtenerConfigEmision):
   // viaja al tab Emitir para que la UI no prometa un carril masivo que aún no existe.
-  const provData = (empresaProvRes.data ?? null) as { boletas_emision_proveedor?: string | null; emision_proveedor?: string | null } | null;
+  const provData = (empresaProvRes.data ?? null) as { boletas_emision_proveedor?: string | null; facturas_emision_proveedor?: string | null; emision_proveedor?: string | null } | null;
   const provRaw = provData?.boletas_emision_proveedor ?? provData?.emision_proveedor;
   const boletasProveedor: "mock" | "sii_local" | "simpleapi" = provRaw === "sii_local" || provRaw === "simpleapi" ? provRaw : "mock";
+  // Carril de facturas por empresa (mismo criterio que providerForTipoDte): el tab
+  // Emitir de la mesa FA decide con esto si abre el motor real o el mock.
+  const factRaw = provData?.facturas_emision_proveedor;
+  const facturasProveedor: "mock" | "sii_local" | "simpleapi" = factRaw === "sii_local" || factRaw === "simpleapi" ? factRaw : "mock";
   const docsBase = (docsData.data ?? []) as DocRow[];
   const boletasComoAgregados = boletas
     .filter((boleta) => !docsBase.some((doc) => (doc.progreso_ia as { boleta_id?: string } | null)?.boleta_id === boleta.id))
@@ -268,6 +272,7 @@ export async function fetchMesaDateDependent(
     // Va dentro de totales porque Mesa.tsx arma el payload del tab Emitir solo con
     // items/totales/aprobadas_otros_tipos — así llega sin tocar ese componente.
     boletas_proveedor: boletasProveedor,
+    facturas_proveedor: facturasProveedor,
   };
 
   // Guardarraíl de emisión: pendientes por MES DE VENTA (agnóstico al rango visible).

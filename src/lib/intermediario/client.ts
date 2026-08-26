@@ -137,7 +137,7 @@ export interface EnvioResultado {
 }
 
 export type ProveedorBoletas = "mock" | "sii_local" | "simpleapi";
-export type ProveedorFacturas = "mock" | "simpleapi";
+export type ProveedorFacturas = "mock" | "sii_local" | "simpleapi";
 export type ProveedorEmision = ProveedorBoletas | ProveedorFacturas;
 
 export interface ConfigEmision {
@@ -155,6 +155,9 @@ function normalizeBoletasProvider(raw: string | null | undefined): ProveedorBole
 }
 
 function normalizeFacturasProvider(raw: string | null | undefined): ProveedorFacturas {
+  // Carril real de facturas: la extensión en el Sistema de Facturación
+  // Gratuito del SII (mismo motor local que boletas).
+  if (raw === "sii_local") return "sii_local";
   if (raw === "simpleapi") return "simpleapi";
   return "mock";
 }

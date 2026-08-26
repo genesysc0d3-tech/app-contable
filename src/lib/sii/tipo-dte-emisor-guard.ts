@@ -15,16 +15,18 @@ export type TipoDteEmisorGuard =
   | { ok: false; code: "EMISOR_EXENTO_NO_AFECTA" };
 
 /**
- * Rechaza SOLO la combinación imposible: emisor exento + boleta afecta (39).
- * `tipoContribuyente` normaliza a minúsculas; solo el literal "exento" bloquea.
- * 'auto' / 'afecto' / null pasan (auto NO implica exento — la app es amplia).
+ * Rechaza SOLO las combinaciones imposibles: emisor exento + documento AFECTO
+ * (boleta 39 o factura 33 — ambos generan débito fiscal que un exento no puede
+ * cobrar). `tipoContribuyente` normaliza a minúsculas; solo el literal "exento"
+ * bloquea. 'auto' / 'afecto' / null pasan (auto NO implica exento — la app es
+ * amplia). Los tipos exentos (41, 34) pasan siempre.
  */
 export function guardTipoDteEmisor(
-  tipoDte: 39 | 41,
+  tipoDte: 33 | 34 | 39 | 41,
   tipoContribuyente: string | null | undefined,
 ): TipoDteEmisorGuard {
   const esExento = (tipoContribuyente ?? "").trim().toLowerCase() === "exento";
-  if (esExento && tipoDte === 39) {
+  if (esExento && (tipoDte === 39 || tipoDte === 33)) {
     return { ok: false, code: "EMISOR_EXENTO_NO_AFECTA" };
   }
   return { ok: true };

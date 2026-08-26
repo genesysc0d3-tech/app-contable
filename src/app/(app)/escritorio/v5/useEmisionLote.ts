@@ -17,6 +17,7 @@ import {
   type MotivoPausa,
 } from "@/lib/emission/lote-runner";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
+import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
 export interface ItemLoteEmision extends ItemLote {
@@ -27,6 +28,11 @@ export interface ItemLoteEmision extends ItemLote {
   receptorEmail?: string | null;
   receptorTelefono?: string | null;
   medioPago?: string | null;
+  // ——— Solo facturas (33/34) ———
+  receptorGiro?: string | null;
+  receptorCiudad?: string | null;
+  /** Obligatoria en facturas (espec Matías: sin default, el usuario la elige). */
+  formaPago?: "contado" | "credito" | null;
   /** Glosa segura (nunca datos de terceros — el caller lo garantiza). */
   detalle: string;
   fechaEmision: string; // "YYYY-MM-DD" en zona Chile
@@ -196,27 +202,65 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         const job = await startJob(full.propuestaId, full.tipoDte);
         if (!job) return { estado: "fallida", motivo: "No se pudo iniciar (autorización, otra emisión en curso, o permiso)." };
 
-        // 2. MISMO payload que boleta única (fuente única) — desde la propuesta.
-        const boleta = buildBoletaJob({
-          empresaId,
-          emisorRut: job.emisorRut ?? empresaRut ?? undefined,
-          tipoDte: full.tipoDte,
-          monto: full.monto,
-          fechaEmision: full.fechaEmision,
-          receptor: {
-            rut: full.receptorRut,
-            razonSocial: full.receptorNombre,
-            direccion: full.receptorDireccion,
-            comuna: full.receptorComuna,
-            email: full.receptorEmail,
-            telefono: full.receptorTelefono,
-          },
-          detalle: full.detalle,
-          medioPago: full.medioPago,
-          logoutAfter: false, // lote: deja la sesión SII abierta para encadenar
-          jobId: job.jobId,
-          expiresAt: job.expiresAt,
-        });
+        // 2. MISMO payload que la emisión única (fuente única) — desde la propuesta.
+        //    Boleta (39/41) → e-Boleta; factura (33/34) → portal gratuito, con su
+        //    propio contrato (receptor completo, forma de pago, clave del cert).
+        const esFactura = full.tipoDte === 33 || full.tipoDte === 34;
+        let payloadJob: object;
+        let msgType: string;
+        if (esFactura) {
+          try {
+            payloadJob = buildFacturaJob({
+              empresaId,
+              emisorRut: job.emisorRut ?? empresaRut ?? "",
+              tipoDte: full.tipoDte as 33 | 34,
+              totalClp: full.monto,
+              fechaEmision: full.fechaEmision,
+              formaPago: full.formaPago as "contado" | "credito",
+              receptor: {
+                rut: full.receptorRut ?? "",
+                razonSocial: full.receptorNombre ?? "",
+                giro: full.receptorGiro,
+                direccion: full.receptorDireccion ?? "",
+                comuna: full.receptorComuna ?? "",
+                ciudad: full.receptorCiudad,
+                email: full.receptorEmail,
+              },
+              detalle: full.detalle,
+              logoutAfter: false, // lote: deja la sesión SII abierta para encadenar
+              jobId: job.jobId,
+              expiresAt: job.expiresAt,
+            });
+          } catch (e) {
+            // Fail-closed del builder (receptor incompleto, sin forma de pago…):
+            // esta factura no sale; cerrar el job y saltar a la siguiente.
+            await closeJob(job.jobId, "failed", e instanceof Error ? e.message : "FACTURA_PAYLOAD_INVALIDO");
+            return { estado: "fallida", motivo: "Esta factura tiene datos incompletos (receptor o forma de pago). Revísala en Check." };
+          }
+          msgType = "APP_CONTABLE_SII_FACT_JOB";
+        } else {
+          payloadJob = buildBoletaJob({
+            empresaId,
+            emisorRut: job.emisorRut ?? empresaRut ?? undefined,
+            tipoDte: full.tipoDte as 39 | 41,
+            monto: full.monto,
+            fechaEmision: full.fechaEmision,
+            receptor: {
+              rut: full.receptorRut,
+              razonSocial: full.receptorNombre,
+              direccion: full.receptorDireccion,
+              comuna: full.receptorComuna,
+              email: full.receptorEmail,
+              telefono: full.receptorTelefono,
+            },
+            detalle: full.detalle,
+            medioPago: full.medioPago,
+            logoutAfter: false, // lote: deja la sesión SII abierta para encadenar
+            jobId: job.jobId,
+            expiresAt: job.expiresAt,
+          });
+          msgType = "APP_CONTABLE_SII_BOLETA_JOB";
+        }
 
         // 3. enviar a la extensión y esperar el desenlace TERMINAL de este job
         const desenlace = await new Promise<DesenlaceItem>((resolve) => {
@@ -237,7 +281,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             Math.max(30_000, Date.parse(job.expiresAt) - Date.now() + 5_000),
           );
           window.postMessage(
-            { source: "app-contable", type: "APP_CONTABLE_SII_BOLETA_JOB", protocol_version: 1, job: boleta },
+            { source: "app-contable", type: msgType, protocol_version: 1, job: payloadJob },
             origin(),
           );
         });

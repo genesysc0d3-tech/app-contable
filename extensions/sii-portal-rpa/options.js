@@ -7,6 +7,8 @@
     siiVaultForm: document.getElementById("sii-vault-form"),
     siiRut: document.getElementById("sii-rut"),
     siiClave: document.getElementById("sii-clave"),
+    siiClaveCert: document.getElementById("sii-clave-cert"),
+    siiVaultClaveCert: document.getElementById("sii-vault-clave-cert"),
     siiPin: document.getElementById("sii-pin"),
     siiVaultRut: document.getElementById("sii-vault-rut"),
     siiVaultClave: document.getElementById("sii-vault-clave"),
@@ -73,6 +75,9 @@
     // Prefill del RUT de empresa guardado (sin pisar lo que el usuario esté tipeando).
     elements.siiVaultRut.textContent = status?.has_rut ? "Configurado" : "Falta";
     elements.siiVaultClave.textContent = status?.has_clave ? "Configurada" : "Falta";
+    if (elements.siiVaultClaveCert) {
+      elements.siiVaultClaveCert.textContent = status?.has_clave_certificado ? "Configurada" : "Falta (solo facturas)";
+    }
     elements.siiVaultEncrypted.textContent = status?.encrypted ? "Activo" : "Sin bóveda";
     // v2: se desbloquea con la sesión de la app, no con passphrase.
     elements.siiVaultUnlocked.textContent = status?.needs_migration
@@ -218,7 +223,11 @@
     // v2: sin passphrase. La clave se cifra localmente con una llave aleatoria y se
     // conecta a tu sesión de la app (se desbloquea sola al emitir). Debes tener la
     // app abierta y con sesión iniciada para conectar.
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave } }, (response) => {
+    // 0.2.0: clave del certificado digital OPCIONAL — solo la exige el carril
+    // de facturas (el paso Firmar del portal). Vacía = vault sin ella, como 0.1.x.
+    const claveCert = elements.siiClaveCert?.value || "";
+    const payload = { rut, clave, ...(claveCert ? { clave_certificado: claveCert } : {}) };
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload }, (response) => {
       elements.saveSiiVault.disabled = false;
       if (chrome.runtime.lastError || !response?.ok) {
         const err = response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED";
@@ -228,7 +237,10 @@
         return;
       }
       elements.siiClave.value = "";
-      setDiag(elements.siiDiagnostic, "ok", "✓ Clave del SII conectada. Se usa sola cuando emites, mientras tengas tu sesión iniciada. No necesitas ninguna clave local.");
+      if (elements.siiClaveCert) elements.siiClaveCert.value = "";
+      setDiag(elements.siiDiagnostic, "ok", claveCert
+        ? "✓ Clave del SII y clave del certificado conectadas. Se usan solas cuando emites, mientras tengas tu sesión iniciada."
+        : "✓ Clave del SII conectada. Se usa sola cuando emites, mientras tengas tu sesión iniciada. No necesitas ninguna clave local.");
       renderSiiStatus(response.status);
     });
   });

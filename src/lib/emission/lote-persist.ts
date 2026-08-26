@@ -20,7 +20,12 @@
 // reabrir, que ya aplica la minimización por monto (135 UF, Res. 44/2025). Caduca a
 // 24h en la lectura.
 
-const KEY = (empresaId: string) => `massdte:lote-pendiente:${empresaId}`;
+// Clave POR MESA: un lote de boletas (mesa BO) y uno de facturas (mesa FA)
+// conviven sin pisarse. La clave legacy sin mesa se lee como "boleta" una vez
+// y se migra (los lotes guardados antes del carril de facturas eran de boletas).
+export type MesaLote = "boleta" | "factura";
+const KEY = (empresaId: string, mesa: MesaLote) => `massdte:lote-pendiente:${empresaId}:${mesa}`;
+const KEY_LEGACY = (empresaId: string) => `massdte:lote-pendiente:${empresaId}`;
 const MAX_EDAD_MS = 24 * 60 * 60 * 1000; // 24h
 
 export interface LotePendiente {
@@ -35,16 +40,17 @@ export interface LotePendiente {
 export function guardarLotePendiente(
   empresaId: string,
   data: { remainingIds: string[]; total: number },
+  mesa: MesaLote = "boleta",
 ): void {
   if (!empresaId || typeof window === "undefined") return;
   // Nada pendiente = nada que reanudar: limpiar en vez de guardar basura.
   if (!data.remainingIds.length) {
-    limpiarLotePendiente(empresaId);
+    limpiarLotePendiente(empresaId, mesa);
     return;
   }
   try {
     window.localStorage.setItem(
-      KEY(empresaId),
+      KEY(empresaId, mesa),
       JSON.stringify({ remainingIds: data.remainingIds, total: data.total, at: Date.now() }),
     );
   } catch {
@@ -53,10 +59,20 @@ export function guardarLotePendiente(
 }
 
 /** Lee un lote a medias reanudable (con IDs y no caducado). null si no hay. */
-export function leerLotePendiente(empresaId: string): LotePendiente | null {
+export function leerLotePendiente(empresaId: string, mesa: MesaLote = "boleta"): LotePendiente | null {
   if (!empresaId || typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(KEY(empresaId));
+    let raw = window.localStorage.getItem(KEY(empresaId, mesa));
+    // Migración one-shot de la clave legacy (pre-facturas, siempre boletas).
+    if (!raw && mesa === "boleta") {
+      raw = window.localStorage.getItem(KEY_LEGACY(empresaId));
+      if (raw) {
+        try {
+          window.localStorage.setItem(KEY(empresaId, "boleta"), raw);
+          window.localStorage.removeItem(KEY_LEGACY(empresaId));
+        } catch { /* best-effort */ }
+      }
+    }
     if (!raw) return null;
     const p = JSON.parse(raw) as LotePendiente;
     const valido =
@@ -68,7 +84,7 @@ export function leerLotePendiente(empresaId: string): LotePendiente | null {
       typeof p.at === "number" &&
       Date.now() - p.at < MAX_EDAD_MS;
     if (!valido) {
-      limpiarLotePendiente(empresaId);
+      limpiarLotePendiente(empresaId, mesa);
       return null;
     }
     return p;
@@ -78,10 +94,10 @@ export function leerLotePendiente(empresaId: string): LotePendiente | null {
 }
 
 /** Borra el lote pendiente (al terminar, detener, descartar, o quedar vacío). */
-export function limpiarLotePendiente(empresaId: string): void {
+export function limpiarLotePendiente(empresaId: string, mesa: MesaLote = "boleta"): void {
   if (!empresaId || typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(KEY(empresaId));
+    window.localStorage.removeItem(KEY(empresaId, mesa));
   } catch {
     /* no-op */
   }

@@ -11,7 +11,15 @@ export type ExtensionStatus = "checking" | "ready" | "missing";
  * Sin extensión también es ok:false (cada gate decide su propio mensaje de
  * "falta la extensión"; acá el motivo cubre AMBOS casos con texto usable).
  */
-export function verificarExtensionCompatible(): Promise<{ ok: boolean; motivo?: string }> {
+export function verificarExtensionCompatible(
+  /**
+   * Capabilities que ESTE flujo exige además del piso de versión (ej. el carril
+   * de facturas pide "sii_portal_factura_33"). El piso global NO sube por una
+   * capacidad nueva: una extensión vieja sigue emitiendo boletas; solo el flujo
+   * que necesita la capacidad frena, con instrucción clara de actualizar.
+   */
+  requiredCapabilities?: string[],
+): Promise<{ ok: boolean; motivo?: string }> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve({ ok: false, motivo: "Sin navegador." });
     const nonce =
@@ -25,7 +33,7 @@ export function verificarExtensionCompatible(): Promise<{ ok: boolean; motivo?: 
     }, 1200);
     function onMessage(event: MessageEvent) {
       if (event.source !== window) return;
-      const data = event.data as { source?: string; type?: string; nonce?: string; extension_version?: string };
+      const data = event.data as { source?: string; type?: string; nonce?: string; extension_version?: string; capabilities?: string[] };
       if (data?.source !== "app-contable-extension" || data.type !== "APP_CONTABLE_EXTENSION_PONG" || data.nonce !== nonce) return;
       if (settled) return;
       settled = true;
@@ -33,9 +41,21 @@ export function verificarExtensionCompatible(): Promise<{ ok: boolean; motivo?: 
       window.removeEventListener("message", onMessage);
       if (extensionDesactualizada(data.extension_version)) {
         resolve({ ok: false, motivo: mensajeExtensionDesactualizada(data.extension_version) });
-      } else {
-        resolve({ ok: true });
+        return;
       }
+      if (requiredCapabilities?.length) {
+        const tiene = new Set(Array.isArray(data.capabilities) ? data.capabilities : []);
+        const faltan = requiredCapabilities.filter((c) => !tiene.has(c));
+        if (faltan.length > 0) {
+          resolve({
+            ok: false,
+            motivo:
+              "Este flujo necesita una versión más nueva de la extensión MassDTE. Chrome la actualiza solo en unas horas; para forzarla al tiro: chrome://extensions → Modo desarrollador → Actualizar.",
+          });
+          return;
+        }
+      }
+      resolve({ ok: true });
     }
     window.addEventListener("message", onMessage);
     window.postMessage(
