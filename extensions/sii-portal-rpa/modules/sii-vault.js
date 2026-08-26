@@ -7,6 +7,10 @@ export const SII_VAULT_CAPABILITIES = [
   "sii_vault_encrypted",
   "sii_vault_envelope_v2",
   "sii_vault_session_unlock",
+  // 0.2.0 — la bóveda puede guardar la clave del CERTIFICADO DIGITAL (secreto
+  // distinto de la Clave Tributaria; la pide el paso Firmar del portal de
+  // facturas). La app detecta por esta capability si el carril existe.
+  "sii_vault_cert_password",
 ];
 
 // ── Bóveda SII v2 "llave partida" (envelope encryption) ──────────────────────
@@ -87,6 +91,7 @@ export async function siiVaultStatus() {
     encrypted: Boolean(meta?.configured),
     has_rut: Boolean(meta?.has_rut),
     has_clave: Boolean(meta?.has_clave),
+    has_clave_certificado: Boolean(meta?.has_clave_certificado),
     has_empresa_rut: Boolean(meta?.has_empresa_rut),
     empresa_rut: typeof meta?.empresa_rut === "string" ? meta.empresa_rut : null,
     updated_at: typeof meta?.updated_at === "string" ? meta.updated_at : null,
@@ -148,6 +153,12 @@ function validatePayload(payload) {
     if (typeof payload.empresa_rut !== "string") return "EMPRESA_RUT_INVALID";
     if (payload.empresa_rut.trim() && !isRutValido(payload.empresa_rut)) return "EMPRESA_RUT_INVALID";
   }
+  // 0.2.0: clave del certificado digital OPCIONAL (solo el carril de facturas
+  // la necesita; boletas siguen sin ella). Si viene, tiene que ser un string
+  // con contenido — cadena vacía sería un estado engañoso ("configurada" sin serlo).
+  if (payload.clave_certificado !== undefined && payload.clave_certificado !== null) {
+    if (typeof payload.clave_certificado !== "string" || !payload.clave_certificado) return "CLAVE_CERTIFICADO_INVALID";
+  }
   return null;
 }
 
@@ -157,6 +168,21 @@ async function saveSiiVault(payload, appOriginHint) {
 
   const appOrigin = await getAppOrigin(appOriginHint);
   if (!appOrigin) return { ok: false, error: "APP_ORIGIN_DESCONOCIDO" };
+
+  // El guardado reescribe el slot COMPLETO. Si el vault ya tenía clave del
+  // certificado y este guardado no la trae (p. ej. reconectar solo la Clave
+  // Tributaria), se arrastra la existente — best-effort: si el desbloqueo
+  // falla (sin sesión), se sigue sin ella en vez de frenar el guardado.
+  let claveCertPrevia = null;
+  if (payload.clave_certificado === undefined || payload.clave_certificado === null) {
+    const slotPrevio = await readSlot();
+    if (slotPrevio?.meta?.has_clave_certificado) {
+      try {
+        const prev = await getUnlockedSiiCredentials(appOriginHint);
+        if (prev.ok && prev.clave_certificado) claveCertPrevia = prev.clave_certificado;
+      } catch { /* best-effort */ }
+    }
+  }
 
   // 1) Registrar WS en el servidor (autenticado con la sesión de la app).
   const deviceId = await ensureDeviceId();
@@ -173,10 +199,18 @@ async function saveSiiVault(payload, appOriginHint) {
   // 2) VK aleatoria → cifra las credenciales.
   const empresaRut = payload.empresa_rut && String(payload.empresa_rut).trim() ? normalizeRut(payload.empresa_rut) : null;
   const now = new Date().toISOString();
+  const claveCertificado = typeof payload.clave_certificado === "string" && payload.clave_certificado
+    ? payload.clave_certificado
+    : claveCertPrevia;
   const vk = crypto.getRandomValues(new Uint8Array(32));
   const credIv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await aesEncrypt(vk, credIv, JSON.stringify({
-    rut: String(payload.rut).trim(), clave: payload.clave, saved_at: now,
+    rut: String(payload.rut).trim(),
+    clave: payload.clave,
+    // Solo se incluye si existe: el JSON cifrado de un vault sin certificado es
+    // idéntico al de 0.1.x (compatibilidad total hacia atrás).
+    ...(claveCertificado ? { clave_certificado: claveCertificado } : {}),
+    saved_at: now,
   }));
 
   // 3) KEK = HKDF(WS, salt) → envuelve VK.
@@ -197,6 +231,7 @@ async function saveSiiVault(payload, appOriginHint) {
       wrapped_vk: bytesToBase64(new Uint8Array(wrappedVk)),
       meta: {
         configured: true, has_rut: true, has_clave: true,
+        has_clave_certificado: Boolean(claveCertificado),
         has_empresa_rut: Boolean(empresaRut), empresa_rut: empresaRut, updated_at: now,
       },
     },
@@ -251,7 +286,16 @@ async function unwrapCreds(slot, vkBytes) {
     const plain = await aesDecrypt(vkBytes, base64ToBytes(slot.cred_iv), base64ToBytes(slot.ciphertext));
     const secrets = JSON.parse(plain);
     if (!secrets?.rut || !secrets?.clave) return { ok: false, error: "VAULT_UNWRAP_FAILED" };
-    return { ok: true, rut: secrets.rut, clave: secrets.clave };
+    return {
+      ok: true,
+      rut: secrets.rut,
+      clave: secrets.clave,
+      // Opcional (0.2.0): vaults viejos no la tienen y siguen 100% válidos para
+      // boletas; el consumidor de facturas chequea su presencia antes de abrir.
+      clave_certificado: typeof secrets.clave_certificado === "string" && secrets.clave_certificado
+        ? secrets.clave_certificado
+        : null,
+    };
   } catch {
     return { ok: false, error: "VAULT_UNWRAP_FAILED" };
   }

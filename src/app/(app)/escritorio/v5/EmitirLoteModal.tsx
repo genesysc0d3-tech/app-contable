@@ -22,17 +22,26 @@ export interface LoteItemInput {
   receptor_comuna?: string | null;
   receptor_email?: string | null;
   receptor_telefono?: string | null;
+  /** Facturas: giro del receptor (obligatorio en el documento). */
+  receptor_giro?: string | null;
   medio_pago?: string | null;
   detalle?: string | null;
   tipo_sugerido: number | null;
   monto_total: number;
 }
 
+/** Capabilities que el carril de facturas exige en el PONG de la extensión. */
+const FACT_CAPABILITIES_REQUERIDAS = [
+  "sii_portal_factura_33",
+  "sii_portal_factura_34",
+  "sii_vault_cert_password",
+];
+
 const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 const ACCENT = "#E8553E";
 
 export default function EmitirLoteModal({
-  items, empresaId, empresaRut, totalOriginal, onClose, onDone,
+  items, empresaId, empresaRut, totalOriginal, mesa = "boleta", formaPagoLote = null, onClose, onDone,
 }: {
   items: LoteItemInput[];
   empresaId: string;
@@ -40,6 +49,10 @@ export default function EmitirLoteModal({
   /** Total del lote ORIGINAL (para el banner honesto entre reanudaciones). Si no
    *  viene, es una emisión fresca y el total es items.length. */
   totalOriginal?: number;
+  /** boleta (39/41, e-Boleta) | factura (33/34, portal gratuito del SII). */
+  mesa?: "boleta" | "factura";
+  /** Facturas: forma de pago del lote, elegida por el usuario (sin default). */
+  formaPagoLote?: "contado" | "credito" | null;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -55,34 +68,50 @@ export default function EmitirLoteModal({
 
   const hoy = useMemo(() => chileDateString(new Date()), []);
   const total = useMemo(() => items.reduce((s, i) => s + i.monto_total, 0), [items]);
+  const esFacturas = mesa === "factura";
+  // Copy honesto por mesa (una factura no es "boleta").
+  const doc = esFacturas ? "factura" : "boleta";
+  const docs = esFacturas ? "facturas" : "boletas";
 
   const loteItems: ItemLoteEmision[] = useMemo(() => items.map((i) => {
-    const tipoDte: 39 | 41 = i.tipo_sugerido === 39 ? 39 : 41;
+    const tipoDte: 33 | 34 | 39 | 41 = esFacturas
+      ? (i.tipo_sugerido === 33 ? 33 : 34)
+      : (i.tipo_sugerido === 39 ? 39 : 41);
     return {
       propuestaId: i.id,
       tipoDte,
       monto: i.monto_total,
-      etiqueta: i.receptor_nombre?.trim() || i.descripcion || "Boleta",
+      etiqueta: i.receptor_nombre?.trim() || i.descripcion || (esFacturas ? "Factura" : "Boleta"),
       receptorRut: i.receptor_rut,
       receptorNombre: i.receptor_nombre,
       receptorDireccion: i.receptor_direccion,
       receptorComuna: i.receptor_comuna,
       receptorEmail: i.receptor_email,
       receptorTelefono: i.receptor_telefono,
+      receptorGiro: i.receptor_giro,
+      formaPago: esFacturas ? formaPagoLote : null,
       medioPago: i.medio_pago,
-      detalle: i.detalle?.trim() || (tipoDte === 41 ? "Venta exenta" : "Servicio prestado"),
+      detalle: i.detalle?.trim() || (tipoDte === 41 || tipoDte === 34 ? "Venta exenta" : "Servicio prestado"),
       fechaEmision: hoy,
     };
-  }), [items, hoy]);
+  }), [items, hoy, esFacturas, formaPagoLote]);
 
   // Autorización legal versionada (una vez por proveedor). El server la re-exige.
   async function confirmar() {
     setError(null);
     setModo("verificando");
+    // Facturas sin forma de pago = no hay lote (espec Matías: elección expresa).
+    // El selector vive en EmitirTabContent; esto es la red de seguridad.
+    if (esFacturas && formaPagoLote !== "contado" && formaPagoLote !== "credito") {
+      setError("Elige la forma de pago del lote (Contado o Crédito) antes de emitir.");
+      setModo("idle");
+      return;
+    }
     // Piso de versión de la extensión: una vieja emite "bien" hasta que algo
     // cambia bajo sus pies (dominio, protocolo) — mejor frenar acá con
-    // instrucciones claras que fallar a mitad de lote.
-    const compat = await verificarExtensionCompatible();
+    // instrucciones claras que fallar a mitad de lote. Facturas exige además
+    // las capabilities del carril (extensión 0.2.0+), con copy de cómo actualizar.
+    const compat = await verificarExtensionCompatible(esFacturas ? FACT_CAPABILITIES_REQUERIDAS : undefined);
     if (!compat.ok) {
       setError(compat.motivo ?? "La extensión del SII no está disponible.");
       setModo("idle");
@@ -131,7 +160,7 @@ export default function EmitirLoteModal({
   // al reabrir se re-hidratan contra los pendientes del server. Se borra al terminar
   // o detener; un cierre duro NO llega acá → el rastro queda para reanudar.
   useEffect(() => {
-    if (terminalLimpio) { itemsAlIniciarRef.current = null; limpiarLotePendiente(empresaId); return; }
+    if (terminalLimpio) { itemsAlIniciarRef.current = null; limpiarLotePendiente(empresaId, mesa); return; }
     if (!progreso) return;
     // corriendo = cierre en vuelo; requiere_revision = freno por "a medias" (H-1):
     // en ambos, lo que falta (slice tras la ya-procesada) debe quedar reanudable.
@@ -140,9 +169,9 @@ export default function EmitirLoteModal({
     if (corriendo || fase === "requiere_revision") {
       const base = itemsAlIniciarRef.current ?? items;
       const remainingIds = base.slice(progreso.procesadas).map((i) => i.id);
-      guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? base.length });
+      guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? base.length }, mesa);
     }
-  }, [progreso, corriendo, fase, terminalLimpio, empresaId, items, totalOriginal]);
+  }, [progreso, corriendo, fase, terminalLimpio, empresaId, items, totalOriginal, mesa]);
 
   return createPortal(
     <div
@@ -159,17 +188,17 @@ export default function EmitirLoteModal({
             style={{ position: "absolute", top: 15, right: 15, width: 26, height: 26, border: 0, background: "var(--bg-muted)", color: "var(--text2)", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>✕</button>
         )}
 
-        {!progreso && (modo === "idle" || modo === "verificando") && <Idle count={items.length} total={total} onConfirmar={confirmar} verificando={modo === "verificando"} error={error} />}
+        {!progreso && (modo === "idle" || modo === "verificando") && <Idle count={items.length} total={total} doc={doc} docs={docs} formaPago={esFacturas ? formaPagoLote : null} onConfirmar={confirmar} verificando={modo === "verificando"} error={error} />}
         {!progreso && modo === "legal" && <Legal onAceptar={aceptarLegal} onCancelar={() => setModo("idle")} error={error} />}
 
         {progreso && (fase === "emitiendo" || fase === "esperando" || fase === "pausada" || fase === "preparando") && (
           <Corriendo p={progreso} onDetener={detener} />
         )}
-        {progreso && fase === "terminada" && <Terminada folios={progreso.folios} onCerrar={() => { onClose(); onDone?.(); }} />}
-        {progreso && fase === "requiere_revision" && <Revision p={progreso} jobId={jobIdRevision} onCerrar={() => { onClose(); onDone?.(); }} />}
+        {progreso && fase === "terminada" && <Terminada folios={progreso.folios} doc={doc} docs={docs} onCerrar={() => { onClose(); onDone?.(); }} />}
+        {progreso && fase === "requiere_revision" && <Revision p={progreso} jobId={jobIdRevision} doc={doc} onCerrar={() => { onClose(); onDone?.(); }} />}
         {progreso && fase === "detenida" && <Detenida p={progreso} onCerrar={() => { onClose(); onDone?.(); }} />}
 
-        {pausa && <Pausa motivo={pausa.motivo} onSeguir={() => responderPausa("continuar")} onDetener={() => responderPausa("detener")} />}
+        {pausa && <Pausa motivo={pausa.motivo} doc={doc} onSeguir={() => responderPausa("continuar")} onDetener={() => responderPausa("detener")} />}
       </div>
     </div>,
     document.body,
@@ -182,15 +211,17 @@ const h1 = { fontSize: 22, fontWeight: 700, letterSpacing: "-.02em", lineHeight:
 const primaryBtn = { width: "100%", border: 0, borderRadius: 11, padding: 13, fontSize: 15, fontWeight: 700, cursor: "pointer", background: ACCENT, color: "#fff", marginTop: 16 };
 const ghostBtn = { border: "1px solid var(--border2, rgba(255,255,255,.10))", borderRadius: 10, padding: "11px 14px", background: "var(--bg-muted)", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer" };
 
-function Idle({ count, total, onConfirmar, verificando, error }: { count: number; total: number; onConfirmar: () => void; verificando: boolean; error: string | null }) {
+function Idle({ count, total, doc, docs, formaPago, onConfirmar, verificando, error }: { count: number; total: number; doc: string; docs: string; formaPago?: "contado" | "credito" | null; onConfirmar: () => void; verificando: boolean; error: string | null }) {
   return (
     <>
       <div style={eyebrow}><span style={dot} />Emitir al SII</div>
-      <div style={h1}>{count} {count === 1 ? "boleta lista" : "boletas listas"}</div>
-      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{fmt(total)} · revisadas y aprobadas por ti</div>
+      <div style={h1}>{count} {count === 1 ? `${doc} lista` : `${docs} listas`}</div>
+      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
+        {fmt(total)} · revisadas y aprobadas por ti{formaPago ? ` · ${formaPago === "contado" ? "Contado" : "Crédito"}` : ""}
+      </div>
       <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginTop: 16, padding: "11px 12px", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--text3)", lineHeight: 1.45 }}>
         <span style={{ marginTop: 1 }}>🔒</span>
-        <span>Emites con tu clave del SII: el contenido es <b style={{ color: "var(--text2)" }}>tu responsabilidad</b>. App Contable automatiza el envío — no asesora ni valida montos.</span>
+        <span>Emites con tus claves del SII: el contenido es <b style={{ color: "var(--text2)" }}>tu responsabilidad</b>. MassDTE automatiza el envío — no asesora ni valida montos.</span>
       </div>
       {error && <div style={{ marginTop: 10, fontSize: 12, color: "var(--red,#ef4444)" }}>{error}</div>}
       <button onClick={onConfirmar} disabled={verificando} style={{ ...primaryBtn, opacity: verificando ? .6 : 1 }}>{verificando ? "Verificando…" : `Emitir las ${count} →`}</button>
@@ -206,8 +237,8 @@ function Legal({ onAceptar, onCancelar, error }: { onAceptar: () => void; onCanc
     <>
       <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-.02em", marginBottom: 12 }}>Autorización de emisión</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div><div style={label}>Qué autorizas</div><div style={{ ...body, color: "var(--text)" }}>Autorizo a App Contable a emitir boletas en el SII con mi clave, por mi instrucción (SII local asistido).</div></div>
-        <div><div style={label}>Tu responsabilidad</div><div style={body}>Soy el contribuyente emisor y el responsable del contenido de cada boleta. La herramienta automatiza; no asesora ni valida montos.</div></div>
+        <div><div style={label}>Qué autorizas</div><div style={{ ...body, color: "var(--text)" }}>Autorizo a MassDTE a emitir documentos tributarios (boletas o facturas) en el SII con mis claves, por mi instrucción (SII local asistido).</div></div>
+        <div><div style={label}>Tu responsabilidad</div><div style={body}>Soy el contribuyente emisor y el responsable del contenido de cada documento. La herramienta automatiza; no asesora ni valida montos.</div></div>
         <div><div style={label}>Registro</div><div style={body}>Esta aceptación queda registrada con versión legal, usuario, empresa, fecha y proveedor.</div></div>
       </div>
       {error && <div style={{ marginTop: 10, fontSize: 12, color: "var(--red,#ef4444)" }}>{error}</div>}
@@ -239,7 +270,7 @@ function Corriendo({ p, onDetener }: { p: import("@/lib/emission/lote-runner").P
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 14.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cur.etiqueta}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: cur.tipoDte === 41 ? "rgba(34,197,94,.14)" : "rgba(232,85,62,.14)", color: cur.tipoDte === 41 ? "#5fd98a" : "#f0836f" }}>{cur.tipoDte === 41 ? "Exenta" : "Afecta"}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: cur.tipoDte === 41 || cur.tipoDte === 34 ? "rgba(34,197,94,.14)" : "rgba(232,85,62,.14)", color: cur.tipoDte === 41 || cur.tipoDte === 34 ? "#5fd98a" : "#f0836f" }}>{cur.tipoDte === 41 || cur.tipoDte === 34 ? "Exenta" : "Afecta"}</span>
               <span style={{ fontSize: 14.5, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmt(cur.monto)}</span>
             </div>
           </div>
@@ -272,20 +303,20 @@ function chips(list: { l: string; v: string }[]) {
   );
 }
 
-function Terminada({ folios, onCerrar }: { folios: number[]; onCerrar: () => void }) {
+function Terminada({ folios, doc, docs, onCerrar }: { folios: number[]; doc: string; docs: string; onCerrar: () => void }) {
   const rango = folios.length ? (folios.length === 1 ? `${folios[0]}` : `${folios[0]} – ${folios[folios.length - 1]}`) : "—";
   return (
     <>
       <Badge bg="rgba(34,197,94,.13)">✅</Badge>
       <div style={h1}>Listo</div>
-      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? "boleta emitida" : "boletas emitidas"} y guardadas.</div>
+      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? `${doc} emitida` : `${docs} emitidas`} y guardadas.</div>
       {folios.length > 0 && chips([{ l: "Folios", v: rango }])}
       <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Ver en el historial</button>
     </>
   );
 }
 
-function Revision({ p, jobId, onCerrar }: { p: import("@/lib/emission/lote-runner").ProgresoLote; jobId: string | null; onCerrar: () => void }) {
+function Revision({ p, jobId, doc, onCerrar }: { p: import("@/lib/emission/lote-runner").ProgresoLote; jobId: string | null; doc: string; onCerrar: () => void }) {
   const faltan = p.total - p.procesadas;
   const [recuperando, setRecuperando] = useState(false);
   const [res, setRes] = useState<RecoverLatestResult | null>(null);
@@ -304,7 +335,7 @@ function Revision({ p, jobId, onCerrar }: { p: import("@/lib/emission/lote-runne
         <Badge bg="rgba(34,197,94,.13)">✅</Badge>
         <div style={h1}>Folio recuperado</div>
         <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
-          {res.folio ? `Folio ${res.folio} ` : "La boleta "}{res.already ? "ya estaba guardada." : "quedó guardada en la app."} Podés emitir el resto desde la pestaña.
+          {res.folio ? `Folio ${res.folio} ` : `La ${doc} `}{res.already ? "ya estaba guardada." : "quedó guardada en la app."} Puedes emitir el resto desde la pestaña.
         </div>
         <button onClick={onCerrar} style={{ ...primaryBtn }}>Cerrar</button>
       </>
@@ -314,9 +345,9 @@ function Revision({ p, jobId, onCerrar }: { p: import("@/lib/emission/lote-runne
   return (
     <>
       <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
-      <div style={h1}>Me detuve en la boleta {p.procesadas}</div>
+      <div style={h1}>Me detuve en la {doc} {p.procesadas}</div>
       <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.5, marginTop: 6 }}>
-        Emitiste, pero no pude confirmar el folio. Esta boleta quedó <span style={{ color: "#f6ab3d", fontWeight: 600 }}>bloqueada</span> para que no salga dos veces. Recupera su folio antes de seguir. <span style={{ color: "#f6ab3d", fontWeight: 600 }}>No la vuelvas a emitir a mano.</span>
+        Emitiste, pero no pude confirmar el folio. Esta {doc} quedó <span style={{ color: "#f6ab3d", fontWeight: 600 }}>bloqueada</span> para que no salga dos veces. Recupera su folio antes de seguir. <span style={{ color: "#f6ab3d", fontWeight: 600 }}>No la vuelvas a emitir a mano.</span>
       </div>
       {res?.estado === "sin_resultado" && (
         <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--text2)", lineHeight: 1.45 }}>
@@ -326,7 +357,7 @@ function Revision({ p, jobId, onCerrar }: { p: import("@/lib/emission/lote-runne
       {res?.estado === "error" && <div style={{ marginTop: 10, fontSize: 12, color: "var(--red,#ef4444)" }}>{res.mensaje}</div>}
       {chips([{ l: "emitidas", v: String(p.emitidas) }, { l: "a medias", v: String(p.revision) }, { l: "faltan", v: String(Math.max(0, faltan)) }])}
       <button onClick={recuperar} disabled={recuperando} style={{ ...primaryBtn, opacity: recuperando ? 0.6 : 1 }}>
-        {recuperando ? "Recuperando…" : "Recuperar el folio de esta boleta"}
+        {recuperando ? "Recuperando…" : `Recuperar el folio de esta ${doc}`}
       </button>
       <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 10 }}>Ir a la ventana SII</button>
     </>
@@ -345,14 +376,14 @@ function Detenida({ p, onCerrar }: { p: import("@/lib/emission/lote-runner").Pro
   );
 }
 
-function Pausa({ motivo, onSeguir, onDetener }: { motivo: "error" | "tope"; onSeguir: () => void; onDetener: () => void }) {
+function Pausa({ motivo, doc, onSeguir, onDetener }: { motivo: "error" | "tope"; doc: string; onSeguir: () => void; onDetener: () => void }) {
   const texto = motivo === "tope"
     ? "Llegaste al tope de esta tanda. ¿Sigues con las próximas?"
-    : "Esa boleta no se pudo emitir. ¿La saltas y sigues con las próximas, o te detienes?";
+    : `Esa ${doc} no se pudo emitir. ¿La saltas y sigues con las próximas, o te detienes?`;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(6,7,10,.82)", borderRadius: 16, display: "grid", placeItems: "center", padding: 22 }}>
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{motivo === "tope" ? "Pausa de seguridad" : "Una boleta falló"}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{motivo === "tope" ? "Pausa de seguridad" : `Una ${doc} falló`}</div>
         <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.5, marginBottom: 16, maxWidth: 300 }}>{texto}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button onClick={onDetener} style={ghostBtn}>Detener</button>

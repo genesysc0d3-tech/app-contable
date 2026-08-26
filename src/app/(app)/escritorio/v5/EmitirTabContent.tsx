@@ -27,6 +27,8 @@ interface Item {
   receptor_comuna?: string | null;
   receptor_email?: string | null;
   receptor_telefono?: string | null;
+  /** Facturas: giro del receptor (viaja al motor masivo real). */
+  receptor_giro?: string | null;
   medio_pago?: string | null;
   // Glosa YA segura (resolverGlosa server-side) para armar el payload del lote real.
   detalle?: string | null;
@@ -58,6 +60,7 @@ interface PendientesResponse {
     // payload solo con items/totales/aprobadas_otros_tipos). El lote HOY solo
     // emite con mock: con proveedor real se avisa y se bloquea el CTA.
     boletas_proveedor?: "mock" | "sii_local" | "simpleapi" | null;
+    facturas_proveedor?: "mock" | "sii_local" | "simpleapi" | null;
   };
   aprobadas_otros_tipos?: Record<string, number>;
 }
@@ -195,12 +198,12 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
 
   useEffect(() => {
     if (!empresaId) return;
-    const p = leerLotePendiente(empresaId);
+    const p = leerLotePendiente(empresaId, esFacturas ? "factura" : "boleta");
     if (!p) return;
     // Lectura de localStorage post-montaje (no existe en SSR): se hace en effect a
     // propósito, para no romper la hidratación (server y cliente-1er-render = null).
     setLotePendiente(p);
-  }, [empresaId]);
+  }, [empresaId, esFacturas]);
   // File-first: qué documentos están expandidos + qué popup de "por revisar" está abierta.
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
   const [popupDoc, setPopupDoc] = useState<string | null>(null);
@@ -259,8 +262,13 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
 
   // El endpoint de lote solo emite con proveedor mock: con sii_local/simpleapi cada
   // ítem fallaría después de confirmar. Se avisa antes y se bloquea el CTA.
+  // Cada mesa mira SU proveedor: boletas → boletas_proveedor; facturas →
+  // facturas_proveedor (el carril real de facturas es sii_local vía extensión).
   const proveedorBoletas = data?.totales.boletas_proveedor ?? null;
-  const proveedorReal = proveedorBoletas === "sii_local" || proveedorBoletas === "simpleapi";
+  const proveedorFacturas = data?.totales.facturas_proveedor ?? null;
+  const proveedorReal = esFacturas
+    ? proveedorFacturas === "sii_local"
+    : proveedorBoletas === "sii_local" || proveedorBoletas === "simpleapi";
 
   const selectableItems = itemsList.filter(i => i.listo_emitir);
 
@@ -310,7 +318,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   );
   const selectedTotal = selectedItems.reduce((s, i) => s + i.monto_total, 0);
   const selectedCount = selectedItems.length;
-  const selAfecta = selectedItems.filter((i) => (i.tipo_sugerido ?? 39) === 39).length;
+  const selAfecta = selectedItems.filter((i) => {
+    const t = i.tipo_sugerido ?? (esFacturas ? 33 : 39);
+    return t === 39 || t === 33;
+  }).length;
   const selExenta = selectedCount - selAfecta;
 
   if (!data) {
@@ -328,6 +339,13 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
       return;
     }
     if (proveedorReal) {
+      if (esFacturas) {
+        // Carril REAL de facturas: la confirmación (con la forma de pago ya
+        // elegida acá) salta al motor masivo de la extensión.
+        setConfirmOpen(false);
+        setLoteOpen(true);
+        return;
+      }
       toast("La emisión masiva aún no está disponible para tu proveedor. Emite con Boleta única por ahora.", "error");
       return;
     }
@@ -476,7 +494,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 const res = await fetch(`/api/intermediaria/pendientes-emision?mesa=${mesa}`);
                 const json = await res.json().catch(() => ({}));
                 if (!res.ok || !json?.ok || !Array.isArray(json.items)) {
-                  toast("No pude cargar el lote para reanudar. Reintentá en un momento.", "error");
+                  toast("No pude cargar el lote para reanudar. Reintenta en un momento.", "error");
                   return; // NO limpiar: el rastro sigue para reintentar
                 }
                 const byId = new Map((json.items as Array<LoteItemInput & { listo_emitir?: boolean }>).map((i) => [i.id, i] as const));
@@ -487,26 +505,26 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 if (presentes.length === 0) {
                   // El server (empresa-wide) confirma que ninguno sigue pendiente → ya
                   // emitidas o en revisión. Ahora sí es seguro descartar el rastro.
-                  limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null);
+                  limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null);
                   toast("Ese lote ya quedó emitido, no queda nada por reanudar.", "success");
                   return;
                 }
                 if (resume.length === 0) {
                   // Siguen pendientes pero ninguna está lista (volvieron a "por revisar").
                   // No las emitimos a ciegas; el usuario las resuelve en Check. Quedan en la cola.
-                  limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null);
-                  toast("El resto del lote quedó en “por revisar”. Resolvelo en Check y emitilo de nuevo.", "error");
+                  limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null);
+                  toast("El resto del lote quedó en “por revisar”. Resuélvelo en Check y emítelo de nuevo.", "error");
                   return;
                 }
                 setLoteResume(resume); setLoteResumeTotal(lotePendiente.total); setLoteOpen(true);
               } catch {
-                toast("No pude cargar el lote para reanudar. Reintentá en un momento.", "error");
+                toast("No pude cargar el lote para reanudar. Reintenta en un momento.", "error");
               } finally {
                 setResumiendo(false);
               }
             }}
               style={{fontSize:11,fontWeight:700,color:"#fff",background:"var(--accent)",border:"none",borderRadius:8,padding:"7px 13px",cursor:resumiendo?"default":"pointer",opacity:resumiendo?0.6:1}}>{resumiendo ? "Cargando…" : `Reanudar ${lotePendiente.remainingIds.length} →`}</button>
-            <button onClick={() => { limpiarLotePendiente(empresaId ?? ""); setLotePendiente(null); }}
+            <button onClick={() => { limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null); }}
               style={{fontSize:10,fontWeight:600,color:"var(--text3)",background:"transparent",border:"none",cursor:"pointer"}}>Descartar</button>
           </div>
         )}
@@ -598,13 +616,13 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             </div>
           )}
           <div className="r">
-            <button className="emit" onClick={() => (proveedorReal ? setLoteOpen(true) : setConfirmOpen(true))} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
+            <button className="emit" onClick={() => (proveedorReal && !esFacturas ? setLoteOpen(true) : setConfirmOpen(true))} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? "Selecciona boletas" : `Emitir ${selectedCount}`}
+              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? `Selecciona ${esFacturas ? "facturas" : "boletas"}` : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>
@@ -657,8 +675,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           empresaId={empresaId ?? ""}
           empresaRut={null}
           totalOriginal={loteResume ? (loteResumeTotal ?? loteResume.length) : selectedItems.length}
-          onClose={() => { setLoteOpen(false); setLoteResume(null); setLoteResumeTotal(null); setLotePendiente(leerLotePendiente(empresaId ?? "")); }}
-          onDone={() => { setSelected(new Set()); setLoteResume(null); setLoteResumeTotal(null); reload(); setLotePendiente(leerLotePendiente(empresaId ?? "")); }}
+          mesa={esFacturas ? "factura" : "boleta"}
+          formaPagoLote={esFacturas ? formaPago : null}
+          onClose={() => { setLoteOpen(false); setLoteResume(null); setLoteResumeTotal(null); setLotePendiente(leerLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta")); }}
+          onDone={() => { setSelected(new Set()); setLoteResume(null); setLoteResumeTotal(null); reload(); setLotePendiente(leerLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta")); }}
         />
       )}
 
@@ -714,7 +734,11 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text2)" }}>Vas a emitir</span>
-                  <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "var(--amber)", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
+                  {proveedorReal && esFacturas ? (
+                    <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#5fd98a", background: "rgba(34,197,94,.14)", padding: "3px 8px", borderRadius: 7 }}>● SII REAL</span>
+                  ) : (
+                    <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "var(--amber)", background: "rgba(245,158,11,.14)", padding: "3px 8px", borderRadius: 7 }}>● MODO PRUEBA</span>
+                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                   <span style={{ fontSize: 38, fontWeight: 800, color: "var(--text)", letterSpacing: "-.03em" }}>{selectedCount}</span>
@@ -746,7 +770,9 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 )}
                 <div style={{ marginTop: 8, fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
                   {esFacturas
-                    ? "Modo de prueba: se simula, no se informa al SII. Una factura real no se puede deshacer."
+                    ? (proveedorReal
+                        ? "Emisión REAL en el SII con tus claves. Una factura emitida no se puede deshacer."
+                        : "Modo de prueba: se simula, no se informa al SII. Una factura real no se puede deshacer.")
                     : "Modo de prueba: se simula, no se informa al SII. Una boleta real no se puede deshacer. Si algo sale mal, escríbenos a soporte."}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text3)", lineHeight: 1.5 }}>

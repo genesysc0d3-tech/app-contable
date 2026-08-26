@@ -187,6 +187,8 @@ export async function getPendientesEmision(
         receptor_comuna: p.receptor_comuna ?? null,
         receptor_email: p.receptor_email ?? null,
         receptor_telefono: p.receptor_telefono ?? null,
+        // El giro viaja al motor masivo real (el documento lo individualiza).
+        receptor_giro: (pf.receptor_giro ?? "").trim() || null,
         medio_pago: null,
         detalle: (pf.detalle ?? "").trim() || "Servicios profesionales",
         monto_total: total,

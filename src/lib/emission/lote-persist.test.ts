@@ -14,7 +14,8 @@ beforeEach(() => {
   });
 });
 
-const KEY = "massdte:lote-pendiente:emp1";
+const KEY = "massdte:lote-pendiente:emp1:boleta";
+const KEY_LEGACY = "massdte:lote-pendiente:emp1";
 
 describe("lote-persist — reanudación segura del lote", () => {
   it("guarda y devuelve los IDs que faltan (nunca PII)", () => {
@@ -57,5 +58,26 @@ describe("lote-persist — reanudación segura del lote", () => {
     guardarLotePendiente("emp1", { remainingIds: ["p1", "p2"], total: 2 });
     expect(leerLotePendiente("emp2")).toBeNull();
     expect(leerLotePendiente("emp1")).not.toBeNull();
+  });
+
+  it("aísla por mesa: un lote de facturas no pisa (ni aparece en) el de boletas", () => {
+    guardarLotePendiente("emp1", { remainingIds: ["b1"], total: 1 }, "boleta");
+    guardarLotePendiente("emp1", { remainingIds: ["f1", "f2"], total: 2 }, "factura");
+    expect(leerLotePendiente("emp1", "boleta")?.remainingIds).toEqual(["b1"]);
+    expect(leerLotePendiente("emp1", "factura")?.remainingIds).toEqual(["f1", "f2"]);
+    limpiarLotePendiente("emp1", "factura");
+    expect(leerLotePendiente("emp1", "factura")).toBeNull();
+    expect(leerLotePendiente("emp1", "boleta")).not.toBeNull();
+  });
+
+  it("migra la clave legacy (sin mesa) a boletas y la borra", () => {
+    store.set(KEY_LEGACY, JSON.stringify({ remainingIds: ["p9"], total: 1, at: Date.now() }));
+    const p = leerLotePendiente("emp1", "boleta");
+    expect(p?.remainingIds).toEqual(["p9"]);
+    expect(store.has(KEY_LEGACY)).toBe(false);
+    expect(store.has(KEY)).toBe(true);
+    // La mesa factura NUNCA hereda el legacy (eran lotes de boletas).
+    store.set(KEY_LEGACY, JSON.stringify({ remainingIds: ["p8"], total: 1, at: Date.now() }));
+    expect(leerLotePendiente("emp1", "factura")).toBeNull();
   });
 });

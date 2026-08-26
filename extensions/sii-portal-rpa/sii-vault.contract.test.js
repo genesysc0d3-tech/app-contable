@@ -160,3 +160,80 @@ describe("round-trip criptográfico completo (conectar → desbloquear → emiti
     expect(creds.error).toBe("VAULT_OTHER_USER");
   });
 });
+
+describe("clave del certificado digital (0.2.0 — carril de facturas)", () => {
+  it("round-trip CON clave del certificado: vuelve intacta y el status la declara", async () => {
+    const save = await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { ...PAYLOAD, clave_certificado: "clave-del-cert" },
+    });
+    expect(save.ok).toBe(true);
+    expect(save.status.has_clave_certificado).toBe(true);
+
+    const creds = await vault.getUnlockedSiiCredentials();
+    expect(creds.ok).toBe(true);
+    expect(creds.clave).toBe("clave-secreta-sii");
+    expect(creds.clave_certificado).toBe("clave-del-cert");
+  });
+
+  it("vault SIN certificado (0.1.x): sigue 100% válido y la clave viene null", async () => {
+    const save = await vault.handleSiiVaultMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: PAYLOAD });
+    expect(save.ok).toBe(true);
+    expect(save.status.has_clave_certificado).toBe(false);
+
+    const creds = await vault.getUnlockedSiiCredentials();
+    expect(creds.ok).toBe(true);
+    expect(creds.clave_certificado).toBe(null);
+  });
+
+  it("clave del certificado vacía → CLAVE_CERTIFICADO_INVALID (nada de estados engañosos)", async () => {
+    const r = await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { ...PAYLOAD, clave_certificado: "" },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("CLAVE_CERTIFICADO_INVALID");
+  });
+
+  it("la clave del certificado JAMÁS queda en claro en el disco", async () => {
+    await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { ...PAYLOAD, clave_certificado: "clave-del-cert" },
+    });
+    const slot = localStore.get("app_contable_sii_vault_v2");
+    expect(JSON.stringify(slot)).not.toContain("clave-del-cert");
+    expect(JSON.stringify(slot)).not.toContain("clave-secreta-sii");
+  });
+
+  it("la capability sii_vault_cert_password viaja en el catálogo de la bóveda", () => {
+    expect(vault.SII_VAULT_CAPABILITIES).toContain("sii_vault_cert_password");
+  });
+});
+
+describe("re-guardado no pierde la clave del certificado", () => {
+  it("reconectar solo RUT+clave arrastra la clave del certificado ya guardada", async () => {
+    await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { ...PAYLOAD, clave_certificado: "clave-del-cert" },
+    });
+    // Segundo guardado SIN el campo (el flujo clásico de 0.1.x)
+    const r = await vault.handleSiiVaultMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: PAYLOAD });
+    expect(r.ok).toBe(true);
+    expect(r.status.has_clave_certificado).toBe(true);
+    const creds = await vault.getUnlockedSiiCredentials();
+    expect(creds.clave_certificado).toBe("clave-del-cert");
+  });
+
+  it("re-guardar CON una clave de certificado nueva la reemplaza", async () => {
+    await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { ...PAYLOAD, clave_certificado: "vieja" },
+    });
+    await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { ...PAYLOAD, clave_certificado: "nueva" },
+    });
+    const creds = await vault.getUnlockedSiiCredentials();
+    expect(creds.clave_certificado).toBe("nueva");
+  });
+});

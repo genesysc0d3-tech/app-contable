@@ -18,7 +18,8 @@ import { CADENCIA_DEFAULT, nextDelayMs, type CadenciaConfig } from "./cadencia";
 export interface ItemLote {
   /** Propuesta que se va a emitir (enlaza el folio). Clave de idempotencia. */
   propuestaId: string;
-  tipoDte: 39 | 41;
+  /** 39/41 = boletas (e-Boleta) · 33/34 = facturas (portal gratuito). */
+  tipoDte: 33 | 34 | 39 | 41;
   monto: number;
   /** Texto corto para mostrar en el progreso (receptor o descripción). */
   etiqueta: string;
