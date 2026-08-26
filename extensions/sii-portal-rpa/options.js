@@ -7,8 +7,12 @@
     siiVaultForm: document.getElementById("sii-vault-form"),
     siiRut: document.getElementById("sii-rut"),
     siiClave: document.getElementById("sii-clave"),
+    // Card Facturas: la clave del certificado digital (bóveda compartida).
+    siiCertForm: document.getElementById("sii-cert-form"),
     siiClaveCert: document.getElementById("sii-clave-cert"),
     siiVaultClaveCert: document.getElementById("sii-vault-clave-cert"),
+    saveSiiCert: document.getElementById("save-sii-cert"),
+    siiCertDiagnostic: document.getElementById("sii-cert-diagnostic"),
     siiPin: document.getElementById("sii-pin"),
     siiVaultRut: document.getElementById("sii-vault-rut"),
     siiVaultClave: document.getElementById("sii-vault-clave"),
@@ -76,8 +80,15 @@
     elements.siiVaultRut.textContent = status?.has_rut ? "Configurado" : "Falta";
     elements.siiVaultClave.textContent = status?.has_clave ? "Configurada" : "Falta";
     if (elements.siiVaultClaveCert) {
-      elements.siiVaultClaveCert.textContent = status?.has_clave_certificado ? "Configurada" : "Falta (solo facturas)";
+      elements.siiVaultClaveCert.textContent = status?.has_clave_certificado ? "Configurada" : "Falta";
     }
+    // El estado de la card Facturas lo manda la clave del certificado (el
+    // carril del portal gratuito); el carril avanzado SimpleAPI tiene su
+    // propia grilla interna.
+    setModuleStatus(elements.simpleApiStatusLabel, Boolean(status?.has_clave_certificado), {
+      ready: "Lista para firmar",
+      pending: "Falta la clave del certificado",
+    });
     elements.siiVaultEncrypted.textContent = status?.encrypted ? "Activo" : "Sin bóveda";
     // v2: se desbloquea con la sesión de la app, no con passphrase.
     elements.siiVaultUnlocked.textContent = status?.needs_migration
@@ -95,12 +106,8 @@
   }
 
   function renderSimpleApiStatus(status) {
-    const configured = Boolean(status?.configured);
-    const ready = Boolean(status?.has_pfx && status?.has_caf && status?.encrypted);
-    setModuleStatus(elements.simpleApiStatusLabel, ready, {
-      ready: "Listo para emitir",
-      pending: configured ? "Falta completar" : "Sin configurar",
-    });
+    // El label de la card lo maneja renderSiiStatus (clave del certificado);
+    // acá solo la grilla del carril avanzado SimpleAPI.
     elements.vaultPfx.textContent = status?.has_pfx ? "Configurado" : "Falta";
     elements.vaultCaf.textContent = status?.has_caf ? "Configurado" : "Falta";
     elements.vaultEncrypted.textContent = status?.encrypted ? "Activo" : "Sin bóveda";
@@ -137,7 +144,9 @@
   // escribe en chrome.storage.local cuando actualizas la config de tu empresa; acá
   // sólo lo leemos. Mientras esté en false, la sección se muestra bloqueada.
   function applyFacturasHabilitado(habilitado) {
-    elements.simpleApiCard?.classList.toggle("locked", !habilitado);
+    // La card ya no se "apaga" entera: el carril del portal gratuito (clave
+    // del certificado) siempre está disponible; el candado es solo para la
+    // sección avanzada SimpleAPI (.pfx + CAF).
     elements.simpleApiLock?.classList.toggle("hidden", habilitado);
     elements.simpleApiConfig?.classList.toggle("hidden", !habilitado);
     if (!habilitado) {
@@ -223,11 +232,7 @@
     // v2: sin passphrase. La clave se cifra localmente con una llave aleatoria y se
     // conecta a tu sesión de la app (se desbloquea sola al emitir). Debes tener la
     // app abierta y con sesión iniciada para conectar.
-    // 0.2.0: clave del certificado digital OPCIONAL — solo la exige el carril
-    // de facturas (el paso Firmar del portal). Vacía = vault sin ella, como 0.1.x.
-    const claveCert = elements.siiClaveCert?.value || "";
-    const payload = { rut, clave, ...(claveCert ? { clave_certificado: claveCert } : {}) };
-    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload }, (response) => {
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { rut, clave } }, (response) => {
       elements.saveSiiVault.disabled = false;
       if (chrome.runtime.lastError || !response?.ok) {
         const err = response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED";
@@ -237,10 +242,36 @@
         return;
       }
       elements.siiClave.value = "";
+      setDiag(elements.siiDiagnostic, "ok", "✓ Clave del SII conectada. Se usa sola cuando emites, mientras tengas tu sesión iniciada. No necesitas ninguna clave local.");
+      renderSiiStatus(response.status);
+    });
+  });
+
+  // Card Facturas: guarda SOLO la clave del certificado. La bóveda reusa el
+  // RUT + Clave Tributaria ya conectados (exige bóveda conectada y sesión).
+  elements.siiCertForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const claveCert = elements.siiClaveCert?.value || "";
+    if (!claveCert) {
+      setDiag(elements.siiCertDiagnostic, "error", "Ingresa la clave del certificado digital (la que usas al Firmar en el SII).");
+      return;
+    }
+    if (elements.saveSiiCert) elements.saveSiiCert.disabled = true;
+    setDiag(elements.siiCertDiagnostic, "info", "Cifrando la clave del certificado…");
+    chrome.runtime.sendMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: { clave_certificado: claveCert } }, (response) => {
+      if (elements.saveSiiCert) elements.saveSiiCert.disabled = false;
+      if (chrome.runtime.lastError || !response?.ok) {
+        const err = response?.error || chrome.runtime.lastError?.message || "SII_SAVE_FAILED";
+        setDiag(elements.siiCertDiagnostic, "error",
+          err === "VAULT_NOT_CONFIGURED"
+            ? "Primero conecta tu clave del SII en la tarjeta de arriba; la clave del certificado se guarda en esa misma bóveda."
+            : err === "APP_ORIGIN_DESCONOCIDO" || err === "SESSION_EXPIRED"
+              ? "Abre la app (con tu sesión iniciada) en otra pestaña y vuelve a intentar."
+              : errorMessage(err));
+        return;
+      }
       if (elements.siiClaveCert) elements.siiClaveCert.value = "";
-      setDiag(elements.siiDiagnostic, "ok", claveCert
-        ? "✓ Clave del SII y clave del certificado conectadas. Se usan solas cuando emites, mientras tengas tu sesión iniciada."
-        : "✓ Clave del SII conectada. Se usa sola cuando emites, mientras tengas tu sesión iniciada. No necesitas ninguna clave local.");
+      setDiag(elements.siiCertDiagnostic, "ok", "✓ Clave del certificado guardada. Se usa sola al firmar tus facturas.");
       renderSiiStatus(response.status);
     });
   });
