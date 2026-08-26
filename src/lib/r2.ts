@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cliente Cloudflare R2 (S3-compatible). Los archivos pesados (PDFs de boletas,
@@ -67,4 +67,29 @@ export async function downloadFromR2(key: string): Promise<Buffer> {
   if (!res.Body) throw new Error("R2_EMPTY_BODY");
   const bytes = await (res.Body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
   return Buffer.from(bytes);
+}
+
+/**
+ * El objeto MÁS NUEVO bajo un prefijo, o null si no hay ninguno.
+ *
+ * Existe para vigilar los respaldos: el Mac mini sube la base cada noche, y
+ * algo FUERA del mini tiene que darse cuenta si dejan de llegar. Un vigilante
+ * que vive dentro de lo vigilado no sirve — si el mini se apaga, se apagan las
+ * dos cosas a la vez y nadie se entera.
+ */
+export async function r2ObjetoMasNuevo(
+  prefijo: string,
+): Promise<{ key: string; modificado: Date; bytes: number } | null> {
+  if (!isR2Configured()) return null;
+  const res = await r2Client().send(
+    new ListObjectsV2Command({ Bucket: process.env.R2_BUCKET, Prefix: prefijo, MaxKeys: 1000 }),
+  );
+  let mejor: { key: string; modificado: Date; bytes: number } | null = null;
+  for (const obj of res.Contents ?? []) {
+    if (!obj.Key || !obj.LastModified) continue;
+    if (!mejor || obj.LastModified > mejor.modificado) {
+      mejor = { key: obj.Key, modificado: obj.LastModified, bytes: obj.Size ?? 0 };
+    }
+  }
+  return mejor;
 }
