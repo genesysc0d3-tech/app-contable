@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type { SearchItem } from "@/lib/tree-structure";
 import VisualizarArchivo from "./VisualizarArchivo";
-import EmpresaBrand from "./EmpresaBrand";
 import { addDaysIso, chileDateString } from "@/lib/chile-date";
 import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
@@ -206,7 +205,7 @@ function useDebouncedValue(value: string, delay = 150) {
   return debounced;
 }
 
-export default function SearchHistoryView({ items: allItems, empresaNombre, empresaLogoUrl }: { items: SearchItem[]; empresaNombre?: string; empresaLogoUrl?: string | null }) {
+export default function SearchHistoryView({ items: allItems }: { items: SearchItem[]; empresaNombre?: string; empresaLogoUrl?: string | null }) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query);
   const [filter, setFilter] = useState<FilterType>("todo");
@@ -342,9 +341,11 @@ export default function SearchHistoryView({ items: allItems, empresaNombre, empr
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--surface)", color: "var(--text)", fontFeatureSettings: '"kern" 1, "liga" 1' }}>
       <header style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10, background: "linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 82%, var(--bg-muted)))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          {/* Sin marca duplicada acá (decisión fundador 2026-08-26): la marca
+              vive UNA vez, en el header de arriba — que en modo búsqueda dice
+              "Mesa boleta + factura" y al clickearla vuelve a la mesa. */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <EmpresaBrand nombre={empresaNombre ?? "Mesa de trabajo"} logoUrl={empresaLogoUrl ?? ""} size={38} textSize={17} />
               <span style={{ fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)", whiteSpace: "nowrap" }}>{workspaceSubtitle}</span>
             </div>
             <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />
