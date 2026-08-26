@@ -228,35 +228,30 @@ export default function EmpresaBrand({
             ))}
           </div>
           </>) : (<>
-          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Tu empresa</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, minHeight: 42, padding: "7px 8px", borderRadius: 9, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)" }}>
+          {/* Start/Pro: MISMA fila y MISMOS pills BO|FA que Business (decisión
+              fundador 2026-08-26: los botones de mesa se ven iguales en todos
+              los planes — antes acá había botones grandes distintos). */}
+          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Tu empresa · y mesa</div>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)", color: "var(--text)" }}
+          >
             <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(232,85,62,.14)", color: "var(--accent)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{nombre.slice(0, 2).toUpperCase()}</span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombre}</span>
-              <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)" }}>{empresaRut ?? ""}</span>
+              <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresaRut ?? "Empresa"}</span>
             </span>
-            <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>
-          </div>
-          <div style={{ padding: "12px 8px 7px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Mesa de trabajo</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            <button type="button" onClick={() => cambiarMesa("boleta")}
-              style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 9px", borderRadius: 9, font: "inherit", cursor: "pointer", textAlign: "left",
-                border: mesa === "boleta" ? "1px solid rgba(232,85,62,.35)" : "1px solid var(--border)", background: mesa === "boleta" ? "rgba(232,85,62,.07)" : "transparent", color: "var(--text)" }}>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 11.5, fontWeight: 800 }}>Mesa Boletas</span>
-                <span style={{ display: "block", fontSize: 9, color: "var(--text3)" }}>cartolas → boletas 39/41</span>
-              </span>
-              {mesa === "boleta" && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>}
-            </button>
-            <button type="button" onClick={() => cambiarMesa("factura")}
-              style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 9px", borderRadius: 9, font: "inherit", cursor: "pointer", textAlign: "left",
-                border: mesa === "factura" ? "1px solid rgba(201,242,75,.4)" : "1px solid var(--border)", background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent", color: "var(--text)" }}>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 11.5, fontWeight: 800 }}>Mesa Facturas</span>
-                <span style={{ display: "block", fontSize: 9, color: "var(--text3)" }}>planillas → facturas 33/34</span>
-              </span>
-              {mesa === "factura" && <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 850, color: "var(--lime)" }}>Actual</span>}
-            </button>
+            <span className="eb-bofa">
+              <button type="button" onClick={() => cambiarMesa("boleta")} title="Mesa boletas"
+                style={{
+                  border: mesa === "boleta" ? "1px solid rgba(232,85,62,.5)" : "1px solid var(--border)",
+                  background: mesa === "boleta" ? "rgba(232,85,62,.1)" : "transparent",
+                  color: mesa === "boleta" ? "var(--accent)" : "var(--text3)" }}><span className="sigla">BO</span><span className="full">Boleta</span></button>
+              <button type="button" onClick={() => cambiarMesa("factura")} title="Mesa facturas"
+                style={{
+                  border: mesa === "factura" ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                  background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent",
+                  color: mesa === "factura" ? "var(--lime)" : "var(--text3)" }}><span className="sigla">FA</span><span className="full">Factura</span></button>
+            </span>
           </div>
           </>)}
           {puedeListarEmpresas && puedeAgregar && (
