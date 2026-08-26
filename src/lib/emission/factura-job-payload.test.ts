@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildFacturaJob,
   FACTURA_NOMBRE_PRODUCTO_MAX,
-  FACTURA_PORTAL_START_URL,
+  facturaPortalStartUrl,
   type FacturaJobInput,
 } from "./factura-job-payload";
 
@@ -32,7 +32,7 @@ describe("buildFacturaJob", () => {
     expect(job.detalles[0].precio).toBe(100_000);
     expect(job.totales).toEqual({ monto_total: 100_000, monto_neto: 0, iva: 0, monto_exento: 100_000 });
     expect(job.requires_cert_password).toBe(true);
-    expect(job.start_url).toBe(FACTURA_PORTAL_START_URL);
+    expect(job.start_url).toBe("https://www1.sii.cl/cgi-bin/Portal001/mipeLaunchPage.cgi?OPCION=34&TIPO=4");
     expect(job.auto_emit).toBe(true);
     expect(job.allow_final_emit).toBe(true);
   });
@@ -65,6 +65,16 @@ describe("buildFacturaJob", () => {
     expect(job.receptor.tipo_compra).toBe("del_giro");
     expect(job.receptor.email).toBeUndefined();
     expect(job.receptor.ciudad).toBe("Santiago");
+  });
+
+  it("ciudad ausente cae a la comuna (el portal la exige y el autocomplete no la llena)", () => {
+    const job = buildFacturaJob(base());
+    expect(job.receptor.ciudad).toBe("San Bernardo");
+  });
+
+  it("la start_url lleva el tipo DTE (33 y 34 entran por su propia OPCION)", () => {
+    expect(facturaPortalStartUrl(33)).toContain("OPCION=33");
+    expect(buildFacturaJob({ ...base(), tipoDte: 33, totalClp: 119_000 }).start_url).toContain("OPCION=33");
   });
 
   it("learn_only apaga auto_emit y allow_final_emit", () => {
