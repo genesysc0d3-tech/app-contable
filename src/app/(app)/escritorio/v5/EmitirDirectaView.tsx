@@ -2,7 +2,13 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { type LoteItemInput } from "./EmitirLoteModal";
+
+// El modal del motor masivo, cargado en idle (fuera del bundle de esta vista);
+// la factura única real lo usa con un solo ítem.
+const EmitirLoteModalDinamico = dynamic(() => import("./EmitirLoteModal"), { ssr: false });
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { validarRut } from "@/lib/rut";
@@ -307,7 +313,7 @@ const RESET_SAFE_STATUSES = new Set([
   "retrying",
 ]);
 
-export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, mesaFactura = false, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; mesaFactura?: boolean; onClose?: (saved?: boolean) => void }) {
+export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, mesaFactura = false, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "sii_local" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; mesaFactura?: boolean; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   // Modo FACTURA ÚNICA (mesa Facturas): misma vista y mismo lenguaje —
@@ -333,6 +339,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const [duplicateLoading, setDuplicateLoading] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<ExtensionInstallStatus>("checking");
   const [localWorker, setLocalWorker] = useState<LocalWorkerState | null>(null);
+  // Factura única REAL (sii_local): tras crear la propuesta, se emite con el
+  // MISMO EmitirLoteModal del masivo (un solo ítem) — auth, candado,
+  // TOTAL_MISMATCH, capabilities y captura de folio, todo reutilizado.
+  const [facturaLote, setFacturaLote] = useState<{ item: LoteItemInput; formaPago: "contado" | "credito" } | null>(null);
   const [localWorkerLoading, setLocalWorkerLoading] = useState(false);
   // Espejo del estado para leerlo dentro del listener de mensajes sin re-suscribir.
   const localWorkerRef = useRef<LocalWorkerState | null>(null);
@@ -1012,6 +1022,28 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           setErrors([msg]);
           toast(msg, "error");
           return;
+        }
+        // Proveedor REAL (sii_local): la propuesta ya está creada y aprobada;
+        // se emite con el EmitirLoteModal (un ítem) por la extensión, en vez
+        // del carril server/mock. El modal maneja auth, candado y folio real.
+        if (facturasProveedor === "sii_local") {
+          setFacturaLote({
+            item: {
+              id: creada.propuesta_id,
+              descripcion: detalleNombre.trim() || "Factura",
+              receptor_nombre: receptorRazonSocial.trim() || null,
+              receptor_rut: receptorRut.trim() || null,
+              receptor_direccion: receptorDireccion.trim() || null,
+              receptor_comuna: receptorComuna.trim() || null,
+              receptor_email: receptorEmail.trim() || null,
+              receptor_giro: receptorGiro.trim() || null,
+              detalle: detalleNombre.trim() || null,
+              tipo_sugerido: tipoDte,
+              monto_total: total,
+            },
+            formaPago: formaPago === "Contado" ? "contado" : "credito",
+          });
+          return; // el modal toma el control; su onDone limpia el borrador
         }
         const emitirRes = await fetch("/api/intermediaria/emitir-lote", {
           method: "POST",
@@ -1857,6 +1889,34 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           </aside>
         </div>
       </div>
+
+      {/* Factura única REAL: el motor masivo (un solo ítem) toma el control. */}
+      {facturaLote && (
+        <EmitirLoteModalDinamico
+          items={[facturaLote.item]}
+          empresaId={empresaId ?? ""}
+          empresaRut={empresaRut ?? null}
+          mesa="factura"
+          formaPagoLote={facturaLote.formaPago}
+          onClose={() => setFacturaLote(null)}
+          onDone={() => {
+            setFacturaLote(null);
+            // Limpia el borrador emitido, igual que el carril mock.
+            setDrafts((current) => {
+              if (current.length <= 1) {
+                const draft = { ...newDraftForOpenSlot(tipoInicial, [], nextDraftSeq), formaPago: "" as FormaPago };
+                setNextDraftSeq((seq) => nextSeq(seq));
+                setActiveDraftId(draft.id);
+                return [draft];
+              }
+              const next = current.filter((draft) => draft.id !== activeDraft.id);
+              setActiveDraftId(next[0]?.id ?? "");
+              return next;
+            });
+            router.refresh();
+          }}
+        />
+      )}
 
       {/* Pre-vuelo: confirmación SIEMPRE antes de emitir (patrón modal de EmitirTabContent).
           Se PORTALEA a document.body: el .ed-overlay usa backdrop-filter, que lo vuelve el
