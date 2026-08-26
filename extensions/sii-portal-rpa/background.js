@@ -2,10 +2,19 @@
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl, versionBajoObjetivo } from "./modules/core.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, wipeLocalVault } from "./modules/sii-vault.js";
+import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob } from "./modules/facturas-portal.js";
+import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, siiVaultStatus, wipeLocalVault } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
-const CAPABILITIES = [...SII_CAPABILITIES, ...SII_VAULT_CAPABILITIES, ...SIMPLEAPI_CAPABILITIES];
+// Las capabilities de FACTURAS solo se anuncian cuando el fillAndEmit del
+// portal existe (fase 3): la app gatea el carril por el PONG, así que anunciar
+// antes de tiempo dejaría a un usuario emitiendo contra un worker que no está.
+const CAPABILITIES = [
+  ...SII_CAPABILITIES,
+  ...(FACT_AUTO_EMIT_READY ? FACT_CAPABILITIES : []),
+  ...SII_VAULT_CAPABILITIES,
+  ...SIMPLEAPI_CAPABILITIES,
+];
 
 const activeJobs = new Map();
 
@@ -542,6 +551,12 @@ function scanWorkerPage(state, attempt = 1) {
       return;
     }
 
+    // Defensa de portal: la conducción de e-Boleta (calculadora + EMITIR) es
+    // EXCLUSIVA de boletas. Un job de facturas jamás debe gatillarla, aunque
+    // alguna pantalla del SII se le parezca. (El drive de facturas llega con
+    // facturas-worker.js; hasta entonces los jobs de facturas son learn-only.)
+    if (state.kind === "factura") return;
+
     const hasEmitButton = Array.isArray(map.buttons) && map.buttons.some((button) => button?.text === "EMITIR");
     const hasNumberPad = Array.isArray(map.buttons) && ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].every((digit) => map.buttons.some((button) => button?.text === digit));
     if (!state.submitted && !state.finalEmitClicked && hasEmitButton && hasNumberPad) {
@@ -860,8 +875,11 @@ function captureWorkerResult(state) {
 }
 
 async function openWorkerWindow(job, appTabId, appOrigin) {
+  // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
+  // https). Boletas siguen en la constante de e-Boleta.
+  const startUrl = job.kind === "factura" && job.start_url ? job.start_url : SII_START_URL;
   const worker = await chrome.windows.create({
-    url: SII_START_URL,
+    url: startUrl,
     type: "popup",
     focused: false,
     width: 1120,
@@ -874,6 +892,10 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
   const state = {
     jobId: job.job_id,
     job,
+    // "factura" (Sistema de Facturación Gratuito) | "boleta" (e-Boleta). Las
+    // ramas de conducción específicas de e-Boleta chequean esto y NUNCA
+    // corren sobre el portal de facturas.
+    kind: job.kind === "factura" ? "factura" : "boleta",
     appTabId,
     appOrigin: appOrigin ?? null, // origen de la app para pedir WS (desbloqueo v2)
     workerWindowId: worker.id,
@@ -1036,6 +1058,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         error: chrome.runtime.lastError?.message ?? null,
       }));
     });
+    return true;
+  }
+
+  if (message?.type === "APP_CONTABLE_SII_FACT_JOB") {
+    const job = message.job;
+    let jobAppOrigin = null;
+    try { jobAppOrigin = new URL(sender.url).origin; } catch { jobAppOrigin = null; }
+    Promise.resolve()
+      .then(async () => {
+        const validationError = validateSiiFacturaJob(job);
+        if (validationError) {
+          sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
+          return;
+        }
+        // Compuerta de fase: hasta que el fillAndEmit del portal exista, solo
+        // se aceptan sesiones learn (mapear sin emitir). Fail-closed.
+        if (job.auto_emit === true && !FACT_AUTO_EMIT_READY) {
+          sendResponse(statusMessage(job.job_id, "error", "FACT_AUTO_EMIT_NO_DISPONIBLE", true));
+          return;
+        }
+        // La clave del certificado se exige ANTES de abrir la ventana: sin ella
+        // el paso Firmar es un callejón sin salida. El copy de la app manda a
+        // Opciones de la extensión a configurarla.
+        if (job.auto_emit === true) {
+          const status = await siiVaultStatus();
+          if (!status.has_clave_certificado) {
+            sendResponse(statusMessage(job.job_id, "error", "CERT_PASSWORD_MISSING", true));
+            return;
+          }
+        }
+        return openWorkerWindow(job, sender.tab?.id, jobAppOrigin).then((state) => {
+          sendResponse(statusMessage(job.job_id, "opening_sii", "Ventana segura SII creada.", true));
+          sendToApp(state, statusMessage(
+            job.job_id,
+            "waiting_sii_login",
+            state.learnOnly
+              ? "Modo aprendizaje activo (portal de facturas). Inicia sesion y navega el flujo."
+              : "Inicia sesion en la ventana SII dedicada.",
+            true,
+          ));
+        });
+      })
+      .catch((error) => {
+        sendResponse(statusMessage(job?.job_id ?? null, "error", error instanceof Error ? error.message : String(error), true));
+      });
+
     return true;
   }
 

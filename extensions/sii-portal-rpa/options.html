@@ -33,14 +33,19 @@
             <span>Clave Tributaria</span>
             <span class="inp"><input type="password" id="sii-clave" autocomplete="current-password" placeholder="Tu clave del SII"><button type="button" class="eye" data-eye="sii-clave" aria-label="Mostrar clave">ver</button></span>
           </label>
+          <label>
+            <span>Clave del certificado digital <em class="opt">(solo para facturas)</em></span>
+            <span class="inp"><input type="password" id="sii-clave-cert" autocomplete="off" placeholder="Opcional — es OTRA clave, no la Tributaria"><button type="button" class="eye" data-eye="sii-clave-cert" aria-label="Mostrar clave">ver</button></span>
+          </label>
           <label class="full">
-            <span class="hint">Necesitas tener la app abierta con tu sesión iniciada para conectar: tu sesión es la que desbloquea la clave al emitir. Si cierras sesión o pierdes el equipo, revócala con «Eliminar / revocar».</span>
+            <span class="hint">Necesitas tener la app abierta con tu sesión iniciada para conectar: tu sesión es la que desbloquea la clave al emitir. Si cierras sesión o pierdes el equipo, revócala con «Eliminar / revocar». La clave del certificado digital es la que el SII te pide al FIRMAR una factura (tu certificado vive centralizado en el SII); solo hace falta si emites facturas.</span>
           </label>
         </form>
 
         <dl class="vault-grid sii-vault-grid">
           <div><dt>RUT</dt><dd id="sii-vault-rut">Falta</dd></div>
           <div><dt>Clave cifrada</dt><dd id="sii-vault-clave">Falta</dd></div>
+          <div><dt>Clave certificado</dt><dd id="sii-vault-clave-cert">Falta (solo facturas)</dd></div>
           <div><dt>Cifrado local</dt><dd id="sii-vault-encrypted">Sin bóveda</dd></div>
           <div><dt>Estado</dt><dd id="sii-vault-unlocked">Sin conectar</dd></div>
         </dl>
