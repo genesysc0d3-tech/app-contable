@@ -453,6 +453,16 @@ async function handleFactDriveResponse(state, res) {
     return;
   }
 
+  // Página desconocida PRE-emisión (p.ej. el login aterrizó en el menú Mi SII
+  // en vez del formulario): volver UNA vez a la start_url del job. Jamás
+  // post-Firmar ni tras enviar la clave (ahí navegar podría perder el folio).
+  if (res.action === "observando" && !state.finalEmitClicked && !state.certPasswordSent && !state.factRenavigated) {
+    state.factRenavigated = true;
+    sendToApp(state, statusMessage(state.jobId, "working", "Volviendo al formulario de facturas…", true));
+    try { chrome.tabs.update(state.workerTabId, { url: state.job.start_url }); } catch { /* el próximo scan reintenta */ }
+    return;
+  }
+
   const mensajes = {
     empresa_seleccionada: "Empresa seleccionada en el portal de facturas…",
     validado: "Documento validado. Revisando la vista previa…",
@@ -618,7 +628,16 @@ function scanWorkerPage(state, attempt = 1) {
     ));
 
     const excerpt = String(map.body_excerpt || "");
-    if (isLoginPageMap(map)) {
+    // Candados del autologin (auditoría 2026-08-26):
+    // (1) POST-FIRMAR jamás se tipean credenciales: la única password visible
+    //     ahí puede ser la CLAVE DEL CERTIFICADO — tipear la Clave Tributaria
+    //     y hacer submit firmaría con clave equivocada.
+    // (2) Las páginas del portal de FACTURAS están llenas de "RUT" y matchean
+    //     el heurístico de login. Si el scan ve sus forms reales
+    //     (fPrmEmpPOP / VIEW_EFXP / PreViewDTE), NO es una página de login.
+    const esPaginaPortalFacturas = Array.isArray(map.forms) &&
+      map.forms.some((f) => ["fPrmEmpPOP", "VIEW_EFXP", "PreViewDTE"].includes(f?.name));
+    if (!state.finalEmitClicked && !esPaginaPortalFacturas && isLoginPageMap(map)) {
       attemptSiiAutologin(state, map);
       return;
     }
@@ -1002,6 +1021,8 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
     // Facturas: la clave del certificado se envía UNA vez; si la pantalla de
     // firma reaparece, es clave mala → pausa humana, jamás reintento solo.
     certPasswordSent: false,
+    // Facturas: un solo re-navegado a start_url si el login aterriza fuera.
+    factRenavigated: false,
     awaitingResult: false,
     autologinAttempted: false,
     humanRequired: false,
