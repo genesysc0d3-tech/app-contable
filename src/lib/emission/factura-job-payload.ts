@@ -26,16 +26,15 @@
 import { derivarMontosFactura } from "../facturas/plantilla";
 
 /**
- * URL de arranque del portal de facturas. PROVISORIA hasta la fase learn en
- * vivo (el tutorial no muestra la barra de direcciones): apunta al selector
- * de empresa del sistema de facturación gratuito; si el worker no aterriza
- * en el formulario, hace el menú-walk por textos visibles ("Servicios
- * online" → "Factura electrónica" → "Sistema de facturación gratuito" →
- * "Emisión de documentos"). Viaja EN EL JOB a propósito: un cambio de URL
+ * URL de arranque del portal de facturas — VERIFICADA EN VIVO 2026-08-26
+ * (docs/facturas-portal-page-map.md): mipeLaunchPage lleva el tipo DTE en
+ * OPCION y redirige solo (selector de empresa si falta elegirla, formulario
+ * mipeGenFacEx si ya está). Viaja EN EL JOB a propósito: un cambio de URL
  * del SII se corrige con deploy de la app, sin pasar por Chrome Web Store.
  */
-export const FACTURA_PORTAL_START_URL =
-  "https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi";
+export function facturaPortalStartUrl(tipoDte: 33 | 34): string {
+  return `https://www1.sii.cl/cgi-bin/Portal001/mipeLaunchPage.cgi?OPCION=${tipoDte}&TIPO=4`;
+}
 
 /** Tope visible del campo "Nombre Producto" del portal (~40-50; usamos 40). */
 export const FACTURA_NOMBRE_PRODUCTO_MAX = 40;
@@ -85,7 +84,8 @@ export interface FacturaJob {
     giro?: string;
     direccion: string;
     comuna: string;
-    ciudad?: string;
+    /** Siempre presente: dato del caller o fallback a la comuna (el portal la exige). */
+    ciudad: string;
     email?: string;
     contacto?: string;
     tipo_compra: "del_giro";
@@ -135,6 +135,11 @@ export function buildFacturaJob(input: FacturaJobInput): FacturaJob {
   const razonSocial = required(input.receptor.razonSocial, "FACTURA_RECEPTOR_SIN_RAZON_SOCIAL");
   const direccion = required(input.receptor.direccion, "FACTURA_RECEPTOR_SIN_DIRECCION");
   const comuna = required(input.receptor.comuna, "FACTURA_RECEPTOR_SIN_COMUNA");
+  // Ciudad: el portal la EXIGE y su autocomplete la deja vacía (verificado en
+  // vivo — el "bug" de Matías). Si el dato no viene, la comuna es el fallback
+  // estándar chileno; el job siempre viaja con ciudad para que el worker no
+  // improvise.
+  const ciudad = clean(input.receptor.ciudad) ?? comuna;
 
   // La matemática es UNA (plantilla.ts): 33 desarma el total en neto+IVA con
   // el mismo redondeo que vio el usuario en la revisión; 34 va entero exento.
@@ -161,7 +166,7 @@ export function buildFacturaJob(input: FacturaJobInput): FacturaJob {
       giro: clean(input.receptor.giro),
       direccion,
       comuna,
-      ciudad: clean(input.receptor.ciudad),
+      ciudad,
       email: clean(input.receptor.email),
       contacto: clean(input.receptor.contacto),
       tipo_compra: "del_giro",
@@ -174,7 +179,7 @@ export function buildFacturaJob(input: FacturaJobInput): FacturaJob {
       monto_exento: montos.exento,
     },
     requires_cert_password: true,
-    start_url: FACTURA_PORTAL_START_URL,
+    start_url: facturaPortalStartUrl(input.tipoDte),
     learn_only: learnOnly,
     auto_emit: !learnOnly,
     allow_final_emit: !learnOnly,
