@@ -12,7 +12,7 @@ import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
 
 type TipoDte = 33 | 34 | 39 | 41;
-type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro";
+type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro" | "Contado" | "Crédito" | "";
 
 // Etiquetas exactas del select "Elija método de pago" del portal e-Boleta SII.
 const FORMAS_PAGO: FormaPago[] = ["Efectivo", "Pago Electrónico", "Transferencia Electrónica", "Cheque", "Otro"];
@@ -41,6 +41,7 @@ interface BoletaDraft {
   receptorRazonSocial: string;
   receptorDireccion: string;
   receptorComuna: string; // solo carril facturas (SimpleAPI); e-Boleta no tiene Comuna
+  receptorGiro?: string;  // solo mesa facturas: la factura individualiza al receptor entero
   receptorEmail: string;
   receptorTelefono: string;
   detalleNombre: string;
@@ -306,12 +307,21 @@ const RESET_SAFE_STATUSES = new Set([
   "retrying",
 ]);
 
-export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; onClose?: (saved?: boolean) => void }) {
+export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, mesaFactura = false, onClose }: { empresaTipo?: string; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; mesaFactura?: boolean; onClose?: (saved?: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
-  const tipoInicial: TipoDte = empresaTipo === "exento" ? 41 : 39;
-  const storageKey = `v5-emision-directa-session-drafts:${empresaId ?? "default"}`;
-  const [drafts, setDrafts] = useState<BoletaDraft[]>(() => [newDraft(tipoInicial)]);
+  // Modo FACTURA ÚNICA (mesa Facturas): misma vista y mismo lenguaje —
+  // pestañas de borradores, secciones, todo — con tipos 33/34, receptor
+  // completo obligatorio y forma de pago Contado/Crédito sin default.
+  const tipoInicial: TipoDte = mesaFactura
+    ? (empresaTipo === "exento" ? 34 : 33)
+    : (empresaTipo === "exento" ? 41 : 39);
+  // Los borradores de cada mesa viven aparte: una boleta a medias no puede
+  // reaparecer como factura ni al revés.
+  const storageKey = `v5-emision-directa-session-drafts:${empresaId ?? "default"}${mesaFactura ? ":factura" : ""}`;
+  const [drafts, setDrafts] = useState<BoletaDraft[]>(() => [
+    mesaFactura ? { ...newDraft(tipoInicial), formaPago: "" as FormaPago } : newDraft(tipoInicial),
+  ]);
   const [nextDraftSeq, setNextDraftSeq] = useState(2);
   const [activeDraftId, setActiveDraftId] = useState<string>(() => drafts[0]?.id ?? "");
   const [emitiendo, setEmitiendo] = useState(false);
@@ -368,8 +378,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   // facturas 33/34 → SimpleAPI. El gate por tipo evita que una factura
   // termine en el bot de e-Boleta o una boleta en el generador de facturas.
   const isBoletaTipo = tipoDte === 39 || tipoDte === 41;
-  const usesSiiLocal = emisionProveedor === "sii_local" && isBoletaTipo;
-  const usesSimpleApi = facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
+  const usesSiiLocal = !mesaFactura && emisionProveedor === "sii_local" && isBoletaTipo;
+  // En la mesa Facturas la emisión va SIEMPRE por el carril del lote (dos
+  // pasos: crear propuesta + emitir) — el server decide si el proveedor real
+  // existe. SimpleAPI queda para el modo dev de la mesa boletas.
+  const usesSimpleApi = !mesaFactura && facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
   const currentEmissionJobId = localWorker?.jobId ?? simpleApiJobId;
   const {
     status: emissionLock,
@@ -389,7 +402,20 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   const receptorNombrePendiente = receptorRut.trim().length > 0 && !receptorRazonSocial.trim();
   // Res. Ex. SII 44/2025: sobre ~135 UF la boleta debe identificar al comprador.
   const receptorObligatorioPendiente = total > umbralReceptor && (!receptorRut.trim() || !receptorRazonSocial.trim());
-  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorNombrePendiente && !receptorObligatorioPendiente && !emitiendo;
+  // Modo factura: receptor COMPLETO (decisión del fundador) + forma de pago
+  // elegida expresamente (sin default). Los faltantes se listan para el hint.
+  const receptorGiro = activeDraft.receptorGiro ?? "";
+  const facturaFaltantes = mesaFactura
+    ? [
+        !receptorRut.trim() && "RUT",
+        !receptorRazonSocial.trim() && "razón social",
+        !receptorGiro.trim() && "giro",
+        !receptorDireccion.trim() && "dirección",
+        !receptorComuna.trim() && "comuna",
+      ].filter((x): x is string => Boolean(x))
+    : [];
+  const facturaFormaPagoElegida = !mesaFactura || formaPago === "Contado" || formaPago === "Crédito";
+  const canSubmit = total > 0 && detalleNombre.trim().length > 0 && !rutReceptorInvalido && !receptorNombrePendiente && !receptorObligatorioPendiente && facturaFaltantes.length === 0 && facturaFormaPagoElegida && !emitiendo;
   // Anti-doble-emisión CROSS-JOB: mientras una emisión SII siga sin resolverse
   // (folio pendiente de capturar/ingresar), NO re-habilitar el botón aunque el
   // servidor haya soltado el lock por una captura de evidencia débil. De lo
@@ -960,6 +986,72 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     setErrors([]);
     setLastResult(null);
 
+    // ── MESA FACTURA: dos pasos por el carril del lote, cero lógica propia ──
+    // /factura-unica crea documento→movimiento→propuesta (nace aprobada:
+    // tipearla ES el gesto) y /emitir-lote emite con los mismos gates de
+    // cuota, locks y anti-doble-emisión del masivo.
+    if (mesaFactura) {
+      try {
+        const crear = await fetch("/api/intermediaria/factura-unica", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            receptor_rut: receptorRut.trim(),
+            razon_social: receptorRazonSocial.trim(),
+            giro: receptorGiro.trim(),
+            direccion: receptorDireccion.trim(),
+            comuna: receptorComuna.trim(),
+            email: receptorEmail.trim() || undefined,
+            detalle: detalleNombre.trim(),
+            total,
+          }),
+        });
+        const creada = await crear.json().catch(() => null);
+        if (!creada?.ok) {
+          const msg = creada?.detalle ?? "No se pudo preparar la factura";
+          setErrors([msg]);
+          toast(msg, "error");
+          return;
+        }
+        const emitirRes = await fetch("/api/intermediaria/emitir-lote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            propuesta_ids: [creada.propuesta_id],
+            forma_pago_lote: formaPago === "Contado" ? "contado" : "credito",
+          }),
+        });
+        const r = await emitirRes.json().catch(() => null);
+        const item = r?.resultados?.[0];
+        if (!r?.ok || !item?.ok) {
+          const msg = item?.error_message ?? r?.detalle ?? "No se pudo emitir la factura";
+          setErrors([msg]);
+          toast(msg, "error");
+          return;
+        }
+        setLastResult({ ok: true, folio: item.folio ?? null, monto_total: item.monto_total ?? total, proveedor: "mock", sandbox: true });
+        toast(`Factura simulada: folio #${item.folio ?? "--"} por ${fmt(item.monto_total ?? total)}. No se informó al SII.`);
+        setDrafts((current) => {
+          if (current.length <= 1) {
+            const draft = { ...newDraftForOpenSlot(tipoInicial, [], nextDraftSeq), formaPago: "" as FormaPago };
+            setNextDraftSeq((seq) => nextSeq(seq));
+            setActiveDraftId(draft.id);
+            return [draft];
+          }
+          const next = current.filter((draft) => draft.id !== activeDraft.id);
+          setActiveDraftId(next[0]?.id ?? "");
+          return next;
+        });
+        router.refresh();
+      } catch {
+        setErrors(["Error de red al emitir la factura"]);
+        toast("Error de red al emitir la factura", "error");
+      } finally {
+        setEmitiendo(false);
+      }
+      return;
+    }
+
     try {
       const body = {
         tipo_dte: tipoDte,
@@ -1368,7 +1460,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             <span className="ed-label">DTE único</span>
             <span className="ed-chip">Manual</span>
           </div>
-          <h2 style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>Emisión Directa</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>{mesaFactura ? "Factura única" : "Emisión Directa"}</h2>
           <p style={{ fontSize: 10, color: "var(--text2)", marginTop: 1 }}>Emite o genera un DTE manual cuando no viene desde una carga masiva.</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
@@ -1377,7 +1469,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         </div>
       </div>
 
-      <div className="ed-draft-tabs" aria-label="Boletas pendientes">
+      <div className="ed-draft-tabs" aria-label={mesaFactura ? "Facturas pendientes" : "Boletas pendientes"}>
         {drafts.map((draft) => {
           const active = draft.id === activeDraft.id;
           const hasContent = draftHasContent(draft);
@@ -1439,6 +1531,18 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               </div>
 
               <div className="ed-grid-2">
+                {mesaFactura ? (
+                  <>
+                    <button className="ed-type-button" onClick={() => setTipo(33)} disabled={tipoLocked} style={{ borderColor: tipoDte === 33 ? "rgba(232,85,62,.45)" : "var(--border)", background: tipoDte === 33 ? "var(--accent-light)" : "var(--surface)", color: tipoDte === 33 ? "#E8553E" : "var(--text2)", opacity: tipoLocked && tipoDte !== 33 ? 0.45 : 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800 }}>Factura afecta</div>
+                      <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 33 · IVA incluido</div>
+                    </button>
+                    <button className="ed-type-button" onClick={() => setTipo(34)} disabled={tipoLocked} style={{ borderColor: tipoDte === 34 ? "rgba(91,156,246,.45)" : "var(--border)", background: tipoDte === 34 ? "rgba(91,156,246,.12)" : "var(--surface)", color: tipoDte === 34 ? "var(--blue)" : "var(--text2)", opacity: tipoLocked && tipoDte !== 34 ? 0.45 : 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800 }}>Factura exenta</div>
+                      <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 34 · Sin IVA</div>
+                    </button>
+                  </>
+                ) : (<>
                 <button className="ed-type-button" onClick={() => setTipo(39)} disabled={tipoLocked} style={{ borderColor: tipoDte === 39 ? "rgba(232,85,62,.45)" : "var(--border)", background: tipoDte === 39 ? "var(--accent-light)" : "var(--surface)", color: tipoDte === 39 ? "#E8553E" : "var(--text2)", opacity: tipoLocked && tipoDte !== 39 ? 0.45 : 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 800 }}>Boleta afecta</div>
                   <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 39 · IVA incluido</div>
@@ -1447,8 +1551,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   <div style={{ fontSize: 12, fontWeight: 800 }}>Boleta exenta</div>
                   <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>DTE 41 · Sin IVA</div>
                 </button>
+                </>)}
                 {/* Facturas solo en dev (founder 2026-07-04): carril sin pulir, no se ofrece. */}
-                {facturasProveedor === "simpleapi" && devMode && (
+                {!mesaFactura && facturasProveedor === "simpleapi" && devMode && (
                   <>
                     <button className="ed-type-button" onClick={() => setTipo(33)} disabled={tipoLocked} style={{ borderColor: tipoDte === 33 ? "rgba(232,85,62,.45)" : "var(--border)", background: tipoDte === 33 ? "var(--accent-light)" : "var(--surface)", color: tipoDte === 33 ? "#E8553E" : "var(--text2)", opacity: tipoLocked && tipoDte !== 33 ? 0.45 : 1 }}>
                       <div style={{ fontSize: 12, fontWeight: 800 }}>Factura afecta</div>
@@ -1500,11 +1605,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   SII; lo que dejes vacío, queda vacío. Sobre 135 UF, RUT+Nombre pasan a
                   obligatorios (Res. 44/2025). (No hay "Comuna": el e-Boleta no la tiene.) */}
               <div className="ed-grid-2">
-                <Field label="RUT receptor" value={receptorRut} onChange={(value) => updateActiveDraft({ receptorRut: value })} placeholder="Opcional (obligatorio sobre 135 UF)" />
-                <Field label="Nombre" value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder="Cliente o consumidor" />
-                <Field label="Dirección" value={receptorDireccion} onChange={(value) => updateActiveDraft({ receptorDireccion: value })} placeholder="Opcional" />
-                <Field label="E-mail" value={receptorEmail} onChange={(value) => updateActiveDraft({ receptorEmail: value })} placeholder="Opcional (para enviarle la boleta)" />
+                <Field label="RUT receptor" value={receptorRut} onChange={(value) => updateActiveDraft({ receptorRut: value })} placeholder={mesaFactura ? "Obligatorio" : "Opcional (obligatorio sobre 135 UF)"} />
+                <Field label={mesaFactura ? "Razón social" : "Nombre"} value={receptorRazonSocial} onChange={(value) => updateActiveDraft({ receptorRazonSocial: value })} placeholder={mesaFactura ? "Obligatoria" : "Cliente o consumidor"} />
+                {mesaFactura && <Field label="Giro" value={receptorGiro} onChange={(value) => updateActiveDraft({ receptorGiro: value })} placeholder="Obligatorio" />}
+                <Field label="Dirección" value={receptorDireccion} onChange={(value) => updateActiveDraft({ receptorDireccion: value })} placeholder={mesaFactura ? "Obligatoria" : "Opcional"} />
+                {mesaFactura && <Field label="Comuna" value={receptorComuna} onChange={(value) => updateActiveDraft({ receptorComuna: value })} placeholder="Obligatoria" />}
+                <Field label="E-mail" value={receptorEmail} onChange={(value) => updateActiveDraft({ receptorEmail: value })} placeholder={mesaFactura ? "Opcional (para enviarle la factura)" : "Opcional (para enviarle la boleta)"} />
                 <Field label="Teléfono" value={receptorTelefono} onChange={(value) => updateActiveDraft({ receptorTelefono: value })} placeholder="Opcional" />
+                {mesaFactura && facturaFaltantes.length > 0 && (
+                  <p style={{ gridColumn: "1 / -1", fontSize: 9.5, color: "var(--amber)", margin: 0 }}>La factura individualiza a su receptor: falta {facturaFaltantes.join(", ")}.</p>
+                )}
               </div>
               {rutReceptorInvalido && (
                 <p style={{ fontSize: 9, color: "var(--red)", marginTop: 7 }}>
@@ -1536,6 +1646,21 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 <Field label="Detalle" value={detalleNombre} onChange={(value) => updateActiveDraft({ detalleNombre: value })} placeholder="Servicio prestado" maxLength={80} />
                 <Field label={tipoDte === 39 || tipoDte === 33 ? "Total bruto" : "Total exento"} value={monto} onChange={(value) => updateActiveDraft({ monto: value })} placeholder="$0" inputMode="numeric" />
               </div>
+              {mesaFactura ? (
+                <div style={{ marginTop: 8 }}>
+                  <span style={{ display: "block", fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Forma de pago</span>
+                  <div className="ed-grid-2">
+                    {(["Contado", "Crédito"] as const).map((fp) => (
+                      <button key={fp} type="button" className="ed-type-button" onClick={() => updateActiveDraft({ formaPago: fp })}
+                        style={{ borderColor: formaPago === fp ? "rgba(201,242,75,.5)" : "var(--border)", background: formaPago === fp ? "rgba(201,242,75,.08)" : "var(--surface)", color: formaPago === fp ? "var(--lime)" : "var(--text2)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 800 }}>{fp}</div>
+                        <div style={{ fontSize: 9, marginTop: 3, color: "var(--text2)" }}>{fp === "Contado" ? "La prestación ya está pagada" : "Por pagar"}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {!facturaFormaPagoElegida && <p style={{ fontSize: 9.5, color: "var(--text3)", marginTop: 5 }}>Sin selección previa a propósito: tú decides cómo fue la operación.</p>}
+                </div>
+              ) : (
               <label style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
                 <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Método de pago</span>
                 <select value={formaPago} onChange={(e) => updateActiveDraft({ formaPago: e.target.value as FormaPago })}
@@ -1543,6 +1668,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   {FORMAS_PAGO.map((fp) => <option key={fp} value={fp}>{fp}</option>)}
                 </select>
               </label>
+              )}
             </section>
           </main>
 

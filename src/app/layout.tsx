@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ThemeInitializer from "@/components/ThemeInitializer";
+import SwRegistrar from "@/components/SwRegistrar";
 import { ToastProvider } from "@/components/Toast";
 
 const inter = Inter({
@@ -15,6 +16,17 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
 });
+
+// Safari hace zoom sobre los campos chicos del formulario de Transbank y al
+// volver a la app MANTIENE ese zoom: la página aparecía agrandada hasta que el
+// usuario la reseteaba a mano. maximum-scale=1 hace que Safari re-encuadre al
+// cargar. (iOS igual permite el pellizco del usuario — ignora maximum-scale
+// para el gesto desde iOS 10 — así que no bloquea a nadie.)
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   title: { default: "MassDTE", template: "%s | MassDTE" },
@@ -40,7 +52,17 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]">
+        {/* Perf: el primer request client-side a Supabase (realtime, candado)
+            paga DNS+TCP+TLS completo desde Chile (~300-450ms); el preconnect lo
+            adelanta mientras el documento aún carga. React lo iza al <head>. */}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <>
+            <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
+          </>
+        )}
         <ThemeInitializer />
+        <SwRegistrar />
         <ToastProvider>
           {children}
         </ToastProvider>

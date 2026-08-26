@@ -51,10 +51,11 @@ function searchData(value: unknown): SearchData {
 }
 
 export default async function V5Page({ searchParams }: {
-  searchParams: Promise<{ date?: string; month?: string; view?: string }>;
+  searchParams: Promise<{ date?: string; month?: string; view?: string; mesa?: string }>;
 }) {
-  const sessionUsuario = (await getUsuario())!;
-  const support = await getDevSupportMode();
+  // Perf F5: auth y modo soporte en paralelo (no dependen entre sí).
+  const [sessionUsuarioRaw, support] = await Promise.all([getUsuario(), getDevSupportMode()]);
+  const sessionUsuario = sessionUsuarioRaw!;
   const supportMode = support?.ok ? support : null;
   const usuario = supportMode
     ? ({ ...sessionUsuario, empresa_id: supportMode.empresaId, empresas: supportMode.empresa } as typeof sessionUsuario)
@@ -64,18 +65,11 @@ export default async function V5Page({ searchParams }: {
   const empresaId = usuario.empresa_id;
   const boletasProveedor = mapBoletasProveedor(usuario.empresas.boletas_emision_proveedor ?? usuario.empresas.emision_proveedor);
   const facturasProveedor = mapFacturasProveedor(usuario.empresas.facturas_emision_proveedor);
-  const { date: dateParam, month: monthParam, view } = await searchParams;
+  const { date: dateParam, month: monthParam, view, mesa: mesaQuery } = await searchParams;
+  // Solo "factura" exacto abre esa mesa; cualquier otra cosa cae a boleta.
+  const mesaParam: "boleta" | "factura" = mesaQuery === "factura" ? "factura" : "boleta";
 
   const supabase = supportMode ? supportMode.sb : await createClient();
-
-  // Bundle inicial date-dependiente de la mesa (panel derecho + calendario).
-  // El toggle de día/semana/mes lo recarga client-side vía `cargarMesa` sin
-  // navegar; aquí solo se siembra el estado inicial (SSR).
-  const mesaInicial = await fetchMesaDateDependent(supabase, empresaId, {
-    giro: usuario.empresas.giro,
-    razon_social: usuario.empresas.razon_social,
-    tipo_contribuyente: usuario.empresas.tipo_contribuyente,
-  }, { date: dateParam, month: monthParam, view });
 
   // Año/mes actuales EN CHILE (no UTC del server, que en Vercel corre): base
   // del mes RCV (resumen de ventas + visor), date-independiente del calendario.
@@ -87,34 +81,39 @@ export default async function V5Page({ searchParams }: {
   const firstThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, "0")}-01`;
   const firstNextMonth = curMonth === 11 ? `${curYear + 1}-01-01` : `${curYear}-${String(curMonth + 2).padStart(2, "0")}-01`;
 
-  // Date-INDEPENDIENTE: clientes (selector de receptor) y CAFs de la empresa. Se
-  // cargan una vez; el toggle del calendario no los re-consulta (eso lo cubre
-  // `mesaInicial` / `cargarMesa`). El resumen de ventas del rango va en mesaInicial.
-  const [clData, cafsData] = await Promise.all([
-    supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
-    supabase.from("boletas_caf_mock")
-      .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
-      .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
-  ]);
-
-  const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
-  const [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa] = await Promise.all([
-    listarEmpresasSelector(),
-    listarEquipoBusiness(),
-    listarResumenCupos(),
-    estadoEleccionEmpresa(),
-  ]);
-  const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
-  const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
-  const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
-
-  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
-
-  // Date-INDEPENDIENTE: boletas del mes para el visor RCV + datos de
-  // búsqueda/historial (últimos 100 de docs/boletas/propuestas). Van en paralelo
-  // (la latencia ≈ la query más lenta). El avance del pipeline por documento
-  // viaja ahora en el bundle date-dependiente de la mesa (`mesaInicial`).
-  const [boletasRcvRes, searchTriple] = await Promise.all([
+  // Perf F5: TODO el bundle inicial va en UN solo Promise.all — antes eran 4
+  // etapas seriales (mesa → clientes/cafs → 4 actions → rcv/búsqueda) que no
+  // dependían entre sí: la latencia era la SUMA de las etapas; ahora es el MÁXIMO.
+  // Grupos:
+  //  - mesaInicial: bundle date-dependiente (panel derecho + calendario); el
+  //    toggle día/semana/mes lo recarga client-side vía `cargarMesa` sin navegar.
+  //  - clientes + CAFs: date-independientes, se cargan una vez.
+  //  - 4 server actions de cuenta (selector de empresas, equipo, cupos, elección).
+  //  - RCV del mes + triple de búsqueda/historial (últimos 100 c/u).
+  const [
+    mesaInicial,
+    [clData, cafsData],
+    [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa],
+    [boletasRcvRes, searchTriple],
+  ] = await Promise.all([
+    fetchMesaDateDependent(supabase, empresaId, {
+      giro: usuario.empresas.giro,
+      razon_social: usuario.empresas.razon_social,
+      tipo_contribuyente: usuario.empresas.tipo_contribuyente,
+    }, { date: dateParam, month: monthParam, view, mesa: mesaParam }),
+    Promise.all([
+      supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
+      supabase.from("boletas_caf_mock")
+        .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
+        .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
+    ]),
+    Promise.all([
+      listarEmpresasSelector(),
+      listarEquipoBusiness(),
+      listarResumenCupos(),
+      estadoEleccionEmpresa(),
+    ]),
+    Promise.all([
     supabase.from("boletas_emitidas")
       .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
       .eq("empresa_id", empresaId)
@@ -128,10 +127,20 @@ export default async function V5Page({ searchParams }: {
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
       supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
         .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
-      supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))")
+      // Perf F5: columnas EXACTAS que consume SearchHistoryView (antes iba
+      // select * + movimientos_raw(*) + join a documentos_subidos que la vista
+      // ni miraba — cientos de KB de RSC payload al pedo por cada F5).
+      supabase.from("propuestas_ia").select("id,created_at,confianza,estado,tipo_dte,movimientos_raw(fecha,monto,descripcion,n_documento,tipo_flujo)")
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
+      ]),
     ]),
   ]);
+
+  const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
+  const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
+  const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
+  const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
+  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
   const boletasRcvData = boletasRcvRes.data;
   const [searchDocsData, searchBoletasData, searchPropsData] = searchTriple;
 
@@ -200,6 +209,74 @@ export default async function V5Page({ searchParams }: {
 .dz:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:color-mix(in srgb,var(--lime) 40%,transparent)}
 .dz-icon{width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--lime) 6%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .dz-icon svg{width:16px;height:16px;color:var(--lime)}
+/* Acciones de cada archivo en cola (renombrar / quitar). Antes eran 16px con
+   fuente 8: casi invisibles y difíciles de apuntar. */
+.dz-icon-btn{width:28px;height:28px;border-radius:7px;border:none;cursor:pointer;font-size:14px;line-height:1;background:transparent;color:var(--text2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
+.dz-icon-btn:hover{background:var(--bg-muted);color:var(--text)}
+.dz-icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* Botón de contexto para la IA. El degradado se ancla en el rojo de marca: un
+   arcoíris genérico se ve pegado de otra app. */
+.dz-ia-btn{box-shadow:0 0 0 0 transparent;display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:5px 9px;border-radius:7px;white-space:nowrap;cursor:pointer;border:1px solid color-mix(in srgb,#A78BFA 30%,transparent);background:color-mix(in srgb,#A78BFA 7%,transparent);color:var(--text2);flex-shrink:0;transition:border-color .15s,background .15s,box-shadow .25s}
+.dz-ia-btn:hover{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent);box-shadow:0 0 16px -4px rgba(167,139,250,.55)}
+.dz-ia-btn:focus-visible{outline:2px solid #A78BFA;outline-offset:1px}
+.dz-ia-btn.puesto{border-color:color-mix(in srgb,#A78BFA 55%,transparent);background:color-mix(in srgb,#A78BFA 14%,transparent);color:#C4B5FD}
+.dz-ia-sp{font-size:10px;background:linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA);-webkit-background-clip:text;background-clip:text;color:transparent}
+/* Loop sin costura: el degradado arranca y termina en el MISMO color (el tile
+   calza consigo mismo), el tile mide 160px fijos, y la animación desplaza
+   exactamente esos 160px. Con background-position en % el navegador lo calcula
+   contra (ancho caja - ancho imagen), que es negativo cuando la imagen es más
+   ancha — por eso el salto no caía en el tile y se veía el corte. */
+.dz-ia-word{font-weight:800;letter-spacing:.02em;background-image:linear-gradient(90deg,#E8553E,#F59E0B,#A78BFA,#60A5FA,#A78BFA,#F59E0B,#E8553E);background-size:160px 100%;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;color:transparent;animation:dz-ia-corre 5s linear infinite}
+@keyframes dz-ia-corre{from{background-position:0 0}to{background-position:160px 0}}
+@media (prefers-reduced-motion:reduce){.dz-ia-word{animation:none}}
+
+/* Popup de contexto. Calca el overlay del modal de la app (.ed-overlay/.ed-panel):
+   mismo velo con blur, mismo radio de 20px, misma superficie. */
+.dz-ctx-velo{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:dzFadeIn .2s ease both}
+.dz-ctx{width:min(440px,96vw);max-height:88vh;overflow-y:auto;padding:20px;border-radius:20px;border:1px solid var(--border);background:var(--surface);box-shadow:0 30px 90px rgba(0,0,0,.45);animation:dzPopIn .22s cubic-bezier(.2,.8,.3,1) both,dzGlow 7s linear infinite}
+@keyframes dzFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes dzPopIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+/* Glow arcoíris: el color viaja por fuera del popup, pero el BORDE se queda
+   neutro como el resto de la app (el contorno de colores se veía cargado).
+   Cierra en el color inicial para que el ciclo no tenga salto. La sombra negra se repite en cada
+   paso porque la animación reemplaza el box-shadow completo. */
+@keyframes dzGlow{
+0%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(232,85,62,.5)}
+25%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(245,158,11,.5)}
+50%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(167,139,250,.55)}
+75%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(96,165,250,.5)}
+100%{box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 52px -6px rgba(232,85,62,.5)}}
+@media (prefers-reduced-motion:reduce){.dz-ctx-velo{animation:none}.dz-ctx{animation:none;box-shadow:0 30px 90px rgba(0,0,0,.45),0 0 46px -8px rgba(167,139,250,.5)}}
+.dz-ctx h4{font-size:14px;font-weight:700;margin:0 0 4px;color:var(--text)}
+.dz-ctx-ph{font-size:11.5px;color:var(--text2);margin:0 0 12px;line-height:1.45}
+.dz-ctx-ph b{color:var(--text)}
+.dz-ctx-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+.dz-ctx-chip{font-size:10px;padding:5px 10px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:border-color .15s,background .15s,color .15s}
+.dz-ctx-chip:hover{border-color:color-mix(in srgb,#A78BFA 45%,transparent);color:var(--text)}
+.dz-ctx-chip.on{border-color:color-mix(in srgb,#A78BFA 45%,transparent);background:color-mix(in srgb,#A78BFA 13%,transparent);color:#C4B5FD}
+.dz-ctx-ta{width:100%;min-height:74px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 11px;color:var(--text);font-size:11.5px;line-height:1.55;font-family:inherit;resize:none;transition:border-color .15s}
+.dz-ctx-ta:focus{outline:none;border-color:color-mix(in srgb,#A78BFA 45%,transparent)}
+.dz-ctx-cta{font-size:10px;color:var(--text3);margin-top:7px}
+.dz-ctx-cta b{color:var(--text2)}
+.dz-ctx-priv{display:flex;gap:7px;font-size:10px;color:var(--text3);margin-top:10px;line-height:1.45}
+.dz-ctx-priv b{color:var(--text2)}
+/* Switch calcado del "Detalle" del visor (GlosaComunControl): 26x15 con la
+   bolita que se corre. Es una preferencia, no una selección — por eso switch y
+   no checkbox. La bolita se mueve con transform: justify-content NO anima,
+   salta de un lado al otro. */
+.dz-ctx-sw{display:inline-flex;align-items:center;gap:8px;margin-top:12px;border:none;background:transparent;cursor:pointer;font-size:10.5px;font-weight:600;color:var(--text3);padding:0;font-family:inherit;transition:color .2s ease}
+.dz-ctx-sw.on{color:#C4B5FD}
+.dz-ctx-sw:focus-visible{outline:2px solid #A78BFA;outline-offset:3px;border-radius:4px}
+.dz-ctx-sw-track{width:26px;height:15px;border-radius:999px;padding:2px;background:var(--bg-muted);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:flex-start;transition:background .22s ease,border-color .22s ease,box-shadow .22s ease;flex-shrink:0}
+.dz-ctx-sw.on .dz-ctx-sw-track{background:color-mix(in srgb,#A78BFA 35%,transparent);border-color:color-mix(in srgb,#A78BFA 45%,transparent);box-shadow:0 0 12px -2px rgba(167,139,250,.5)}
+.dz-ctx-sw-knob{width:11px;height:11px;border-radius:50%;background:var(--text3);transition:transform .22s cubic-bezier(.34,1.4,.5,1),background .22s ease}
+.dz-ctx-sw.on .dz-ctx-sw-knob{transform:translateX(9px);background:#A78BFA}
+@media (prefers-reduced-motion:reduce){.dz-ctx-sw-knob{transition:background .22s ease}}
+.dz-ctx-pie{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.dz-ctx-b{font-size:11.5px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:background .15s,color .15s}
+.dz-ctx-b:hover{background:var(--bg-muted);color:var(--text)}
+.dz-ctx-b.p{background:linear-gradient(135deg,#8B5CF6,#6366F1);color:#fff;border:none}
+.dz-ctx-b.p:hover{filter:brightness(1.1)}
 .dz-txt h4{font-size:12px;font-weight:600}
 .dz-txt p{font-size:10px;color:var(--text2);margin-top:1px}
 .dz-fmts{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:9px;color:var(--text3);flex-wrap:wrap}
@@ -341,7 +418,7 @@ export default async function V5Page({ searchParams }: {
           // fuerza remount para re-sembrar el estado client-held y el cache de rangos
           // (router.refresh NO re-siembra la mesa) — evita mostrar datos de la empresa
           // anterior en Check/Emitir/Boletas.
-          key={empresaId}
+          key={`${empresaId}:${mesaParam}`}
           initialMesa={mesaInicial}
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
@@ -352,7 +429,7 @@ export default async function V5Page({ searchParams }: {
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} /></span></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} /></span></div>}
           actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
@@ -369,9 +446,22 @@ export default async function V5Page({ searchParams }: {
 
             {/* EMITIR PANEL — massDTE arriba de boleta única */}
              <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
-              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} />
+              <MassDTEAction empresaId={empresaId} readOnlyReason={supportReadOnlyReason} mesa={mesaParam} />
             </div></GlowWrap>
-             <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+             {mesaParam === "factura" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
+              <EmisionDirectaAction
+                mesa="factura"
+                empresaTipo={usuario.empresas.tipo_contribuyente}
+                empresaId={empresaId}
+                empresaRut={usuario.empresas.rut}
+                empresaRazonSocial={usuario.empresas.razon_social}
+                empresaGiro={usuario.empresas.giro}
+                empresaDireccion={usuario.empresas.direccion}
+                empresaComuna={usuario.empresas.comuna}
+                readOnlyReason={supportReadOnlyReason}
+              />
+            </div></GlowWrap>}
+             {mesaParam === "boleta" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction
                 empresaTipo={usuario.empresas.tipo_contribuyente}
                 empresaId={empresaId}
@@ -385,7 +475,7 @@ export default async function V5Page({ searchParams }: {
                 empresaComuna={usuario.empresas.comuna}
                 readOnlyReason={supportReadOnlyReason}
               />
-            </div></GlowWrap>
+            </div></GlowWrap>}
             <div style={{display:"none"}}><RCVButton /></div>
             {equipoBusiness.ok && equipoBusiness.equipo && (
               <TeamBusinessPanel

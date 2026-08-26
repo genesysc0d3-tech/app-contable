@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cambiarEmpresaActiva, crearEmpresaAdicional } from "./actions";
 
 export type EmpresaSelectorItem = {
@@ -22,6 +23,8 @@ export default function EmpresaBrand({
   size = 34,
   textSize = 18,
   maxWidth = 260,
+  mesa = "boleta",
+  empresaRut = null,
 }: {
   nombre: string;
   logoUrl: string;
@@ -31,6 +34,10 @@ export default function EmpresaBrand({
   size?: number;
   textSize?: number;
   maxWidth?: number;
+  /** Mesa activa del escritorio; el conmutador BO|FA vive en este popup. */
+  mesa?: "boleta" | "factura";
+  /** RUT de la empresa activa — la variante Start/Pro no lista empresas, muestra esto. */
+  empresaRut?: string | null;
 }) {
   const router = useRouter();
   const [logoOk, setLogoOk] = useState(Boolean(logoUrl));
@@ -39,9 +46,34 @@ export default function EmpresaBrand({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const rootRef = useRef<HTMLSpanElement>(null);
-  // El menú abre si hay más de una empresa (cambiar) O si el titular Business
-  // aún puede agregar la siguiente (aunque hoy tenga una sola).
-  const canSwitch = multiempresa && (empresas.length > 1 || puedeAgregar);
+  // Antes el menú abría solo con multiempresa. Ahora abre SIEMPRE: el
+  // conmutador de mesa (boletas|facturas) vive acá, también para Start/Pro
+  // (que en vez de lista de empresas muestra la suya con su RUT).
+  const puedeListarEmpresas = multiempresa && (empresas.length > 1 || puedeAgregar);
+  const canSwitch = true;
+
+  // Cambiar de mesa navega DE VERDAD (no replaceState): la mesa re-siembra
+  // todo su estado client-held desde el server, que es la única forma segura
+  // de cambiar de mundo (misma razón del remount por empresa). La garantía la
+  // da el `key={empresaId}:{mesaParam}` de MesaController en page.tsx — al
+  // cambiar la query, React destruye y reconstruye SOLO la mesa con los datos
+  // frescos. Por eso basta router.push (navegación de cliente): antes había un
+  // window.location.assign que recargaba el documento completo (re-render de
+  // todo el server + re-hidratar todo el JS) y hacía sentir el cambio como
+  // abrir la app de cero.
+  function cambiarMesa(destino: "boleta" | "factura") {
+    setOpen(false);
+    if (destino === mesa) return;
+    router.push(`/massdte?mesa=${destino}`);
+  }
+
+  // "Shader cache" del conmutador: al ABRIR el popup (la señal de intención —
+  // los botones BO|FA viven ahí) un <Link prefetch={true}> invisible baja la
+  // OTRA mesa COMPLETA (con datos; router.prefetch() solo trae el layout en
+  // rutas dinámicas — medido: el click igual iba al servidor). El router.push
+  // del click consume ese mismo cache (staleTimes.dynamic lo mantiene 30s) →
+  // cambio instantáneo. En dev el prefetch es no-op; se siente en build prod.
+  const otraMesa = mesa === "boleta" ? "factura" : "boleta";
 
   useEffect(() => {
     setLogoOk(Boolean(logoUrl));
@@ -101,6 +133,11 @@ export default function EmpresaBrand({
 
   return (
     <span ref={rootRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: logoOk ? 0 : 9, minWidth: 0, width: "fit-content", maxWidth, whiteSpace: "nowrap", flexShrink: 0, overflow: "visible" }}>
+      {/* Título de la mesa activa, sobre el logo — el usuario siempre sabe en
+          qué mundo está parado sin abrir nada. */}
+      <span aria-hidden style={{ position: "absolute", left: 1, top: -13, fontSize: 8, fontWeight: 850, letterSpacing: ".09em", textTransform: "uppercase", color: mesa === "factura" ? "var(--lime)" : "var(--text3)", pointerEvents: "none", whiteSpace: "nowrap" }}>
+        {mesa === "factura" ? "Mesa facturas" : "Mesa boletas"}
+      </span>
       {canSwitch ? (
         <button
           type="button"
@@ -117,12 +154,27 @@ export default function EmpresaBrand({
 
       {open && canSwitch && (
         <div className="eb-pop" style={{ position: "absolute", left: 0, top: size + 10, zIndex: 90, width: `min(${agregando ? 340 : 320}px, calc(100vw - 28px))`, padding: 8, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 var(--border)", color: "var(--text)", whiteSpace: "normal", transformOrigin: "top left" }}>
+          {/* Prefetch COMPLETO de la otra mesa mientras el popup está abierto
+              (invisible, 1×1px: los botones visibles quedan intactos). */}
+          <Link href={`/massdte?mesa=${otraMesa}`} prefetch={true} aria-hidden tabIndex={-1}
+            style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none", overflow: "hidden" }} />
           {/* Entrada con resorte sutil; el nowrap del brand NO se hereda (los
               textos del panel deben envolver, no escaparse del borde). */}
           <style>{`
             @keyframes ebPopIn{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
             .eb-pop{animation:ebPopIn .18s cubic-bezier(.22,1,.36,1) both;}
-            @media (prefers-reduced-motion: reduce){.eb-pop{animation:none;}}
+            /* Par BO|FA: al pasar el mouse, el tocado CRECE y aplasta al
+               hermano; al salir, ambos vuelven. Misma curva que el resto del
+               v5. Sin JS: es pura geometría del contenedor. */
+            .eb-bofa{display:flex;gap:5px;flex-shrink:0}
+            .eb-bofa button{width:34px;height:26px;border-radius:8px;font-size:10px;font-weight:900;cursor:pointer;font-family:inherit;padding:0;overflow:hidden;white-space:nowrap;transition:width .28s cubic-bezier(.22,1,.36,1),background .2s,border-color .2s,color .2s,font-size .28s cubic-bezier(.22,1,.36,1)}
+            .eb-bofa:hover button{width:22px;font-size:9px}
+            .eb-bofa:hover button:hover{width:64px;font-size:10px}
+            /* Al crecer, la sigla cede el lugar a la palabra completa. */
+            .eb-bofa .full{display:none}
+            .eb-bofa:hover button:hover .full{display:inline}
+            .eb-bofa:hover button:hover .sigla{display:none}
+            @media (prefers-reduced-motion: reduce){.eb-pop{animation:none;}.eb-bofa button{transition:background .2s,border-color .2s,color .2s}.eb-bofa:hover button{width:34px;font-size:10px}.eb-bofa:hover button:hover{width:34px}.eb-bofa:hover button:hover .full{display:none}.eb-bofa:hover button:hover .sigla{display:inline}}
           `}</style>
           {agregando ? (
             <AgregarEmpresaForm
@@ -137,28 +189,72 @@ export default function EmpresaBrand({
               onCancelar={() => setAgregando(false)}
             />
           ) : (<>
-          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Cambiar empresa</div>
+          {puedeListarEmpresas ? (<>
+          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Cambiar empresa · y mesa</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {empresas.map((empresa) => (
-              <button
+              <div
                 key={empresa.id}
-                type="button"
-                onClick={() => switchEmpresa(empresa.id)}
-                disabled={pending}
-                style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: empresa.activaActual ? "1px solid rgba(232,85,62,.22)" : "1px solid transparent", background: empresa.activaActual ? "rgba(232,85,62,.09)" : "transparent", color: "var(--text)", cursor: pending ? "wait" : empresa.activaActual ? "default" : "pointer", textAlign: "left" }}
+                style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: empresa.activaActual ? "1px solid rgba(232,85,62,.22)" : "1px solid transparent", background: empresa.activaActual ? "rgba(232,85,62,.09)" : "transparent", color: "var(--text)" }}
               >
-                <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: empresa.activaActual ? "rgba(232,85,62,.14)" : "var(--bg-muted)", color: empresa.activaActual ? "var(--accent)" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
-                  {empresa.nombre.slice(0, 2).toUpperCase()}
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.nombre}</span>
-                  <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.rut ?? "Empresa"}</span>
-                </span>
-                {empresa.activaActual && <span style={{ fontSize: 9, fontWeight: 850, color: "var(--accent)" }}>Actual</span>}
-              </button>
+                <button type="button" onClick={() => switchEmpresa(empresa.id)} disabled={pending} style={{ display: "contents", border: 0, padding: 0, background: "transparent", color: "inherit", cursor: pending ? "wait" : empresa.activaActual ? "default" : "pointer", textAlign: "left", font: "inherit" }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: empresa.activaActual ? "rgba(232,85,62,.14)" : "var(--bg-muted)", color: empresa.activaActual ? "var(--accent)" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>
+                    {empresa.nombre.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.nombre}</span>
+                    <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresa.rut ?? "Empresa"}</span>
+                  </span>
+                </button>
+                {/* El conmutador de mesa solo en la empresa ACTUAL: cambiar de
+                    empresa Y de mesa en un click sería adivinar la intención. */}
+                {empresa.activaActual ? (
+                  <span className="eb-bofa">
+                    <button type="button" onClick={() => cambiarMesa("boleta")} title="Mesa boletas"
+                      style={{
+                        border: mesa === "boleta" ? "1px solid rgba(232,85,62,.5)" : "1px solid var(--border)",
+                        background: mesa === "boleta" ? "rgba(232,85,62,.1)" : "transparent",
+                        color: mesa === "boleta" ? "var(--accent)" : "var(--text3)" }}><span className="sigla">BO</span><span className="full">Boleta</span></button>
+                    <button type="button" onClick={() => cambiarMesa("factura")} title="Mesa facturas"
+                      style={{
+                        border: mesa === "factura" ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                        background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent",
+                        color: mesa === "factura" ? "var(--lime)" : "var(--text3)" }}><span className="sigla">FA</span><span className="full">Factura</span></button>
+                  </span>
+                ) : (
+                  <span />
+                )}
+              </div>
             ))}
           </div>
-          {puedeAgregar && (
+          </>) : (<>
+          {/* Start/Pro: MISMA fila y MISMOS pills BO|FA que Business (decisión
+              fundador 2026-08-26: los botones de mesa se ven iguales en todos
+              los planes — antes acá había botones grandes distintos). */}
+          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Tu empresa · y mesa</div>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 42, padding: "7px 8px", borderRadius: 9, border: "1px solid rgba(232,85,62,.22)", background: "rgba(232,85,62,.09)", color: "var(--text)" }}
+          >
+            <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(232,85,62,.14)", color: "var(--accent)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{nombre.slice(0, 2).toUpperCase()}</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombre}</span>
+              <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{empresaRut ?? "Empresa"}</span>
+            </span>
+            <span className="eb-bofa">
+              <button type="button" onClick={() => cambiarMesa("boleta")} title="Mesa boletas"
+                style={{
+                  border: mesa === "boleta" ? "1px solid rgba(232,85,62,.5)" : "1px solid var(--border)",
+                  background: mesa === "boleta" ? "rgba(232,85,62,.1)" : "transparent",
+                  color: mesa === "boleta" ? "var(--accent)" : "var(--text3)" }}><span className="sigla">BO</span><span className="full">Boleta</span></button>
+              <button type="button" onClick={() => cambiarMesa("factura")} title="Mesa facturas"
+                style={{
+                  border: mesa === "factura" ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                  background: mesa === "factura" ? "rgba(201,242,75,.06)" : "transparent",
+                  color: mesa === "factura" ? "var(--lime)" : "var(--text3)" }}><span className="sigla">FA</span><span className="full">Factura</span></button>
+            </span>
+          </div>
+          </>)}
+          {puedeListarEmpresas && puedeAgregar && (
             <button
               type="button"
               onClick={() => setAgregando(true)}

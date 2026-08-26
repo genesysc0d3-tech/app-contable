@@ -16,7 +16,84 @@ function todayStr() {
 
 type EmisionProveedorUi = "mock" | "sii_local" | "simpleapi";
 
-export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string }) {
+/**
+ * Perf: pausa las animaciones infinitas del sparkle cuando la tarjeta sale del
+ * viewport (scroll, overlay que tapa todo). Fuera de pantalla = invisible, así
+ * que pausar es pixel-idéntico; solo deja de gastar GPU/CPU en algo que nadie ve.
+ */
+function useFxViewportPause<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => {
+      el.setAttribute("data-fx-off", entry.isIntersecting ? "false" : "true");
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return ref;
+}
+
+/**
+ * Estilos del sparkle button + overlay de emisión única. Compartidos entre la
+ * boleta única y la factura única (misma tarjeta, mismo lenguaje visual) — el
+ * fundador pidió explícitamente que la factura única siga el estilo de la
+ * boleta única, y la forma de garantizarlo es que sea EL MISMO CSS.
+ */
+function SparkleFxStyles() {
+  return (
+    <style>{`
+        .ed-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
+        .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
+        @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
+        .sp{position:relative;z-index:0;width:100%;overflow:hidden}
+        /* Perf: las animaciones infinitas rotan en su propia capa (compositor, sin repintar) */
+        .spark,.spark:before{will-change:transform}
+        .sp[data-fx-off="true"] .spark,.sp[data-fx-off="true"] .spark:before{animation-play-state:paused}
+        .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:var(--lime);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
+        .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:#2f5a0d;outline:none}
+        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:var(--amber);cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
+        .sparkle-button:active{filter:brightness(.96);transition:.3s}
+        .sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .22);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
+        .spark{position:absolute;inset:0;border-radius:inherit;rotate:0deg;overflow:hidden;mask:linear-gradient(white,transparent 50%);animation:flip calc(var(--spark) * 2) infinite steps(2,end);pointer-events:none}
+        .spark:before{content:"";position:absolute;width:200%;aspect-ratio:1;top:0;left:50%;z-index:-1;translate:-50% -15%;transform:rotate(-90deg);opacity:calc(var(--active) + .4);background:conic-gradient(from 0deg,transparent 0 340deg,white 360deg);transition:opacity var(--transition);animation:rotate var(--spark) linear infinite both}
+        .spark:after{content:"";position:absolute;inset:var(--cut);border-radius:inherit}
+        .backdrop{position:absolute;inset:var(--cut);background:var(--bg);border-radius:inherit;transition:background var(--transition);pointer-events:none}
+        .sparkle-label{position:relative;z-index:1;display:flex;align-items:center;gap:10px;width:100%}
+        .sparkle-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:rgba(180,240,39,.12);color:currentColor;flex-shrink:0;transition:background var(--transition),color var(--transition)}
+        .sparkle-button:is(:hover,:focus-visible) .sparkle-icon{background:hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .22);color:#2f5a0d}
+        .sparkle-title{font-size:12px;font-weight:700;color:currentColor;transition:color var(--transition)}
+        .sparkle-subtitle{font-size:9px;color:var(--text2);margin-top:1px;transition:color var(--transition)}
+        .sparkle-button:is(:hover,:focus-visible) .sparkle-subtitle{color:rgba(47,90,13,.72)}
+        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:var(--amber)}
+        .receipt-sparkle{inline-size:1.38em;translate:-8% -3%;flex-shrink:0;position:relative;z-index:1;color:currentColor;overflow:visible}
+        .receipt-sparkle .receipt-paper{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;filter:drop-shadow(0 0 calc(var(--active) * 8px) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .7));transform-box:fill-box;transform-origin:center;transition:stroke var(--transition),filter var(--transition)}
+        .receipt-sparkle .receipt-line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;opacity:.7;transform-origin:left;transition:opacity var(--transition)}
+        .receipt-sparkle .receipt-dot{fill:currentColor;opacity:.65;transition:opacity var(--transition)}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-paper{animation:receipt-float .9s ease both}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-line{animation:receipt-scan .75s ease both;opacity:.95}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(3){animation-delay:.08s}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(4){animation-delay:.16s}
+        .sparkle-button:is(:hover,:focus-visible) .receipt-dot{animation:receipt-pop .55s ease both;opacity:1}
+        .particle-pen{position:absolute;width:200%;aspect-ratio:1;top:50%;left:50%;translate:-50% -50%;-webkit-mask:radial-gradient(white,transparent 65%);z-index:-1;opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
+        .particle{fill:white;width:calc(var(--size,.25) * 1rem);aspect-ratio:1;position:absolute;top:calc(var(--y) * 1%);left:calc(var(--x) * 1%);opacity:var(--alpha,1);animation:float-out calc(var(--duration,1) * 1s) calc(var(--delay) * -1s) infinite linear;transform-origin:var(--origin-x,1000%) var(--origin-y,1000%);z-index:-1;animation-play-state:var(--play-state,paused)}
+        .particle path{fill:hsl(0 0% 90%);stroke:none}
+        .particle:nth-of-type(even){animation-direction:reverse}
+        .sparkle-button:is(:hover,:focus-visible)~.particle-pen{--active:1;--play-state:running}
+        @keyframes bounce{35%,65%{scale:var(--scale)}}
+        @keyframes receipt-float{0%,100%{translate:0 0;rotate:0deg}45%{translate:0 -2px;rotate:-4deg}72%{translate:0 1px;rotate:2deg}}
+        @keyframes receipt-scan{0%{scale:0 1;opacity:.2}70%,100%{scale:1 1;opacity:.95}}
+        @keyframes receipt-pop{0%{scale:.4;opacity:.2}60%{scale:1.35;opacity:1}100%{scale:1;opacity:1}}
+        @keyframes flip{to{rotate:360deg}}
+        @keyframes rotate{to{transform:rotate(90deg)}}
+        @keyframes float-out{to{rotate:360deg}}
+      `}</style>
+  );
+}
+
+export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor = "mock", facturasProveedor = "mock", devMode = false, empresaRut, empresaRazonSocial, empresaGiro, empresaDireccion, empresaComuna, readOnlyReason, mesa = "boleta" }: { empresaTipo?: string | null; empresaId?: string; emisionProveedor?: EmisionProveedorUi; facturasProveedor?: "mock" | "simpleapi"; devMode?: boolean; empresaRut?: string | null; empresaRazonSocial?: string | null; empresaGiro?: string | null; empresaDireccion?: string | null; empresaComuna?: string | null; readOnlyReason?: string; mesa?: "boleta" | "factura" }) {
+  const esFacturas = mesa === "factura";
   const [open, setOpen] = useState(false);
   const usesRealProvider = emisionProveedor === "sii_local" || facturasProveedor === "simpleapi";
   const { lockedByOtherUser, businessMode, lockMessage } = useEmissionLockStatus({ enabled: usesRealProvider });
@@ -61,53 +138,13 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
     setOpen(true);
   }
 
+  const fxRef = useFxViewportPause<HTMLDivElement>();
+
   return (
     <>
-      <style>{`
-        .ed-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
-        .ed-panel{width:min(880px,96vw);max-height:92vh;border-radius:20px;overflow:visible;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
-        @keyframes edFadeIn{from{opacity:0}to{opacity:1}}
-        .sp{position:relative;z-index:0;width:100%;overflow:hidden}
-        .sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:77;--accent-s:88%;--accent-l:55%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 88%) 70% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 88%) 56% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 28%) + 16%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:linear-gradient(135deg, rgba(180,240,39,.13), rgba(180,240,39,.04));color:var(--lime);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .25),0 0 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc((var(--active) * 42%) + 32%)) inset,0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 88%) calc(var(--active) * 55%)) inset;transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
-        .sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:#2f5a0d;outline:none}
-        .sparkle-button:disabled,.sparkle-button:disabled:is(:hover,:focus-visible){--active:0;background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04));color:var(--amber);cursor:not-allowed;box-shadow:none;filter:saturate(.78);opacity:.86}
-        .sparkle-button:active{filter:brightness(.96);transition:.3s}
-        .sparkle-button:before{content:"";position:absolute;inset:0;z-index:0;border:1px solid hsl(var(--accent-h) var(--accent-s) 50% / .22);opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
-        .spark{position:absolute;inset:0;border-radius:inherit;rotate:0deg;overflow:hidden;mask:linear-gradient(white,transparent 50%);animation:flip calc(var(--spark) * 2) infinite steps(2,end);pointer-events:none}
-        .spark:before{content:"";position:absolute;width:200%;aspect-ratio:1;top:0;left:50%;z-index:-1;translate:-50% -15%;transform:rotate(-90deg);opacity:calc(var(--active) + .4);background:conic-gradient(from 0deg,transparent 0 340deg,white 360deg);transition:opacity var(--transition);animation:rotate var(--spark) linear infinite both}
-        .spark:after{content:"";position:absolute;inset:var(--cut);border-radius:inherit}
-        .backdrop{position:absolute;inset:var(--cut);background:var(--bg);border-radius:inherit;transition:background var(--transition);pointer-events:none}
-        .sparkle-label{position:relative;z-index:1;display:flex;align-items:center;gap:10px;width:100%}
-        .sparkle-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:rgba(180,240,39,.12);color:currentColor;flex-shrink:0;transition:background var(--transition),color var(--transition)}
-        .sparkle-button:is(:hover,:focus-visible) .sparkle-icon{background:hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .22);color:#2f5a0d}
-        .sparkle-title{font-size:12px;font-weight:700;color:currentColor;transition:color var(--transition)}
-        .sparkle-subtitle{font-size:9px;color:var(--text2);margin-top:1px;transition:color var(--transition)}
-        .sparkle-button:is(:hover,:focus-visible) .sparkle-subtitle{color:rgba(47,90,13,.72)}
-        .sparkle-button:disabled .sparkle-subtitle,.sparkle-button:disabled:is(:hover,:focus-visible) .sparkle-subtitle{color:var(--amber)}
-        .receipt-sparkle{inline-size:1.38em;translate:-8% -3%;flex-shrink:0;position:relative;z-index:1;color:currentColor;overflow:visible}
-        .receipt-sparkle .receipt-paper{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;filter:drop-shadow(0 0 calc(var(--active) * 8px) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .7));transform-box:fill-box;transform-origin:center;transition:stroke var(--transition),filter var(--transition)}
-        .receipt-sparkle .receipt-line{stroke:currentColor;stroke-width:1.6;stroke-linecap:round;opacity:.7;transform-origin:left;transition:opacity var(--transition)}
-        .receipt-sparkle .receipt-dot{fill:currentColor;opacity:.65;transition:opacity var(--transition)}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-paper{animation:receipt-float .9s ease both}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-line{animation:receipt-scan .75s ease both;opacity:.95}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(3){animation-delay:.08s}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-line:nth-of-type(4){animation-delay:.16s}
-        .sparkle-button:is(:hover,:focus-visible) .receipt-dot{animation:receipt-pop .55s ease both;opacity:1}
-        .particle-pen{position:absolute;width:200%;aspect-ratio:1;top:50%;left:50%;translate:-50% -50%;-webkit-mask:radial-gradient(white,transparent 65%);z-index:-1;opacity:var(--active,0);transition:opacity var(--transition);pointer-events:none}
-        .particle{fill:white;width:calc(var(--size,.25) * 1rem);aspect-ratio:1;position:absolute;top:calc(var(--y) * 1%);left:calc(var(--x) * 1%);opacity:var(--alpha,1);animation:float-out calc(var(--duration,1) * 1s) calc(var(--delay) * -1s) infinite linear;transform-origin:var(--origin-x,1000%) var(--origin-y,1000%);z-index:-1;animation-play-state:var(--play-state,paused)}
-        .particle path{fill:hsl(0 0% 90%);stroke:none}
-        .particle:nth-of-type(even){animation-direction:reverse}
-        .sparkle-button:is(:hover,:focus-visible)~.particle-pen{--active:1;--play-state:running}
-        @keyframes bounce{35%,65%{scale:var(--scale)}}
-        @keyframes receipt-float{0%,100%{translate:0 0;rotate:0deg}45%{translate:0 -2px;rotate:-4deg}72%{translate:0 1px;rotate:2deg}}
-        @keyframes receipt-scan{0%{scale:0 1;opacity:.2}70%,100%{scale:1 1;opacity:.95}}
-        @keyframes receipt-pop{0%{scale:.4;opacity:.2}60%{scale:1.35;opacity:1}100%{scale:1;opacity:1}}
-        @keyframes flip{to{rotate:360deg}}
-        @keyframes rotate{to{transform:rotate(90deg)}}
-        @keyframes float-out{to{rotate:360deg}}
-      `}</style>
+      <SparkleFxStyles />
 
-      <div className="sp">
+      <div className="sp" ref={fxRef}>
         <button className="sparkle-button" onClick={openIfAvailable} disabled={lockedByOtherUser || Boolean(readOnlyReason)}>
           <span className="spark" />
           <span className="backdrop" />
@@ -116,8 +153,8 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="sparkle-title">EMITIR BOLETA ÚNICA</span>
-              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOtherUser ? "Emisión bloqueada" : "Boleta manual, una a la vez")}</span>
+              <span className="sparkle-title">{esFacturas ? "EMITIR FACTURA ÚNICA" : "EMITIR BOLETA ÚNICA"}</span>
+              <span className="sparkle-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (lockedByOtherUser ? "Emisión bloqueada" : esFacturas ? "Factura manual, una a la vez" : "Boleta manual, una a la vez")}</span>
             </span>
             <svg className="receipt-sparkle" viewBox="0 0 24 24" aria-hidden="true">
               <path className="receipt-paper" d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z" />
@@ -160,7 +197,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       {open && (
         <div className="ed-overlay">
           <div className="ed-panel">
-            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} onClose={closeWithSavedPulse} />
+            <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} mesaFactura={esFacturas} onClose={closeWithSavedPulse} />
           </div>
         </div>
       )}
@@ -168,9 +205,11 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
   );
 }
 
-export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyReason?: string }) {
+export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: string; readOnlyReason?: string; mesa?: "boleta" | "factura" }) {
+  const esFacturas = mesa === "factura";
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const fxRefMass = useFxViewportPause<HTMLDivElement>();
 
   function closeWithSavedPulse(label = "Archivo subido a Agregados") {
     setOpen(false);
@@ -195,6 +234,9 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
         .md-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:edFadeIn .2s ease both}
         .md-panel{width:min(720px,94vw);border-radius:20px;overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.45),inset 0 1px 0 var(--border);display:flex;flex-direction:column}
         .mass-sp{position:relative;z-index:0;width:100%;overflow:hidden}
+        /* Perf: capa propia + pausa fuera de viewport (ver useFxViewportPause) */
+        .mass-spark,.mass-spark:before{will-change:transform}
+        .mass-sp[data-fx-off="true"] .mass-spark,.mass-sp[data-fx-off="true"] .mass-spark:before{animation-play-state:paused}
         .mass-sparkle-button{--active:0;--transition:.3s;--spark:1.8s;--cut:0px;--accent-h:9;--accent-s:79%;--accent-l:58%;--bg:radial-gradient(40% 50% at center 100%,hsl(var(--accent-h) calc(var(--active) * 79%) 68% / var(--active)),transparent),radial-gradient(80% 100% at center 120%,hsl(var(--accent-h) calc(var(--active) * 79%) 58% / var(--active)),transparent),hsl(var(--accent-h) calc(var(--active) * 79%) calc((var(--active) * 34%) + 18%));position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border:0;border-bottom:1px solid rgba(232,85,62,.10);border-radius:0;background:rgba(232,85,62,.06);color:var(--accent);cursor:pointer;text-align:left;white-space:normal;box-shadow:0 0 calc(var(--active) * 2em) calc(var(--active) * .35em) hsl(var(--accent-h) var(--accent-s) var(--accent-l) / .24),inset 0 0 0 1px rgba(232,85,62,.04),0 -.05em 0 0 hsl(var(--accent-h) calc(var(--active) * 79%) calc(var(--active) * 58%));transition:box-shadow var(--transition),background var(--transition),color var(--transition);overflow:hidden}
         .mass-sparkle-button:is(:hover,:focus-visible){--active:1;background:var(--bg);color:white;outline:none}
         .mass-sparkle-button:active{filter:brightness(.96);transition:.3s}
@@ -236,7 +278,7 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
         @keyframes mass-enter-from-left{0%,54%{opacity:0;transform:translate(-14px,0) scale(.7)}70%,100%{opacity:.62;transform:translate(1px,0) scale(.78)}}
       `}</style>
 
-      <div className="mass-sp">
+      <div className="mass-sp" ref={fxRefMass}>
         <button className="mass-sparkle-button" onClick={() => { if (!readOnlyReason) setOpen(true); }} disabled={Boolean(readOnlyReason)}>
           <span className="mass-spark" />
           <span className="mass-backdrop" />
@@ -245,8 +287,8 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="mass-title">SUBIR CARTOLAS</span>
-              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? "Subida masiva de cartolas"}</span>
+              <span className="mass-title">{esFacturas ? "MASSDTE FACTURA" : "SUBIR CARTOLAS"}</span>
+              <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (esFacturas ? "Plantilla obligatoria" : "Subida masiva de cartolas")}</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
               <g className="mass-doc mass-doc-new">
@@ -316,22 +358,22 @@ export function MassDTEAction({ readOnlyReason }: { empresaId: string; readOnlyR
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Carga masiva</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>Excel · PDF · CSV · Fotos</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 999, border: "1px solid var(--border)", padding: "5px 8px", fontSize: 9, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)" }}>{esFacturas ? "Solo Excel (plantilla)" : "Excel · PDF · CSV · Fotos"}</span>
                 </div>
-                <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>MassDTE</h2>
-                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>Sube cartolas bancarias y documentos para procesamiento masivo.</p>
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>{esFacturas ? "MassDTE Factura" : "MassDTE"}</h2>
+                <p style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>{esFacturas ? "Sube tu plantilla de facturas — cada fila es una factura lista para revisar." : "Sube cartolas bancarias y documentos para procesamiento masivo."}</p>
               </div>
             </div>
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto" }}>
               <div className="sec" style={{ padding: 0 }}>
-                <DropzoneUpload onUploaded={handleUploaded} />
+                <DropzoneUpload onUploaded={handleUploaded} mesa={mesa} />
               </div>
             </div>
             <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "var(--surface)" }}>
               <div style={{ fontSize: 10, color: "var(--text2)" }}>
                 Descarga la plantilla para preparar tus datos.
               </div>
-              <a href="/api/generar-template" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "var(--accent)", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
+              <a href={esFacturas ? "/api/generar-template?mesa=factura" : "/api/generar-template"} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(232,85,62,.18)", background: "rgba(232,85,62,.06)", color: "var(--accent)", fontSize: 10, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14m-7-7l7-7 7 7"/></svg>
                 Plantilla Excel
               </a>

@@ -3,6 +3,7 @@ import "server-only";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
+import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { descargarDocumento } from "@/lib/storage";
 import { procesarDocumento, ProcessorYieldError } from "@/lib/ai/processor";
@@ -448,6 +449,34 @@ async function markJobFailedDefinitivo(sb: Sb, job: DocumentProcessingJob, error
   });
 }
 
+/**
+ * Cierre de job con compare-and-set: solo completa si el job SIGUE 'running'.
+ * Si el usuario canceló en vuelo (status → 'cancelled'), el update no toca
+ * ninguna fila y el job queda cancelado en vez de revivir como 'completed'.
+ * Devuelve false en ese caso (el llamador decide qué hacer con el documento).
+ */
+async function completarJob(sb: Sb, job: DocumentProcessingJob): Promise<boolean> {
+  const completedAt = new Date().toISOString();
+  const { data: completado, error } = await sb
+    .from("document_processing_jobs")
+    .update({
+      status: "completed",
+      locked_at: null,
+      locked_by: null,
+      last_error: null,
+      // Trabajo terminado: el checkpoint ya no sirve y ocupa cientos de KB.
+      checkpoint: null,
+      completed_at: completedAt,
+      updated_at: completedAt,
+    })
+    .eq("id", job.id)
+    .eq("status", "running")
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`JOB_COMPLETE_UPDATE_FAILED:${error.message}`);
+  return Boolean(completado);
+}
+
 async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
   const now = new Date();
   try {
@@ -459,12 +488,39 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       })
       .eq("id", job.documento_id);
 
-    const { contenido, preExtracted } = await extractContentFromJob(sb, job);
-    if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
-
     const meta = job.metadata && typeof job.metadata === "object" && !Array.isArray(job.metadata)
       ? job.metadata as Record<string, Json>
       : {};
+
+    // Mesa FACTURA por PLANTILLA: pipeline determinístico propio. Va ANTES de
+    // extractContentFromJob a propósito (la barrera de cartolas la rechazaría).
+    // Telegram queda FUERA: sus fotos de la mesa factura siguen por su propio
+    // camino (OCR → propuesta de factura incompleta que se termina en el Check).
+    if (meta.mesa === "factura" && meta.origen !== "telegram") {
+      if (job.tipo !== "excel") throw new Error("La mesa Facturas solo recibe la plantilla Excel");
+      const { data: docRow } = await sb.from("documentos_subidos").select("storage_provider").eq("id", job.documento_id).maybeSingle();
+      const provider = docRow?.storage_provider === "r2" ? "r2" : "supabase";
+      const bajar = async (p: string): Promise<Buffer> => {
+        const { data, error } = await sb.storage.from("documentos").download(p);
+        if (error || !data) throw new Error(`Error descargando archivo: ${error?.message ?? "sin archivo"}`);
+        return Buffer.from(await data.arrayBuffer());
+      };
+      const buffer = await descargarDocumento(provider, job.storage_path, bajar);
+      const { procesarPlantillaFacturas } = await import("@/lib/facturas/procesar");
+      const r = await procesarPlantillaFacturas(sb, { documentoId: job.documento_id, empresaId: job.empresa_id, buffer });
+      const cerrado = await completarJob(sb, job);
+      if (!cerrado) {
+        await sb.from("documentos_subidos")
+          .update({ estado: "error", progreso_ia: safeJson({ estado: "error", error: "Cancelado por el usuario" }) })
+          .eq("id", job.documento_id);
+        return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, cancelled: true };
+      }
+      return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: r.movimientos_total };
+    }
+
+    const { contenido, preExtracted } = await extractContentFromJob(sb, job);
+    if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
+
     let movimientosTotal: number;
     if (meta.origen === "telegram") {
       // Telegram (álbum o foto suelta vía cola): determinístico-primero + boleta al chat.
@@ -473,7 +529,7 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       // Álbum (multi-imagen) → IA (el parser determinístico es de 1 comprobante y se
       // confunde con varios montos). Foto suelta vía cola → determinístico-primero.
       const esAlbum = Array.isArray(meta.grouped_images) && meta.grouped_images.length > 1;
-      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum });
+      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum, mesa: meta.mesa === "factura" ? "factura" : "boleta" });
       movimientosTotal = r.movimientos_total;
     } else {
       // Presupuesto de tiempo: si el modelo de turno es lento y no alcanza,
@@ -484,27 +540,7 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       movimientosTotal = result.movimientos_total;
     }
 
-    const completedAt = new Date().toISOString();
-    // Compare-and-set: solo completamos si el job SIGUE 'running'. Si el usuario
-    // canceló en vuelo (status → 'cancelled'), el update no toca ninguna fila y el
-    // job queda cancelado en vez de revivir como 'completed'.
-    const { data: completado, error } = await sb
-      .from("document_processing_jobs")
-      .update({
-        status: "completed",
-        locked_at: null,
-        locked_by: null,
-        last_error: null,
-        // Trabajo terminado: el checkpoint ya no sirve y ocupa cientos de KB.
-        checkpoint: null,
-        completed_at: completedAt,
-        updated_at: completedAt,
-      })
-      .eq("id", job.id)
-      .eq("status", "running")
-      .select("id")
-      .maybeSingle();
-    if (error) throw new Error(`JOB_COMPLETE_UPDATE_FAILED:${error.message}`);
+    const completado = await completarJob(sb, job);
     if (!completado) {
       // El job dejó de estar 'running' (cancelado mientras procesaba): dejamos el
       // documento en 'error' para que no aparezca como procesado.
@@ -520,6 +556,12 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
     if (error instanceof ProcessorYieldError) {
       await markJobYielded(sb, job, error, new Date());
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, yielded: true };
+    }
+    if (error instanceof PlantillaFacturasEnCartolaError) {
+      // Definitivo: reintentar no cambia el archivo. El mensaje ya le dice al
+      // usuario dónde subirlo.
+      await markJobFailedDefinitivo(sb, job, error, now);
+      return { ok: false as const, jobId: job.id, documentoId: job.documento_id, error: error.message };
     }
     if (error instanceof PdfProtegidoError) {
       // Definitivo: reintentar no sirve (la clave no va a aparecer sola). Se marca

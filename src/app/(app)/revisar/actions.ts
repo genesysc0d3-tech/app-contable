@@ -213,6 +213,7 @@ export async function editarPropuesta(
     receptor_comuna?: string | null;
     receptor_email?: string | null;
     receptor_telefono?: string | null;
+    receptor_giro?: string | null;
     medio_pago?: string | null;
     monto_neto?: number;
     iva?: number;
@@ -242,6 +243,7 @@ export async function editarPropuesta(
   if (campos.receptor_comuna !== undefined) update.receptor_comuna = strField(campos.receptor_comuna);
   if (campos.receptor_email !== undefined) update.receptor_email = strField(campos.receptor_email);
   if (campos.receptor_telefono !== undefined) update.receptor_telefono = strField(campos.receptor_telefono);
+  if (campos.receptor_giro !== undefined) update.receptor_giro = strField(campos.receptor_giro);
   if (campos.medio_pago !== undefined) update.medio_pago = strField(campos.medio_pago);
   if (campos.notas !== undefined) update.notas = strField(campos.notas);
   if (campos.moneda_origen !== undefined) update.moneda_origen = strField(campos.moneda_origen);

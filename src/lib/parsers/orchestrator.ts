@@ -8,6 +8,7 @@ import type {
 import { computeFingerprint } from "./fingerprint";
 import { detectHeuristic } from "./heuristic";
 import { detectByNames } from "./named";
+import { esPlantillaFacturas } from "../facturas/plantilla";
 import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
 import { validate } from "./validator";
 import {
@@ -35,6 +36,14 @@ import {
  * "succeeds" structurally so we never return an error to the caller —
  * worst case the generic TSV is sent to OpenCode just like before this PR.
  */
+/** Plantilla de facturas en el carril de cartolas: definitivo, sin reintentos. */
+export class PlantillaFacturasEnCartolaError extends Error {
+  constructor() {
+    super("Este archivo es una plantilla de FACTURAS — súbelo desde la mesa Facturas (se cambia tocando el logo de la empresa)");
+    this.name = "PlantillaFacturasEnCartolaError";
+  }
+}
+
 export async function parseExcelWithOrchestrator(
   buffer: ArrayBuffer,
   opts?: { documento_id?: string; empresa_id?: string }
@@ -49,6 +58,13 @@ export async function parseExcelWithOrchestrator(
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<Row>(sheet, { header: 1, defval: "" });
     if (!rows.length) continue;
+
+    // Una plantilla de FACTURAS subida al carril de cartolas/boletas no debe
+    // procesarse como cartola (nacerían boletas desde filas que son facturas).
+    // Error definitivo con mensaje humano — mismo trato que el PDF con clave.
+    if (esPlantillaFacturas(rows)) {
+      throw new PlantillaFacturasEnCartolaError();
+    }
 
     const fingerprint = computeFingerprint(rows);
 

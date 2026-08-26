@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { nombre?: string; base64?: string; tipo?: string; mime?: string };
+  let body: { nombre?: string; base64?: string; tipo?: string; mime?: string; contexto?: string; mesa?: string };
   try {
     body = await request.json();
   } catch {
@@ -94,12 +94,25 @@ export async function POST(request: Request) {
     });
   }
 
+  // La mesa viaja con el documento desde el nacimiento (el aislamiento
+  // boletas/facturas vive en los datos). Solo "factura" exacto abre ese
+  // pipeline; cualquier otra cosa cae a boleta. La plantilla es Excel.
+  const mesa = body.mesa === "factura" ? "factura" : "boleta";
+  if (mesa === "factura" && validated.tipo !== "excel") {
+    return NextResponse.json(
+      { ok: false, error: "MESA_FACTURA_SOLO_EXCEL", detalle: "La mesa Facturas recibe la plantilla Excel — descárgala desde la misma mesa" },
+      { status: 400 },
+    );
+  }
+
   const { data: doc, error: docError } = await supabase
     .from("documentos_subidos")
     .insert({
       empresa_id: usuario.empresa_id,
       nombre_archivo: validated.nombre,
       tipo: validated.tipo,
+      mesa,
+      contexto_usuario: validated.contexto,
       storage_path: "memoria",
       estado: "subido",
       archivo_hash: archivoHash,
@@ -182,7 +195,7 @@ export async function POST(request: Request) {
       usuarioId: user.id,
       tipo: validated.tipo,
       storagePath,
-      metadata: { mime: contentType, nombre: validated.nombre },
+      metadata: { mime: contentType, nombre: validated.nombre, mesa },
     });
   } catch (error) {
     await svc.from("documentos_subidos").update({

@@ -97,13 +97,26 @@ describe("glosas bancarias REALES (calibración PR 2 — cartolas santander/cart
     expect(out).not.toContain("FRANKLIN");
   });
 
-  it("EMPRESA (SpA/Ltda/S.A.) NO se tokeniza — es persona jurídica + señal de clasificación", () => {
+  it("EMPRESA: se conserva la FORMA JURÍDICA (señal) y se tokeniza el NOMBRE", () => {
     const v = createVault();
-    // la forma jurídica se conserva (señal afecta/factura); la cuenta sí se enmascara
+    // Antes se conservaba el nombre entero por "ser empresa". El problema: un EIRL
+    // chileno se llama literalmente "NOMBRE APELLIDO E.I.R.L.", y una SpA
+    // unipersonal igual — o sea el sufijo que servía de señal "no es persona" era
+    // justo el que garantizaba que el nombre civil de una persona natural saliera
+    // sin tapar. Ahora se separan: el sufijo se queda (el clasificador lo usa para
+    // distinguir factura de P2P) y el nombre se tokeniza.
     const out = tokenizeForAI("0782035096 Transf de EMPREFERNANDEZ SPA", v);
-    expect(out).toBe("[NUM] Transf de EMPREFERNANDEZ SPA");
-    expect(tokenizeForAI("Transfer a Comercial Los Robles Ltda", v)).toContain("Comercial Los Robles Ltda");
-    expect(v.seq.n).toBe(0); // no se creó ningún token de persona
+    expect(out).toBe("[NUM] Transf de PER_1 SPA");
+    expect(out).toContain("SPA"); // la señal sobrevive
+    expect(out).not.toContain("EMPREFERNANDEZ");
+  });
+
+  it("la trampa del EIRL: el nombre civil ya no sale en claro", () => {
+    const v = createVault();
+    const out = tokenizeForAI("Transferencia de JUAN PEREZ SOTO E.I.R.L.", v);
+    expect(out).not.toContain("JUAN");
+    expect(out).not.toContain("PEREZ");
+    expect(out).toContain("E.I.R.L."); // sigue sabiéndose que es una empresa
   });
 
   it("'TRANSFER DE' en mayúscula + nombre MAYÚS → tokeniza (conserva keyword+dirección)", () => {

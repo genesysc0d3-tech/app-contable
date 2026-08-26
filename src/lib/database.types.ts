@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   graphql_public: {
     Tables: {
@@ -186,6 +186,7 @@ export type Database = {
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
+          receptor_giro: string | null
           receptor_razon_social: string | null
           receptor_rut: string | null
           receptor_telefono: string | null
@@ -223,6 +224,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
@@ -260,6 +262,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_razon_social?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
@@ -628,25 +631,25 @@ export type Database = {
       cuenta_empresas: {
         Row: {
           activa: boolean
-          desactivada_motivo: string | null
           created_at: string
           cuenta_id: string
+          desactivada_motivo: string | null
           empresa_id: string
           es_principal: boolean
         }
         Insert: {
           activa?: boolean
-          desactivada_motivo?: string | null
           created_at?: string
           cuenta_id: string
+          desactivada_motivo?: string | null
           empresa_id: string
           es_principal?: boolean
         }
         Update: {
           activa?: boolean
-          desactivada_motivo?: string | null
           created_at?: string
           cuenta_id?: string
+          desactivada_motivo?: string | null
           empresa_id?: string
           es_principal?: boolean
         }
@@ -708,8 +711,8 @@ export type Database = {
       }
       cuentas: {
         Row: {
-          empresa_operativa_elegida_at: string | null
           created_at: string
+          empresa_operativa_elegida_at: string | null
           id: string
           nombre: string
           owner_usuario_id: string | null
@@ -719,8 +722,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          empresa_operativa_elegida_at?: string | null
           created_at?: string
+          empresa_operativa_elegida_at?: string | null
           id?: string
           nombre: string
           owner_usuario_id?: string | null
@@ -730,8 +733,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          empresa_operativa_elegida_at?: string | null
           created_at?: string
+          empresa_operativa_elegida_at?: string | null
           id?: string
           nombre?: string
           owner_usuario_id?: string | null
@@ -855,6 +858,7 @@ export type Database = {
         Row: {
           album_imagenes: Json | null
           archivo_hash: string | null
+          contexto_usuario: string | null
           created_at: string
           empresa_id: string
           estado: string
@@ -864,6 +868,7 @@ export type Database = {
           id: string
           media_group_id: string | null
           medio_pago_comun: string | null
+          mesa: string
           movimientos_detectados: number | null
           nombre_archivo: string
           progreso_ia: Json | null
@@ -875,6 +880,7 @@ export type Database = {
         Insert: {
           album_imagenes?: Json | null
           archivo_hash?: string | null
+          contexto_usuario?: string | null
           created_at?: string
           empresa_id: string
           estado?: string
@@ -884,6 +890,7 @@ export type Database = {
           id?: string
           media_group_id?: string | null
           medio_pago_comun?: string | null
+          mesa?: string
           movimientos_detectados?: number | null
           nombre_archivo: string
           progreso_ia?: Json | null
@@ -895,6 +902,7 @@ export type Database = {
         Update: {
           album_imagenes?: Json | null
           archivo_hash?: string | null
+          contexto_usuario?: string | null
           created_at?: string
           empresa_id?: string
           estado?: string
@@ -904,6 +912,7 @@ export type Database = {
           id?: string
           media_group_id?: string | null
           medio_pago_comun?: string | null
+          mesa?: string
           movimientos_detectados?: number | null
           nombre_archivo?: string
           progreso_ia?: Json | null
@@ -1313,11 +1322,14 @@ export type Database = {
           boletas_emision_proveedor: string
           clave_sii: string | null
           comuna: string | null
+          contexto_usuario_default: string | null
           created_at: string
           direccion: string | null
           email_sii: string | null
           emision_baseapi_sandbox: boolean
           emision_proveedor: string
+          ext_last_seen_at: string | null
+          ext_last_version: string | null
           facturas_emision_proveedor: string
           giro: string | null
           id: string
@@ -1333,19 +1345,20 @@ export type Database = {
           rut: string
           tiene_certificado_sii: boolean
           tipo_contribuyente: string
-          ext_last_seen_at: string | null
-          ext_last_version: string | null
           trial_inicio: string | null
         }
         Insert: {
           boletas_emision_proveedor?: string
           clave_sii?: string | null
           comuna?: string | null
+          contexto_usuario_default?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          ext_last_seen_at?: string | null
+          ext_last_version?: string | null
           facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
@@ -1361,19 +1374,20 @@ export type Database = {
           rut: string
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
-          ext_last_seen_at?: string | null
-          ext_last_version?: string | null
           trial_inicio?: string | null
         }
         Update: {
           boletas_emision_proveedor?: string
           clave_sii?: string | null
           comuna?: string | null
+          contexto_usuario_default?: string | null
           created_at?: string
           direccion?: string | null
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          ext_last_seen_at?: string | null
+          ext_last_version?: string | null
           facturas_emision_proveedor?: string
           giro?: string | null
           id?: string
@@ -1389,8 +1403,6 @@ export type Database = {
           rut?: string
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
-          ext_last_seen_at?: string | null
-          ext_last_version?: string | null
           trial_inicio?: string | null
         }
         Relationships: []
@@ -1640,6 +1652,56 @@ export type Database = {
           },
         ]
       }
+      medios_pago: {
+        Row: {
+          ambiente: string
+          created_at: string
+          cuenta_id: string
+          estado: string
+          id: string
+          inscrito_at: string | null
+          marca: string | null
+          proveedor: string
+          proveedor_ref: string
+          ultimos4: string | null
+          updated_at: string
+        }
+        Insert: {
+          ambiente?: string
+          created_at?: string
+          cuenta_id: string
+          estado?: string
+          id?: string
+          inscrito_at?: string | null
+          marca?: string | null
+          proveedor: string
+          proveedor_ref: string
+          ultimos4?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ambiente?: string
+          created_at?: string
+          cuenta_id?: string
+          estado?: string
+          id?: string
+          inscrito_at?: string | null
+          marca?: string | null
+          proveedor?: string
+          proveedor_ref?: string
+          ultimos4?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medios_pago_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       movimientos_raw: {
         Row: {
           created_at: string
@@ -1700,6 +1762,75 @@ export type Database = {
             columns: ["transaccion_id"]
             isOneToOne: false
             referencedRelation: "transacciones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ocr_jobs: {
+        Row: {
+          created_at: string
+          documento_id: string | null
+          empresa_id: string | null
+          estado: string
+          id: string
+          intentos: number
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_intentos: number
+          metadata: Json
+          resultado: Json | null
+          storage_path: string
+          storage_provider: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          id?: string
+          intentos?: number
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_intentos?: number
+          metadata?: Json
+          resultado?: Json | null
+          storage_path: string
+          storage_provider?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          id?: string
+          intentos?: number
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_intentos?: number
+          metadata?: Json
+          resultado?: Json | null
+          storage_path?: string
+          storage_provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_jobs_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]
@@ -2074,12 +2205,14 @@ export type Database = {
           cliente_id: string | null
           confianza: number | null
           created_at: string
+          detalle: string | null
           empresa_id: string
           estado: string
           fuente_clasificacion: string | null
           id: string
           iva: number | null
           medio_pago: string | null
+          mesa: string
           moneda_origen: string | null
           monto_moneda_origen: number | null
           monto_neto: number | null
@@ -2088,6 +2221,7 @@ export type Database = {
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
+          receptor_giro: string | null
           receptor_nombre: string | null
           receptor_rut: string | null
           receptor_telefono: string | null
@@ -2104,12 +2238,14 @@ export type Database = {
           cliente_id?: string | null
           confianza?: number | null
           created_at?: string
+          detalle?: string | null
           empresa_id: string
           estado?: string
           fuente_clasificacion?: string | null
           id?: string
           iva?: number | null
           medio_pago?: string | null
+          mesa?: string
           moneda_origen?: string | null
           monto_moneda_origen?: number | null
           monto_neto?: number | null
@@ -2118,6 +2254,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
@@ -2134,12 +2271,14 @@ export type Database = {
           cliente_id?: string | null
           confianza?: number | null
           created_at?: string
+          detalle?: string | null
           empresa_id?: string
           estado?: string
           fuente_clasificacion?: string | null
           id?: string
           iva?: number | null
           medio_pago?: string | null
+          mesa?: string
           moneda_origen?: string | null
           monto_moneda_origen?: number | null
           monto_neto?: number | null
@@ -2148,6 +2287,7 @@ export type Database = {
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
+          receptor_giro?: string | null
           receptor_nombre?: string | null
           receptor_rut?: string | null
           receptor_telefono?: string | null
@@ -2357,7 +2497,15 @@ export type Database = {
           operador_email?: string
           revocada_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "soporte_intervenciones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       suscripciones: {
         Row: {
@@ -2369,6 +2517,7 @@ export type Database = {
           id: string
           periodo_hasta: string | null
           plan_codigo: string
+          plan_siguiente: string | null
           proveedor: string
           proveedor_ref: string | null
           updated_at: string
@@ -2382,6 +2531,7 @@ export type Database = {
           id?: string
           periodo_hasta?: string | null
           plan_codigo: string
+          plan_siguiente?: string | null
           proveedor?: string
           proveedor_ref?: string | null
           updated_at?: string
@@ -2395,6 +2545,7 @@ export type Database = {
           id?: string
           periodo_hasta?: string | null
           plan_codigo?: string
+          plan_siguiente?: string | null
           proveedor?: string
           proveedor_ref?: string | null
           updated_at?: string
@@ -2417,6 +2568,13 @@ export type Database = {
           {
             foreignKeyName: "suscripciones_plan_codigo_fkey"
             columns: ["plan_codigo"]
+            isOneToOne: false
+            referencedRelation: "planes_config"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "suscripciones_plan_siguiente_fkey"
+            columns: ["plan_siguiente"]
             isOneToOne: false
             referencedRelation: "planes_config"
             referencedColumns: ["codigo"]
@@ -2828,6 +2986,70 @@ export type Database = {
             columns: ["propuesta_id"]
             isOneToOne: false
             referencedRelation: "propuestas_ia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_sesiones: {
+        Row: {
+          chat_id: number
+          created_at: string
+          documento_id: string | null
+          empresa_id: string | null
+          estado: string
+          expires_at: string
+          mesa: string | null
+          message_id: number | null
+          opciones: Json
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          expires_at: string
+          mesa?: string | null
+          message_id?: number | null
+          opciones?: Json
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          documento_id?: string | null
+          empresa_id?: string | null
+          estado?: string
+          expires_at?: string
+          mesa?: string | null
+          message_id?: number | null
+          opciones?: Json
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_sesiones_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: true
+            referencedRelation: "telegram_chats"
+            referencedColumns: ["chat_id"]
+          },
+          {
+            foreignKeyName: "telegram_sesiones_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_sesiones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]

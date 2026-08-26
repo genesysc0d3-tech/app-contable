@@ -225,6 +225,7 @@ async function procesarComprobanteDeterministico(
   documentoId: string,
   empresaId: string,
   parsed: ParsedComprobanteTelegram,
+  mesaFactura = false,
 ): Promise<boolean> {
   const { data: existentes } = await svc
     .from("movimientos_raw")
@@ -312,12 +313,18 @@ async function procesarComprobanteDeterministico(
     // la identidad de la contraparte, ni en columnas ni en la glosa (notas manda en
     // resolverGlosa → se imprimiría en la boleta). Piso conservador, igual que el
     // processor, para no minimizar algo que la emisión podría exigir.
-    const identificarContraparte = receptorObligatorio(parsed.monto, RECEPTOR_OBLIGATORIO_DESDE);
+    // La minimización por monto es regla de BOLETAS (Res. 44/2025 rige la
+    // identificación en boletas): la factura identifica a su receptor SIEMPRE,
+    // así que en la mesa factura se conserva lo que el comprobante dio — el
+    // resto lo completa el usuario en el Check (nace "incompleta" a propósito).
+    const identificarContraparte = mesaFactura || receptorObligatorio(parsed.monto, RECEPTOR_OBLIGATORIO_DESDE);
     const { error: propError } = await svc.from("propuestas_ia").insert({
       empresa_id: empresaId,
       movimiento_id: mov.id,
       estado: "pendiente",
-      tipo_propuesto: parsed.tipo_venta ?? (exento ? "exenta" : "boleta"),
+      mesa: mesaFactura ? "factura" : "boleta",
+      tipo_propuesto: mesaFactura ? (exento ? "factura_exenta" : "factura_afecta") : (parsed.tipo_venta ?? (exento ? "exenta" : "boleta")),
+      tipo_dte: mesaFactura ? (exento ? 34 : 33) : null,
       receptor_nombre: identificarContraparte ? parsed.contraparte_nombre : null,
       receptor_rut: identificarContraparte ? parsed.contraparte_rut : null,
       total: parsed.monto,
@@ -360,10 +367,33 @@ async function procesarComprobanteDeterministico(
  * la config de la empresa (exento → exenta sin IVA; afecto → desglose 19%).
  * Scoped por empresa. No lanza.
  */
+async function convertirPropuestasAFactura(
+  svc: ReturnType<typeof getServiceClient>,
+  documentoId: string,
+): Promise<void> {
+  const { data: movs } = await svc
+    .from("movimientos_raw")
+    .select("id")
+    .eq("documento_id", documentoId);
+  const ids = (movs ?? []).map((m) => m.id);
+  if (ids.length === 0) return;
+  await svc
+    .from("propuestas_ia")
+    .update({ mesa: "factura", tipo_propuesto: "factura_exenta", tipo_dte: 34 })
+    .in("movimiento_id", ids)
+    .eq("iva", 0);
+  await svc
+    .from("propuestas_ia")
+    .update({ mesa: "factura", tipo_propuesto: "factura_afecta", tipo_dte: 33 })
+    .in("movimiento_id", ids)
+    .gt("iva", 0);
+}
+
 async function asegurarPropuestasDeVenta(
   svc: ReturnType<typeof getServiceClient>,
   documentoId: string,
   empresaId: string,
+  mesaFactura = false,
 ): Promise<void> {
   const { data: movs } = await svc
     .from("movimientos_raw")
@@ -395,7 +425,9 @@ async function asegurarPropuestasDeVenta(
       empresa_id: empresaId,
       movimiento_id: m.id,
       estado: "pendiente",
-      tipo_propuesto: "boleta",
+      mesa: mesaFactura ? "factura" : "boleta",
+      tipo_propuesto: mesaFactura ? (exento ? "factura_exenta" : "factura_afecta") : "boleta",
+      tipo_dte: mesaFactura ? (exento ? 34 : 33) : null,
       total,
       monto_neto: neto,
       iva: exento ? 0 : total - neto,
@@ -606,8 +638,11 @@ export async function clasificarComprobanteTelegram(args: {
   chatId?: number;
   receivedAt?: number;
   soloIA?: boolean;
+  /** Mesa elegida en la sesión del bot; factura = la propuesta nace en la mesa Facturas. */
+  mesa?: "boleta" | "factura";
 }): Promise<{ movimientos_total: number }> {
   const svc = getServiceClient();
+  const mesaFactura = args.mesa === "factura";
   const fechaFallback = chileDateString(args.receivedAt ? new Date(args.receivedAt * 1000) : new Date());
   // El parser determinístico es para UN comprobante (foto suelta). Un álbum = varias
   // imágenes (1 venta, OCR concatenado con varios montos) → lo confunde y da "ambiguo".
@@ -615,7 +650,7 @@ export async function clasificarComprobanteTelegram(args: {
   // el conjunto como una sola operación.
   if (!args.soloIA) {
     const parsed = await parseComprobanteTelegramDeterministico(svc, args.empresaId, args.groupedText, fechaFallback);
-    if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed)) {
+    if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed, mesaFactura)) {
       if (args.chatId) await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, args.groupedText);
       return { movimientos_total: 1 };
     }
@@ -643,7 +678,13 @@ export async function clasificarComprobanteTelegram(args: {
   const result = await procesarDocumento(args.documentoId, args.empresaId, args.groupedText);
   if (result.error) console.error(`[telegram] ${args.documentoId} error pipeline:`, result.error);
   await normalizarMovimientosTelegram(svc, args.documentoId, args.empresaId, args.groupedText, fechaFallback);
-  await asegurarPropuestasDeVenta(svc, args.documentoId, args.empresaId);
+  await asegurarPropuestasDeVenta(svc, args.documentoId, args.empresaId, mesaFactura);
+  // Mesa factura vía IA: el clasificador crea propuestas del mundo boletas —
+  // se convierten acá a factura conservando su naturaleza fiscal (exenta→34,
+  // afecta→33). El receptor queda con lo que el OCR dio; lo que falte se
+  // completa en el Check (la propuesta nace bloqueada como "incompleta", que
+  // es exactamente el diseño: el bot detecta, el humano termina).
+  if (mesaFactura) await convertirPropuestasAFactura(svc, args.documentoId);
   // Reinyectar origen telegram (el pipeline reescribe progreso_ia) + estamparlo en los
   // movimientos para que cuenten en el medidor (contarComprobantesTelegramUtiles).
   const { data: row } = await svc.from("documentos_subidos").select("progreso_ia").eq("id", args.documentoId).single();

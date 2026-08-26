@@ -59,9 +59,12 @@ export default function MesaController({
       date: patch.date ?? mesa.selDate,
       month: patch.month ?? `${mesa.calendar.y}-${mesa.calendar.m}`,
       view: patch.view ?? mesa.workMode,
+      // La mesa activa (boleta|factura) sobrevive a toda navegación del
+      // calendario: perderla devolvería al usuario a boletas en silencio.
+      mesa: mesa.mesaActiva,
     };
     // URL sigue siendo la verdad (para refresh/compartir) — sin navegar.
-    window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}`);
+    window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}&mesa=${params.mesa}`);
     const key = keyOf(params.view, params.date, params.month);
     const cached = cacheRef.current.get(key);
     if (cached) { setMesa(cached); broadcastMesa(cached); return; }
@@ -71,12 +74,34 @@ export default function MesaController({
     });
   }, [mesa]);
 
+  // "Shader cache" del calendario (misma filosofía que el conmutador de mesa):
+  // los otros dos modos (día/semana/mes) del rango actual se precargan en idle
+  // a la cache — el toggle pasa de esperar el server action (segundos con
+  // cartolas grandes en el rango) al cache hit (~50ms medidos). Deduplicado por
+  // key; reloadMesa vacía la cache tras mutar y este effect re-tibia solo.
+  const prefetchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current);
+    prefetchTimer.current = window.setTimeout(() => {
+      const month = `${mesa.calendar.y}-${mesa.calendar.m}`;
+      (["day", "week", "month"] as const).forEach((view) => {
+        if (view === mesa.workMode) return;
+        const key = keyOf(view, mesa.selDate, month);
+        if (cacheRef.current.has(key)) return;
+        void cargarMesa({ date: mesa.selDate, month, view, mesa: mesa.mesaActiva }).then((res) => {
+          if (res.ok && !cacheRef.current.has(key)) cacheRef.current.set(key, res.mesa);
+        }).catch(() => { /* precarga best-effort: si falla, el toggle paga el fetch normal */ });
+      });
+    }, 1500);
+    return () => { if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current); };
+  }, [mesa]);
+
   // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
   // diferencia de navigate, ignora la cache (los datos cambiaron): la vacía
   // COMPLETA (aprobar/emitir también altera los contadores de otros rangos
   // visitados) y re-siembra solo el rango actual.
   const reloadMesa = useCallback((opts?: { silent?: boolean }) => {
-    const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode };
+    const params = { date: mesa.selDate, month: `${mesa.calendar.y}-${mesa.calendar.m}`, view: mesa.workMode, mesa: mesa.mesaActiva };
     const run = async () => {
       cacheRef.current.clear();
       const res = await cargarMesa(params);

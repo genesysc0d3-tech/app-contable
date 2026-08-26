@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
+// Versión de la app ("shader cache" del fundador): una sola fuente de verdad
+// para el build ID de Next, el Service Worker y el cliente. En Vercel es el
+// commit; en build local, un timestamp (cada build local = versión nueva).
+const APP_VERSION = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? `local-${Date.now().toString(36)}`;
+
 const nextConfig: NextConfig = {
+  // Build ID = commit: navegaciones de Next detectan build nuevo y recargan
+  // solas; el SW usa la MISMA versión para purgar sus caches viejos.
+  generateBuildId: () => APP_VERSION,
+  env: {
+    NEXT_PUBLIC_APP_VERSION: APP_VERSION,
+  },
   // Legal canónico: los documentos viven en el LANDING (decisión fundador —
   // junto a Confianza). Las rutas /legal/* de la app redirigen allá; los links
   // internos (consentimiento del registro, footers) siguen funcionando.
@@ -22,9 +33,29 @@ const nextConfig: NextConfig = {
     optimizePackageImports: [
       "@phosphor-icons/react",
     ],
+    // Cache de cliente del App Router ("shader cache" de la app): sin esto,
+    // dynamic=0 y CADA router.push re-pide el render completo al servidor
+    // aunque se haya prefetcheado 1 segundo antes. Con 30s, el conmutador de
+    // mesa (BO|FA) usa el payload precargado → cambio instantáneo. La frescura
+    // la garantizan los canales de siempre (realtime + reloadMesa tras mutar);
+    // y un deploy nuevo invalida solo (build id distinto → full reload de Next).
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
   },
   async headers() {
     return [
+      // El Service Worker JAMÁS se cachea por HTTP: Chrome lo re-baja en cada
+      // navegación y el byte-diff (VERSION nueva) dispara la actualización.
+      // Sin esto, un SW con bug podría quedarse pegado en los Chrome de los
+      // clientes (regla del kill-switch, capa 0).
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
       {
         source: "/:path*",
         headers: [

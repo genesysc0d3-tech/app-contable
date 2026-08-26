@@ -34,7 +34,7 @@ export type DocRow = {
   tipo_operacion_hint: string | null; glosa_comun: string | null; glosa_activa: boolean | null;
 };
 
-export type MesaParams = { date?: string; month?: string; view?: string };
+export type MesaParams = { date?: string; month?: string; view?: string; mesa?: string };
 
 export type EmpresaMesa = {
   giro: string | null;
@@ -57,6 +57,12 @@ export async function fetchMesaDateDependent(
   empresa: EmpresaMesa,
   params: MesaParams,
 ) {
+  // El aislamiento boletas/facturas: cada consulta de la mesa lleva su filtro.
+  // Solo "factura" exacto abre esa mesa; cualquier otra cosa cae a boleta.
+  const mesaActiva: "boleta" | "factura" = params.mesa === "factura" ? "factura" : "boleta";
+  // En emitidas la mesa se lee del tipo de documento (la tabla es genérica de DTE).
+  const tiposDteMesa = mesaActiva === "factura" ? [33, 34] : [39, 41];
+
   const selDate = params.date && params.date !== "all" ? params.date : todayStr();
   const nextSelDate = addDaysStr(selDate, 1);
   const weekRange = weekRangeStr(selDate);
@@ -123,18 +129,18 @@ export async function fetchMesaDateDependent(
 
   // ── Consultas date-dependientes (paralelas) ──
   const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
-    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
-    supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
-    supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).gte("created_at", sm).lt("created_at", em),
-    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun").eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
-    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
+    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
+    supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
+    supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
+    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
-    supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
-    supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).or(boletasRangeOr),
+    supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
+    supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr),
     supabase.from("empresas").select("boletas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
-    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).gte("created_at", workStart).lt("created_at", workEnd),
+    supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd),
   ]);
   // Desborde del tope de propuestas: total real del rango vs lo servido.
   const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
@@ -233,7 +239,7 @@ export async function fetchMesaDateDependent(
   // ── Pendientes de emisión (cola del tab Emitir) — depende de empresa, no del rango ──
   const pendientes = await getPendientesEmision(supabase, empresaId, {
     giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente,
-  }, { start: workStart, end: workEnd }).catch((e) => {
+  }, { start: workStart, end: workEnd }, { mesa: mesaActiva }).catch((e) => {
     // NUNCA tragar en silencio: una cola vacía por error se ve igual que "no hay
     // nada que emitir" y el usuario pierde boletas sin saberlo.
     console.error("[mesa] getPendientesEmision falló — la cola de Emitir queda vacía", e);
@@ -274,6 +280,7 @@ export async function fetchMesaDateDependent(
   ).catch((e) => { console.error("[mesa] guardarail de emisión falló", e); return null; });
 
   return {
+    mesaActiva,
     selDate, workMode,
     guardarail,
     propuestas: propsData.data ?? [],
