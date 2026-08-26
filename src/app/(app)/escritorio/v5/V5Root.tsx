@@ -1,7 +1,12 @@
 "use client";
 
 import { Component, useState, useCallback, useRef, useEffect, type ErrorInfo, type ReactNode } from "react";
-import EmpresaPopup from "./EmpresaPopup";
+import dynamic from "next/dynamic";
+
+// Perf: el wizard de empresa (5 pasos, ~850 líneas) sale del bundle inicial y se
+// precarga en idle 2s después de montar (ver effect abajo) — la primera apertura
+// sigue siendo instantánea porque el chunk ya está en cache cuando alguien clickea.
+const EmpresaPopup = dynamic(() => import("./EmpresaPopup"), { ssr: false });
 import { EmissionLockProvider, useEmissionLockStatus } from "./useEmissionLockStatus";
 import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
@@ -73,6 +78,14 @@ export default function V5Root({
     if (saved === "off") {
       window.requestAnimationFrame(() => setHelpStepsEnabled(false));
     }
+  }, []);
+
+  // Precarga en idle del chunk del wizard de empresa (dynamic import arriba):
+  // 2s después de montar, cuando el escritorio ya está quieto, el navegador baja
+  // el chunk en silencio. Abrir el popup después es instantáneo, igual que antes.
+  useEffect(() => {
+    const t = window.setTimeout(() => { void import("./EmpresaPopup"); }, 2000);
+    return () => window.clearTimeout(t);
   }, []);
 
   const updateHelpSteps = useCallback((enabled: boolean) => {
