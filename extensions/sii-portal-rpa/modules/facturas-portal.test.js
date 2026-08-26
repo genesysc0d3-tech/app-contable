@@ -77,8 +77,37 @@ describe("validateSiiFacturaJob — fail-closed en el portal de facturas", () =>
 });
 
 describe("compuerta de fase", () => {
-  it("las capabilities del carril existen pero auto_emit está cerrado hasta la fase 3", () => {
+  it("las capabilities del carril existen y auto_emit quedó abierto (fase 3 construida)", () => {
     expect(FACT_CAPABILITIES).toEqual(["sii_portal_factura_33", "sii_portal_factura_34"]);
-    expect(FACT_AUTO_EMIT_READY).toBe(false);
+    expect(FACT_AUTO_EMIT_READY).toBe(true);
+  });
+});
+
+describe("splitRutCuerpoDv (las dos cajas del portal)", () => {
+  it("acepta puntos, guion y K minúscula", async () => {
+    const { splitRutCuerpoDv } = await import("./facturas-portal.js");
+    expect(splitRutCuerpoDv("78.448.088-7")).toEqual({ cuerpo: "78448088", dv: "7" });
+    expect(splitRutCuerpoDv("78029972-k")).toEqual({ cuerpo: "78029972", dv: "K" });
+    expect(splitRutCuerpoDv("78448088-7")).toEqual({ cuerpo: "78448088", dv: "7" });
+  });
+  it("basura → null (el worker aborta, no adivina)", async () => {
+    const { splitRutCuerpoDv } = await import("./facturas-portal.js");
+    expect(splitRutCuerpoDv("")).toBe(null);
+    expect(splitRutCuerpoDv("sin-rut")).toBe(null);
+    expect(splitRutCuerpoDv("123456789012-3")).toBe(null);
+  });
+});
+
+describe("extractFolioFromText (evidencia fuerte post-Firmar)", () => {
+  it("matchea las formas reales de folio", async () => {
+    const { extractFolioFromText } = await import("./facturas-portal.js");
+    expect(extractFolioFromText("Se ha generado el documento Folio N° 635").folio).toBe(635);
+    expect(extractFolioFromText("FOLIO: 1234")).toMatchObject({ folio: 1234 });
+    expect(extractFolioFromText("folio nro. 88 emitido").folio).toBe(88);
+  });
+  it("sin la palabra folio NO hay match (nunca un número suelto)", async () => {
+    const { extractFolioFromText } = await import("./facturas-portal.js");
+    expect(extractFolioFromText("documento 635 generado por $100.000")).toBe(null);
+    expect(extractFolioFromText("")).toBe(null);
   });
 });

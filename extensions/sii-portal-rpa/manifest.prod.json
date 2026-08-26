@@ -65,7 +65,8 @@
         "https://*.sii.cl/*"
       ],
       "js": [
-        "sii-worker.js"
+        "sii-worker.js",
+        "facturas-worker.js"
       ],
       "run_at": "document_idle"
     }
