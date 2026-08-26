@@ -53,8 +53,9 @@ function searchData(value: unknown): SearchData {
 export default async function V5Page({ searchParams }: {
   searchParams: Promise<{ date?: string; month?: string; view?: string; mesa?: string }>;
 }) {
-  const sessionUsuario = (await getUsuario())!;
-  const support = await getDevSupportMode();
+  // Perf F5: auth y modo soporte en paralelo (no dependen entre sí).
+  const [sessionUsuarioRaw, support] = await Promise.all([getUsuario(), getDevSupportMode()]);
+  const sessionUsuario = sessionUsuarioRaw!;
   const supportMode = support?.ok ? support : null;
   const usuario = supportMode
     ? ({ ...sessionUsuario, empresa_id: supportMode.empresaId, empresas: supportMode.empresa } as typeof sessionUsuario)
@@ -70,15 +71,6 @@ export default async function V5Page({ searchParams }: {
 
   const supabase = supportMode ? supportMode.sb : await createClient();
 
-  // Bundle inicial date-dependiente de la mesa (panel derecho + calendario).
-  // El toggle de día/semana/mes lo recarga client-side vía `cargarMesa` sin
-  // navegar; aquí solo se siembra el estado inicial (SSR).
-  const mesaInicial = await fetchMesaDateDependent(supabase, empresaId, {
-    giro: usuario.empresas.giro,
-    razon_social: usuario.empresas.razon_social,
-    tipo_contribuyente: usuario.empresas.tipo_contribuyente,
-  }, { date: dateParam, month: monthParam, view, mesa: mesaParam });
-
   // Año/mes actuales EN CHILE (no UTC del server, que en Vercel corre): base
   // del mes RCV (resumen de ventas + visor), date-independiente del calendario.
   const nowChile = chileDateString(new Date());
@@ -89,34 +81,39 @@ export default async function V5Page({ searchParams }: {
   const firstThisMonth = `${curYear}-${String(curMonth + 1).padStart(2, "0")}-01`;
   const firstNextMonth = curMonth === 11 ? `${curYear + 1}-01-01` : `${curYear}-${String(curMonth + 2).padStart(2, "0")}-01`;
 
-  // Date-INDEPENDIENTE: clientes (selector de receptor) y CAFs de la empresa. Se
-  // cargan una vez; el toggle del calendario no los re-consulta (eso lo cubre
-  // `mesaInicial` / `cargarMesa`). El resumen de ventas del rango va en mesaInicial.
-  const [clData, cafsData] = await Promise.all([
-    supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
-    supabase.from("boletas_caf_mock")
-      .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
-      .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
-  ]);
-
-  const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
-  const [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa] = await Promise.all([
-    listarEmpresasSelector(),
-    listarEquipoBusiness(),
-    listarResumenCupos(),
-    estadoEleccionEmpresa(),
-  ]);
-  const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
-  const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
-  const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
-
-  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
-
-  // Date-INDEPENDIENTE: boletas del mes para el visor RCV + datos de
-  // búsqueda/historial (últimos 100 de docs/boletas/propuestas). Van en paralelo
-  // (la latencia ≈ la query más lenta). El avance del pipeline por documento
-  // viaja ahora en el bundle date-dependiente de la mesa (`mesaInicial`).
-  const [boletasRcvRes, searchTriple] = await Promise.all([
+  // Perf F5: TODO el bundle inicial va en UN solo Promise.all — antes eran 4
+  // etapas seriales (mesa → clientes/cafs → 4 actions → rcv/búsqueda) que no
+  // dependían entre sí: la latencia era la SUMA de las etapas; ahora es el MÁXIMO.
+  // Grupos:
+  //  - mesaInicial: bundle date-dependiente (panel derecho + calendario); el
+  //    toggle día/semana/mes lo recarga client-side vía `cargarMesa` sin navegar.
+  //  - clientes + CAFs: date-independientes, se cargan una vez.
+  //  - 4 server actions de cuenta (selector de empresas, equipo, cupos, elección).
+  //  - RCV del mes + triple de búsqueda/historial (últimos 100 c/u).
+  const [
+    mesaInicial,
+    [clData, cafsData],
+    [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa],
+    [boletasRcvRes, searchTriple],
+  ] = await Promise.all([
+    fetchMesaDateDependent(supabase, empresaId, {
+      giro: usuario.empresas.giro,
+      razon_social: usuario.empresas.razon_social,
+      tipo_contribuyente: usuario.empresas.tipo_contribuyente,
+    }, { date: dateParam, month: monthParam, view, mesa: mesaParam }),
+    Promise.all([
+      supabase.from("clientes").select("id,nombre,rut").eq("empresa_id", empresaId).order("nombre",{ascending:true}),
+      supabase.from("boletas_caf_mock")
+        .select("id, tipo_dte, folio_desde, folio_hasta, folio_actual, estado, fecha_vence")
+        .eq("empresa_id", empresaId).order("fecha_solicitud", { ascending: false }),
+    ]),
+    Promise.all([
+      listarEmpresasSelector(),
+      listarEquipoBusiness(),
+      listarResumenCupos(),
+      estadoEleccionEmpresa(),
+    ]),
+    Promise.all([
     supabase.from("boletas_emitidas")
       .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
       .eq("empresa_id", empresaId)
@@ -130,10 +127,20 @@ export default async function V5Page({ searchParams }: {
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
       supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
         .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
-      supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))")
+      // Perf F5: columnas EXACTAS que consume SearchHistoryView (antes iba
+      // select * + movimientos_raw(*) + join a documentos_subidos que la vista
+      // ni miraba — cientos de KB de RSC payload al pedo por cada F5).
+      supabase.from("propuestas_ia").select("id,created_at,confianza,estado,tipo_dte,movimientos_raw(fecha,monto,descripcion,n_documento,tipo_flujo)")
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
+      ]),
     ]),
   ]);
+
+  const empresaLogoUrl = `/api/empresa/logo/${empresaId}`;
+  const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
+  const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
+  const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
+  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
   const boletasRcvData = boletasRcvRes.data;
   const [searchDocsData, searchBoletasData, searchPropsData] = searchTriple;
 

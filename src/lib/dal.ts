@@ -106,8 +106,10 @@ export async function requireActiveEmpresa(): Promise<UsuarioConEmpresa> {
 }
 
 export async function getAppEmpresaContext(): Promise<AppEmpresaContext> {
-  const sessionUsuario = await requireActiveEmpresa();
-  const support = await getDevSupportMode();
+  // Perf F5: el gate de acceso y el modo soporte no dependen entre sí — en
+  // paralelo. Si requireActiveEmpresa redirige, el redirect gana igual
+  // (NEXT_REDIRECT se propaga a través del Promise.all).
+  const [sessionUsuario, support] = await Promise.all([requireActiveEmpresa(), getDevSupportMode()]);
 
   if (support?.ok) {
     const usuario = {
