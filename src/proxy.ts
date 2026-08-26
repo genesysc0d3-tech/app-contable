@@ -35,6 +35,11 @@ export const config = {
     // NO pasan por el check de sesión: llegan sin cookie de usuario y tienen
     // su propia autenticación (secret header / Bearer). Sin esto el middleware
     // los redirige a /auth/login y nunca se ejecutan.
-    "/((?!_next/static|_next/image|favicon.ico|legal(?:/.*)?$|instalar-extension$|descargas(?:/.*)?$|api/empresa/upload-logo|api/empresa/logo/|api/archivo/|api/sii-local/|api/extension/|api/telegram/|api/pagos/webhook|api/pagos/flow/|api/pagos/cron|api/ops/cron|api/document-processing/cron|api/document-processing/kick|api/audit/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // sw.js|manifest.webmanifest|shell|api/sw-config: piezas del Service Worker
+    // ("shader cache"). Sin sesión igual deben servirse tal cual: si el
+    // middleware las redirige a login, el SW precachearía la PÁGINA DE LOGIN
+    // como shell (bug real cazado en diseño). /shell es una silueta estática
+    // sin datos de nadie — servirla pública es seguro por construcción.
+    "/((?!_next/static|_next/image|favicon.ico|sw.js$|manifest.webmanifest$|shell$|api/sw-config$|legal(?:/.*)?$|instalar-extension$|descargas(?:/.*)?$|api/empresa/upload-logo|api/empresa/logo/|api/archivo/|api/sii-local/|api/extension/|api/telegram/|api/pagos/webhook|api/pagos/flow/|api/pagos/cron|api/ops/cron|api/document-processing/cron|api/document-processing/kick|api/audit/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

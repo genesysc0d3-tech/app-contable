@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ThemeInitializer from "@/components/ThemeInitializer";
+import SwRegistrar from "@/components/SwRegistrar";
 import { ToastProvider } from "@/components/Toast";
 
 const inter = Inter({
@@ -51,7 +52,17 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]">
+        {/* Perf: el primer request client-side a Supabase (realtime, candado)
+            paga DNS+TCP+TLS completo desde Chile (~300-450ms); el preconnect lo
+            adelanta mientras el documento aún carga. React lo iza al <head>. */}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <>
+            <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
+          </>
+        )}
         <ThemeInitializer />
+        <SwRegistrar />
         <ToastProvider>
           {children}
         </ToastProvider>
