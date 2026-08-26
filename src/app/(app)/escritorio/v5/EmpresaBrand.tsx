@@ -140,7 +140,11 @@ export default function EmpresaBrand({
           <LogoImage src={logoUrl} alt={`Logo de ${nombre}`} maxHeight={size} onError={() => setLogoOk(false)} />
         </span>
       ) : (
-        <span style={{ fontSize: textSize, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{nombre}</span>
+        /* Sin logo: el nombre debe CABER (pedido fundador 2026-08-26 — antes
+           "persona natural..." quedaba mocho a 18px). Tamaño adaptativo por
+           largo; el ellipsis queda solo como último recurso para nombres
+           kilométricos. Con logo, nada cambia. */
+        <span style={{ fontSize: nombre.length > 22 ? 11 : nombre.length > 15 ? 12.5 : nombre.length > 10 ? 14.5 : textSize, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, lineHeight: 1.1 }}>{nombre}</span>
       )}
       {canSwitch && (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text2)", flexShrink: 0 }}>
@@ -398,10 +402,21 @@ function AgregarEmpresaForm({ onListo, onCancelar }: { onListo: (empresaId: stri
  * legible) y la silueta se activa SOLO si es oscuro y sin color; además solo
  * rige en tema oscuro (vía CSS .dark).
  */
+// Resultado del análisis de silueta por URL: el brand se remonta en cada
+// cambio de mesa (key de MesaController) y sin este cache el canvas se
+// re-analizaba cada vez → parpadeo del filtro. Vive lo que viva la pestaña.
+const siluetaCache = new Map<string, boolean>();
+
 function LogoImage({ src, alt, maxHeight, onError }: { src: string; alt: string; maxHeight: number; onError: () => void }) {
-  const [silhouette, setSilhouette] = useState(false);
+  const [silhouette, setSilhouette] = useState(() => siluetaCache.get(src) ?? false);
 
   useEffect(() => {
+    if (siluetaCache.has(src)) {
+      // rAF: el estado inicial ya leyó el cache en el mount; esto solo cubre
+      // un cambio de src en caliente, sin setState síncrono dentro del effect.
+      const raf = requestAnimationFrame(() => setSilhouette(siluetaCache.get(src)!));
+      return () => cancelAnimationFrame(raf);
+    }
     let cancelled = false;
     const img = new Image();
     img.src = src;
@@ -424,7 +439,9 @@ function LogoImage({ src, alt, maxHeight, onError }: { src: string; alt: string;
           if ((Math.max(r, g, b) - Math.min(r, g, b)) / 255 > 0.22) colorful++;
         }
         if (!cancelled && n > 0) {
-          setSilhouette(lumSum / n < 0.45 && colorful / n < 0.08);
+          const esSilueta = lumSum / n < 0.45 && colorful / n < 0.08;
+          siluetaCache.set(src, esSilueta);
+          setSilhouette(esSilueta);
         }
       } catch {
         /* canvas tainted u otro fallo: se queda el logo original */
