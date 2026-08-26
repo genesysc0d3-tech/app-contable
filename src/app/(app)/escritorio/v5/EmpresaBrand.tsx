@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cambiarEmpresaActiva, crearEmpresaAdicional } from "./actions";
 
 export type EmpresaSelectorItem = {
@@ -65,6 +66,14 @@ export default function EmpresaBrand({
     if (destino === mesa) return;
     router.push(`/massdte?mesa=${destino}`);
   }
+
+  // "Shader cache" del conmutador: al ABRIR el popup (la señal de intención —
+  // los botones BO|FA viven ahí) un <Link prefetch={true}> invisible baja la
+  // OTRA mesa COMPLETA (con datos; router.prefetch() solo trae el layout en
+  // rutas dinámicas — medido: el click igual iba al servidor). El router.push
+  // del click consume ese mismo cache (staleTimes.dynamic lo mantiene 30s) →
+  // cambio instantáneo. En dev el prefetch es no-op; se siente en build prod.
+  const otraMesa = mesa === "boleta" ? "factura" : "boleta";
 
   useEffect(() => {
     setLogoOk(Boolean(logoUrl));
@@ -145,6 +154,10 @@ export default function EmpresaBrand({
 
       {open && canSwitch && (
         <div className="eb-pop" style={{ position: "absolute", left: 0, top: size + 10, zIndex: 90, width: `min(${agregando ? 340 : 320}px, calc(100vw - 28px))`, padding: 8, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 var(--border)", color: "var(--text)", whiteSpace: "normal", transformOrigin: "top left" }}>
+          {/* Prefetch COMPLETO de la otra mesa mientras el popup está abierto
+              (invisible, 1×1px: los botones visibles quedan intactos). */}
+          <Link href={`/massdte?mesa=${otraMesa}`} prefetch={true} aria-hidden tabIndex={-1}
+            style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none", overflow: "hidden" }} />
           {/* Entrada con resorte sutil; el nowrap del brand NO se hereda (los
               textos del panel deben envolver, no escaparse del borde). */}
           <style>{`
