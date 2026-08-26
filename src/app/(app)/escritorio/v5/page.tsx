@@ -194,6 +194,12 @@ export default async function V5Page({ searchParams }: {
 .v5-calendar-wrap,.left-col{transition:opacity .28s cubic-bezier(.22,1,.36,1),transform .28s cubic-bezier(.22,1,.36,1)}
 :root.v5-dashboard-fullscreen .v5-calendar-wrap{opacity:0;transform:translateY(-8px);pointer-events:none}
 :root.v5-dashboard-fullscreen .left-col{opacity:0;transform:translateX(-10px);pointer-events:none}
+/* Los HIJOS también: la tarjeta interior del calendario re-activa pointer-events
+   inline (pointerEvents:"auto", necesario en modo normal por el aire del wrap) y
+   en fullscreen el calendario INVISIBLE seguía comiendo clicks — en pantallas
+   angostas quedaba encima de "Volver a dashboard" y el botón parecía roto. */
+:root.v5-dashboard-fullscreen .v5-calendar-wrap *{pointer-events:none!important}
+:root.v5-dashboard-fullscreen .left-col *{pointer-events:none!important}
 .left-glass{background:rgba(255,255,255,.5);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:20px;box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
 .dark .left-glass{background:rgba(255,255,255,.03)}
 .panel-hd-txt .plantilla{margin-left:auto;display:flex;align-items:center;gap:3px;padding:4px 8px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:9px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s}
