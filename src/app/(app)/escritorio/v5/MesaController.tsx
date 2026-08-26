@@ -74,6 +74,28 @@ export default function MesaController({
     });
   }, [mesa]);
 
+  // "Shader cache" del calendario (misma filosofía que el conmutador de mesa):
+  // los otros dos modos (día/semana/mes) del rango actual se precargan en idle
+  // a la cache — el toggle pasa de esperar el server action (segundos con
+  // cartolas grandes en el rango) al cache hit (~50ms medidos). Deduplicado por
+  // key; reloadMesa vacía la cache tras mutar y este effect re-tibia solo.
+  const prefetchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current);
+    prefetchTimer.current = window.setTimeout(() => {
+      const month = `${mesa.calendar.y}-${mesa.calendar.m}`;
+      (["day", "week", "month"] as const).forEach((view) => {
+        if (view === mesa.workMode) return;
+        const key = keyOf(view, mesa.selDate, month);
+        if (cacheRef.current.has(key)) return;
+        void cargarMesa({ date: mesa.selDate, month, view, mesa: mesa.mesaActiva }).then((res) => {
+          if (res.ok && !cacheRef.current.has(key)) cacheRef.current.set(key, res.mesa);
+        }).catch(() => { /* precarga best-effort: si falla, el toggle paga el fetch normal */ });
+      });
+    }, 1500);
+    return () => { if (prefetchTimer.current !== null) window.clearTimeout(prefetchTimer.current); };
+  }, [mesa]);
+
   // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
   // diferencia de navigate, ignora la cache (los datos cambiaron): la vacía
   // COMPLETA (aprobar/emitir también altera los contadores de otros rangos
