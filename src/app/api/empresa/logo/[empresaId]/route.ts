@@ -4,7 +4,7 @@ import { createClient as createSsrClient } from "@/lib/supabase/server";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ empresaId: string }> },
 ) {
   const supabase = await createSsrClient();
@@ -44,6 +44,22 @@ export async function GET(
     return new NextResponse(null, { status: 204 });
   }
 
+  // Cache serio (pedido fundador 2026-08-26: el logo NO tiene por qué
+  // recargarse en cada cambio de mesa): 1 hora en el navegador sin preguntar
+  // (cero parpadeo al conmutar BO|FA) + ETag por versión del archivo para que
+  // después de esa hora la revalidación sea un 304 sin cuerpo. Un logo nuevo
+  // se ve al tiro tras hard-reload y solo (≤1h) en navegación normal — los
+  // logos cambian casi nunca; el switch de mesa pasa veinte veces al día.
+  const etag = `"${logoFile.updated_at ?? logoFile.id ?? logoFile.name}"`;
+  const cacheHeaders = {
+    "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+    ETag: etag,
+  } as const;
+
+  if (request.headers.get("if-none-match") === etag) {
+    return new NextResponse(null, { status: 304, headers: cacheHeaders });
+  }
+
   const { data, error } = await sb.storage.from("documentos").download(`${logoDir}/${logoFile.name}`);
   if (error || !data) return new NextResponse(null, { status: 204 });
 
@@ -51,7 +67,7 @@ export async function GET(
     headers: {
       "Content-Type": data.type === "image/svg+xml" ? "application/octet-stream" : (data.type || "image/png"),
       "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "private, max-age=300",
+      ...cacheHeaders,
     },
   });
 }
