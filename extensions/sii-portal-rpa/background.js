@@ -391,6 +391,79 @@ function closeWorker(state) {
   aplicarUpdateSiOcioso();
 }
 
+// ── Conductor del portal de FACTURAS (facturas-worker.js) ────────────────────
+// Un drive por carga de página (tabs.onUpdated → scanWorkerPage → acá). El
+// worker mira el DOM, ejecuta el paso que corresponda y responde; los pasos
+// que navegan (seleccionar empresa, validar, firmar) provocan el próximo
+// onUpdated y con él el próximo drive. Sin bucles: el motor es la navegación.
+function driveFacturaPage(state) {
+  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+    type: "APP_CONTABLE_SII_FACT_DRIVE",
+    job_id: state.jobId,
+    job: state.job,
+  }), (res) => {
+    // Content script aún no inyectado en esta carga: el próximo onUpdated
+    // (o el retry del overlay) vuelve a intentar. No es un error.
+    if (chrome.runtime.lastError || !res) return;
+    handleFactDriveResponse(state, res);
+  });
+}
+
+async function handleFactDriveResponse(state, res) {
+  if (!activeJobs.has(state.jobId)) return;
+
+  if (res.ok === false) {
+    const detalle = res.detalle ? `${res.error}: ${res.detalle}` : String(res.error ?? "FACT_ERROR");
+    if (state.finalEmitClicked) {
+      // Post-Firmar NADA cierra el job ni re-emite: posible folio real vivo.
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`, true));
+      return;
+    }
+    state.humanRequired = Boolean(res.human) || state.humanRequired;
+    sendToApp(state, statusMessage(state.jobId, "error", detalle, true));
+    return;
+  }
+
+  if (res.action === "needs_cert_password") {
+    // Doctrina: UN intento con la clave del certificado. Si la pantalla de
+    // firma reaparece tras haberla enviado, la clave es mala — jamás
+    // reintentar solo (el SII puede bloquear el certificado).
+    if (state.certPasswordSent) {
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "CERT_PASSWORD_INVALID: la clave del certificado parece incorrecta. Corrígela en Opciones de la extensión y verifica en el portal si la factura alcanzó a emitirse — no la re-emitas.", true));
+      return;
+    }
+    const creds = await getUnlockedSiiCredentials(state.appOrigin);
+    if (!creds.ok || !creds.clave_certificado) {
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "CERT_PASSWORD_MISSING: falta la clave del certificado digital en la extensión (Opciones). El documento quedó a un paso de firmarse — verifica en el portal, no lo re-emitas.", true));
+      return;
+    }
+    state.certPasswordSent = true;
+    sendToApp(state, statusMessage(state.jobId, "signing", "Firmando la factura en el SII…", true));
+    chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+      type: "APP_CONTABLE_SII_FACT_SIGN",
+      job_id: state.jobId,
+      clave_certificado: creds.clave_certificado,
+    }), () => { void chrome.runtime.lastError; });
+    return;
+  }
+
+  if (res.action === "captured" && res.result) {
+    state.awaitingResult = false;
+    handleCapturedResult(state, res.result);
+    return;
+  }
+
+  const mensajes = {
+    empresa_seleccionada: "Empresa seleccionada en el portal de facturas…",
+    validado: "Documento validado. Revisando la vista previa…",
+    firmar_click: "Firmando la factura (no cierres la ventana)…",
+    paused_preview: "Vista previa lista en la ventana SII. Revísala ahí.",
+    learn_stop_pre_validar: "Aprendizaje: formulario llenado, sin validar ni firmar.",
+    observando: "Navegando el portal de facturas…",
+  };
+  sendToApp(state, statusMessage(state.jobId, res.action ?? "working", mensajes[res.action] ?? "Trabajando en el portal de facturas…", true));
+}
+
 function scheduleLearningScan(state, delayMs = 1500) {
   if (!state.learnOnly || !activeJobs.has(state.jobId)) return;
   if (state.learningScanCount >= 160) return;
@@ -409,6 +482,15 @@ function handleWorkerAction(message, sender, sendResponse) {
   }
 
   if (message.action === "retry") {
+    // Facturas: reintentar = volver a conducir la página actual (el estado
+    // vive en los forms del CGI; recargar lo borraría). El candado
+    // finalEmitClicked sigue mandando: post-Firmar el drive solo captura.
+    if (state.kind === "factura") {
+      sendToApp(state, statusMessage(state.jobId, "retrying", "Reintentando en el portal de facturas.", true));
+      driveFacturaPage(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
     if (state.awaitingResult) {
       sendToApp(state, statusMessage(state.jobId, "capturing_result", "Reintentando captura de resultado SII.", true));
       captureWorkerResult(state);
@@ -455,6 +537,12 @@ function handleWorkerAction(message, sender, sendResponse) {
   }
 
   if (message.action === "capture") {
+    if (state.kind === "factura") {
+      sendToApp(state, statusMessage(state.jobId, "capturing_result", "Capturando folio desde el portal de facturas.", true));
+      driveFacturaPage(state);
+      sendResponse?.({ ok: true });
+      return false;
+    }
     state.awaitingResult = true;
     sendToApp(state, statusMessage(state.jobId, "capturing_result", "Capturando folio desde la pantalla SII actual.", true));
     captureWorkerResult(state);
@@ -552,10 +640,12 @@ function scanWorkerPage(state, attempt = 1) {
     }
 
     // Defensa de portal: la conducción de e-Boleta (calculadora + EMITIR) es
-    // EXCLUSIVA de boletas. Un job de facturas jamás debe gatillarla, aunque
-    // alguna pantalla del SII se le parezca. (El drive de facturas llega con
-    // facturas-worker.js; hasta entonces los jobs de facturas son learn-only.)
-    if (state.kind === "factura") return;
+    // EXCLUSIVA de boletas. Los jobs de factura tienen su propio conductor
+    // (facturas-worker.js, portal clásico) — jamás la calculadora.
+    if (state.kind === "factura") {
+      driveFacturaPage(state);
+      return;
+    }
 
     const hasEmitButton = Array.isArray(map.buttons) && map.buttons.some((button) => button?.text === "EMITIR");
     const hasNumberPad = Array.isArray(map.buttons) && ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].every((digit) => map.buttons.some((button) => button?.text === digit));
@@ -909,6 +999,9 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
     // Candado monótono: una vez que se cliqueó el EMITIR real, NUNCA se re-emite ni
     // se cierra el trabajo por "error" — solo se captura/recupera el folio.
     finalEmitClicked: false,
+    // Facturas: la clave del certificado se envía UNA vez; si la pantalla de
+    // firma reaparece, es clave mala → pausa humana, jamás reintento solo.
+    certPasswordSent: false,
     awaitingResult: false,
     autologinAttempted: false,
     humanRequired: false,
