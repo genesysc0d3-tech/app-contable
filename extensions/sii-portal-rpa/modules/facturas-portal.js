@@ -13,11 +13,49 @@ export const FACT_CAPABILITIES = [
   "sii_portal_factura_34",
 ];
 
-// Compuerta de fase: el fillAndEmit del portal de facturas se construye contra
-// los page-maps de la sesión learn en vivo. Hasta que exista, un job auto_emit
-// se rechaza ACÁ (fail-closed) y las FACT_CAPABILITIES no se anuncian en el
-// PONG — la app jamás ve un carril que no puede terminar.
-export const FACT_AUTO_EMIT_READY = false;
+// Compuerta de fase: encendida 2026-08-26 con el fillAndEmit construido
+// contra el page-map real (docs/facturas-portal-page-map.md). Sigue inerte
+// para la flota por triple candado: la 0.2.0 no está publicada (la flota
+// 0.1.8 no trae este código), la app gatea por capabilities del PONG, y
+// facturas_emision_proveedor sigue 'mock' en toda empresa hasta el flip
+// por empresa de la fase 5.
+export const FACT_AUTO_EMIT_READY = true;
+
+/**
+ * Divide un RUT en {cuerpo, dv} para las DOS cajas del portal
+ * (EFXP_RUT_RECEP + EFXP_DV_RECEP). Acepta puntos y guion; DV a mayúscula.
+ * null si no es parseable — el caller aborta (fail-closed), nunca adivina.
+ */
+export function splitRutCuerpoDv(rut) {
+  const limpio = String(rut ?? "").replace(/\./g, "").replace(/\s/g, "").toUpperCase();
+  const m = limpio.match(/^(\d{1,8})-?([\dK])$/);
+  if (!m) return null;
+  return { cuerpo: m[1], dv: m[2] };
+}
+
+/**
+ * Extrae el folio del texto de la página post-Firmar, con la MISMA doctrina
+ * de evidencia fuerte de boletas: solo un match explícito con la palabra
+ * folio (o el encabezado del documento) da confianza alta. Sin match → null
+ * (jamás inventar un número suelto).
+ */
+export function extractFolioFromText(text) {
+  const t = String(text ?? "");
+  const patrones = [
+    /folio\s*(?:n(?:ro)?\.?\s*[°ºo]?\s*)?[:#]?\s*(\d{1,10})/i,
+    /n[°ºo]\s*folio\s*[:#]?\s*(\d{1,10})/i,
+  ];
+  for (const re of patrones) {
+    const m = t.match(re);
+    if (m) {
+      const folio = Number(m[1]);
+      if (Number.isSafeInteger(folio) && folio > 0) {
+        return { folio, matched_text: m[0].slice(0, 60) };
+      }
+    }
+  }
+  return null;
+}
 
 export function validateSiiFacturaJob(job) {
   if (!job || typeof job !== "object") return "JOB_INVALID";
