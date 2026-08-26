@@ -22,6 +22,16 @@ const nextConfig: NextConfig = {
     optimizePackageImports: [
       "@phosphor-icons/react",
     ],
+    // Cache de cliente del App Router ("shader cache" de la app): sin esto,
+    // dynamic=0 y CADA router.push re-pide el render completo al servidor
+    // aunque se haya prefetcheado 1 segundo antes. Con 30s, el conmutador de
+    // mesa (BO|FA) usa el payload precargado → cambio instantáneo. La frescura
+    // la garantizan los canales de siempre (realtime + reloadMesa tras mutar);
+    // y un deploy nuevo invalida solo (build id distinto → full reload de Next).
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
   },
   async headers() {
     return [
