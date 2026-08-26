@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
-import { workbookToPreviewSheets, type ExcelPreviewSheet } from "@/lib/excel/preview";
-import * as XLSX from "xlsx";
+import { type ExcelPreviewSheet } from "@/lib/excel/preview";
 import GaleriaComprobante from "./GaleriaComprobante";
 
 type FileKind = "sheet" | "image" | "pdf";
@@ -68,11 +67,19 @@ export default function VisualizarArchivo({
         } else if (fk === "pdf") {
           if (!cancelled) setObjectUrl(url);
         } else {
-          const res = await fetch(url);
+          // Perf: xlsx (SheetJS, ~365KB) se carga RECIÉN al abrir un Excel — antes
+          // viajaba en el bundle inicial del escritorio para todos, siempre.
+          // El import type de ExcelPreviewSheet arriba no cuenta: los types se borran
+          // al compilar; el módulo real entra solo por este import dinámico.
+          const [res, { read }, { workbookToPreviewSheets }] = await Promise.all([
+            fetch(url),
+            import("xlsx"),
+            import("@/lib/excel/preview"),
+          ]);
           if (!res.ok) throw new Error("No se pudo descargar el archivo");
           const buffer = await res.arrayBuffer();
           if (cancelled) return;
-          const workbook = XLSX.read(buffer, { type: "array" });
+          const workbook = read(buffer, { type: "array" });
           setSheets(workbookToPreviewSheets(workbook));
         }
       } catch (err) {

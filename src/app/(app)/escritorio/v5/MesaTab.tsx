@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import DocCardList from "./DocCardList";
 import DocPanelsBoard from "./DocPanelsBoard";
 import VisualizarArchivo from "./VisualizarArchivo";
@@ -12,7 +13,9 @@ import MedioPagoControl from "./MedioPagoControl";
 import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import VeredictoCard from "./VeredictoCard";
 import VeredictoCartola from "./VeredictoCartola";
-import CartolaEditor from "./CartolaEditor";
+// Perf: el editor bulk de cartolas sale del bundle inicial (solo existe dentro
+// del popup); se precarga en idle tras montar la mesa — abrir sigue instantáneo.
+const CartolaEditor = dynamic(() => import("./CartolaEditor"), { ssr: false });
 import { aprobarCartola } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
@@ -80,6 +83,14 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   // cubre el caso de otro mes (tras navegar el calendario).
   const docsRef = useRef(docs);
   useEffect(() => { docsRef.current = docs; }, [docs]);
+
+  // Precarga en idle del chunk del CartolaEditor (dynamic import arriba): baja
+  // en silencio 2s después de montar la mesa; abrir el popup sigue instantáneo.
+  useEffect(() => {
+    const t = window.setTimeout(() => { void import("./CartolaEditor"); }, 2000);
+    return () => window.clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     // defer a microtarea: lee la lista YA commiteada (cubre el cambio de mes).
     const tryOpen = () => window.setTimeout(() => {

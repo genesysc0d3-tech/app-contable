@@ -7,9 +7,15 @@ import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
-import EmitirLoteModal, { type LoteItemInput } from "./EmitirLoteModal";
+import dynamic from "next/dynamic";
+import { type LoteItemInput } from "./EmitirLoteModal";
 import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
+
+// Perf: el modal de emisión en lote sale del bundle inicial; se precarga en idle
+// tras montar la pestaña (effect abajo) — abrirlo sigue siendo instantáneo.
+// El import type de LoteItemInput arriba se borra al compilar (no arrastra el módulo).
+const EmitirLoteModal = dynamic(() => import("./EmitirLoteModal"), { ssr: false });
 
 interface Item {
   id: string;
@@ -181,6 +187,12 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const [loteResume, setLoteResume] = useState<LoteItemInput[] | null>(null);
   const [loteResumeTotal, setLoteResumeTotal] = useState<number | null>(null);
   const [resumiendo, setResumiendo] = useState(false);
+  // Precarga en idle del chunk del EmitirLoteModal (dynamic import arriba).
+  useEffect(() => {
+    const t = window.setTimeout(() => { void import("./EmitirLoteModal"); }, 2000);
+    return () => window.clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     if (!empresaId) return;
     const p = leerLotePendiente(empresaId);

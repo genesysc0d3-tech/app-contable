@@ -53,11 +53,17 @@ export default function EmpresaBrand({
 
   // Cambiar de mesa navega DE VERDAD (no replaceState): la mesa re-siembra
   // todo su estado client-held desde el server, que es la única forma segura
-  // de cambiar de mundo (misma razón del remount por empresa).
+  // de cambiar de mundo (misma razón del remount por empresa). La garantía la
+  // da el `key={empresaId}:{mesaParam}` de MesaController en page.tsx — al
+  // cambiar la query, React destruye y reconstruye SOLO la mesa con los datos
+  // frescos. Por eso basta router.push (navegación de cliente): antes había un
+  // window.location.assign que recargaba el documento completo (re-render de
+  // todo el server + re-hidratar todo el JS) y hacía sentir el cambio como
+  // abrir la app de cero.
   function cambiarMesa(destino: "boleta" | "factura") {
     setOpen(false);
     if (destino === mesa) return;
-    window.location.assign(`/massdte?mesa=${destino}`);
+    router.push(`/massdte?mesa=${destino}`);
   }
 
   useEffect(() => {
