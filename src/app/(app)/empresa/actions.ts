@@ -28,7 +28,7 @@ export interface DatosEmisor {
 const HINTS_OPERACION_VALIDOS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 
 export type BoletasEmisionProveedor = "mock" | "sii_local" | "simpleapi";
-export type FacturasEmisionProveedor = "mock" | "simpleapi";
+export type FacturasEmisionProveedor = "mock" | "sii_local" | "simpleapi";
 export type EmisionProveedor = BoletasEmisionProveedor | FacturasEmisionProveedor;
 
 export interface EmisionConfigInput {
@@ -296,7 +296,7 @@ export async function setEmisionConfig(
   if (config.boletasProveedor !== "mock" && config.boletasProveedor !== "sii_local" && config.boletasProveedor !== "simpleapi") {
     return { error: "Proveedor de boletas inválido" };
   }
-  if (config.facturasProveedor !== "mock" && config.facturasProveedor !== "simpleapi") {
+  if (config.facturasProveedor !== "mock" && config.facturasProveedor !== "sii_local" && config.facturasProveedor !== "simpleapi") {
     return { error: "Proveedor de facturas inválido" };
   }
 

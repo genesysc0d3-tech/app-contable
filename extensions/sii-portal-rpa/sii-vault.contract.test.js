@@ -237,3 +237,37 @@ describe("re-guardado no pierde la clave del certificado", () => {
     expect(creds.clave_certificado).toBe("nueva");
   });
 });
+
+describe("guardado de SOLO la clave del certificado (card Facturas)", () => {
+  it("con bóveda conectada: reusa RUT + Clave Tributaria y agrega la clave del cert", async () => {
+    await vault.handleSiiVaultMessage({ type: "APP_CONTABLE_SII_VAULT_SAVE", payload: PAYLOAD });
+    const r = await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { clave_certificado: "clave-cert-sola" },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.status.has_clave_certificado).toBe(true);
+    const creds = await vault.getUnlockedSiiCredentials();
+    expect(creds.rut).toBe(RUT_PERSONA);
+    expect(creds.clave).toBe("clave-secreta-sii");
+    expect(creds.clave_certificado).toBe("clave-cert-sola");
+  });
+
+  it("sin bóveda conectada → VAULT_NOT_CONFIGURED (primero la clave del SII)", async () => {
+    const r = await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { clave_certificado: "x" },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("VAULT_NOT_CONFIGURED");
+  });
+
+  it("cert-only vacía → CLAVE_CERTIFICADO_INVALID", async () => {
+    const r = await vault.handleSiiVaultMessage({
+      type: "APP_CONTABLE_SII_VAULT_SAVE",
+      payload: { clave_certificado: "" },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("CLAVE_CERTIFICADO_INVALID");
+  });
+});
