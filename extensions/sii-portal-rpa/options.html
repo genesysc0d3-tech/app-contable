@@ -33,19 +33,14 @@
             <span>Clave Tributaria</span>
             <span class="inp"><input type="password" id="sii-clave" autocomplete="current-password" placeholder="Tu clave del SII"><button type="button" class="eye" data-eye="sii-clave" aria-label="Mostrar clave">ver</button></span>
           </label>
-          <label>
-            <span>Clave del certificado digital <em class="opt">(solo para facturas)</em></span>
-            <span class="inp"><input type="password" id="sii-clave-cert" autocomplete="off" placeholder="Opcional — es OTRA clave, no la Tributaria"><button type="button" class="eye" data-eye="sii-clave-cert" aria-label="Mostrar clave">ver</button></span>
-          </label>
           <label class="full">
-            <span class="hint">Necesitas tener la app abierta con tu sesión iniciada para conectar: tu sesión es la que desbloquea la clave al emitir. Si cierras sesión o pierdes el equipo, revócala con «Eliminar / revocar». La clave del certificado digital es la que el SII te pide al FIRMAR una factura (tu certificado vive centralizado en el SII); solo hace falta si emites facturas.</span>
+            <span class="hint">Necesitas tener la app abierta con tu sesión iniciada para conectar: tu sesión es la que desbloquea la clave al emitir. Si cierras sesión o pierdes el equipo, revócala con «Eliminar / revocar».</span>
           </label>
         </form>
 
         <dl class="vault-grid sii-vault-grid">
           <div><dt>RUT</dt><dd id="sii-vault-rut">Falta</dd></div>
           <div><dt>Clave cifrada</dt><dd id="sii-vault-clave">Falta</dd></div>
-          <div><dt>Clave certificado</dt><dd id="sii-vault-clave-cert">Falta (solo facturas)</dd></div>
           <div><dt>Cifrado local</dt><dd id="sii-vault-encrypted">Sin bóveda</dd></div>
           <div><dt>Estado</dt><dd id="sii-vault-unlocked">Sin conectar</dd></div>
         </dl>
@@ -59,17 +54,37 @@
         <p class="muted" id="sii-diagnostic">Tu Clave Tributaria se cifra en este equipo con una llave aleatoria. Se desbloquea sola con tu sesión de la app cuando emites. Si el inicio de sesión automático falla, se abre el SII para entrar a mano.</p>
       </article>
 
-      <!-- Carril avanzado: facturas (bloqueado hasta habilitar en la empresa) -->
-      <article class="card card-simpleapi locked" id="simpleapi-card">
+      <!-- Facturas: carril del portal gratuito del SII (clave del certificado)
+           + carril avanzado SimpleAPI (bloqueado hasta habilitar en la empresa) -->
+      <article class="card card-simpleapi" id="simpleapi-card">
         <div class="card-header">
           <h2>Facturas electrónicas 33 / 34</h2>
           <span class="module-status" id="simpleapi-status-label">No disponible aún</span>
         </div>
 
+        <p class="copy">Facturas desde el portal gratuito del SII, con la misma ventana segura de las boletas. Tu certificado digital vive centralizado en el SII; acá solo se guarda (cifrada en este equipo) la <b>clave del certificado</b> — la que el portal pide al FIRMAR. No es la Clave Tributaria.</p>
+
+        <form class="vault-form" id="sii-cert-form">
+          <label>
+            <span>Clave del certificado digital</span>
+            <span class="inp"><input type="password" id="sii-clave-cert" autocomplete="off" placeholder="La clave que usas al Firmar en el SII"><button type="button" class="eye" data-eye="sii-clave-cert" aria-label="Mostrar clave">ver</button></span>
+            <span class="hint">Requiere tener conectada la clave del SII (tarjeta de arriba) y la app abierta con tu sesión.</span>
+          </label>
+        </form>
+
+        <dl class="vault-grid">
+          <div><dt>Clave del certificado</dt><dd id="sii-vault-clave-cert">Falta</dd></div>
+        </dl>
+
+        <div class="actions">
+          <button type="submit" form="sii-cert-form" id="save-sii-cert">Guardar clave del certificado</button>
+        </div>
+        <p class="muted" id="sii-cert-diagnostic">Se cifra junto a tu Clave Tributaria (misma bóveda, mismo candado) y se usa sola al firmar facturas.</p>
+
         <div class="lockrow" id="simpleapi-lock">
           <div class="ic" aria-hidden="true">🔒</div>
           <div class="tx">
-            Se habilita desde la <b>configuración de tu empresa</b>. Cuando actives <b>Facturas</b> ahí, esta sección se desbloquea sola para cargar tu certificado y CAF.
+            <b>Carril avanzado (certificado propio .pfx + CAF):</b> se habilita desde la <b>configuración de tu empresa</b>. Para facturas por el portal gratuito no lo necesitas.
           </div>
         </div>
 

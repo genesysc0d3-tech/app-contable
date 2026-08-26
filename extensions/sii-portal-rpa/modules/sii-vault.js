@@ -142,8 +142,21 @@ export async function getSiiEmpresaRutDefault() {
   return typeof raw === "string" && raw ? normalizeRut(raw) : null;
 }
 
+// ¿Es un guardado de SOLO la clave del certificado? (la card de Facturas de
+// options: exige bóveda ya conectada, reusa el RUT y la Clave Tributaria).
+function esCertOnly(payload) {
+  return Boolean(
+    payload && typeof payload === "object" &&
+    payload.rut === undefined && payload.clave === undefined &&
+    typeof payload.clave_certificado === "string",
+  );
+}
+
 function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "PAYLOAD_INVALID";
+  if (esCertOnly(payload)) {
+    return payload.clave_certificado ? null : "CLAVE_CERTIFICADO_INVALID";
+  }
   if (typeof payload.rut !== "string" || !payload.rut.trim()) return "RUT_REQUIRED";
   if (typeof payload.clave !== "string" || !payload.clave) return "CLAVE_REQUIRED";
   // 0.1.8: empresa_rut ya no se pide en la UI (la app es la fuente única del
@@ -168,6 +181,22 @@ async function saveSiiVault(payload, appOriginHint) {
 
   const appOrigin = await getAppOrigin(appOriginHint);
   if (!appOrigin) return { ok: false, error: "APP_ORIGIN_DESCONOCIDO" };
+
+  // Guardado de SOLO la clave del certificado (card Facturas): exige bóveda
+  // ya conectada — se desbloquea, se reusa RUT + Clave Tributaria y se
+  // re-cifra el slot completo con la clave nueva.
+  if (esCertOnly(payload)) {
+    const prev = await getUnlockedSiiCredentials(appOriginHint);
+    if (!prev.ok) return { ok: false, error: prev.error };
+    const slotPrevio = await readSlot();
+    payload = {
+      rut: prev.rut,
+      clave: prev.clave,
+      clave_certificado: payload.clave_certificado,
+      // Metadato legacy: se arrastra para no perderlo en el re-cifrado.
+      empresa_rut: slotPrevio?.meta?.empresa_rut ?? null,
+    };
+  }
 
   // El guardado reescribe el slot COMPLETO. Si el vault ya tenía clave del
   // certificado y este guardado no la trae (p. ej. reconectar solo la Clave
