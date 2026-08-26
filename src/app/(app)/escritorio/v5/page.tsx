@@ -28,6 +28,8 @@ function mapBoletasProveedor(raw: string | null | undefined): BoletasEmisionProv
 }
 
 function mapFacturasProveedor(raw: string | null | undefined): FacturasEmisionProveedor {
+  // Carril real de facturas: el portal gratuito del SII vía la extensión.
+  if (raw === "sii_local") return "sii_local";
   if (raw === "simpleapi") return "simpleapi";
   return "mock";
 }
@@ -459,6 +461,9 @@ export default async function V5Page({ searchParams }: {
                 mesa="factura"
                 empresaTipo={usuario.empresas.tipo_contribuyente}
                 empresaId={empresaId}
+                emisionProveedor={boletasProveedor}
+                facturasProveedor={facturasProveedor}
+                devMode={usuario.dev_mode === true}
                 empresaRut={usuario.empresas.rut}
                 empresaRazonSocial={usuario.empresas.razon_social}
                 empresaGiro={usuario.empresas.giro}
