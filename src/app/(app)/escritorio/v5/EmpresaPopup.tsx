@@ -6,7 +6,7 @@ import EmisorForm from "../../empresa/EmisorForm";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
 import SoporteAccesoConfig from "../../empresa/SoporteAccesoConfig";
-import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
+import EmissionProviderConfig, { FacturasCarrilInline, type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
 import FacturacionUsoPanel from "./FacturacionUsoPanel";
@@ -799,7 +799,7 @@ export default function EmpresaPopup({
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /> },
+                  { key: "emisor", content: <><EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /><FacturasCarrilInline inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /></> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },

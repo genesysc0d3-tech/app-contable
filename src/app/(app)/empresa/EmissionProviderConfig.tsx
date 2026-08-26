@@ -167,17 +167,8 @@ export default function EmissionProviderConfig({
     save({ ...state, boletasProveedor: proveedor });
   }
 
-  function selectFacturas(proveedor: FacturasEmisionProveedor) {
-    if (state.facturasProveedor === "mock" && proveedor !== "mock" && !(confirmReal?.grupo === "facturas" && confirmReal.proveedor === proveedor)) {
-      setConfirmReal({ grupo: "facturas", proveedor });
-      return;
-    }
-    setConfirmReal(null);
-    save({ ...state, facturasProveedor: proveedor });
-  }
-
+  // Facturas se configura en el paso "Emisor" (FacturasCarrilInline); acá solo boletas.
   const showMockBoletas = devMode || inicialAlMontar.boletasProveedor === "mock" || state.boletasProveedor === "mock";
-  const showMockFacturas = devMode || inicialAlMontar.facturasProveedor === "mock" || state.facturasProveedor === "mock";
   const combinedMode = state.boletasProveedor === "sii_local" && state.facturasProveedor === "simpleapi";
 
   return (
@@ -306,36 +297,9 @@ export default function EmissionProviderConfig({
           />
         </ProviderGroup>
 
-        {/* Facturas 33/34 DESACTIVADO para clientes (decisión founder 2026-07-04:
-            el carril existe pero no está pulido — no se ofrece hasta pulirlo).
-            Solo visible con dev_mode; NO borrar. */}
-        {devMode && <ProviderGroup title="Facturas" code="DTE 33/34" subtitle="SII Local usa el portal gratuito del SII (la misma extensión de boletas).">
-          {showMockFacturas && (
-            <ProviderButton
-              active={state.facturasProveedor === "mock"}
-              title="Modo de prueba"
-              description={devMode ? "Simula facturas sin informar al SII. Visible para desarrollo." : "Simula facturas sin informar al SII."}
-              disabled={pending}
-              onClick={() => selectFacturas("mock")}
-            />
-          )}
-          <ProviderButton
-            active={state.facturasProveedor === "sii_local"}
-            title="SII Local (portal gratuito)"
-            description="Emite facturas 33/34 en el Sistema de Facturación Gratuito del SII, en la ventana segura de la extensión. Necesita la clave del certificado en la extensión."
-            disabled={pending}
-            confirming={confirmReal?.grupo === "facturas" && confirmReal.proveedor === "sii_local"}
-            onClick={() => selectFacturas("sii_local")}
-          />
-          <ProviderButton
-            active={state.facturasProveedor === "simpleapi"}
-            title="SimpleAPI"
-            description="Emitirá con nuestra API key y datos cifrados en la extensión."
-            disabled={pending}
-            confirming={confirmReal?.grupo === "facturas" && confirmReal.proveedor === "simpleapi"}
-            onClick={() => selectFacturas("simpleapi")}
-          />
-        </ProviderGroup>}
+        {/* Facturas 33/34 se configura en el paso "Emisor" (FacturasCarrilInline),
+            junto al Tipo de contribuyente — pedido del fundador 2026-08-26. Acá
+            (paso Emisión) queda solo Boletas para no duplicar el selector. */}
 
         <div style={{
           marginTop: 12,
@@ -569,5 +533,68 @@ function ProviderButton({ active, title, description, disabled, badge, confirmin
         {confirming ? "¿Seguro? Emitirás documentos REALES ante el SII" : description}
       </div>
     </button>
+  );
+}
+
+// Selector COMPACTO del carril de facturas, para vivir en el paso "Emisor"
+// (pedido del fundador 2026-08-26: la config de facturas va junto al Tipo de
+// contribuyente, no enterrada en el paso Emisión). Reusa el mismo guardado
+// (setEmisionConfig) y no pisa el proveedor de boletas. Dev-only, igual que el
+// grupo Facturas original (rollout gradual).
+export function FacturasCarrilInline({ inicial, devMode, onProveedorChange }: {
+  inicial: EmissionProviderState;
+  devMode: boolean;
+  onProveedorChange?: (p: { boletas: string; facturas: string }) => void;
+}) {
+  const { toast } = useToast();
+  const [state, setState] = useState(inicial);
+  const [confirmReal, setConfirmReal] = useState<FacturasEmisionProveedor | null>(null);
+  const [pending, start] = useTransition();
+
+  if (!devMode) return null;
+
+  function selectFacturas(proveedor: FacturasEmisionProveedor) {
+    if (state.facturasProveedor === "mock" && proveedor !== "mock" && confirmReal !== proveedor) {
+      setConfirmReal(proveedor);
+      return;
+    }
+    setConfirmReal(null);
+    const next = { ...state, facturasProveedor: proveedor };
+    const previous = state;
+    setState(next);
+    start(async () => {
+      const r = await setEmisionConfig(next);
+      if (r.error) { setState(previous); toast(r.error, "error"); }
+      else { toast("Carril de facturas actualizado"); onProveedorChange?.({ boletas: next.boletasProveedor, facturas: next.facturasProveedor }); }
+    });
+  }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontSize: 13, fontWeight: 850, color: "var(--text, #e8eaf0)" }}>
+        Facturas <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: "var(--text3, #697080)" }}>DTE 33/34</span>
+        <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 800, color: "var(--accent)", background: "rgba(232,85,62,.12)", padding: "2px 7px", borderRadius: 999 }}>DEV</span>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text3, #697080)", marginTop: 3, marginBottom: 10, lineHeight: 1.45 }}>
+        Cómo emites tus facturas. SII Local usa el portal gratuito del SII por la misma extensión de las boletas (necesita la clave del certificado en la extensión).
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>
+        <ProviderButton
+          active={state.facturasProveedor === "mock"}
+          title="Modo de prueba"
+          description="Simula facturas sin informar al SII."
+          disabled={pending}
+          onClick={() => selectFacturas("mock")}
+        />
+        <ProviderButton
+          active={state.facturasProveedor === "sii_local"}
+          title="SII Local (portal gratuito)"
+          description="Emite facturas 33/34 reales en el Sistema de Facturación Gratuito del SII."
+          disabled={pending}
+          confirming={confirmReal === "sii_local"}
+          onClick={() => selectFacturas("sii_local")}
+        />
+      </div>
+    </div>
   );
 }
