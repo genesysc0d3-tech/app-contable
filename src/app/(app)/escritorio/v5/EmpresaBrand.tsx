@@ -79,6 +79,25 @@ export default function EmpresaBrand({
     setLogoOk(Boolean(logoUrl));
   }, [logoUrl]);
 
+  // Modo búsqueda/historial (fullscreen): la búsqueda cruza AMBAS mesas, así
+  // que el título sobre el logo pasa a "Mesa boleta + factura"; y clickear la
+  // marca VUELVE a la mesa (en vez de abrir el popup) — pedido del fundador
+  // 2026-08-26: la marca vive una sola vez y es el camino de vuelta.
+  const [searchMode, setSearchMode] = useState(false);
+  useEffect(() => {
+    function onFullscreen(e: Event) {
+      setSearchMode(Boolean((e as CustomEvent<{ open?: boolean }>).detail?.open));
+    }
+    window.addEventListener("toggle-dashboard-fullscreen", onFullscreen);
+    return () => window.removeEventListener("toggle-dashboard-fullscreen", onFullscreen);
+  }, []);
+  function salirDeBusqueda() {
+    document.documentElement.classList.remove("v5-dashboard-fullscreen");
+    // Mismo evento/forma que toggleDashboardFullscreen: lo escuchan
+    // RightColumnView (cierra el overlay) y HeaderActionsRow (resetea la query).
+    window.dispatchEvent(new CustomEvent("toggle-dashboard-fullscreen", { detail: { open: false } }));
+  }
+
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
@@ -134,16 +153,18 @@ export default function EmpresaBrand({
   return (
     <span ref={rootRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: logoOk ? 0 : 9, minWidth: 0, width: "fit-content", maxWidth, whiteSpace: "nowrap", flexShrink: 0, overflow: "visible" }}>
       {/* Título de la mesa activa, sobre el logo — el usuario siempre sabe en
-          qué mundo está parado sin abrir nada. */}
-      <span aria-hidden style={{ position: "absolute", left: 1, top: -13, fontSize: 8, fontWeight: 850, letterSpacing: ".09em", textTransform: "uppercase", color: mesa === "factura" ? "var(--lime)" : "var(--text3)", pointerEvents: "none", whiteSpace: "nowrap" }}>
-        {mesa === "factura" ? "Mesa facturas" : "Mesa boletas"}
+          qué mundo está parado sin abrir nada. En modo búsqueda (que cruza
+          ambas mesas) dice "Mesa boleta + factura". */}
+      <span aria-hidden style={{ position: "absolute", left: 1, top: -13, fontSize: 8, fontWeight: 850, letterSpacing: ".09em", textTransform: "uppercase", color: searchMode ? "var(--text2)" : mesa === "factura" ? "var(--lime)" : "var(--text3)", pointerEvents: "none", whiteSpace: "nowrap" }}>
+        {searchMode ? "Mesa boleta + factura" : mesa === "factura" ? "Mesa facturas" : "Mesa boletas"}
       </span>
       {canSwitch ? (
         <button
           type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          aria-label="Cambiar empresa"
+          onClick={() => (searchMode ? salirDeBusqueda() : setOpen((value) => !value))}
+          aria-expanded={searchMode ? undefined : open}
+          aria-label={searchMode ? "Volver a la mesa" : "Cambiar empresa"}
+          title={searchMode ? "Volver a la mesa" : undefined}
           style={{ display: "flex", alignItems: "center", gap: logoOk ? 6 : 9, minWidth: 0, maxWidth, border: 0, padding: 0, margin: 0, background: "transparent", color: "inherit", cursor: pending ? "wait" : "pointer", textAlign: "left" }}
         >
           {brandContent}
