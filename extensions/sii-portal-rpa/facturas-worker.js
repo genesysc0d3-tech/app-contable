@@ -296,9 +296,15 @@
     const pwd = document.querySelector('input[type="password"]');
     if (!pwd) return { ok: false, error: "FIRMA_SIN_CAMPO_CLAVE" };
     setVal(pwd, clave);
-    // Botón de confirmación: el form de la clave o el botón con texto de firma.
-    const botones = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')]
+    // Botón de confirmación: PRIMERO dentro del form de la clave (no pegarle
+    // a otro control de la página); el documento entero es solo fallback.
+    const alcance = pwd.form ?? document;
+    let botones = [...alcance.querySelectorAll('button, input[type="submit"], input[type="button"]')]
       .filter((b) => /firmar|aceptar|enviar|continuar/i.test(`${b.value ?? ""} ${b.textContent ?? ""}`));
+    if (botones.length === 0 && pwd.form) {
+      botones = [...document.querySelectorAll('button, input[type="submit"], input[type="button"]')]
+        .filter((b) => /firmar|aceptar|enviar|continuar/i.test(`${b.value ?? ""} ${b.textContent ?? ""}`));
+    }
     const btn = botones[0] ?? pwd.form?.querySelector('[type="submit"]');
     if (!clickEl(btn)) {
       if (pwd.form) { pwd.form.submit(); } else { return { ok: false, error: "FIRMA_SIN_BOTON" }; }
@@ -311,7 +317,11 @@
   function stepPostFirma(job) {
     const texto = document.body?.innerText ?? "";
     const hit = extractFolioFromText(texto);
+    // Emisor ACTIVO del portal ("Empresa: 77.155.156-4" en la cabecera): el
+    // server lo cruza contra el RUT registrado — misma red que boletas.
+    const emisorHit = texto.match(/Empresa:\s*([\d.]{7,12}-?[\dkK])/);
     const result = {
+      emisor_rut_activo: emisorHit ? emisorHit[1] : null,
       folio: hit?.folio ?? null,
       folio_confidence: hit ? "high" : "none",
       folio_evidence: hit ? { source: "fact_portal_text", matched_text: hit.matched_text } : null,
