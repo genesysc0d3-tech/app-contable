@@ -30,6 +30,15 @@
   if (window.__appContableFactWorker) return;
   window.__appContableFactWorker = true;
 
+  // BALIZA DE DIAGNÓSTICO (auditoría titileo 2026-08-26): cada copia instalada
+  // de la extensión imprime su ID al inyectarse. Si en la consola de la
+  // pestaña SII aparecen DOS balizas, hay DOS copias conviviendo (p. ej. la
+  // 0.1.8 de la Web Store + la carpeta dev) y la vieja puede estar conduciendo
+  // la página por su cuenta. Un renglón, cero efectos.
+  try {
+    console.log("[FACT-worker] inyectado · ext:", chrome.runtime.id, "· v:", chrome.runtime.getManifest?.()?.version, "·", location.href);
+  } catch { /* sin permiso runtime: igual seguimos */ }
+
   const EXT_SOURCE = "app-contable-extension";
 
   // ── Espejos inline de modules/facturas-portal.js (los content scripts no
