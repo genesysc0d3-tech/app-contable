@@ -27,7 +27,7 @@ function compactEmpty(kind: "subidos" | "boletas") {
           )}
         </div>
         <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>{isSubidos ? "Nada por aquí" : "Aún no hay boletas"}</div>
-        <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 270 }}>{isSubidos ? "Esta mesa no tiene documentos agregados todavía." : "Las boletas emitidas en esta mesa aparecerán aquí."}</div>
+        <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 270 }}>{isSubidos ? "Esta mesa no tiene documentos agregados todavía." : "Los documentos emitidos en esta mesa aparecerán aquí."}</div>
       </div>
     </div>
   );
@@ -45,6 +45,7 @@ export type MesaProps = {
 export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo }: MesaProps) {
   return (
     <TabsV5
+      boletasLabel={mesa.mesaActiva === "factura" ? "Facturas" : "Boletas"}
       pendCount={mesa.pendCount}
       aprobCount={mesa.aprobCount}
       nombreEmpresa={empresaRazon}

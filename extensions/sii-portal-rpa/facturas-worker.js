@@ -30,6 +30,15 @@
   if (window.__appContableFactWorker) return;
   window.__appContableFactWorker = true;
 
+  // BALIZA DE DIAGNÓSTICO (auditoría titileo 2026-08-26): cada copia instalada
+  // de la extensión imprime su ID al inyectarse. Si en la consola de la
+  // pestaña SII aparecen DOS balizas, hay DOS copias conviviendo (p. ej. la
+  // 0.1.8 de la Web Store + la carpeta dev) y la vieja puede estar conduciendo
+  // la página por su cuenta. Un renglón, cero efectos.
+  try {
+    console.log("[FACT-worker] inyectado · ext:", chrome.runtime.id, "· v:", chrome.runtime.getManifest?.()?.version, "·", location.href);
+  } catch { /* sin permiso runtime: igual seguimos */ }
+
   const EXT_SOURCE = "app-contable-extension";
 
   // ── Espejos inline de modules/facturas-portal.js (los content scripts no
@@ -90,6 +99,28 @@
     return true;
   }
 
+  // Escribe respetando la naturaleza del control (cazado en vivo 2026-08-26):
+  // cuando el SII CONOCE al receptor, campos como la dirección llegan como
+  // <select> de valores registrados — escribirles texto arbitrario los deja
+  // vacíos. En un select: match exacto por value → match por texto
+  // normalizado (contiene) → primera opción con valor real.
+  function setValInteligente(el, valor) {
+    if (!el) return false;
+    if (el.tagName === "SELECT") {
+      const objetivo = String(valor ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const opciones = [...el.options].filter((o) => String(o.value ?? "").trim() !== "");
+      const porValor = opciones.find((o) => String(o.value).trim().toLowerCase() === objetivo);
+      const porTexto = opciones.find((o) => {
+        const t = String(o.text ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        return t && (t.includes(objetivo) || objetivo.includes(t));
+      });
+      const elegida = porValor ?? porTexto ?? opciones[0];
+      if (!elegida) return false;
+      return setVal(el, elegida.value);
+    }
+    return setVal(el, valor);
+  }
+
   function clickEl(el) {
     if (!el) return false;
     el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -110,13 +141,31 @@
   }
 
   // ── Identidad de página (por estructura, no por URL: los CGIs redirigen) ─
+  // PRECEDENCIA ENDURECIDA (auditoría 2026-08-26): el formulario y la vista
+  // previa GANAN sobre el selector — el popup `fPrmEmpPOP` puede quedar
+  // RESIDUAL en el DOM del formulario, y clasificar "selector_empresa" ahí
+  // hacía re-clickear submit en cada recarga = titileo. Una página con
+  // VIEW_EFXP/PreViewDTE ya pasó la selección de empresa, punto.
   function pageKind() {
-    if (formEl("fPrmEmpPOP")) return "selector_empresa";
-    if (formEl("VIEW_EFXP")) return "formulario";
     if (formEl("PreViewDTE")) return "preview";
+    if (formEl("VIEW_EFXP")) return "formulario";
+    if (formEl("fPrmEmpPOP")) return "selector_empresa";
     const texto = (document.body?.innerText ?? "").slice(0, 4000);
     const pwd = document.querySelector('input[type="password"]');
+    // LOGIN ANTES QUE FIRMA (bug cazado EN VIVO 2026-08-27, stream completo):
+    // la página de login del SII tiene input password Y menciona "certificado
+    // digital" como opción de entrada — con firma primero, el worker tipeaba
+    // la CLAVE DEL CERTIFICADO como Clave Tributaria, el login rebotaba y el
+    // flujo quedaba en unknown/observando para siempre (el titileo + modal
+    // congelado). El login manda: RUT + Clave Tributaria es inconfundible.
+    if (pwd && /clave\s+tributaria|iniciar\s+sesi|autenticaci/i.test(texto)) return "login";
     if (pwd && /certificado|firma/i.test(texto)) return "firma";
+    // Página de ÉXITO real del portal (capturada en vivo 2026-08-27, folios
+    // 961/962): "DOCUMENTO TRIBUTARIO ELECTRÓNICO ENVIADO EXITOSAMENTE". El
+    // folio NO está en el texto plano (vive en el iframe con la imagen del
+    // documento) — el ancla basta para clasificar; stepPostFirma lo busca
+    // también dentro de los iframes same-origin.
+    if (/ENVIADO\s+EXITOSAMENTE/i.test(texto) && /DOCUMENTO\s+TRIBUTARIO/i.test(texto)) return "post_firma";
     if (extractFolioFromText(texto) && /factura|documento tributario/i.test(texto)) return "post_firma";
     return "unknown";
   }
@@ -142,6 +191,17 @@
     setVal(sel, candidatos[0].value);
     const submit = form.querySelector('button[type="submit"], input[type="submit"]');
     if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT" };
+    // Cinturón (cazado en vivo 2026-08-27): el click sintético en Enviar puede
+    // NO gatillar la navegación del CGI (la página quedó quieta con la empresa
+    // elegida y el latch impedía reintentar). A los 2.5s forzamos el submit
+    // nativo; si el click sí navegó, este timer muere con la página — jamás
+    // doble-submite.
+    setTimeout(() => {
+      try {
+        const f = formEl("fPrmEmpPOP");
+        if (f && !formEl("VIEW_EFXP")) f.submit();
+      } catch { /* la página ya navegó */ }
+    }, 2500);
     return { ok: true, action: "empresa_seleccionada" };
   }
 
@@ -169,61 +229,92 @@
   }
 
   async function stepFormulario(job) {
-    const form = formEl("VIEW_EFXP");
-    const codigo = valorDe(form, "PTDC_CODIGO");
+    // REGLA DURA (cazada en la primera factura real 2026-08-26): el AJAX del
+    // autocomplete puede REEMPLAZAR nodos del formulario — jamás retener una
+    // referencia a `form`/campos a través de un await. Todo acceso pasa por
+    // f() (form fresco) y los overrides se re-aplican con verificación.
+    const f = () => formEl("VIEW_EFXP");
+    const codigo = valorDe(f(), "PTDC_CODIGO");
     if (codigo !== String(job.tipo_dte)) {
       return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.` };
     }
 
-    // Fecha (editable; el guardarraíl de período vive en la app — acá se obedece).
-    if (job.fecha_emision) setVal(campo(form, "EFXP_FCH_EMIS"), job.fecha_emision);
-
-    // Ciudad del emisor: el autocomplete del portal la deja vacía y ES
-    // obligatoria (verificado en vivo). Fallback: la comuna del emisor.
-    if (!valorDe(form, "EFXP_CIUDAD_ORIGEN")) {
-      setVal(campo(form, "EFXP_CIUDAD_ORIGEN"), valorDe(form, "EFXP_CMNA_ORIGEN") || job.receptor?.ciudad || "");
-    }
-
-    // Receptor: RUT en dos cajas; el change del DV dispara enviaCGI (AJAX).
+    // Receptor primero — MEDIDO EN VIVO 2026-08-27 (laboratorio con la página
+    // real): el change del DV dispara enviaCGI y en este portal eso puede ser
+    // un POST DE PÁGINA COMPLETA (no AJAX) — la página navega y vuelve con el
+    // receptor autocompletado. Poner el RUT en cada pasada era el LOOP
+    // infinito de recargas (titileo): cada reload re-ponía el RUT y re-POSTeaba.
+    // Regla: el RUT se pone UNA vez; si la página ya lo trae (volvió del POST),
+    // se salta el gatillo y se sigue con el resto. Los demás campos NO navegan
+    // (detalle/cantidad/precio/forma de pago verificados en vivo).
     const rutRecep = splitRutCuerpoDv(job.receptor?.rut);
     if (!rutRecep) return { ok: false, error: "RECEPTOR_RUT_INVALID" };
-    setVal(campo(form, "EFXP_RUT_RECEP"), rutRecep.cuerpo);
-    setVal(campo(form, "EFXP_DV_RECEP"), rutRecep.dv);
+    const rutYaPuesto = valorDe(f(), "EFXP_RUT_RECEP") === rutRecep.cuerpo
+      && valorDe(f(), "EFXP_DV_RECEP").toUpperCase() === rutRecep.dv;
+    if (!rutYaPuesto) {
+      setVal(campo(f(), "EFXP_RUT_RECEP"), rutRecep.cuerpo);
+      setVal(campo(f(), "EFXP_DV_RECEP"), rutRecep.dv);
+      // Modo AJAX (existe también): la razón social aparece sin navegar y
+      // seguimos en esta misma pasada. Modo POST: la página muere durante esta
+      // espera, este script muere con ella, y el próximo load retoma con el
+      // RUT ya puesto (rutYaPuesto=true) — sin re-gatillar. Convergente.
+      const razonLlego = await waitFor(() => valorDe(formEl("VIEW_EFXP"), "EFXP_RZN_SOC_RECEP"), 8000, 300);
+      if (!razonLlego) {
+        return { ok: true, action: "observando", detalle: "receptor enviado al SII, esperando autocomplete/recarga" };
+      }
+      // Respiro extra: que el re-pintado termine antes de escribir.
+      await esperar(700);
+    }
 
-    // Esperar el autocomplete (<2s medido; 8s de margen). Si no llega, no
-    // importa: el job trae el receptor COMPLETO y lo escribimos igual.
-    await waitFor(() => valorDe(form, "EFXP_RZN_SOC_RECEP"), 8000, 300);
-
-    // El documento nace de la APP (receptor completo obligatorio, decisión
-    // del fundador): los datos del job PISAN lo que haya autocompletado.
     const r = job.receptor ?? {};
-    if (r.razon_social) setVal(campo(form, "EFXP_RZN_SOC_RECEP"), r.razon_social);
-    if (r.direccion) setVal(campo(form, "EFXP_DIR_RECEP"), r.direccion);
-    if (r.comuna) setVal(campo(form, "EFXP_CMNA_RECEP"), r.comuna);
-    if (r.ciudad) setVal(campo(form, "EFXP_CIUDAD_RECEP"), r.ciudad);
-    if (r.giro) setVal(campo(form, "EFXP_GIRO_RECEP"), r.giro);
-    else if (!valorDe(form, "EFXP_GIRO_RECEP")) {
+    const det = Array.isArray(job.detalles) ? job.detalles[0] : null;
+    if (!det) return { ok: false, error: "DETALLE_MISSING" };
+
+    // Overrides idempotentes sobre el form FRESCO. Se aplican y se VERIFICAN;
+    // si el portal re-pinta y pisa algo, la segunda/tercera vuelta lo repone.
+    const aplicarTodo = () => {
+      if (job.fecha_emision) setVal(campo(f(), "EFXP_FCH_EMIS"), job.fecha_emision);
+      // Ciudades: el autocomplete las deja vacías y SON obligatorias.
+      if (!valorDe(f(), "EFXP_CIUDAD_ORIGEN")) {
+        setVal(campo(f(), "EFXP_CIUDAD_ORIGEN"), valorDe(f(), "EFXP_CMNA_ORIGEN") || job.receptor?.ciudad || "");
+      }
+      if (r.razon_social) setValInteligente(campo(f(), "EFXP_RZN_SOC_RECEP"), r.razon_social);
+      if (r.direccion) setValInteligente(campo(f(), "EFXP_DIR_RECEP"), r.direccion);
+      if (r.comuna) setValInteligente(campo(f(), "EFXP_CMNA_RECEP"), r.comuna);
+      if (r.ciudad) setValInteligente(campo(f(), "EFXP_CIUDAD_RECEP"), r.ciudad);
+      if (r.giro) setValInteligente(campo(f(), "EFXP_GIRO_RECEP"), r.giro);
+      if (r.contacto || r.email) setVal(campo(f(), "EFXP_CONTACTO"), r.contacto || r.email);
+      setVal(campo(f(), "EFXP_NMB_01"), det.nombre);
+      setVal(campo(f(), "EFXP_QTY_01"), det.cantidad ?? 1);
+      setVal(campo(f(), "EFXP_PRC_01"), det.precio); // change → calculaRelacionadoFacEx
+      // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa).
+      setVal(campo(f(), "EFXP_FMA_PAGO"), job.forma_pago === "credito" ? "2" : "1");
+    };
+
+    let faltas = [];
+    for (let intento = 0; intento < 3; intento += 1) {
+      aplicarTodo();
+      await esperar(600);
+      faltas = preValidar(f(), job);
+      if (faltas.length === 0) break;
+    }
+
+    if (!r.giro && !valorDe(f(), "EFXP_GIRO_RECEP")) {
       // Persona natural sin giro y el autocomplete tampoco lo trajo: pausa
       // humana (criterio 8 de la espec: se informa, se ingresa a mano).
       return { ok: false, error: "GIRO_RECEPTOR_REQUERIDO", human: true, detalle: "El SII no informó giro para este receptor. Ingrésalo en la app (queda guardado en tu libreta de clientes) y reintenta." };
     }
-    if (r.contacto || r.email) setVal(campo(form, "EFXP_CONTACTO"), r.contacto || r.email);
+    if (faltas.length > 0) {
+      return { ok: false, error: "FORMULARIO_INCOMPLETO", human: true, detalle: `Faltan: ${faltas.join(", ")}. (3 intentos de escritura sobre el form fresco)` };
+    }
 
-    // Detalle (1 línea, criterio del masivo simple).
-    const det = Array.isArray(job.detalles) ? job.detalles[0] : null;
-    if (!det) return { ok: false, error: "DETALLE_MISSING" };
-    setVal(campo(form, "EFXP_NMB_01"), det.nombre);
+    // Glosa extendida (>40 chars): checkbox Descrip. inserta el textarea.
     if (det.descripcion) {
-      const chk = campo(form, "DESCRIP_01");
+      const chk = campo(f(), "DESCRIP_01");
       if (chk && !chk.checked) clickEl(chk); // dibujaTextArea inserta EFXP_DSC_ITEM_01
       const area = await waitFor(() => campo(formEl("VIEW_EFXP"), "EFXP_DSC_ITEM_01"), 3000, 150);
       if (area) setVal(area, det.descripcion);
     }
-    setVal(campo(form, "EFXP_QTY_01"), det.cantidad ?? 1);
-    setVal(campo(form, "EFXP_PRC_01"), det.precio); // change → calculaRelacionadoFacEx
-
-    // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa).
-    setVal(campo(form, "EFXP_FMA_PAGO"), job.forma_pago === "credito" ? "2" : "1");
 
     // Totales del portal vs el job (±$1 de redondeo) — ANTES de validar.
     const totalEsperado = Number(job.totales?.monto_total);
@@ -233,11 +324,6 @@
     }, 6000, 250);
     if (!totalPortal || !Number.isFinite(totalEsperado) || Math.abs(totalPortal - totalEsperado) > 1) {
       return { ok: false, error: "TOTAL_MISMATCH", detalle: `El portal calculó $${totalPortal ?? "?"} y el documento aprobado dice $${totalEsperado}. No se firma un documento descuadrado.` };
-    }
-
-    const faltas = preValidar(formEl("VIEW_EFXP"), job);
-    if (faltas.length > 0) {
-      return { ok: false, error: "FORMULARIO_INCOMPLETO", human: true, detalle: `Faltan: ${faltas.join(", ")}.` };
     }
 
     // "Validar y visualizar" NO emite ni asigna folio (la vista previa dice
@@ -284,9 +370,12 @@
     return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 
-  // Pantalla de la clave del certificado (post-Firmar; estructura por
-  // confirmar en la fase 4 — este handler es defensivo por diseño).
+  // Pantalla de la clave del certificado (post-Firmar). Solo pedir la clave si
+  // el campo ya existe — si no, es la pantalla de espera "generando firma":
+  // seguir observando (el próximo scan la retoma) sin gastar el único intento.
   function stepFirmaNecesitaClave() {
+    const pwd = document.querySelector('input[type="password"]');
+    if (!pwd) return { ok: true, action: "observando", detalle: "generando firma, esperando el campo de la clave" };
     return { ok: true, action: "needs_cert_password" };
   }
 
@@ -314,16 +403,70 @@
 
   // Página post-firma: capturar folio con evidencia fuerte y construir el
   // resultado en el MISMO contrato que boletas (handleCapturedResult).
-  function stepPostFirma(job) {
-    const texto = document.body?.innerText ?? "";
-    const hit = extractFolioFromText(texto);
+  // El folio de la página de éxito vive DENTRO del iframe con la imagen del
+  // documento (mismo patrón que la vista previa) — sumar los iframes
+  // same-origin al texto donde se busca.
+  function textoConIframes() {
+    let t = document.body?.innerText ?? "";
+    for (const fr of document.querySelectorAll("iframe")) {
+      try { t += "\n" + (fr.contentDocument?.body?.innerText ?? ""); } catch { /* cross-origin: ignorar */ }
+    }
+    return t;
+  }
+
+  // PDF de la factura recién emitida (medido en vivo 2026-08-27, folio 964):
+  // la página de éxito (mipeSendXML.cgi) trae el link "Ver Documento" →
+  // /cgi-bin/Portal001/mipeDisplayPDF.cgi?DHDR_CODIGO=... que responde
+  // application/pdf directo (185KB, %PDF-1.4) con las cookies de la sesión.
+  // Un fetch same-origin lo captura SIN navegar (la página de éxito sigue
+  // viva para el resto de la captura). Falla suave: sin PDF el folio igual
+  // se registra (pdf_pendiente, mismo contrato que boletas).
+  async function capturarPdfFactura(job) {
+    const link = document.querySelector('a[href*="mipeDisplayPDF.cgi"]');
+    if (!link) return null;
+    try {
+      const resp = await fetch(link.getAttribute("href"), { credentials: "include" });
+      if (!resp.ok || !/pdf/i.test(resp.headers.get("content-type") ?? "")) return null;
+      const buf = await resp.arrayBuffer();
+      if (buf.byteLength < 1000 || buf.byteLength > 15 * 1024 * 1024) return null;
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      return {
+        source: "fact_portal_pdf",
+        base64: btoa(bin),
+        content_type: "application/pdf",
+        filename: `factura-${job?.tipo_dte ?? "34"}.pdf`,
+        size: buf.byteLength,
+        source_url: link.href,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function stepPostFirma(job) {
+    const texto = textoConIframes();
+    // Patrón primario: "folio NNN". Fallback: el "Nº962" del documento
+    // impreso (cabecera roja), solo en página anclada como post_firma.
+    const hit = extractFolioFromText(texto)
+      ?? (() => {
+        const m = texto.match(/N[°ºo]\s*:?\s*(\d{1,10})/);
+        if (!m) return null;
+        const folio = Number(m[1]);
+        return Number.isSafeInteger(folio) && folio > 0 ? { folio, matched_text: m[0].slice(0, 60) } : null;
+      })();
     // Emisor ACTIVO del portal ("Empresa: 77.155.156-4" en la cabecera): el
     // server lo cruza contra el RUT registrado — misma red que boletas.
     const emisorHit = texto.match(/Empresa:\s*([\d.]{7,12}-?[\dkK])/);
+    const pdf = await capturarPdfFactura(job);
     const result = {
       emisor_rut_activo: emisorHit ? emisorHit[1] : null,
       folio: hit?.folio ?? null,
       folio_confidence: hit ? "high" : "none",
+      pdf,
       folio_evidence: hit ? { source: "fact_portal_text", matched_text: hit.matched_text } : null,
       tipo_dte: job.tipo_dte,
       fecha_emision: job.fecha_emision ?? null,
@@ -354,26 +497,87 @@
     // Deja respirar al DOM recién cargado (los CGIs inicializan con jQuery).
     await esperar(400);
     const kind = pageKind();
+    console.log("[FACT-worker] handleDrive kind:", kind, "url:", location.href.split("/").pop(), "done:", JSON.stringify(message.done ?? {}));
     try {
-      if (kind === "selector_empresa") return { kind, ...stepSelectorEmpresa(job) };
-      if (kind === "formulario") return { kind, ...(await stepFormulario(job)) };
+      // CANDADO MONÓTONO: con Firmar ya clickeado, ni el formulario ni la
+      // vista previa se vuelven a conducir (re-llenar + re-Firmar = posible
+      // loop de firmas). Solo captura/clave; el humano decide el resto.
+      if (message.final_emit_clicked === true && (kind === "formulario" || kind === "preview")) {
+        return { kind, ok: false, error: "POST_FIRMA_REBOTO", human: true, detalle: "El portal volvió a una pantalla previa DESPUÉS de Firmar. No re-emito: verifica en el portal si la factura alcanzó a generarse." };
+      }
+      // LATCH DE PASO (auditoría 2026-08-26): un paso que NAVEGA no se repite.
+      // El background lleva la cuenta (message.done = { empresa, validado });
+      // si volvemos a aterrizar en un kind ya hecho, esperamos en vez de
+      // re-clickear (matabas el titileo del selector que re-submitía).
+      const done = message.done ?? {};
+      if (kind === "selector_empresa") {
+        if (done.empresa) return { kind, ok: true, action: "observando", detalle: "empresa ya seleccionada, esperando el formulario" };
+        return { kind, ...stepSelectorEmpresa(job) };
+      }
+      if (kind === "formulario") {
+        if (done.validado) return { kind, ok: true, action: "observando", detalle: "ya validado, esperando la vista previa" };
+        return { kind, ...(await stepFormulario(job)) };
+      }
       if (kind === "preview") return { kind, ...(await stepPreview(job)) };
+      if (kind === "login") return { kind, ok: true, action: "needs_login" };
       if (kind === "firma") return { kind, ...stepFirmaNecesitaClave() };
-      if (kind === "post_firma") return { kind, ...stepPostFirma(job) };
+      if (kind === "post_firma") return { kind, ...(await stepPostFirma(job)) };
       return { kind, ok: true, action: "observando", excerpt: excerpt() };
     } catch (error) {
       return { kind, ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) };
     }
   }
 
+  // PATRÓN PUSH (cazado en vivo 2026-08-26): mantener el canal del
+  // sendMessage abierto durante los 15-20s del formulario moría con
+  // "message channel closed before a response was received". El drive
+  // responde 'accepted' AL TIRO y el resultado viaja como mensaje propio
+  // (APP_CONTABLE_SII_FACT_STEP) cuando el paso termina — inmune a
+  // navegaciones y a la vida del canal.
+  let driveEnCurso = false;
+
+  function pushStep(jobId, res) {
+    try {
+      chrome.runtime.sendMessage({ source: EXT_SOURCE, type: "APP_CONTABLE_SII_FACT_STEP", job_id: jobId, res }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch { /* extensión recargada: el watchdog del próximo drive retoma */ }
+  }
+
+  // KEEP-ALIVE (causa raíz cazada 2026-08-26): un paso de facturas tarda
+  // 15-20s llenando el formulario. En ese rato el service worker MV3 se queda
+  // sin eventos y Chrome lo RECICLA a los ~30s → se pierde el estado del job
+  // (activeJobs) y el pushStep del resultado cae en un SW vacío → el modal se
+  // congela para siempre. Un latido cada 10s mientras el paso corre resetea
+  // el timer de reciclado del SW y lo mantiene vivo hasta que el push llegue.
+  function pingBackground() {
+    try {
+      chrome.runtime.sendMessage({ source: EXT_SOURCE, type: "APP_CONTABLE_SII_FACT_KEEPALIVE" }, () => { void chrome.runtime.lastError; });
+    } catch { /* extensión recargada */ }
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "APP_CONTABLE_SII_FACT_DRIVE") {
-      handleDrive(message).then(sendResponse).catch(() => sendResponse({ ok: false, error: "FACT_WORKER_ERROR" }));
-      return true;
+      if (driveEnCurso) {
+        sendResponse({ ok: true, accepted: true, busy: true });
+        return false;
+      }
+      driveEnCurso = true;
+      sendResponse({ ok: true, accepted: true });
+      pingBackground();
+      const keepalive = setInterval(pingBackground, 10000);
+      handleDrive(message)
+        .then((res) => pushStep(message.job_id ?? message.job?.job_id ?? null, res))
+        .catch((error) => pushStep(message.job_id ?? null, { ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) }))
+        .finally(() => { clearInterval(keepalive); driveEnCurso = false; });
+      return false;
     }
     if (message?.type === "APP_CONTABLE_SII_FACT_SIGN") {
-      handleSign(message).then(sendResponse).catch(() => sendResponse({ ok: false, error: "FACT_WORKER_ERROR" }));
-      return true;
+      sendResponse({ ok: true, accepted: true });
+      handleSign(message)
+        .then((res) => pushStep(message.job_id ?? null, { ...res, kind: "firma" }))
+        .catch((error) => pushStep(message.job_id ?? null, { ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error), kind: "firma" }));
+      return false;
     }
     return false;
   });
