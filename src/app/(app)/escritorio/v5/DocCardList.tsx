@@ -492,8 +492,12 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       nm = info?.nombre || "Comprobante";
                       metaNorm = fmtMonto(info?.monto);
                     } else if (g.key === "boleta") {
-                      nm = prog?.folio ? `Boleta #${prog.folio}${prog.receptor ? ` · ${prog.receptor}` : ""}` : doc.nombre_archivo;
-                      metaNorm = fmtMonto(prog?.monto_total) || "emitida";
+                      // HONESTIDAD (2026-08-27): "emitida" verde solo con FOLIO real.
+                      // Sin folio la emisión nunca se confirmó → "sin emitir" ámbar
+                      // (antes toda solicitud procesada se vestía de emitida).
+                      const docWord = /factura/i.test(doc.nombre_archivo) ? "Factura" : "Boleta";
+                      nm = prog?.folio ? `${docWord} #${prog.folio}${prog.receptor ? ` · ${prog.receptor}` : ""}` : doc.nombre_archivo;
+                      metaNorm = prog?.folio ? (fmtMonto(prog?.monto_total) || "emitida") : "sin emitir";
                     } else {
                       nm = aliasBanco(doc.nombre_archivo); // alias de banco; el nombre real queda en el hover (title)
                       metaNorm = doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "";
@@ -503,7 +507,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       : metaNorm;
                     const metaColor = doc.estado === "error" ? "var(--red)"
                       : doc.estado === "procesando" ? "var(--blue)"
-                      : (doc.estado === "procesado" && isBoletaTipo(doc.tipo)) ? "var(--green)"
+                      : (doc.estado === "procesado" && isBoletaTipo(doc.tipo) && prog?.folio) ? "var(--green)"
+                      : (isBoletaTipo(doc.tipo) && !prog?.folio && doc.estado !== "subido") ? "var(--amber)"
                       : "var(--text2)";
                     return (
                       <button key={doc.id} type="button" className={`agg-fr${selectedDocId === doc.id ? " sel" : ""}`} title={doc.nombre_archivo}
