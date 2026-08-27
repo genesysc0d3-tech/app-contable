@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useId } from "react";
+import { useState, useMemo, useEffect, useRef, useId, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
@@ -168,7 +168,18 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // Criterio 7 de Matías: la forma de pago del lote es OBLIGATORIA y SIN
   // default — el usuario la elige expresamente en la revisión, el sistema no
   // presupone cómo se hizo la operación. Solo aplica a facturas.
-  const [formaPago, setFormaPago] = useState<"contado" | "credito" | null>(null);
+  // FORMA DE PAGO POR FACTURA (2026-08-27): antes era UNA sola para todo el
+  // lote y se preguntaba recién en el modal final. Ahora se decide en la lista
+  // —por factura o de una para el grupo— porque un lote real mezcla contado y
+  // crédito. Sigue sin default: la elección es expresa (criterio de Matías).
+  const [formaPagoItems, setFormaPagoItems] = useState<Record<string, "contado" | "credito">>({});
+  const setFormaPagoDe = useCallback((ids: string[], fp: "contado" | "credito") => {
+    setFormaPagoItems((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = fp;
+      return next;
+    });
+  }, []);
   const { toast } = useToast();
   const reloadCtx = useMesaReload();
   const reload = useMemo(() => reloadCtx ?? (() => {}), [reloadCtx]);
@@ -323,6 +334,14 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     return t === 39 || t === 33;
   }).length;
   const selExenta = selectedCount - selAfecta;
+  // Facturas: reparto de la forma de pago entre lo seleccionado + las que aún
+  // no la tienen (bloquean la emisión, sin default).
+  const selSinFormaPago = useMemo(
+    () => (esFacturas ? selectedItems.filter((i) => !formaPagoItems[i.id]) : []),
+    [esFacturas, selectedItems, formaPagoItems],
+  );
+  const selContado = selectedItems.filter((i) => formaPagoItems[i.id] === "contado").length;
+  const selCredito = selectedItems.filter((i) => formaPagoItems[i.id] === "credito").length;
 
   if (!data) {
     return <EmitirEmpty loading />;
@@ -334,8 +353,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
 
   async function handleEmitir() {
     if (selectedItems.length === 0) return;
-    if (esFacturas && !formaPago) {
-      toast("Elige la forma de pago del lote (Contado o Crédito) antes de emitir", "error");
+    if (esFacturas && selSinFormaPago.length > 0) {
+      toast(`Falta elegir la forma de pago de ${selSinFormaPago.length === 1 ? "1 factura" : `${selSinFormaPago.length} facturas`} — márcalas en la lista`, "error");
       return;
     }
     if (proveedorReal) {
@@ -357,8 +376,15 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     setEmitSnapshot(Object.fromEntries(selectedItems.map((i) => [i.id, { receptor: i.receptor_nombre || i.descripcion || "Sin nombre", monto: i.monto_total }])));
     try {
       const body = {
-        items: selectedItems.map(i => ({ id: i.id, tipo_dte: i.tipo_sugerido ?? (esFacturas ? 33 : 39) })),
-        ...(esFacturas ? { forma_pago_lote: formaPago } : {}),
+        items: selectedItems.map(i => ({
+          id: i.id,
+          tipo_dte: i.tipo_sugerido ?? (esFacturas ? 33 : 39),
+          ...(esFacturas ? { forma_pago: formaPagoItems[i.id] } : {}),
+        })),
+        // Compat: el carril mock del server aún lee forma_pago_lote. Si TODAS
+        // comparten forma, se manda; si el lote es mixto, manda la de la
+        // primera y cada ítem lleva la suya en `forma_pago`.
+        ...(esFacturas ? { forma_pago_lote: formaPagoItems[selectedItems[0].id] ?? null } : {}),
       };
       const res = await fetch("/api/intermediaria/emitir-lote", {
         method: "POST",
@@ -432,6 +458,17 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <div className="sub">
             {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
           </div>
+          {/* EL DETALLE SE VE — SOLO MESA FACTURAS (2026-08-27): sin esto, tres
+              facturas al mismo receptor por el mismo monto son indistinguibles
+              en la lista. Es LO QUE dice el documento, el dato que guía al
+              cliente. Boletas NO se toca: su lista ya funciona y ahí el título
+              suele SER la glosa de la cartola. */}
+          {esFacturas && (() => {
+            const glosa = (item.detalle ?? "").trim() || (item.descripcion ?? "").trim();
+            const titulo = item.receptor_nombre || item.descripcion || "";
+            if (!glosa || glosa === titulo) return null;
+            return <div className="sub" style={{ color: "var(--text)", opacity: .78 }} title={glosa}>{glosa}</div>;
+          })()}
           {item.motivo_no_listo && (
             <div className="sub rn">
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -445,6 +482,27 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           {item.balde === "listas" && item.documento_id && (
             <button onClick={(e) => { e.stopPropagation(); goToCheck(item); }} title="Corregir el tipo en Check"
               style={{ fontSize: 10, fontWeight: 500, color: "var(--text2)", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 2, textAlign: "left", display: "block" }}>Corregir en Check →</button>
+          )}
+          {/* FORMA DE PAGO POR FACTURA — SOLO MESA FACTURAS. Un lote real mezcla
+              contado y crédito; una sola elección global obligaba a partir el
+              lote en dos. Sin default: la elección es expresa. */}
+          {esFacturas && item.balde === "listas" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5 }} onClick={(e) => e.stopPropagation()}>
+              {(["contado", "credito"] as const).map((fp) => {
+                const activo = formaPagoItems[item.id] === fp;
+                return (
+                  <button key={fp} type="button" onClick={(e) => { e.stopPropagation(); setFormaPagoDe([item.id], fp); }}
+                    title={fp === "contado" ? "La prestación ya está pagada" : "Por pagar"}
+                    style={{ padding: "2px 9px", borderRadius: 7, fontSize: 9.5, fontWeight: 800, cursor: "pointer", font: "inherit", lineHeight: 1.7,
+                      border: activo ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                      background: activo ? "rgba(201,242,75,.1)" : "transparent",
+                      color: activo ? "var(--lime)" : "var(--text3)" }}>
+                    {fp === "contado" ? "Contado" : "Crédito"}
+                  </button>
+                );
+              })}
+              {!formaPagoItems[item.id] && <span style={{ fontSize: 9, color: "var(--amber)", fontWeight: 700 }}>elige forma de pago</span>}
+            </div>
           )}
         </div>
         <div className="tp" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
@@ -590,6 +648,26 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                         )}
                       </div>
                     </div>
+                    {/* Atajo del grupo: aplica la forma de pago a todas las
+                        facturas listas del archivo de una sola vez. */}
+                    {esFacturas && listas > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                        {(["contado", "credito"] as const).map((fp) => {
+                          const ids = g.items.filter((i) => i.balde === "listas").map((i) => i.id);
+                          const todas = ids.length > 0 && ids.every((id) => formaPagoItems[id] === fp);
+                          return (
+                            <button key={fp} type="button" onClick={(e) => { e.stopPropagation(); setFormaPagoDe(ids, fp); }}
+                              title={`Marcar las ${ids.length} como ${fp === "contado" ? "Contado" : "Crédito"}`}
+                              style={{ padding: "3px 9px", borderRadius: 7, fontSize: 9.5, fontWeight: 800, cursor: "pointer", font: "inherit",
+                                border: todas ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
+                                background: todas ? "rgba(201,242,75,.1)" : "transparent",
+                                color: todas ? "var(--lime)" : "var(--text3)" }}>
+                              {fp === "contado" ? "Contado" : "Crédito"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: "tabular-nums", textAlign: "right", flexShrink: 0 }}>{fmt(monto)}</div>
                   </div>
                   {isOpen && (
@@ -676,7 +754,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           empresaRut={null}
           totalOriginal={loteResume ? (loteResumeTotal ?? loteResume.length) : selectedItems.length}
           mesa={esFacturas ? "factura" : "boleta"}
-          formaPagoLote={esFacturas ? formaPago : null}
+          formaPagoPorItem={esFacturas ? formaPagoItems : null}
           onClose={() => { setLoteOpen(false); setLoteResume(null); setLoteResumeTotal(null); setLotePendiente(leerLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta")); }}
           onDone={() => { setSelected(new Set()); setLoteResume(null); setLoteResumeTotal(null); reload(); setLotePendiente(leerLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta")); }}
         />
@@ -751,21 +829,22 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 12, color: "var(--text2)" }}>
                   Total <b style={{ color: "var(--text)" }}>{fmt(selectedTotal)}</b>
                 </div>
+                {/* La forma de pago YA se eligió en la lista (por factura o por
+                    grupo). Acá solo se RESUME y se bloquea si alguna quedó sin
+                    elegir — el modal confirma, no interroga. */}
                 {esFacturas && (
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text3)", marginBottom: 6 }}>Forma de pago del lote</div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {(["contado", "credito"] as const).map((fp) => (
-                        <button key={fp} type="button" onClick={() => setFormaPago(fp)}
-                          style={{ flex: 1, padding: "10px 12px", borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: "pointer", font: "inherit",
-                            border: formaPago === fp ? "1px solid rgba(201,242,75,.5)" : "1px solid var(--border)",
-                            background: formaPago === fp ? "rgba(201,242,75,.08)" : "transparent",
-                            color: formaPago === fp ? "var(--lime)" : "var(--text2)" }}>
-                          {fp === "contado" ? "Contado" : "Crédito"}
-                        </button>
-                      ))}
-                    </div>
-                    {!formaPago && <div style={{ marginTop: 5, fontSize: 9.5, color: "var(--text3)" }}>Sin selección previa a propósito: tú decides cómo fue la operación.</div>}
+                    <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text3)", marginBottom: 6 }}>Forma de pago</div>
+                    {selSinFormaPago.length > 0 ? (
+                      <div style={{ fontSize: 11.5, color: "var(--amber)", lineHeight: 1.5, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", borderRadius: 9, padding: "8px 10px" }}>
+                        {selSinFormaPago.length === 1 ? "Falta elegir la forma de pago de 1 factura" : `Faltan ${selSinFormaPago.length} facturas por elegir forma de pago`}. Márcalas en la lista (por factura o con el atajo del archivo).
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {selContado > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--lime)", background: "rgba(201,242,75,.12)", padding: "4px 10px", borderRadius: 8 }}>{selContado} contado</span>}
+                        {selCredito > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)", padding: "4px 10px", borderRadius: 8 }}>{selCredito} crédito</span>}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div style={{ marginTop: 8, fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
@@ -781,8 +860,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
                   <button onClick={() => setConfirmOpen(false)}
                     style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", background: "transparent", color: "var(--text2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-                  <button onClick={handleEmitir} disabled={esFacturas && !formaPago}
-                    style={{ flex: 1, border: 0, borderRadius: 10, padding: "11px 14px", background: esFacturas && !formaPago ? "var(--bg-muted)" : "#E8553E", color: esFacturas && !formaPago ? "var(--text3)" : "#fff", fontSize: 13, fontWeight: 800, cursor: esFacturas && !formaPago ? "not-allowed" : "pointer" }}>Emitir {selectedCount} →</button>
+                  <button onClick={handleEmitir} disabled={esFacturas && selSinFormaPago.length > 0}
+                    style={{ flex: 1, border: 0, borderRadius: 10, padding: "11px 14px", background: esFacturas && selSinFormaPago.length > 0 ? "var(--bg-muted)" : "#E8553E", color: esFacturas && selSinFormaPago.length > 0 ? "var(--text3)" : "#fff", fontSize: 13, fontWeight: 800, cursor: esFacturas && selSinFormaPago.length > 0 ? "not-allowed" : "pointer" }}>Emitir {selectedCount} →</button>
                 </div>
               </>
             )}

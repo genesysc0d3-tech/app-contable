@@ -41,7 +41,7 @@ const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 const ACCENT = "#E8553E";
 
 export default function EmitirLoteModal({
-  items, empresaId, empresaRut, totalOriginal, mesa = "boleta", formaPagoLote = null, onClose, onDone,
+  items, empresaId, empresaRut, totalOriginal, mesa = "boleta", formaPagoPorItem = null, onClose, onDone,
 }: {
   items: LoteItemInput[];
   empresaId: string;
@@ -52,7 +52,9 @@ export default function EmitirLoteModal({
   /** boleta (39/41, e-Boleta) | factura (33/34, portal gratuito del SII). */
   mesa?: "boleta" | "factura";
   /** Facturas: forma de pago del lote, elegida por el usuario (sin default). */
-  formaPagoLote?: "contado" | "credito" | null;
+  /** Facturas: forma de pago ELEGIDA POR FACTURA en la lista (id → contado|credito).
+   *  Un lote real mezcla ambas; por eso es un mapa y no un valor único. */
+  formaPagoPorItem?: Record<string, "contado" | "credito"> | null;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -89,12 +91,12 @@ export default function EmitirLoteModal({
       receptorEmail: i.receptor_email,
       receptorTelefono: i.receptor_telefono,
       receptorGiro: i.receptor_giro,
-      formaPago: esFacturas ? formaPagoLote : null,
+      formaPago: esFacturas ? (formaPagoPorItem?.[i.id] ?? null) : null,
       medioPago: i.medio_pago,
       detalle: i.detalle?.trim() || (tipoDte === 41 || tipoDte === 34 ? "Venta exenta" : "Servicio prestado"),
       fechaEmision: hoy,
     };
-  }), [items, hoy, esFacturas, formaPagoLote]);
+  }), [items, hoy, esFacturas, formaPagoPorItem]);
 
   // Autorización legal versionada (una vez por proveedor). El server la re-exige.
   async function confirmar() {
@@ -102,8 +104,8 @@ export default function EmitirLoteModal({
     setModo("verificando");
     // Facturas sin forma de pago = no hay lote (espec Matías: elección expresa).
     // El selector vive en EmitirTabContent; esto es la red de seguridad.
-    if (esFacturas && formaPagoLote !== "contado" && formaPagoLote !== "credito") {
-      setError("Elige la forma de pago del lote (Contado o Crédito) antes de emitir.");
+    if (esFacturas && items.some((i) => { const fp = formaPagoPorItem?.[i.id]; return fp !== "contado" && fp !== "credito"; })) {
+      setError("Falta elegir la forma de pago de alguna factura — márcala en la lista de Emitir (por factura o con el atajo del archivo).");
       setModo("idle");
       return;
     }
@@ -188,7 +190,7 @@ export default function EmitirLoteModal({
             style={{ position: "absolute", top: 15, right: 15, width: 26, height: 26, border: 0, background: "var(--bg-muted)", color: "var(--text2)", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>✕</button>
         )}
 
-        {!progreso && (modo === "idle" || modo === "verificando") && <Idle count={items.length} total={total} doc={doc} docs={docs} formaPago={esFacturas ? formaPagoLote : null} onConfirmar={confirmar} verificando={modo === "verificando"} error={error} />}
+        {!progreso && (modo === "idle" || modo === "verificando") && <Idle count={items.length} total={total} doc={doc} docs={docs} formaPago={esFacturas ? (formaPagoPorItem?.[items[0]?.id ?? ""] ?? null) : null} onConfirmar={confirmar} verificando={modo === "verificando"} error={error} />}
         {!progreso && modo === "legal" && <Legal onAceptar={aceptarLegal} onCancelar={() => setModo("idle")} error={error} />}
 
         {progreso && (fase === "emitiendo" || fase === "esperando" || fase === "pausada" || fase === "preparando") && (
