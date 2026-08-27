@@ -221,7 +221,9 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
     // Asegura estar en massdte (por si se subió desde otra vista). El refresco REAL de
     // la mesa lo hace MesaController al recibir "massdte:uploaded": router.refresh() no
     // re-sembraba el estado de la mesa, así que el doc no aparecía hasta un F5.
-    router.push(`/massdte?date=${todayStr()}&view=day`);
+    // La MESA viaja en la URL (bug 2026-08-27): sin ella el push devolvía al
+    // usuario a boletas justo después de subir su plantilla de facturas.
+    router.push(`/massdte?date=${todayStr()}&view=day&mesa=${esFacturas ? "factura" : "boleta"}`);
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent("massdte:uploaded", { detail: { date: todayStr() } }));
       window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" }));
