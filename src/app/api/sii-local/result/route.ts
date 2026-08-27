@@ -393,11 +393,21 @@ async function backfillFolioSinJobVivo(
     totales: { monto_total?: number | null; monto_neto?: number | null; iva?: number | null; monto_exento?: number | null } | null;
     jobId: string | null;
     propuestaId: string | null;
+    /** Payload completo: la red anti-pérdida también SUBE el PDF si vino. */
+    result?: SiiLocalResultPayload["result"];
+    pdfInfo?: SiiLocalPdfInfo | null;
   },
 ): Promise<{ ok: boolean; boletaId?: string; already?: boolean; error?: string }> {
   const { data: empresa } = await sb
     .from("empresas").select("rut, razon_social, giro, direccion, comuna").eq("id", args.empresaId).single();
   if (!empresa?.rut || !empresa?.razon_social) return { ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" };
+
+  // EL PDF NO SE TIRA (cazado en el primer lote real, folio 966): el payload
+  // llegaba CON el PDF (228 KB) pero esta ruta solo guardaba el folio y lo
+  // marcaba pdf_pendiente. Si el PDF vino en el mismo paquete, se sube igual.
+  const pdfBackfill = (args.result?.pdf || args.pdfInfo)
+    ? await uploadResultPdf(sb, { empresaId: args.empresaId, tipoDte: args.tipoDte, folio: args.folio, result: args.result ?? null, pdfInfo: args.pdfInfo ?? null }).catch(() => null)
+    : null;
 
   // El receptor sale de la propuesta (ver backfillRow): el rescate solo aporta
   // folio y monto, y sin esto la boleta quedaba como "consumidor final".
@@ -456,7 +466,16 @@ async function backfillFolioSinJobVivo(
     proveedor_respuesta: {
       origen: "backfill_job_cerrado",
       job_id: args.jobId,
-      pdf_pendiente: true,
+      pdf_pendiente: !pdfBackfill?.storagePath,
+      ...(pdfBackfill?.storagePath ? {
+        pdf: {
+          storage_path: pdfBackfill.storagePath,
+          filename: pdfBackfill.filename ?? null,
+          content_type: "application/pdf",
+          source_url: pdfBackfill.sourceUrl ?? null,
+          provider: "provider" in pdfBackfill ? pdfBackfill.provider : null,
+        },
+      } : {}),
       recuperado_en: new Date().toISOString(),
     },
   };
@@ -706,6 +725,8 @@ export async function POST(request: Request) {
         totales: result?.totales ?? null,
         jobId: effectiveJobId,
         propuestaId: jobCerrado.propuesta_id ?? null,
+        result,
+        pdfInfo,
       });
       if (respaldo.ok) {
         await rememberResult(sb, {

@@ -1069,11 +1069,13 @@ function captureWorkerResult(state) {
   });
 }
 
-// Modo del worker de FACTURAS: false = VENTANA dedicada con overlay y candado
-// de clicks (UX de producción, igual que boletas). true fue el modo pestaña de
-// la sesión de depuración 2026-08-27 (observable por herramientas) — dejarlo a
-// mano por si hay que volver a depurar el carril mirando la página.
-const FACT_WORKER_EN_PESTANA = false;
+// Modo del worker de FACTURAS.
+//   true  = PESTAÑA: auditable paso a paso con herramientas (depuración).
+//   false = VENTANA dedicada con overlay y candado de clicks (UX de producción).
+// Hoy en PESTAÑA por decisión del fundador: mientras el carril MASIVO se afina,
+// cada emisión se mira de cerca en vez de confiar. Volver a false antes de
+// publicar 0.2.0.
+const FACT_WORKER_EN_PESTANA = true;
 
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
