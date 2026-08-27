@@ -1,11 +1,11 @@
-# Política de Privacidad — Extensión "App Contable Motor Local"
+# Política de Privacidad — Extensión "MassDTE — Motor Local"
 
-_Última actualización: [COMPLETAR fecha]_
+_Última actualización: 27 de agosto de 2026_
 
-Esta política describe cómo la extensión de Chrome **App Contable Motor Local** (en
+Esta política describe cómo la extensión de Chrome **MassDTE — Motor Local** (en
 adelante, "la Extensión") trata los datos. La Extensión es parte del servicio App
-Contable, operado por **AlphaCode SpA** (RUT [COMPLETAR], domicilio [COMPLETAR],
-contacto [COMPLETAR correo]). Complementa la [Política de Privacidad de App
+Contable, operado por **AlphaCode SpA** (RUT 78.448.088-7, domicilio Av. Apoquindo 6410,
+oficina 605, Las Condes, Santiago, Chile; contacto alphacode.chile@gmail.com). Complementa la [Política de Privacidad de App
 Contable][pp].
 
 ## Qué datos maneja la Extensión
@@ -51,10 +51,10 @@ recibir los trabajos de emisión y guardar el folio. No hay otros terceros.
 ## Tus derechos (Ley 19.628 / 21.719)
 
 Podés acceder, rectificar, eliminar y portar tus datos, y revocar la conexión de tu
-clave, escribiendo a **[COMPLETAR correo]** o desde la app.
+clave, escribiendo a **soporte@massdte.cl** o desde la app.
 
 ## Cambios
 
 Publicaremos cualquier cambio en esta misma URL con su fecha de actualización.
 
-[pp]: [COMPLETAR URL de la política general de App Contable]
+[pp]: https://massdte.cl/privacidad
