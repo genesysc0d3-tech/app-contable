@@ -51,10 +51,10 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 24, height: 24, borderRadius: 7, display: "grid", placeItems: "center", color: RED, background: "rgba(232,85,62,.1)", border: "1px solid var(--border)", flexShrink: 0 }}><ReceiptText size={12} strokeWidth={2.2} /></span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", color: "var(--text)", fontSize: 11, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Boletas y facturas desde cartolas</span>
-              <span style={{ display: "block", marginTop: 1, color: "var(--text2)", fontSize: 10 }}>{fmt(b.disponible)} disponibles</span>
+              <span style={{ display: "block", color: "var(--text)", fontSize: 11, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Boletas y facturas</span>
+              <span style={{ display: "block", marginTop: 1, color: "var(--text2)", fontSize: 10 }}>desde cartolas · {fmt(b.disponible)} disponibles</span>
             </span>
-            <span style={{ color: "var(--text)", fontSize: 11, fontWeight: 850, whiteSpace: "nowrap" }}>{fmt(b.uso)} / {fmt(b.total)}</span>
+            <span style={{ color: "var(--text)", fontSize: 11, fontWeight: 850, whiteSpace: "nowrap", flexShrink: 0 }}>{fmt(b.uso)} / {fmt(b.total)}</span>
           </div>
           <div style={{ height: 5, borderRadius: 999, background: "var(--bg-muted)", overflow: "hidden" }}>
             <div style={{ width: `${barW}%`, height: "100%", borderRadius: 999, background: barColor, boxShadow: `0 0 10px color-mix(in srgb, ${barColor} 35%, transparent)`, transition: "width 1s cubic-bezier(.22,1,.36,1)" }} />
@@ -66,7 +66,7 @@ function UsoSide({ resumen, barW }: { resumen: ResumenCupos; barW: number }) {
             <span style={{ display: "block", color: t.habilitado ? "var(--text)" : "var(--text2)", fontSize: 11, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Comprobantes por Telegram</span>
             <span style={{ display: "block", marginTop: 1, color: "var(--text3)", fontSize: 10 }}>{t.total > 0 ? `${fmt(t.disponible)} disponibles` : "No incluido"}</span>
           </span>
-          <span style={{ color: t.habilitado ? "var(--text)" : "var(--text3)", fontSize: 11, fontWeight: 850 }}>{t.total > 0 ? `${fmt(t.uso)} / ${fmt(t.total)}` : "0"}</span>
+          <span style={{ color: t.habilitado ? "var(--text)" : "var(--text3)", fontSize: 11, fontWeight: 850, whiteSpace: "nowrap", flexShrink: 0 }}>{t.total > 0 ? `${fmt(t.uso)} / ${fmt(t.total)}` : "0"}</span>
         </div>
       </div>
 
