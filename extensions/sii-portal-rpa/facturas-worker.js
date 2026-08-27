@@ -152,12 +152,15 @@
     if (formEl("fPrmEmpPOP")) return "selector_empresa";
     const texto = (document.body?.innerText ?? "").slice(0, 4000);
     const pwd = document.querySelector('input[type="password"]');
+    // LOGIN ANTES QUE FIRMA (bug cazado EN VIVO 2026-08-27, stream completo):
+    // la página de login del SII tiene input password Y menciona "certificado
+    // digital" como opción de entrada — con firma primero, el worker tipeaba
+    // la CLAVE DEL CERTIFICADO como Clave Tributaria, el login rebotaba y el
+    // flujo quedaba en unknown/observando para siempre (el titileo + modal
+    // congelado). El login manda: RUT + Clave Tributaria es inconfundible.
+    if (pwd && /clave\s+tributaria|iniciar\s+sesi|autenticaci/i.test(texto)) return "login";
     if (pwd && /certificado|firma/i.test(texto)) return "firma";
     if (extractFolioFromText(texto) && /factura|documento tributario/i.test(texto)) return "post_firma";
-    // Página de login real del SII (zeusr): RUT + Clave Tributaria, SIN los
-    // forms del portal de facturas. El worker lo reporta y el background
-    // dispara el autologin — el motor de boletas ya NO toca páginas de factura.
-    if (pwd && /clave\s+tributaria|iniciar\s+sesi|autenticaci/i.test(texto)) return "login";
     return "unknown";
   }
 
