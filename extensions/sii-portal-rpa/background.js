@@ -410,11 +410,14 @@ function driveFacturaPage(state, attempt = 1) {
   chrome.tabs.get(state.workerTabId, (tab) => {
     if (chrome.runtime.lastError || !tab) return;
     const urlActual = tab.url ?? "";
-    if (attempt === 1) state.factDriveUrl = urlActual;
+    if (attempt === 1) {
+      state.factDriveUrl = urlActual;
+    } else if (state.factDriveUrl && urlActual !== state.factDriveUrl) {
+      // Cambió la URL desde que arrancó esta cadena → la abortamos; el
+      // onUpdated de la página nueva arranca una cadena fresca.
+      return;
+    }
     console.log("[FACT] drive attempt", attempt, "url:", String(urlActual).split("/").pop(), "empresaSel:", state.empresaSeleccionada, "validado:", state.formularioValidado, "finalEmit:", state.finalEmitClicked);
-    // Cambió la URL desde que arrancó esta cadena → la abortamos; el
-    // onUpdated de la página nueva arranca una cadena fresca.
-    else if (state.factDriveUrl && urlActual !== state.factDriveUrl) return;
 
     chrome.tabs.sendMessage(state.workerTabId, baseMessage({
       type: "APP_CONTABLE_SII_FACT_DRIVE",
