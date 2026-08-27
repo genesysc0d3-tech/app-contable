@@ -90,6 +90,28 @@
     return true;
   }
 
+  // Escribe respetando la naturaleza del control (cazado en vivo 2026-08-26):
+  // cuando el SII CONOCE al receptor, campos como la dirección llegan como
+  // <select> de valores registrados — escribirles texto arbitrario los deja
+  // vacíos. En un select: match exacto por value → match por texto
+  // normalizado (contiene) → primera opción con valor real.
+  function setValInteligente(el, valor) {
+    if (!el) return false;
+    if (el.tagName === "SELECT") {
+      const objetivo = String(valor ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const opciones = [...el.options].filter((o) => String(o.value ?? "").trim() !== "");
+      const porValor = opciones.find((o) => String(o.value).trim().toLowerCase() === objetivo);
+      const porTexto = opciones.find((o) => {
+        const t = String(o.text ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        return t && (t.includes(objetivo) || objetivo.includes(t));
+      });
+      const elegida = porValor ?? porTexto ?? opciones[0];
+      if (!elegida) return false;
+      return setVal(el, elegida.value);
+    }
+    return setVal(el, valor);
+  }
+
   function clickEl(el) {
     if (!el) return false;
     el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -204,11 +226,11 @@
       if (!valorDe(f(), "EFXP_CIUDAD_ORIGEN")) {
         setVal(campo(f(), "EFXP_CIUDAD_ORIGEN"), valorDe(f(), "EFXP_CMNA_ORIGEN") || job.receptor?.ciudad || "");
       }
-      if (r.razon_social) setVal(campo(f(), "EFXP_RZN_SOC_RECEP"), r.razon_social);
-      if (r.direccion) setVal(campo(f(), "EFXP_DIR_RECEP"), r.direccion);
-      if (r.comuna) setVal(campo(f(), "EFXP_CMNA_RECEP"), r.comuna);
-      if (r.ciudad) setVal(campo(f(), "EFXP_CIUDAD_RECEP"), r.ciudad);
-      if (r.giro) setVal(campo(f(), "EFXP_GIRO_RECEP"), r.giro);
+      if (r.razon_social) setValInteligente(campo(f(), "EFXP_RZN_SOC_RECEP"), r.razon_social);
+      if (r.direccion) setValInteligente(campo(f(), "EFXP_DIR_RECEP"), r.direccion);
+      if (r.comuna) setValInteligente(campo(f(), "EFXP_CMNA_RECEP"), r.comuna);
+      if (r.ciudad) setValInteligente(campo(f(), "EFXP_CIUDAD_RECEP"), r.ciudad);
+      if (r.giro) setValInteligente(campo(f(), "EFXP_GIRO_RECEP"), r.giro);
       if (r.contacto || r.email) setVal(campo(f(), "EFXP_CONTACTO"), r.contacto || r.email);
       setVal(campo(f(), "EFXP_NMB_01"), det.nombre);
       setVal(campo(f(), "EFXP_QTY_01"), det.cantidad ?? 1);
