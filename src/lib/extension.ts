@@ -56,6 +56,17 @@ export function extensionDesactualizada(version: string | null | undefined): boo
   return compararVersiones(version, EXTENSION_VERSION_MINIMA) < 0;
 }
 
+/**
+ * ¿Hay una versión MÁS NUEVA publicada que la instalada? Señal SUAVE: no bloquea
+ * (para eso está el piso `EXTENSION_VERSION_MINIMA`), solo avisa. Sirve para el
+ * hueco entre publicar y que Chrome propague el auto-update: el usuario ve que
+ * existe algo nuevo en vez de enterarse cuando algo falla.
+ */
+export function hayVersionNuevaDeExtension(version: string | null | undefined): boolean {
+  if (!version || !/^\d+(\.\d+)*$/.test(version)) return false;
+  return compararVersiones(version, EXTENSION_VERSION_ACTUAL) < 0;
+}
+
 /** Copy único para el bloqueo por versión (banner y toasts consistentes). */
 export function mensajeExtensionDesactualizada(version: string | null | undefined): string {
   const detectada = version ? `Tu extensión está en la versión ${version}` : "Tu extensión está desactualizada";
