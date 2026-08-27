@@ -3,6 +3,7 @@ import { downloadFromR2 } from "@/lib/r2";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { extraerTimbrePng } from "@/lib/pdf/timbre-extract";
 import { generarBoletaPersonalizada } from "@/lib/pdf/boleta-personalizada";
+import { generarFacturaPersonalizada } from "@/lib/pdf/factura-personalizada";
 
 /**
  * Boleta PERSONALIZADA a pedido (no se almacena): datos de la boleta + timbre
@@ -31,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { data: boleta, error } = await guard.service
     .from("boletas_emitidas")
     .select(
-      "id, tipo_dte, folio, fecha_emision, medio_pago, detalles, monto_neto, monto_exento, iva, monto_total, receptor_razon_social, receptor_rut, emisor_razon_social, emisor_rut, emisor_giro, emisor_direccion, emisor_comuna, proveedor_respuesta",
+      "id, tipo_dte, folio, fecha_emision, medio_pago, detalles, monto_neto, monto_exento, iva, monto_total, receptor_razon_social, receptor_rut, receptor_giro, receptor_direccion, receptor_comuna, emisor_razon_social, emisor_rut, emisor_giro, emisor_direccion, emisor_comuna, proveedor_respuesta",
     )
     .eq("id", id)
     .eq("empresa_id", guard.empresaId)
@@ -95,14 +96,59 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const detalles = detallesRaw
     .map((d) => {
       const o = d as { nombre?: unknown; monto?: unknown };
+      const cant = (d as { qty?: unknown; cantidad?: unknown });
+      const n = typeof cant?.cantidad === "number" ? cant.cantidad : typeof cant?.qty === "number" ? cant.qty : null;
       return {
         nombre: typeof o?.nombre === "string" && o.nombre.trim() ? o.nombre.trim() : "Venta",
         monto: typeof o?.monto === "number" ? o.monto : boleta.monto_total,
+        cantidad: n,
       };
     })
     .slice(0, 12);
   if (detalles.length === 0) {
-    detalles.push({ nombre: boleta.tipo_dte === 41 ? "Venta exenta" : "Venta", monto: boleta.monto_total });
+    const exento = boleta.tipo_dte === 41 || boleta.tipo_dte === 34;
+    detalles.push({ nombre: exento ? "Venta exenta" : "Venta", monto: boleta.monto_total, cantidad: 1 });
+  }
+
+  // FACTURAS (33/34): documento formal en carta, NO el voucher de boleta. Sin
+  // esta rama el ojo dibujaba una "boleta" rotulada TIPO 41 para una factura —
+  // el tipo tributario equivocado en la cara del documento.
+  const esFactura = boleta.tipo_dte === 33 || boleta.tipo_dte === 34;
+  if (esFactura) {
+    const pdfFactura = generarFacturaPersonalizada({
+      folio: boleta.folio,
+      tipoDte: boleta.tipo_dte,
+      fechaEmision: boleta.fecha_emision,
+      formaPago: boleta.medio_pago ?? null, // en facturas acá vive Contado/Crédito
+      emisor: {
+        razonSocial: boleta.emisor_razon_social,
+        rut: boleta.emisor_rut,
+        giro: boleta.emisor_giro,
+        direccion: boleta.emisor_direccion,
+        comuna: boleta.emisor_comuna,
+      },
+      receptor: {
+        razonSocial: boleta.receptor_razon_social,
+        rut: boleta.receptor_rut,
+        giro: boleta.receptor_giro,
+        direccion: boleta.receptor_direccion,
+        comuna: boleta.receptor_comuna,
+      },
+      detalles,
+      montoNeto: boleta.monto_neto,
+      montoExento: boleta.monto_exento,
+      iva: boleta.iva,
+      montoTotal: boleta.monto_total,
+      timbrePng,
+      logo,
+    });
+    return new Response(new Uint8Array(pdfFactura), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="factura-${boleta.tipo_dte}-${boleta.folio}.pdf"`,
+        "Cache-Control": "private, max-age=60",
+      },
+    });
   }
 
   const pdf = generarBoletaPersonalizada({
