@@ -160,6 +160,12 @@
     // congelado). El login manda: RUT + Clave Tributaria es inconfundible.
     if (pwd && /clave\s+tributaria|iniciar\s+sesi|autenticaci/i.test(texto)) return "login";
     if (pwd && /certificado|firma/i.test(texto)) return "firma";
+    // Página de ÉXITO real del portal (capturada en vivo 2026-08-27, folios
+    // 961/962): "DOCUMENTO TRIBUTARIO ELECTRÓNICO ENVIADO EXITOSAMENTE". El
+    // folio NO está en el texto plano (vive en el iframe con la imagen del
+    // documento) — el ancla basta para clasificar; stepPostFirma lo busca
+    // también dentro de los iframes same-origin.
+    if (/ENVIADO\s+EXITOSAMENTE/i.test(texto) && /DOCUMENTO\s+TRIBUTARIO/i.test(texto)) return "post_firma";
     if (extractFolioFromText(texto) && /factura|documento tributario/i.test(texto)) return "post_firma";
     return "unknown";
   }
@@ -397,9 +403,28 @@
 
   // Página post-firma: capturar folio con evidencia fuerte y construir el
   // resultado en el MISMO contrato que boletas (handleCapturedResult).
+  // El folio de la página de éxito vive DENTRO del iframe con la imagen del
+  // documento (mismo patrón que la vista previa) — sumar los iframes
+  // same-origin al texto donde se busca.
+  function textoConIframes() {
+    let t = document.body?.innerText ?? "";
+    for (const fr of document.querySelectorAll("iframe")) {
+      try { t += "\n" + (fr.contentDocument?.body?.innerText ?? ""); } catch { /* cross-origin: ignorar */ }
+    }
+    return t;
+  }
+
   function stepPostFirma(job) {
-    const texto = document.body?.innerText ?? "";
-    const hit = extractFolioFromText(texto);
+    const texto = textoConIframes();
+    // Patrón primario: "folio NNN". Fallback: el "Nº962" del documento
+    // impreso (cabecera roja), solo en página anclada como post_firma.
+    const hit = extractFolioFromText(texto)
+      ?? (() => {
+        const m = texto.match(/N[°ºo]\s*:?\s*(\d{1,10})/);
+        if (!m) return null;
+        const folio = Number(m[1]);
+        return Number.isSafeInteger(folio) && folio > 0 ? { folio, matched_text: m[0].slice(0, 60) } : null;
+      })();
     // Emisor ACTIVO del portal ("Empresa: 77.155.156-4" en la cabecera): el
     // server lo cruza contra el RUT registrado — misma red que boletas.
     const emisorHit = texto.match(/Empresa:\s*([\d.]{7,12}-?[\dkK])/);
