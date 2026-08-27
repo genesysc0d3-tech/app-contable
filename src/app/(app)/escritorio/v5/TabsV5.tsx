@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
-const tabs = [
+const baseTabs = [
   { id: "subidos", label: "Check de agregados",
     icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   { id: "emitir", label: "Emitir",
@@ -14,12 +14,16 @@ const tabs = [
 export default function TabsV5({
   pendCount, aprobCount, fecha,
   subidosContent, emitirContent, boletasContent,
+  boletasLabel = "Boletas",
 }: {
   pendCount: number; aprobCount: number; nombreEmpresa: string; fecha: string;
   subidosContent?: React.ReactNode;
   emitirContent: React.ReactNode;
   boletasContent: React.ReactNode;
+  /** Etiqueta de la 3ª pestaña: "Boletas" (mesa BO) o "Facturas" (mesa FA). */
+  boletasLabel?: string;
 }) {
+  const tabs = baseTabs.map((t) => (t.id === "boletas" ? { ...t, label: boletasLabel } : t));
   const [tab, setTab] = useState("subidos");
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
