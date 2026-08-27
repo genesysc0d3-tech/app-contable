@@ -193,7 +193,7 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
         style={{ display: "none" }} onChange={handleInput} />
 
       <div className="dz" role="button" tabIndex={uploading ? -1 : 0}
-        aria-label="Subir cartola o comprobante: Excel, PDF, CSV o foto (máx 10MB)"
+        aria-label={esFacturas ? "Subir plantilla de facturas: Excel (máx 10MB)" : "Subir cartola o comprobante: Excel, PDF, CSV o foto (máx 10MB)"}
         aria-disabled={uploading || undefined}
         onClick={() => inputRef.current?.click()}
         onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !uploading) { e.preventDefault(); inputRef.current?.click(); } }}
@@ -207,7 +207,7 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
         </div>
         <div className="dz-txt">
           <h4>{uploading ? "Subiendo..." : dragOver ? "Suelta aquí" : "Arrastra tu archivo aquí"}</h4>
-          <p>Excel, PDF, CSV o foto de cartola · Máx 10MB</p>
+          <p>{esFacturas ? "Solo Excel con la plantilla de facturas · Máx 10MB" : "Excel, PDF, CSV o foto de cartola · Máx 10MB"}</p>
         </div>
       </div>
 
