@@ -102,6 +102,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         const st = data.status ?? "";
         // La extensión NUNCA manda error/cancelado/closed post-emit → son PRE-emit
         // seguros (sin folio): fallida, se puede saltar y seguir.
+        // La extensión se actualizó bajo los pies (auto-update de la store o
+        // recarga en dev): el puente murió pero el TRABAJO PUEDE SEGUIR — pasó
+        // en vivo 2026-08-27 y salió el folio 966 mientras la app lo daba por
+        // fallido. Es incierto, no fallo: frena el lote y manda a verificar.
+        if (st === "extension_recargada") {
+          w.resolve({ estado: "revisar", motivo: data.message ?? "La extensión se actualizó durante la emisión. Recarga la pestaña y verifica el folio antes de reintentar." });
+          return;
+        }
         if (st === "error" || st === "cancelled" || st === "closed") {
           w.resolve({ estado: "fallida", motivo: data.message ?? "No se pudo emitir esta boleta." });
           return;

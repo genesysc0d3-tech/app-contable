@@ -3,6 +3,24 @@
 
   const APP_SOURCE = "app-contable";
   const EXT_SOURCE = "app-contable-extension";
+
+  // GUARDIA DE GENERACIÓN (cazado en vivo 2026-08-27, primer lote real).
+  // Cuando la extensión se ACTUALIZA (auto-update de la store o recarga en dev),
+  // el service worker reinyecta este archivo en las pestañas abiertas para que la
+  // app siga funcionando sin recargar. Pero el puente VIEJO sigue escuchando: su
+  // `chrome.runtime.sendMessage` ya no existe y lanza "Extension context
+  // invalidated", que la app leía como FALLO de emisión — con la factura
+  // emitiéndose de verdad en paralelo (folio 966).
+  // Ahora cada inyección toma un número; solo la ÚLTIMA atiende. Las viejas
+  // quedan inertes y calladas.
+  const GEN = (window.__massdteBridgeGen = (window.__massdteBridgeGen ?? 0) + 1);
+  const soyElVigente = () => window.__massdteBridgeGen === GEN;
+
+  /** ¿El error es "me quedé sin extensión" (contexto invalidado)? */
+  function esContextoInvalidado(error) {
+    const texto = String(error?.message ?? error ?? "");
+    return /context invalidated|Extension context|message port closed/i.test(texto);
+  }
   const ALLOWED_TYPES = new Set([
     "APP_CONTABLE_EXTENSION_PING",
     "APP_CONTABLE_SII_BOLETA_JOB",
@@ -33,6 +51,21 @@
     });
   }
 
+  /**
+   * La extensión se actualizó mientras la app la usaba. Estado NO terminal a
+   * propósito: si había una emisión en vuelo, el folio puede existir — la app
+   * debe verificar, nunca dar por fallido.
+   */
+  function reportBridgeRecargada(data) {
+    postToPage({
+      type: "APP_CONTABLE_SII_JOB_STATUS",
+      job_id: data?.job?.job_id ?? data?.job_id ?? null,
+      status: "extension_recargada",
+      recoverable: true,
+      message: "La extensión se actualizó. Recarga esta pestaña; si había una emisión en curso, verifica el folio antes de reintentar.",
+    });
+  }
+
   function postToPage(message) {
     window.postMessage({ source: EXT_SOURCE, protocol_version: 1, ...message }, window.location.origin);
   }
@@ -43,6 +76,7 @@
 
     const data = event.data;
     if (!data || data.source !== APP_SOURCE || !ALLOWED_TYPES.has(data.type)) return;
+    if (!soyElVigente()) return; // puente viejo tras una actualización: mudo
 
     // JOB_CLOSE es fire-and-forget: su fallo NO se reporta como status "error".
     // Reportarlo creaba un BUCLE infinito con la app cuando la extensión quedaba
@@ -51,6 +85,13 @@
     try {
       chrome.runtime.sendMessage(data, (response) => {
         if (chrome.runtime.lastError) {
+          // Contexto invalidado = la extensión se actualizó bajo los pies. NO es
+          // un fallo de emisión: el trabajo puede estar corriendo. Se avisa con
+          // un estado propio para que la app NO lo cuente como "no se emitió".
+          if (esContextoInvalidado(chrome.runtime.lastError)) {
+            if (!fireAndForget) reportBridgeRecargada(data);
+            return;
+          }
           if (!fireAndForget) reportBridgeError(data, chrome.runtime.lastError.message || "No se pudo contactar la extension");
           return;
         }
@@ -58,7 +99,9 @@
         if (response) postToPage(response);
       });
     } catch (error) {
-      if (!fireAndForget) reportBridgeError(data, error instanceof Error ? error.message : "Extension no disponible. Recarga la extension y esta pagina.");
+      if (fireAndForget) return;
+      if (esContextoInvalidado(error)) { reportBridgeRecargada(data); return; }
+      reportBridgeError(data, error instanceof Error ? error.message : "Extension no disponible. Recarga la extension y esta pagina.");
     }
   });
 
