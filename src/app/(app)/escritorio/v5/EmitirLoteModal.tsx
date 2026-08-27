@@ -194,7 +194,7 @@ export default function EmitirLoteModal({
         {progreso && (fase === "emitiendo" || fase === "esperando" || fase === "pausada" || fase === "preparando") && (
           <Corriendo p={progreso} onDetener={detener} />
         )}
-        {progreso && fase === "terminada" && <Terminada folios={progreso.folios} doc={doc} docs={docs} onCerrar={() => { onClose(); onDone?.(); }} />}
+        {progreso && fase === "terminada" && <Terminada p={progreso} doc={doc} docs={docs} onCerrar={() => { onClose(); onDone?.(); }} />}
         {progreso && fase === "requiere_revision" && <Revision p={progreso} jobId={jobIdRevision} doc={doc} onCerrar={() => { onClose(); onDone?.(); }} />}
         {progreso && fase === "detenida" && <Detenida p={progreso} onCerrar={() => { onClose(); onDone?.(); }} />}
 
@@ -303,14 +303,36 @@ function chips(list: { l: string; v: string }[]) {
   );
 }
 
-function Terminada({ folios, doc, docs, onCerrar }: { folios: number[]; doc: string; docs: string; onCerrar: () => void }) {
+function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-runner").ProgresoLote; doc: string; docs: string; onCerrar: () => void }) {
+  const folios = p.folios;
   const rango = folios.length ? (folios.length === 1 ? `${folios[0]}` : `${folios[0]} – ${folios[folios.length - 1]}`) : "—";
+  const fallas = p.resultados.filter((r) => r.desenlace.estado === "fallida");
+  const motivo = fallas.length > 0 && "motivo" in fallas[0].desenlace ? fallas[0].desenlace.motivo : null;
+
+  // HONESTIDAD DEL CIERRE (cazado en vivo 2026-08-27): con TODO fallido el
+  // modal decía "Listo ✅ 0 emitidas" — un check verde sobre un fracaso total
+  // (p. ej. lock de cuenta tomado). Cero emitidas = advertencia con el motivo.
+  if (folios.length === 0) {
+    return (
+      <>
+        <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
+        <div style={h1}>No se emitió ninguna</div>
+        <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
+          {p.total === 1 ? `La ${doc} no se pudo emitir.` : `Ninguna de las ${p.total} ${docs} se pudo emitir.`}
+        </div>
+        {motivo && <div style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 8, background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", textAlign: "left" }}>{motivo}</div>}
+        <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Cerrar y revisar</button>
+      </>
+    );
+  }
+
   return (
     <>
       <Badge bg="rgba(34,197,94,.13)">✅</Badge>
       <div style={h1}>Listo</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? `${doc} emitida` : `${docs} emitidas`} y guardadas.</div>
-      {folios.length > 0 && chips([{ l: "Folios", v: rango }])}
+      {chips([{ l: "Folios", v: rango }, ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
+      {fallas.length > 0 && motivo && <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 8 }}>Última falla: {motivo}</div>}
       <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Ver en el historial</button>
     </>
   );
