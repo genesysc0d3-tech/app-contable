@@ -1897,7 +1897,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           empresaId={empresaId ?? ""}
           empresaRut={empresaRut ?? null}
           mesa="factura"
-          formaPagoLote={facturaLote.formaPago}
+          formaPagoPorItem={{ [facturaLote.item.id]: facturaLote.formaPago }}
           onClose={() => setFacturaLote(null)}
           onDone={() => {
             setFacturaLote(null);
