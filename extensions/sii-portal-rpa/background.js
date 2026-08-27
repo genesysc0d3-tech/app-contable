@@ -396,37 +396,52 @@ function closeWorker(state) {
 // worker mira el DOM, ejecuta el paso que corresponda y responde; los pasos
 // que navegan (seleccionar empresa, validar, firmar) provocan el próximo
 // onUpdated y con él el próximo drive. Sin bucles: el motor es la navegación.
+// UN SOLO watchdog por job (auditoría 2026-08-26): antes cada onUpdated
+// arrancaba su propia cadena de 30 reintentos → tormenta de FACT_DRIVE sobre
+// una página recargándose ("no respondió"/"channel closed"). Ahora hay UN
+// timer por state, se cancela al re-entrar, y la cadena se ABORTA si cambió la
+// URL de la pestaña (una navegación nueva ya traerá su propio scan).
 function driveFacturaPage(state, attempt = 1) {
   if (!activeJobs.has(state.jobId)) return;
-  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
-    type: "APP_CONTABLE_SII_FACT_DRIVE",
-    job_id: state.jobId,
-    job: state.job,
-    // Candado monótono hacia el worker: post-Firmar JAMÁS se re-llena el
-    // formulario ni se re-clickea Firmar (si la pantalla de firma rebota al
-    // formulario, sería un loop de firmas — cazado en vivo 2026-08-26).
-    final_emit_clicked: state.finalEmitClicked === true,
-  }), (res) => {
-    const lastErr = chrome.runtime.lastError?.message ?? null;
-    if (lastErr || !res) {
-      // WATCHDOG (cazado en vivo 2026-08-26): los CGIs del SII inyectan el
-      // content script DESPUÉS del onUpdated — un solo intento se perdía y
-      // el job quedaba mirando el formulario para siempre. Reintentar hasta
-      // ~45s; después, pausa humana honesta CON la causa real.
-      state.lastDriveError = lastErr ?? "respuesta vacía";
-      if (attempt < 30) {
-        setTimeout(() => driveFacturaPage(state, attempt + 1), 1500);
-      } else {
-        sendToApp(state, statusMessage(state.jobId, "error", `La ventana SII no respondió al conductor de facturas (${state.lastDriveError}). Reintenta la emisión.`, true));
+  if (attempt === 1 && state.factDriveTimer) {
+    clearTimeout(state.factDriveTimer);
+    state.factDriveTimer = null;
+  }
+  chrome.tabs.get(state.workerTabId, (tab) => {
+    if (chrome.runtime.lastError || !tab) return;
+    const urlActual = tab.url ?? "";
+    if (attempt === 1) state.factDriveUrl = urlActual;
+    // Cambió la URL desde que arrancó esta cadena → la abortamos; el
+    // onUpdated de la página nueva arranca una cadena fresca.
+    else if (state.factDriveUrl && urlActual !== state.factDriveUrl) return;
+
+    chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+      type: "APP_CONTABLE_SII_FACT_DRIVE",
+      job_id: state.jobId,
+      job: state.job,
+      // Candado post-Firmar: nunca re-llenar formulario ni re-Firmar.
+      final_emit_clicked: state.finalEmitClicked === true,
+      // Latches de paso: un paso que navega no se repite (mata el titileo).
+      done: { empresa: state.empresaSeleccionada === true, validado: state.formularioValidado === true },
+    }), (res) => {
+      const lastErr = chrome.runtime.lastError?.message ?? null;
+      if (lastErr || !res) {
+        // Content script aún no inyectado (document_idle llega tras onUpdated):
+        // reintentar acotado (8×1.5s ≈ 12s); después, pausa humana con causa.
+        state.lastDriveError = lastErr ?? "respuesta vacía";
+        if (attempt < 8) {
+          state.factDriveTimer = setTimeout(() => driveFacturaPage(state, attempt + 1), 1500);
+        } else {
+          sendToApp(state, statusMessage(state.jobId, "error", `La ventana SII no respondió al conductor de facturas (${state.lastDriveError}). Reintenta la emisión.`, true));
+        }
+        return;
       }
-      return;
-    }
-    // Patrón push: el worker solo ACUSA RECIBO acá; el resultado del paso
-    // llega aparte como APP_CONTABLE_SII_FACT_STEP (inmune al cierre del
-    // canal durante los 15-20s del formulario — cazado en vivo).
-    if (res.accepted) return;
-    handleFactDriveResponse(state, res).catch((error) => {
-      sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
+      // Patrón push: el worker ACUSA RECIBO acá; el resultado del paso llega
+      // aparte como APP_CONTABLE_SII_FACT_STEP.
+      if (res.accepted) return;
+      handleFactDriveResponse(state, res).catch((error) => {
+        sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
+      });
     });
   });
 }
@@ -485,15 +500,43 @@ async function handleFactDriveResponse(state, res) {
     return;
   }
 
-  // Página desconocida PRE-emisión (p.ej. el login aterrizó en el menú Mi SII
-  // en vez del formulario): volver UNA vez a la start_url del job. Jamás
-  // post-Firmar ni tras enviar la clave (ahí navegar podría perder el folio).
-  if (res.action === "observando" && !state.finalEmitClicked && !state.certPasswordSent && !state.factRenavigated) {
-    state.factRenavigated = true;
-    sendToApp(state, statusMessage(state.jobId, "working", "Volviendo al formulario de facturas…", true));
-    try { chrome.tabs.update(state.workerTabId, { url: state.job.start_url }); } catch { /* el próximo scan reintenta */ }
+  // Login real del SII: el worker de FACTURAS lo detecta y lo pide (el motor
+  // de boletas ya NO toca las páginas del portal de facturas). Un solo intento
+  // de autologin; si reaparece, pausa humana.
+  if (res.action === "needs_login") {
+    if (state.factLoginIntentado) {
+      state.humanRequired = true;
+      sendToApp(state, statusMessage(state.jobId, "waiting_sii_login", "Inicia sesión en la ventana del SII a mano y la extensión sigue sola.", true));
+      return;
+    }
+    state.factLoginIntentado = true;
+    attemptSiiAutologin(state, res.map ?? null);
     return;
   }
+
+  // LATCHES DE PASO: al confirmar un paso que navega, se marca para no
+  // repetirlo si volvemos a aterrizar en su misma página (mata el titileo).
+  if (res.action === "empresa_seleccionada") state.empresaSeleccionada = true;
+  if (res.action === "validado") state.formularioValidado = true;
+
+  // POLL de la fase de FIRMA: el campo de la clave del certificado (y el folio
+  // final) pueden aparecer por JS SIN recargar → no hay onUpdated que re-drive.
+  // Tras Firmar, si el worker sigue "observando", re-escanear cada 2s hasta
+  // ~40s para pillar el campo/folio en cuanto aparezcan (sin re-navegar).
+  if (res.action === "observando" && state.finalEmitClicked) {
+    state.factSignPolls = (state.factSignPolls ?? 0) + 1;
+    if (state.factSignPolls <= 20) {
+      if (state.factSignTimer) clearTimeout(state.factSignTimer);
+      state.factSignTimer = setTimeout(() => { if (activeJobs.has(state.jobId)) driveFacturaPage(state); }, 2000);
+      return;
+    }
+    sendToApp(state, statusMessage(state.jobId, "result_needs_review", "La firma no avanzó tras varios intentos. Revisa la ventana del SII: si viste un folio, la factura se emitió — no la re-emitas.", true));
+    return;
+  }
+
+  // NOTA: se ELIMINÓ la re-navegación a start_url ante "observando" — el
+  // watchdog ya re-conduce sola la página actual, y re-navegar descartaba el
+  // progreso del POST (fuente del titileo). "observando" = seguir mirando.
 
   const mensajes = {
     empresa_seleccionada: "Empresa seleccionada en el portal de facturas…",
@@ -659,17 +702,19 @@ function scanWorkerPage(state, attempt = 1) {
       true,
     ));
 
+    // FACTURAS: su conductor es autónomo (facturas-worker.js) y detecta el
+    // login él mismo (→ needs_login). El motor de boletas —incluido su
+    // autologin por heurística de "RUT"— NO toca las páginas de facturas:
+    // ahí vivía el loop menú↔login que titilaba. Ruteo directo y salir.
+    if (state.kind === "factura") {
+      driveFacturaPage(state);
+      return;
+    }
+
     const excerpt = String(map.body_excerpt || "");
-    // Candados del autologin (auditoría 2026-08-26):
-    // (1) POST-FIRMAR jamás se tipean credenciales: la única password visible
-    //     ahí puede ser la CLAVE DEL CERTIFICADO — tipear la Clave Tributaria
-    //     y hacer submit firmaría con clave equivocada.
-    // (2) Las páginas del portal de FACTURAS están llenas de "RUT" y matchean
-    //     el heurístico de login. Si el scan ve sus forms reales
-    //     (fPrmEmpPOP / VIEW_EFXP / PreViewDTE), NO es una página de login.
-    const esPaginaPortalFacturas = Array.isArray(map.forms) &&
-      map.forms.some((f) => ["fPrmEmpPOP", "VIEW_EFXP", "PreViewDTE"].includes(f?.name));
-    if (!state.finalEmitClicked && !esPaginaPortalFacturas && isLoginPageMap(map)) {
+    // Autologin de BOLETAS: post-emit jamás tipear credenciales (la password
+    // visible podría ser otra).
+    if (!state.finalEmitClicked && isLoginPageMap(map)) {
       attemptSiiAutologin(state, map);
       return;
     }
@@ -687,14 +732,6 @@ function scanWorkerPage(state, attempt = 1) {
         true,
       ));
       scheduleLearningScan(state);
-      return;
-    }
-
-    // Defensa de portal: la conducción de e-Boleta (calculadora + EMITIR) es
-    // EXCLUSIVA de boletas. Los jobs de factura tienen su propio conductor
-    // (facturas-worker.js, portal clásico) — jamás la calculadora.
-    if (state.kind === "factura") {
-      driveFacturaPage(state);
       return;
     }
 
@@ -1053,8 +1090,13 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
     // Facturas: la clave del certificado se envía UNA vez; si la pantalla de
     // firma reaparece, es clave mala → pausa humana, jamás reintento solo.
     certPasswordSent: false,
-    // Facturas: un solo re-navegado a start_url si el login aterriza fuera.
-    factRenavigated: false,
+    // Facturas: latches de paso (un paso que navega no se repite → sin titileo),
+    // un solo autologin, y watchdog único cancelable por cambio de URL.
+    empresaSeleccionada: false,
+    formularioValidado: false,
+    factLoginIntentado: false,
+    factDriveTimer: null,
+    factDriveUrl: null,
     awaitingResult: false,
     autologinAttempted: false,
     humanRequired: false,

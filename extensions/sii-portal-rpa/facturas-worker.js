@@ -132,14 +132,23 @@
   }
 
   // ── Identidad de página (por estructura, no por URL: los CGIs redirigen) ─
+  // PRECEDENCIA ENDURECIDA (auditoría 2026-08-26): el formulario y la vista
+  // previa GANAN sobre el selector — el popup `fPrmEmpPOP` puede quedar
+  // RESIDUAL en el DOM del formulario, y clasificar "selector_empresa" ahí
+  // hacía re-clickear submit en cada recarga = titileo. Una página con
+  // VIEW_EFXP/PreViewDTE ya pasó la selección de empresa, punto.
   function pageKind() {
-    if (formEl("fPrmEmpPOP")) return "selector_empresa";
-    if (formEl("VIEW_EFXP")) return "formulario";
     if (formEl("PreViewDTE")) return "preview";
+    if (formEl("VIEW_EFXP")) return "formulario";
+    if (formEl("fPrmEmpPOP")) return "selector_empresa";
     const texto = (document.body?.innerText ?? "").slice(0, 4000);
     const pwd = document.querySelector('input[type="password"]');
     if (pwd && /certificado|firma/i.test(texto)) return "firma";
     if (extractFolioFromText(texto) && /factura|documento tributario/i.test(texto)) return "post_firma";
+    // Página de login real del SII (zeusr): RUT + Clave Tributaria, SIN los
+    // forms del portal de facturas. El worker lo reporta y el background
+    // dispara el autologin — el motor de boletas ya NO toca páginas de factura.
+    if (pwd && /clave\s+tributaria|iniciar\s+sesi|autenticaci/i.test(texto)) return "login";
     return "unknown";
   }
 
@@ -318,9 +327,12 @@
     return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 
-  // Pantalla de la clave del certificado (post-Firmar; estructura por
-  // confirmar en la fase 4 — este handler es defensivo por diseño).
+  // Pantalla de la clave del certificado (post-Firmar). Solo pedir la clave si
+  // el campo ya existe — si no, es la pantalla de espera "generando firma":
+  // seguir observando (el próximo scan la retoma) sin gastar el único intento.
   function stepFirmaNecesitaClave() {
+    const pwd = document.querySelector('input[type="password"]');
+    if (!pwd) return { ok: true, action: "observando", detalle: "generando firma, esperando el campo de la clave" };
     return { ok: true, action: "needs_cert_password" };
   }
 
@@ -395,9 +407,21 @@
       if (message.final_emit_clicked === true && (kind === "formulario" || kind === "preview")) {
         return { kind, ok: false, error: "POST_FIRMA_REBOTO", human: true, detalle: "El portal volvió a una pantalla previa DESPUÉS de Firmar. No re-emito: verifica en el portal si la factura alcanzó a generarse." };
       }
-      if (kind === "selector_empresa") return { kind, ...stepSelectorEmpresa(job) };
-      if (kind === "formulario") return { kind, ...(await stepFormulario(job)) };
+      // LATCH DE PASO (auditoría 2026-08-26): un paso que NAVEGA no se repite.
+      // El background lleva la cuenta (message.done = { empresa, validado });
+      // si volvemos a aterrizar en un kind ya hecho, esperamos en vez de
+      // re-clickear (matabas el titileo del selector que re-submitía).
+      const done = message.done ?? {};
+      if (kind === "selector_empresa") {
+        if (done.empresa) return { kind, ok: true, action: "observando", detalle: "empresa ya seleccionada, esperando el formulario" };
+        return { kind, ...stepSelectorEmpresa(job) };
+      }
+      if (kind === "formulario") {
+        if (done.validado) return { kind, ok: true, action: "observando", detalle: "ya validado, esperando la vista previa" };
+        return { kind, ...(await stepFormulario(job)) };
+      }
       if (kind === "preview") return { kind, ...(await stepPreview(job)) };
+      if (kind === "login") return { kind, ok: true, action: "needs_login" };
       if (kind === "firma") return { kind, ...stepFirmaNecesitaClave() };
       if (kind === "post_firma") return { kind, ...stepPostFirma(job) };
       return { kind, ok: true, action: "observando", excerpt: excerpt() };
