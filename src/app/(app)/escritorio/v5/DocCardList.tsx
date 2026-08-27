@@ -495,7 +495,8 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       // HONESTIDAD (2026-08-27): "emitida" verde solo con FOLIO real.
                       // Sin folio la emisión nunca se confirmó → "sin emitir" ámbar
                       // (antes toda solicitud procesada se vestía de emitida).
-                      const docWord = /factura/i.test(doc.nombre_archivo) ? "Factura" : "Boleta";
+                      const progTipo = (prog as { tipo_dte?: number } | null)?.tipo_dte;
+                      const docWord = progTipo === 33 || progTipo === 34 || /factura/i.test(doc.nombre_archivo) ? "Factura" : "Boleta";
                       nm = prog?.folio ? `${docWord} #${prog.folio}${prog.receptor ? ` · ${prog.receptor}` : ""}` : doc.nombre_archivo;
                       metaNorm = prog?.folio ? (fmtMonto(prog?.monto_total) || "emitida") : "sin emitir";
                     } else {
