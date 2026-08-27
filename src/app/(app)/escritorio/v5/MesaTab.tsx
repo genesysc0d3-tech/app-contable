@@ -287,7 +287,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
         ) : tipo === "massdte" && selDoc.estado === "procesado" && pend.length > 0 ? (
-          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} />
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
@@ -339,8 +339,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   </div>
                   {selDoc.estado === "procesado" && (
                     <div style={{ padding: "0 16px 6px" }}>
-                      <GlosaComunControl documentoId={selDoc.id} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} />
-                      <MedioPagoControl documentoId={selDoc.id} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />
+                      <GlosaComunControl documentoId={selDoc.id} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
+                      {mesa.mesaActiva !== "factura" && <MedioPagoControl documentoId={selDoc.id} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />}
                     </div>
                   )}
                   {pend.length === 0 && selDoc.estado === "error" ? (
@@ -435,8 +435,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                 {selDoc?.estado === "procesado" && (
                   <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
                     <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
-                    <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} />
-                    <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />
+                    <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
+                    {mesa.mesaActiva !== "factura" && <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />}
                   </div>
                 )}
                 <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} />
