@@ -1070,12 +1070,11 @@ function captureWorkerResult(state) {
 }
 
 // Modo del worker de FACTURAS.
-//   true  = PESTAÑA: auditable paso a paso con herramientas (depuración).
 //   false = VENTANA dedicada con overlay y candado de clicks (UX de producción).
-// Hoy en PESTAÑA por decisión del fundador: mientras el carril MASIVO se afina,
-// cada emisión se mira de cerca en vez de confiar. Volver a false antes de
-// publicar 0.2.0.
-const FACT_WORKER_EN_PESTANA = true;
+//   true  = PESTAÑA: auditable paso a paso con herramientas (depuración).
+// En VENTANA para la 0.2.0: el cliente no debe poder escribir encima del RPA
+// mientras emite. El modo pestaña queda disponible para depurar el carril.
+const FACT_WORKER_EN_PESTANA = false;
 
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
