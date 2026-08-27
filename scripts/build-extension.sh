@@ -39,7 +39,9 @@ cp "$EXT_DIR/manifest.prod.json" "$STAGE/manifest.json"
 
 ZIP="$OUT_DIR/massdte-motor-local-v$VERSION.zip"
 rm -f "$ZIP"
-( cd "$STAGE" && zip -rq "$ZIP" . -x '*.DS_Store' )
+# node_modules/.vite: caché del runner de tests de la carpeta de la extensión.
+# No es código de la extensión y no tiene por qué viajar a la Chrome Web Store.
+( cd "$STAGE" && zip -rq "$ZIP" . -x '*.DS_Store' -x 'node_modules/*' -x '*/node_modules/*' )
 
 # Copia servible por la app (público, CDN de Vercel) → botón "Descargar" en /instalar-extension.
 mkdir -p "$ROOT/public/descargas"
