@@ -400,6 +400,7 @@
     // Deja respirar al DOM recién cargado (los CGIs inicializan con jQuery).
     await esperar(400);
     const kind = pageKind();
+    console.log("[FACT-worker] handleDrive kind:", kind, "url:", location.href.split("/").pop(), "done:", JSON.stringify(message.done ?? {}));
     try {
       // CANDADO MONÓTONO: con Firmar ya clickeado, ni el formulario ni la
       // vista previa se vuelven a conducir (re-llenar + re-Firmar = posible

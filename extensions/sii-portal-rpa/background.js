@@ -411,6 +411,7 @@ function driveFacturaPage(state, attempt = 1) {
     if (chrome.runtime.lastError || !tab) return;
     const urlActual = tab.url ?? "";
     if (attempt === 1) state.factDriveUrl = urlActual;
+    console.log("[FACT] drive attempt", attempt, "url:", String(urlActual).split("/").pop(), "empresaSel:", state.empresaSeleccionada, "validado:", state.formularioValidado, "finalEmit:", state.finalEmitClicked);
     // Cambió la URL desde que arrancó esta cadena → la abortamos; el
     // onUpdated de la página nueva arranca una cadena fresca.
     else if (state.factDriveUrl && urlActual !== state.factDriveUrl) return;
@@ -707,6 +708,8 @@ function scanWorkerPage(state, attempt = 1) {
     // autologin por heurística de "RUT"— NO toca las páginas de facturas:
     // ahí vivía el loop menú↔login que titilaba. Ruteo directo y salir.
     if (state.kind === "factura") {
+      const formNames = (Array.isArray(map.forms) ? map.forms : []).map((f) => f?.name).filter(Boolean).join(",");
+      console.log("[FACT] scan complete → drive. forms:", formNames || "(ninguno)", "url:", String(map.url || "").split("/").pop());
       driveFacturaPage(state);
       return;
     }
