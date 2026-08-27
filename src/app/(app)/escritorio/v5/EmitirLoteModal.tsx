@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { chileDateString } from "@/lib/chile-date";
-import { recoverLatestFolio, type RecoverLatestResult } from "@/lib/emission/recover-latest";
+import { recoverLatestFolio, registrarFolioAMano, type RecoverLatestResult } from "@/lib/emission/recover-latest";
 import { useEmisionLote, type ItemLoteEmision } from "./useEmisionLote";
 import { verificarExtensionCompatible } from "./useExtensionStatus";
 import { guardarLotePendiente, limpiarLotePendiente } from "@/lib/emission/lote-persist";
@@ -342,10 +342,23 @@ function Revision({ p, jobId, doc, onCerrar }: { p: import("@/lib/emission/lote-
   const faltan = p.total - p.procesadas;
   const [recuperando, setRecuperando] = useState(false);
   const [res, setRes] = useState<RecoverLatestResult | null>(null);
+  const [folioManual, setFolioManual] = useState("");
 
   async function recuperar() {
     setRecuperando(true);
     setRes(await recoverLatestFolio(jobId));
+    setRecuperando(false);
+  }
+
+  // El RPA no capturó la pantalla, pero el folio EXISTE y el usuario lo está
+  // viendo en la ventana del SII: lo escribe y queda registrado (la app deja de
+  // estar ciega y la lápida se levanta). Sin esto, un folio real quedaba
+  // invisible para siempre.
+  async function registrarAMano() {
+    const n = Number(folioManual.trim());
+    if (!Number.isFinite(n) || n <= 0) return;
+    setRecuperando(true);
+    setRes(await registrarFolioAMano(jobId, n));
     setRecuperando(false);
   }
 
@@ -373,7 +386,27 @@ function Revision({ p, jobId, doc, onCerrar }: { p: import("@/lib/emission/lote-
       </div>
       {res?.estado === "sin_resultado" && (
         <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--text2)", lineHeight: 1.45 }}>
-          No encontré un folio para recuperar. Si la ventana del SII <b>no</b> mostró un folio, no se emitió nada. Abre la ventana del SII para confirmar; la boleta queda en revisión (no la re-emitas hasta estar seguro).
+          No alcancé a capturar el folio. Revisa la ventana del SII:
+          <div style={{ marginTop: 7 }}>· Si <b>no</b> hay folio, no se emitió nada y puedes cerrar.</div>
+          <div style={{ marginTop: 3 }}>· Si <b>sí</b> ves un folio, la {doc} se emitió: escríbelo acá y la guardo.</div>
+          <div style={{ display: "flex", gap: 7, marginTop: 10 }}>
+            <input
+              value={folioManual}
+              onChange={(e) => setFolioManual(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter") void registrarAMano(); }}
+              inputMode="numeric"
+              placeholder="N° de folio"
+              aria-label="Número de folio que ves en el SII"
+              style={{ flex: 1, minWidth: 0, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 9, padding: "8px 11px", fontSize: 13, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}
+            />
+            <button
+              onClick={() => void registrarAMano()}
+              disabled={recuperando || !folioManual.trim()}
+              style={{ ...ghostBtn, marginTop: 0, whiteSpace: "nowrap", opacity: recuperando || !folioManual.trim() ? 0.5 : 1 }}
+            >
+              Guardar folio
+            </button>
+          </div>
         </div>
       )}
       {res?.estado === "error" && <div style={{ marginTop: 10, fontSize: 12, color: "var(--red,#ef4444)" }}>{res.mensaje}</div>}
