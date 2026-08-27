@@ -334,6 +334,20 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     return t === 39 || t === 33;
   }).length;
   const selExenta = selectedCount - selAfecta;
+  // POSIBLES REPETIDAS (2026-08-27): un intento fallido deja la propuesta
+  // aprobada; varios intentos dejan VARIAS por la misma venta. Emitirlas todas
+  // = varios documentos reales por una sola operación, y una factura emitida no
+  // se deshace. Se AVISA (nunca se bloquea: repetir a un mismo cliente el mismo
+  // día por el mismo monto es legítimo) — criterio 3 de Matías.
+  const gruposRepetidos = useMemo(() => {
+    const porClave = new Map<string, number>();
+    for (const i of selectedItems) {
+      const clave = `${i.receptor_rut ?? i.receptor_nombre ?? "s/r"}|${i.monto_total}|${i.fecha}`;
+      porClave.set(clave, (porClave.get(clave) ?? 0) + 1);
+    }
+    return [...porClave.values()].filter((n) => n > 1);
+  }, [selectedItems]);
+  const posiblesRepetidas = gruposRepetidos.reduce((s, n) => s + n, 0);
   // Facturas: reparto de la forma de pago entre lo seleccionado + las que aún
   // no la tienen (bloquean la emisión, sin default).
   const selSinFormaPago = useMemo(
@@ -845,6 +859,11 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                         {selCredito > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", background: "var(--bg-muted)", padding: "4px 10px", borderRadius: 8 }}>{selCredito} crédito</span>}
                       </div>
                     )}
+                  </div>
+                )}
+                {posiblesRepetidas > 0 && (
+                  <div style={{ marginTop: 12, padding: "9px 11px", background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.3)", borderRadius: 9, fontSize: 11.5, color: "var(--amber)", lineHeight: 1.5 }}>
+                    <b>Ojo: {posiblesRepetidas} podrían estar repetidas</b> — mismo receptor, mismo monto y misma fecha. Si vienen de intentos fallidos, saldrían {esFacturas ? "varias facturas" : "varias boletas"} por una sola venta. Revisa antes de seguir.
                   </div>
                 )}
                 <div style={{ marginTop: 8, fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>

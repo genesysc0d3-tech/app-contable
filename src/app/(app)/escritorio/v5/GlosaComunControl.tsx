@@ -20,14 +20,19 @@ export default function GlosaComunControl({
   hint,
   glosaInicial,
   activaInicial,
+  mesa = "boleta",
 }: {
   documentoId: string;
   hint: string | null;
   glosaInicial: string | null;
   activaInicial: boolean;
+  /** Vocabulario por mesa: en facturas no se habla de "boletas". */
+  mesa?: "boleta" | "factura";
 }) {
   const { toast } = useToast();
-  const placeholder = GLOSA_DEFAULT[hint ?? "mixto"] || "Detalle de las boletas (ej. Compraventa USDT)";
+  const placeholder = mesa === "factura"
+    ? "Detalle de las facturas (ej. Servicios contables de agosto)"
+    : (GLOSA_DEFAULT[hint ?? "mixto"] || "Detalle de las boletas (ej. Compraventa USDT)");
   const [activa, setActiva] = useState(activaInicial);
   const [glosa, setGlosa] = useState(glosaInicial ?? "");
   const [saving, setSaving] = useState(false);

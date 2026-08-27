@@ -399,6 +399,14 @@ async function backfillFolioSinJobVivo(
     .from("empresas").select("rut, razon_social, giro, direccion, comuna").eq("id", args.empresaId).single();
   if (!empresa?.rut || !empresa?.razon_social) return { ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" };
 
+  // El receptor sale de la propuesta (ver backfillRow): el rescate solo aporta
+  // folio y monto, y sin esto la boleta quedaba como "consumidor final".
+  const { data: prop } = args.propuestaId
+    ? await sb.from("propuestas_ia")
+        .select("receptor_rut, receptor_nombre, receptor_giro, receptor_direccion, receptor_comuna")
+        .eq("id", args.propuestaId).maybeSingle()
+    : { data: null };
+
   // Dedup por la MISMA clave que el índice UNIQUE(empresa_id, tipo_dte, folio) —
   // sin filtrar estado — para no chocar con la constraint ni "registrar" un folio
   // nuevo apuntando a una boleta anulada (coincide con el camino vivo).
@@ -423,6 +431,17 @@ async function backfillFolioSinJobVivo(
     emisor_giro: empresa.giro,
     emisor_direccion: empresa.direccion,
     emisor_comuna: empresa.comuna,
+    // RECEPTOR desde la PROPUESTA (2026-08-27): el rescate solo aporta folio y
+    // monto, así que la boleta respaldada salía como "consumidor final" aunque
+    // el documento sí identificaba a su receptor. Se lee de la propuesta, que
+    // es la fuente de verdad de lo que se emitió.
+    ...(prop ? {
+      receptor_rut: prop.receptor_rut ?? null,
+      receptor_razon_social: prop.receptor_nombre ?? null,
+      receptor_giro: prop.receptor_giro ?? null,
+      receptor_direccion: prop.receptor_direccion ?? null,
+      receptor_comuna: prop.receptor_comuna ?? null,
+    } : {}),
     monto_neto: totals.monto_neto,
     monto_exento: totals.monto_exento,
     iva: totals.iva,
