@@ -133,7 +133,9 @@ function hasCapturedPdf(result) {
   return Boolean(
     result?.pdf?.base64 &&
     result.pdf.content_type === "application/pdf" &&
-    (result.pdf.source === "extension_session_fetch" || result.pdf.source === "share_capture"),
+    // fact_portal_pdf = facturas: el worker lo fetchea de mipeDisplayPDF.cgi
+    // en la propia página de éxito (2026-08-27, folio 964).
+    (result.pdf.source === "extension_session_fetch" || result.pdf.source === "share_capture" || result.pdf.source === "fact_portal_pdf"),
   );
 }
 

@@ -414,7 +414,40 @@
     return t;
   }
 
-  function stepPostFirma(job) {
+  // PDF de la factura recién emitida (medido en vivo 2026-08-27, folio 964):
+  // la página de éxito (mipeSendXML.cgi) trae el link "Ver Documento" →
+  // /cgi-bin/Portal001/mipeDisplayPDF.cgi?DHDR_CODIGO=... que responde
+  // application/pdf directo (185KB, %PDF-1.4) con las cookies de la sesión.
+  // Un fetch same-origin lo captura SIN navegar (la página de éxito sigue
+  // viva para el resto de la captura). Falla suave: sin PDF el folio igual
+  // se registra (pdf_pendiente, mismo contrato que boletas).
+  async function capturarPdfFactura(job) {
+    const link = document.querySelector('a[href*="mipeDisplayPDF.cgi"]');
+    if (!link) return null;
+    try {
+      const resp = await fetch(link.getAttribute("href"), { credentials: "include" });
+      if (!resp.ok || !/pdf/i.test(resp.headers.get("content-type") ?? "")) return null;
+      const buf = await resp.arrayBuffer();
+      if (buf.byteLength < 1000 || buf.byteLength > 15 * 1024 * 1024) return null;
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      return {
+        source: "fact_portal_pdf",
+        base64: btoa(bin),
+        content_type: "application/pdf",
+        filename: `factura-${job?.tipo_dte ?? "34"}.pdf`,
+        size: buf.byteLength,
+        source_url: link.href,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function stepPostFirma(job) {
     const texto = textoConIframes();
     // Patrón primario: "folio NNN". Fallback: el "Nº962" del documento
     // impreso (cabecera roja), solo en página anclada como post_firma.
@@ -428,10 +461,12 @@
     // Emisor ACTIVO del portal ("Empresa: 77.155.156-4" en la cabecera): el
     // server lo cruza contra el RUT registrado — misma red que boletas.
     const emisorHit = texto.match(/Empresa:\s*([\d.]{7,12}-?[\dkK])/);
+    const pdf = await capturarPdfFactura(job);
     const result = {
       emisor_rut_activo: emisorHit ? emisorHit[1] : null,
       folio: hit?.folio ?? null,
       folio_confidence: hit ? "high" : "none",
+      pdf,
       folio_evidence: hit ? { source: "fact_portal_text", matched_text: hit.matched_text } : null,
       tipo_dte: job.tipo_dte,
       fecha_emision: job.fecha_emision ?? null,
@@ -486,7 +521,7 @@
       if (kind === "preview") return { kind, ...(await stepPreview(job)) };
       if (kind === "login") return { kind, ok: true, action: "needs_login" };
       if (kind === "firma") return { kind, ...stepFirmaNecesitaClave() };
-      if (kind === "post_firma") return { kind, ...stepPostFirma(job) };
+      if (kind === "post_firma") return { kind, ...(await stepPostFirma(job)) };
       return { kind, ok: true, action: "observando", excerpt: excerpt() };
     } catch (error) {
       return { kind, ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) };
