@@ -400,14 +400,42 @@
     }
   }
 
+  // PATRÓN PUSH (cazado en vivo 2026-08-26): mantener el canal del
+  // sendMessage abierto durante los 15-20s del formulario moría con
+  // "message channel closed before a response was received". El drive
+  // responde 'accepted' AL TIRO y el resultado viaja como mensaje propio
+  // (APP_CONTABLE_SII_FACT_STEP) cuando el paso termina — inmune a
+  // navegaciones y a la vida del canal.
+  let driveEnCurso = false;
+
+  function pushStep(jobId, res) {
+    try {
+      chrome.runtime.sendMessage({ source: EXT_SOURCE, type: "APP_CONTABLE_SII_FACT_STEP", job_id: jobId, res }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch { /* extensión recargada: el watchdog del próximo drive retoma */ }
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "APP_CONTABLE_SII_FACT_DRIVE") {
-      handleDrive(message).then(sendResponse).catch(() => sendResponse({ ok: false, error: "FACT_WORKER_ERROR" }));
-      return true;
+      if (driveEnCurso) {
+        sendResponse({ ok: true, accepted: true, busy: true });
+        return false;
+      }
+      driveEnCurso = true;
+      sendResponse({ ok: true, accepted: true });
+      handleDrive(message)
+        .then((res) => pushStep(message.job_id ?? message.job?.job_id ?? null, res))
+        .catch((error) => pushStep(message.job_id ?? null, { ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) }))
+        .finally(() => { driveEnCurso = false; });
+      return false;
     }
     if (message?.type === "APP_CONTABLE_SII_FACT_SIGN") {
-      handleSign(message).then(sendResponse).catch(() => sendResponse({ ok: false, error: "FACT_WORKER_ERROR" }));
-      return true;
+      sendResponse({ ok: true, accepted: true });
+      handleSign(message)
+        .then((res) => pushStep(message.job_id ?? null, { ...res, kind: "firma" }))
+        .catch((error) => pushStep(message.job_id ?? null, { ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error), kind: "firma" }));
+      return false;
     }
     return false;
   });

@@ -417,12 +417,23 @@ function driveFacturaPage(state, attempt = 1) {
       }
       return;
     }
-    // Eco de diagnóstico: cada respuesta del drive se ve en el subestado del
-    // modal (barato y honesto mientras el carril madura).
-    sendToApp(state, statusMessage(state.jobId, "fact_drive", `Portal: ${res.kind ?? "?"} → ${res.action ?? res.error ?? "?"}`, true));
+    // Patrón push: el worker solo ACUSA RECIBO acá; el resultado del paso
+    // llega aparte como APP_CONTABLE_SII_FACT_STEP (inmune al cierre del
+    // canal durante los 15-20s del formulario — cazado en vivo).
+    if (res.accepted) return;
     handleFactDriveResponse(state, res).catch((error) => {
       sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
     });
+  });
+}
+
+// Resultado de un paso del portal de facturas, EMPUJADO por facturas-worker
+// al terminar (patrón push). Llega por runtime.onMessage (handler abajo).
+function handleFactStepPush(state, res) {
+  if (!res || res.busy) return;
+  sendToApp(state, statusMessage(state.jobId, "fact_drive", `Portal: ${res.kind ?? "?"} → ${res.action ?? res.error ?? "?"}`, true));
+  handleFactDriveResponse(state, res).catch((error) => {
+    sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
   });
 }
 
@@ -1068,6 +1079,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Aviso inmediato del worker: el EMITIR real ya se cliqueó. Arma el candado AL
   // INSTANTE (no espera la confirmación de 16s), así ninguna ruta de error post-emit
   // (captura, salida de dominio, ventana cerrada) cierra el job ni permite re-emitir.
+  // Paso del portal de facturas empujado por facturas-worker (patrón push).
+  if (message?.type === "APP_CONTABLE_SII_FACT_STEP" && isAllowedSiiUrl(sender.url || "")) {
+    const state = stateForWorkerTab(sender.tab?.id);
+    if (state) handleFactStepPush(state, message.res);
+    sendResponse?.({ ok: true });
+    return false;
+  }
+
   if (message?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED" && isAllowedSiiUrl(sender.url || "")) {
     const state = stateForWorkerTab(sender.tab?.id);
     if (state) state.finalEmitClicked = true;
