@@ -1125,10 +1125,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Aviso inmediato del worker: el EMITIR real ya se cliqueó. Arma el candado AL
   // INSTANTE (no espera la confirmación de 16s), así ninguna ruta de error post-emit
   // (captura, salida de dominio, ventana cerrada) cierra el job ni permite re-emitir.
+  // Latido del worker de facturas: solo recibirlo ya resetea el timer de
+  // reciclado del service worker MV3 → lo mantiene vivo durante el paso largo
+  // (llenado del formulario) para que el estado del job no se pierda.
+  if (message?.type === "APP_CONTABLE_SII_FACT_KEEPALIVE") {
+    sendResponse?.({ ok: true });
+    return false;
+  }
+
   // Paso del portal de facturas empujado por facturas-worker (patrón push).
   if (message?.type === "APP_CONTABLE_SII_FACT_STEP" && isAllowedSiiUrl(sender.url || "")) {
     const state = stateForWorkerTab(sender.tab?.id);
-    if (state) handleFactStepPush(state, message.res);
+    if (state) {
+      handleFactStepPush(state, message.res);
+    } else {
+      // Red de seguridad: si el SW se recicló y perdió activeJobs, el push
+      // llega a un cerebro vacío. Al menos avisar (y NO quedar mudo): la app
+      // muestra el error y el usuario reintenta sin ambigüedad.
+      console.warn("[facturas] FACT_STEP sin state (SW reciclado); res:", message.res?.action ?? message.res?.error);
+    }
     sendResponse?.({ ok: true });
     return false;
   }

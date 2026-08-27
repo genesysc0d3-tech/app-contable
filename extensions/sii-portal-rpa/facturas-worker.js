@@ -446,6 +446,18 @@
     } catch { /* extensión recargada: el watchdog del próximo drive retoma */ }
   }
 
+  // KEEP-ALIVE (causa raíz cazada 2026-08-26): un paso de facturas tarda
+  // 15-20s llenando el formulario. En ese rato el service worker MV3 se queda
+  // sin eventos y Chrome lo RECICLA a los ~30s → se pierde el estado del job
+  // (activeJobs) y el pushStep del resultado cae en un SW vacío → el modal se
+  // congela para siempre. Un latido cada 10s mientras el paso corre resetea
+  // el timer de reciclado del SW y lo mantiene vivo hasta que el push llegue.
+  function pingBackground() {
+    try {
+      chrome.runtime.sendMessage({ source: EXT_SOURCE, type: "APP_CONTABLE_SII_FACT_KEEPALIVE" }, () => { void chrome.runtime.lastError; });
+    } catch { /* extensión recargada */ }
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "APP_CONTABLE_SII_FACT_DRIVE") {
       if (driveEnCurso) {
@@ -454,10 +466,12 @@
       }
       driveEnCurso = true;
       sendResponse({ ok: true, accepted: true });
+      pingBackground();
+      const keepalive = setInterval(pingBackground, 10000);
       handleDrive(message)
         .then((res) => pushStep(message.job_id ?? message.job?.job_id ?? null, res))
         .catch((error) => pushStep(message.job_id ?? null, { ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) }))
-        .finally(() => { driveEnCurso = false; });
+        .finally(() => { clearInterval(keepalive); driveEnCurso = false; });
       return false;
     }
     if (message?.type === "APP_CONTABLE_SII_FACT_SIGN") {
