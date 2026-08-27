@@ -1069,12 +1069,11 @@ function captureWorkerResult(state) {
   });
 }
 
-// DEV (2026-08-27, decisión del fundador): el worker de FACTURAS corre en
-// PESTAÑA del navegador principal — así el carril se puede mirar y depurar
-// con el navegador instrumentado (la ventana popup es invisible para las
-// herramientas). Antes de publicar 0.2.0 esto vuelve a false (ventana
-// dedicada, UX de producción). Boletas NO cambian.
-const FACT_WORKER_EN_PESTANA = true;
+// Modo del worker de FACTURAS: false = VENTANA dedicada con overlay y candado
+// de clicks (UX de producción, igual que boletas). true fue el modo pestaña de
+// la sesión de depuración 2026-08-27 (observable por herramientas) — dejarlo a
+// mano por si hay que volver a depurar el carril mirando la página.
+const FACT_WORKER_EN_PESTANA = false;
 
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
