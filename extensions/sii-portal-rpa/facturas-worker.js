@@ -169,61 +169,78 @@
   }
 
   async function stepFormulario(job) {
-    const form = formEl("VIEW_EFXP");
-    const codigo = valorDe(form, "PTDC_CODIGO");
+    // REGLA DURA (cazada en la primera factura real 2026-08-26): el AJAX del
+    // autocomplete puede REEMPLAZAR nodos del formulario — jamás retener una
+    // referencia a `form`/campos a través de un await. Todo acceso pasa por
+    // f() (form fresco) y los overrides se re-aplican con verificación.
+    const f = () => formEl("VIEW_EFXP");
+    const codigo = valorDe(f(), "PTDC_CODIGO");
     if (codigo !== String(job.tipo_dte)) {
       return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.` };
     }
 
-    // Fecha (editable; el guardarraíl de período vive en la app — acá se obedece).
-    if (job.fecha_emision) setVal(campo(form, "EFXP_FCH_EMIS"), job.fecha_emision);
-
-    // Ciudad del emisor: el autocomplete del portal la deja vacía y ES
-    // obligatoria (verificado en vivo). Fallback: la comuna del emisor.
-    if (!valorDe(form, "EFXP_CIUDAD_ORIGEN")) {
-      setVal(campo(form, "EFXP_CIUDAD_ORIGEN"), valorDe(form, "EFXP_CMNA_ORIGEN") || job.receptor?.ciudad || "");
-    }
-
-    // Receptor: RUT en dos cajas; el change del DV dispara enviaCGI (AJAX).
+    // Receptor primero: el change del DV dispara enviaCGI (AJAX) — que corra
+    // mientras seguimos con el resto.
     const rutRecep = splitRutCuerpoDv(job.receptor?.rut);
     if (!rutRecep) return { ok: false, error: "RECEPTOR_RUT_INVALID" };
-    setVal(campo(form, "EFXP_RUT_RECEP"), rutRecep.cuerpo);
-    setVal(campo(form, "EFXP_DV_RECEP"), rutRecep.dv);
+    setVal(campo(f(), "EFXP_RUT_RECEP"), rutRecep.cuerpo);
+    setVal(campo(f(), "EFXP_DV_RECEP"), rutRecep.dv);
 
-    // Esperar el autocomplete (<2s medido; 8s de margen). Si no llega, no
-    // importa: el job trae el receptor COMPLETO y lo escribimos igual.
-    await waitFor(() => valorDe(form, "EFXP_RZN_SOC_RECEP"), 8000, 300);
+    // Esperar el autocomplete (<2s medido; 8s de margen), SIEMPRE contra el
+    // form fresco. Si no llega, no importa: el job trae el receptor completo.
+    await waitFor(() => valorDe(f(), "EFXP_RZN_SOC_RECEP"), 8000, 300);
+    // Respiro extra: que el AJAX termine de re-pintar antes de escribir.
+    await esperar(700);
 
-    // El documento nace de la APP (receptor completo obligatorio, decisión
-    // del fundador): los datos del job PISAN lo que haya autocompletado.
     const r = job.receptor ?? {};
-    if (r.razon_social) setVal(campo(form, "EFXP_RZN_SOC_RECEP"), r.razon_social);
-    if (r.direccion) setVal(campo(form, "EFXP_DIR_RECEP"), r.direccion);
-    if (r.comuna) setVal(campo(form, "EFXP_CMNA_RECEP"), r.comuna);
-    if (r.ciudad) setVal(campo(form, "EFXP_CIUDAD_RECEP"), r.ciudad);
-    if (r.giro) setVal(campo(form, "EFXP_GIRO_RECEP"), r.giro);
-    else if (!valorDe(form, "EFXP_GIRO_RECEP")) {
+    const det = Array.isArray(job.detalles) ? job.detalles[0] : null;
+    if (!det) return { ok: false, error: "DETALLE_MISSING" };
+
+    // Overrides idempotentes sobre el form FRESCO. Se aplican y se VERIFICAN;
+    // si el portal re-pinta y pisa algo, la segunda/tercera vuelta lo repone.
+    const aplicarTodo = () => {
+      if (job.fecha_emision) setVal(campo(f(), "EFXP_FCH_EMIS"), job.fecha_emision);
+      // Ciudades: el autocomplete las deja vacías y SON obligatorias.
+      if (!valorDe(f(), "EFXP_CIUDAD_ORIGEN")) {
+        setVal(campo(f(), "EFXP_CIUDAD_ORIGEN"), valorDe(f(), "EFXP_CMNA_ORIGEN") || job.receptor?.ciudad || "");
+      }
+      if (r.razon_social) setVal(campo(f(), "EFXP_RZN_SOC_RECEP"), r.razon_social);
+      if (r.direccion) setVal(campo(f(), "EFXP_DIR_RECEP"), r.direccion);
+      if (r.comuna) setVal(campo(f(), "EFXP_CMNA_RECEP"), r.comuna);
+      if (r.ciudad) setVal(campo(f(), "EFXP_CIUDAD_RECEP"), r.ciudad);
+      if (r.giro) setVal(campo(f(), "EFXP_GIRO_RECEP"), r.giro);
+      if (r.contacto || r.email) setVal(campo(f(), "EFXP_CONTACTO"), r.contacto || r.email);
+      setVal(campo(f(), "EFXP_NMB_01"), det.nombre);
+      setVal(campo(f(), "EFXP_QTY_01"), det.cantidad ?? 1);
+      setVal(campo(f(), "EFXP_PRC_01"), det.precio); // change → calculaRelacionadoFacEx
+      // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa).
+      setVal(campo(f(), "EFXP_FMA_PAGO"), job.forma_pago === "credito" ? "2" : "1");
+    };
+
+    let faltas = [];
+    for (let intento = 0; intento < 3; intento += 1) {
+      aplicarTodo();
+      await esperar(600);
+      faltas = preValidar(f(), job);
+      if (faltas.length === 0) break;
+    }
+
+    if (!r.giro && !valorDe(f(), "EFXP_GIRO_RECEP")) {
       // Persona natural sin giro y el autocomplete tampoco lo trajo: pausa
       // humana (criterio 8 de la espec: se informa, se ingresa a mano).
       return { ok: false, error: "GIRO_RECEPTOR_REQUERIDO", human: true, detalle: "El SII no informó giro para este receptor. Ingrésalo en la app (queda guardado en tu libreta de clientes) y reintenta." };
     }
-    if (r.contacto || r.email) setVal(campo(form, "EFXP_CONTACTO"), r.contacto || r.email);
+    if (faltas.length > 0) {
+      return { ok: false, error: "FORMULARIO_INCOMPLETO", human: true, detalle: `Faltan: ${faltas.join(", ")}. (3 intentos de escritura sobre el form fresco)` };
+    }
 
-    // Detalle (1 línea, criterio del masivo simple).
-    const det = Array.isArray(job.detalles) ? job.detalles[0] : null;
-    if (!det) return { ok: false, error: "DETALLE_MISSING" };
-    setVal(campo(form, "EFXP_NMB_01"), det.nombre);
+    // Glosa extendida (>40 chars): checkbox Descrip. inserta el textarea.
     if (det.descripcion) {
-      const chk = campo(form, "DESCRIP_01");
+      const chk = campo(f(), "DESCRIP_01");
       if (chk && !chk.checked) clickEl(chk); // dibujaTextArea inserta EFXP_DSC_ITEM_01
       const area = await waitFor(() => campo(formEl("VIEW_EFXP"), "EFXP_DSC_ITEM_01"), 3000, 150);
       if (area) setVal(area, det.descripcion);
     }
-    setVal(campo(form, "EFXP_QTY_01"), det.cantidad ?? 1);
-    setVal(campo(form, "EFXP_PRC_01"), det.precio); // change → calculaRelacionadoFacEx
-
-    // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa).
-    setVal(campo(form, "EFXP_FMA_PAGO"), job.forma_pago === "credito" ? "2" : "1");
 
     // Totales del portal vs el job (±$1 de redondeo) — ANTES de validar.
     const totalEsperado = Number(job.totales?.monto_total);
@@ -233,11 +250,6 @@
     }, 6000, 250);
     if (!totalPortal || !Number.isFinite(totalEsperado) || Math.abs(totalPortal - totalEsperado) > 1) {
       return { ok: false, error: "TOTAL_MISMATCH", detalle: `El portal calculó $${totalPortal ?? "?"} y el documento aprobado dice $${totalEsperado}. No se firma un documento descuadrado.` };
-    }
-
-    const faltas = preValidar(formEl("VIEW_EFXP"), job);
-    if (faltas.length > 0) {
-      return { ok: false, error: "FORMULARIO_INCOMPLETO", human: true, detalle: `Faltan: ${faltas.join(", ")}.` };
     }
 
     // "Validar y visualizar" NO emite ni asigna folio (la vista previa dice
