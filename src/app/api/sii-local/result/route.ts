@@ -939,24 +939,57 @@ export async function POST(request: Request) {
   }
 
   const receptorLabel = cleanText(receptor?.razon_social) ?? "consumidor final";
-  await sb.from("documentos_subidos").insert({
-    empresa_id: empresaId,
-    nombre_archivo: `Boleta SII #${boleta.folio} - ${receptorLabel}`,
-    tipo: "boleta_sii_local",
-    storage_path: pdfUpload.storagePath ?? `sii-local-pdf-pendiente/${empresaId}/${tipoDte}-${folio}`,
-    estado: "procesado",
-    movimientos_detectados: 1,
-    created_at: new Date().toISOString(),
-    progreso_ia: {
-      origen: "sii_local_extension",
-      proveedor: "sii_local",
-      boleta_id: boleta.id,
-      folio: boleta.folio,
-      tipo_dte: tipoDte,
-      monto_total: boleta.monto_total,
-      receptor: receptorLabel,
-    },
-  });
+  const docWord = esFactura(tipoDte) ? "Factura" : "Boleta";
+  const progresoEmitido = {
+    origen: "sii_local_extension",
+    proveedor: "sii_local",
+    boleta_id: boleta.id,
+    folio: boleta.folio,
+    tipo_dte: tipoDte,
+    monto_total: boleta.monto_total,
+    receptor: receptorLabel,
+  };
+
+  // EMISIÓN DIRECTA (2026-08-27): la solicitud ("Factura única - X", tipo
+  // boleta_unica) ya tiene su fila en la mesa — al emitir se ACTUALIZA esa
+  // misma fila con el folio, en vez de crear una segunda. Antes quedaban dos:
+  // la solicitud eternamente "sin emitir" (mentira ámbar) + el resultado.
+  // Guardia dura: SOLO docs tipo boleta_unica (jamás renombrar una cartola).
+  let solicitudActualizada = false;
+  if (job.propuesta_id) {
+    const { data: prop } = await sb.from("propuestas_ia").select("movimiento_id").eq("id", job.propuesta_id).maybeSingle();
+    if (prop?.movimiento_id) {
+      const { data: movRow } = await sb.from("movimientos_raw").select("documento_id").eq("id", prop.movimiento_id).maybeSingle();
+      if (movRow?.documento_id) {
+        const { data: reqDoc } = await sb.from("documentos_subidos").select("id, tipo, progreso_ia").eq("id", movRow.documento_id).maybeSingle();
+        if (reqDoc?.tipo === "boleta_unica") {
+          const progresoPrevio = (reqDoc.progreso_ia && typeof reqDoc.progreso_ia === "object") ? reqDoc.progreso_ia as Record<string, unknown> : {};
+          const origenPrevio = typeof progresoPrevio.origen === "string" ? progresoPrevio.origen : progresoEmitido.origen;
+          const { error: updErr } = await sb.from("documentos_subidos").update({
+            nombre_archivo: `${docWord} SII #${boleta.folio} - ${receptorLabel}`,
+            progreso_ia: { ...progresoPrevio, ...progresoEmitido, origen: origenPrevio },
+          }).eq("id", reqDoc.id);
+          solicitudActualizada = !updErr;
+        }
+      }
+    }
+  }
+  if (!solicitudActualizada) {
+    await sb.from("documentos_subidos").insert({
+      empresa_id: empresaId,
+      nombre_archivo: `${docWord} SII #${boleta.folio} - ${receptorLabel}`,
+      tipo: "boleta_sii_local",
+      // CARRILES SEPARADOS (cazado en vivo 2026-08-27): sin mesa explícita el
+      // doc caía al default 'boleta' y las FACTURAS aparecían en la mesa de
+      // boletas. Cada mesa ve solo lo suyo.
+      mesa: esFactura(tipoDte) ? "factura" : "boleta",
+      storage_path: pdfUpload.storagePath ?? `sii-local-pdf-pendiente/${empresaId}/${tipoDte}-${folio}`,
+      estado: "procesado",
+      movimientos_detectados: 1,
+      created_at: new Date().toISOString(),
+      progreso_ia: progresoEmitido,
+    });
+  }
 
   await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
   if (pdfPendiente) {
