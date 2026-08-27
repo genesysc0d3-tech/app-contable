@@ -402,6 +402,10 @@ function driveFacturaPage(state, attempt = 1) {
     type: "APP_CONTABLE_SII_FACT_DRIVE",
     job_id: state.jobId,
     job: state.job,
+    // Candado monótono hacia el worker: post-Firmar JAMÁS se re-llena el
+    // formulario ni se re-clickea Firmar (si la pantalla de firma rebota al
+    // formulario, sería un loop de firmas — cazado en vivo 2026-08-26).
+    final_emit_clicked: state.finalEmitClicked === true,
   }), (res) => {
     const lastErr = chrome.runtime.lastError?.message ?? null;
     if (lastErr || !res) {

@@ -389,6 +389,12 @@
     await esperar(400);
     const kind = pageKind();
     try {
+      // CANDADO MONÓTONO: con Firmar ya clickeado, ni el formulario ni la
+      // vista previa se vuelven a conducir (re-llenar + re-Firmar = posible
+      // loop de firmas). Solo captura/clave; el humano decide el resto.
+      if (message.final_emit_clicked === true && (kind === "formulario" || kind === "preview")) {
+        return { kind, ok: false, error: "POST_FIRMA_REBOTO", human: true, detalle: "El portal volvió a una pantalla previa DESPUÉS de Firmar. No re-emito: verifica en el portal si la factura alcanzó a generarse." };
+      }
       if (kind === "selector_empresa") return { kind, ...stepSelectorEmpresa(job) };
       if (kind === "formulario") return { kind, ...(await stepFormulario(job)) };
       if (kind === "preview") return { kind, ...(await stepPreview(job)) };
