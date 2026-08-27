@@ -233,18 +233,32 @@
       return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.` };
     }
 
-    // Receptor primero: el change del DV dispara enviaCGI (AJAX) — que corra
-    // mientras seguimos con el resto.
+    // Receptor primero — MEDIDO EN VIVO 2026-08-27 (laboratorio con la página
+    // real): el change del DV dispara enviaCGI y en este portal eso puede ser
+    // un POST DE PÁGINA COMPLETA (no AJAX) — la página navega y vuelve con el
+    // receptor autocompletado. Poner el RUT en cada pasada era el LOOP
+    // infinito de recargas (titileo): cada reload re-ponía el RUT y re-POSTeaba.
+    // Regla: el RUT se pone UNA vez; si la página ya lo trae (volvió del POST),
+    // se salta el gatillo y se sigue con el resto. Los demás campos NO navegan
+    // (detalle/cantidad/precio/forma de pago verificados en vivo).
     const rutRecep = splitRutCuerpoDv(job.receptor?.rut);
     if (!rutRecep) return { ok: false, error: "RECEPTOR_RUT_INVALID" };
-    setVal(campo(f(), "EFXP_RUT_RECEP"), rutRecep.cuerpo);
-    setVal(campo(f(), "EFXP_DV_RECEP"), rutRecep.dv);
-
-    // Esperar el autocomplete (<2s medido; 8s de margen), SIEMPRE contra el
-    // form fresco. Si no llega, no importa: el job trae el receptor completo.
-    await waitFor(() => valorDe(f(), "EFXP_RZN_SOC_RECEP"), 8000, 300);
-    // Respiro extra: que el AJAX termine de re-pintar antes de escribir.
-    await esperar(700);
+    const rutYaPuesto = valorDe(f(), "EFXP_RUT_RECEP") === rutRecep.cuerpo
+      && valorDe(f(), "EFXP_DV_RECEP").toUpperCase() === rutRecep.dv;
+    if (!rutYaPuesto) {
+      setVal(campo(f(), "EFXP_RUT_RECEP"), rutRecep.cuerpo);
+      setVal(campo(f(), "EFXP_DV_RECEP"), rutRecep.dv);
+      // Modo AJAX (existe también): la razón social aparece sin navegar y
+      // seguimos en esta misma pasada. Modo POST: la página muere durante esta
+      // espera, este script muere con ella, y el próximo load retoma con el
+      // RUT ya puesto (rutYaPuesto=true) — sin re-gatillar. Convergente.
+      const razonLlego = await waitFor(() => valorDe(formEl("VIEW_EFXP"), "EFXP_RZN_SOC_RECEP"), 8000, 300);
+      if (!razonLlego) {
+        return { ok: true, action: "observando", detalle: "receptor enviado al SII, esperando autocomplete/recarga" };
+      }
+      // Respiro extra: que el re-pintado termine antes de escribir.
+      await esperar(700);
+    }
 
     const r = job.receptor ?? {};
     const det = Array.isArray(job.detalles) ? job.detalles[0] : null;
