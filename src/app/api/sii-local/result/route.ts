@@ -554,6 +554,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "PROPUESTA_INCOMPLETA" }, { status: 409 });
     }
 
+    // FOLIO DE OTRO DOCUMENTO (cazado por prueba adversarial 2026-08-27): si el
+    // folio tecleado YA pertenece a otra propuesta, el backfill lo trataba como
+    // "already_exists: ok" y —peor— levantaba la lápida de ESTE intento. Un
+    // dedazo dejaba re-emitible un documento que puede tener su propio folio
+    // real en el SII → doble folio, el peor desenlace del producto. Se rechaza
+    // y la lápida se queda donde está.
+    const { data: folioAjeno } = await sb
+      .from("boletas_emitidas")
+      .select("id, propuesta_id")
+      .eq("empresa_id", jobManual.empresa_id)
+      .eq("tipo_dte", tipoManual)
+      .eq("folio", folioManual)
+      .maybeSingle();
+    if (folioAjeno && folioAjeno.propuesta_id && folioAjeno.propuesta_id !== jobManual.propuesta_id) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "FOLIO_DE_OTRO_DOCUMENTO",
+          detalle: `El folio ${folioManual} ya está registrado en otro documento. Revisa el número en la ventana del SII; este intento sigue bloqueado.`,
+        },
+        { status: 409 },
+      );
+    }
+
     const respaldoManual = await backfillFolioSinJobVivo(sb, {
       empresaId: jobManual.empresa_id,
       tipoDte: tipoManual as 33 | 34 | 39 | 41,
