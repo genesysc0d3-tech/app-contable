@@ -396,15 +396,25 @@ function closeWorker(state) {
 // worker mira el DOM, ejecuta el paso que corresponda y responde; los pasos
 // que navegan (seleccionar empresa, validar, firmar) provocan el próximo
 // onUpdated y con él el próximo drive. Sin bucles: el motor es la navegación.
-function driveFacturaPage(state) {
+function driveFacturaPage(state, attempt = 1) {
+  if (!activeJobs.has(state.jobId)) return;
   chrome.tabs.sendMessage(state.workerTabId, baseMessage({
     type: "APP_CONTABLE_SII_FACT_DRIVE",
     job_id: state.jobId,
     job: state.job,
   }), (res) => {
-    // Content script aún no inyectado en esta carga: el próximo onUpdated
-    // (o el retry del overlay) vuelve a intentar. No es un error.
-    if (chrome.runtime.lastError || !res) return;
+    if (chrome.runtime.lastError || !res) {
+      // WATCHDOG (cazado en vivo 2026-08-26): los CGIs del SII inyectan el
+      // content script DESPUÉS del onUpdated — un solo intento se perdía y
+      // el job quedaba mirando el formulario para siempre. Reintentar hasta
+      // ~45s; después, pausa humana honesta.
+      if (attempt < 30) {
+        setTimeout(() => driveFacturaPage(state, attempt + 1), 1500);
+      } else {
+        sendToApp(state, statusMessage(state.jobId, "error", "La ventana SII no respondió al conductor de facturas. Reintenta la emisión.", true));
+      }
+      return;
+    }
     handleFactDriveResponse(state, res);
   });
 }
