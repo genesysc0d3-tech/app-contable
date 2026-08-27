@@ -11,7 +11,10 @@ import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
 
-const keyOf = (view: string, date: string, month: string) => `${view}|${date}|${month}`;
+// La MESA es parte de la clave (bug transversal 2026-08-27): sin ella, boletas y
+// facturas del mismo día/rango compartían entrada de caché y una le servía a la
+// otra datos ajenos — la mesa "se vaciaba" o mostraba lo que no era.
+const keyOf = (view: string, date: string, month: string, mesa: "boleta" | "factura") => `${view}|${date}|${month}|${mesa}`;
 
 // Avisa a los slots estáticos (card de Registros) los nuevos números del rango,
 // para que Ventas/Actividad sigan al calendario maestro.
@@ -51,7 +54,7 @@ export default function MesaController({
   const [isPending, startTransition] = useTransition();
   // Cache en memoria sembrada con el estado inicial (evita re-fetch al volver a él).
   const cacheRef = useRef<Map<string, MesaDateDependent>>(
-    new Map([[keyOf(initialMesa.workMode, initialMesa.selDate, `${initialMesa.calendar.y}-${initialMesa.calendar.m}`), initialMesa]]),
+    new Map([[keyOf(initialMesa.workMode, initialMesa.selDate, `${initialMesa.calendar.y}-${initialMesa.calendar.m}`, initialMesa.mesaActiva), initialMesa]]),
   );
 
   const navigate = useCallback((patch: NavParams) => {
@@ -65,7 +68,7 @@ export default function MesaController({
     };
     // URL sigue siendo la verdad (para refresh/compartir) — sin navegar.
     window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}&mesa=${params.mesa}`);
-    const key = keyOf(params.view, params.date, params.month);
+    const key = keyOf(params.view, params.date, params.month, params.mesa);
     const cached = cacheRef.current.get(key);
     if (cached) { setMesa(cached); broadcastMesa(cached); return; }
     startTransition(async () => {
@@ -86,7 +89,7 @@ export default function MesaController({
       const month = `${mesa.calendar.y}-${mesa.calendar.m}`;
       (["day", "week", "month"] as const).forEach((view) => {
         if (view === mesa.workMode) return;
-        const key = keyOf(view, mesa.selDate, month);
+        const key = keyOf(view, mesa.selDate, month, mesa.mesaActiva);
         if (cacheRef.current.has(key)) return;
         void cargarMesa({ date: mesa.selDate, month, view, mesa: mesa.mesaActiva }).then((res) => {
           if (res.ok && !cacheRef.current.has(key)) cacheRef.current.set(key, res.mesa);
@@ -106,7 +109,7 @@ export default function MesaController({
       cacheRef.current.clear();
       const res = await cargarMesa(params);
       if (res.ok) {
-        cacheRef.current.set(keyOf(params.view, params.date, params.month), res.mesa);
+        cacheRef.current.set(keyOf(params.view, params.date, params.month, params.mesa), res.mesa);
         setMesa(res.mesa);
         broadcastMesa(res.mesa);
       }
@@ -144,14 +147,19 @@ export default function MesaController({
       const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesa.selDate;
       const [yy, mm] = date.split("-");
       const month = `${yy}-${Number(mm) - 1}`; // calendar.m es 0-indexed
-      const key = keyOf("day", date, month);
+      // La MESA ACTIVA viaja en el refresco (bug 2026-08-27): sin ella cargaba
+      // la mesa por defecto (boletas) ENCIMA de la de facturas — el usuario
+      // subía su plantilla y veía "Nada por aquí" con los contadores en 0,
+      // creyendo que había fallado (el archivo estaba perfecto).
+      const mesaActiva = mesa.mesaActiva;
+      const key = keyOf("day", date, month, mesaActiva);
       cacheRef.current.delete(key); // datos nuevos → forzar re-fetch
       // SILENCIOSO (sin startTransition) → NO atenúa la mesa (era el "gris" que se
       // quedaba pegado mientras el procesamiento de fondo competía). subir-procesar
       // deja el doc en "procesando"; entra al toque y el poll de DocCardList lo lleva
       // a "procesado" sin volver a atenuar.
       void (async () => {
-        const res = await cargarMesa({ date, month, view: "day" });
+        const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva });
         if (res.ok) { cacheRef.current.set(key, res.mesa); setMesa(res.mesa); broadcastMesa(res.mesa); }
       })();
     };
