@@ -386,6 +386,10 @@ function closeWorker(state) {
   if (state.learningTimer) clearTimeout(state.learningTimer);
   if (state.workerWindowId) {
     chrome.windows.remove(state.workerWindowId).catch(() => undefined);
+  } else if (state.workerTabId) {
+    // Modo pestaña (dev facturas): cerrar SOLO la pestaña del worker — el
+    // workerWindowId null es la ventana principal del usuario, intocable.
+    chrome.tabs.remove(state.workerTabId).catch(() => undefined);
   }
   // Si un update quedó pendiente durante la emisión, este es el momento seguro.
   aplicarUpdateSiOcioso();
@@ -801,6 +805,7 @@ function isLoginPageMap(map) {
 function focusWorkerForHuman(state, message) {
   state.humanRequired = true;
   if (state.workerWindowId) chrome.windows.update(state.workerWindowId, { focused: true }).catch(() => undefined);
+  else if (state.workerTabId) chrome.tabs.update(state.workerTabId, { active: true }).catch(() => undefined); // modo pestaña: frontearla
   sendToSii(state.workerTabId, {
     type: "APP_CONTABLE_SII_WORKER_OVERLAY",
     job_id: state.jobId,
@@ -1058,20 +1063,37 @@ function captureWorkerResult(state) {
   });
 }
 
+// DEV (2026-08-27, decisión del fundador): el worker de FACTURAS corre en
+// PESTAÑA del navegador principal — así el carril se puede mirar y depurar
+// con el navegador instrumentado (la ventana popup es invisible para las
+// herramientas). Antes de publicar 0.2.0 esto vuelve a false (ventana
+// dedicada, UX de producción). Boletas NO cambian.
+const FACT_WORKER_EN_PESTANA = true;
+
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
   // https). Boletas siguen en la constante de e-Boleta.
   const startUrl = job.kind === "factura" && job.start_url ? job.start_url : SII_START_URL;
-  const worker = await chrome.windows.create({
-    url: startUrl,
-    type: "popup",
-    focused: false,
-    width: 1120,
-    height: 820,
-  });
-
-  const workerTabId = worker.tabs?.[0]?.id;
-  if (!worker.id || !workerTabId) throw new Error("SII_WORKER_WINDOW_FAILED");
+  let workerWindowId = null;
+  let workerTabId = null;
+  if (job.kind === "factura" && FACT_WORKER_EN_PESTANA) {
+    const tab = await chrome.tabs.create({ url: startUrl, active: false });
+    workerTabId = tab.id ?? null;
+    // workerWindowId queda null A PROPÓSITO: es la ventana principal del
+    // usuario — closeWorker jamás debe cerrarla (solo cierra la pestaña).
+  } else {
+    const worker = await chrome.windows.create({
+      url: startUrl,
+      type: "popup",
+      focused: false,
+      width: 1120,
+      height: 820,
+    });
+    workerWindowId = worker.id ?? null;
+    workerTabId = worker.tabs?.[0]?.id ?? null;
+    if (!workerWindowId) throw new Error("SII_WORKER_WINDOW_FAILED");
+  }
+  if (!workerTabId) throw new Error("SII_WORKER_WINDOW_FAILED");
 
   const state = {
     jobId: job.job_id,
@@ -1082,7 +1104,7 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
     kind: job.kind === "factura" ? "factura" : "boleta",
     appTabId,
     appOrigin: appOrigin ?? null, // origen de la app para pedir WS (desbloqueo v2)
-    workerWindowId: worker.id,
+    workerWindowId,
     workerTabId,
     createdAt: new Date().toISOString(),
     learnOnly: job.learn_only === true,

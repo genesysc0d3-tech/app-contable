@@ -185,6 +185,17 @@
     setVal(sel, candidatos[0].value);
     const submit = form.querySelector('button[type="submit"], input[type="submit"]');
     if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT" };
+    // Cinturón (cazado en vivo 2026-08-27): el click sintético en Enviar puede
+    // NO gatillar la navegación del CGI (la página quedó quieta con la empresa
+    // elegida y el latch impedía reintentar). A los 2.5s forzamos el submit
+    // nativo; si el click sí navegó, este timer muere con la página — jamás
+    // doble-submite.
+    setTimeout(() => {
+      try {
+        const f = formEl("fPrmEmpPOP");
+        if (f && !formEl("VIEW_EFXP")) f.submit();
+      } catch { /* la página ya navegó */ }
+    }, 2500);
     return { ok: true, action: "empresa_seleccionada" };
   }
 
