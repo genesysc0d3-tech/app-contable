@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, mensajeExtensionDesactualizada } from "@/lib/extension";
+import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, hayVersionNuevaDeExtension, mensajeExtensionDesactualizada } from "@/lib/extension";
 
 export type ExtensionStatus = "checking" | "ready" | "missing";
 
@@ -75,7 +75,7 @@ export function verificarExtensionCompatible(
  *
  * `recheck()` vuelve a "checking" y re-lanza el ping (botón "Actualizar" tras instalar).
  */
-export function useExtensionStatus(): { status: ExtensionStatus; version: string | null; desactualizada: boolean; recheck: () => void } {
+export function useExtensionStatus(): { status: ExtensionStatus; version: string | null; desactualizada: boolean; hayVersionNueva: boolean; versionPublicada: string; recheck: () => void } {
   const [status, setStatus] = useState<ExtensionStatus>("checking");
   const [version, setVersion] = useState<string | null>(null);
   const pingRef = useRef<{ nonce: string; timeoutId: number } | null>(null);
@@ -154,5 +154,13 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     };
   }, [postPing]);
 
-  return { status, version, desactualizada: status === "ready" && extensionDesactualizada(version), recheck };
+  return {
+    status,
+    version,
+    desactualizada: status === "ready" && extensionDesactualizada(version),
+    // Aviso suave: hay una versión publicada más nueva que la instalada.
+    hayVersionNueva: status === "ready" && hayVersionNuevaDeExtension(version),
+    versionPublicada: EXTENSION_VERSION_ACTUAL,
+    recheck,
+  };
 }

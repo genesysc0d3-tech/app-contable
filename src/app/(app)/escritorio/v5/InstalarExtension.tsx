@@ -76,7 +76,7 @@ function ExtensionDesactualizada({ version, recheck }: { version: string | null;
 }
 
 export default function InstalarExtension() {
-  const { status, version, desactualizada, recheck } = useExtensionStatus();
+  const { status, version, desactualizada, hayVersionNueva, versionPublicada, recheck } = useExtensionStatus();
   const [showSteps, setShowSteps] = useState(false);
 
   if (status === "checking") return null;
@@ -89,9 +89,21 @@ export default function InstalarExtension() {
 
   if (status === "ready") {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "0 0 10px", fontSize: 11.5, color: "var(--green, #22c55e)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "0 0 10px", fontSize: 11.5, color: "var(--green, #22c55e)", flexWrap: "wrap" }}>
         <span aria-hidden style={{ fontSize: 13 }}>✓</span>
-        <span>Extensión conectada</span>
+        <span>Extensión conectada{version ? ` · v${version}` : ""}</span>
+        {/* Aviso SUAVE de versión nueva: no bloquea (para eso está el piso).
+            Cubre la ventana entre publicar y que Chrome propague el auto-update:
+            el usuario se entera de que existe algo nuevo, no cuando algo falla. */}
+        {hayVersionNueva && (
+          <span title={`Instalada v${version} · publicada v${versionPublicada}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 700, color: "var(--amber, #f59e0b)", background: "color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 28%, transparent)", borderRadius: 7, padding: "2px 8px" }}>
+            Hay una versión nueva (v{versionPublicada})
+            {EXTENSION_STORE_URL.length > 0 && (
+              <a href={EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>actualizar</a>
+            )}
+          </span>
+        )}
       </div>
     );
   }
