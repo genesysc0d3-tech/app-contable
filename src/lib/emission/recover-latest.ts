@@ -13,6 +13,35 @@ export type RecoverLatestResult =
   | { estado: "sin_resultado" } // 404: no hay folio stasheado (probable "no se emitió nada")
   | { estado: "error"; mensaje: string };
 
+/**
+ * RESCATE MANUAL: el usuario leyó el folio en la ventana del SII y lo declara.
+ * Es la salida cuando el RPA emitió de verdad pero no capturó la pantalla del
+ * folio — el caso donde `recoverLatestFolio` responde "sin_resultado" pese a
+ * existir el documento en el SII. El server exige que el intento tenga lápida
+ * y deriva monto/tipo de la propuesta: el humano aporta el número, no la plata.
+ */
+export async function registrarFolioAMano(jobId: string | null, folio: number): Promise<RecoverLatestResult> {
+  try {
+    const res = await fetch("/api/sii-local/result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: jobId, registrar_folio_manual: folio }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json?.ok) {
+      return {
+        estado: "recuperado",
+        folio: typeof json.folio === "number" ? json.folio : folio,
+        boletaId: json.boleta_id ?? null,
+        already: Boolean(json.already_exists),
+      };
+    }
+    return { estado: "error", mensaje: json?.detalle ?? json?.error ?? "No se pudo registrar el folio." };
+  } catch {
+    return { estado: "error", mensaje: "Error de red al registrar el folio." };
+  }
+}
+
 export async function recoverLatestFolio(jobId: string | null): Promise<RecoverLatestResult> {
   try {
     const res = await fetch("/api/sii-local/result", {

@@ -9,10 +9,18 @@ import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { cleanRut } from "@/lib/sii/validation";
+import { chileDateString } from "@/lib/chile-date";
 
 interface SiiLocalResultPayload {
   job_id?: string | null;
   recover_latest?: boolean;
+  /**
+   * RESCATE MANUAL: el humano leyó el folio en la ventana del SII y lo declara.
+   * Es la salida de emergencia cuando el RPA emitió de verdad pero no alcanzó a
+   * capturar la pantalla del folio (el copy de la extensión lo prometía desde
+   * siempre — "ingrésalo abajo" — y no existía). Solo sobre jobs con lápida.
+   */
+  registrar_folio_manual?: number | null;
   /** Telemetría de flota: versión de la extensión que POSTea (bridge 0.1.7+). */
   extension_version?: string | null;
   result?: {
@@ -500,6 +508,85 @@ export async function POST(request: Request) {
           .eq("id", u.empresa_id);
       }
     } catch { /* columnas sin migrar o fallo puntual: la telemetría espera */ }
+  }
+
+  // ── RESCATE MANUAL DEL FOLIO ────────────────────────────────────────────
+  // El RPA emitió (hay folio real en el SII) pero no capturó la pantalla: el
+  // job quedó con lápida y "Recuperar folio" no tiene nada que rescatar. Acá
+  // el humano declara el número que ve en pantalla. Fail-closed:
+  //  · solo sobre un job propio en 'revision_pendiente' (una lápida real; no
+  //    se puede inventar un folio para un job cualquiera),
+  //  · el UNIQUE(empresa, tipo_dte, folio) impide duplicar un folio ya vivo,
+  //  · el monto/tipo/fecha salen de la PROPUESTA (el humano aporta el folio,
+  //    no la plata),
+  //  · queda auditado como declaración humana, no como captura del RPA.
+  if (payload.registrar_folio_manual != null) {
+    const folioManual = positiveInt(payload.registrar_folio_manual);
+    if (!folioManual) return NextResponse.json({ ok: false, error: "FOLIO_INVALIDO", detalle: "El folio debe ser un número mayor a cero." }, { status: 400 });
+    const jobIdManual = cleanText(payload.job_id);
+    if (!jobIdManual) return NextResponse.json({ ok: false, error: "JOB_ID_REQUERIDO" }, { status: 400 });
+
+    const { data: jobManual } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id")
+      .eq("job_id", jobIdManual)
+      .maybeSingle();
+    if (!jobManual) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
+    if (jobManual.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
+    if (jobManual.estado !== "revision_pendiente") {
+      return NextResponse.json(
+        { ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no quedó a medias: no corresponde registrar un folio a mano." },
+        { status: 409 },
+      );
+    }
+    if (!jobManual.propuesta_id) {
+      return NextResponse.json({ ok: false, error: "JOB_SIN_PROPUESTA", detalle: "Este intento no tiene documento asociado; escríbenos a soporte." }, { status: 409 });
+    }
+
+    const { data: propManual } = await sb
+      .from("propuestas_ia")
+      .select("tipo_dte, total, created_at")
+      .eq("id", jobManual.propuesta_id)
+      .maybeSingle();
+    const tipoManual = propManual?.tipo_dte;
+    const montoManual = Number(propManual?.total);
+    if (!tipoManual || ![33, 34, 39, 41].includes(tipoManual) || !Number.isFinite(montoManual) || montoManual <= 0) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_INCOMPLETA" }, { status: 409 });
+    }
+
+    const respaldoManual = await backfillFolioSinJobVivo(sb, {
+      empresaId: jobManual.empresa_id,
+      tipoDte: tipoManual as 33 | 34 | 39 | 41,
+      folio: folioManual,
+      montoTotal: montoManual,
+      fechaEmision: chileDateString(new Date(propManual?.created_at ?? Date.now())),
+      totales: null,
+      jobId: jobManual.job_id,
+      propuestaId: jobManual.propuesta_id,
+    });
+    if (!respaldoManual.ok) {
+      return NextResponse.json({ ok: false, error: "REGISTRO_MANUAL_FALLIDO", detalle: respaldoManual.error }, { status: 500 });
+    }
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_folio_declarado_a_mano",
+      summary: `Folio ${folioManual} declarado a mano por el usuario (el RPA no lo capturó)`,
+      empresaId: jobManual.empresa_id,
+      cuentaId: jobManual.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobManual.job_id,
+      metadata: { folio: folioManual, tipo_dte: tipoManual, already_exists: Boolean(respaldoManual.already), origen: "declaracion_humana" },
+    });
+    return NextResponse.json({
+      ok: true,
+      boleta_id: respaldoManual.boletaId ?? null,
+      folio: folioManual,
+      already_exists: Boolean(respaldoManual.already),
+      recuperado: true,
+    });
   }
 
   let result = payload.result;
