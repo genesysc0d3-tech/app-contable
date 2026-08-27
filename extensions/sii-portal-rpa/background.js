@@ -536,6 +536,10 @@ async function handleFactDriveResponse(state, res) {
     if (state.factSignPolls <= 20) {
       if (state.factSignTimer) clearTimeout(state.factSignTimer);
       state.factSignTimer = setTimeout(() => { if (activeJobs.has(state.jobId)) driveFacturaPage(state); }, 2000);
+      // DIAGNÓSTICO POST-FIRMA (2026-08-27): la página de éxito del SII no
+      // calzó con el detector de folio y quedó "unknown" — el excerpt viaja
+      // en el status para VER qué dice esa pantalla y afinar el matcher.
+      sendToApp(state, statusMessage(state.jobId, "fact_sign_poll", `Post-firma (${state.factSignPolls}/20): ${String(res.excerpt ?? res.detalle ?? "sin texto").slice(0, 400)}`, true));
       return;
     }
     sendToApp(state, statusMessage(state.jobId, "result_needs_review", "La firma no avanzó tras varios intentos. Revisa la ventana del SII: si viste un folio, la factura se emitió — no la re-emitas.", true));
