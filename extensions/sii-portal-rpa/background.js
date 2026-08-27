@@ -403,19 +403,26 @@ function driveFacturaPage(state, attempt = 1) {
     job_id: state.jobId,
     job: state.job,
   }), (res) => {
-    if (chrome.runtime.lastError || !res) {
+    const lastErr = chrome.runtime.lastError?.message ?? null;
+    if (lastErr || !res) {
       // WATCHDOG (cazado en vivo 2026-08-26): los CGIs del SII inyectan el
       // content script DESPUÉS del onUpdated — un solo intento se perdía y
       // el job quedaba mirando el formulario para siempre. Reintentar hasta
-      // ~45s; después, pausa humana honesta.
+      // ~45s; después, pausa humana honesta CON la causa real.
+      state.lastDriveError = lastErr ?? "respuesta vacía";
       if (attempt < 30) {
         setTimeout(() => driveFacturaPage(state, attempt + 1), 1500);
       } else {
-        sendToApp(state, statusMessage(state.jobId, "error", "La ventana SII no respondió al conductor de facturas. Reintenta la emisión.", true));
+        sendToApp(state, statusMessage(state.jobId, "error", `La ventana SII no respondió al conductor de facturas (${state.lastDriveError}). Reintenta la emisión.`, true));
       }
       return;
     }
-    handleFactDriveResponse(state, res);
+    // Eco de diagnóstico: cada respuesta del drive se ve en el subestado del
+    // modal (barato y honesto mientras el carril madura).
+    sendToApp(state, statusMessage(state.jobId, "fact_drive", `Portal: ${res.kind ?? "?"} → ${res.action ?? res.error ?? "?"}`, true));
+    handleFactDriveResponse(state, res).catch((error) => {
+      sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
+    });
   });
 }
 
