@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MassDTE — Motor Local",
   "description": "Motor local para emitir tus boletas electrónicas del SII (Portal / e-Boleta) por tu cuenta, desde tu propio equipo.",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "minimum_chrome_version": "116",
   "options_page": "options.html",
   "action": {
