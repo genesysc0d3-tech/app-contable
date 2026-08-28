@@ -15,6 +15,7 @@ import { recordOpsEvent } from "@/lib/ops/events";
 import { purgarCuentaCompleta, type PurgaResumen } from "@/lib/derechos/purga-cuenta";
 import { clearDevSupportEmpresaCookie, getDevOperatorContext, getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { cuotaEmpresaMes, periodoActualChile, rangoMesActualChileUtc } from "./helpers";
+import { syncPlanActivo } from "@/lib/pagos/activacion";
 
 type ServiceClient = ReturnType<typeof createServiceClient<Database>>;
 
@@ -457,35 +458,23 @@ export async function setCuentaPlan(
   if (!PLAN_CODES.includes(planCodigo as (typeof PLAN_CODES)[number])) return { error: "Plan inválido" };
   if (typeof planActivo !== "boolean") return { error: "Valor inválido" };
 
-  const { error, count } = await gate.sb
+  const { count } = await gate.sb
     .from("cuentas")
-    .update({ plan_codigo: planCodigo, plan_activo: planActivo }, { count: "exact" })
+    .select("id", { count: "exact", head: true })
     .eq("id", cuentaId);
-  if (error) return { error: error.message };
   if (!count) return { error: "Cuenta no encontrada" };
 
-  // Mismos invariantes que el webhook de pagos al activar un plan multiempresa
-  // (revisión adversarial 2026-08-22: el "Business manual" de /dev no los
-  // replicaba): revivir las empresas desactivadas por downgrade y resetear la
-  // marca de elección única — si no, la próxima bajada no vuelve a preguntar.
-  if (planActivo) {
-    const { data: planRow } = await gate.sb
-      .from("planes_config")
-      .select("multiempresa")
-      .eq("codigo", planCodigo)
-      .maybeSingle();
-    if (planRow?.multiempresa === true) {
-      await gate.sb
-        .from("cuenta_empresas")
-        .update({ activa: true, desactivada_motivo: null })
-        .eq("cuenta_id", cuentaId)
-        .eq("activa", false)
-        .eq("desactivada_motivo", "fuera_de_plan");
-      await gate.sb
-        .from("cuentas")
-        .update({ empresa_operativa_elegida_at: null })
-        .eq("id", cuentaId);
-    }
+  // LA MISMA función que usan las pasarelas, no una copia. Acá vivía una copia
+  // a medias que actualizaba la cuenta y revivía las membresías pero NO
+  // propagaba el plan a `empresas.plan_activo`. Caso real (2026-08-28): una
+  // cuenta Business activa con una empresa que emitía todos los días quedó
+  // "bloqueada" porque su flag nunca se encendió, y el panel mostraba el
+  // problema sin dar forma de arreglarlo. El archivo compartido lo advierte en
+  // su cabecera: estas reglas se importan, no se reescriben.
+  try {
+    await syncPlanActivo(gate.sb, { cuentaId, empresaId: null }, planCodigo, planActivo);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo sincronizar el plan" };
   }
 
   await recordCuentaAudit({
@@ -683,7 +672,17 @@ export async function migrarEmpresaACuenta(
       { onConflict: "usuario_id,empresa_id", ignoreDuplicates: true },
     );
   }
-  await sb.from("empresas").update({ plan: planEfectivo, plan_activo: true }).eq("id", empresaId);
+  // Se sincroniza la cuenta DESTINO COMPLETA, no solo la empresa que llega.
+  // Antes esta línea encendía únicamente a la recién llegada y las que ya
+  // vivían ahí se quedaban con el flag que traían: así una empresa que llevaba
+  // 200 boletas emitidas amaneció bloqueada el día que le migraron una hermana.
+  try {
+    await syncPlanActivo(sb, { cuentaId: cuentaDestinoId, empresaId: null }, planEfectivo, true);
+  } catch {
+    // Si la sincronización falla, al menos la empresa migrada queda operativa:
+    // el move ya ocurrió y dejarla sin plan sería peor.
+    await sb.from("empresas").update({ plan: planEfectivo, plan_activo: true }).eq("id", empresaId);
+  }
   const { count: tgCortados } = await sb
     .from("telegram_chats")
     .update({ activo: false }, { count: "exact" })
