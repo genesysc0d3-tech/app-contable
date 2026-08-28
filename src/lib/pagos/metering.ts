@@ -1,5 +1,10 @@
 /**
- * Metering de boletas masivas — el corazón medible del plan.
+ * Metering de documentos masivos — el corazón medible del plan.
+ *
+ * OJO: la cuota es COMPARTIDA entre boletas y facturas. `contarMasivas` cuenta
+ * filas de `boletas_emitidas` con propuesta enlazada sin mirar el tipo_dte, y
+ * las facturas 33/34 viven en esa misma tabla. Si algún día se quisieran cuotas
+ * separadas, hay que tocar acá y TODO el copy que le promete al cliente.
  *
  * REGLA DE CONTEO (la única que importa para cobrar):
  * Una boleta cuenta contra la cuota MASIVA cuando nace del pipeline de
@@ -287,7 +292,7 @@ export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision
     return {
       ok: false,
       codigo: "CUOTA_AGOTADA",
-      detalle: `Te quedan ${estado.disponible} boletas masivas este mes — amplía con REFILL o sube de plan.`,
+      detalle: `Te quedan ${estado.disponible} documentos masivos este mes (boletas y facturas comparten cuota) — amplía con REFILL o sube de plan.`,
       disponible: estado.disponible,
     };
   }
@@ -308,7 +313,7 @@ export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision
     return {
       ok: false,
       codigo: "SIN_PLAN",
-      detalle: "Tu empresa no tiene un plan activo — contrata uno en Planes para emitir boletas masivas.",
+      detalle: "Tu empresa no tiene un plan activo — contrata uno en Planes para emitir en masa.",
       disponible: 0,
     };
   }
@@ -319,7 +324,7 @@ export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision
       return {
         ok: false,
         codigo: "CUOTA_AGOTADA",
-        detalle: `El período de prueba incluye ${trial.boletasMax} boletas masivas — selecciona menos boletas o contrata un plan.`,
+        detalle: `El período de prueba incluye ${trial.boletasMax} documentos masivos — selecciona menos o contrata un plan.`,
         disponible: trial.boletasMax,
       };
     }
@@ -330,7 +335,7 @@ export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision
     return {
       ok: false,
       codigo: "TRIAL_TERMINADO",
-      detalle: "Tu período de prueba terminó — contrata un plan para seguir emitiendo boletas masivas.",
+      detalle: "Tu período de prueba terminó — contrata un plan para seguir emitiendo en masa.",
       disponible: 0,
     };
   }
