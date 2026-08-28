@@ -73,7 +73,10 @@ const vacio = (): DatosOficialesDte => ({
 async function leerPagina(pdfBytes: Uint8Array): Promise<{ lineas: string[]; lineasIzq: string[]; texto: string } | null> {
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const doc = await pdfjs.getDocument({ data: pdfBytes, disableFontFace: true, verbosity: 0 }).promise;
+    // COPIA a propósito: pdf.js se apropia del buffer y lo deja desprendido
+    // (ver la misma nota en `timbre-extract`). Así el mismo PDF se puede leer
+    // dos veces —timbre y datos— sin que el primero le vacíe el plato al otro.
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBytes), disableFontFace: true, verbosity: 0 }).promise;
     const page = await doc.getPage(1);
     const contenido = await page.getTextContent();
 
