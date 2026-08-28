@@ -692,8 +692,14 @@
     }
     if (!options.length) throw new Error("No pude abrir la lista de empresas del portal. Selecciona la empresa a mano arriba y reintenta.");
     const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
-    if (candidatos.length !== 1) {
-      throw new Error(`No pude seleccionar la empresa ${rutObjetivo}: ${candidatos.length === 0 ? "no está entre tus empresas habilitadas en el SII" : "coincidencia ambigua"}. Selecciónala a mano arriba y reintenta.`);
+    if (candidatos.length === 0) {
+      // NO se le puede decir "selecciónala a mano": no está en la lista, así que
+      // el usuario la busca, no la encuentra y reintenta en círculos. Esto no se
+      // arregla en massdte — es un permiso que se da en el SII.
+      throw new Error(`Tu RUT no está autorizado en el SII para emitir por la empresa ${rutObjetivo}. El representante legal de esa empresa tiene que autorizar tu RUT en el sitio del SII; desde acá no se puede habilitar.`);
+    }
+    if (candidatos.length > 1) {
+      throw new Error(`Encontré más de una empresa que calza con ${rutObjetivo} en el selector del portal. Elígela a mano arriba y reintenta.`);
     }
     await clickElement(candidatos[0]);
     await closeEmisorDropdown();

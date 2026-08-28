@@ -186,7 +186,8 @@
     if (!objetivo) return { ok: false, error: "EMISOR_RUT_INVALID" };
     const candidatos = [...sel.options].filter((o) => normalizeRutValue(o.value) === objetivo);
     if (candidatos.length !== 1) {
-      return { ok: false, error: "EMISOR_NO_AUTORIZADO", detalle: `El RUT ${job.emisor_rut} no está entre las empresas autorizadas de esta sesión SII.` };
+      // human: reintentar no sirve de nada — el permiso se da en el SII.
+      return { ok: false, error: "EMISOR_NO_AUTORIZADO", human: true, detalle: `Tu RUT no está autorizado en el SII para emitir por la empresa ${job.emisor_rut}. El representante legal de esa empresa tiene que autorizar tu RUT en el sitio del SII; desde acá no se puede habilitar.` };
     }
     setVal(sel, candidatos[0].value);
     const submit = form.querySelector('button[type="submit"], input[type="submit"]');
