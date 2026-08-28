@@ -106,7 +106,7 @@ function errorLoteAmable(code?: string, detalle?: string): string {
     case "EMISION_BLOQUEADA": return "Ya hay una emisión en curso en tu cuenta. Espera a que termine.";
     case "PLAN_INACTIVO":
     case "SIN_PLAN": return "Necesitas un plan activo para emitir. Actívalo en Planes.";
-    case "CUOTA_AGOTADA": return "Se acabó tu cupo de boletas masivas de este período.";
+    case "CUOTA_AGOTADA": return "Se acabó tu cupo de documentos masivos de este período (boletas y facturas comparten cuota).";
     case "TRIAL_TERMINADO": return "Tu período de prueba terminó — contrata un plan para seguir emitiendo.";
     case "ROL_SIN_PERMISO": return "Tu rol no permite emitir documentos.";
     case "DEMASIADAS_PROPUESTAS": return "Son demasiadas de una vez (máximo 200 por lote).";

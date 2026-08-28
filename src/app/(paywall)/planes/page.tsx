@@ -77,10 +77,10 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
   } else if (sp.tarjeta === "ok") {
     aviso = "Tu tarjeta quedó registrada. Elige un plan para activarlo.";
   } else if (cuota.suscripcionEstado === "morosa") aviso = "Tu suscripción está morosa — regulariza el pago para reactivar la emisión.";
-  else if (cuota.suscripcionEstado === "pausada") aviso = "Tu suscripción está pausada — reactívala para seguir emitiendo boletas.";
+  else if (cuota.suscripcionEstado === "pausada") aviso = "Tu suscripción está pausada — reactívala para seguir emitiendo.";
   else if (trial && trial.activo && trial.inicio) aviso = `Período de prueba activo — ${trial.diasRestantes} ${trial.diasRestantes === 1 ? "día restante" : "días restantes"} · ${trial.boletasUsadas} de ${trial.boletasMax} boletas usadas`;
   else if (trial && trial.activo && !trial.inicio) aviso = `Prueba gratis: tu primera emisión masiva activa ${trial.diasRestantes} días o ${trial.boletasMax} boletas, lo que ocurra primero.`;
-  else if (trial && !trial.activo) aviso = "Tu período de prueba terminó — contrata un plan para seguir emitiendo boletas.";
+  else if (trial && !trial.activo) aviso = "Tu período de prueba terminó — contrata un plan para seguir emitiendo.";
 
   // El trial (disponible o corriendo) también da acceso al escritorio: quien está
   // probando no debe quedar atrapado en el paywall.
@@ -96,7 +96,7 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: RED }}>Inversión en gestión</div>
           <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.03em", marginTop: 6 }}>Elige tu plan</h1>
           <p style={{ fontSize: 14, color: "rgba(255,255,255,.55)", marginTop: 8, maxWidth: 560, margin: "8px auto 0" }}>
-            Tarifa plana en UF — la cuota cuenta solo lo masivo, las boletas únicas son ilimitadas. Cobrado en pesos al valor del día (UF hoy: {fmtClp(uf)}).
+            Tarifa plana en UF — la cuota cuenta solo lo masivo (boletas y facturas juntas); las únicas son ilimitadas. Cobrado en pesos al valor del día (UF hoy: {fmtClp(uf)}).
           </p>
         </div>
 
@@ -149,13 +149,14 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
                 </div>
 
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.1)" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{fmtNum(plan.cuota_masivas)} boletas masivas</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{fmtNum(plan.cuota_masivas)} documentos masivos</div>
+                  <div style={{ marginTop: 3, fontSize: 12.5, color: "rgba(255,255,255,.5)" }}>boletas y facturas comparten esta cuota</div>
                   <div style={{ marginTop: 5, fontSize: 14, fontWeight: 600, color: RED }}>≈ {horas} horas de digitación ahorradas al mes</div>
-                  <div style={{ marginTop: 2, fontSize: 13, color: "rgba(255,255,255,.45)" }}>~{fmtNum(porDia)} por día hábil · {fmtClp(porBoleta)} por boleta</div>
+                  <div style={{ marginTop: 2, fontSize: 13, color: "rgba(255,255,255,.45)" }}>~{fmtNum(porDia)} por día hábil · {fmtClp(porBoleta)} por documento</div>
                 </div>
 
                 <ul style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 9, flex: 1, listStyle: "none", padding: 0 }}>
-                  <Feat t="Boletas manuales ilimitadas" />
+                  <Feat t="Boletas y facturas únicas ilimitadas" />
                   <Feat t={`${plan.empresas_incluidas} ${plan.empresas_incluidas === 1 ? "empresa incluida" : "empresas incluidas"}`} />
                   <Feat t={`${plan.personas_incluidas} ${plan.personas_incluidas === 1 ? "persona incluida" : "personas incluidas"}`} />
                   {plan.telegram_comprobantes > 0 ? (
@@ -165,7 +166,12 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
                   )}
                   {plan.equipo && <Feat t="Equipo habilitado" />}
                   {plan.multiempresa && <Feat t="Multiempresa con add-ons" />}
-                  <Feat t={`Extra: +${fmtNum(plan.refill_boletas)} boletas por ${fmtClp(plan.refill_clp_neto * 1.19)}`} />
+                  {plan.multiempresa && (
+                    <li style={{ marginTop: -3, marginLeft: 26, fontSize: 12, lineHeight: 1.45, color: "rgba(255,255,255,.45)" }}>
+                      Para emitir por cada empresa, tu RUT tiene que estar autorizado en el SII en esa empresa. Ese permiso se da en el sitio del SII.
+                    </li>
+                  )}
+                  <Feat t={`Extra: +${fmtNum(plan.refill_boletas)} documentos por ${fmtClp(plan.refill_clp_neto * 1.19)}`} />
                   {featuresDe(plan.features)
                     .filter((f) => !/boleta|empresa|persona|manual|telegram|refill|equipo|\bextra\b/i.test(f))
                     .map((f) => (
