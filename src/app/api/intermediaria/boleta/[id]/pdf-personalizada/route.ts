@@ -4,6 +4,7 @@ import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { extraerTimbrePng } from "@/lib/pdf/timbre-extract";
 import { generarBoletaPersonalizada } from "@/lib/pdf/boleta-personalizada";
 import { generarFacturaPersonalizada } from "@/lib/pdf/factura-personalizada";
+import { leerDatosOficialesDte, type DatosOficialesDte } from "@/lib/pdf/datos-oficiales-dte";
 
 /**
  * Boleta PERSONALIZADA a pedido (no se almacena): datos de la boleta + timbre
@@ -115,11 +116,32 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // el tipo tributario equivocado en la cara del documento.
   const esFactura = boleta.tipo_dte === 33 || boleta.tipo_dte === 34;
   if (esFactura) {
+    // REGLA DEL FUNDADOR: la cara personalizada se genera con la información
+    // del documento ORIGINAL, nada inventado. Se lee el mismo PDF oficial del
+    // que ya salió el timbre. COTEJO: si el folio o el total impresos no
+    // calzan con lo que la app tiene registrado, el PDF leído NO es este
+    // documento (o el parseo falló) y se descarta entero — mejor mostrar los
+    // datos de la app que mezclar dos documentos distintos.
+    let oficialDte: DatosOficialesDte | null = null;
+    try {
+      const leido = await leerDatosOficialesDte(oficial);
+      const folioOk = leido.folio == null || leido.folio === boleta.folio;
+      const totalOk = leido.montoTotal == null || Math.abs(leido.montoTotal - boleta.monto_total) <= 1;
+      if (folioOk && totalOk) oficialDte = leido;
+    } catch { /* ilegible: la cara sale con lo que la app tiene */ }
+
+    // El giro y la dirección DEL EMISOR se toman de `empresas` a propósito: el
+    // portal los imprime sin rótulo y envueltos en varias líneas, así que
+    // separarlos del PDF sería adivinar. No es inventar — es el mismo dato del
+    // registro del SII, ya estructurado.
     const pdfFactura = generarFacturaPersonalizada({
       folio: boleta.folio,
       tipoDte: boleta.tipo_dte,
       fechaEmision: boleta.fecha_emision,
-      formaPago: boleta.medio_pago ?? null, // en facturas acá vive Contado/Crédito
+      fechaEmisionTexto: oficialDte?.fechaEmisionTexto ?? null,
+      unidadSii: oficialDte?.unidadSii ?? null,
+      // en facturas el Contado/Crédito vive en medio_pago; el original manda
+      formaPago: oficialDte?.formaPago ?? boleta.medio_pago ?? null,
       emisor: {
         razonSocial: boleta.emisor_razon_social,
         rut: boleta.emisor_rut,
@@ -128,11 +150,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         comuna: boleta.emisor_comuna,
       },
       receptor: {
-        razonSocial: boleta.receptor_razon_social,
-        rut: boleta.receptor_rut,
-        giro: boleta.receptor_giro,
-        direccion: boleta.receptor_direccion,
-        comuna: boleta.receptor_comuna,
+        razonSocial: oficialDte?.receptor.razonSocial ?? boleta.receptor_razon_social,
+        rut: oficialDte?.receptor.rut ?? boleta.receptor_rut,
+        giro: oficialDte?.receptor.giro ?? boleta.receptor_giro,
+        direccion: oficialDte?.receptor.direccion ?? boleta.receptor_direccion,
+        comuna: oficialDte?.receptor.comuna ?? boleta.receptor_comuna,
+        ciudad: oficialDte?.receptor.ciudad ?? null,
       },
       detalles,
       montoNeto: boleta.monto_neto,

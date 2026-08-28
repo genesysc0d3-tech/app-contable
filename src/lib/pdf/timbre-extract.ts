@@ -21,7 +21,11 @@ interface ImagenPdfjs {
 export async function extraerTimbrePng(pdfBytes: Uint8Array): Promise<{ png: Buffer; width: number; height: number } | null> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const doc = await pdfjs.getDocument({
-    data: pdfBytes,
+    // COPIA a propósito: pdf.js se APROPIA del buffer que recibe y lo deja
+    // desprendido (largo 0). Sin la copia, el siguiente que quiera leer el
+    // mismo PDF —p.ej. `datos-oficiales-dte`— recibe cero bytes y falla en
+    // silencio. Leer no puede destruir lo que te pasaron.
+    data: new Uint8Array(pdfBytes),
     disableFontFace: true,
     verbosity: 0,
   }).promise;
