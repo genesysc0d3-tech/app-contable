@@ -24,6 +24,31 @@ describe("validate — checks bloqueantes (errores)", () => {
     expect(r.errors).toHaveLength(0);
   });
 
+  // Caso real: clienta M&E, 2026-08-28. Su planilla dejó de traer columna de
+  // fecha y el detector tomó la de MONTOS como fecha (en Excel una fecha es un
+  // número: 46.242 es el 21-nov-2026, idéntico a un monto de $46.242). Salieron
+  // 66 movimientos con fechas de 2036, 2064 y 2091 y montos de la columna de
+  // comisiones — todo con cara de éxito, listo para aprobar y emitir.
+  it("fechas del futuro lejano (columna de montos leída como fecha) → check_2b", () => {
+    const absurdas = ["2036-11-21", "2064-04-08", "2091-08-25", "2009-07-06"]
+      .map((fecha) => L({ fecha }));
+    const r = validate([...absurdas, L(), L()]);
+    expect(r.ok).toBe(false);
+    expect(hasError(r, "check_2b_fechas_absurdas")).toBe(true);
+  });
+
+  it("una sola fecha rara entre muchas buenas NO bloquea (puede ser un dedazo)", () => {
+    const buenas = Array.from({ length: 20 }, () => L());
+    const r = validate([...buenas, L({ fecha: "2091-08-25" })]);
+    expect(hasError(r, "check_2b_fechas_absurdas")).toBe(false);
+  });
+
+  it("una cartola vieja pero razonable sigue pasando", () => {
+    const anioPasado = String(new Date().getUTCFullYear() - 2);
+    const r = validate([L({ fecha: `${anioPasado}-03-15` }), L({ fecha: `${anioPasado}-04-02` })]);
+    expect(hasError(r, "check_2b_fechas_absurdas")).toBe(false);
+  });
+
   it("sin filas → check_1_min_rows", () => {
     const r = validate([]);
     expect(r.ok).toBe(false);
