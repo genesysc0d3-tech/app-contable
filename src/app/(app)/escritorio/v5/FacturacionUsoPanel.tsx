@@ -146,7 +146,7 @@ export default function FacturacionUsoPanel() {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 850, color: "var(--text)" }}>Sin plan</div>
             <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 1 }}>
-              Contrata un plan para emitir boletas masivas
+              Contrata un plan para emitir en masa
             </div>
           </div>
         </div>
@@ -193,7 +193,7 @@ export default function FacturacionUsoPanel() {
               <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 1 }}>
                 {data.plan
                   ? `UF ${data.plan.ufMensual} / mes · ≈ ${fmtClp(data.plan.clpMensualConIva)} con IVA`
-                  : "Contrata un plan para emitir boletas masivas"}
+                  : "Contrata un plan para emitir en masa"}
               </div>
             </div>
           </div>
