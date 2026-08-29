@@ -10,6 +10,7 @@ import { getUfClp } from "@/lib/sii/uf";
 import { clpConIva, estadoCuota } from "@/lib/pagos/metering";
 import { Check, X, RefreshCw } from "lucide-react";
 import CheckoutButton from "./CheckoutButton";
+import CancelarPlan from "./CancelarPlan";
 import { flowConfigurado } from "@/lib/pagos/flow";
 
 /**
@@ -84,6 +85,17 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
 
   // El trial (disponible o corriendo) también da acceso al escritorio: quien está
   // probando no debe quedar atrapado en el paywall.
+  // El botón de cancelar necesita dos datos que `estadoCuota` no expone y que
+  // no vale la pena meterle, porque la usa media app: hasta cuándo va el
+  // período pagado, y si ya pidió cancelar.
+  const { data: suscripcionViva } = await sb
+    .from("suscripciones")
+    .select("periodo_hasta, cancela_al_terminar")
+    .eq("estado", "activa")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const tienePlan = cuota.suscripcionActiva || Boolean(usuario.empresas?.plan_activo);
   const puedeVolver = tienePlan || Boolean(trial?.activo);
 
@@ -233,16 +245,12 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
         <p style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.4)", marginTop: 24 }}>
           {/*
             Decía "Pagos procesados por Mercado Pago · cancela cuando quieras".
-            Dos cosas falsas en una línea: la pasarela es Flow desde el
-            2026-08-25, y no existe ningún botón para cancelar. No es que
-            falte: la página afirmaba que ya estaba. Mientras no se construya,
-            se dice cómo se cancela de verdad.
+            Dos cosas falsas en una línea: la pasarela era Flow desde el
+            2026-08-25, y no existía ningún botón para cancelar — la página
+            afirmaba que ya estaba. Ahora el botón existe, así que la frase
+            volvió a ser verdad.
           */}
-          Pagos procesados por {porFlow ? "Flow" : "Mercado Pago"} · para cancelar, escríbenos a{" "}
-          <a href="mailto:soporte@massdte.cl" style={{ color: "rgba(255,255,255,.6)", textDecoration: "underline" }}>
-            soporte@massdte.cl
-          </a>
-          .
+          Pagos procesados por {porFlow ? "Flow" : "Mercado Pago"} · cancelas desde acá cuando quieras.
           {puedeVolver && (
             <>
               {" · "}
@@ -250,6 +258,13 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
             </>
           )}
         </p>
+
+        {cuota.suscripcionActiva && (
+          <CancelarPlan
+            cancelada={suscripcionViva?.cancela_al_terminar === true}
+            hasta={suscripcionViva?.periodo_hasta ?? null}
+          />
+        )}
       </div>
     </div>
   );
