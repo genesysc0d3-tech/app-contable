@@ -2484,6 +2484,7 @@ export type Database = {
       }
       suscripciones: {
         Row: {
+          cancela_al_terminar: boolean
           clp_ultimo_cobro: number | null
           created_at: string
           cuenta_id: string | null
@@ -2498,6 +2499,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancela_al_terminar?: boolean
           clp_ultimo_cobro?: number | null
           created_at?: string
           cuenta_id?: string | null
@@ -2512,6 +2514,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cancela_al_terminar?: boolean
           clp_ultimo_cobro?: number | null
           created_at?: string
           cuenta_id?: string | null

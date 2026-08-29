@@ -89,7 +89,7 @@ export async function GET(request: Request) {
     if (flowConfigurado()) {
       const { data: porRenovar } = await sb
         .from("suscripciones")
-        .select("id, cuenta_id, empresa_id, plan_codigo, plan_siguiente, estado")
+        .select("id, cuenta_id, empresa_id, plan_codigo, plan_siguiente, estado, cancela_al_terminar")
         .eq("proveedor", "flow")
         .in("estado", ["activa", "morosa"])
         .lte("periodo_hasta", hoy);
@@ -100,6 +100,33 @@ export async function GET(request: Request) {
         const porCodigo = new Map((planes ?? []).map((p) => [p.codigo, p]));
 
         for (const s of porRenovar ?? []) {
+          // El cliente pidió cancelar: se le respetó el mes que ya había
+          // pagado y hoy es el día de cierre. NO se cobra. Esto va ANTES de
+          // cualquier cálculo de monto — cobrar y después cerrar sería
+          // exactamente lo que la gente teme de las suscripciones.
+          if (s.cancela_al_terminar) {
+            await sb
+              .from("suscripciones")
+              .update({ estado: "cancelada", plan_siguiente: null, updated_at: new Date().toISOString() })
+              .eq("id", s.id);
+            if (s.cuenta_id) {
+              await syncPlanActivo(sb, { cuentaId: s.cuenta_id, empresaId: s.empresa_id }, s.plan_codigo, false)
+                .catch(() => {});
+              await recordOpsEvent({
+                sb,
+                severity: "info",
+                source: "pagos/cron",
+                eventName: "suscripcion_cerrada_por_cancelacion",
+                summary: "Terminó el período pagado de una suscripción cancelada: se cierra sin cobrar",
+                cuentaId: s.cuenta_id,
+                resourceType: "suscripcion",
+                resourceId: s.id,
+                metadata: { plan_codigo: s.plan_codigo },
+              }).catch(() => {});
+            }
+            continue;
+          }
+
           // Downgrade programado (modelo Anthropic): el plan barato entra
           // recién acá, en la renovación — el caro ya estaba pagado entero.
           const codigoACobrar = s.plan_siguiente ?? s.plan_codigo;
