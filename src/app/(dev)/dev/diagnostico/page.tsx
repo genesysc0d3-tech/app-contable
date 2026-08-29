@@ -32,6 +32,14 @@ function Row({ label, value, ok }: { label: string; value: string; ok?: boolean 
   );
 }
 
+/** Deja ver el dominio y las dos primeras letras: alcanza para reconocerlo, no para usarlo. */
+function maskEmail(email: string | null | undefined) {
+  if (!email) return "sin email de auth";
+  const [nombre, dominio] = email.split("@");
+  if (!nombre || !dominio) return "[email]";
+  return `${nombre.slice(0, 2)}***@${dominio}`;
+}
+
 function boolText(value: boolean | null) {
   if (value === null) return "sin dato";
   return value ? "true" : "false";
@@ -214,8 +222,15 @@ export default async function DevDiagnosticoPage() {
             {data.ok ? "Acceso dev OK" : "El servidor no está aceptando esta sesión como operador dev"}
           </div>
 
-          <Row label="Auth email" value={data.authEmail ?? "sin email de auth"} ok={data.authEmail?.toLowerCase() === data.expectedEmail} />
-          <Row label="Email esperado" value={data.expectedEmail} ok />
+          {/*
+            Enmascarados a propósito. `expectedEmail` es la ÚNICA dirección que
+            abre god-mode sobre todas las cuentas de clientes, y esta pantalla
+            se ve en capturas y en pantalla compartida — publicarla es entregar
+            el blanco. Lo accionable no es leer el correo, es saber si calza:
+            eso lo dice la fila "Email calza" de más abajo.
+          */}
+          <Row label="Auth email" value={maskEmail(data.authEmail)} ok={data.authEmail?.toLowerCase() === data.expectedEmail} />
+          <Row label="Email esperado" value={maskEmail(data.expectedEmail)} ok />
           <Row label="Auth user id" value={data.authUserId ?? "sin user id"} />
           <Row label="Backend service" value={data.backendConfigured ? "configurado" : "faltante"} ok={data.backendConfigured} />
           <Row label="Fila usuarios" value={data.usuarioEncontrado ? "encontrada" : "no encontrada para este auth user id"} ok={data.usuarioEncontrado} />

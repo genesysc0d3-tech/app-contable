@@ -119,8 +119,16 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
   // El paso viene de la señal misma (account-360), no de su título: antes esta
   // caja repetía el síntoma —«Sin suscripción asociada» no es un paso— y
   // fallaba justo cuando había problemas, que es cuando se lee.
-  const nextStep = problems.length > 0
-    ? problems[0].paso ?? problems[0].texto
+  //
+  // Y el candado gana antes que cualquier advertencia: mientras hay folios en
+  // juego, "no toques nada" manda sobre "esta cuenta no registra pagos". La
+  // primera versión de esto ordenaba solo por código y dejaba el candado
+  // último, o sea degradaba justo la advertencia irreversible.
+  const urgente = problems.find((item) => item.codigo === "error")
+    ?? (lock ? problems.find((item) => item.texto.startsWith("Emisión real en curso")) : undefined)
+    ?? problems[0];
+  const nextStep = urgente
+    ? urgente.paso ?? urgente.texto
     : "Entrar en modo cliente y confirmar que la cuenta ve funciones, cupos y empresas esperadas.";
 
   return (
@@ -633,7 +641,7 @@ export default async function DevCuentaDetallePage({
             tono="warning"
             que="Fija a mano el plan y si sus funciones están liberadas, en la cuenta y en todas sus empresas de una vez. Si lo subes a un plan multiempresa, las empresas que un downgrade había dormido REVIVEN y se borra la elección de empresa operativa del cliente."
             cuando="La pasarela falló, hay que probar un tier, o una cuenta quedó bloqueada por un desfase nuestro."
-            ojo="Si la cuenta tiene suscripción activa, su plan manda desde ya —no desde el próximo cobro— y este control no hace nada. En ese caso aparece deshabilitado."
+            ojo="Si la cuenta tiene suscripción activa, el CÓDIGO de plan lo manda ella desde ya —no desde el próximo cobro— y lo que elijas acá lo pisa. Igual sirve tocarlo: sincroniza las empresas con el plan vigente y revive las que un downgrade había dormido."
           />
           <PlanToggle
             cuentaId={cuentaId}

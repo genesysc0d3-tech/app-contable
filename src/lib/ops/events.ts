@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
-import { errorMetadata, sanitizeOpsMetadata } from "@/lib/ops/sanitize";
+import { errorMetadata, sanitizeOpsMetadata, sanitizeString } from "@/lib/ops/sanitize";
 
 export type OpsSeverity = "info" | "warn" | "error" | "critical";
 export type OpsSource =
@@ -66,7 +66,12 @@ export async function recordOpsEvent(input: OpsEventInput) {
       usuario_id: input.usuarioId ?? null,
       resource_type: input.resourceType ? cleanText(input.resourceType, 80) : null,
       resource_id: input.resourceId ? cleanText(input.resourceId, 120) : null,
-      summary: cleanText(input.summary),
+      // El summary es LO QUE EL PANEL IMPRIME SIEMPRE, y además sale al webhook
+      // y a Telegram. Pasaba solo por cleanText —recortar— mientras la metadata
+      // sí se saneaba, así que el enmascarado de correos y RUTs se saltaba
+      // entero por acá. Y hay emisores que meten texto del CLIENTE adentro
+      // (el status_message que manda la extensión, raspado del portal del SII).
+      summary: sanitizeString(cleanText(input.summary)),
       metadata: metadata as Json,
     });
     if (error) console.warn("[ops-events] insert fallo:", error.message);

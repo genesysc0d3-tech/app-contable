@@ -83,10 +83,33 @@ describe("vigilante de respaldos", () => {
   });
 
   describe("nunca dice DÓNDE vive el respaldo", () => {
+    /**
+     * Dos redes, porque una sola no alcanza:
+     *
+     * 1) La lista negra de palabras. Útil, pero es adivinar de antemano: no
+     *    cubre el nombre real del bucket, ni un host propio, ni "Mac mini".
+     * 2) La FORMA del hallazgo. Esta es la que de verdad protege: la metadata
+     *    solo puede tener estas tres llaves, y el resumen solo puede empezar
+     *    con una de estas tres frases. Cualquier dato nuevo —venga como venga,
+     *    se llame como se llame— rompe el test.
+     */
+    const LLAVES_PERMITIDAS = ["horas", "bytes", "modificado"];
+    const INICIOS_PERMITIDOS = [/^El último respaldo/, /^No hay NINGÚN respaldo/, /^No se pudo verificar/];
+
     const noDelata = (hallazgos: Awaited<ReturnType<typeof revisarRespaldos>>) => {
       const texto = JSON.stringify(hallazgos).toLowerCase();
       for (const palabra of PROHIBIDO) {
         expect({ palabra, texto }).toStrictEqual({ palabra, texto: texto.replace(palabra, "") });
+      }
+      for (const f of hallazgos) {
+        expect(Object.keys(f.metadata ?? {}).sort()).toStrictEqual(
+          LLAVES_PERMITIDAS.filter((k) => k in (f.metadata ?? {})).sort(),
+        );
+        for (const llave of Object.keys(f.metadata ?? {})) {
+          expect({ llave, permitida: LLAVES_PERMITIDAS.includes(llave) }).toStrictEqual({ llave, permitida: true });
+        }
+        expect({ resumen: f.summary, empiezaBien: INICIOS_PERMITIDOS.some((re) => re.test(f.summary)) })
+          .toStrictEqual({ resumen: f.summary, empiezaBien: true });
       }
     };
 
