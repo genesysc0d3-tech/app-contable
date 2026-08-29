@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "../database.types";
-import { sesionVencidaPorEdad } from "@/lib/auth/edad-sesion";
+import { debeRefrescarUltimoAcceso, sesionVencidaPorInactividad } from "@/lib/auth/inactividad-sesion";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -41,19 +41,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Tope de edad de la sesión: acá se CIERRA de verdad (signOut revoca del lado
-  // del servidor), no solo se redirige. Importa para la extensión: su cookie
-  // vive en este mismo Chrome, así que al revocar la sesión la bóveda del SII
-  // deja de poder abrirse también allá. El guard de las rutas es el cinturón;
-  // esto es el tirante. Ver lib/auth/edad-sesion.ts.
+  // Cierre por inactividad: acá se CIERRA de verdad (signOut revoca del lado del
+  // servidor), no solo se redirige. Importa para la extensión: su cookie vive en
+  // este mismo Chrome, así que al revocar la sesión la bóveda del SII deja de
+  // poder abrirse también allá. El guard de las rutas es el cinturón; esto es el
+  // tirante. Ver lib/auth/inactividad-sesion.ts.
   if (user) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (sesionVencidaPorEdad(session?.access_token)) {
-      try { await supabase.auth.signOut(); } catch { /* igual se manda a login */ }
-      const url = request.nextUrl.clone();
-      url.pathname = "/auth/login";
-      url.searchParams.set("motivo", "sesion_vencida");
-      return NextResponse.redirect(url);
+    const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (sbUrl && sbKey) {
+      const { createClient: createServiceClient } = await import("@supabase/supabase-js");
+      const sb = createServiceClient(sbUrl, sbKey);
+      const { data: visto } = await sb.from("usuarios").select("ultimo_acceso").eq("id", user.id).maybeSingle();
+      if (sesionVencidaPorInactividad(visto?.ultimo_acceso)) {
+        try { await supabase.auth.signOut(); } catch { /* igual se manda a login */ }
+        const url = request.nextUrl.clone();
+        url.pathname = "/auth/login";
+        url.searchParams.set("motivo", "sesion_vencida");
+        return NextResponse.redirect(url);
+      }
+      if (debeRefrescarUltimoAcceso(visto?.ultimo_acceso)) {
+        await sb.from("usuarios").update({ ultimo_acceso: new Date().toISOString() }).eq("id", user.id);
+      }
     }
   }
 
