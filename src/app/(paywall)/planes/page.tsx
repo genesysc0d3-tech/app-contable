@@ -96,7 +96,7 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: RED }}>Inversión en gestión</div>
           <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.03em", marginTop: 6 }}>Elige tu plan</h1>
           <p style={{ fontSize: 14, color: "rgba(255,255,255,.55)", marginTop: 8, maxWidth: 560, margin: "8px auto 0" }}>
-            Tarifa plana en UF — la cuota cuenta solo lo masivo (boletas y facturas juntas); las únicas son ilimitadas. Cobrado en pesos al valor del día (UF hoy: {fmtClp(uf)}).
+            El número del plan son las boletas y facturas que salen de tus cartolas. Las que emites de a una no descuentan: son ilimitadas. Cobrado en pesos al valor del día (UF hoy: {fmtClp(uf)}).
           </p>
         </div>
 
@@ -115,7 +115,6 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
             const iva = Math.round(neto * 0.19);
             const total = neto + iva;
             const horas = Math.round((plan.cuota_masivas * 2.5) / 60);
-            const porBoleta = plan.cuota_masivas > 0 ? Math.round(neto / plan.cuota_masivas) : 0;
             const porDia = Math.round(plan.cuota_masivas / 22);
 
             return (
@@ -149,14 +148,14 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
                 </div>
 
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.1)" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{fmtNum(plan.cuota_masivas)} documentos masivos</div>
-                  <div style={{ marginTop: 3, fontSize: 12.5, color: "rgba(255,255,255,.5)" }}>boletas y facturas comparten esta cuota</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{fmtNum(plan.cuota_masivas)} boletas o facturas</div>
+                  <div style={{ marginTop: 3, fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>salidas de tus cartolas, al mes</div>
                   <div style={{ marginTop: 5, fontSize: 14, fontWeight: 600, color: RED }}>≈ {horas} horas de digitación ahorradas al mes</div>
-                  <div style={{ marginTop: 2, fontSize: 13, color: "rgba(255,255,255,.45)" }}>~{fmtNum(porDia)} por día hábil · {fmtClp(porBoleta)} por documento</div>
+                  <div style={{ marginTop: 2, fontSize: 13, color: "rgba(255,255,255,.45)" }}>~{fmtNum(porDia)} por día hábil · 2,5 minutos menos de tecleo por cada una</div>
                 </div>
 
                 <ul style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 9, flex: 1, listStyle: "none", padding: 0 }}>
-                  <Feat t="Boletas y facturas únicas ilimitadas" />
+                  <Feat t="Emitir de a una: ilimitado, no descuenta" />
                   <Feat t={`${plan.empresas_incluidas} ${plan.empresas_incluidas === 1 ? "empresa incluida" : "empresas incluidas"}`} />
                   <Feat t={`${plan.personas_incluidas} ${plan.personas_incluidas === 1 ? "persona incluida" : "personas incluidas"}`} />
                   {plan.telegram_comprobantes > 0 ? (
@@ -171,7 +170,7 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
                       Para emitir por cada empresa, tu RUT tiene que estar autorizado en el SII en esa empresa. Ese permiso se da en el sitio del SII.
                     </li>
                   )}
-                  <Feat t={`Extra: +${fmtNum(plan.refill_boletas)} documentos por ${fmtClp(plan.refill_clp_neto * 1.19)}`} />
+                  <Feat t={`Extra: +${fmtNum(plan.refill_boletas)} por ${fmtClp(plan.refill_clp_neto * 1.19)}`} />
                   {featuresDe(plan.features)
                     .filter((f) => !/boleta|empresa|persona|manual|telegram|refill|equipo|\bextra\b/i.test(f))
                     .map((f) => (
