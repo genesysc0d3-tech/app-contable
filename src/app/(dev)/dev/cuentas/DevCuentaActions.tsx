@@ -139,9 +139,16 @@ export function PlanToggle({
   planCodigo: string | null;
   planActivo: boolean;
   /**
-   * Si hay suscripción viva, `entitlements` resuelve el plan desde ella en
-   * CADA lectura: escribir acá no tiene ningún efecto, ni siquiera hasta el
-   * próximo webhook. Antes el botón decía "Guardado ✓" igual.
+   * Con suscripción viva, `entitlements` resuelve el CÓDIGO de plan desde ella
+   * en cada lectura, así que cambiarlo acá no pega. Pero el botón hace dos
+   * cosas más que nadie recalcula: sincroniza `empresas.plan_activo` y revive
+   * las empresas que un downgrade había dormido.
+   *
+   * Por eso NO se esconde. La primera versión de esto lo escondía, y con eso
+   * reconstruía el incidente del 2026-08-28 —una cuenta Business ACTIVA con
+   * una empresa marcada "bloqueada" porque su flag nunca se encendió— que se
+   * arregló justamente dándole al operador este botón. Esconderlo dejaba el
+   * problema a la vista y la solución fuera de alcance.
    */
   suscripcionActiva: boolean;
 }) {
@@ -151,24 +158,23 @@ export function PlanToggle({
   const [estado, setEstado] = useState<"idle" | "loading" | "error" | "ok">("idle");
 
   async function guardar() {
-    if (estado === "loading" || suscripcionActiva) return;
+    if (estado === "loading") return;
     setEstado("loading");
     const res = await setCuentaPlan(cuentaId, plan, activo);
     setEstado("error" in res ? "error" : "ok");
     if (!("error" in res)) router.refresh();
   }
 
-  if (suscripcionActiva) {
-    return (
-      <div style={{ fontSize: 12, color: C.amber, fontWeight: 700, lineHeight: 1.5, maxWidth: 620 }}>
-        Esta cuenta tiene una suscripción activa, así que su plan manda desde ya y este control no haría nada.
-        Para cambiarlo, primero hay que cancelar la suscripción en la pasarela.
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {suscripcionActiva && (
+        <span style={{ fontSize: 12, color: C.amber, fontWeight: 700, lineHeight: 1.5, maxWidth: 640 }}>
+          Ojo: esta cuenta tiene suscripción activa, así que el plan que elijas acá lo pisa la pasarela en
+          la próxima lectura. Lo que SÍ queda: sincroniza las empresas con el plan vigente y revive las que
+          un downgrade había dormido. Para eso es que sirve tocarlo con suscripción viva.
+        </span>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <select
         value={plan}
         onChange={(e) => { setPlan(e.target.value); setEstado("idle"); }}
@@ -198,6 +204,7 @@ export function PlanToggle({
       >
         {estado === "loading" ? "Guardando..." : estado === "ok" ? "Guardado ✓" : estado === "error" ? "Error" : `Guardar el plan de «${cuentaNombre}»`}
       </button>
+      </div>
     </div>
   );
 }
