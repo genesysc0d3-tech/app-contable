@@ -21,6 +21,17 @@ const haceHoras = (h: number) => ({
   bytes: 320_348,
 });
 
+/**
+ * Lo que el vigilante NUNCA puede escupir al panel.
+ *
+ * El panel /dev se ve en capturas de pantalla, y el respaldo es lo último que
+ * queda si todo lo demás se cae: saber que anda no exige saber dónde está.
+ * Hasta el 2026-08-30 el resumen imprimía la ruta completa del archivo y la
+ * metadata llevaba el prefijo del bucket — se sacó, y esta lista existe para
+ * que no vuelvan.
+ */
+const PROHIBIDO = ["respaldos-db", ".sql.gz", "massdte-2026", "prefijo", "bucket", "r2", "cloudflare"];
+
 describe("vigilante de respaldos", () => {
   beforeEach(() => {
     mocks.configurado.mockReturnValue(true);
@@ -69,5 +80,46 @@ describe("vigilante de respaldos", () => {
   it("sin R2 configurado no molesta (entornos locales)", async () => {
     mocks.configurado.mockReturnValue(false);
     expect(await revisarRespaldos()).toEqual([]);
+  });
+
+  describe("nunca dice DÓNDE vive el respaldo", () => {
+    const noDelata = (hallazgos: Awaited<ReturnType<typeof revisarRespaldos>>) => {
+      const texto = JSON.stringify(hallazgos).toLowerCase();
+      for (const palabra of PROHIBIDO) {
+        expect({ palabra, texto }).toStrictEqual({ palabra, texto: texto.replace(palabra, "") });
+      }
+    };
+
+    it("ni cuando está atrasado", async () => {
+      mocks.masNuevo.mockResolvedValue(haceHoras(30));
+      noDelata(await revisarRespaldos());
+    });
+
+    it("ni cuando se saltó un día entero", async () => {
+      mocks.masNuevo.mockResolvedValue(haceHoras(50));
+      noDelata(await revisarRespaldos());
+    });
+
+    it("ni cuando no hay ningún respaldo", async () => {
+      mocks.masNuevo.mockResolvedValue(null);
+      noDelata(await revisarRespaldos());
+    });
+
+    // El caso real que cazó este guardia cuando se escribió: el mensaje decía
+    // "No se pudo consultar R2…". Y un error de red trae peor: el host entero.
+    it("ni cuando el almacenamiento no responde", async () => {
+      mocks.masNuevo.mockRejectedValue(new Error("timeout"));
+      noDelata(await revisarRespaldos());
+    });
+
+    it("ni aunque el error venga con la URL firmada adentro", async () => {
+      mocks.masNuevo.mockRejectedValue(
+        new Error("connect ETIMEDOUT https://abc123.r2.cloudflarestorage.com/massdte/respaldos-db/x.sql.gz?X-Amz-Signature=deadbeef"),
+      );
+      const hallazgos = await revisarRespaldos();
+      noDelata(hallazgos);
+      // Y sigue diciendo algo útil, no una cáscara vacía.
+      expect(hallazgos[0].summary).toContain("No se pudo verificar");
+    });
   });
 });
