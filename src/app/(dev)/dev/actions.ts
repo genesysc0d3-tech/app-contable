@@ -576,7 +576,8 @@ export async function setCuentaTrialCortesia(
  * cero pipeline en vuelo, sin suscripción viva en el origen (se cancela antes,
  * a mano), Telegram de la empresa desconectado en el acto, auditoría en ambas
  * cuentas. La resolución del login huérfano del origen es un paso HUMANO aparte
- * (runbook): acá no se toca ningún usuario.
+ * (docs/runbook-login-huerfano.md): acá no se toca ningún usuario. El panel
+ * ahora avisa solo cuando queda uno colgado, con una señal en rojo.
  * Verificación de identidad previa (runbook, en el panel): unificación = la
  * persona responde desde ambos correos; recuperación = $1 con código desde la
  * cuenta bancaria de la empresa. Jamás pedir/almacenar cédulas.
@@ -698,7 +699,7 @@ export async function migrarEmpresaACuenta(
   revalidatePath(`/dev/cuentas/${origenId}`);
   return {
     ok: true,
-    resumen: `«${empresa.razon_social}» migrada a «${destino.nombre}». Telegram desconectados: ${tgCortados ?? 0}. Pendiente humano: resolver el login del origen (runbook) y avisar al cliente.`,
+    resumen: `«${empresa.razon_social}» migrada a «${destino.nombre}». Telegram desconectados: ${tgCortados ?? 0}. Pendiente humano: cerrar el login del origen (ver docs/runbook-login-huerfano.md; el panel lo va a marcar en rojo) y avisar al cliente.`,
   };
 }
 

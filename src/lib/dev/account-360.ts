@@ -478,6 +478,30 @@ export async function obtenerDevCuentaDetalle(cuentaId: string): Promise<DevAcco
     if (usuariosRes.error) throw new Error(usuariosRes.error.message);
     const usuarios = new Map(((usuariosRes.data ?? []) as Usuario[]).map((usuario) => [usuario.id, usuario] as const));
 
+    /**
+     * HUÉRFANOS: logins que apuntan a una empresa de esta cuenta pero NO están
+     * en su equipo.
+     *
+     * La consulta de arriba parte de `cuenta_usuarios`, así que por
+     * construcción nunca los ve — y `personasActivas` tampoco los cuenta. Eso
+     * los vuelve invisibles justo en la pantalla donde uno los buscaría.
+     *
+     * Y no son cosméticos: TODA la RLS cuelga de `usuarios.empresa_id`, con
+     * policies `FOR ALL`. Un huérfano lee, escribe y borra los datos de esta
+     * cuenta con su propio token, aunque la app lo mande a /bloqueado.
+     *
+     * Caso real (2026-08-30): tras migrar una empresa, el correo viejo de la
+     * clienta quedó así y alcanzaba 375 movimientos y 42 cartolas de un tenant
+     * ajeno. Se descubrió por una auditoría, no por el panel. Esta señal existe
+     * para que la próxima vez lo diga la pantalla.
+     */
+    const huerfanosRes = empresaIds.length
+      ? await gate.sb.from("usuarios").select("id, email, vetado").in("empresa_id", empresaIds)
+      : { data: [], error: null };
+    if (huerfanosRes.error) throw new Error(huerfanosRes.error.message);
+    const huerfanos = ((huerfanosRes.data ?? []) as { id: string; email: string | null; vetado: boolean }[])
+      .filter((u) => !usuarios.has(u.id));
+
     const [boletasTotalRes, boletasCartolaRes, propuestasPendientesRes, propuestasListasRes, locksRes, jobsRes, foliosRes, auditRes] = await Promise.all([
       empresaIds.length
         ? gate.sb
@@ -593,6 +617,13 @@ export async function obtenerDevCuentaDetalle(cuentaId: string): Promise<DevAcco
             paso: "Hay folios en juego ahora mismo. No toques nada de esta cuenta hasta que cierre, falle o expire el candado.",
           }
         : { codigo: "ok", texto: "Sin candado de emisión activo" },
+      huerfanos.length === 0
+        ? { codigo: "ok", texto: "Sin logins colgados de esta cuenta" }
+        : {
+            codigo: "error",
+            texto: `${huerfanos.length} login${huerfanos.length === 1 ? "" : "s"} ve${huerfanos.length === 1 ? "" : "n"} datos de esta cuenta sin estar en el equipo`,
+            paso: `${huerfanos.map((u) => maskEmail(u.email)).join(", ")} apunta${huerfanos.length === 1 ? "" : "n"} a una empresa de acá pero no figura${huerfanos.length === 1 ? "" : "n"} entre las personas. Con su propio acceso alcanza${huerfanos.length === 1 ? "" : "n"} los datos igual, aunque la app lo${huerfanos.length === 1 ? "" : "s"} bloquee. Suele quedar así después de mover una empresa: hay que cerrarle el acceso.`,
+          },
     ];
 
     return {
