@@ -1,57 +1,22 @@
+/**
+ * Lista de cuentas pagadoras: la puerta de entrada del panel.
+ *
+ * El único control global del panel —el trial público— tiene bloque propio y
+ * explicado, ARRIBA de la lista: antes vivía suelto en la cabecera, al lado de
+ * un link, y el primer intento de arreglarlo lo mandó abajo de una lista sin
+ * paginación. Explicado no puede significar escondido: prenderlo o apagarlo
+ * cambia la oferta para todas las cuentas y corta a quien esté en su prueba.
+ *
+ * Los cinco números de arriba SON los filtros. Antes eran dos filas con la
+ * misma información y empujaban los resultados fuera de la pantalla.
+ */
 import { notFound, redirect } from "next/navigation";
 import { listarDevCuentas, type DevCuentaRow } from "@/lib/dev/account-360";
 import { DevLinkButton, VerComoClienteButton, TrialGlobalToggle } from "./DevCuentaActions";
 import { obtenerTrialGlobal } from "../actions";
-
-const C = {
-  bg: "#0f1014",
-  surface: "#16181d",
-  border: "rgba(255,255,255,.07)",
-  text: "#e8eaf0",
-  text2: "#9aa0ad",
-  text3: "#636878",
-  accent: "#E8553E",
-  amber: "#f59e0b",
-  green: "#22c55e",
-  muted: "rgba(255,255,255,.045)",
-} as const;
+import { C, DevNav, Explica, Pill, Section, fmtClp, fmtFecha, toneColor, type Tone } from "../ui";
 
 type FiltroEstado = "todas" | "alertas" | "bloqueadas" | "sin_pago" | "sobre_cupo";
-type RowTone = "ok" | "warn" | "bad";
-
-function fmtClp(value: number | null) {
-  if (value === null) return "sin monto";
-  return `$${Math.round(value).toLocaleString("es-CL")}`;
-}
-
-function fmtDate(value: string) {
-  return new Intl.DateTimeFormat("es-CL", {
-    dateStyle: "medium",
-    timeZone: "America/Santiago",
-  }).format(new Date(value));
-}
-
-function Pill({ children, tone = "muted" }: { children: string; tone?: "muted" | "ok" | "warn" | "bad" }) {
-  const color = tone === "ok" ? C.green : tone === "warn" ? C.amber : tone === "bad" ? C.accent : C.text2;
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${tone === "muted" ? C.border : `${color}55`}`,
-        background: tone === "muted" ? C.muted : `${color}14`,
-        color,
-        borderRadius: 999,
-        padding: "3px 7px",
-        fontSize: 10,
-        fontWeight: 700,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
 
 function normalizarFiltro(value: string | string[] | undefined): FiltroEstado {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -70,22 +35,16 @@ function conAlerta(cuenta: DevCuentaRow) {
   return cuenta.alertas.length > 0 || !cuenta.planActivo || sinPago(cuenta) || sobreCupo(cuenta);
 }
 
-function tonoCuenta(cuenta: DevCuentaRow): RowTone {
-  if (!cuenta.planActivo || sobreCupo(cuenta)) return "bad";
-  if (sinPago(cuenta) || cuenta.alertas.length > 0) return "warn";
+function tonoCuenta(cuenta: DevCuentaRow): Tone {
+  if (!cuenta.planActivo || sobreCupo(cuenta)) return "error";
+  if (sinPago(cuenta) || cuenta.alertas.length > 0) return "warning";
   return "ok";
 }
 
-function etiquetaTono(tone: RowTone) {
-  if (tone === "bad") return "accion";
-  if (tone === "warn") return "revisar";
+function etiquetaTono(tone: Tone) {
+  if (tone === "error") return "actuar";
+  if (tone === "warning") return "revisar";
   return "ok";
-}
-
-function colorTono(tone: RowTone) {
-  if (tone === "bad") return C.accent;
-  if (tone === "warn") return C.amber;
-  return C.green;
 }
 
 function filtrarCuentas(cuentas: DevCuentaRow[], filtro: FiltroEstado) {
@@ -104,74 +63,67 @@ function filtroHref(filtro: FiltroEstado, query: string) {
   return qs ? `/dev/cuentas?${qs}` : "/dev/cuentas";
 }
 
-function FilterLink({
+/**
+ * Tarjeta-filtro. Antes eran dos filas apiladas —cinco tarjetas con los
+ * números y cinco pastillas con los mismos números— que decían exactamente lo
+ * mismo y se comían el alto donde deberían verse las cuentas. Ahora la tarjeta
+ * ES el filtro.
+ */
+function FiltroCard({
   filtro,
   activo,
   query,
-  count,
-  children,
+  label,
+  value,
+  sub,
+  tone = "muted",
 }: {
   filtro: FiltroEstado;
   activo: boolean;
   query: string;
-  count: number;
-  children: string;
+  label: string;
+  value: number;
+  sub: string;
+  tone?: Tone;
 }) {
+  const color = toneColor(tone);
   return (
     <a
       href={filtroHref(filtro, query)}
+      // El filtro elegido se marca en blanco, no en rojo: en este panel el
+      // rojo significa "hay un problema", y un filtro que tú elegiste no es un
+      // problema. Antes «Todas» seleccionado se veía igual que una alerta.
       style={{
-        border: `1px solid ${activo ? "rgba(232,85,62,.48)" : C.border}`,
-        background: activo ? "rgba(232,85,62,.14)" : C.muted,
-        color: activo ? C.accent : C.text2,
-        borderRadius: 999,
-        padding: "6px 10px",
-        fontSize: 10,
-        fontWeight: 850,
-        textDecoration: "none",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children} <span style={{ color: activo ? C.text : C.text3 }}>{count.toLocaleString("es-CL")}</span>
-    </a>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  tone = "muted",
-}: {
-  label: string;
-  value: number;
-  tone?: "muted" | "ok" | "warn" | "bad";
-}) {
-  const color = tone === "ok" ? C.green : tone === "warn" ? C.amber : tone === "bad" ? C.accent : C.text2;
-  return (
-    <div
-      style={{
-        border: `1px solid ${C.border}`,
-        background: C.muted,
+        display: "block",
+        border: `1px solid ${activo ? "rgba(255,255,255,.28)" : C.border}`,
+        background: activo ? "rgba(255,255,255,.07)" : C.muted,
         borderRadius: 10,
         padding: "10px 11px",
         minWidth: 0,
+        textDecoration: "none",
       }}
     >
-      <div style={{ fontSize: 10, color: C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 850 }}>
-        {label}
+      <div style={{ fontSize: 10, color: activo ? C.text : C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 850 }}>
+        {activo ? `▸ ${label}` : label}
       </div>
       <div style={{ marginTop: 5, color, fontSize: 20, lineHeight: 1, fontWeight: 950 }}>
         {value.toLocaleString("es-CL")}
       </div>
-    </div>
+      <div style={{ marginTop: 5, fontSize: 10, color: C.text3, lineHeight: 1.35 }}>{sub}</div>
+    </a>
   );
 }
 
 function CuentaRow({ cuenta }: { cuenta: DevCuentaRow }) {
-  const estadoPlan = cuenta.planActivo ? "ok" : "bad";
-  const estadoPago = cuenta.ultimoPagoEstado === "approved" || cuenta.ultimoPagoEstado === "aprobado" ? "ok" : cuenta.ultimoPagoEstado ? "warn" : "bad";
+  const estadoPlan: Tone = cuenta.planActivo ? "ok" : "error";
+  const estadoPago: Tone =
+    cuenta.ultimoPagoEstado === "approved" || cuenta.ultimoPagoEstado === "aprobado"
+      ? "ok"
+      : cuenta.ultimoPagoEstado
+        ? "warning"
+        : "error";
   const tone = tonoCuenta(cuenta);
-  const toneColor = colorTono(tone);
+  const color = toneColor(tone);
   const issue = cuenta.alertas[0] ?? (!cuenta.planActivo ? "plan bloqueado" : sinPago(cuenta) ? "sin pago registrado" : sobreCupo(cuenta) ? "sobre cupo" : "sin alertas");
 
   return (
@@ -182,8 +134,8 @@ function CuentaRow({ cuenta }: { cuenta: DevCuentaRow }) {
         gap: 12,
         alignItems: "center",
         borderTop: `1px solid ${C.border}`,
-        borderLeft: `3px solid ${toneColor}`,
-        background: tone === "ok" ? "transparent" : `${toneColor}0c`,
+        borderLeft: `3px solid ${color}`,
+        background: tone === "ok" ? "transparent" : `${color}0c`,
         borderRadius: 10,
         marginTop: 8,
         padding: "12px 10px",
@@ -208,14 +160,18 @@ function CuentaRow({ cuenta }: { cuenta: DevCuentaRow }) {
         <div style={{ fontSize: 10, color: C.text3, marginTop: 3 }}>
           {cuenta.ownerNombre} · {cuenta.ownerEmailMasked}
         </div>
-        <div style={{ fontSize: 10, color: C.text2, marginTop: 3 }}>
-          {cuenta.empresaPrincipalNombre ?? "sin empresa principal"}
-        </div>
+        {/* La empresa principal suele llamarse igual que la cuenta y salía dos
+            veces en la misma fila. Se muestra solo cuando aporta algo. */}
+        {cuenta.empresaPrincipalNombre !== cuenta.nombre && (
+          <div style={{ fontSize: 10, color: C.text2, marginTop: 3 }}>
+            {cuenta.empresaPrincipalNombre ?? "sin empresa principal"}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-start" }}>
         <Pill tone={estadoPlan}>{cuenta.planNombre}</Pill>
-        <span style={{ fontSize: 10, color: C.text3 }}>actualizado {fmtDate(cuenta.updatedAt)}</span>
+        <span style={{ fontSize: 10, color: C.text3 }}>actualizado {fmtFecha(cuenta.updatedAt)}</span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-start" }}>
@@ -224,7 +180,7 @@ function CuentaRow({ cuenta }: { cuenta: DevCuentaRow }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span style={{ fontSize: 10, color: tone === "ok" ? C.text3 : toneColor, fontWeight: 850, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <span style={{ fontSize: 10, color: tone === "ok" ? C.text3 : color, fontWeight: 850, textTransform: "uppercase", letterSpacing: ".06em" }}>
           {issue}
         </span>
         <span style={{ fontSize: 11, color: C.text2 }}>
@@ -292,31 +248,69 @@ export default async function DevCuentasPage({
             </div>
             <h1 style={{ margin: "2px 0 0", fontSize: 22, lineHeight: 1.1 }}>Cuentas</h1>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <TrialGlobalToggle habilitado={trialGlobalOn} />
-            <DevLinkButton href="/dev/diagnostico">Diagnostico</DevLinkButton>
-          </div>
+          <DevNav activa="cuentas" />
         </header>
 
-        <section
-          style={{
-            background: C.surface,
-            border: `1px solid ${C.border}`,
-            borderRadius: 12,
-            padding: "14px",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 13 }}>Account 360</h2>
-              <p style={{ margin: "4px 0 0", fontSize: 11, color: C.text2 }}>
-                Plan, pago, cupos y acceso de soporte. No muestra documentos, imágenes ni raw de pagos.
-              </p>
-            </div>
-            <Pill>{`${cuentas.length.toLocaleString("es-CL")} cuentas`}</Pill>
+        {/* Plegado: se lee cuando estás perdido, no cuando estás trabajando.
+            Abierto se comía el mejor espacio de la pantalla en cada visita. */}
+        <details style={{ border: `1px solid ${C.border}`, background: C.surface, borderRadius: 12, padding: "10px 14px" }}>
+          <summary style={{ fontSize: 12, color: C.text2, fontWeight: 800, cursor: "pointer", letterSpacing: ".04em" }}>
+            ¿QUÉ HAY EN ESTE PANEL?
+          </summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10, marginTop: 11 }}>
+            {[
+              {
+                titulo: "Cuentas (esta pantalla)",
+                texto: "Buscar una cuenta y ver de un vistazo cuáles necesitan atención. Los números de arriba son también los filtros. El único control global del panel —el trial público— está más abajo.",
+              },
+              {
+                titulo: "La ficha de una cuenta",
+                texto: "Entrando a «Detalle»: plan, pagos, empresas, personas, emisión y auditoría, y después los controles de soporte, ordenados por lo que cuesta deshacerlos.",
+              },
+              {
+                titulo: "Estado del sistema",
+                texto: "Si TU acceso de operador está bien y cómo está la plataforma completa: colas, emisiones fallidas y eventos de las últimas 24 horas. Sin documentos ni datos de cuentas: solo contadores y mensajes de error.",
+              },
+            ].map((item) => (
+              <div key={item.titulo} style={{ border: `1px solid ${C.border}`, background: C.muted, borderRadius: 10, padding: "10px 11px" }}>
+                <div style={{ fontSize: 12, fontWeight: 900 }}>{item.titulo}</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: C.text2, lineHeight: 1.5 }}>{item.texto}</div>
+              </div>
+            ))}
           </div>
+        </details>
 
-          <form action="/dev/cuentas" style={{ display: "flex", gap: 8, margin: "12px 0 6px" }}>
+        {/*
+          Plegado, pero con el ESTADO en el resumen. Explicarlo bien lo había
+          convertido en lo más grande de la pantalla de entrada: 250px de texto
+          antes de ver una sola cuenta, para un control que se toca dos veces
+          al año. Así el estado se ve siempre y la explicación aparece cuando
+          vas a tocarlo, que es cuando importa.
+        */}
+        <details style={{ border: `1px solid rgba(245,158,11,.3)`, background: C.surface, borderRadius: 12, padding: "10px 14px" }}>
+          <summary style={{ fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: ".04em", color: C.amber }}>
+            TRIAL PÚBLICO:{" "}
+            <span style={{ color: trialGlobalOn ? C.green : C.text2 }}>{trialGlobalOn ? "ON" : "OFF"}</span>
+            <span style={{ color: C.text3, fontWeight: 600, letterSpacing: 0 }}>
+              {" "}— la prueba gratis para todas las cuentas sin plan
+            </span>
+          </summary>
+          <div style={{ marginTop: 11 }}>
+            <Explica
+              tono="warning"
+              que="Prende o apaga la prueba gratis para todas las cuentas sin plan."
+              cuando="Abrir o cerrar la prueba como oferta pública. Para una cuenta puntual está «Prestar la prueba gratis», dentro de su ficha."
+              ojo="Apagarlo deja afuera EN EL ACTO a quien esté en medio de su prueba, no solo a los que vengan después. Y la prueba emite documentos tributarios reales: los folios gastados no se deshacen."
+            />
+            <TrialGlobalToggle habilitado={trialGlobalOn} />
+          </div>
+        </details>
+
+        <Section
+          title="Cuentas"
+          hint="Plan, pago, cupos y acceso de soporte. No muestra documentos, imágenes ni el crudo de los pagos."
+        >
+          <form action="/dev/cuentas" style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             {filtro !== "todas" && <input type="hidden" name="estado" value={filtro} />}
             <input
               name="q"
@@ -351,25 +345,17 @@ export default async function DevCuentasPage({
             {query && <DevLinkButton href="/dev/cuentas">Limpiar</DevLinkButton>}
           </form>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, margin: "10px 0 10px" }}>
-            <MetricCard label="Coinciden" value={total} tone="muted" />
-            <MetricCard label="Con alertas" value={totalAlertas} tone={totalAlertas > 0 ? "warn" : "ok"} />
-            <MetricCard label="Bloqueadas" value={totalBloqueadas} tone={totalBloqueadas > 0 ? "bad" : "ok"} />
-            <MetricCard label="Sin pago" value={totalSinPago} tone={totalSinPago > 0 ? "warn" : "ok"} />
-            <MetricCard label="Sobre cupo" value={totalSobreCupo} tone={totalSobreCupo > 0 ? "bad" : "ok"} />
-          </div>
-
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", margin: "0 0 8px" }}>
-            <FilterLink filtro="todas" activo={filtro === "todas"} query={query} count={total}>Todas</FilterLink>
-            <FilterLink filtro="alertas" activo={filtro === "alertas"} query={query} count={totalAlertas}>Alertas</FilterLink>
-            <FilterLink filtro="bloqueadas" activo={filtro === "bloqueadas"} query={query} count={totalBloqueadas}>Bloqueadas</FilterLink>
-            <FilterLink filtro="sin_pago" activo={filtro === "sin_pago"} query={query} count={totalSinPago}>Sin pago</FilterLink>
-            <FilterLink filtro="sobre_cupo" activo={filtro === "sobre_cupo"} query={query} count={totalSobreCupo}>Sobre cupo</FilterLink>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
+            <FiltroCard filtro="todas" activo={filtro === "todas"} query={query} label="Todas" value={total} sub="cuentas en la búsqueda actual" />
+            <FiltroCard filtro="alertas" activo={filtro === "alertas"} query={query} label="Con alertas" value={totalAlertas} sub="algo que mirar, no siempre urgente" tone={totalAlertas > 0 ? "warning" : "ok"} />
+            <FiltroCard filtro="bloqueadas" activo={filtro === "bloqueadas"} query={query} label="Bloqueadas" value={totalBloqueadas} sub="sin funciones liberadas" tone={totalBloqueadas > 0 ? "error" : "ok"} />
+            <FiltroCard filtro="sin_pago" activo={filtro === "sin_pago"} query={query} label="Sin pago" value={totalSinPago} sub="ningún cobro registrado todavía" tone={totalSinPago > 0 ? "warning" : "ok"} />
+            <FiltroCard filtro="sobre_cupo" activo={filtro === "sobre_cupo"} query={query} label="Sobre cupo" value={totalSobreCupo} sub="más empresas o personas que su plan" tone={totalSobreCupo > 0 ? "error" : "ok"} />
           </div>
 
           <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>
             Mostrando {cuentas.length.toLocaleString("es-CL")} de {total.toLocaleString("es-CL")} cuenta{total === 1 ? "" : "s"}
-            {query ? ` para "${query}"` : ""}.
+            {query ? ` para «${query}»` : ""}.
           </div>
 
           {cuentas.length === 0 ? (
@@ -383,7 +369,7 @@ export default async function DevCuentasPage({
               ))}
             </div>
           )}
-        </section>
+        </Section>
       </div>
     </main>
   );
