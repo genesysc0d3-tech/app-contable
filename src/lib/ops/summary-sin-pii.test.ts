@@ -13,6 +13,7 @@
  * Estos tests son sobre `sanitizeString`, que es por donde pasa ahora. Van
  * casos REALES, no inventados: si alguien los relaja, que sea a sabiendas.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { sanitizeString } from "./sanitize";
 
@@ -60,11 +61,43 @@ describe("el resumen no filtra ubicación ni credenciales", () => {
 });
 
 describe("el que escribe eventos usa el saneador", () => {
-  it("recordOpsEvent pasa el summary por sanitizeString, no solo por cleanText", async () => {
-    const { readFileSync } = await import("node:fs");
+  it("recordOpsEvent pasa el summary por sanitizeString, no solo por cleanText", () => {
     const fuente = readFileSync("src/lib/ops/events.ts", "utf8");
     expect(fuente).toContain("summary: sanitizeString(");
     // El bug original: `summary: cleanText(input.summary)` a secas.
     expect(fuente).not.toMatch(/summary:\s*cleanText\(input\.summary\)\s*,/);
+  });
+});
+
+/**
+ * Y lo que el VIGILANTE de la plataforma no puede contar.
+ *
+ * El estado del sistema se anuncia como "sin documentos ni datos de cuentas:
+ * solo contadores". Era falso: cuando detectaba empresas atascadas ponía la
+ * razón social del cliente en el resumen — que se persiste, se pinta en la
+ * vista global y además sale al webhook y a Telegram.
+ */
+describe("el estado de la plataforma no nombra clientes", () => {
+  const fuente = readFileSync("src/lib/ops/diagnostics.ts", "utf8");
+
+  it("el atasco de propuestas no dice QUÉ empresa", () => {
+    expect(fuente).toContain("Una empresa tiene ${listas} boleta(s)");
+    expect(fuente).not.toMatch(/nombresAtascadas\.get\(empresaId\)/);
+  });
+
+  it("y ni siquiera se consultan las razones sociales", () => {
+    // Traer datos de clientes "por si acaso" es cómo terminan filtrándose.
+    expect(fuente).not.toMatch(/\.select\("id, razon_social"\)/);
+  });
+});
+
+describe("el panel no entrega el medio de cobro", () => {
+  it("proveedor_ref de suscripciones no sale del server", () => {
+    // En Flow ese campo guarda el customerId: con él se le cobra la tarjeta al
+    // cliente. Hoy la UI no lo pinta, pero si el server lo entrega basta que
+    // alguien lo agregue a una fila.
+    const a360 = readFileSync("src/lib/dev/account-360.ts", "utf8");
+    const sel = a360.match(/\.select\("id, cuenta_id, created_at[^"]*"\)/)?.[0] ?? "";
+    expect(sel).not.toContain("proveedor_ref");
   });
 });

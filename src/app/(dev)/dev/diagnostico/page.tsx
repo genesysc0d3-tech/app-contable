@@ -240,7 +240,13 @@ export default async function DevDiagnosticoPage() {
           <Row label="vetado" value={boolText(data.usuarioVetado)} ok={data.vetadoOk} />
           <Row label="Email calza" value={boolText(data.emailOk)} ok={data.emailOk} />
           <Row label="Resultado" value={data.ok ? "puede entrar a /dev/cuentas" : data.error ?? "bloqueado"} ok={data.ok} />
-          {data.detalle && <Row label="Detalle" value={data.detalle} ok={false} />}
+          {/*
+            Antes acá se pintaba el mensaje crudo de la base, que nombra tabla,
+            columna, constraint y hasta la policy que falló. Es un mapa del
+            esquema en una pantalla que se ve en capturas. El detalle completo
+            queda en los logs del servidor, que es donde sirve.
+          */}
+          {data.detalle && <Row label="Detalle" value="La consulta falló — el detalle está en los logs del servidor" ok={false} />}
         </Section>
 
         <OpsHealth snapshot={opsSnapshot} />
