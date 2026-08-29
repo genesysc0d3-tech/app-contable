@@ -116,13 +116,12 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
     : warnings > 0
       ? "La cuenta puede operar, pero hay señales que conviene confirmar."
       : "Plan, pagos, cupos y emisión no muestran problemas críticos en esta vista.";
-  const nextStep = errors > 0
-    ? problems[0]?.texto ?? "Revisar las señales antes de entrar en modo cliente."
-    : lock
-      ? "Hay una emisión real en curso. Espera cierre, fallo o expiración antes de probar otra emisión."
-      : warnings > 0
-        ? problems[0]?.texto ?? "Confirmar la advertencia principal y luego probar como cliente."
-        : "Entrar en modo cliente y confirmar que la cuenta ve funciones, cupos y empresas esperadas.";
+  // El paso viene de la señal misma (account-360), no de su título: antes esta
+  // caja repetía el síntoma —«Sin suscripción asociada» no es un paso— y
+  // fallaba justo cuando había problemas, que es cuando se lee.
+  const nextStep = problems.length > 0
+    ? problems[0].paso ?? problems[0].texto
+    : "Entrar en modo cliente y confirmar que la cuenta ve funciones, cupos y empresas esperadas.";
 
   return (
     <section
@@ -230,6 +229,10 @@ function Senales({ data }: { data: DevCuentaDetalle["diagnostico"] }) {
 }
 
 function Empresas({ data }: { data: DevCuentaDetalle["empresas"] }) {
+  // Una cuenta sin empresas dejaba el bloque en blanco: ni filas ni aviso.
+  if (data.length === 0) {
+    return <EmptyState>Esta cuenta no tiene ninguna empresa. Es lo que se ve cuando alguien se registró y nunca terminó de crearla, o cuando su única empresa se migró a otra cuenta.</EmptyState>;
+  }
   return (
     <div>
       {data.map((empresa) => (
@@ -258,6 +261,9 @@ function Empresas({ data }: { data: DevCuentaDetalle["empresas"] }) {
 }
 
 function Personas({ data }: { data: DevCuentaDetalle["usuarios"] }) {
+  if (data.length === 0) {
+    return <EmptyState>Nadie está vinculado a esta cuenta. Si el cliente dice que no puede entrar, esta es la razón.</EmptyState>;
+  }
   return (
     <div>
       {data.map((usuario) => (
@@ -522,13 +528,21 @@ export default async function DevCuentaDetallePage({
           descripcion="Lectura, con una excepción: «Ver como cliente»."
         />
 
-        <Section title="Ver como cliente" hint="El único control que escribe en esta zona. Está en la barra de arriba y en cada fila de Empresas.">
-          <Explica
-            que="Abre la app con la empresa del cliente, en modo soporte de solo lectura, con tu propia sesión. Deja registro en la auditoría de esa cuenta y le muestra una barra al operador diciendo que está adentro."
-            cuando="Para ver lo que ve el cliente cuando reporta algo que en estas tablas no se nota."
-            ojo="La sesión de soporte dura 4 horas y NO se cierra sola al volver acá con el botón del navegador: hay que salir con «Volver a dev». Para escribir de verdad hace falta que el cliente te dé su código de 6 dígitos."
-          />
-        </Section>
+        {/* Plegado: es la nota al pie de la excepción, no un bloque de la
+            página. Abierto empujaba los datos hacia abajo en cada visita. */}
+        <details style={{ border: `1px solid ${C.border}`, background: C.surface, borderRadius: 12, padding: "10px 14px" }}>
+          <summary style={{ fontSize: 12, color: C.text2, fontWeight: 800, cursor: "pointer", letterSpacing: ".04em" }}>
+            ¿QUÉ HACE «VER COMO CLIENTE»?
+            <span style={{ color: C.text3, fontWeight: 600, letterSpacing: 0 }}> — el único control que escribe en esta zona</span>
+          </summary>
+          <div style={{ marginTop: 11 }}>
+            <Explica
+              que="Abre la app con la empresa del cliente, en modo soporte de solo lectura, con tu propia sesión. Deja registro en la auditoría de esa cuenta y te muestra una barra diciendo que estás adentro."
+              cuando="Para ver lo que ve el cliente cuando reporta algo que en estas tablas no se nota."
+              ojo="La sesión de soporte dura 4 horas y NO se cierra sola al volver acá con el botón del navegador: hay que salir con «Volver a dev». Para escribir de verdad hace falta que el cliente te dé su código de 6 dígitos."
+            />
+          </div>
+        </details>
 
         <Section
           title="Resumen operativo"

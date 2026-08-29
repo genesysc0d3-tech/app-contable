@@ -90,18 +90,21 @@ function FiltroCard({
   return (
     <a
       href={filtroHref(filtro, query)}
+      // El filtro elegido se marca en blanco, no en rojo: en este panel el
+      // rojo significa "hay un problema", y un filtro que tú elegiste no es un
+      // problema. Antes «Todas» seleccionado se veía igual que una alerta.
       style={{
         display: "block",
-        border: `1px solid ${activo ? "rgba(232,85,62,.5)" : C.border}`,
-        background: activo ? "rgba(232,85,62,.12)" : C.muted,
+        border: `1px solid ${activo ? "rgba(255,255,255,.28)" : C.border}`,
+        background: activo ? "rgba(255,255,255,.07)" : C.muted,
         borderRadius: 10,
         padding: "10px 11px",
         minWidth: 0,
         textDecoration: "none",
       }}
     >
-      <div style={{ fontSize: 10, color: activo ? C.accent : C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 850 }}>
-        {label}
+      <div style={{ fontSize: 10, color: activo ? C.text : C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 850 }}>
+        {activo ? `▸ ${label}` : label}
       </div>
       <div style={{ marginTop: 5, color, fontSize: 20, lineHeight: 1, fontWeight: 950 }}>
         {value.toLocaleString("es-CL")}
@@ -157,9 +160,13 @@ function CuentaRow({ cuenta }: { cuenta: DevCuentaRow }) {
         <div style={{ fontSize: 10, color: C.text3, marginTop: 3 }}>
           {cuenta.ownerNombre} · {cuenta.ownerEmailMasked}
         </div>
-        <div style={{ fontSize: 10, color: C.text2, marginTop: 3 }}>
-          {cuenta.empresaPrincipalNombre ?? "sin empresa principal"}
-        </div>
+        {/* La empresa principal suele llamarse igual que la cuenta y salía dos
+            veces en la misma fila. Se muestra solo cuando aporta algo. */}
+        {cuenta.empresaPrincipalNombre !== cuenta.nombre && (
+          <div style={{ fontSize: 10, color: C.text2, marginTop: 3 }}>
+            {cuenta.empresaPrincipalNombre ?? "sin empresa principal"}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-start" }}>
@@ -273,15 +280,31 @@ export default async function DevCuentasPage({
           </div>
         </details>
 
-        <Section title="Trial público" tone="warning">
-          <Explica
-            tono="warning"
-            que="Prende o apaga la prueba gratis para todas las cuentas sin plan."
-            cuando="Abrir o cerrar la prueba como oferta pública. Para una cuenta puntual está «Prestar la prueba gratis», dentro de su ficha."
-            ojo="Apagarlo deja afuera EN EL ACTO a quien esté en medio de su prueba, no solo a los que vengan después. Y la prueba emite documentos tributarios reales: los folios gastados no se deshacen."
-          />
-          <TrialGlobalToggle habilitado={trialGlobalOn} />
-        </Section>
+        {/*
+          Plegado, pero con el ESTADO en el resumen. Explicarlo bien lo había
+          convertido en lo más grande de la pantalla de entrada: 250px de texto
+          antes de ver una sola cuenta, para un control que se toca dos veces
+          al año. Así el estado se ve siempre y la explicación aparece cuando
+          vas a tocarlo, que es cuando importa.
+        */}
+        <details style={{ border: `1px solid rgba(245,158,11,.3)`, background: C.surface, borderRadius: 12, padding: "10px 14px" }}>
+          <summary style={{ fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: ".04em", color: C.amber }}>
+            TRIAL PÚBLICO:{" "}
+            <span style={{ color: trialGlobalOn ? C.green : C.text2 }}>{trialGlobalOn ? "ON" : "OFF"}</span>
+            <span style={{ color: C.text3, fontWeight: 600, letterSpacing: 0 }}>
+              {" "}— la prueba gratis para todas las cuentas sin plan
+            </span>
+          </summary>
+          <div style={{ marginTop: 11 }}>
+            <Explica
+              tono="warning"
+              que="Prende o apaga la prueba gratis para todas las cuentas sin plan."
+              cuando="Abrir o cerrar la prueba como oferta pública. Para una cuenta puntual está «Prestar la prueba gratis», dentro de su ficha."
+              ojo="Apagarlo deja afuera EN EL ACTO a quien esté en medio de su prueba, no solo a los que vengan después. Y la prueba emite documentos tributarios reales: los folios gastados no se deshacen."
+            />
+            <TrialGlobalToggle habilitado={trialGlobalOn} />
+          </div>
+        </details>
 
         <Section
           title="Cuentas"
