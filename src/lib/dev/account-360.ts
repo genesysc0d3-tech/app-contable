@@ -124,7 +124,15 @@ export type DevCuentaDetalle = {
   auditoria: (CuentaAuditEvent & { empresaNombre: string | null; usuarioEmailMasked: string })[];
   diagnostico: {
     codigo: "ok" | "warning" | "error";
+    /** El síntoma: qué se detectó. */
     texto: string;
+    /**
+     * Qué HACER con eso. La caja «Siguiente paso» del panel mostraba el
+     * `texto` del primer problema, o sea repetía el síntoma —«Sin suscripción
+     * asociada» no es un paso—. Y fallaba justo cuando había problemas, que es
+     * cuando sirve. Cada señal que no es "ok" trae su acción.
+     */
+    paso?: string;
   }[];
 };
 
@@ -156,6 +164,13 @@ function normalizeSearch(value: string | null | undefined) {
     .replace(/[^a-z0-9@.\-\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Los proveedores se guardan en minúscula ('flow', 'mercadopago'); en pantalla van con su nombre. */
+function fmtProveedor(proveedor: string | null) {
+  const nombres: Record<string, string> = { flow: "Flow", mercadopago: "Mercado Pago", mp: "Mercado Pago" };
+  if (!proveedor) return "la pasarela";
+  return nombres[proveedor.toLowerCase()] ?? proveedor;
 }
 
 function fmtPlan(plan: Plan | undefined, codigo: string | null) {
@@ -526,22 +541,58 @@ export async function obtenerDevCuentaDetalle(cuentaId: string): Promise<DevAcco
     const diagnostico: DevCuentaDetalle["diagnostico"] = [
       row.planActivo
         ? { codigo: "ok", texto: "Plan liberado para la cuenta" }
-        : { codigo: "error", texto: "Plan no esta liberado" },
+        : {
+            codigo: "error",
+            texto: "El plan no está liberado",
+            paso: "El cliente no ve sus funciones. Revisa primero si hay un pago que la pasarela no registró; recién si no lo hay, libéralo a mano en «Cambiar el plan».",
+          },
       activeSub
-        ? { codigo: "ok", texto: `Suscripcion activa en ${activeSub.proveedor}` }
-        : { codigo: "warning", texto: latestSub ? `Ultima suscripcion: ${latestSub.estado}` : "Sin suscripcion asociada" },
+        ? { codigo: "ok", texto: `Suscripción activa en ${fmtProveedor(activeSub.proveedor)}` }
+        : latestSub
+          ? {
+              codigo: "warning",
+              texto: `Última suscripción: ${latestSub.estado}`,
+              paso: `La suscripción quedó en «${latestSub.estado}». Si el cliente cree que sigue pagando, mira el estado en ${fmtProveedor(latestSub.proveedor)} antes de tocar el plan.`,
+            }
+          : {
+              codigo: "warning",
+              texto: "Sin suscripción asociada",
+              paso: "Esta cuenta no está pagando por la pasarela. Si igual tiene funciones liberadas, es porque alguien las prendió a mano: confirma que corresponde.",
+            },
       latestPago
-        ? { codigo: latestPago.estado === "approved" || latestPago.estado === "aprobado" ? "ok" : "warning", texto: `Ultimo pago: ${latestPago.estado}` }
-        : { codigo: "warning", texto: "Sin pagos asociados a la cuenta" },
+        ? latestPago.estado === "approved" || latestPago.estado === "aprobado"
+          ? { codigo: "ok", texto: `Último pago: ${latestPago.estado}` }
+          : {
+              codigo: "warning",
+              texto: `Último pago: ${latestPago.estado}`,
+              paso: `El último cobro quedó en «${latestPago.estado}». Mira el detalle en «Pagos y suscripción» y compáralo con la pasarela antes de prometerle algo al cliente.`,
+            }
+        : {
+            codigo: "warning",
+            texto: "Sin pagos asociados a la cuenta",
+            paso: "No hay ni un cobro registrado. Si el cliente asegura haber pagado, el problema está en el webhook o en el proveedor, no en su plan.",
+          },
       empresasCount <= row.empresasPermitidas
         ? { codigo: "ok", texto: "Empresas dentro del cupo" }
-        : { codigo: "error", texto: "Hay mas empresas activas que cupos disponibles" },
+        : {
+            codigo: "error",
+            texto: "Hay más empresas activas que cupos disponibles",
+            paso: `Tiene ${empresasCount} empresas y su plan permite ${row.empresasPermitidas}. O sube el plan, o el cliente elige con cuál se queda.`,
+          },
       usuariosCount <= row.personasPermitidas
         ? { codigo: "ok", texto: "Personas dentro del cupo" }
-        : { codigo: "error", texto: "Hay mas personas activas que cupos disponibles" },
+        : {
+            codigo: "error",
+            texto: "Hay más personas activas que cupos disponibles",
+            paso: `Tiene ${usuariosCount} personas y su plan permite ${row.personasPermitidas}. O sube el plan, o hay que sacar a alguien del equipo.`,
+          },
       lock
-        ? { codigo: "warning", texto: `Emision real en curso: ${lock.estado_visible}` }
-        : { codigo: "ok", texto: "Sin candado de emision activo" },
+        ? {
+            codigo: "warning",
+            texto: `Emisión real en curso: ${lock.estado_visible}`,
+            paso: "Hay folios en juego ahora mismo. No toques nada de esta cuenta hasta que cierre, falle o expire el candado.",
+          }
+        : { codigo: "ok", texto: "Sin candado de emisión activo" },
     ];
 
     return {

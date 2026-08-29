@@ -3,15 +3,18 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, purgarCuenta, migrarEmpresaACuenta } from "../actions";
+import { C } from "../colors";
 
-const C = {
-  border: "rgba(255,255,255,.08)",
-  text: "#e8eaf0",
-  text2: "#9aa0ad",
-  accent: "#E8553E",
-  accentSoft: "rgba(232,85,62,.14)",
-  muted: "rgba(255,255,255,.05)",
-} as const;
+/**
+ * Gramática de color de los botones, para que no contradiga la de las fases:
+ * ámbar = escribe y se puede deshacer · rojo = no se deshace · gris = navega.
+ * Antes "Guardar plan" era rojo igual que "Purgar cuenta", y "Traer empresa"
+ * era gris igual que "Buscar".
+ */
+const BTN_AMBAR = { border: "1px solid rgba(245,158,11,.45)", background: C.amberSoft, color: C.text } as const;
+const BTN_ROJO = { border: "1px solid rgba(232,85,62,.6)", background: "rgba(232,85,62,.18)", color: C.accent } as const;
+const BTN_GRIS = { border: `1px solid ${C.border}`, background: C.muted, color: C.text } as const;
+const BASE = { borderRadius: 7, padding: "7px 12px", fontSize: 11, fontWeight: 800 } as const;
 
 export function VerComoClienteButton({
   empresaId,
@@ -41,15 +44,18 @@ export function VerComoClienteButton({
       type="button"
       onClick={entrar}
       disabled={!empresaId || estado === "loading"}
-      title={estado === "error" ? "No se pudo entrar en modo cliente" : undefined}
+      title={
+        estado === "error"
+          ? "No se pudo entrar en modo cliente"
+          : "Abre la app del cliente en modo soporte, de solo lectura. Queda en su auditoría y la sesión dura 4 horas."
+      }
       style={{
-        border: `1px solid ${estado === "error" ? "rgba(232,85,62,.55)" : "rgba(232,85,62,.45)"}`,
-        background: estado === "error" ? "rgba(232,85,62,.08)" : C.accentSoft,
-        color: estado === "error" ? C.accent : C.text,
+        ...BTN_AMBAR,
         borderRadius: 7,
         padding: compacto ? "5px 9px" : "7px 11px",
         fontSize: compacto ? 10 : 11,
-        fontWeight: 700,
+        fontWeight: 800,
+        color: estado === "error" ? C.accent : C.text,
         cursor: !empresaId || estado === "loading" ? "default" : "pointer",
         opacity: !empresaId ? 0.45 : 1,
         whiteSpace: "nowrap",
@@ -87,14 +93,57 @@ export function DevLinkButton({
   );
 }
 
+/** Copia al portapapeles un dato que la UI necesita mostrar (ej. el id de una empresa). */
+export function CopiarButton({ valor, etiqueta }: { valor: string; etiqueta: string }) {
+  const [copiado, setCopiado] = useState(false);
+  return (
+    <button
+      type="button"
+      title={valor}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(valor);
+          setCopiado(true);
+          setTimeout(() => setCopiado(false), 1500);
+        } catch {
+          setCopiado(false);
+        }
+      }}
+      style={{
+        border: `1px solid ${C.border}`,
+        background: C.muted,
+        color: copiado ? C.green : C.text2,
+        borderRadius: 6,
+        padding: "3px 7px",
+        fontSize: 10,
+        fontWeight: 800,
+        fontFamily: "ui-monospace, monospace",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {copiado ? "copiado ✓" : etiqueta}
+    </button>
+  );
+}
+
 export function PlanToggle({
   cuentaId,
+  cuentaNombre,
   planCodigo,
   planActivo,
+  suscripcionActiva,
 }: {
   cuentaId: string;
+  cuentaNombre: string;
   planCodigo: string | null;
   planActivo: boolean;
+  /**
+   * Si hay suscripción viva, `entitlements` resuelve el plan desde ella en
+   * CADA lectura: escribir acá no tiene ningún efecto, ni siquiera hasta el
+   * próximo webhook. Antes el botón decía "Guardado ✓" igual.
+   */
+  suscripcionActiva: boolean;
 }) {
   const router = useRouter();
   const [plan, setPlan] = useState(planCodigo ?? "start");
@@ -102,11 +151,20 @@ export function PlanToggle({
   const [estado, setEstado] = useState<"idle" | "loading" | "error" | "ok">("idle");
 
   async function guardar() {
-    if (estado === "loading") return;
+    if (estado === "loading" || suscripcionActiva) return;
     setEstado("loading");
     const res = await setCuentaPlan(cuentaId, plan, activo);
     setEstado("error" in res ? "error" : "ok");
     if (!("error" in res)) router.refresh();
+  }
+
+  if (suscripcionActiva) {
+    return (
+      <div style={{ fontSize: 12, color: C.amber, fontWeight: 700, lineHeight: 1.5, maxWidth: 620 }}>
+        Esta cuenta tiene una suscripción activa, así que su plan manda desde ya y este control no haría nada.
+        Para cambiarlo, primero hay que cancelar la suscripción en la pasarela.
+      </div>
+    );
   }
 
   return (
@@ -125,75 +183,97 @@ export function PlanToggle({
       </select>
       <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.text2, fontWeight: 700 }}>
         <input type="checkbox" checked={activo} onChange={(e) => { setActivo(e.target.checked); setEstado("idle"); }} />
-        activo
+        funciones liberadas
       </label>
       <button
         type="button"
         onClick={guardar}
         disabled={estado === "loading"}
         style={{
-          border: "1px solid rgba(232,85,62,.45)",
-          background: estado === "error" ? "rgba(232,85,62,.08)" : C.accentSoft,
+          ...BASE,
+          ...BTN_AMBAR,
           color: estado === "error" ? C.accent : C.text,
-          borderRadius: 7, padding: "7px 12px", fontSize: 11, fontWeight: 700,
           cursor: estado === "loading" ? "default" : "pointer",
         }}
       >
-        {estado === "loading" ? "Guardando..." : estado === "ok" ? "Guardado ✓" : estado === "error" ? "Error" : "Guardar plan"}
+        {estado === "loading" ? "Guardando..." : estado === "ok" ? "Guardado ✓" : estado === "error" ? "Error" : `Guardar el plan de «${cuentaNombre}»`}
       </button>
     </div>
   );
 }
 
-/** Toggle GLOBAL del trial (oferta pública para todas las cuentas sin plan). */
+/**
+ * Toggle GLOBAL del trial (oferta pública para todas las cuentas sin plan).
+ * Pide confirmación: apagarlo no solo cierra la puerta a los que vengan, deja
+ * afuera EN EL ACTO a quien esté en medio de su prueba (lib/dal.ts).
+ */
 export function TrialGlobalToggle({ habilitado }: { habilitado: boolean }) {
   const router = useRouter();
   const [on, setOn] = useState(habilitado);
+  const [armado, setArmado] = useState(false);
   const [estado, setEstado] = useState<"idle" | "loading" | "error">("idle");
 
-  async function toggle() {
+  async function confirmar() {
     if (estado === "loading") return;
     const next = !on;
     setEstado("loading");
     const res = await setTrialGlobal(next);
     if ("error" in res) { setEstado("error"); return; }
     setOn(next);
+    setArmado(false);
     setEstado("idle");
     router.refresh();
   }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <span style={{
-        fontSize: 11, fontWeight: 800, letterSpacing: ".04em",
-        color: on ? "#22c55e" : C.text2,
-      }}>
-        {on ? "TRIAL GLOBAL: ON" : "TRIAL GLOBAL: OFF"}
+      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".04em", color: on ? C.green : C.text2 }}>
+        {on ? "TRIAL PÚBLICO: ON" : "TRIAL PÚBLICO: OFF"}
       </span>
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={estado === "loading"}
-        style={{
-          border: `1px solid ${on ? "rgba(34,197,94,.45)" : "rgba(232,85,62,.45)"}`,
-          background: estado === "error" ? "rgba(232,85,62,.08)" : on ? "rgba(34,197,94,.12)" : C.accentSoft,
-          color: estado === "error" ? C.accent : C.text,
-          borderRadius: 7, padding: "7px 12px", fontSize: 11, fontWeight: 700,
-          cursor: estado === "loading" ? "default" : "pointer",
-        }}
-      >
-        {estado === "loading" ? "..." : estado === "error" ? "Error" : on ? "Apagar trial global" : "Prender trial global"}
-      </button>
+      {!armado ? (
+        <button
+          type="button"
+          onClick={() => setArmado(true)}
+          style={{ ...BASE, ...BTN_AMBAR, cursor: "pointer" }}
+        >
+          {on ? "Apagar el trial público" : "Prender el trial público"}
+        </button>
+      ) : (
+        <>
+          <span style={{ fontSize: 11, color: C.amber, fontWeight: 700 }}>
+            {on
+              ? "Se apaga para todos, incluida la gente que está en medio de su prueba ahora mismo. ¿Seguro?"
+              : "Se abre la prueba para toda cuenta sin plan. ¿Seguro?"}
+          </span>
+          <button
+            type="button"
+            onClick={confirmar}
+            disabled={estado === "loading"}
+            style={{ ...BASE, ...BTN_AMBAR, color: estado === "error" ? C.accent : C.text, cursor: "pointer" }}
+          >
+            {estado === "loading" ? "..." : estado === "error" ? "Error" : "Sí, cambiarlo"}
+          </button>
+          <button type="button" onClick={() => setArmado(false)} style={{ ...BASE, ...BTN_GRIS, cursor: "pointer" }}>
+            Cancelar
+          </button>
+        </>
+      )}
     </div>
   );
 }
 
-/** Zona de peligro: purga TOTAL de la cuenta. Exige tipear el nombre exacto. */
+/**
+ * Zona de peligro: purga TOTAL de la cuenta.
+ *
+ * El nombre a tipear NO va en el placeholder: tenerlo impreso al lado
+ * convierte la confirmación en copiar y pegar, que no confirma nada. Está en
+ * la barra de arriba, que es donde el operador ya lo tiene a la vista.
+ */
 export function PurgarCuentaButton({ cuentaId, nombre }: { cuentaId: string; nombre: string }) {
-  const router = useRouter();
   const [confirmacion, setConfirmacion] = useState("");
-  const [estado, setEstado] = useState<"idle" | "loading" | "error">("idle");
+  const [estado, setEstado] = useState<"idle" | "loading" | "error" | "listo">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [resumen, setResumen] = useState<string | null>(null);
   const armado = confirmacion.trim() === nombre.trim();
 
   async function purgar() {
@@ -202,7 +282,21 @@ export function PurgarCuentaButton({ cuentaId, nombre }: { cuentaId: string; nom
     setError(null);
     const res = await purgarCuenta(cuentaId, confirmacion);
     if ("error" in res) { setEstado("error"); setError(res.error); return; }
-    router.push("/dev/cuentas");
+    // El resumen es la evidencia con la que se le responde al cliente en un
+    // ARCO: antes se descartaba y se navegaba de vuelta a la lista.
+    const r = res.resumen;
+    setEstado("listo");
+    setResumen(`Borrado: ${r.empresas} empresa(s), ${r.documentos} documento(s), ${r.auditChunks} audit_chunks, ${r.parserLogs} parser_logs.`);
+  }
+
+  if (estado === "listo") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+        <span style={{ fontSize: 12, color: C.green, fontWeight: 800 }}>Cuenta borrada.</span>
+        <span style={{ fontSize: 11, color: C.text2, fontFamily: "ui-monospace, monospace" }}>{resumen}</span>
+        <DevLinkButton href="/dev/cuentas">Volver a la lista</DevLinkButton>
+      </div>
+    );
   }
 
   return (
@@ -210,10 +304,10 @@ export function PurgarCuentaButton({ cuentaId, nombre }: { cuentaId: string; nom
       <input
         value={confirmacion}
         onChange={(e) => { setConfirmacion(e.target.value); setEstado("idle"); }}
-        placeholder={`Escribí «${nombre}» para habilitar`}
+        placeholder="Escribe el nombre exacto de la cuenta para habilitar"
         style={{
           border: "1px solid rgba(232,85,62,.45)", background: C.muted, color: C.text,
-          borderRadius: 7, padding: "8px 10px", fontSize: 12, width: "100%", maxWidth: 360,
+          borderRadius: 7, padding: "8px 10px", fontSize: 12, width: "100%", maxWidth: 380,
         }}
       />
       <button
@@ -221,16 +315,16 @@ export function PurgarCuentaButton({ cuentaId, nombre }: { cuentaId: string; nom
         onClick={purgar}
         disabled={!armado || estado === "loading"}
         style={{
-          border: "1px solid rgba(232,85,62,.6)",
-          background: armado ? "rgba(232,85,62,.18)" : "rgba(232,85,62,.05)",
-          color: armado ? C.accent : C.text2,
-          borderRadius: 7, padding: "8px 12px", fontSize: 11, fontWeight: 800, letterSpacing: ".03em",
-          cursor: armado && estado !== "loading" ? "pointer" : "not-allowed", alignSelf: "flex-start",
+          ...BASE,
+          ...(armado ? BTN_ROJO : { border: "1px solid rgba(232,85,62,.35)", background: "rgba(232,85,62,.05)", color: C.text2 }),
+          letterSpacing: ".03em",
+          cursor: armado && estado !== "loading" ? "pointer" : "not-allowed",
+          alignSelf: "flex-start",
         }}
       >
-        {estado === "loading" ? "Purgando..." : "Purgar cuenta (irreversible)"}
+        {estado === "loading" ? "Borrando..." : "Borrar la cuenta (no se deshace)"}
       </button>
-      {error && <span style={{ fontSize: 11, color: C.accent }}>{error}</span>}
+      {error && <span style={{ fontSize: 11, color: C.accent, maxWidth: 620, lineHeight: 1.5 }}>{error}</span>}
     </div>
   );
 }
@@ -253,19 +347,19 @@ export function TrialCortesiaToggle({ cuentaId, cortesia }: { cuentaId: string; 
   }
 
   return (
-    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: C.text2, fontWeight: 700 }}>
+    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.text2, fontWeight: 700 }}>
       <input type="checkbox" checked={on} disabled={estado === "loading"} onChange={toggle} />
-      Trial de cortesía {estado === "error" ? <span style={{ color: C.accent }}>· error</span> : on ? <span style={{ color: "#22c55e" }}>· activo</span> : null}
+      Prestarle la prueba gratis a esta cuenta
+      {estado === "error" ? <span style={{ color: C.accent }}>· error</span> : on ? <span style={{ color: C.green }}>· activa</span> : null}
     </label>
   );
 }
 
 /**
- * Migración de empresa hacia ESTA cuenta (LEGO: re-apunta el vínculo; los datos
- * no se mueven). Corre el checklist adversarial completo en el server. Antes de
- * usar: verificar identidad según el runbook — unificación = responde desde
- * ambos correos; recuperación = $1 con código desde el banco de la empresa.
- * Nunca pedir cédulas.
+ * Migración de empresa hacia ESTA cuenta (LEGO: re-apunta el vínculo; los
+ * datos no se mueven). Corre el checklist adversarial completo en el server.
+ * La explicación de qué hace y qué exige vive en el `Explica` de la página, no
+ * acá: tenerla en los dos lados producía dos redacciones del mismo aviso.
  */
 export function MigrarEmpresaForm({ cuentaId }: { cuentaId: string }) {
   const router = useRouter();
@@ -285,25 +379,20 @@ export function MigrarEmpresaForm({ cuentaId }: { cuentaId: string }) {
     router.refresh();
   }
 
-  const inp = { border: `1px solid ${C.border}`, background: C.muted, color: C.text, borderRadius: 7, padding: "8px 10px", fontSize: 12, width: "100%", maxWidth: 360 } as const;
+  const inp = { border: `1px solid ${C.border}`, background: C.muted, color: C.text, borderRadius: 7, padding: "8px 10px", fontSize: 12, width: "100%", maxWidth: 380 } as const;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <span style={{ fontSize: 11, color: C.text2, maxWidth: 460, lineHeight: 1.5 }}>
-        Verificación previa (runbook): unificación → responde desde ambos correos; recuperación → $1 con
-        código desde el banco de la empresa. El server valida cupo, plan multiempresa, cero emisiones a
-        medio camino y suscripción del origen. El login del origen se resuelve aparte, a mano.
-      </span>
-      <input value={empresaId} onChange={(e) => { setEmpresaId(e.target.value); setEstado("idle"); }} placeholder="ID (uuid) de la empresa a traer" style={inp} />
-      <input value={confirmacion} onChange={(e) => { setConfirmacion(e.target.value); setEstado("idle"); }} placeholder="Razón social EXACTA de la empresa (confirmación)" style={inp} />
+      <input value={empresaId} onChange={(e) => { setEmpresaId(e.target.value); setEstado("idle"); }} placeholder="ID de la empresa a traer (se copia desde su cuenta actual)" style={inp} />
+      <input value={confirmacion} onChange={(e) => { setConfirmacion(e.target.value); setEstado("idle"); }} placeholder="Razón social EXACTA de esa empresa (confirmación)" style={inp} />
       <button
         type="button"
         onClick={migrar}
         disabled={!empresaId.trim() || !confirmacion.trim() || estado === "loading"}
-        style={{ border: `1px solid ${C.border}`, background: C.muted, color: C.text, borderRadius: 7, padding: "8px 12px", fontSize: 11, fontWeight: 800, letterSpacing: ".03em", cursor: estado === "loading" ? "wait" : "pointer", alignSelf: "flex-start" }}
+        style={{ ...BASE, ...BTN_ROJO, letterSpacing: ".03em", cursor: estado === "loading" ? "wait" : "pointer", alignSelf: "flex-start" }}
       >
-        {estado === "loading" ? "Migrando..." : "Traer empresa a esta cuenta"}
+        {estado === "loading" ? "Migrando..." : "Traer la empresa (no se deshace)"}
       </button>
-      {mensaje && <span style={{ fontSize: 11, color: estado === "ok" ? "#4ade80" : C.accent, maxWidth: 460, lineHeight: 1.5 }}>{mensaje}</span>}
+      {mensaje && <span style={{ fontSize: 11, color: estado === "ok" ? C.green : C.accent, maxWidth: 620, lineHeight: 1.5 }}>{mensaje}</span>}
     </div>
   );
 }
