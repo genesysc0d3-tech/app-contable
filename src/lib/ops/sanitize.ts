@@ -3,7 +3,18 @@ import type { Json } from "@/lib/database.types";
 const SENSITIVE_KEY_RE = /(authorization|cookie|token|secret|password|passwd|clave|api[_-]?key|service[_-]?role|cert|certificate|private[_-]?key|base64|xml|pdf|prompt|response|raw|payload|html)/i;
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const RUT_RE = /\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b/g;
-const LONG_BASE64_RE = /^[A-Za-z0-9+/]{120,}={0,2}$/;
+// Sin anclas: un token no siempre viene solo. `Invalid JWT: eyJhbGci…` traía
+// la credencial entera en medio de una frase y pasaba de largo.
+const LONG_BASE64_RE = /[A-Za-z0-9+/_-]{60,}={0,2}/g;
+// Un JWT viene partido en tres por puntos, y cada trozo puede ser corto: la
+// regla de arriba redactaba el medio y dejaba la cabecera intacta. Empiezan
+// con `eyJ` porque es el base64 de `{"`. Va PRIMERO, para tomarlo entero.
+const JWT_RE = /\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/g;
+// Una URL en un mensaje de error trae host, ruta y a veces la firma completa.
+const URL_RE = /\bhttps?:\/\/\S+/gi;
+// Rutas de Storage tipo `{empresa_id}/{uuid}/cartola-santander.xlsx`: el nombre
+// del archivo que subió el cliente es dato suyo, no del sistema.
+const PATH_RE = /\b[\w-]{6,}\/[\w-]{8,}\/\S+/g;
 
 const MAX_STRING_LENGTH = 240;
 const MAX_ARRAY_ITEMS = 8;
@@ -25,12 +36,23 @@ function maskRut(value: string) {
   });
 }
 
-function sanitizeString(value: string) {
+/**
+ * Limpia un texto antes de que llegue a `ops_events` — y de ahí al panel del
+ * operador, al webhook y a Telegram.
+ *
+ * El orden importa: primero URL y rutas (que pueden CONTENER un correo o un
+ * token), después el token suelto, y al final correo y RUT sobre lo que quede.
+ */
+export function sanitizeString(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
-  if (LONG_BASE64_RE.test(trimmed)) return `[redacted:base64:${trimmed.length}]`;
 
-  let safe = maskRut(maskEmail(trimmed));
+  let safe = trimmed
+    .replace(URL_RE, "[url]")
+    .replace(JWT_RE, "[token]")
+    .replace(PATH_RE, "[ruta]")
+    .replace(LONG_BASE64_RE, (t) => `[redacted:${t.length}]`);
+  safe = maskRut(maskEmail(safe));
   if (safe.length > MAX_STRING_LENGTH) safe = `${safe.slice(0, MAX_STRING_LENGTH)}...[truncated:${safe.length}]`;
   return safe;
 }

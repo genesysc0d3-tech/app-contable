@@ -62,13 +62,35 @@ describe("lo que el panel promete sobre CAMBIAR EL PLAN", () => {
   it("la suscripción viva manda en CADA lectura, no desde el próximo cobro", () => {
     expect(leer(ENTITLEMENTS)).toContain("suscripcionActiva ? suscripcion.plan_codigo");
     const texto = leer(DETALLE);
-    expect(texto).toContain("su plan manda desde ya");
+    // Se afirma la INTENCIÓN, no la redacción: el texto tiene que decir que la
+    // suscripción manda YA. Atarlo a una frase exacta hacía caer el test con
+    // cualquier mejora de estilo, y un test frágil termina relajado.
+    expect(texto).toMatch(/desde ya/);
     expect(texto).not.toMatch(/el próximo evento de la pasarela pisa/);
+    expect(texto).not.toMatch(/aparece deshabilitado/);
   });
 
-  it("con suscripción activa el control se deshabilita en vez de fingir que guardó", () => {
+  /**
+   * Este test nació al revés y por eso se deja explicado.
+   *
+   * La primera versión ESCONDÍA el control cuando había suscripción activa, y
+   * este test defendía ese escondite. Estaba mal: `setCuentaPlan` no solo fija
+   * el código de plan —que sí lo pisa la pasarela—, también sincroniza
+   * `empresas.plan_activo` y revive las empresas dormidas, que no las recalcula
+   * nadie. Esconderlo reconstruía el incidente del 2026-08-28: una cuenta
+   * Business ACTIVA con una empresa marcada "bloqueada", el problema a la vista
+   * y la solución fuera de alcance.
+   *
+   * Ahora se afirma lo contrario: el control se queda, y avisa.
+   */
+  it("con suscripción activa el control NO se esconde: avisa y sigue disponible", () => {
+    const botones = leer("src/app/(dev)/dev/cuentas/DevCuentaActions.tsx");
     expect(leer(DETALLE)).toContain("suscripcionActiva={suscripcionActiva}");
-    expect(leer("src/app/(dev)/dev/cuentas/DevCuentaActions.tsx")).toContain("if (suscripcionActiva) {");
+    // El escondite de la primera versión: un return temprano que se comía el form.
+    expect(botones).not.toMatch(/if \(suscripcionActiva\) \{\s*\n\s*return \(/);
+    // Y el botón sigue existiendo pase lo que pase.
+    expect(botones).toContain("Guardar el plan de");
+    expect(botones).toContain("revive las que");
   });
 
   it("subir a un plan multiempresa REVIVE empresas dormidas — y el texto lo declara", () => {
@@ -149,7 +171,7 @@ describe("la disciplina de fases sigue en pie", () => {
   });
 
   it("cada control que escribe tiene su Explica", () => {
-    // Cuatro bloques Explica: ver como cliente, plan, prueba, traer, borrar.
+    // Cinco bloques Explica: ver como cliente, plan, prueba, traer, borrar.
     const explicas = detalle.match(/<Explica/g) ?? [];
     expect(explicas.length).toBe(5);
   });
@@ -170,6 +192,10 @@ describe("el idioma de la casa", () => {
       "src/app/(dev)/dev/cuentas/DevCuentaActions.tsx",
       "src/app/(dev)/dev/diagnostico/page.tsx",
       "src/app/(dev)/dev/ui.tsx",
+      // Acá viven los textos del "siguiente paso", que es lo más visible del
+      // panel. Faltaba en esta lista: se podía escribir voseo ahí y salir a
+      // producción con el test en verde.
+      "src/lib/dev/account-360.ts",
     ];
     // Imperativos y presentes rioplatenses que ya se colaron alguna vez.
     //
