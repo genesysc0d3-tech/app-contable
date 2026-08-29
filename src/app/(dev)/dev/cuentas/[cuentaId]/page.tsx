@@ -8,7 +8,7 @@
  * pasaba por encima de ella en cada scroll.
  */
 import { notFound, redirect } from "next/navigation";
-import { obtenerDevCuentaDetalle, type DevCuentaDetalle } from "@/lib/dev/account-360";
+import { obtenerDevCuentaDetalle, fmtProveedor, type DevCuentaDetalle } from "@/lib/dev/account-360";
 import { CopiarButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
 import {
   C,
@@ -323,7 +323,7 @@ function Finanzas({ data }: { data: Pick<DevCuentaDetalle, "suscripciones" | "pa
           <CompactRow
             key={suscripcion.id}
             left={`${suscripcion.plan_codigo} · ${suscripcion.estado}`}
-            sub={`${suscripcion.proveedor} · ${fmtDate(suscripcion.created_at)} · vence ${fmtDate(suscripcion.periodo_hasta)}`}
+            sub={`${fmtProveedor(suscripcion.proveedor)} · ${fmtDate(suscripcion.created_at)} · vence ${fmtDate(suscripcion.periodo_hasta)}`}
             right={<Pill tone={suscripcion.estado === "activa" ? "ok" : "warning"}>{fmtClp(suscripcion.clp_ultimo_cobro)}</Pill>}
           />
         ))}
@@ -335,7 +335,7 @@ function Finanzas({ data }: { data: Pick<DevCuentaDetalle, "suscripciones" | "pa
           <CompactRow
             key={pago.id}
             left={`${pago.tipo} · ${pago.estado}`}
-            sub={`${pago.proveedor} · ${fmtDate(pago.created_at)} · ref ${pago.proveedor_ref ?? "sin ref"}`}
+            sub={`${fmtProveedor(pago.proveedor)} · ${fmtDate(pago.created_at)} · ref ${pago.proveedor_ref ?? "sin ref"}`}
             right={<Pill tone={pago.estado === "approved" || pago.estado === "aprobado" ? "ok" : "warning"}>{fmtClp(pago.monto_clp)}</Pill>}
           />
         ))}

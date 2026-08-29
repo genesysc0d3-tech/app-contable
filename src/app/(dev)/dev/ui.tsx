@@ -139,7 +139,10 @@ export function Fase({
         gap: "4px 10px",
         margin: "8px 0 0",
         paddingBottom: 3,
-        scrollMarginTop: 76,
+        // 110 y no 76: la barra tiene flexWrap y bajo ~950px el grupo derecho
+        // baja a una segunda línea, con lo que pasa de 100px. Con 76 el ancla
+        // dejaba este título DEBAJO de la barra, o sea el atajo no servía.
+        scrollMarginTop: 110,
         borderBottom: `1px solid ${tono === "muted" ? C.border : `${color}44`}`,
         fontSize: 13,
         fontWeight: 900,
