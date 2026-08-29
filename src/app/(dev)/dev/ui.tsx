@@ -1,46 +1,27 @@
 /**
  * Piezas visuales compartidas del panel /dev.
  *
- * Antes cada página repetía su propia paleta, su propio `Pill` y su propio
- * `Section`, y el detalle de cuenta mezclaba lo que se MIRA con lo que se
- * ESCRIBE. El panel funcionaba, pero mareaba: no había forma de saber, sin
- * leer el código, si un bloque solo informaba o si tocarlo cambiaba la cuenta
- * de un cliente real.
+ * Los bloques se agrupan por CONSECUENCIA, no por tema: `Fase` separa mirar /
+ * actuar / no-se-vuelve-atrás, y todo control que escribe lleva un `Explica`
+ * con las mismas tres líneas.
  *
- * De ahí las dos reglas que impone este archivo:
- *
- *  1. Los bloques se agrupan por CONSECUENCIA, no por tema: `Fase` separa
- *     mirar / actuar / no-se-vuelve-atrás.
- *  2. Todo control que escribe lleva un `Explica` con las mismas tres líneas
- *     —qué hace, cuándo se usa, ojo—. Si un control nuevo no puede llenarlas,
- *     todavía no está listo para vivir acá.
+ * REGLA DURA sobre esas tres líneas: describen lo que hace el código de
+ * actions.ts, y un texto que promete de más es PEOR que no tener texto —
+ * traslada la vigilancia del operador a un cartel que miente. La primera
+ * versión de este archivo tenía tres explicaciones falsas el mismo día que se
+ * escribió. Por eso las afirmaciones están amarradas por
+ * `explicaciones.test.ts`: si alguien cambia la regla en el server, el test
+ * cae y obliga a revisar el texto.
  *
  * Server components: no hay estado ni handlers. Los botones con estado viven
- * en DevCuentaActions.tsx.
+ * en DevCuentaActions.tsx. Los colores viven en colors.ts (sin JSX) para que
+ * ese archivo cliente pueda importarlos sin arrastrarse este.
  */
+import Link from "next/link";
 import type { ReactNode } from "react";
+import { C, toneColor, type Tone } from "./colors";
 
-export const C = {
-  bg: "#0f1014",
-  surface: "#16181d",
-  border: "rgba(255,255,255,.07)",
-  text: "#e8eaf0",
-  text2: "#9aa0ad",
-  text3: "#636878",
-  accent: "#E8553E",
-  amber: "#f59e0b",
-  green: "#22c55e",
-  muted: "rgba(255,255,255,.045)",
-} as const;
-
-export type Tone = "ok" | "warning" | "error" | "muted";
-
-export function toneColor(tone: Tone) {
-  if (tone === "ok") return C.green;
-  if (tone === "warning") return C.amber;
-  if (tone === "error") return C.accent;
-  return C.text2;
-}
+export { C, toneColor, type Tone };
 
 export function fmtClp(value: number | null) {
   if (value === null) return "sin monto";
@@ -78,18 +59,24 @@ export function Pill({ children, tone = "muted" }: { children: string; tone?: To
   );
 }
 
-/** Barra de navegación: las tres pantallas del panel, siempre a la vista. */
-export function DevNav({ activa }: { activa: "cuentas" | "sistema" }) {
-  const items = [
-    { id: "cuentas" as const, href: "/dev/cuentas", label: "Cuentas" },
-    { id: "sistema" as const, href: "/dev/diagnostico", label: "Estado del sistema" },
-  ];
+/** Las pantallas del panel. Una sola fuente: el texto de la portada la usa. */
+export const PANTALLAS = [
+  { id: "cuentas" as const, href: "/dev/cuentas", label: "Cuentas" },
+  { id: "sistema" as const, href: "/dev/diagnostico", label: "Estado del sistema" },
+];
+
+/**
+ * Navegación entre pantallas. `activa` es opcional a propósito: en el detalle
+ * de una cuenta no estás en NINGUNA de las dos, y pintar "Cuentas" como
+ * pestaña actual ahí sería mentir.
+ */
+export function DevNav({ activa }: { activa?: "cuentas" | "sistema" }) {
   return (
     <nav style={{ display: "flex", gap: 6 }}>
-      {items.map((item) => {
+      {PANTALLAS.map((item) => {
         const on = item.id === activa;
         return (
-          <a
+          <Link
             key={item.id}
             href={item.href}
             style={{
@@ -105,7 +92,7 @@ export function DevNav({ activa }: { activa: "cuentas" | "sistema" }) {
             }}
           >
             {item.label}
-          </a>
+          </Link>
         );
       })}
     </nav>
@@ -113,16 +100,18 @@ export function DevNav({ activa }: { activa: "cuentas" | "sistema" }) {
 }
 
 /**
- * Separador de fase. Le dice al operador, antes de seguir bajando, qué tipo de
- * cosa viene: mirar no cambia nada, actuar escribe en la cuenta de alguien,
- * peligro no se deshace.
+ * Separador de fase. Dice, antes de seguir bajando, qué tipo de cosa viene.
+ * Es un `<h2>` con `id` para que el header pegajoso pueda saltar acá: sin
+ * atajo, ordenar en vertical solo aleja los controles.
  */
 export function Fase({
+  id,
   paso,
   titulo,
   descripcion,
   tono = "muted",
 }: {
+  id: string;
   paso: string;
   titulo: string;
   descripcion: string;
@@ -130,14 +119,19 @@ export function Fase({
 }) {
   const color = toneColor(tono);
   return (
-    <div
+    <h2
+      id={id}
       style={{
         display: "flex",
         alignItems: "baseline",
-        gap: 10,
-        marginTop: 8,
-        paddingBottom: 2,
+        flexWrap: "wrap",
+        gap: "4px 10px",
+        margin: "8px 0 0",
+        paddingBottom: 3,
+        scrollMarginTop: 76,
         borderBottom: `1px solid ${tono === "muted" ? C.border : `${color}44`}`,
+        fontSize: 13,
+        fontWeight: 900,
       }}
     >
       <span
@@ -152,9 +146,9 @@ export function Fase({
       >
         {paso}
       </span>
-      <span style={{ fontSize: 13, fontWeight: 900, color: tono === "muted" ? C.text : color }}>{titulo}</span>
-      <span style={{ fontSize: 11, color: C.text2, lineHeight: 1.4 }}>{descripcion}</span>
-    </div>
+      <span style={{ color: tono === "muted" ? C.text : color }}>{titulo}</span>
+      <span style={{ fontSize: 11, fontWeight: 500, color: C.text2, lineHeight: 1.4 }}>{descripcion}</span>
+    </h2>
   );
 }
 
@@ -181,7 +175,7 @@ export function Section({
         minWidth: 0,
       }}
     >
-      <h2
+      <h3
         style={{
           margin: 0,
           fontSize: 12,
@@ -191,9 +185,12 @@ export function Section({
         }}
       >
         {title}
-      </h2>
+      </h3>
+      {/* text2, no text3: el hint es la explicación que este panel existe para
+          dar. Pintarla con el gris más tenue la dejaba en 3,2:1 de contraste,
+          menos legible que el texto genérico que vino a reemplazar. */}
       {hint && (
-        <p style={{ margin: "5px 0 0", fontSize: 11, color: C.text3, lineHeight: 1.5, maxWidth: 720 }}>{hint}</p>
+        <p style={{ margin: "5px 0 0", fontSize: 12, color: C.text2, lineHeight: 1.5, maxWidth: 760 }}>{hint}</p>
       )}
       <div style={{ marginTop: 11 }}>{children}</div>
     </section>
@@ -216,10 +213,12 @@ export function Explica({
   tono?: Tone;
 }) {
   const color = toneColor(tono);
+  // En el bloque irreversible la etiqueta carga el peso: "Ojo" alcanza para
+  // una advertencia, no para algo que no tiene vuelta.
   const filas: Array<[string, string]> = [
     ["Qué hace", que],
     ["Cuándo", cuando],
-    ["Ojo", ojo],
+    [tono === "error" ? "No se deshace" : "Ojo", ojo],
   ];
   return (
     <div
@@ -232,23 +231,24 @@ export function Explica({
         display: "flex",
         flexDirection: "column",
         gap: 6,
-        maxWidth: 720,
+        maxWidth: 760,
       }}
     >
       {filas.map(([etiqueta, texto], i) => (
-        <div key={etiqueta} style={{ display: "grid", gridTemplateColumns: "62px minmax(0, 1fr)", gap: 10 }}>
+        <div key={etiqueta} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 10 }}>
           <span
             style={{
               fontSize: 10,
               fontWeight: 900,
               letterSpacing: ".06em",
               textTransform: "uppercase",
+              whiteSpace: "nowrap",
               color: i === 2 ? color : C.text3,
             }}
           >
             {etiqueta}
           </span>
-          <span style={{ fontSize: 11, color: i === 2 && tono !== "muted" ? color : C.text2, lineHeight: 1.5 }}>
+          <span style={{ fontSize: 12, color: i === 2 && tono !== "muted" ? color : C.text2, lineHeight: 1.5 }}>
             {texto}
           </span>
         </div>

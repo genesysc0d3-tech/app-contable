@@ -76,9 +76,9 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
   if (!snapshot) {
     return (
       <Section
-        title="2 · La plataforma"
+        title="La plataforma"
         tone="warning"
-        hint="Entra como operador dev válido para leer el snapshot productivo."
+        hint="No se pudo leer el estado de la plataforma. Revisa tu acceso, arriba."
       >
         <div style={{ color: C.amber, fontSize: 13, fontWeight: 900 }}>Salud operacional no disponible</div>
       </Section>
@@ -88,7 +88,7 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
   const statusColor = snapshot.status === "critical" ? C.accent : snapshot.status === "degraded" ? C.amber : C.green;
   return (
     <Section
-      title="2 · La plataforma"
+      title="La plataforma"
       tone={snapshot.status === "critical" ? "error" : snapshot.status === "degraded" ? "warning" : "muted"}
       hint="Cómo está el sistema entero, no una cuenta: colas de documentos, emisiones que fallaron y eventos de las últimas 24 horas. Snapshot seguro: sin payloads, claves, XML, PDFs ni prompts."
     >
@@ -110,10 +110,10 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
         }}
       >
         <Metric label="Docs atascados" value={snapshot.metrics.documentosAtascados} tone={snapshot.metrics.documentosAtascados > 0 ? "critical" : "ok"} />
-        <Metric label="Locks expirados" value={snapshot.metrics.locksExpirados} tone={snapshot.metrics.locksExpirados > 0 ? "warn" : "ok"} />
-        <Metric label="Emisión fallida 24h" value={snapshot.metrics.jobsEmisionFallidos24h} tone={snapshot.metrics.jobsEmisionFallidos24h > 0 ? "warn" : "ok"} />
+        <Metric label="Bloqueos vencidos" value={snapshot.metrics.locksExpirados} tone={snapshot.metrics.locksExpirados > 0 ? "warn" : "ok"} />
+        <Metric label="Emisiones fallidas 24h" value={snapshot.metrics.jobsEmisionFallidos24h} tone={snapshot.metrics.jobsEmisionFallidos24h > 0 ? "warn" : "ok"} />
         <Metric label="Errores ops 24h" value={snapshot.metrics.opsErrores24h} tone={snapshot.metrics.opsCriticos24h > 0 ? "critical" : snapshot.metrics.opsErrores24h > 0 ? "warn" : "ok"} />
-        <Metric label="Cola docs lista" value={snapshot.metrics.documentJobsQueued} tone={snapshot.metrics.documentJobsQueued > 10 ? "warn" : "ok"} />
+        <Metric label="Cola docs en espera" value={snapshot.metrics.documentJobsQueued} tone={snapshot.metrics.documentJobsQueued > 10 ? "warn" : "ok"} />
         <Metric label="Cola docs corriendo" value={snapshot.metrics.documentJobsRunning} tone="ok" />
         <Metric label="Cola docs fallida 24h" value={snapshot.metrics.documentJobsFailed24h} tone={snapshot.metrics.documentJobsFailed24h > 0 ? "warn" : "ok"} />
         <Metric label="Cola docs atascada" value={snapshot.metrics.documentJobsStale} tone={snapshot.metrics.documentJobsStale > 0 ? "critical" : "ok"} />
@@ -199,7 +199,7 @@ export default async function DevDiagnosticoPage() {
         </header>
 
         <Section
-          title="1 · Tu acceso"
+          title="Tu acceso"
           tone={data.ok ? "muted" : "warning"}
           hint="Por qué el servidor te deja entrar —o no— al panel. Solo muestra el estado de TU sesión: acá no hay datos de clientes ni claves."
         >

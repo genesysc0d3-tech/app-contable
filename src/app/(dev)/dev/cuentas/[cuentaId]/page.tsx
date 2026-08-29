@@ -9,7 +9,7 @@
  */
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, type DevCuentaDetalle } from "@/lib/dev/account-360";
-import { DevLinkButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
+import { CopiarButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
 import {
   C,
   CompactRow,
@@ -26,6 +26,18 @@ import {
 } from "../../ui";
 
 const fmtDate = (value: string | null | undefined) => fmtFecha(value, true);
+
+const ancla = {
+  border: `1px solid ${C.border}`,
+  background: C.muted,
+  color: C.text2,
+  borderRadius: 7,
+  padding: "6px 10px",
+  fontSize: 11,
+  fontWeight: 800,
+  textDecoration: "none",
+  whiteSpace: "nowrap" as const,
+};
 
 function StatusTile({
   label,
@@ -95,10 +107,10 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
   const personasSobreCupo = data.cuenta.personasActivas > data.cuenta.personasPermitidas;
   const healthTone: Tone = errors > 0 ? "error" : warnings > 0 ? "warning" : "ok";
   const title = errors > 0
-    ? "Hay bloqueos que revisar"
+    ? "Hay errores que revisar"
     : warnings > 0
-      ? "Hay advertencias operativas"
-      : "Cuenta sin alertas principales";
+      ? "Hay advertencias"
+      : "Cuenta sin alertas";
   const subtitle = errors > 0
     ? "Parte por los errores antes de entrar en modo cliente o revisar pagos."
     : warnings > 0
@@ -166,7 +178,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
             )}
             {problems.length > 5 && (
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, fontSize: 11, color: C.text3 }}>
-                {problems.length - 5} señales adicionales más abajo.
+                {problems.length - 5} señales más abajo.
               </div>
             )}
           </div>
@@ -195,7 +207,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
             label="Emisión"
             value={lock ? "bloqueada" : "libre"}
             tone={lock ? "warning" : "ok"}
-            sub={lock ? `${lock.usuarioNombre} · ${lock.estado_visible}` : "Sin lock activo"}
+            sub={lock ? `${lock.usuarioNombre} · ${lock.estado_visible}` : "Sin bloqueo activo"}
           />
         </div>
       </div>
@@ -230,6 +242,10 @@ function Empresas({ data }: { data: DevCuentaDetalle["empresas"] }) {
               {empresa.esPrincipal && <Pill tone="ok">principal</Pill>}
               <Pill tone={empresa.planActivo ? "ok" : "error"}>{empresa.planActivo ? "activa" : "bloqueada"}</Pill>
               <Pill tone={empresa.certificadoLocal ? "ok" : "muted"}>{empresa.certificadoLocal ? "certificado" : "sin cert."}</Pill>
+              {/* El formulario de traer una empresa pide este id y el panel no
+                  lo mostraba en ninguna parte: había que ir a buscarlo por SQL
+                  para usar un control del propio panel. */}
+              <CopiarButton valor={empresa.id} etiqueta="copiar id" />
               <VerComoClienteButton empresaId={empresa.id} compacto>
                 Ver
               </VerComoClienteButton>
@@ -271,7 +287,7 @@ function Addons({ data }: { data: DevCuentaDetalle["addons"] }) {
         <CompactRow
           key={addon.id}
           left={`${addon.tipo} × ${addon.cantidad.toLocaleString("es-CL")}`}
-          sub={`${addon.origen} · ${addon.periodo ?? "sin periodo"} · ${fmtDate(addon.created_at)}`}
+          sub={`${addon.origen} · ${addon.periodo ?? "sin período"} · ${fmtDate(addon.created_at)}`}
           right={<Pill tone={addon.estado === "activo" ? "ok" : "muted"}>{addon.estado}</Pill>}
         />
       ))}
@@ -322,7 +338,7 @@ function Emision({ data }: { data: DevCuentaDetalle["emision"] }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 14 }}>
       <div>
-        <h3 style={{ margin: "0 0 4px", fontSize: 11, color: C.text2 }}>Lock activo</h3>
+        <h3 style={{ margin: "0 0 4px", fontSize: 11, color: C.text2 }}>Bloqueo activo</h3>
         {data.lockActivo ? (
           <CompactRow
             left={`${data.lockActivo.usuarioNombre} · ${data.lockActivo.estado_visible}`}
@@ -377,7 +393,7 @@ function Auditoria({ data }: { data: DevCuentaDetalle["auditoria"] }) {
       ))}
       {hidden > 0 && (
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 9, fontSize: 11, color: C.text3 }}>
-          {hidden} evento{hidden === 1 ? "" : "s"} más oculto{hidden === 1 ? "" : "s"} para mantener esta vista compacta.
+          {hidden} evento{hidden === 1 ? "" : "s"} más, oculto{hidden === 1 ? "" : "s"} por espacio.
         </div>
       )}
     </div>
@@ -401,6 +417,9 @@ export default async function DevCuentaDetallePage({
   const detalle = result.data;
   const cuenta = detalle.cuenta;
   const cuota = detalle.uso.cuota;
+  // entitlements.ts resuelve el plan desde la suscripción viva en CADA lectura:
+  // con una activa, escribir el plan a mano no tiene efecto ninguno.
+  const suscripcionActiva = detalle.suscripciones.some((s) => s.estado === "activa");
 
   return (
     <main
@@ -413,38 +432,84 @@ export default async function DevCuentaDetallePage({
       }}
     >
       <div style={{ maxWidth: 1320, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        {/*
+          Barra PEGAJOSA. Dos razones, las dos aprendidas rompiendo esta misma
+          página: (1) ordenar por consecuencia deja los controles abajo, y sin
+          atajo eso es "más ordenado y más lejos"; (2) a esa altura del scroll
+          ninguna de las tarjetas dice de quién es la cuenta, y ahí es donde se
+          le cambia el plan a la empresa equivocada.
+        */}
+        <header
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
+            margin: "-18px -18px 0",
+            padding: "12px 18px",
+            background: "rgba(15,16,20,.92)",
+            backdropFilter: "blur(8px)",
+            borderBottom: `1px solid ${C.border}`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: C.text3, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <div style={{ fontSize: 10, color: C.text3, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
               Cuenta pagadora
             </div>
-            <h1 style={{ margin: "2px 0 0", fontSize: 22, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <h1 style={{ margin: "1px 0 0", fontSize: 18, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {cuenta.nombre}
             </h1>
-            <div style={{ marginTop: 4, fontSize: 11, color: C.text2 }}>
-              {cuenta.ownerNombre} · {cuenta.ownerEmailMasked}
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-              <Pill tone={cuenta.planActivo ? "ok" : "error"}>{cuenta.planActivo ? "funciones liberadas" : "bloqueada"}</Pill>
-              <Pill>{cuenta.planNombre}</Pill>
-              {detalle.funciones.equipo && <Pill tone="ok">Business equipo</Pill>}
-              {detalle.funciones.multiempresa && <Pill tone="ok">multiempresa</Pill>}
-            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <DevNav activa="cuentas" />
-            <DevLinkButton href="/dev/cuentas">← Lista</DevLinkButton>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <a href="#mirar" style={ancla}>Mirar</a>
+            <a href="#actuar" style={ancla}>Actuar</a>
+            <a href="#peligro" style={{ ...ancla, color: C.accent, borderColor: "rgba(232,85,62,.4)" }}>Peligro</a>
+            <span style={{ width: 1, height: 20, background: C.border, margin: "0 3px" }} />
+            <DevNav />
             <VerComoClienteButton empresaId={cuenta.empresaPrincipalId}>Ver como cliente</VerComoClienteButton>
           </div>
         </header>
 
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: C.text2 }}>
+            {cuenta.ownerNombre} · {cuenta.ownerEmailMasked}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            <Pill tone={cuenta.planActivo ? "ok" : "error"}>{cuenta.planActivo ? "funciones liberadas" : "bloqueada"}</Pill>
+            <Pill>{cuenta.planNombre}</Pill>
+            {suscripcionActiva && <Pill tone="ok">suscripción activa</Pill>}
+            {detalle.funciones.equipo && <Pill tone="ok">Business equipo</Pill>}
+            {detalle.funciones.multiempresa && <Pill tone="ok">multiempresa</Pill>}
+          </div>
+        </div>
+
         <PriorityPanel data={detalle} />
 
+        {/*
+          La descripción NO dice "solo lectura": sería falso. «Ver como
+          cliente» vive en esta zona (en la barra y en cada fila de empresa) y
+          escribe cookie + auditoría en la cuenta del cliente. Un cartel que
+          dice "tranquilo" sobre el control más invasivo después del borrado es
+          peor que no tener cartel.
+        */}
         <Fase
+          id="mirar"
           paso="1 · Mirar"
           titulo="Estado de la cuenta"
-          descripcion="Solo lectura. Nada de lo que sigue cambia algo del cliente."
+          descripcion="Lectura, con una excepción: «Ver como cliente»."
         />
+
+        <Section title="Ver como cliente" hint="El único control que escribe en esta zona. Está en la barra de arriba y en cada fila de Empresas.">
+          <Explica
+            que="Abre la app con la empresa del cliente, en modo soporte de solo lectura, con tu propia sesión. Deja registro en la auditoría de esa cuenta y le muestra una barra al operador diciendo que está adentro."
+            cuando="Para ver lo que ve el cliente cuando reporta algo que en estas tablas no se nota."
+            ojo="La sesión de soporte dura 4 horas y NO se cierra sola al volver acá con el botón del navegador: hay que salir con «Volver a dev». Para escribir de verdad hace falta que el cliente te dé su código de 6 dígitos."
+          />
+        </Section>
 
         <Section
           title="Resumen operativo"
@@ -499,7 +564,7 @@ export default async function DevCuentaDetallePage({
           <Section title="Personas" hint="Quiénes entran a esta cuenta. «Titular» es quien paga; «dev» y «vetado» son marcas nuestras.">
             <Personas data={detalle.usuarios} />
           </Section>
-          <Section title="Extras" hint="Recargas de cuota compradas aparte del plan, con su período y si siguen activas.">
+          <Section title="Extras" hint="Boletas extra compradas aparte del plan, con su período y si siguen activas.">
             <Addons data={detalle.addons} />
           </Section>
         </div>
@@ -523,55 +588,68 @@ export default async function DevCuentaDetallePage({
         </Section>
 
         <Fase
+          id="actuar"
           paso="2 · Actuar"
-          titulo="Controles que escriben"
-          descripcion="Todo lo de acá abajo cambia la cuenta de un cliente real y queda auditado."
+          titulo="Se puede deshacer"
+          descripcion="Escriben en la cuenta de un cliente real, quedan auditados, y se revierten volviendo a tocarlos."
           tono="warning"
         />
 
-        <Section title="Plan de la cuenta" tone="warning">
+        <Section title="Cambiar el plan" tone="warning">
           <Explica
             tono="warning"
-            que="Fija a mano el plan y si sus funciones están liberadas. Escribe la cuenta y todas sus empresas de una vez."
+            que="Fija a mano el plan y si sus funciones están liberadas, en la cuenta y en todas sus empresas de una vez. Si lo subes a un plan multiempresa, las empresas que un downgrade había dormido REVIVEN y se borra la elección de empresa operativa del cliente."
             cuando="La pasarela falló, hay que probar un tier, o una cuenta quedó bloqueada por un desfase nuestro."
-            ojo="Si la cuenta tiene suscripción activa, el próximo evento de la pasarela pisa lo que pongas acá."
+            ojo="Si la cuenta tiene suscripción activa, su plan manda desde ya —no desde el próximo cobro— y este control no hace nada. En ese caso aparece deshabilitado."
           />
-          <PlanToggle cuentaId={cuentaId} planCodigo={cuenta.planCodigo} planActivo={cuenta.planActivo} />
+          <PlanToggle
+            cuentaId={cuentaId}
+            cuentaNombre={cuenta.nombre}
+            planCodigo={cuenta.planCodigo}
+            planActivo={cuenta.planActivo}
+            suscripcionActiva={suscripcionActiva}
+          />
         </Section>
 
-        <Section title="Trial de cortesía" tone="warning">
+        <Section title="Prestar la prueba gratis" tone="warning">
           <Explica
             tono="warning"
-            que="Le habilita el trial a ESTA cuenta aunque el trial global esté apagado."
+            que="Le habilita la prueba a ESTA cuenta aunque el trial público esté apagado."
             cuando="Un conocido o un cliente puntual al que le queremos dar la prueba sin abrirla para todo el mundo."
-            ojo="El trial emite documentos tributarios REALES: los folios que gaste son irreversibles."
+            ojo="La prueba emite documentos tributarios REALES: los folios que gaste no se pueden deshacer, aunque le quites la cortesía después."
           />
           <TrialCortesiaToggle cuentaId={cuentaId} cortesia={cuenta.trialCortesia} />
         </Section>
 
-        <Section title="Traer una empresa a esta cuenta" tone="warning">
+        {/*
+          Migrar vive en la fase 3, no en la 2: el server exige que el DESTINO
+          tenga plan multiempresa, así que si el origen era Pro la empresa no
+          se puede devolver por acá. No tiene botón de vuelta.
+        */}
+        <Fase
+          id="peligro"
+          paso="3 · No se vuelve atrás"
+          titulo="Sin botón de deshacer"
+          descripcion="Dos controles. Si dudas, no es acá."
+          tono="error"
+        />
+
+        <Section title="Traer una empresa a esta cuenta" tone="error">
           <Explica
-            tono="warning"
-            que="Re-apunta el vínculo de una empresa hacia esta cuenta. Los datos no se mueven ni se copian."
-            cuando="Unificar dos cuentas del mismo dueño, o devolverle su empresa a alguien que perdió el acceso."
-            ojo="Primero verificar identidad por el runbook: unificación = responde desde ambos correos; recuperación = $1 con código desde el banco de la empresa. Nunca pedir cédula."
+            tono="error"
+            que="Re-apunta el vínculo de la empresa hacia esta cuenta: los datos no se copian, pero el titular de ACÁ pasa a ver toda la historia de esa empresa —cartolas, movimientos, RUTs de terceros y boletas—. También desconecta sus chats de Telegram, que hay que re-vincular desde esta cuenta."
+            cuando="Unificar dos cuentas del mismo dueño, o devolverle su empresa a alguien que perdió el acceso. El id de la empresa se copia desde la ficha de su cuenta actual, en el bloque Empresas."
+            ojo="No hay vuelta por el panel: traerla exige plan multiempresa en el destino, así que si venía de un Pro no se puede devolver. Antes de tocar: verificar identidad por el runbook —unificación, responde desde ambos correos; recuperación, $1 con código desde el banco de la empresa—. Nunca pedir cédula. El login de la cuenta de origen se resuelve aparte, a mano."
           />
           <MigrarEmpresaForm cuentaId={cuentaId} />
         </Section>
 
-        <Fase
-          paso="3 · No se vuelve atrás"
-          titulo="Borrado definitivo"
-          descripcion="Un solo control, y no tiene deshacer. Si dudas, no es acá."
-          tono="error"
-        />
-
         <Section title="Borrar la cuenta entera" tone="error">
           <Explica
             tono="error"
-            que="Borra empresas, cartolas, boletas, movimientos, propuestas y la PII cruda (audit_chunks, parser_logs). Conserva auth y consentimientos como prueba ARCO."
+            que="Borra empresas, cartolas, documentos, movimientos, propuestas y el texto crudo que sobrevive al documento y trae RUTs y montos de terceros (audit_chunks, parser_logs). Conserva auth y consentimientos como prueba ARCO."
             cuando="El cliente ejerció su derecho de eliminación (Ley 21.719), o hay que limpiar una cuenta de prueba."
-            ojo="Irreversible y sin respaldo. Exige tipear la razón social exacta justamente para que no pase de largo."
+            ojo="Si la cuenta tiene aunque sea UNA boleta emitida en el SII, la purga se niega entera y no borra nada: son 6 años de retención tributaria y ese cierre se hace a mano. Para habilitar el botón hay que escribir el nombre de la CUENTA (el de la barra de arriba), que no siempre es la razón social."
           />
           <PurgarCuentaButton cuentaId={cuentaId} nombre={cuenta.nombre} />
         </Section>

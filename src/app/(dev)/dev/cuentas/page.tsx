@@ -1,10 +1,14 @@
 /**
  * Lista de cuentas pagadoras: la puerta de entrada del panel.
  *
- * Arriba explica qué es el panel y qué hay en cada pantalla —el operador entra
- * acá a veces cada varias semanas— y el único control global que existe (el
- * trial público) vive en su propio bloque explicado, no suelto en la cabecera
- * al lado de un link: prenderlo cambia la oferta para TODAS las cuentas.
+ * El único control global del panel —el trial público— tiene bloque propio y
+ * explicado, ARRIBA de la lista: antes vivía suelto en la cabecera, al lado de
+ * un link, y el primer intento de arreglarlo lo mandó abajo de una lista sin
+ * paginación. Explicado no puede significar escondido: prenderlo o apagarlo
+ * cambia la oferta para todas las cuentas y corta a quien esté en su prueba.
+ *
+ * Los cinco números de arriba SON los filtros. Antes eran dos filas con la
+ * misma información y empujaban los resultados fuera de la pantalla.
  */
 import { notFound, redirect } from "next/navigation";
 import { listarDevCuentas, type DevCuentaRow } from "@/lib/dev/account-360";
@@ -38,7 +42,7 @@ function tonoCuenta(cuenta: DevCuentaRow): Tone {
 }
 
 function etiquetaTono(tone: Tone) {
-  if (tone === "error") return "accion";
+  if (tone === "error") return "actuar";
   if (tone === "warning") return "revisar";
   return "ok";
 }
@@ -59,59 +63,51 @@ function filtroHref(filtro: FiltroEstado, query: string) {
   return qs ? `/dev/cuentas?${qs}` : "/dev/cuentas";
 }
 
-function FilterLink({
+/**
+ * Tarjeta-filtro. Antes eran dos filas apiladas —cinco tarjetas con los
+ * números y cinco pastillas con los mismos números— que decían exactamente lo
+ * mismo y se comían el alto donde deberían verse las cuentas. Ahora la tarjeta
+ * ES el filtro.
+ */
+function FiltroCard({
   filtro,
   activo,
   query,
-  count,
-  children,
+  label,
+  value,
+  sub,
+  tone = "muted",
 }: {
   filtro: FiltroEstado;
   activo: boolean;
   query: string;
-  count: number;
-  children: string;
+  label: string;
+  value: number;
+  sub: string;
+  tone?: Tone;
 }) {
+  const color = toneColor(tone);
   return (
     <a
       href={filtroHref(filtro, query)}
       style={{
-        border: `1px solid ${activo ? "rgba(232,85,62,.48)" : C.border}`,
-        background: activo ? "rgba(232,85,62,.14)" : C.muted,
-        color: activo ? C.accent : C.text2,
-        borderRadius: 999,
-        padding: "6px 10px",
-        fontSize: 10,
-        fontWeight: 850,
-        textDecoration: "none",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children} <span style={{ color: activo ? C.text : C.text3 }}>{count.toLocaleString("es-CL")}</span>
-    </a>
-  );
-}
-
-function MetricCard({ label, value, sub, tone = "muted" }: { label: string; value: number; sub: string; tone?: Tone }) {
-  const color = toneColor(tone);
-  return (
-    <div
-      style={{
-        border: `1px solid ${C.border}`,
-        background: C.muted,
+        display: "block",
+        border: `1px solid ${activo ? "rgba(232,85,62,.5)" : C.border}`,
+        background: activo ? "rgba(232,85,62,.12)" : C.muted,
         borderRadius: 10,
         padding: "10px 11px",
         minWidth: 0,
+        textDecoration: "none",
       }}
     >
-      <div style={{ fontSize: 10, color: C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 850 }}>
+      <div style={{ fontSize: 10, color: activo ? C.accent : C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 850 }}>
         {label}
       </div>
       <div style={{ marginTop: 5, color, fontSize: 20, lineHeight: 1, fontWeight: 950 }}>
         {value.toLocaleString("es-CL")}
       </div>
       <div style={{ marginTop: 5, fontSize: 10, color: C.text3, lineHeight: 1.35 }}>{sub}</div>
-    </div>
+    </a>
   );
 }
 
@@ -248,31 +244,47 @@ export default async function DevCuentasPage({
           <DevNav activa="cuentas" />
         </header>
 
-        <Section
-          title="Qué hay en este panel"
-          hint="Dos pantallas y nada más. Todo lo que escribe algo vive dentro de una cuenta, nunca suelto por acá."
-        >
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+        {/* Plegado: se lee cuando estás perdido, no cuando estás trabajando.
+            Abierto se comía el mejor espacio de la pantalla en cada visita. */}
+        <details style={{ border: `1px solid ${C.border}`, background: C.surface, borderRadius: 12, padding: "10px 14px" }}>
+          <summary style={{ fontSize: 12, color: C.text2, fontWeight: 800, cursor: "pointer", letterSpacing: ".04em" }}>
+            ¿QUÉ HAY EN ESTE PANEL?
+          </summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10, marginTop: 11 }}>
             {[
               {
                 titulo: "Cuentas (esta pantalla)",
-                texto: "Buscar una cuenta y ver de un vistazo cuáles necesitan atención. Entrando al detalle está todo lo demás: plan, pagos, empresas, emisión y los controles de soporte.",
+                texto: "Buscar una cuenta y ver de un vistazo cuáles necesitan atención. Los números de arriba son también los filtros. El único control global del panel —el trial público— está más abajo.",
+              },
+              {
+                titulo: "La ficha de una cuenta",
+                texto: "Entrando a «Detalle»: plan, pagos, empresas, personas, emisión y auditoría, y después los controles de soporte, ordenados por lo que cuesta deshacerlos.",
               },
               {
                 titulo: "Estado del sistema",
-                texto: "Si TU acceso de operador está bien y cómo está la plataforma completa: colas, emisiones fallidas y eventos de las últimas 24 horas. No muestra datos de clientes.",
+                texto: "Si TU acceso de operador está bien y cómo está la plataforma completa: colas, emisiones fallidas y eventos de las últimas 24 horas. Sin documentos ni datos de cuentas: solo contadores y mensajes de error.",
               },
             ].map((item) => (
               <div key={item.titulo} style={{ border: `1px solid ${C.border}`, background: C.muted, borderRadius: 10, padding: "10px 11px" }}>
                 <div style={{ fontSize: 12, fontWeight: 900 }}>{item.titulo}</div>
-                <div style={{ marginTop: 4, fontSize: 11, color: C.text2, lineHeight: 1.5 }}>{item.texto}</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: C.text2, lineHeight: 1.5 }}>{item.texto}</div>
               </div>
             ))}
           </div>
+        </details>
+
+        <Section title="Trial público" tone="warning">
+          <Explica
+            tono="warning"
+            que="Prende o apaga la prueba gratis para todas las cuentas sin plan."
+            cuando="Abrir o cerrar la prueba como oferta pública. Para una cuenta puntual está «Prestar la prueba gratis», dentro de su ficha."
+            ojo="Apagarlo deja afuera EN EL ACTO a quien esté en medio de su prueba, no solo a los que vengan después. Y la prueba emite documentos tributarios reales: los folios gastados no se deshacen."
+          />
+          <TrialGlobalToggle habilitado={trialGlobalOn} />
         </Section>
 
         <Section
-          title="Account 360"
+          title="Cuentas"
           hint="Plan, pago, cupos y acceso de soporte. No muestra documentos, imágenes ni el crudo de los pagos."
         >
           <form action="/dev/cuentas" style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -311,24 +323,16 @@ export default async function DevCuentasPage({
           </form>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
-            <MetricCard label="Coinciden" value={total} sub="cuentas en la búsqueda actual" />
-            <MetricCard label="Con alertas" value={totalAlertas} sub="algo que mirar, no siempre urgente" tone={totalAlertas > 0 ? "warning" : "ok"} />
-            <MetricCard label="Bloqueadas" value={totalBloqueadas} sub="pagan pero no ven sus funciones" tone={totalBloqueadas > 0 ? "error" : "ok"} />
-            <MetricCard label="Sin pago" value={totalSinPago} sub="ningún cobro registrado todavía" tone={totalSinPago > 0 ? "warning" : "ok"} />
-            <MetricCard label="Sobre cupo" value={totalSobreCupo} sub="más empresas o personas que su plan" tone={totalSobreCupo > 0 ? "error" : "ok"} />
-          </div>
-
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 8 }}>
-            <FilterLink filtro="todas" activo={filtro === "todas"} query={query} count={total}>Todas</FilterLink>
-            <FilterLink filtro="alertas" activo={filtro === "alertas"} query={query} count={totalAlertas}>Alertas</FilterLink>
-            <FilterLink filtro="bloqueadas" activo={filtro === "bloqueadas"} query={query} count={totalBloqueadas}>Bloqueadas</FilterLink>
-            <FilterLink filtro="sin_pago" activo={filtro === "sin_pago"} query={query} count={totalSinPago}>Sin pago</FilterLink>
-            <FilterLink filtro="sobre_cupo" activo={filtro === "sobre_cupo"} query={query} count={totalSobreCupo}>Sobre cupo</FilterLink>
+            <FiltroCard filtro="todas" activo={filtro === "todas"} query={query} label="Todas" value={total} sub="cuentas en la búsqueda actual" />
+            <FiltroCard filtro="alertas" activo={filtro === "alertas"} query={query} label="Con alertas" value={totalAlertas} sub="algo que mirar, no siempre urgente" tone={totalAlertas > 0 ? "warning" : "ok"} />
+            <FiltroCard filtro="bloqueadas" activo={filtro === "bloqueadas"} query={query} label="Bloqueadas" value={totalBloqueadas} sub="sin funciones liberadas" tone={totalBloqueadas > 0 ? "error" : "ok"} />
+            <FiltroCard filtro="sin_pago" activo={filtro === "sin_pago"} query={query} label="Sin pago" value={totalSinPago} sub="ningún cobro registrado todavía" tone={totalSinPago > 0 ? "warning" : "ok"} />
+            <FiltroCard filtro="sobre_cupo" activo={filtro === "sobre_cupo"} query={query} label="Sobre cupo" value={totalSobreCupo} sub="más empresas o personas que su plan" tone={totalSobreCupo > 0 ? "error" : "ok"} />
           </div>
 
           <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>
             Mostrando {cuentas.length.toLocaleString("es-CL")} de {total.toLocaleString("es-CL")} cuenta{total === 1 ? "" : "s"}
-            {query ? ` para "${query}"` : ""}.
+            {query ? ` para «${query}»` : ""}.
           </div>
 
           {cuentas.length === 0 ? (
@@ -342,16 +346,6 @@ export default async function DevCuentasPage({
               ))}
             </div>
           )}
-        </Section>
-
-        <Section title="Trial público" tone="warning">
-          <Explica
-            tono="warning"
-            que="Prende o apaga la prueba gratis para TODAS las cuentas sin plan, incluida gente que se registre en el próximo minuto."
-            cuando="Abrir o cerrar la prueba como oferta pública. Para una cuenta puntual está el trial de cortesía, dentro de su detalle."
-            ojo="El trial emite documentos tributarios REALES contra el SII. Los folios que gaste la gente no se pueden deshacer."
-          />
-          <TrialGlobalToggle habilitado={trialGlobalOn} />
         </Section>
       </div>
     </main>
