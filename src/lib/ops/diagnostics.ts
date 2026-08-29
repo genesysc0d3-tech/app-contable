@@ -71,10 +71,33 @@ function countFrom(result: { count: number | null; error: { message: string } | 
  *
  * Un respaldo diario sano tiene menos de 26 horas (24 + margen). Sobre 48
  * significa que se saltó al menos un día entero.
+ *
+ * LO QUE NO SALE AL PANEL: el nombre del archivo, el prefijo, el proveedor ni
+ * la máquina. Antes el resumen imprimía la ruta completa y la metadata llevaba
+ * el prefijo del bucket. El panel es god-mode pero sigue siendo una página web
+ * que se ve en capturas, y el respaldo es lo último que queda si todo lo demás
+ * se cae: saber que anda no exige saber dónde está. Lo que sí sale es el
+ * tiempo, que es lo único accionable.
  */
 const RESPALDO_PREFIJO = "respaldos-db/";
 const RESPALDO_HORAS_WARN = 26;
 const RESPALDO_HORAS_CRITICO = 48;
+
+/**
+ * El mensaje de un error de red trae host, URL firmada o nombre del bucket.
+ * Para el panel basta con saber QUÉ falló, no contra qué: se recorta y se le
+ * borra cualquier cosa que parezca una dirección.
+ */
+function errorSinUbicacion(error: unknown): string {
+  const crudo = error instanceof Error ? error.message : "error desconocido";
+  return crudo
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/[\w.-]*\b(r2|cloudflarestorage|amazonaws|s3)\b[\w.-]*/gi, "")
+    .replace(/respaldos?-db\S*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 120) || "error desconocido";
+}
 
 export async function revisarRespaldos(): Promise<OpsFinding[]> {
   // Sin R2 configurado no hay nada que vigilar (entornos locales, previews).
@@ -86,7 +109,9 @@ export async function revisarRespaldos(): Promise<OpsFinding[]> {
     return [{
       severity: "warn",
       eventName: "respaldo_db_no_verificable",
-      summary: `No se pudo consultar R2 para verificar los respaldos: ${error instanceof Error ? error.message : "error desconocido"}`,
+      // El mensaje del error se recorta y se limpia: puede traer el host o la
+      // URL firmada del almacenamiento, que es justo lo que no debe aparecer.
+      summary: `No se pudo verificar el estado de los respaldos: ${errorSinUbicacion(error)}`,
     }];
   }
 
@@ -94,8 +119,7 @@ export async function revisarRespaldos(): Promise<OpsFinding[]> {
     return [{
       severity: "critical",
       eventName: "respaldo_db_inexistente",
-      summary: "No hay NINGÚN respaldo de la base en R2. Supabase Free no tiene respaldos propios, así que ahora mismo no hay de dónde restaurar.",
-      metadata: { prefijo: RESPALDO_PREFIJO },
+      summary: "No hay NINGÚN respaldo de la base. El plan que tenemos no trae respaldos propios, así que ahora mismo no hay de dónde restaurar.",
     }];
   }
 
@@ -106,9 +130,8 @@ export async function revisarRespaldos(): Promise<OpsFinding[]> {
   return [{
     severity: critico ? "critical" : "warn",
     eventName: "respaldo_db_atrasado",
-    summary: `El último respaldo de la base tiene ${Math.floor(horas)} horas (${ultimo.key}). ${critico ? "Se saltó al menos un día completo — revisar el Mac mini." : "Debería llegar uno cada 24 h."}`,
+    summary: `El último respaldo de la base tiene ${Math.floor(horas)} horas. ${critico ? "Se saltó al menos un día completo — revisar la máquina que respalda." : "Debería llegar uno cada 24 h."}`,
     metadata: {
-      key: ultimo.key,
       horas: Math.floor(horas),
       bytes: ultimo.bytes,
       modificado: ultimo.modificado.toISOString(),
