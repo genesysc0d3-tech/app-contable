@@ -252,14 +252,10 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     .filter(([empresaId]) => !empresasConAprobadas.has(empresaId))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
-  let nombresAtascadas = new Map<string, string>();
-  if (empresasAtascadas.length > 0) {
-    const { data: empRows } = await sb
-      .from("empresas")
-      .select("id, razon_social")
-      .in("id", empresasAtascadas.map(([id]) => id));
-    nombresAtascadas = new Map((empRows ?? []).map((e) => [e.id, e.razon_social]));
-  }
+  // Antes acá se traían las razones sociales para ponerlas en el resumen. Se
+  // sacaron: ese texto se persiste, se pinta en la vista global y sale al
+  // webhook y a Telegram. Y de paso se borra la consulta, porque traer datos de
+  // clientes "por si acaso" es cómo terminan filtrándose.
 
   const findings: OpsFinding[] = [];
   // El vigilante de respaldos entra acá para reutilizar el mismo cron, la misma
@@ -269,7 +265,11 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     findings.push({
       severity: "warn",
       eventName: "embudo_listas_sin_aprobar",
-      summary: `${nombresAtascadas.get(empresaId) ?? empresaId} tiene ${listas} boleta(s) lista(s) hace más de 30 min y ninguna aprobada — probable atasco en el paso Aprobar (Emitir se le ve vacío)`,
+      // Sin la razón social: este resumen se guarda, se pinta en la vista
+      // GLOBAL de la plataforma —que se anuncia como "sin datos de cuentas"— y
+      // además se manda al webhook y a Telegram. El operador que necesite saber
+      // cuál es entra a la ficha; el id va en metadata para eso.
+      summary: `Una empresa tiene ${listas} boleta(s) lista(s) hace más de 30 min y ninguna aprobada — probable atasco en el paso Aprobar (Emitir se le ve vacío)`,
       metadata: { empresa_id: empresaId, listas, threshold_minutes: 30 },
     });
   }

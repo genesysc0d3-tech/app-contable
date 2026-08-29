@@ -167,7 +167,7 @@ function normalizeSearch(value: string | null | undefined) {
 }
 
 /** Los proveedores se guardan en minúscula ('flow', 'mercadopago'); en pantalla van con su nombre. */
-function fmtProveedor(proveedor: string | null) {
+export function fmtProveedor(proveedor: string | null) {
   const nombres: Record<string, string> = { flow: "Flow", mercadopago: "Mercado Pago", mp: "Mercado Pago" };
   if (!proveedor) return "la pasarela";
   return nombres[proveedor.toLowerCase()] ?? proveedor;
@@ -309,7 +309,11 @@ async function loadCommon(sb: Sb, cuentaIds: string[], ownerIds: string[]) {
     cuentaIds.length
       ? sb
           .from("suscripciones")
-          .select("id, cuenta_id, created_at, updated_at, estado, plan_codigo, proveedor, proveedor_ref, clp_ultimo_cobro, periodo_hasta")
+          // proveedor_ref NO va: en Flow guarda el customerId, que es con lo que se
+          // le cobra la tarjeta al cliente. Hoy la UI no lo pinta, pero si sale
+          // del server basta con que alguien lo agregue a una fila para volver
+          // un identificador en un medio de cobro. Se corta en el origen.
+          .select("id, cuenta_id, created_at, updated_at, estado, plan_codigo, proveedor, clp_ultimo_cobro, periodo_hasta")
           .in("cuenta_id", cuentaIds)
           .order("created_at", { ascending: false })
           .limit(500)
