@@ -5,6 +5,7 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
+import { sesionVencidaPorEdad } from "@/lib/auth/edad-sesion";
 
 type Sb = SupabaseClient<Database>;
 
@@ -29,6 +30,18 @@ export async function requireAccountApiAccess(options: {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, response: NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 }) };
+
+  // Tope de edad de la sesión. Va ACÁ y no en cada ruta: toda ruta que use este
+  // guard lo hereda, incluida /api/extension/vault-key, que es la que abre la
+  // bóveda con las claves del SII y que el middleware NO cubre (está excluida
+  // del matcher). Ver lib/auth/edad-sesion.ts para el porqué.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (sesionVencidaPorEdad(session?.access_token)) {
+    return {
+      ok: false,
+      response: NextResponse.json({ ok: false, error: "SESSION_EXPIRED" }, { status: 401 }),
+    };
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
