@@ -1730,7 +1730,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
             )}
 
             {/* Tu propio candado pegado de un intento anterior (no bloquea a nadie más):
-                un click lo cancela y podés emitir de nuevo — sin esperar el TTL. */}
+                un click lo cancela y puedes emitir de nuevo — sin esperar el TTL. */}
             {myStaleLock && !lockBlocksEmission && (usesSiiLocal || usesSimpleApi) && (
               <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 10, lineHeight: 1.45, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div>

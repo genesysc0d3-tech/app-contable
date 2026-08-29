@@ -567,7 +567,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
           </div>
           <div style={{ marginTop: 2, fontSize: 11, color: "var(--text2, #8b92a3)" }}>
             Ayuda a clasificar tu primera cartola, antes de que la app aprenda tus movimientos.
-            Podés cambiarlo por cartola al subirla.
+            Puedes cambiarlo por cartola al subirla.
           </div>
         </div>
 
