@@ -1,20 +1,15 @@
-import Link from "next/link";
+/**
+ * Estado del sistema: las dos preguntas que se hacen cuando algo no anda —
+ * "¿estoy entrando bien yo?" y "¿está bien la plataforma?"—, en ese orden.
+ *
+ * Se llama "Estado del sistema" y no "Diagnóstico" porque el detalle de cada
+ * cuenta ya tiene sus propias señales: dos cosas distintas con el mismo nombre
+ * era la mitad del mareo. La ruta sigue siendo /dev/diagnostico.
+ */
 import { redirect } from "next/navigation";
 import { getDevOperatorContext, getDevOperatorDiagnostics } from "@/lib/dev/support-mode";
 import { collectOpsSnapshot, type OpsSnapshot } from "@/lib/ops/diagnostics";
-
-const C = {
-  bg: "#0f1014",
-  surface: "#16181d",
-  border: "rgba(255,255,255,.08)",
-  text: "#e8eaf0",
-  text2: "#9aa0ad",
-  text3: "#636878",
-  accent: "#E8553E",
-  green: "#22c55e",
-  amber: "#f59e0b",
-  muted: "rgba(255,255,255,.05)",
-} as const;
+import { C, DevNav, Section } from "../ui";
 
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean | null }) {
   const color = ok === true ? C.green : ok === false ? C.accent : C.text2;
@@ -80,26 +75,26 @@ function Metric({ label, value, tone }: { label: string; value: number; tone?: "
 function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
   if (!snapshot) {
     return (
-      <section style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+      <Section
+        title="2 · La plataforma"
+        tone="warning"
+        hint="Entra como operador dev válido para leer el snapshot productivo."
+      >
         <div style={{ color: C.amber, fontSize: 13, fontWeight: 900 }}>Salud operacional no disponible</div>
-        <p style={{ margin: "8px 0 0", color: C.text2, fontSize: 12 }}>
-          Entra como operador dev valido para leer el snapshot productivo.
-        </p>
-      </section>
+      </Section>
     );
   }
 
   const statusColor = snapshot.status === "critical" ? C.accent : snapshot.status === "degraded" ? C.amber : C.green;
   return (
-    <section style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 }}>
+    <Section
+      title="2 · La plataforma"
+      tone={snapshot.status === "critical" ? "error" : snapshot.status === "degraded" ? "warning" : "muted"}
+      hint="Cómo está el sistema entero, no una cuenta: colas de documentos, emisiones que fallaron y eventos de las últimas 24 horas. Snapshot seguro: sin payloads, claves, XML, PDFs ni prompts."
+    >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-        <div>
-          <div style={{ color: statusColor, fontSize: 13, fontWeight: 900 }}>
-            Salud operacional {statusLabel(snapshot.status)}
-          </div>
-          <p style={{ margin: "5px 0 0", color: C.text2, fontSize: 12 }}>
-            Snapshot seguro: sin payloads, claves, XML, PDFs ni prompts.
-          </p>
+        <div style={{ color: statusColor, fontSize: 13, fontWeight: 900 }}>
+          Salud operacional {statusLabel(snapshot.status)}
         </div>
         <div style={{ color: C.text3, fontSize: 11, fontWeight: 800 }}>
           {new Date(snapshot.checkedAt).toLocaleString("es-CL", { timeZone: "America/Santiago" })}
@@ -172,7 +167,7 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
           </div>
         )}
       </div>
-    </section>
+    </Section>
   );
 }
 
@@ -198,46 +193,26 @@ export default async function DevDiagnosticoPage() {
             <div style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800 }}>
               Panel operador
             </div>
-            <h1 style={{ margin: "3px 0 0", fontSize: 22 }}>Diagnóstico de acceso dev</h1>
+            <h1 style={{ margin: "3px 0 0", fontSize: 22 }}>Estado del sistema</h1>
           </div>
-          <Link
-            href="/dev/cuentas"
-            style={{
-              border: `1px solid ${C.border}`,
-              background: C.muted,
-              color: C.text2,
-              borderRadius: 8,
-              padding: "8px 12px",
-              fontSize: 11,
-              fontWeight: 800,
-              textDecoration: "none",
-            }}
-          >
-            Reintentar cuentas
-          </Link>
+          <DevNav activa="sistema" />
         </header>
 
-        <section
-          style={{
-            background: C.surface,
-            border: `1px solid ${C.border}`,
-            borderRadius: 14,
-            padding: 16,
-          }}
+        <Section
+          title="1 · Tu acceso"
+          tone={data.ok ? "muted" : "warning"}
+          hint="Por qué el servidor te deja entrar —o no— al panel. Solo muestra el estado de TU sesión: acá no hay datos de clientes ni claves."
         >
           <div
             style={{
               color: data.ok ? C.green : C.amber,
               fontSize: 13,
               fontWeight: 900,
-              marginBottom: 8,
+              marginBottom: 4,
             }}
           >
-            {data.ok ? "Acceso dev OK" : "El servidor no esta aceptando esta sesion como operador dev"}
+            {data.ok ? "Acceso dev OK" : "El servidor no está aceptando esta sesión como operador dev"}
           </div>
-          <p style={{ margin: "0 0 10px", fontSize: 12, color: C.text2, lineHeight: 1.5 }}>
-            Esta pantalla solo muestra el estado de tu propia sesion. No muestra datos de clientes ni claves.
-          </p>
 
           <Row label="Auth email" value={data.authEmail ?? "sin email de auth"} ok={data.authEmail?.toLowerCase() === data.expectedEmail} />
           <Row label="Email esperado" value={data.expectedEmail} ok />
@@ -251,7 +226,7 @@ export default async function DevDiagnosticoPage() {
           <Row label="Email calza" value={boolText(data.emailOk)} ok={data.emailOk} />
           <Row label="Resultado" value={data.ok ? "puede entrar a /dev/cuentas" : data.error ?? "bloqueado"} ok={data.ok} />
           {data.detalle && <Row label="Detalle" value={data.detalle} ok={false} />}
-        </section>
+        </Section>
 
         <OpsHealth snapshot={opsSnapshot} />
       </div>

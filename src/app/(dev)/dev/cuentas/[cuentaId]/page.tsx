@@ -1,87 +1,31 @@
+/**
+ * Ficha de una cuenta pagadora para el operador.
+ *
+ * El orden de la página NO es temático, es por consecuencia: primero todo lo
+ * que solo se MIRA, después los controles que ESCRIBEN en la cuenta de un
+ * cliente real, y al final —separado y solo— lo que no se puede deshacer.
+ * Antes la purga total vivía en el medio, entre dos bloques informativos, y se
+ * pasaba por encima de ella en cada scroll.
+ */
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, type DevCuentaDetalle } from "@/lib/dev/account-360";
 import { DevLinkButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
+import {
+  C,
+  CompactRow,
+  DevNav,
+  EmptyState,
+  Explica,
+  Fase,
+  Pill,
+  Section,
+  fmtClp,
+  fmtFecha,
+  toneColor,
+  type Tone,
+} from "../../ui";
 
-const C = {
-  bg: "#0f1014",
-  surface: "#16181d",
-  border: "rgba(255,255,255,.07)",
-  text: "#e8eaf0",
-  text2: "#9aa0ad",
-  text3: "#636878",
-  accent: "#E8553E",
-  amber: "#f59e0b",
-  green: "#22c55e",
-  muted: "rgba(255,255,255,.045)",
-} as const;
-
-function fmtClp(value: number | null) {
-  if (value === null) return "sin monto";
-  return `$${Math.round(value).toLocaleString("es-CL")}`;
-}
-
-function fmtDate(value: string | null | undefined) {
-  if (!value) return "sin fecha";
-  return new Intl.DateTimeFormat("es-CL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Santiago",
-  }).format(new Date(value));
-}
-
-function toneColor(tone: "ok" | "warning" | "error" | "muted") {
-  if (tone === "ok") return C.green;
-  if (tone === "warning") return C.amber;
-  if (tone === "error") return C.accent;
-  return C.text2;
-}
-
-function Pill({
-  children,
-  tone = "muted",
-}: {
-  children: string;
-  tone?: "ok" | "warning" | "error" | "muted";
-}) {
-  const color = toneColor(tone);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        border: `1px solid ${tone === "muted" ? C.border : `${color}55`}`,
-        background: tone === "muted" ? C.muted : `${color}14`,
-        color,
-        borderRadius: 999,
-        padding: "3px 8px",
-        fontSize: 10,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section
-      style={{
-        background: C.surface,
-        border: `1px solid ${C.border}`,
-        borderRadius: 12,
-        padding: 14,
-        minWidth: 0,
-      }}
-    >
-      <h2 style={{ margin: "0 0 10px", fontSize: 12, color: C.text2, textTransform: "uppercase", letterSpacing: ".08em" }}>
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
+const fmtDate = (value: string | null | undefined) => fmtFecha(value, true);
 
 function StatusTile({
   label,
@@ -92,7 +36,7 @@ function StatusTile({
   label: string;
   value: string;
   sub?: string;
-  tone?: "ok" | "warning" | "error" | "muted";
+  tone?: Tone;
 }) {
   const color = toneColor(tone);
   return (
@@ -116,23 +60,6 @@ function StatusTile({
   );
 }
 
-function EmptyState({ children }: { children: string }) {
-  return (
-    <div
-      style={{
-        border: `1px dashed ${C.border}`,
-        background: "rgba(255,255,255,.025)",
-        borderRadius: 10,
-        padding: "13px 12px",
-        fontSize: 12,
-        color: C.text2,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 function QuickCheck({
   label,
   value,
@@ -141,7 +68,7 @@ function QuickCheck({
 }: {
   label: string;
   value: string;
-  tone: "ok" | "warning" | "error" | "muted";
+  tone: Tone;
   sub?: string;
 }) {
   return (
@@ -157,26 +84,6 @@ function QuickCheck({
   );
 }
 
-function CompactRow({
-  left,
-  right,
-  sub,
-}: {
-  left: React.ReactNode;
-  right?: React.ReactNode;
-  sub?: React.ReactNode;
-}) {
-  return (
-    <div style={{ borderTop: `1px solid ${C.border}`, padding: "9px 0", display: "flex", gap: 10, alignItems: "center" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 750, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{left}</div>
-        {sub && <div style={{ marginTop: 3, fontSize: 10, color: C.text3 }}>{sub}</div>}
-      </div>
-      {right && <div style={{ flexShrink: 0, display: "flex", gap: 6, alignItems: "center" }}>{right}</div>}
-    </div>
-  );
-}
-
 function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
   const problems = data.diagnostico
     .filter((item) => item.codigo !== "ok")
@@ -186,7 +93,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
   const lock = data.emision.lockActivo;
   const empresasSobreCupo = data.cuenta.empresasActivas > data.cuenta.empresasPermitidas;
   const personasSobreCupo = data.cuenta.personasActivas > data.cuenta.personasPermitidas;
-  const healthTone = errors > 0 ? "error" : warnings > 0 ? "warning" : "ok";
+  const healthTone: Tone = errors > 0 ? "error" : warnings > 0 ? "warning" : "ok";
   const title = errors > 0
     ? "Hay bloqueos que revisar"
     : warnings > 0
@@ -198,9 +105,9 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
       ? "La cuenta puede operar, pero hay señales que conviene confirmar."
       : "Plan, pagos, cupos y emisión no muestran problemas críticos en esta vista.";
   const nextStep = errors > 0
-    ? problems[0]?.texto ?? "Revisar el diagnostico antes de entrar en modo cliente."
+    ? problems[0]?.texto ?? "Revisar las señales antes de entrar en modo cliente."
     : lock
-      ? "Hay una emision real en curso. Espera cierre, fallo o expiracion antes de probar otra emision."
+      ? "Hay una emisión real en curso. Espera cierre, fallo o expiración antes de probar otra emisión."
       : warnings > 0
         ? problems[0]?.texto ?? "Confirmar la advertencia principal y luego probar como cliente."
         : "Entrar en modo cliente y confirmar que la cuenta ve funciones, cupos y empresas esperadas.";
@@ -247,7 +154,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
 
           <div style={{ marginTop: 10 }}>
             {problems.length === 0 ? (
-              <CompactRow left="No hay errores ni advertencias en el diagnostico principal." right={<Pill tone="ok">listo</Pill>} />
+              <CompactRow left="No hay errores ni advertencias en las señales de la cuenta." right={<Pill tone="ok">listo</Pill>} />
             ) : (
               problems.slice(0, 5).map((item) => (
                 <CompactRow
@@ -259,7 +166,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
             )}
             {problems.length > 5 && (
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, fontSize: 11, color: C.text3 }}>
-                {problems.length - 5} señales adicionales en diagnostico.
+                {problems.length - 5} señales adicionales más abajo.
               </div>
             )}
           </div>
@@ -285,7 +192,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
             sub={`Empresas ${data.cuenta.empresasActivas}/${data.cuenta.empresasPermitidas} · Personas ${data.cuenta.personasActivas}/${data.cuenta.personasPermitidas}`}
           />
           <QuickCheck
-            label="Emision"
+            label="Emisión"
             value={lock ? "bloqueada" : "libre"}
             tone={lock ? "warning" : "ok"}
             sub={lock ? `${lock.usuarioNombre} · ${lock.estado_visible}` : "Sin lock activo"}
@@ -296,7 +203,7 @@ function PriorityPanel({ data }: { data: DevCuentaDetalle }) {
   );
 }
 
-function Diagnostico({ data }: { data: DevCuentaDetalle["diagnostico"] }) {
+function Senales({ data }: { data: DevCuentaDetalle["diagnostico"] }) {
   return (
     <div>
       {data.map((item) => (
@@ -357,7 +264,7 @@ function Personas({ data }: { data: DevCuentaDetalle["usuarios"] }) {
 }
 
 function Addons({ data }: { data: DevCuentaDetalle["addons"] }) {
-  if (data.length === 0) return <div style={{ fontSize: 11, color: C.text2 }}>Sin extras activos o históricos.</div>;
+  if (data.length === 0) return <EmptyState>Sin extras activos o históricos.</EmptyState>;
   return (
     <div>
       {data.map((addon) => (
@@ -470,7 +377,7 @@ function Auditoria({ data }: { data: DevCuentaDetalle["auditoria"] }) {
       ))}
       {hidden > 0 && (
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 9, fontSize: 11, color: C.text3 }}>
-          {hidden} evento{hidden === 1 ? "" : "s"} mas oculto{hidden === 1 ? "" : "s"} para mantener esta vista compacta.
+          {hidden} evento{hidden === 1 ? "" : "s"} más oculto{hidden === 1 ? "" : "s"} para mantener esta vista compacta.
         </div>
       )}
     </div>
@@ -525,15 +432,24 @@ export default async function DevCuentaDetallePage({
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <DevLinkButton href="/dev/cuentas">Cuentas</DevLinkButton>
-            <DevLinkButton href="/dev/diagnostico">Diagnostico</DevLinkButton>
+            <DevNav activa="cuentas" />
+            <DevLinkButton href="/dev/cuentas">← Lista</DevLinkButton>
             <VerComoClienteButton empresaId={cuenta.empresaPrincipalId}>Ver como cliente</VerComoClienteButton>
           </div>
         </header>
 
         <PriorityPanel data={detalle} />
 
-        <Section title="Resumen operativo">
+        <Fase
+          paso="1 · Mirar"
+          titulo="Estado de la cuenta"
+          descripcion="Solo lectura. Nada de lo que sigue cambia algo del cliente."
+        />
+
+        <Section
+          title="Resumen operativo"
+          hint="Los seis números que explican casi cualquier reclamo: si el plan está liberado, si el último cobro pasó, si se pasó de empresas o personas, y cuánta cuota de cartolas le queda este mes."
+        >
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
             <StatusTile
               label="Plan"
@@ -564,56 +480,100 @@ export default async function DevCuentaDetallePage({
           </div>
         </Section>
 
-        <Section title="Plan (control dev)">
-          <PlanToggle cuentaId={cuentaId} planCodigo={cuenta.planCodigo} planActivo={cuenta.planActivo} />
-          <div style={{ marginTop: 10 }}>
-            <TrialCortesiaToggle cuentaId={cuentaId} cortesia={cuenta.trialCortesia} />
-          </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: C.text2 }}>
-            Cambia plan/estado a mano (test de tiers y ops: si la pasarela falla o hay downgrade). Si la cuenta tiene suscripción activa, su plan manda sobre esto.
-            La cortesía habilita el trial para esta cuenta aunque el trial global esté apagado.
-          </div>
-        </Section>
-
-        <Section title="Migrar empresa (soporte)">
-          <MigrarEmpresaForm cuentaId={cuentaId} />
-        </Section>
-
-        <Section title="Zona de peligro">
-          <PurgarCuentaButton cuentaId={cuentaId} nombre={cuenta.nombre} />
-          <div style={{ marginTop: 8, fontSize: 11, color: C.text2 }}>
-            Purga TOTAL e irreversible (derecho de eliminación, Ley 21.719): borra empresas, cartolas, boletas, movimientos, propuestas y la PII cruda (audit_chunks/parser_logs). Conserva auth + consentimientos como prueba ARCO.
-          </div>
-        </Section>
-
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, .9fr) minmax(0, 1.1fr)", gap: 12 }}>
-          <Section title="Diagnóstico">
-            <Diagnostico data={detalle.diagnostico} />
+          <Section
+            title="Señales de la cuenta"
+            hint="Chequeos automáticos sobre ESTA cuenta. No confundir con «Estado del sistema», que mira la plataforma entera."
+          >
+            <Senales data={detalle.diagnostico} />
           </Section>
-          <Section title="Empresas">
+          <Section
+            title="Empresas"
+            hint="Cada empresa con su RUT enmascarado, su tipo de contribuyente y por qué carril emite boletas y facturas."
+          >
             <Empresas data={detalle.empresas} />
           </Section>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, .9fr) minmax(0, 1.1fr)", gap: 12 }}>
-          <Section title="Personas">
+          <Section title="Personas" hint="Quiénes entran a esta cuenta. «Titular» es quien paga; «dev» y «vetado» son marcas nuestras.">
             <Personas data={detalle.usuarios} />
           </Section>
-          <Section title="Extras">
+          <Section title="Extras" hint="Recargas de cuota compradas aparte del plan, con su período y si siguen activas.">
             <Addons data={detalle.addons} />
           </Section>
         </div>
 
-        <Section title="Pagos y suscripción">
+        <Section
+          title="Pagos y suscripción"
+          hint="Lo que dice la pasarela. Si el cliente asegura haber pagado y acá no aparece nada, el problema es el webhook, no el plan."
+        >
           <Finanzas data={detalle} />
         </Section>
 
-        <Section title="Emisión local">
+        <Section
+          title="Emisión local"
+          hint="Trabajos que la extensión corrió contra el SII, folios reservados y si hay una emisión real bloqueando la cuenta ahora mismo."
+        >
           <Emision data={detalle.emision} />
         </Section>
 
-        <Section title="Auditoría">
+        <Section title="Auditoría" hint="Últimos movimientos registrados de la cuenta, incluidas las entradas de soporte.">
           <Auditoria data={detalle.auditoria} />
+        </Section>
+
+        <Fase
+          paso="2 · Actuar"
+          titulo="Controles que escriben"
+          descripcion="Todo lo de acá abajo cambia la cuenta de un cliente real y queda auditado."
+          tono="warning"
+        />
+
+        <Section title="Plan de la cuenta" tone="warning">
+          <Explica
+            tono="warning"
+            que="Fija a mano el plan y si sus funciones están liberadas. Escribe la cuenta y todas sus empresas de una vez."
+            cuando="La pasarela falló, hay que probar un tier, o una cuenta quedó bloqueada por un desfase nuestro."
+            ojo="Si la cuenta tiene suscripción activa, el próximo evento de la pasarela pisa lo que pongas acá."
+          />
+          <PlanToggle cuentaId={cuentaId} planCodigo={cuenta.planCodigo} planActivo={cuenta.planActivo} />
+        </Section>
+
+        <Section title="Trial de cortesía" tone="warning">
+          <Explica
+            tono="warning"
+            que="Le habilita el trial a ESTA cuenta aunque el trial global esté apagado."
+            cuando="Un conocido o un cliente puntual al que le queremos dar la prueba sin abrirla para todo el mundo."
+            ojo="El trial emite documentos tributarios REALES: los folios que gaste son irreversibles."
+          />
+          <TrialCortesiaToggle cuentaId={cuentaId} cortesia={cuenta.trialCortesia} />
+        </Section>
+
+        <Section title="Traer una empresa a esta cuenta" tone="warning">
+          <Explica
+            tono="warning"
+            que="Re-apunta el vínculo de una empresa hacia esta cuenta. Los datos no se mueven ni se copian."
+            cuando="Unificar dos cuentas del mismo dueño, o devolverle su empresa a alguien que perdió el acceso."
+            ojo="Primero verificar identidad por el runbook: unificación = responde desde ambos correos; recuperación = $1 con código desde el banco de la empresa. Nunca pedir cédula."
+          />
+          <MigrarEmpresaForm cuentaId={cuentaId} />
+        </Section>
+
+        <Fase
+          paso="3 · No se vuelve atrás"
+          titulo="Borrado definitivo"
+          descripcion="Un solo control, y no tiene deshacer. Si dudas, no es acá."
+          tono="error"
+        />
+
+        <Section title="Borrar la cuenta entera" tone="error">
+          <Explica
+            tono="error"
+            que="Borra empresas, cartolas, boletas, movimientos, propuestas y la PII cruda (audit_chunks, parser_logs). Conserva auth y consentimientos como prueba ARCO."
+            cuando="El cliente ejerció su derecho de eliminación (Ley 21.719), o hay que limpiar una cuenta de prueba."
+            ojo="Irreversible y sin respaldo. Exige tipear la razón social exacta justamente para que no pase de largo."
+          />
+          <PurgarCuentaButton cuentaId={cuentaId} nombre={cuenta.nombre} />
         </Section>
       </div>
     </main>
