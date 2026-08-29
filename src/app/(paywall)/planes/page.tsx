@@ -114,7 +114,6 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
             const neto = Math.round(plan.uf_mensual * uf);
             const iva = Math.round(neto * 0.19);
             const total = neto + iva;
-            const horas = Math.round((plan.cuota_masivas * 2.5) / 60);
             const porDia = Math.round(plan.cuota_masivas / 22);
 
             return (
@@ -150,8 +149,15 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.1)" }}>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>{fmtNum(plan.cuota_masivas)} boletas o facturas</div>
                   <div style={{ marginTop: 3, fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>salidas de tus cartolas, al mes</div>
-                  <div style={{ marginTop: 5, fontSize: 14, fontWeight: 600, color: RED }}>≈ {horas} horas de digitación ahorradas al mes</div>
-                  <div style={{ marginTop: 2, fontSize: 13, color: "rgba(255,255,255,.45)" }}>~{fmtNum(porDia)} por día hábil · 2,5 minutos menos de tecleo por cada una</div>
+                  {/*
+                    Acá decía "≈ N horas ahorradas al mes", con N = la cuota
+                    ENTERA × 2,5 min. Solo es cierto si gastas el cupo completo,
+                    o sea para casi nadie. El landing ya lo había sacado por eso
+                    mismo; en la app quedó vivo. Lo que sí es verdad en todos los
+                    casos es el rendimiento por documento.
+                  */}
+                  <div style={{ marginTop: 5, fontSize: 14, fontWeight: 600, color: RED }}>2,5 minutos menos de tecleo por cada una</div>
+                  <div style={{ marginTop: 2, fontSize: 13, color: "rgba(255,255,255,.45)" }}>~{fmtNum(porDia)} por día hábil si usas el cupo completo</div>
                 </div>
 
                 <ul style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 9, flex: 1, listStyle: "none", padding: 0 }}>
@@ -225,7 +231,18 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
         )}
 
         <p style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.4)", marginTop: 24 }}>
-          Pagos procesados por Mercado Pago · cancela cuando quieras.
+          {/*
+            Decía "Pagos procesados por Mercado Pago · cancela cuando quieras".
+            Dos cosas falsas en una línea: la pasarela es Flow desde el
+            2026-08-25, y no existe ningún botón para cancelar. No es que
+            falte: la página afirmaba que ya estaba. Mientras no se construya,
+            se dice cómo se cancela de verdad.
+          */}
+          Pagos procesados por {porFlow ? "Flow" : "Mercado Pago"} · para cancelar, escríbenos a{" "}
+          <a href="mailto:soporte@massdte.cl" style={{ color: "rgba(255,255,255,.6)", textDecoration: "underline" }}>
+            soporte@massdte.cl
+          </a>
+          .
           {puedeVolver && (
             <>
               {" · "}
