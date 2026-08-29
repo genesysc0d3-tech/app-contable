@@ -5,7 +5,7 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
-import { sesionVencidaPorEdad } from "@/lib/auth/edad-sesion";
+import { debeRefrescarUltimoAcceso, sesionVencidaPorInactividad } from "@/lib/auth/inactividad-sesion";
 
 type Sb = SupabaseClient<Database>;
 
@@ -31,16 +31,26 @@ export async function requireAccountApiAccess(options: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, response: NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 }) };
 
-  // Tope de edad de la sesión. Va ACÁ y no en cada ruta: toda ruta que use este
+  // Cierre por inactividad. Va ACÁ y no en cada ruta: toda ruta que use este
   // guard lo hereda, incluida /api/extension/vault-key, que es la que abre la
   // bóveda con las claves del SII y que el middleware NO cubre (está excluida
-  // del matcher). Ver lib/auth/edad-sesion.ts para el porqué.
-  const { data: { session } } = await supabase.auth.getSession();
-  if (sesionVencidaPorEdad(session?.access_token)) {
-    return {
-      ok: false,
-      response: NextResponse.json({ ok: false, error: "SESSION_EXPIRED" }, { status: 401 }),
-    };
+  // del matcher). Ver lib/auth/inactividad-sesion.ts para el porqué.
+  {
+    const url0 = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key0 = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (url0 && key0) {
+      const sb0 = createServiceClient<Database>(url0, key0);
+      const { data: visto } = await sb0.from("usuarios").select("ultimo_acceso").eq("id", user.id).maybeSingle();
+      if (sesionVencidaPorInactividad(visto?.ultimo_acceso)) {
+        return {
+          ok: false,
+          response: NextResponse.json({ ok: false, error: "SESSION_EXPIRED" }, { status: 401 }),
+        };
+      }
+      if (debeRefrescarUltimoAcceso(visto?.ultimo_acceso)) {
+        await sb0.from("usuarios").update({ ultimo_acceso: new Date().toISOString() }).eq("id", user.id);
+      }
+    }
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
