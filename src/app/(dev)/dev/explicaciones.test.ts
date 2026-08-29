@@ -209,3 +209,41 @@ describe("el idioma de la casa", () => {
     }
   });
 });
+
+/**
+ * LA SEÑAL QUE FALTABA.
+ *
+ * El 2026-08-30 un login quedó apuntando a una empresa que se había migrado a
+ * otra cuenta. La app lo mandaba a /bloqueado, pero la RLS cuelga de
+ * `usuarios.empresa_id` con policies FOR ALL: con su propio token leía, escribía
+ * y borraba 375 movimientos y 42 cartolas de un tenant ajeno.
+ *
+ * El panel no lo mostraba, y no por descuido: arma la lista de personas desde
+ * `cuenta_usuarios`, así que un huérfano es invisible POR CONSTRUCCIÓN. Se
+ * descubrió por una auditoría. Estos tests existen para que la próxima vez lo
+ * diga la pantalla.
+ */
+describe("el panel ve los logins colgados", () => {
+  const fuente = leer("src/lib/dev/account-360.ts");
+
+  it("busca usuarios por empresa, no solo por membresía de cuenta", () => {
+    // La consulta que ve al huérfano: parte de las empresas, no del equipo.
+    expect(fuente).toContain('.in("empresa_id", empresaIds)');
+    expect(fuente).toContain("!usuarios.has(u.id)");
+  });
+
+  it("lo reporta como ERROR, no como advertencia", () => {
+    // Es acceso a datos de otro tenant: no es un "conviene revisar".
+    expect(fuente).toMatch(/huerfanos\.length === 0[\s\S]{0,200}codigo: "error"/);
+  });
+
+  it("enmascara el correo del huérfano, como todo lo demás del panel", () => {
+    expect(fuente).toContain("huerfanos.map((u) => maskEmail(u.email))");
+  });
+
+  it("la señal explica que el bloqueo de la app NO alcanza", () => {
+    // El veto corta la app, no la base. Si el texto dijera que basta con
+    // vetarlo, mentiría — y es exactamente el error que se cometió ese día.
+    expect(fuente).toContain("aunque la app lo");
+  });
+});
