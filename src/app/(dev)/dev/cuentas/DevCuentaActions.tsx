@@ -44,7 +44,11 @@ export function VerComoClienteButton({
       type="button"
       onClick={entrar}
       disabled={!empresaId || estado === "loading"}
-      title={estado === "error" ? "No se pudo entrar en modo cliente" : undefined}
+      title={
+        estado === "error"
+          ? "No se pudo entrar en modo cliente"
+          : "Abre la app del cliente en modo soporte, de solo lectura. Queda en su auditoría y la sesión dura 4 horas."
+      }
       style={{
         ...BTN_AMBAR,
         borderRadius: 7,

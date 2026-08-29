@@ -61,8 +61,18 @@ export function Pill({ children, tone = "muted" }: { children: string; tone?: To
 
 /** Las pantallas del panel. Una sola fuente: el texto de la portada la usa. */
 export const PANTALLAS = [
-  { id: "cuentas" as const, href: "/dev/cuentas", label: "Cuentas" },
-  { id: "sistema" as const, href: "/dev/diagnostico", label: "Estado del sistema" },
+  {
+    id: "cuentas" as const,
+    href: "/dev/cuentas",
+    label: "Cuentas",
+    title: "Ir a la lista de todas las cuentas.",
+  },
+  {
+    id: "sistema" as const,
+    href: "/dev/diagnostico",
+    label: "Estado del sistema",
+    title: "Ir a la salud de la plataforma entera: tu acceso, colas, emisiones fallidas y eventos de las últimas 24 horas.",
+  },
 ];
 
 /**
@@ -79,6 +89,7 @@ export function DevNav({ activa }: { activa?: "cuentas" | "sistema" }) {
           <Link
             key={item.id}
             href={item.href}
+            title={item.title}
             style={{
               border: `1px solid ${on ? "rgba(232,85,62,.45)" : C.border}`,
               background: on ? "rgba(232,85,62,.12)" : C.muted,

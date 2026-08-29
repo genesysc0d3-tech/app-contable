@@ -464,11 +464,30 @@ export default async function DevCuentaDetallePage({
               {cuenta.nombre}
             </h1>
           </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <a href="#mirar" style={ancla}>Mirar</a>
-            <a href="#actuar" style={ancla}>Actuar</a>
-            <a href="#peligro" style={{ ...ancla, color: C.accent, borderColor: "rgba(232,85,62,.4)" }}>Peligro</a>
-            <span style={{ width: 1, height: 20, background: C.border, margin: "0 3px" }} />
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {/*
+              Los saltos van encerrados y rotulados. Sueltos se veían iguales a
+              los botones que hacen cosas —seis controles idénticos en fila, tres
+              tipos distintos— y daban susto: parecía que «Peligro» iba a hacer
+              algo peligroso, cuando solo baja la página.
+            */}
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                border: `1px dashed ${C.border}`,
+                borderRadius: 9,
+                padding: "5px 8px",
+              }}
+            >
+              <span style={{ fontSize: 10, color: C.text3, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                Ir a panel:
+              </span>
+              <a href="#mirar" style={ancla} title="Baja al estado de la cuenta: plan, pagos, empresas, personas, emisión y auditoría.">Mirar</a>
+              <a href="#actuar" style={ancla} title="Baja a los controles que se pueden deshacer: cambiar el plan y prestar la prueba gratis.">Actuar</a>
+              <a href="#peligro" style={{ ...ancla, color: C.accent, borderColor: "rgba(232,85,62,.4)" }} title="Baja a los dos controles sin vuelta atrás: traer una empresa y borrar la cuenta. Bajar no hace nada.">Peligro</a>
+            </div>
             <DevNav />
             <VerComoClienteButton empresaId={cuenta.empresaPrincipalId}>Ver como cliente</VerComoClienteButton>
           </div>
