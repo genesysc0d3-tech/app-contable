@@ -33,11 +33,29 @@ DBTMP="verif_respaldo_$$"
 
 log(){ printf '%s  %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
 
+# Le cuenta a la app si el respaldo anduvo, para que el panel /dev lo muestre
+# sin que nadie tenga que entrar a esta máquina a leer el log.
+#
+# SOLO viajan banderas y un conteo: NUNCA la ruta, el proveedor, el bucket ni
+# el nombre de este equipo. El panel es una página web y el respaldo es lo
+# último que queda si todo lo demás se cae — una captura filtrada no puede ser
+# el mapa al tesoro. Y si este aviso falla, da lo mismo: el respaldo ya está
+# hecho y el correo de alerta es el canal que manda.
+avisar_app(){
+  [ -n "${APP_URL:-}" ] && [ -n "${CRON_SECRET:-}" ] || return 0
+  curl -s -m 10 -X POST "$APP_URL/api/ops/respaldo" \
+    -H "Authorization: Bearer $CRON_SECRET" \
+    -H "Content-Type: application/json" \
+    -d "{\"ok\":$1,\"verificado\":$2,\"tablas\":${3:-null},\"motivo\":\"${4:-}\"}" \
+    -o /dev/null 2>>"$LOG" || log "aviso a la app falló (no importa: el respaldo sí se hizo)"
+}
+
 # Único punto de salida por error: avisa y termina.
 morir(){
   local motivo="$1"
   log "FALLÓ: $motivo"
   avisar "$motivo"
+  avisar_app false false null "$motivo"
   limpiar
   exit 1
 }
@@ -172,4 +190,5 @@ find "$DEST" -name 'massdte-*.sql.gz' -mtime "+$RETENCION_DIAS" | while read -r 
 done
 
 log "== fin OK — $(ls -1 "$DEST"/massdte-*.sql.gz 2>/dev/null | wc -l | tr -d ' ') respaldos guardados =="
+avisar_app true true "$(printf '%s' "$TABLAS_TESTIGO" | wc -w | tr -d ' ')"
 exit 0

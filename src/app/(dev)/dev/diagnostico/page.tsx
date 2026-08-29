@@ -54,6 +54,47 @@ function eventMotivo(event: { metadata: Record<string, unknown> | null }): strin
   return raw.length > 220 ? `${raw.slice(0, 220)}…` : raw;
 }
 
+type EstadoRespaldo = OpsSnapshot["respaldo"]["estado"];
+
+function respaldoColor(estado: EstadoRespaldo) {
+  if (estado === "ok") return C.green;
+  if (estado === "fallido") return C.accent;
+  return C.amber;
+}
+
+function respaldoTitulo(estado: EstadoRespaldo) {
+  if (estado === "ok") return "Al día y verificado";
+  if (estado === "sin_verificar") return "Hecho, sin verificar";
+  if (estado === "fallido") return "Falló";
+  if (estado === "atrasado") return "Atrasado";
+  return "Sin noticias";
+}
+
+/**
+ * El detalle habla de tiempo y de verificación, nunca de ubicación. Que el
+ * respaldo exista es información de operación; dónde vive es un secreto.
+ */
+function respaldoDetalle(r: OpsSnapshot["respaldo"]) {
+  if (r.estado === "sin_datos") {
+    return "El respaldo nunca ha avisado que corrió. O no está instalado, o la máquina que lo corre está apagada.";
+  }
+  const hace = r.horas === null
+    ? ""
+    : r.horas < 1
+      ? "hace menos de una hora"
+      : `hace ${Math.round(r.horas)} ${Math.round(r.horas) === 1 ? "hora" : "horas"}`;
+  if (r.estado === "fallido") {
+    return `El último intento (${hace}) falló. Mientras no haya respaldo, un problema en la base no tiene vuelta atrás.`;
+  }
+  if (r.estado === "atrasado") {
+    return `El último fue ${hace}. Debería correr cada noche: revisa que la máquina esté encendida.`;
+  }
+  if (r.estado === "sin_verificar") {
+    return `Se hizo ${hace}, pero no se comprobó restaurándolo. Un volcado que nunca se restauró es un archivo, no un respaldo.`;
+  }
+  return `El último se hizo ${hace} y se comprobó restaurándolo y cotejando los conteos.`;
+}
+
 function severityColor(severity: string) {
   if (severity === "critical" || severity === "error") return C.accent;
   if (severity === "warn") return C.amber;
@@ -117,6 +158,33 @@ function OpsHealth({ snapshot }: { snapshot: OpsSnapshot | null }) {
         <Metric label="Cola docs corriendo" value={snapshot.metrics.documentJobsRunning} tone="ok" />
         <Metric label="Cola docs fallida 24h" value={snapshot.metrics.documentJobsFailed24h} tone={snapshot.metrics.documentJobsFailed24h > 0 ? "warn" : "ok"} />
         <Metric label="Cola docs atascada" value={snapshot.metrics.documentJobsStale} tone={snapshot.metrics.documentJobsStale > 0 ? "critical" : "ok"} />
+      </div>
+
+      {/*
+        Respaldo: dice SI anda, nunca DÓNDE. Ni proveedor, ni ruta, ni máquina.
+        Esta pantalla se ve en capturas y el respaldo es lo último que queda si
+        todo lo demás se cae.
+      */}
+      <div
+        style={{
+          marginTop: 14,
+          border: `1px solid ${snapshot.respaldo.estado === "ok" ? C.border : `${respaldoColor(snapshot.respaldo.estado)}55`}`,
+          background: snapshot.respaldo.estado === "ok" ? C.muted : `${respaldoColor(snapshot.respaldo.estado)}0f`,
+          borderRadius: 10,
+          padding: "11px 12px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 900 }}>
+            Respaldo local
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: respaldoColor(snapshot.respaldo.estado) }}>
+            {respaldoTitulo(snapshot.respaldo.estado)}
+          </span>
+        </div>
+        <p style={{ margin: "6px 0 0", fontSize: 12, color: C.text2, lineHeight: 1.5 }}>
+          {respaldoDetalle(snapshot.respaldo)}
+        </p>
       </div>
 
       {snapshot.findings.length > 0 ? (

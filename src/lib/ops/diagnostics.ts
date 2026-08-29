@@ -44,6 +44,17 @@ export type OpsSnapshot = {
   findings: OpsFinding[];
   latestEvents: OpsLatestEvent[];
   queryErrors: string[];
+  /**
+   * Estado del respaldo nocturno, contado por él mismo vía /api/ops/respaldo.
+   * A propósito no dice DÓNDE se guarda ni con qué: el panel es una página web
+   * y una captura filtrada no puede ser el mapa al tesoro. Basta con saber si
+   * anoche ocurrió y si se verificó restaurándolo.
+   */
+  respaldo: {
+    estado: "ok" | "sin_verificar" | "fallido" | "atrasado" | "sin_datos";
+    horas: number | null;
+    ultimo: string | null;
+  };
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -307,6 +318,36 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     });
   }
 
+  // Respaldo nocturno: se lee del último evento que él mismo dejó. Si van más
+  // de 30 horas sin noticias, el silencio ES la noticia — puede que la máquina
+  // esté apagada, y ahí nadie se entera hasta que se necesita el respaldo.
+  const respaldoEvento = (latestEventsResult.data ?? []).find((e) => e.event_name === "respaldo_nocturno") ?? null;
+  const respaldo = ((): OpsSnapshot["respaldo"] => {
+    if (!respaldoEvento) return { estado: "sin_datos", horas: null, ultimo: null };
+    const horas = (Date.now() - Date.parse(respaldoEvento.created_at)) / (60 * 60 * 1000);
+    const md = respaldoEvento.metadata as Record<string, unknown> | null;
+    const ok = md?.ok === true;
+    const verificado = md?.verificado === true;
+    const estado = !ok ? "fallido" : horas > 30 ? "atrasado" : verificado ? "ok" : "sin_verificar";
+    return { estado, horas: Math.round(horas * 10) / 10, ultimo: respaldoEvento.created_at };
+  })();
+
+  if (respaldo.estado === "fallido") {
+    findings.push({
+      severity: "critical",
+      eventName: "respaldo_fallido",
+      summary: "El respaldo de anoche falló. Sin respaldo no hay de dónde volver: el plan de la base no trae ninguno.",
+    });
+  } else if (respaldo.estado === "atrasado" || respaldo.estado === "sin_datos") {
+    findings.push({
+      severity: "warn",
+      eventName: "respaldo_atrasado",
+      summary: respaldo.estado === "sin_datos"
+        ? "El respaldo nunca ha avisado que corrió. Puede que no esté instalado, o que la máquina esté apagada."
+        : `Van ${Math.round(respaldo.horas ?? 0)} horas sin respaldo. Debería correr cada noche.`,
+    });
+  }
+
   const status = findings.some((finding) => finding.severity === "critical")
     ? "critical"
     : findings.length > 0
@@ -328,5 +369,6 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
         : null,
     })),
     queryErrors,
+    respaldo,
   };
 }

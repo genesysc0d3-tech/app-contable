@@ -16,6 +16,22 @@ Esto lo cubre desde el Mac mini, que está encendido 24/7.
 4. Sube una segunda copia a Cloudflare R2
 5. Rota a 14 días, conservando el primero de cada mes
 6. **Si algo falla, manda un correo.** Si todo anduvo, silencio
+7. **Le avisa a la app** (`/api/ops/respaldo`) para que el panel /dev muestre si
+   el respaldo anda, sin que nadie tenga que entrar acá a leer el log
+
+## Qué se le cuenta a la app, y qué NO
+
+Del aviso al panel viajan **solo tres cosas**: si terminó bien, si se verificó
+restaurándolo, y cuántas tablas se cotejaron.
+
+**NO viaja dónde se guarda**: ni la ruta local, ni el proveedor, ni el bucket,
+ni las credenciales, ni el nombre de esta máquina. El panel se ve en capturas de
+pantalla, y el respaldo es lo último que queda si todo lo demás se cae — saber
+que anda no exige saber dónde está. Si algún día alguien agrega un campo a ese
+aviso, esta es la regla que tiene que respetar.
+
+Si el aviso falla, no pasa nada: el respaldo ya está hecho y el correo de alerta
+sigue siendo el canal que manda.
 
 ## Instalación en una máquina nueva
 
@@ -27,6 +43,9 @@ mkdir -p ~/.massdte-respaldo && chmod 700 ~/.massdte-respaldo
 # crear ~/.massdte-respaldo/config (chmod 600) con:
 #   PGURL R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET
 #   RESEND_KEY ALERTA_A
+#   APP_URL CRON_SECRET   <- opcionales: sin ellos el respaldo corre igual,
+#                            pero el panel /dev no sabe que corrió
+#   APP_URL=https://app.massdte.cl · CRON_SECRET = el mismo de Vercel
 cp respaldar.sh ~/.massdte-respaldo/ && chmod +x ~/.massdte-respaldo/respaldar.sh
 sed "s|\$HOME|$HOME|g" cl.massdte.respaldo.plist > ~/Library/LaunchAgents/cl.massdte.respaldo.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cl.massdte.respaldo.plist
