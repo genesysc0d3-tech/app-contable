@@ -9,6 +9,8 @@
 // Puro y sin efectos: recibe datos limpios, devuelve el objeto `job`. Fácil de
 // testear y de mantener sincronizado con el contrato de la extensión.
 
+import { BOLETA_LIBRETO, type BoletaLibreto } from "./sii-libreto";
+
 export interface ReceptorInput {
   rut?: string | null;
   razonSocial?: string | null;
@@ -51,6 +53,13 @@ export interface BoletaJob {
   detalles: { nombre: string; cantidad: number; monto_total: number }[];
   totales: { monto_total: number; monto_neto: number; iva: number; monto_exento: number };
   glosa: string;
+  /**
+   * DOM del portal e-Boleta (selectores Vuetify, textos, esperas) como DATO —
+   * un cambio del SII se arregla con deploy, sin Chrome Web Store. El worker lo
+   * consume con fallback al hardcode (byte-idéntico). La flota vieja lo ignora.
+   * Ver sii-libreto.ts.
+   */
+  libreto: BoletaLibreto;
   learn_only: false;
   auto_emit: true;
   allow_final_emit: true;
@@ -90,6 +99,7 @@ export function buildBoletaJob(input: BoletaJobInput): BoletaJob {
     detalles: [{ nombre: glosa, cantidad: 1, monto_total: total }],
     totales: { monto_total: total, monto_neto: neto, iva, monto_exento: exento },
     glosa,
+    libreto: BOLETA_LIBRETO,
     learn_only: false,
     auto_emit: true,
     allow_final_emit: true,
