@@ -159,8 +159,128 @@ export const ANCLA_LABELS: Record<string, string> = {
   "page_kind:unknown": "la página no calzó con ninguna pantalla conocida del portal",
 };
 
-/** Traduce un rol de ancla a su explicación; si no está mapeado, devuelve el rol. */
+// ── BOLETAS: libreto del portal e-Boleta (Vuetify) ──────────────────────────
+// Mismo principio que FACTURA_LIBRETO: catálogo de nombres del portal como
+// DATO, con fallback al hardcode en el worker (byte-idéntico). Los valores son
+// ESPEJO EXACTO de extensions/sii-portal-rpa/sii-worker.js, verificados contra
+// la fuente viva. Datos = nombres; la coreografía y la SEGURIDAD (match del
+// emisor, candado, evidencia del folio) son CÓDIGO.
+//
+// ALCANCE deliberado de la v1: NO baja al libreto el detector de "monto alto"
+// ni la confirmación/folio post-emit (alto acoplamiento — un libreto malo ahí
+// cuelga el modal). Esos quedan hardcodeados, igual que facturas dejó la
+// evidencia del folio. El libreto cubre lo que el SII efectivamente renombra:
+// botones, slots, opciones, toggles y los selectores Vuetify.
+
+export const BOLETA_LIBRETO_SCHEMA_VERSION = 1 as const;
+
+export interface BoletaLibreto {
+  libreto_version: number;
+  portal: "eboleta_vuetify";
+  /** Clases CSS de Vuetify — único vocabulario de selector permitido (whitelist). */
+  selectores: {
+    dialogo_activo: string;
+    slot: string;
+    menu: string;
+    opcion: string;
+    toggle_row: string;
+    toggle_click: string;
+    emisor_selecciones: string;
+    emisor_select: string;
+    input_container: string;
+  };
+  botones: { emitir: string; limpiar_pad: string[] };
+  /** Textos de slot v-select + opciones elegibles. */
+  slots: {
+    sucursal: string;
+    tipo: string;
+    tipo_afecta: string;
+    tipo_exenta: string;
+    metodo_pago: string;
+    metodo_pago_alt: string;
+    metodo_pago_default: string;
+  };
+  toggles: { detalle: string; receptor: string };
+  /** Regex source (flag "i") para hallar los campos del receptor en el modal. */
+  receptor_campos: { rut: string; nombre: string; direccion: string; email: string; telefono: string };
+  /** Timeouts en ms (cada uno hoy sembrado inline). */
+  esperas: {
+    modal_emision: number;
+    emisor_estable: number;
+    emisores_listos: number;
+    emit_habilitado: number;
+    glosa_aparece: number;
+    glosa_escribe: number;
+    pad_post: number;
+  };
+}
+
+export const BOLETA_LIBRETO: BoletaLibreto = {
+  libreto_version: BOLETA_LIBRETO_SCHEMA_VERSION,
+  portal: "eboleta_vuetify",
+  selectores: {
+    dialogo_activo: ".v-dialog.v-dialog--active", // sii-worker.js:531
+    slot: ".v-select__slot, .v-input__slot", // :475
+    menu: ".v-menu__content", // :485
+    opcion: ".v-list-item, [role='option'], .v-list__tile", // :488
+    toggle_row: ".v-input--selection-controls, .v-input--switch, .v-input", // :557
+    toggle_click: ".v-input--selection-controls__ripple, .v-input--selection-controls__input, label", // :565
+    emisor_selecciones: ".v-select__selections", // :637
+    emisor_select: ".v-select", // :682
+    input_container: ".v-input", // :586
+  },
+  botones: {
+    emitir: "EMITIR", // :1068,1102
+    limpiar_pad: ["C", "CE", "AC", "BORRAR"], // :1087
+  },
+  slots: {
+    sucursal: "elija sucursal", // :1115
+    tipo: "Boleta", // :1129
+    tipo_afecta: "Boleta afecta", // :1128
+    tipo_exenta: "Boleta exenta", // :1128
+    metodo_pago: "metodo de pago", // :1137
+    metodo_pago_alt: "elija metodo", // :1138
+    metodo_pago_default: "Efectivo", // :1136
+  },
+  toggles: {
+    detalle: "Detalle", // :1153
+    receptor: "Receptor", // :1181
+  },
+  receptor_campos: {
+    rut: "RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\\s*CON\\s*DV", // :1194
+    nombre: "NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE", // :1198
+    direccion: "DIRECCION.*RECEPTOR|RECEPTOR.*DIRECCION", // :1199
+    email: "(E-?MAIL|CORREO).*RECEPTOR|RECEPTOR.*(E-?MAIL|CORREO)", // :1200
+    telefono: "(TELEFONO|FONO|CELULAR).*RECEPTOR|RECEPTOR.*(TELEFONO|FONO|CELULAR)", // :1201
+  },
+  esperas: {
+    modal_emision: 12000, // :541
+    emisor_estable: 6000, // :649
+    emisores_listos: 9000, // :671
+    emit_habilitado: 12000, // :772
+    glosa_aparece: 150, // :1159
+    glosa_escribe: 120, // :1165
+    pad_post: 250, // :1100
+  },
+};
+
+// Qué significa cada ancla de BOLETAS, en cristiano (para el panel /dev).
+export const ANCLA_LABELS_BOLETA: Record<string, string> = {
+  "selectores.emisor_select": "el selector de empresa arriba (bajo qué RUT emites)",
+  "selectores.dialogo_activo": "el modal «Emitir e-Boleta»",
+  "botones.emitir": "el botón EMITIR",
+  "slots.tipo": "el desplegable del tipo de boleta (afecta o exenta)",
+  "slots.metodo_pago": "el desplegable del método de pago",
+  "toggles.detalle": "el interruptor «Detalle» (la glosa de la boleta)",
+  "toggles.receptor": "el interruptor «Receptor»",
+  "page_kind:unknown": "la pantalla no calzó con ninguna conocida de e-Boleta",
+};
+
+/**
+ * Traduce un rol de ancla a su explicación (facturas Y boletas); si no está
+ * mapeado, devuelve el rol. El panel /dev lo usa para el bloque "Portal SII".
+ */
 export function describeAncla(rol: string | null | undefined): string {
   const k = String(rol ?? "").trim();
-  return ANCLA_LABELS[k] ?? (k || "un punto del portal");
+  return ANCLA_LABELS[k] ?? ANCLA_LABELS_BOLETA[k] ?? (k || "un punto del portal");
 }
