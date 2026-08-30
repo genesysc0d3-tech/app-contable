@@ -12,6 +12,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { FACTURA_LIBRETO } from "../../src/lib/emission/sii-libreto.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKER_SRC = readFileSync(join(__dirname, "facturas-worker.js"), "utf8");
@@ -206,5 +207,31 @@ describe("sintético del worker de facturas (corre el original que ya funciona)"
     const { res, actions: a } = await drive(jobFactura(), [previewPage()]);
     expect(res.action).toBe("paused_preview");
     expect(a.find((x) => x.name === "btnSign")).toBeUndefined(); // el candado: no se firmó
+  });
+
+  // ── LA PRUEBA DE "PURA MUDANZA" ──────────────────────────────────────────
+  // Con el libreto REAL de producción (espejo del hardcode), el worker tiene
+  // que producir EXACTAMENTE la misma secuencia que sin libreto. Si el espejo
+  // del servidor y el fallback del worker divergieran en un solo carácter, esta
+  // igualdad cae. Es la definición operativa de que llamarlo distinto no cambia
+  // cómo funciona.
+  describe("con libreto == sin libreto == baseline (pura mudanza)", () => {
+    it("formulario: misma secuencia con el libreto real", async () => {
+      const { res, actions: a } = await drive(jobFactura({ libreto: FACTURA_LIBRETO }), [formularioPage()]);
+      expect(res.action).toBe("validado");
+      expect(a).toEqual(BASELINE_FORMULARIO);
+    }, 15000);
+
+    it("selector_empresa: misma secuencia con el libreto real", async () => {
+      const { res, actions: a } = await drive(jobFactura({ libreto: FACTURA_LIBRETO }), [selectorEmpresaPage()]);
+      expect(res.action).toBe("empresa_seleccionada");
+      expect(a).toEqual([{ op: "set", name: "RUT_EMP", value: EMISOR }, { op: "click", name: "__submit__" }]);
+    });
+
+    it("preview: el candado aguanta también con libreto (no firma)", async () => {
+      const { res, actions: a } = await drive(jobFactura({ libreto: FACTURA_LIBRETO }), [previewPage()]);
+      expect(res.action).toBe("paused_preview");
+      expect(a.find((x) => x.name === "btnSign")).toBeUndefined();
+    });
   });
 });
