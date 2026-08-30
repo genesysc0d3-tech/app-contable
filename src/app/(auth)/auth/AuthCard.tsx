@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signIn, signUp, signInWithGoogle } from "./actions";
+import AvisoNavegadorOcupado from "./AvisoNavegadorOcupado";
 import { POLICY_VERSION } from "@/lib/legal/version";
 
 type Modo = "login" | "registro";
@@ -141,6 +142,7 @@ export default function AuthCard({ inicial }: { inicial: Modo }) {
               ) : (
                 <form action={handleRegistro} className="space-y-[clamp(8px,1.4svh,12px)]">
                   {next && <input type="hidden" name="next" value={next} />}
+                  <AvisoNavegadorOcupado />
                   {/* Honeypot: invisible para humanos (aria-hidden + fuera de pantalla
                       + sin tab); los bots lo rellenan y el server los rechaza. */}
                   <div aria-hidden="true" style={{ position: "absolute", left: -9999, top: -9999, height: 0, overflow: "hidden" }}>
