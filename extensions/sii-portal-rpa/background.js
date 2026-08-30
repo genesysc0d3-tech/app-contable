@@ -2,7 +2,7 @@
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl, versionBajoObjetivo } from "./modules/core.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob } from "./modules/facturas-portal.js";
+import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob, validateLibreto } from "./modules/facturas-portal.js";
 import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, siiVaultStatus, wipeLocalVault } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
@@ -460,6 +460,23 @@ function driveFacturaPage(state, attempt = 1) {
 // al terminar (patrón push). Llega por runtime.onMessage (handler abajo).
 function handleFactStepPush(state, res) {
   if (!res || res.busy) return;
+  // POSIBLE CAMBIO DEL SII: un ancla estructural del portal no apareció. Se
+  // reporta al servidor (para el panel /dev) SOLO si NO se firmó todavía —
+  // post-firma cualquier fallo puede convivir con un folio vivo y manda
+  // result_needs_review, no esta señal. Lleva solo el rol del ancla, jamás PII.
+  if (res.posible_cambio_sii && !state.finalEmitClicked) {
+    sendToApp(state, {
+      source: EXT_SOURCE,
+      type: "APP_CONTABLE_SII_CAMBIO_SII",
+      job_id: state.jobId,
+      portal: "facturas",
+      ancla: res.ancla_faltante ?? null,
+      error: res.error ?? null,
+      page_kind: res.kind ?? null,
+      libreto_version: state.job?.libreto?.libreto_version ?? null,
+      ext_version: chrome.runtime.getManifest().version,
+    });
+  }
   sendToApp(state, statusMessage(state.jobId, "fact_drive", `Portal: ${res.kind ?? "?"} → ${res.action ?? res.error ?? "?"}`, true));
   handleFactDriveResponse(state, res).catch((error) => {
     sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
@@ -835,7 +852,10 @@ function mapUnlockError(error) {
     case "VAULT_NEEDS_MIGRATION":
       return "Actualizamos la seguridad: reconecta tu clave del SII una vez desde la app (ya no necesitas clave local). Mientras, puedes iniciar sesión a mano aquí.";
     case "VAULT_OTHER_USER":
-      return "Esta cuenta no tiene su clave del SII conectada en este equipo. Conéctala desde la app (o inicia sesión a mano aquí).";
+      // Honesto: el navegador YA tiene la bóveda de otra cuenta. Por diseño, un
+      // navegador guarda una sola clave del SII (es lo que hace segura la
+      // bóveda). No se bloquea nada — se explican las salidas reales.
+      return "En este navegador ya hay otra cuenta con su clave del SII conectada, y por seguridad cada navegador guarda una sola. Para usar esta cuenta, abre massDTE en otro navegador o en otro perfil de Chrome, o junta tus empresas en un plan Business. También puedes iniciar sesión en el SII a mano aquí.";
     case "VAULT_NOT_CONFIGURED":
       return "Aún no conectas tu clave del SII. Hazlo desde la app para emitir automáticamente (o inicia sesión a mano aquí).";
     case "APP_ORIGIN_DESCONOCIDO":
@@ -1239,13 +1259,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     redeliverPendingResults(sender.tab?.id, message.empresa_id ?? null);
     // La sesión pudo restablecerse: reintenta jobs colgados por un fallo transitorio.
     retryTransientUnlocks();
-    sendResponse(baseMessage({
+    // has_vault: SOLO el booleano de si ESTE navegador ya tiene una bóveda —
+    // NUNCA de quién es. Alcanza para que la app avise "este navegador ya está
+    // ocupado" antes de que alguien cree una 2ª cuenta y se estrelle contra
+    // VAULT_OTHER_USER. La respuesta pasa a async porque leer la bóveda lo es;
+    // si falla, se contesta igual con has_vault:false (el PONG nunca puede
+    // quedar sin respuesta o la app cree que no hay extensión).
+    const respondePong = (hasVault) => sendResponse(baseMessage({
       type: "APP_CONTABLE_EXTENSION_PONG",
       extension_version: EXTENSION_VERSION,
       capabilities: CAPABILITIES,
+      has_vault: hasVault,
       nonce: message.nonce,
     }));
-    return false;
+    siiVaultStatus()
+      .then((st) => respondePong(Boolean(st?.configured || st?.needs_migration)))
+      .catch(() => respondePong(false));
+    return true;
   }
 
   // Ack de app-bridge: el POST /api/sii-local/result respondió ok → el folio quedó
@@ -1312,7 +1342,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try { jobAppOrigin = new URL(sender.url).origin; } catch { jobAppOrigin = null; }
     Promise.resolve()
       .then(async () => {
-        const validationError = validateSiiFacturaJob(job);
+        const validationError = validateSiiFacturaJob(job) || validateLibreto(job?.libreto);
         if (validationError) {
           sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
           return;

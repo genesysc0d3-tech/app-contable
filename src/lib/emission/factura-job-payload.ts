@@ -24,6 +24,7 @@
 // (fail-closed: un job de factura a medias jamás sale hacia la extensión).
 
 import { derivarMontosFactura } from "../facturas/plantilla";
+import { FACTURA_LIBRETO, type FacturaLibreto } from "./sii-libreto";
 
 /**
  * URL de arranque del portal de facturas — VERIFICADA EN VIVO 2026-08-26
@@ -101,6 +102,13 @@ export interface FacturaJob {
   totales: { monto_total: number; monto_neto: number; iva: number; monto_exento: number };
   requires_cert_password: true;
   start_url: string;
+  /**
+   * DOM del portal (nombres de form/campo, regex de detección, códigos, esperas)
+   * como DATO — un cambio de selector del SII se arregla con deploy, sin pasar
+   * por la Chrome Web Store. La flota actual lo ignora; el worker lo consumirá
+   * con fallback al hardcode (byte-idéntico) recién en la 0.2.1. Ver sii-libreto.ts.
+   */
+  libreto: FacturaLibreto;
   learn_only: boolean;
   auto_emit: boolean;
   allow_final_emit: boolean;
@@ -180,6 +188,7 @@ export function buildFacturaJob(input: FacturaJobInput): FacturaJob {
     },
     requires_cert_password: true,
     start_url: facturaPortalStartUrl(input.tipoDte),
+    libreto: FACTURA_LIBRETO,
     learn_only: learnOnly,
     auto_emit: !learnOnly,
     allow_final_emit: !learnOnly,

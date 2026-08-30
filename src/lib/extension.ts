@@ -18,7 +18,7 @@ export const EXTENSION_NOMBRE = "MassDTE — Motor Local";
  * `modules/core.js` (el test lo verifica). Se muestra en la UI de instalación para que
  * el usuario sepa cuál es la vigente y pueda comparar con la que tiene detectada.
  */
-export const EXTENSION_VERSION_ACTUAL = "0.2.0";
+export const EXTENSION_VERSION_ACTUAL = "0.2.1";
 
 /**
  * Piso de compatibilidad: bajo esta versión la app NO emite (banner + bloqueo con

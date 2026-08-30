@@ -114,7 +114,7 @@
     elements.vaultAmbiente.textContent = status?.ambiente === 1 ? "Producción" : "Certificación";
     elements.vaultUpdated.textContent = formatDate(status?.updated_at);
     elements.vaultUnlocked.textContent = status?.unlocked ? `Hasta ${formatDate(status.unlocked_until)}` : "Bloqueada";
-    setDiag(elements.simpleApiDiagnostic, "info", configured
+    setDiag(elements.simpleApiDiagnostic, "info", status?.encrypted
       ? "Bóveda local cifrada en este equipo. Desbloquéala sólo cuando vayas a emitir."
       : "Sube tu certificado, CAF y clave local. Se cifran sólo cuando presionas Guardar bóveda cifrada.");
   }
