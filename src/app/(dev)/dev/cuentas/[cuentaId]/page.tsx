@@ -663,9 +663,10 @@ export default async function DevCuentaDetallePage({
         </Section>
 
         {/*
-          Migrar vive en la fase 3, no en la 2: el server exige que el DESTINO
-          tenga plan multiempresa, así que si el origen era Pro la empresa no
-          se puede devolver por acá. No tiene botón de vuelta.
+          Migrar vive en la fase 3, no en la 2: el server exige plan activo con
+          CUPO libre en el destino, y devolverla exige que el origen tenga cupo
+          de vuelta — no hay botón de deshacer, solo otra migración con sus
+          mismos requisitos.
         */}
         <Fase
           id="peligro"
@@ -679,8 +680,8 @@ export default async function DevCuentaDetallePage({
           <Explica
             tono="error"
             que="Re-apunta el vínculo de la empresa hacia esta cuenta: los datos no se copian, pero el titular de ACÁ pasa a ver toda la historia de esa empresa —cartolas, movimientos, RUTs de terceros y boletas—. También desconecta sus chats de Telegram, que hay que re-vincular desde esta cuenta."
-            cuando="Unificar dos cuentas del mismo dueño, o devolverle su empresa a alguien que perdió el acceso. El id de la empresa se copia desde la ficha de su cuenta actual, en el bloque Empresas."
-            ojo="No hay vuelta por el panel: traerla exige plan multiempresa en el destino, así que si venía de un Pro no se puede devolver. Antes de tocar: verificar identidad por el runbook —unificación, responde desde ambos correos; recuperación, $1 con código desde el banco de la empresa—. Nunca pedir cédula. El login de la cuenta de origen se resuelve aparte, a mano."
+            cuando="Unificar dos cuentas del mismo dueño, devolverle su empresa a alguien que perdió el acceso, o el DIVORCIO: un socio se separa y su empresa se muda a la cuenta nueva que él ya pagó. El id de la empresa se copia desde la ficha de su cuenta actual, en el bloque Empresas."
+            ojo="Exige plan activo con cupo libre en el destino (el destino paga primero, siempre). No hay botón de deshacer: devolverla es otra migración, con cupo en el origen. Antes de tocar: verificar identidad por el runbook —unificación, responde desde ambos correos; recuperación, $1 con código desde el banco de la empresa—. Nunca pedir cédula. Si al origen le queda otra empresa, sus logins se re-apuntan solos; si no, el panel marca el login colgado en rojo."
           />
           <MigrarEmpresaForm cuentaId={cuentaId} />
         </Section>
