@@ -102,7 +102,7 @@ export async function crearEmpresa(formData: FormData) {
     return { error: "No se pudo crear la cuenta. Intenta de nuevo." };
   }
 
-  const [{ error: cuentaEmpresaError }, { error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
+  const [{ error: cuentaEmpresaError }, { error: cuentaUsuarioError }] = await Promise.all([
     admin.from("cuenta_empresas").insert({
       cuenta_id: cuenta.id,
       empresa_id: empresa.id,
@@ -115,14 +115,9 @@ export async function crearEmpresa(formData: FormData) {
       es_titular: true,
       activo: true,
     }),
-    admin.from("usuario_empresas").insert({
-      usuario_id: user.id,
-      empresa_id: empresa.id,
-      rol: "titular",
-    }),
   ]);
 
-  const membershipError = cuentaEmpresaError ?? cuentaUsuarioError ?? usuarioEmpresaError;
+  const membershipError = cuentaEmpresaError ?? cuentaUsuarioError;
   if (membershipError) {
     await admin.from("cuentas").delete().eq("id", cuenta.id);
     await admin.from("empresas").delete().eq("id", empresa.id);

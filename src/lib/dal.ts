@@ -41,9 +41,9 @@ export const getUsuario = cache(async (): Promise<UsuarioConEmpresa | null> => {
   const user = await getSession();
   const supabase = await createClient();
 
-  // Embed desambiguado: usuario_empresas (junction multiempresa) crea un segundo
-  // camino usuarios↔empresas, así que hay que indicar el FK directo o PostgREST
-  // falla el embed por ambigüedad.
+  // FK explícito a propósito: cuando existía usuario_empresas (borrada el
+  // 2026-08-31) el embed ambiguo rompía esta consulta. La tabla ya no está,
+  // pero nombrar el camino evita que cualquier junction futura la re-rompa.
   const { data } = await supabase
     .from("usuarios")
     .select("*, empresas!usuarios_empresa_id_fkey(*)")
