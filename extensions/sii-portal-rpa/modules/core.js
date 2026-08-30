@@ -2,7 +2,7 @@
 
 export const EXT_SOURCE = "app-contable-extension";
 export const PROTOCOL_VERSION = 1;
-export const EXTENSION_VERSION = "0.2.1";
+export const EXTENSION_VERSION = "0.2.2";
 
 /**
  * Orígenes de la app permitidos. Transición de dominio (2026-08): se aceptan
