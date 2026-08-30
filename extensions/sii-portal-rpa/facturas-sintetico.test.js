@@ -22,6 +22,8 @@ const WORKER_SRC = readFileSync(join(__dirname, "facturas-worker.js"), "utf8");
 // seteando `activeForms` antes de cada drive.
 let activeForms = new Map();
 let actions = []; // la grabación: [{op:"set",name,value} | {op:"click",name}]
+let activeBodyText = ""; // texto de la página (para los detectores de pageKind)
+let activePwd = false; // ¿hay input[type=password]? (login/firma)
 
 function field(name, { tag = "INPUT", value = "", options = null, checked = false } = {}) {
   return {
@@ -48,11 +50,13 @@ function form(name, fields) {
 }
 
 const fakeDocument = {
-  body: { get innerText() { return ""; } },
+  body: { get innerText() { return activeBodyText; } },
+  getElementById: (id) => activeForms.get(id) ?? null,
   querySelector: (sel) => {
     const m = String(sel).match(/^form\[name="([^"]+)"\]$/);
     if (m) return activeForms.get(m[1]) ?? null;
-    return null; // input[type=password] etc. → no hay en estas páginas
+    if (/password/i.test(sel)) return activePwd ? { tagName: "INPUT" } : null;
+    return null;
   },
 };
 
@@ -83,8 +87,10 @@ function mountWorker() {
 }
 
 // Maneja un drive y espera el push del resultado (APP_CONTABLE_SII_FACT_STEP).
-async function drive(job, forms) {
+async function drive(job, forms, { bodyText = "", pwd = false } = {}) {
   activeForms = new Map(forms.map((f) => [f.name, f]));
+  activeBodyText = bodyText;
+  activePwd = pwd;
   actions = [];
   outgoing = [];
   driveListener({ type: "APP_CONTABLE_SII_FACT_DRIVE", job, job_id: job.job_id, done: {} }, {}, () => {});
@@ -233,5 +239,61 @@ describe("sintético del worker de facturas (corre el original que ya funciona)"
       expect(res.action).toBe("paused_preview");
       expect(a.find((x) => x.name === "btnSign")).toBeUndefined();
     });
+
+    // GLOSA extendida: ejercita glosa_checkbox + glosa_textarea (no cubiertos
+    // por el fixture base). Con y sin libreto deben grabar lo mismo.
+    it("glosa: misma secuencia con y sin libreto (checkbox + textarea)", async () => {
+      const jobGlosa = (over) => jobFactura({
+        detalles: [{ nombre: "Asesoría", cantidad: 1, precio: 100000, descripcion: "Glosa larga con más de cuarenta caracteres de detalle." }],
+        ...over,
+      });
+      const paginaGlosa = () => form("VIEW_EFXP", [
+        field("PTDC_CODIGO", { value: "34" }),
+        field("EFXP_RZN_SOC", { value: "AlphaCode SpA" }),
+        field("EFXP_GIRO_EMIS", { value: "Servicios" }),
+        field("EFXP_CMNA_ORIGEN", { value: "Las Condes" }),
+        field("EFXP_CIUDAD_ORIGEN", { value: "" }),
+        field("EFXP_RUT_RECEP", { value: "" }),
+        field("EFXP_DV_RECEP", { value: "" }),
+        field("EFXP_RZN_SOC_RECEP", { value: "MV SpA" }),
+        field("EFXP_DIR_RECEP", { value: "" }),
+        field("EFXP_CMNA_RECEP", { value: "" }),
+        field("EFXP_CIUDAD_RECEP", { value: "" }),
+        field("EFXP_GIRO_RECEP", { value: "" }),
+        field("EFXP_CONTACTO", { value: "" }),
+        field("EFXP_NMB_01", { value: "" }),
+        field("EFXP_QTY_01", { value: "" }),
+        field("EFXP_PRC_01", { value: "" }),
+        field("EFXP_FCH_EMIS", { value: "" }),
+        field("EFXP_FMA_PAGO", { value: "" }),
+        field("EFXP_MNT_TOTAL", { value: "100000" }),
+        field("DESCRIP_01", { checked: false }),
+        field("EFXP_DSC_ITEM_01", { tag: "TEXTAREA", value: "" }),
+        field("Button_Update", { tag: "BUTTON" }),
+      ]);
+      const sin = await drive(jobGlosa(), [paginaGlosa()]);
+      const con = await drive(jobGlosa({ libreto: FACTURA_LIBRETO }), [paginaGlosa()]);
+      expect(sin.res.action).toBe("validado");
+      expect(con.actions).toEqual(sin.actions);
+      // y la glosa efectivamente se escribió
+      expect(con.actions).toContainEqual({ op: "click", name: "DESCRIP_01" });
+      expect(con.actions).toContainEqual({ op: "set", name: "EFXP_DSC_ITEM_01", value: "Glosa larga con más de cuarenta caracteres de detalle." });
+    }, 15000);
+
+    // DETECTORES de página (login/firma/éxito): clasificación por texto. Con y
+    // sin libreto tienen que clasificar igual (mismos regex).
+    it("clasifica login / firma / post_firma igual con y sin libreto", async () => {
+      const casos = [
+        { kind: "login", pwd: true, bodyText: "Ingrese su RUT y Clave Tributaria para iniciar sesión" },
+        { kind: "firma", pwd: true, bodyText: "Ingrese la clave de su certificado digital para la firma" },
+        { kind: "post_firma", pwd: false, bodyText: "DOCUMENTO TRIBUTARIO ELECTRÓNICO ENVIADO EXITOSAMENTE" },
+      ];
+      for (const caso of casos) {
+        const sin = await drive(jobFactura(), [], { bodyText: caso.bodyText, pwd: caso.pwd });
+        const con = await drive(jobFactura({ libreto: FACTURA_LIBRETO }), [], { bodyText: caso.bodyText, pwd: caso.pwd });
+        expect(sin.res.kind).toBe(caso.kind);
+        expect(con.res.kind).toBe(caso.kind);
+      }
+    }, 15000);
   });
 });
