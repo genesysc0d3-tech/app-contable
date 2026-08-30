@@ -670,14 +670,10 @@ export async function migrarEmpresaACuenta(
   if (movErr) return { error: `El move falló: ${movErr.message}` };
   if (movidas !== 1) return { error: "El move no encontró el vínculo esperado (¿carrera?) — nada cambió, re-verificar" };
 
-  // Post-move (re-ejecutables): vínculo del titular destino, plan legacy de la
-  // empresa, Telegram fuera (se re-vincula desde la cuenta destino).
-  if (destino.owner_usuario_id) {
-    await sb.from("usuario_empresas").upsert(
-      { usuario_id: destino.owner_usuario_id, empresa_id: empresaId, rol: "titular" },
-      { onConflict: "usuario_id,empresa_id", ignoreDuplicates: true },
-    );
-  }
+  // Post-move (re-ejecutables): plan legacy de la empresa y Telegram fuera (se
+  // re-vincula desde la cuenta destino). El acceso del titular destino no
+  // necesita paso extra: es miembro de su cuenta y la empresa acaba de llegar
+  // a ella — el RLS por cuenta pagadora hace el resto.
   // Se sincroniza la cuenta DESTINO COMPLETA, no solo la empresa que llega.
   // Antes esta línea encendía únicamente a la recién llegada y las que ya
   // vivían ahí se quedaban con el flag que traían: así una empresa que llevaba
