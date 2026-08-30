@@ -473,20 +473,12 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
 
   if (existing?.empresa_id === invitacion.empresa_id) {
     if (cupoAceptacion.cuentaId) {
-      const [{ error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
-        sb.from("cuenta_usuarios").upsert({
-          cuenta_id: cupoAceptacion.cuentaId,
-          usuario_id: user.id,
-          activo: true,
-          es_titular: false,
-        }, { onConflict: "cuenta_id,usuario_id" }),
-        sb.from("usuario_empresas").upsert({
-          usuario_id: user.id,
-          empresa_id: invitacion.empresa_id,
-          rol: invitacion.rol,
-        }, { onConflict: "usuario_id,empresa_id" }),
-      ]);
-      const membershipError = cuentaUsuarioError ?? usuarioEmpresaError;
+      const { error: membershipError } = await sb.from("cuenta_usuarios").upsert({
+        cuenta_id: cupoAceptacion.cuentaId,
+        usuario_id: user.id,
+        activo: true,
+        es_titular: false,
+      }, { onConflict: "cuenta_id,usuario_id" });
       if (membershipError) return { error: membershipError.message };
     }
     await sb.from("empresa_invitaciones").update({
@@ -520,20 +512,12 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   if (insertError) return { error: insertError.message };
 
   if (cupoAceptacion.cuentaId) {
-    const [{ error: cuentaUsuarioError }, { error: usuarioEmpresaError }] = await Promise.all([
-      sb.from("cuenta_usuarios").upsert({
-        cuenta_id: cupoAceptacion.cuentaId,
-        usuario_id: user.id,
-        activo: true,
-        es_titular: false,
-      }, { onConflict: "cuenta_id,usuario_id" }),
-      sb.from("usuario_empresas").upsert({
-        usuario_id: user.id,
-        empresa_id: invitacion.empresa_id,
-        rol: invitacion.rol,
-      }, { onConflict: "usuario_id,empresa_id" }),
-    ]);
-    const membershipError = cuentaUsuarioError ?? usuarioEmpresaError;
+    const { error: membershipError } = await sb.from("cuenta_usuarios").upsert({
+      cuenta_id: cupoAceptacion.cuentaId,
+      usuario_id: user.id,
+      activo: true,
+      es_titular: false,
+    }, { onConflict: "cuenta_id,usuario_id" });
     if (membershipError) {
       await sb.from("usuarios").delete().eq("id", user.id);
       return { error: membershipError.message };

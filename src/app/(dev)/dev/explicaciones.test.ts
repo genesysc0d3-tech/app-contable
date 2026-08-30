@@ -103,7 +103,12 @@ describe("lo que el panel promete sobre CAMBIAR EL PLAN", () => {
 
 describe("lo que el panel promete sobre TRAER UNA EMPRESA", () => {
   it("el titular del destino queda con acceso a la empresa — el texto no lo esconde", () => {
-    expect(leer(ACTIONS)).toContain('rol: "titular"');
+    // El acceso viene del move mismo: la empresa llega a la cuenta donde el
+    // titular ya es miembro, y el RLS por cuenta pagadora hace el resto. Ya no
+    // hay upsert a usuario_empresas (tabla borrada el 2026-08-31).
+    const actions = leer(ACTIONS);
+    expect(actions).toContain('.update({ cuenta_id: cuentaDestinoId');
+    expect(actions).not.toContain("usuario_empresas");
     expect(leer(DETALLE)).toContain("pasa a ver toda la historia de esa empresa");
   });
 
