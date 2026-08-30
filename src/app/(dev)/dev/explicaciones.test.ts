@@ -112,9 +112,25 @@ describe("lo que el panel promete sobre TRAER UNA EMPRESA", () => {
     expect(leer(DETALLE)).toContain("Telegram");
   });
 
-  it("exige plan multiempresa en el destino: por eso no hay vuelta", () => {
-    expect(leer(ACTIONS)).toContain("no es multiempresa");
-    expect(leer(DETALLE)).toContain("No hay vuelta por el panel");
+  it("la regla del destino es CUPO con plan activo, no multiempresa (divorcio 2026-08-31)", () => {
+    // El server dejó de exigir plan multiempresa: una empresa puede mudarse a
+    // un Start/Pro vacío (el socio que se separa). Al Pro lleno lo sigue
+    // defendiendo el conteo de cupo, dormidas incluidas.
+    const actions = leer(ACTIONS);
+    expect(actions).not.toContain("no es multiempresa");
+    expect(actions).toContain("Sin cupo en el destino");
+    expect(actions).toContain("no tiene un plan activo");
+    // Y el texto promete exactamente eso, sin la regla vieja.
+    const texto = leer(DETALLE);
+    expect(texto).toContain("cupo libre en el destino");
+    expect(texto).not.toContain("exige plan multiempresa");
+  });
+
+  it("los logins del origen se re-apuntan solo si le queda otra empresa — y el texto no promete más", () => {
+    const actions = leer(ACTIONS);
+    expect(actions).toContain("loginsReapuntados");
+    expect(actions).toContain("runbook-login-huerfano");
+    expect(leer(DETALLE)).toContain("se re-apuntan solos");
   });
 
   it("el id que pide el formulario está a la vista en la ficha", () => {
