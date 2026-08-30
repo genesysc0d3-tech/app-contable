@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { recordOpsEvent } from "@/lib/ops/events";
-import { ANCLA_LABELS, describeAncla } from "@/lib/emission/sii-libreto";
+import { ANCLA_LABELS, ANCLA_LABELS_BOLETA, describeAncla } from "@/lib/emission/sii-libreto";
 
 /**
  * Aviso de POSIBLE CAMBIO DEL PORTAL DEL SII.
@@ -43,7 +43,8 @@ export async function POST(request: Request) {
   // Lista blanca: solo roles de ancla conocidos. Cualquier otra cosa se
   // normaliza a "otro" — el cliente no escribe texto libre en ops_events.
   const anclaRaw = typeof payload.ancla === "string" ? payload.ancla.trim() : "";
-  const ancla = anclaRaw in ANCLA_LABELS ? anclaRaw : "otro";
+  const anclaConocida = anclaRaw in ANCLA_LABELS || anclaRaw in ANCLA_LABELS_BOLETA;
+  const ancla = anclaConocida ? anclaRaw : "otro";
   const portal = payload.portal === "boletas" ? "boletas" : "facturas";
   const tipoDoc = portal === "boletas" ? "boleta" : "factura";
 

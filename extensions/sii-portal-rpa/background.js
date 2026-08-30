@@ -786,6 +786,22 @@ function scanWorkerPage(state, attempt = 1) {
       }), (emitResponse) => {
         if (chrome.runtime.lastError || !emitResponse?.ok) {
           const errorMessage = emitResponse?.error || chrome.runtime.lastError?.message || "No se pudo emitir en e-Boleta.";
+          // POSIBLE CAMBIO DEL SII: un ancla estructural del portal e-Boleta no
+          // apareció. Se reporta al /dev (mismo contrato que facturas), SOLO si
+          // NO se firmó — post-emit puede haber folio vivo. Aditivo.
+          if (emitResponse?.posible_cambio_sii && !state.finalEmitClicked && !emitResponse.final_emit_clicked) {
+            sendToApp(state, {
+              source: EXT_SOURCE,
+              type: "APP_CONTABLE_SII_CAMBIO_SII",
+              job_id: state.jobId,
+              portal: "boletas",
+              ancla: emitResponse.ancla_faltante ?? null,
+              error: emitResponse.error ?? null,
+              page_kind: null,
+              libreto_version: state.job?.libreto?.libreto_version ?? null,
+              ext_version: chrome.runtime.getManifest().version,
+            });
+          }
           // Post-emit si: (a) el worker lo confirmó, o (b) el candado ya se armó por el
           // aviso inmediato (notifyFinalEmitClicked, apenas se cliqueó el EMITIR real).
           // En ese caso NO cerrar ni re-emitir: capturar el folio. Una muerte de puerto
