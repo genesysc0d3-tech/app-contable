@@ -15,10 +15,11 @@ export const SII_VAULT_CAPABILITIES = [
 
 // ── Bóveda SII v2 "llave partida" (envelope encryption) ──────────────────────
 // Las credenciales SII se cifran con una llave aleatoria VK. VK se envuelve bajo
-// KEK = HKDF(WS, salt), donde WS (32 bytes) vive SOLO en el servidor (tabla
-// extension_vault_keys) y se obtiene con la sesión de la app. Ni el disco solo
-// (no tiene WS) ni el servidor solo (no tiene el ciphertext ni la Clave
-// Tributaria) pueden descifrar. Adiós passphrase manual: la sesión de la app es
+// KEK = HKDF(WS, salt), donde WS (32 bytes) vive SOLO en el servidor y se obtiene
+// con la sesión de la app. Ni el disco solo (no tiene WS) ni el servidor solo (no
+// tiene el ciphertext ni la Clave Tributaria) pueden descifrar. La garantía y su
+// esquema van en la página legal /extension; acá no se nombran tablas del
+// servidor. Adiós passphrase manual: la sesión de la app es
 // lo único que desbloquea, y VK se cachea en chrome.storage.session (sobrevive la
 // muerte del service worker MV3 —el bug del "10 min" falso—, se borra al cerrar
 // el navegador, invisible a content scripts).

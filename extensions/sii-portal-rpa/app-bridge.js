@@ -157,6 +157,24 @@
       }).catch(() => undefined);
       return;
     }
+    if (message.type === "APP_CONTABLE_SII_CAMBIO_SII") {
+      // Aviso de posible cambio del portal del SII → se registra como evento de
+      // ops para el panel /dev. Solo el rol del ancla del portal, nunca PII.
+      fetch("/api/sii-local/cambio-sii", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: message.job_id ?? null,
+          portal: message.portal ?? null,
+          ancla: message.ancla ?? null,
+          error: message.error ?? null,
+          page_kind: message.page_kind ?? null,
+          libreto_version: message.libreto_version ?? null,
+          extension_version: message.ext_version ?? chrome.runtime.getManifest().version,
+        }),
+      }).catch(() => undefined);
+      return;
+    }
     postToPage(message);
   });
 })();

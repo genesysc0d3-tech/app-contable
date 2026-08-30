@@ -86,3 +86,57 @@ export function validateSiiFacturaJob(job) {
   }
   return null;
 }
+
+// Vocabulario CERRADO de nombres de campo que el libreto puede nombrar. Un
+// libreto (que viene del servidor) SOLO puede apuntar a campos del formulario
+// de facturas del SII — jamás a un selector arbitrario. Esto acota qué puede
+// tocar el worker si algún día bajara un libreto malformado o manipulado.
+const LIBRETO_CAMPO_RE = /^(?:EFXP_[A-Z0-9_]+|RUT_EMP|PTDC_CODIGO|DESCRIP_01|Button_Update|btnSign)$/;
+const LIBRETO_FORMS = ["preview", "formulario", "selector_empresa"];
+const LIBRETO_CAMPOS = [
+  "emisor_select", "tipo_verif", "rut_recep", "dv_recep", "razon_soc_recep",
+  "dir_recep", "comuna_recep", "ciudad_recep", "giro_recep", "contacto",
+  "comuna_origen", "ciudad_origen", "razon_soc_emisor", "giro_emisor",
+  "fecha_emision", "forma_pago", "detalle_nombre", "detalle_cantidad",
+  "detalle_precio", "glosa_checkbox", "glosa_textarea", "monto_total",
+  "boton_validar", "boton_firmar",
+];
+const LIBRETO_DETECTORES = ["login", "firma", "exito_a", "exito_b"];
+const LIBRETO_SCHEMA_VERSION = 1;
+
+/**
+ * Validación fail-closed del LIBRETO (el catálogo de nombres del portal que
+ * viaja en el job — ver src/lib/emission/sii-libreto.ts).
+ *
+ * AUSENTE = válido: el worker usa su fallback hardcodeado y la conducta es
+ * byte-idéntica. Pero si el libreto viene PRESENTE, tiene que estar bien
+ * formado: un libreto malformado que dirige en qué campo escribe el worker es
+ * peor que ninguno (podría emitir un DTE con datos en el lugar equivocado), así
+ * que ante cualquier duda se rechaza el job entero antes de abrir la ventana.
+ */
+export function validateLibreto(libreto) {
+  if (libreto == null) return null; // ausente = fallback hardcodeado, OK
+  if (typeof libreto !== "object") return "LIBRETO_INVALID";
+  if (libreto.libreto_version !== LIBRETO_SCHEMA_VERSION) return "LIBRETO_SCHEMA_UNKNOWN";
+  if (libreto.portal !== "sii_facturas_gratuito") return "LIBRETO_PORTAL_INVALID";
+
+  const noVacio = (v) => typeof v === "string" && v.trim().length > 0;
+
+  if (!libreto.forms || typeof libreto.forms !== "object") return "LIBRETO_FORMS_MISSING";
+  for (const k of LIBRETO_FORMS) {
+    if (!noVacio(libreto.forms[k])) return "LIBRETO_FORM_MISSING";
+  }
+  if (!libreto.detectores || typeof libreto.detectores !== "object") return "LIBRETO_DETECTORES_MISSING";
+  for (const k of LIBRETO_DETECTORES) {
+    if (!noVacio(libreto.detectores[k])) return "LIBRETO_DETECTOR_MISSING";
+  }
+  if (!libreto.campos || typeof libreto.campos !== "object") return "LIBRETO_CAMPOS_MISSING";
+  for (const k of LIBRETO_CAMPOS) {
+    const name = libreto.campos[k];
+    if (!noVacio(name)) return "LIBRETO_CAMPO_MISSING";
+    if (!LIBRETO_CAMPO_RE.test(name)) return "LIBRETO_CAMPO_NO_PERMITIDO";
+  }
+  const fp = libreto.codigos?.forma_pago;
+  if (!fp || !noVacio(fp.contado) || !noVacio(fp.credito)) return "LIBRETO_CODIGO_MISSING";
+  return null;
+}

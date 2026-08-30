@@ -30,6 +30,7 @@ mkdir -p "$STAGE" "$OUT_DIR"
     ! -name 'manifest.prod.json' \
     ! -name 'README.md' \
     ! -name 'ARQUITECTURA.md' \
+    ! -name 'PUBLICAR.md' \
     ! -name '.DS_Store' \
     ! -name '*.test.js' \
     -exec sh -c 'mkdir -p "$0/$(dirname "$1")" && cp "$1" "$0/$1"' "$STAGE" {} \; )

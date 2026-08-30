@@ -133,6 +133,87 @@
   const campo = (form, name) => (form?.elements?.namedItem?.(name) ?? null);
   const valorDe = (form, name) => String(campo(form, name)?.value ?? "").trim();
 
+  // ── Libreto: catálogo de nombres/regex/esperas del portal como DATO, con
+  //    FALLBACK al hardcode. Sin job.libreto (o con un campo faltante) devuelve
+  //    el literal de siempre → conducta BYTE-IDÉNTICA. El servidor manda el
+  //    espejo exacto (src/lib/emission/sii-libreto.ts) para poder arreglar un
+  //    cambio de selector del SII con un deploy, sin pasar por la Chrome Web
+  //    Store. OJO: acá SOLO se resuelve QUÉ nombre/regex/espera usar. La
+  //    coreografía (orden, el RUT que se pone una vez, los 3 reintentos, POST
+  //    vs AJAX) y la SEGURIDAD (match del emisor, candado, TOTAL_MISMATCH,
+  //    evidencia del folio) son CÓDIGO, jamás datos del servidor.
+  function resolverLibreto(job) {
+    const L = job?.libreto ?? null;
+    const c = L?.campos ?? {};
+    const f = L?.forms ?? {};
+    const d = L?.detectores ?? {};
+    const s = L?.selectores ?? {};
+    const e = L?.esperas ?? {};
+    const p = L?.codigos?.forma_pago ?? {};
+    const re = (src, hard) => { try { return src ? new RegExp(src, "i") : hard; } catch { return hard; } };
+    return {
+      forms: {
+        preview: f.preview ?? "PreViewDTE",
+        formulario: f.formulario ?? "VIEW_EFXP",
+        selector_empresa: f.selector_empresa ?? "fPrmEmpPOP",
+      },
+      det: {
+        login: re(d.login, /clave\s+tributaria|iniciar\s+sesi|autenticaci/i),
+        firma: re(d.firma, /certificado|firma/i),
+        exito_a: re(d.exito_a, /ENVIADO\s+EXITOSAMENTE/i),
+        exito_b: re(d.exito_b, /DOCUMENTO\s+TRIBUTARIO/i),
+      },
+      campos: {
+        emisor_select: c.emisor_select ?? "RUT_EMP",
+        tipo_verif: c.tipo_verif ?? "PTDC_CODIGO",
+        rut_recep: c.rut_recep ?? "EFXP_RUT_RECEP",
+        dv_recep: c.dv_recep ?? "EFXP_DV_RECEP",
+        razon_soc_recep: c.razon_soc_recep ?? "EFXP_RZN_SOC_RECEP",
+        dir_recep: c.dir_recep ?? "EFXP_DIR_RECEP",
+        comuna_recep: c.comuna_recep ?? "EFXP_CMNA_RECEP",
+        ciudad_recep: c.ciudad_recep ?? "EFXP_CIUDAD_RECEP",
+        giro_recep: c.giro_recep ?? "EFXP_GIRO_RECEP",
+        contacto: c.contacto ?? "EFXP_CONTACTO",
+        comuna_origen: c.comuna_origen ?? "EFXP_CMNA_ORIGEN",
+        ciudad_origen: c.ciudad_origen ?? "EFXP_CIUDAD_ORIGEN",
+        razon_soc_emisor: c.razon_soc_emisor ?? "EFXP_RZN_SOC",
+        giro_emisor: c.giro_emisor ?? "EFXP_GIRO_EMIS",
+        fecha_emision: c.fecha_emision ?? "EFXP_FCH_EMIS",
+        forma_pago: c.forma_pago ?? "EFXP_FMA_PAGO",
+        detalle_nombre: c.detalle_nombre ?? "EFXP_NMB_01",
+        detalle_cantidad: c.detalle_cantidad ?? "EFXP_QTY_01",
+        detalle_precio: c.detalle_precio ?? "EFXP_PRC_01",
+        glosa_checkbox: c.glosa_checkbox ?? "DESCRIP_01",
+        glosa_textarea: c.glosa_textarea ?? "EFXP_DSC_ITEM_01",
+        monto_total: c.monto_total ?? "EFXP_MNT_TOTAL",
+        boton_validar: c.boton_validar ?? "Button_Update",
+        boton_firmar: c.boton_firmar ?? "btnSign",
+      },
+      selectores: {
+        submit_empresa: s.submit_empresa ?? 'button[type="submit"], input[type="submit"]',
+        pdf_link: s.pdf_link ?? 'a[href*="mipeDisplayPDF.cgi"]',
+      },
+      codigos: { contado: p.contado ?? "1", credito: p.credito ?? "2" },
+      esperas: {
+        submit_empresa_cinturon: e.submit_empresa_cinturon ?? 2500,
+        razon_recep: e.razon_recep ?? 8000,
+        respiro_post_recep: e.respiro_post_recep ?? 700,
+        reintento_override: e.reintento_override ?? 600,
+        glosa_textarea: e.glosa_textarea ?? 3000,
+        total_portal: e.total_portal ?? 6000,
+      },
+    };
+  }
+
+  // Señal de POSIBLE CAMBIO DEL SII: se adjunta a un resultado cuando falla un
+  // ANCLA ESTRUCTURAL del portal (un selector/form del libreto que SIEMPRE
+  // debería existir y no está) — no un dato del cliente. Es aditiva: no cambia
+  // ok/error/human/latches; si se quita, la conducta es byte-idéntica. Lleva
+  // SOLO el rol del ancla del libreto (público), jamás RUT/nombre/monto.
+  function cambioSii(ancla) {
+    return { posible_cambio_sii: true, ancla_faltante: ancla };
+  }
+
   // Montos del portal: "1.000" / "1000" → entero.
   function montoPortal(raw) {
     const limpio = String(raw ?? "").replace(/[.\s$]/g, "").replace(",", ".");
@@ -146,10 +227,11 @@
   // RESIDUAL en el DOM del formulario, y clasificar "selector_empresa" ahí
   // hacía re-clickear submit en cada recarga = titileo. Una página con
   // VIEW_EFXP/PreViewDTE ya pasó la selección de empresa, punto.
-  function pageKind() {
-    if (formEl("PreViewDTE")) return "preview";
-    if (formEl("VIEW_EFXP")) return "formulario";
-    if (formEl("fPrmEmpPOP")) return "selector_empresa";
+  function pageKind(job) {
+    const LB = resolverLibreto(job);
+    if (formEl(LB.forms.preview)) return "preview";
+    if (formEl(LB.forms.formulario)) return "formulario";
+    if (formEl(LB.forms.selector_empresa)) return "selector_empresa";
     const texto = (document.body?.innerText ?? "").slice(0, 4000);
     const pwd = document.querySelector('input[type="password"]');
     // LOGIN ANTES QUE FIRMA (bug cazado EN VIVO 2026-08-27, stream completo):
@@ -158,14 +240,14 @@
     // la CLAVE DEL CERTIFICADO como Clave Tributaria, el login rebotaba y el
     // flujo quedaba en unknown/observando para siempre (el titileo + modal
     // congelado). El login manda: RUT + Clave Tributaria es inconfundible.
-    if (pwd && /clave\s+tributaria|iniciar\s+sesi|autenticaci/i.test(texto)) return "login";
-    if (pwd && /certificado|firma/i.test(texto)) return "firma";
+    if (pwd && LB.det.login.test(texto)) return "login";
+    if (pwd && LB.det.firma.test(texto)) return "firma";
     // Página de ÉXITO real del portal (capturada en vivo 2026-08-27, folios
     // 961/962): "DOCUMENTO TRIBUTARIO ELECTRÓNICO ENVIADO EXITOSAMENTE". El
     // folio NO está en el texto plano (vive en el iframe con la imagen del
     // documento) — el ancla basta para clasificar; stepPostFirma lo busca
     // también dentro de los iframes same-origin.
-    if (/ENVIADO\s+EXITOSAMENTE/i.test(texto) && /DOCUMENTO\s+TRIBUTARIO/i.test(texto)) return "post_firma";
+    if (LB.det.exito_a.test(texto) && LB.det.exito_b.test(texto)) return "post_firma";
     if (extractFolioFromText(texto) && /factura|documento tributario/i.test(texto)) return "post_firma";
     return "unknown";
   }
@@ -179,9 +261,12 @@
   // Selector de empresa: match EXACTO por value normalizado. La lista trae
   // las N empresas donde el usuario está autorizado — el RUT del job manda.
   function stepSelectorEmpresa(job) {
-    const form = formEl("fPrmEmpPOP");
-    const sel = campo(form, "RUT_EMP");
-    if (!sel) return { ok: false, error: "SELECTOR_SIN_RUT_EMP" };
+    const LB = resolverLibreto(job);
+    const form = formEl(LB.forms.selector_empresa);
+    const sel = campo(form, LB.campos.emisor_select);
+    if (!sel) return { ok: false, error: "SELECTOR_SIN_RUT_EMP", ...cambioSii("campos.emisor_select") };
+    // SEGURIDAD (no libreto): el match del emisor es CÓDIGO — el libreto solo
+    // dice el NOMBRE del <select>, jamás afloja la comparación fail-closed.
     const objetivo = normalizeRutValue(job.emisor_rut);
     if (!objetivo) return { ok: false, error: "EMISOR_RUT_INVALID" };
     const candidatos = [...sel.options].filter((o) => normalizeRutValue(o.value) === objetivo);
@@ -190,8 +275,8 @@
       return { ok: false, error: "EMISOR_NO_AUTORIZADO", human: true, detalle: `Tu RUT no está autorizado en el SII para emitir por la empresa ${job.emisor_rut}. El representante legal de esa empresa tiene que autorizar tu RUT en el sitio del SII; desde acá no se puede habilitar.` };
     }
     setVal(sel, candidatos[0].value);
-    const submit = form.querySelector('button[type="submit"], input[type="submit"]');
-    if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT" };
+    const submit = form.querySelector(LB.selectores.submit_empresa);
+    if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT", ...cambioSii("selectores.submit_empresa") };
     // Cinturón (cazado en vivo 2026-08-27): el click sintético en Enviar puede
     // NO gatillar la navegación del CGI (la página quedó quieta con la empresa
     // elegida y el latch impedía reintentar). A los 2.5s forzamos el submit
@@ -199,33 +284,35 @@
     // doble-submite.
     setTimeout(() => {
       try {
-        const f = formEl("fPrmEmpPOP");
-        if (f && !formEl("VIEW_EFXP")) f.submit();
+        const f = formEl(LB.forms.selector_empresa);
+        if (f && !formEl(LB.forms.formulario)) f.submit();
       } catch { /* la página ya navegó */ }
-    }, 2500);
+    }, LB.esperas.submit_empresa_cinturon);
     return { ok: true, action: "empresa_seleccionada" };
   }
 
   // Campos cuyo vacío haría rebotar validaFacEx con alert() invisible.
   function preValidar(form, job) {
+    const c = resolverLibreto(job).campos;
+    const cod = resolverLibreto(job).codigos;
     const faltas = [];
     const exige = (name, etiqueta) => { if (!valorDe(form, name)) faltas.push(etiqueta); };
-    exige("EFXP_RZN_SOC", "razón social del emisor");
-    exige("EFXP_GIRO_EMIS", "giro del emisor");
-    exige("EFXP_CMNA_ORIGEN", "comuna del emisor");
-    exige("EFXP_CIUDAD_ORIGEN", "ciudad del emisor");
-    exige("EFXP_RUT_RECEP", "RUT del receptor");
-    exige("EFXP_RZN_SOC_RECEP", "razón social del receptor");
-    exige("EFXP_DIR_RECEP", "dirección del receptor");
-    exige("EFXP_CMNA_RECEP", "comuna del receptor");
-    exige("EFXP_CIUDAD_RECEP", "ciudad del receptor");
-    exige("EFXP_GIRO_RECEP", "giro del receptor");
-    exige("EFXP_NMB_01", "detalle");
-    exige("EFXP_QTY_01", "cantidad");
-    exige("EFXP_PRC_01", "precio");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(valorDe(form, "EFXP_FCH_EMIS"))) faltas.push("fecha de emisión");
-    const fma = valorDe(form, "EFXP_FMA_PAGO");
-    if (fma !== "1" && fma !== "2") faltas.push("forma de pago");
+    exige(c.razon_soc_emisor, "razón social del emisor");
+    exige(c.giro_emisor, "giro del emisor");
+    exige(c.comuna_origen, "comuna del emisor");
+    exige(c.ciudad_origen, "ciudad del emisor");
+    exige(c.rut_recep, "RUT del receptor");
+    exige(c.razon_soc_recep, "razón social del receptor");
+    exige(c.dir_recep, "dirección del receptor");
+    exige(c.comuna_recep, "comuna del receptor");
+    exige(c.ciudad_recep, "ciudad del receptor");
+    exige(c.giro_recep, "giro del receptor");
+    exige(c.detalle_nombre, "detalle");
+    exige(c.detalle_cantidad, "cantidad");
+    exige(c.detalle_precio, "precio");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(valorDe(form, c.fecha_emision))) faltas.push("fecha de emisión");
+    const fma = valorDe(form, c.forma_pago);
+    if (fma !== cod.contado && fma !== cod.credito) faltas.push("forma de pago");
     return faltas;
   }
 
@@ -234,10 +321,15 @@
     // autocomplete puede REEMPLAZAR nodos del formulario — jamás retener una
     // referencia a `form`/campos a través de un await. Todo acceso pasa por
     // f() (form fresco) y los overrides se re-aplican con verificación.
-    const f = () => formEl("VIEW_EFXP");
-    const codigo = valorDe(f(), "PTDC_CODIGO");
+    const LB = resolverLibreto(job);
+    const c = LB.campos;
+    const f = () => formEl(LB.forms.formulario);
+    const codigo = valorDe(f(), c.tipo_verif);
     if (codigo !== String(job.tipo_dte)) {
-      return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.` };
+      // Campo AUSENTE (vacío) = ancla estructural desaparecida → posible cambio
+      // del SII. Campo con OTRO valor = routing/dato, no estructura → sin señal.
+      const structural = codigo === "" ? cambioSii("campos.tipo_verif") : {};
+      return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.`, ...structural };
     }
 
     // Receptor primero — MEDIDO EN VIVO 2026-08-27 (laboratorio con la página
@@ -250,21 +342,21 @@
     // (detalle/cantidad/precio/forma de pago verificados en vivo).
     const rutRecep = splitRutCuerpoDv(job.receptor?.rut);
     if (!rutRecep) return { ok: false, error: "RECEPTOR_RUT_INVALID" };
-    const rutYaPuesto = valorDe(f(), "EFXP_RUT_RECEP") === rutRecep.cuerpo
-      && valorDe(f(), "EFXP_DV_RECEP").toUpperCase() === rutRecep.dv;
+    const rutYaPuesto = valorDe(f(), c.rut_recep) === rutRecep.cuerpo
+      && valorDe(f(), c.dv_recep).toUpperCase() === rutRecep.dv;
     if (!rutYaPuesto) {
-      setVal(campo(f(), "EFXP_RUT_RECEP"), rutRecep.cuerpo);
-      setVal(campo(f(), "EFXP_DV_RECEP"), rutRecep.dv);
+      setVal(campo(f(), c.rut_recep), rutRecep.cuerpo);
+      setVal(campo(f(), c.dv_recep), rutRecep.dv);
       // Modo AJAX (existe también): la razón social aparece sin navegar y
       // seguimos en esta misma pasada. Modo POST: la página muere durante esta
       // espera, este script muere con ella, y el próximo load retoma con el
       // RUT ya puesto (rutYaPuesto=true) — sin re-gatillar. Convergente.
-      const razonLlego = await waitFor(() => valorDe(formEl("VIEW_EFXP"), "EFXP_RZN_SOC_RECEP"), 8000, 300);
+      const razonLlego = await waitFor(() => valorDe(formEl(LB.forms.formulario), c.razon_soc_recep), LB.esperas.razon_recep, 300);
       if (!razonLlego) {
         return { ok: true, action: "observando", detalle: "receptor enviado al SII, esperando autocomplete/recarga" };
       }
       // Respiro extra: que el re-pintado termine antes de escribir.
-      await esperar(700);
+      await esperar(LB.esperas.respiro_post_recep);
     }
 
     const r = job.receptor ?? {};
@@ -274,33 +366,33 @@
     // Overrides idempotentes sobre el form FRESCO. Se aplican y se VERIFICAN;
     // si el portal re-pinta y pisa algo, la segunda/tercera vuelta lo repone.
     const aplicarTodo = () => {
-      if (job.fecha_emision) setVal(campo(f(), "EFXP_FCH_EMIS"), job.fecha_emision);
+      if (job.fecha_emision) setVal(campo(f(), c.fecha_emision), job.fecha_emision);
       // Ciudades: el autocomplete las deja vacías y SON obligatorias.
-      if (!valorDe(f(), "EFXP_CIUDAD_ORIGEN")) {
-        setVal(campo(f(), "EFXP_CIUDAD_ORIGEN"), valorDe(f(), "EFXP_CMNA_ORIGEN") || job.receptor?.ciudad || "");
+      if (!valorDe(f(), c.ciudad_origen)) {
+        setVal(campo(f(), c.ciudad_origen), valorDe(f(), c.comuna_origen) || job.receptor?.ciudad || "");
       }
-      if (r.razon_social) setValInteligente(campo(f(), "EFXP_RZN_SOC_RECEP"), r.razon_social);
-      if (r.direccion) setValInteligente(campo(f(), "EFXP_DIR_RECEP"), r.direccion);
-      if (r.comuna) setValInteligente(campo(f(), "EFXP_CMNA_RECEP"), r.comuna);
-      if (r.ciudad) setValInteligente(campo(f(), "EFXP_CIUDAD_RECEP"), r.ciudad);
-      if (r.giro) setValInteligente(campo(f(), "EFXP_GIRO_RECEP"), r.giro);
-      if (r.contacto || r.email) setVal(campo(f(), "EFXP_CONTACTO"), r.contacto || r.email);
-      setVal(campo(f(), "EFXP_NMB_01"), det.nombre);
-      setVal(campo(f(), "EFXP_QTY_01"), det.cantidad ?? 1);
-      setVal(campo(f(), "EFXP_PRC_01"), det.precio); // change → calculaRelacionadoFacEx
+      if (r.razon_social) setValInteligente(campo(f(), c.razon_soc_recep), r.razon_social);
+      if (r.direccion) setValInteligente(campo(f(), c.dir_recep), r.direccion);
+      if (r.comuna) setValInteligente(campo(f(), c.comuna_recep), r.comuna);
+      if (r.ciudad) setValInteligente(campo(f(), c.ciudad_recep), r.ciudad);
+      if (r.giro) setValInteligente(campo(f(), c.giro_recep), r.giro);
+      if (r.contacto || r.email) setVal(campo(f(), c.contacto), r.contacto || r.email);
+      setVal(campo(f(), c.detalle_nombre), det.nombre);
+      setVal(campo(f(), c.detalle_cantidad), det.cantidad ?? 1);
+      setVal(campo(f(), c.detalle_precio), det.precio); // change → calculaRelacionadoFacEx
       // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa).
-      setVal(campo(f(), "EFXP_FMA_PAGO"), job.forma_pago === "credito" ? "2" : "1");
+      setVal(campo(f(), c.forma_pago), job.forma_pago === "credito" ? LB.codigos.credito : LB.codigos.contado);
     };
 
     let faltas = [];
     for (let intento = 0; intento < 3; intento += 1) {
       aplicarTodo();
-      await esperar(600);
+      await esperar(LB.esperas.reintento_override);
       faltas = preValidar(f(), job);
       if (faltas.length === 0) break;
     }
 
-    if (!r.giro && !valorDe(f(), "EFXP_GIRO_RECEP")) {
+    if (!r.giro && !valorDe(f(), c.giro_recep)) {
       // Persona natural sin giro y el autocomplete tampoco lo trajo: pausa
       // humana (criterio 8 de la espec: se informa, se ingresa a mano).
       return { ok: false, error: "GIRO_RECEPTOR_REQUERIDO", human: true, detalle: "El SII no informó giro para este receptor. Ingrésalo en la app (queda guardado en tu libreta de clientes) y reintenta." };
@@ -311,18 +403,20 @@
 
     // Glosa extendida (>40 chars): checkbox Descrip. inserta el textarea.
     if (det.descripcion) {
-      const chk = campo(f(), "DESCRIP_01");
-      if (chk && !chk.checked) clickEl(chk); // dibujaTextArea inserta EFXP_DSC_ITEM_01
-      const area = await waitFor(() => campo(formEl("VIEW_EFXP"), "EFXP_DSC_ITEM_01"), 3000, 150);
+      const chk = campo(f(), c.glosa_checkbox);
+      if (chk && !chk.checked) clickEl(chk); // dibujaTextArea inserta el textarea de glosa
+      const area = await waitFor(() => campo(formEl(LB.forms.formulario), c.glosa_textarea), LB.esperas.glosa_textarea, 150);
       if (area) setVal(area, det.descripcion);
     }
 
     // Totales del portal vs el job (±$1 de redondeo) — ANTES de validar.
+    // SEGURIDAD (no libreto): el TOTAL_MISMATCH es CÓDIGO; el libreto solo dice
+    // el nombre del campo del total, no afloja la verificación cruzada.
     const totalEsperado = Number(job.totales?.monto_total);
     const totalPortal = await waitFor(() => {
-      const t = montoPortal(valorDe(formEl("VIEW_EFXP"), "EFXP_MNT_TOTAL"));
+      const t = montoPortal(valorDe(formEl(LB.forms.formulario), c.monto_total));
       return t && t > 0 ? t : null;
-    }, 6000, 250);
+    }, LB.esperas.total_portal, 250);
     if (!totalPortal || !Number.isFinite(totalEsperado) || Math.abs(totalPortal - totalEsperado) > 1) {
       return { ok: false, error: "TOTAL_MISMATCH", detalle: `El portal calculó $${totalPortal ?? "?"} y el documento aprobado dice $${totalEsperado}. No se firma un documento descuadrado.` };
     }
@@ -330,22 +424,26 @@
     // "Validar y visualizar" NO emite ni asigna folio (la vista previa dice
     // "Documento NO válido") — es seguro pre-candado.
     if (job.learn_only === true) return { ok: true, action: "learn_stop_pre_validar" };
-    if (!clickEl(campo(formEl("VIEW_EFXP"), "Button_Update"))) {
-      return { ok: false, error: "SIN_BOTON_VALIDAR" };
+    if (!clickEl(campo(formEl(LB.forms.formulario), c.boton_validar))) {
+      return { ok: false, error: "SIN_BOTON_VALIDAR", ...cambioSii("campos.boton_validar") };
     }
     return { ok: true, action: "validado" }; // la página navega al preview
   }
 
   async function stepPreview(job) {
-    const form = formEl("PreViewDTE");
+    const LB = resolverLibreto(job);
+    const c = LB.campos;
+    const form = formEl(LB.forms.preview);
     // Verificación cruzada final sobre los hidden del preview (es el
-    // documento EXACTO que se firmaría).
-    const totalPrev = montoPortal(valorDe(form, "EFXP_MNT_TOTAL"));
+    // documento EXACTO que se firmaría). SEGURIDAD (no libreto): el
+    // TOTAL_MISMATCH y el chequeo de tipo son CÓDIGO; el libreto solo nombra
+    // los campos que lee.
+    const totalPrev = montoPortal(valorDe(form, c.monto_total));
     const totalEsperado = Number(job.totales?.monto_total);
     if (totalPrev != null && Number.isFinite(totalEsperado) && Math.abs(totalPrev - totalEsperado) > 1) {
       return { ok: false, error: "TOTAL_MISMATCH", detalle: `La vista previa dice $${totalPrev} y el documento aprobado $${totalEsperado}.` };
     }
-    const codigo = valorDe(form, "PTDC_CODIGO");
+    const codigo = valorDe(form, c.tipo_verif);
     if (codigo && codigo !== String(job.tipo_dte)) {
       return { ok: false, error: "TIPO_PORTAL_MISMATCH" };
     }
@@ -366,8 +464,9 @@
       } catch { resolve(); }
     });
 
-    const btn = campo(form, "btnSign") ?? document.getElementById("btnSign");
-    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR" };
+    const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
+    // btnSign no encontrado = ANTES de firmar (no hay folio en riesgo) → señal.
+    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar") };
     return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 
@@ -497,7 +596,7 @@
     if (!job) return { ok: false, error: "JOB_MISSING" };
     // Deja respirar al DOM recién cargado (los CGIs inicializan con jQuery).
     await esperar(400);
-    const kind = pageKind();
+    const kind = pageKind(job);
     console.log("[FACT-worker] handleDrive kind:", kind, "url:", location.href.split("/").pop(), "done:", JSON.stringify(message.done ?? {}));
     try {
       // CANDADO MONÓTONO: con Firmar ya clickeado, ni el formulario ni la
