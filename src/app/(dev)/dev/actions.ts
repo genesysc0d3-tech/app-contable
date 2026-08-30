@@ -571,13 +571,13 @@ export async function setCuentaTrialCortesia(
  * MIGRACIÓN DE EMPRESA entre cuentas (LEGO del fundador, 2026-08-22): los datos
  * cuelgan de empresa_id y no se mueven jamás — esto re-apunta el ÚNICO vínculo
  * cuenta_empresas hacia la cuenta destino. Solo operador, nunca cliente.
- * Checklist de la revisión adversarial: destino con plan multiempresa efectivo
+ * Checklist de la revisión adversarial: destino con plan efectivo activo
  * y cupo (contando dormidas fuera_de_plan), cero emisiones a medio camino,
  * cero pipeline en vuelo, sin suscripción viva en el origen (se cancela antes,
  * a mano), Telegram de la empresa desconectado en el acto, auditoría en ambas
- * cuentas. La resolución del login huérfano del origen es un paso HUMANO aparte
- * (docs/runbook-login-huerfano.md): acá no se toca ningún usuario. El panel
- * ahora avisa solo cuando queda uno colgado, con una señal en rojo.
+ * cuentas. Los logins del origen que quedan parados en la empresa que se fue se
+ * re-apuntan solos a otra empresa del origen SI le queda alguna; si no queda,
+ * es paso humano (docs/runbook-login-huerfano.md) y el panel lo marca en rojo.
  * Verificación de identidad previa (runbook, en el panel): unificación = la
  * persona responde desde ambos correos; recuperación = $1 con código desde la
  * cuenta bancaria de la empresa. Jamás pedir/almacenar cédulas.
@@ -627,10 +627,15 @@ export async function migrarEmpresaACuenta(
   if (!planEfectivo || !planVivo) return { error: "La cuenta destino no tiene un plan activo" };
   const { data: planRow } = await sb
     .from("planes_config")
-    .select("multiempresa, empresas_incluidas")
+    .select("empresas_incluidas")
     .eq("codigo", planEfectivo)
     .maybeSingle();
-  if (planRow?.multiempresa !== true) return { error: `El plan del destino (${planEfectivo}) no es multiempresa — el modelo Pro = 1 empresa no se salta ni por soporte` };
+  // Divorcio (decisión del fundador, 2026-08-31): la regla NO es "multiempresa",
+  // es CUPO. Una empresa puede mudarse a un Start/Pro vacío — el caso del socio
+  // que se separa y contrata su propio plan. El modelo "Pro = 1 empresa" lo
+  // sigue defendiendo el conteo de abajo: un Pro con su empresa (despierta o
+  // dormida) no recibe una segunda ni por soporte.
+  if (!planRow) return { error: `El plan del destino (${planEfectivo}) no existe en planes_config` };
 
   // Cupo contando también las dormidas fuera_de_plan (reviven en el próximo upgrade).
   const { count: cupoUsado } = await sb
@@ -690,7 +695,43 @@ export async function migrarEmpresaACuenta(
     .eq("empresa_id", empresaId)
     .eq("activo", true);
 
-  const meta = { empresa_id: empresaId, rut: empresa.rut, cuenta_origen: origenId, cuenta_destino: cuentaDestinoId, telegram_desconectados: tgCortados ?? 0, operador: gate.userId };
+  // Logins del ORIGEN que quedaron parados en la empresa que se fue. Desde el
+  // RLS por cuenta pagadora ya no ven nada (la base exige membresía en la
+  // cuenta destino), pero su `empresa_id` apunta a una empresa que dal.ts ya no
+  // les resuelve: pantalla en blanco. Si al origen le queda otra empresa
+  // activa, se les re-apunta ahí; si no queda ninguna, se deja tal cual y el
+  // panel lo marca en rojo (runbook-login-huerfano). Los miembros activos del
+  // DESTINO no se tocan: su empresa_id sigue siendo válido donde llegó.
+  let loginsReapuntados = 0;
+  const { data: parados } = await sb.from("usuarios").select("id").eq("empresa_id", empresaId);
+  if (parados?.length) {
+    const { data: miembrosDestino } = await sb
+      .from("cuenta_usuarios")
+      .select("usuario_id")
+      .eq("cuenta_id", cuentaDestinoId)
+      .eq("activo", true)
+      .in("usuario_id", parados.map((p) => p.id));
+    const enDestino = new Set((miembrosDestino ?? []).map((m) => m.usuario_id));
+    const huerfanos = parados.filter((p) => !enDestino.has(p.id));
+    if (huerfanos.length) {
+      const { data: quedaEnOrigen } = await sb
+        .from("cuenta_empresas")
+        .select("empresa_id")
+        .eq("cuenta_id", origenId)
+        .eq("activa", true)
+        .limit(1)
+        .maybeSingle();
+      if (quedaEnOrigen?.empresa_id) {
+        const { count } = await sb
+          .from("usuarios")
+          .update({ empresa_id: quedaEnOrigen.empresa_id }, { count: "exact" })
+          .in("id", huerfanos.map((h) => h.id));
+        loginsReapuntados = count ?? 0;
+      }
+    }
+  }
+
+  const meta = { empresa_id: empresaId, rut: empresa.rut, cuenta_origen: origenId, cuenta_destino: cuentaDestinoId, telegram_desconectados: tgCortados ?? 0, logins_reapuntados: loginsReapuntados, operador: gate.userId };
   await recordCuentaAudit({ sb, cuentaId: cuentaDestinoId, empresaId, usuarioId: gate.userId, accion: "empresa_migrada_entrante", recursoTipo: "empresa", recursoId: empresaId, resumen: `Migración de soporte: «${empresa.razon_social}» llega desde otra cuenta`, metadata: meta }).catch(() => {});
   await recordCuentaAudit({ sb, cuentaId: origenId, empresaId, usuarioId: gate.userId, accion: "empresa_migrada_saliente", recursoTipo: "empresa", recursoId: empresaId, resumen: `Migración de soporte: «${empresa.razon_social}» sale hacia otra cuenta`, metadata: meta }).catch(() => {});
 
@@ -699,7 +740,7 @@ export async function migrarEmpresaACuenta(
   revalidatePath(`/dev/cuentas/${origenId}`);
   return {
     ok: true,
-    resumen: `«${empresa.razon_social}» migrada a «${destino.nombre}». Telegram desconectados: ${tgCortados ?? 0}. Pendiente humano: cerrar el login del origen (ver docs/runbook-login-huerfano.md; el panel lo va a marcar en rojo) y avisar al cliente.`,
+    resumen: `«${empresa.razon_social}» migrada a «${destino.nombre}». Telegram desconectados: ${tgCortados ?? 0}. Logins del origen re-apuntados a otra empresa suya: ${loginsReapuntados}. Si el panel marca un login colgado en rojo, resolverlo por docs/runbook-login-huerfano.md. Avisar al cliente.`,
   };
 }
 
