@@ -141,3 +141,26 @@ export const FACTURA_LIBRETO: FacturaLibreto = {
     total_portal: 6000, // :322
   },
 };
+
+// Qué significa cada ancla, en cristiano. Cuando el worker avisa "falló esta
+// ancla del portal", el panel /dev traduce el rol técnico (ej.
+// "campos.boton_validar") a una frase que se entiende sin mirar el código. Solo
+// describe el PUNTO del portal del SII (público), nunca datos del cliente.
+export const ANCLA_LABELS: Record<string, string> = {
+  "forms.selector_empresa": "la pantalla donde eliges bajo qué empresa emites",
+  "forms.formulario": "la página del formulario de la factura",
+  "forms.preview": "la vista previa antes de firmar",
+  "campos.emisor_select": "el selector de empresa (dónde eliges tu RUT emisor)",
+  "campos.tipo_verif": "el campo del tipo de documento (33 o 34)",
+  "campos.rut_recep": "la casilla del RUT del receptor",
+  "campos.boton_validar": "el botón «Validar y visualizar» del formulario",
+  "campos.boton_firmar": "el botón «Firmar» de la vista previa",
+  "selectores.submit_empresa": "el botón para enviar la empresa elegida",
+  "page_kind:unknown": "la página no calzó con ninguna pantalla conocida del portal",
+};
+
+/** Traduce un rol de ancla a su explicación; si no está mapeado, devuelve el rol. */
+export function describeAncla(rol: string | null | undefined): string {
+  const k = String(rol ?? "").trim();
+  return ANCLA_LABELS[k] ?? (k || "un punto del portal");
+}

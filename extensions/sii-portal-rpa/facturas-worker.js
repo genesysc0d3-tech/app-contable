@@ -205,6 +205,15 @@
     };
   }
 
+  // Señal de POSIBLE CAMBIO DEL SII: se adjunta a un resultado cuando falla un
+  // ANCLA ESTRUCTURAL del portal (un selector/form del libreto que SIEMPRE
+  // debería existir y no está) — no un dato del cliente. Es aditiva: no cambia
+  // ok/error/human/latches; si se quita, la conducta es byte-idéntica. Lleva
+  // SOLO el rol del ancla del libreto (público), jamás RUT/nombre/monto.
+  function cambioSii(ancla) {
+    return { posible_cambio_sii: true, ancla_faltante: ancla };
+  }
+
   // Montos del portal: "1.000" / "1000" → entero.
   function montoPortal(raw) {
     const limpio = String(raw ?? "").replace(/[.\s$]/g, "").replace(",", ".");
@@ -255,7 +264,7 @@
     const LB = resolverLibreto(job);
     const form = formEl(LB.forms.selector_empresa);
     const sel = campo(form, LB.campos.emisor_select);
-    if (!sel) return { ok: false, error: "SELECTOR_SIN_RUT_EMP" };
+    if (!sel) return { ok: false, error: "SELECTOR_SIN_RUT_EMP", ...cambioSii("campos.emisor_select") };
     // SEGURIDAD (no libreto): el match del emisor es CÓDIGO — el libreto solo
     // dice el NOMBRE del <select>, jamás afloja la comparación fail-closed.
     const objetivo = normalizeRutValue(job.emisor_rut);
@@ -267,7 +276,7 @@
     }
     setVal(sel, candidatos[0].value);
     const submit = form.querySelector(LB.selectores.submit_empresa);
-    if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT" };
+    if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT", ...cambioSii("selectores.submit_empresa") };
     // Cinturón (cazado en vivo 2026-08-27): el click sintético en Enviar puede
     // NO gatillar la navegación del CGI (la página quedó quieta con la empresa
     // elegida y el latch impedía reintentar). A los 2.5s forzamos el submit
@@ -317,7 +326,10 @@
     const f = () => formEl(LB.forms.formulario);
     const codigo = valorDe(f(), c.tipo_verif);
     if (codigo !== String(job.tipo_dte)) {
-      return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.` };
+      // Campo AUSENTE (vacío) = ancla estructural desaparecida → posible cambio
+      // del SII. Campo con OTRO valor = routing/dato, no estructura → sin señal.
+      const structural = codigo === "" ? cambioSii("campos.tipo_verif") : {};
+      return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.`, ...structural };
     }
 
     // Receptor primero — MEDIDO EN VIVO 2026-08-27 (laboratorio con la página
@@ -413,7 +425,7 @@
     // "Documento NO válido") — es seguro pre-candado.
     if (job.learn_only === true) return { ok: true, action: "learn_stop_pre_validar" };
     if (!clickEl(campo(formEl(LB.forms.formulario), c.boton_validar))) {
-      return { ok: false, error: "SIN_BOTON_VALIDAR" };
+      return { ok: false, error: "SIN_BOTON_VALIDAR", ...cambioSii("campos.boton_validar") };
     }
     return { ok: true, action: "validado" }; // la página navega al preview
   }
@@ -453,7 +465,8 @@
     });
 
     const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
-    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR" };
+    // btnSign no encontrado = ANTES de firmar (no hay folio en riesgo) → señal.
+    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar") };
     return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 

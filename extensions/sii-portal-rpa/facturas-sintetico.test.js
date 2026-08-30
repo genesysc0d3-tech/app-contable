@@ -280,6 +280,35 @@ describe("sintético del worker de facturas (corre el original que ya funciona)"
       expect(con.actions).toContainEqual({ op: "set", name: "EFXP_DSC_ITEM_01", value: "Glosa larga con más de cuarenta caracteres de detalle." });
     }, 15000);
 
+    // DETECCIÓN DE POSIBLE CAMBIO DEL SII: una página sin un ancla ESTRUCTURAL
+    // marca posible_cambio_sii; un error de DATO del cliente, no.
+    it("formulario sin el botón Validar → posible_cambio_sii en boton_validar", async () => {
+      // la página completa MENOS el botón Validar: el ancla estructural desaparece
+      const campos = [
+        ["PTDC_CODIGO", "34"], ["EFXP_RZN_SOC", "AlphaCode SpA"], ["EFXP_GIRO_EMIS", "Serv"],
+        ["EFXP_CMNA_ORIGEN", "Las Condes"], ["EFXP_CIUDAD_ORIGEN", ""], ["EFXP_RUT_RECEP", ""],
+        ["EFXP_DV_RECEP", ""], ["EFXP_RZN_SOC_RECEP", "MV SpA"], ["EFXP_DIR_RECEP", ""],
+        ["EFXP_CMNA_RECEP", ""], ["EFXP_CIUDAD_RECEP", ""], ["EFXP_GIRO_RECEP", ""],
+        ["EFXP_CONTACTO", ""], ["EFXP_NMB_01", ""], ["EFXP_QTY_01", ""], ["EFXP_PRC_01", ""],
+        ["EFXP_FCH_EMIS", ""], ["EFXP_FMA_PAGO", ""], ["EFXP_MNT_TOTAL", "100000"],
+      ];
+      const sinBoton = form("VIEW_EFXP", campos.map(([n, v]) => field(n, { value: v })));
+      const { res } = await drive(jobFactura(), [sinBoton]);
+      expect(res.error).toBe("SIN_BOTON_VALIDAR");
+      expect(res.posible_cambio_sii).toBe(true);
+      expect(res.ancla_faltante).toBe("campos.boton_validar");
+    }, 15000);
+
+    it("receptor sin giro (dato del cliente) → NO dispara la alerta", async () => {
+      const jobSinGiro = jobFactura({
+        receptor: { rut: RECEPTOR, razon_social: "MV SpA", direccion: "Mendoza 0932", comuna: "San Bernardo", ciudad: "San Bernardo", contacto: "mv@ej.cl" },
+      });
+      const { res } = await drive(jobSinGiro, [formularioPage()]);
+      expect(res.error).toBe("GIRO_RECEPTOR_REQUERIDO");
+      expect(res.human).toBe(true);
+      expect(res.posible_cambio_sii).toBeUndefined();
+    }, 15000);
+
     // DETECTORES de página (login/firma/éxito): clasificación por texto. Con y
     // sin libreto tienen que clasificar igual (mismos regex).
     it("clasifica login / firma / post_firma igual con y sin libreto", async () => {

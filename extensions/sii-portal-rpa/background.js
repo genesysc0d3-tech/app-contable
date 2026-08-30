@@ -460,6 +460,23 @@ function driveFacturaPage(state, attempt = 1) {
 // al terminar (patrón push). Llega por runtime.onMessage (handler abajo).
 function handleFactStepPush(state, res) {
   if (!res || res.busy) return;
+  // POSIBLE CAMBIO DEL SII: un ancla estructural del portal no apareció. Se
+  // reporta al servidor (para el panel /dev) SOLO si NO se firmó todavía —
+  // post-firma cualquier fallo puede convivir con un folio vivo y manda
+  // result_needs_review, no esta señal. Lleva solo el rol del ancla, jamás PII.
+  if (res.posible_cambio_sii && !state.finalEmitClicked) {
+    sendToApp(state, {
+      source: EXT_SOURCE,
+      type: "APP_CONTABLE_SII_CAMBIO_SII",
+      job_id: state.jobId,
+      portal: "facturas",
+      ancla: res.ancla_faltante ?? null,
+      error: res.error ?? null,
+      page_kind: res.kind ?? null,
+      libreto_version: state.job?.libreto?.libreto_version ?? null,
+      ext_version: chrome.runtime.getManifest().version,
+    });
+  }
   sendToApp(state, statusMessage(state.jobId, "fact_drive", `Portal: ${res.kind ?? "?"} → ${res.action ?? res.error ?? "?"}`, true));
   handleFactDriveResponse(state, res).catch((error) => {
     sendToApp(state, statusMessage(state.jobId, "error", `Conductor de facturas falló: ${error instanceof Error ? error.message : String(error)}`, true));
