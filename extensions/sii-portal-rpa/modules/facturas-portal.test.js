@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob } from "./facturas-portal.js";
+import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob, validateLibreto } from "./facturas-portal.js";
+import { FACTURA_LIBRETO } from "../../../src/lib/emission/sii-libreto.ts";
 
 const START_URL = "https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi";
 const EMISOR = "78.448.088-7"; // DV válido (módulo 11)
@@ -109,5 +110,46 @@ describe("extractFolioFromText (evidencia fuerte post-Firmar)", () => {
     const { extractFolioFromText } = await import("./facturas-portal.js");
     expect(extractFolioFromText("documento 635 generado por $100.000")).toBe(null);
     expect(extractFolioFromText("")).toBe(null);
+  });
+});
+
+describe("validateLibreto — fail-closed del catálogo de nombres del portal", () => {
+  const clon = () => JSON.parse(JSON.stringify(FACTURA_LIBRETO));
+
+  it("ausente = válido (el worker usa su fallback hardcodeado, byte-idéntico)", () => {
+    expect(validateLibreto(undefined)).toBe(null);
+    expect(validateLibreto(null)).toBe(null);
+  });
+  it("el libreto real de producción pasa", () => {
+    expect(validateLibreto(FACTURA_LIBRETO)).toBe(null);
+  });
+  it("no-objeto se rechaza", () => {
+    expect(validateLibreto("PreViewDTE")).toBe("LIBRETO_INVALID");
+  });
+  it("schema_version desconocido se rechaza (compat: extensión vieja no adivina)", () => {
+    expect(validateLibreto({ ...clon(), libreto_version: 99 })).toBe("LIBRETO_SCHEMA_UNKNOWN");
+  });
+  it("portal ajeno se rechaza", () => {
+    expect(validateLibreto({ ...clon(), portal: "otro_portal" })).toBe("LIBRETO_PORTAL_INVALID");
+  });
+  it("falta un form ancla se rechaza", () => {
+    const l = clon(); l.forms.preview = "";
+    expect(validateLibreto(l)).toBe("LIBRETO_FORM_MISSING");
+  });
+  it("falta un detector de página se rechaza", () => {
+    const l = clon(); delete l.detectores.firma;
+    expect(validateLibreto(l)).toBe("LIBRETO_DETECTOR_MISSING");
+  });
+  it("falta un campo obligatorio se rechaza", () => {
+    const l = clon(); delete l.campos.rut_recep;
+    expect(validateLibreto(l)).toBe("LIBRETO_CAMPO_MISSING");
+  });
+  it("un campo fuera del vocabulario cerrado se rechaza (no puede apuntar a un selector arbitrario)", () => {
+    const l = clon(); l.campos.rut_recep = "password";
+    expect(validateLibreto(l)).toBe("LIBRETO_CAMPO_NO_PERMITIDO");
+  });
+  it("falta un código de forma de pago se rechaza", () => {
+    const l = clon(); delete l.codigos.forma_pago.credito;
+    expect(validateLibreto(l)).toBe("LIBRETO_CODIGO_MISSING");
   });
 });

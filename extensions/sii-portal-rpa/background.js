@@ -2,7 +2,7 @@
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl, versionBajoObjetivo } from "./modules/core.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
-import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob } from "./modules/facturas-portal.js";
+import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob, validateLibreto } from "./modules/facturas-portal.js";
 import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, siiVaultStatus, wipeLocalVault } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
 
@@ -1325,7 +1325,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try { jobAppOrigin = new URL(sender.url).origin; } catch { jobAppOrigin = null; }
     Promise.resolve()
       .then(async () => {
-        const validationError = validateSiiFacturaJob(job);
+        const validationError = validateSiiFacturaJob(job) || validateLibreto(job?.libreto);
         if (validationError) {
           sendResponse(statusMessage(job?.job_id ?? null, "error", validationError, true));
           return;
