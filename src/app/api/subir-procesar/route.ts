@@ -6,6 +6,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { eleccionEmpresaPendiente } from "@/lib/entitlements";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/lib/document-processing/abuse-guard";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
@@ -105,6 +106,16 @@ export async function POST(request: Request) {
     );
   }
 
+  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const svc = createServiceClient<Database>(svcUrl, svcKey);
+
+  // Cortafuegos de costo (auditoría #3): techo diario de jobs de IA por
+  // empresa, ANTES de crear el documento — el rate-limit por minuto solo
+  // frena ráfagas, no el goteo 24/7.
+  const topeIa = await verificarTopeDiarioIa(svc as unknown as JobsCountClient, usuario.empresa_id);
+  if (!topeIa.ok) return NextResponse.json(respuestaTopeIa(topeIa), { status: 429 });
+
   const { data: doc, error: docError } = await supabase
     .from("documentos_subidos")
     .insert({
@@ -134,10 +145,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: docError.message }, { status: 500 });
   }
   if (!doc) return NextResponse.json({ error: "DB_ERROR" }, { status: 500 });
-
-  const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const svc = createServiceClient<Database>(svcUrl, svcKey);
 
   // Guardar archivo: R2 si está configurado (no quema storage/egress de Supabase),
   // si no fallback a Supabase Storage. La key/provider quedan en el documento.

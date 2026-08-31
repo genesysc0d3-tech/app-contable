@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/lib/document-processing/abuse-guard";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { recordOpsError } from "@/lib/ops/events";
@@ -73,6 +74,13 @@ export async function POST(request: Request) {
   const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!svcUrl || !svcKey) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   const svc = createServiceClient<Database>(svcUrl, svcKey);
+
+  // Mismo cortafuegos de costo que la subida: el reproceso también crea jobs
+  // de IA y sin techo acumulado el 6/min se gotea a miles al día.
+  // Cast estructural: el query-builder tipado de Supabase hace explotar la
+  // instanciación de tipos (TS2589) contra el cliente mínimo del guard.
+  const topeIa = await verificarTopeDiarioIa(svc as unknown as JobsCountClient, usuario.empresa_id);
+  if (!topeIa.ok) return NextResponse.json(respuestaTopeIa(topeIa), { status: 429 });
 
   const groupedImagesInput = Array.isArray(body.grouped_images) ? body.grouped_images : null;
   const groupedImages = cleanGroupedImages(groupedImagesInput, {
