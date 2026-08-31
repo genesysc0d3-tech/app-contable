@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { SearchItem } from "@/lib/tree-structure";
 import { chileDateString } from "@/lib/chile-date";
 import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
@@ -24,7 +24,8 @@ const TIPO_LABEL: Record<number, { label: string; cod: string; color: string }> 
   61: { label: "Nota de crédito", cod: "61", color: "#8b5cf6" },
 };
 
-type FilaCat = "factura" | "boleta" | "nota";
+export type FilaCat = "factura" | "boleta" | "nota";
+export type RcvCat = "todo" | FilaCat;
 
 type Fila = {
   key: string;
@@ -42,12 +43,27 @@ type Fila = {
   docCount: number;
 };
 
-const CAT_FILTERS: { key: "todo" | FilaCat; label: string }[] = [
+export const CAT_FILTERS: { key: RcvCat; label: string }[] = [
   { key: "todo", label: "Todos" },
   { key: "factura", label: "Facturas" },
   { key: "boleta", label: "Boletas" },
   { key: "nota", label: "Notas" },
 ];
+
+// Conteo por tipo para las fichas de la barra (las pinta el padre).
+export function contarPorTipoRcv(items: SearchItem[], monthKey: string) {
+  const counts: Record<RcvCat, number> = { todo: 0, factura: 0, boleta: 0, nota: 0 };
+  for (const item of items) {
+    if (item.type !== "boleta") continue;
+    const fecha = String(item.data?.fecha_emision ?? item.fecha ?? "");
+    if (chileDisplayMonthKey(fecha) !== monthKey) continue;
+    const tipo = Number(item.data?.tipo_dte ?? 39);
+    const cat: FilaCat = tipo === 56 || tipo === 61 ? "nota" : TIPO_LABEL[tipo] ? "factura" : "boleta";
+    counts[cat] += 1;
+    counts.todo += 1;
+  }
+  return counts;
+}
 
 function fmtMoney(n: number) {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
@@ -57,9 +73,7 @@ function fmtDateLong(fecha: string) {
   return formatDisplayDateEsCl(fecha, { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function RcvCuadreView({ items, notice, monthKey }: { items: SearchItem[]; notice: string | null; monthKey: string }) {
-  const [catFilter, setCatFilter] = useState<"todo" | FilaCat>("todo");
-  const esMesActual = monthKey === chileDateString().slice(0, 7);
+export default function RcvCuadreView({ items, notice, monthKey, catFilter }: { items: SearchItem[]; notice: string | null; monthKey: string; catFilter: RcvCat }) {
   const monthLabel = useMemo(() => {
     const label = formatDisplayDateEsCl(`${monthKey}-01`, { month: "long", year: "numeric" });
     return label.charAt(0).toUpperCase() + label.slice(1);
@@ -147,12 +161,6 @@ export default function RcvCuadreView({ items, notice, monthKey }: { items: Sear
     return Array.from(map.entries());
   }, [filasFiltradas]);
 
-  const catCounts = useMemo(() => {
-    const counts = { todo: 0, factura: 0, boleta: 0, nota: 0 };
-    for (const fila of filas) { counts[fila.cat] += fila.docCount; counts.todo += fila.docCount; }
-    return counts;
-  }, [filas]);
-
   // El resumen sigue al filtro: si miras solo Facturas, el conteo y el total
   // son de facturas.
   const { totalDocs, totalMonto } = useMemo(() => {
@@ -166,29 +174,13 @@ export default function RcvCuadreView({ items, notice, monthKey }: { items: Sear
 
   return (
     <div style={{ minHeight: 0, overflow: "auto", padding: "14px 18px 28px", background: "var(--surface)" }}>
-      {/* El gris: las fichas arriba (+ el amarillo a la derecha), y abajo las cifras. */}
-      <div style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
-          {CAT_FILTERS.map((f) => {
-            const active = catFilter === f.key;
-            return (
-              <button key={f.key} onClick={() => setCatFilter(f.key)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer", transition: "all .18s ease" }}>
-                {f.label}
-                <span style={{ fontSize: 8, color: active ? "var(--accent)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{catCounts[f.key]}</span>
-              </button>
-            );
-          })}
-          <span title="El SII recibe las boletas al cierre del día (vía RCOF); el cuadre definitivo queda al terminar el mes, antes del F29." style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7, padding: "5px 11px", borderRadius: 999, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
-            ⚠ {esMesActual ? "Cuadre parcial · las boletas de hoy entran al cierre del día (RCOF)" : "Cuadre pendiente del RCV · aún no descargado"}
-          </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px" }}>
-          <Stat n={String(totalDocs)} nColor="var(--accent)" label={`${catFilter === "todo" ? "Emitidos" : filtroLabel} con massDTE · ${monthLabel}`} />
-          <Sep />
-          <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label={catFilter === "todo" ? "Total emitido del mes" : `Total ${filtroLabel.toLowerCase()} del mes`} />
-          <Sep />
-          <Stat n="—" nColor="var(--text3)" label="En el RCV del SII · sin descargar" />
-        </div>
+      {/* El gris: solo las cifras (las fichas y el amarillo viven en la barra). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
+        <Stat n={String(totalDocs)} nColor="var(--accent)" label={`${catFilter === "todo" ? "Emitidos" : filtroLabel} con massDTE · ${monthLabel}`} />
+        <Sep />
+        <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label={catFilter === "todo" ? "Total emitido del mes" : `Total ${filtroLabel.toLowerCase()} del mes`} />
+        <Sep />
+        <Stat n="—" nColor="var(--text3)" label="En el RCV del SII · sin descargar" />
       </div>
 
       {notice && (

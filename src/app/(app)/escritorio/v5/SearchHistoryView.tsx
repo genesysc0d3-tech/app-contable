@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type { SearchItem } from "@/lib/tree-structure";
 import VisualizarArchivo from "./VisualizarArchivo";
-import RcvCuadreView from "./RcvCuadreView";
+import RcvCuadreView, { CAT_FILTERS as RCV_CAT_FILTERS, contarPorTipoRcv, type RcvCat } from "./RcvCuadreView";
 import { addDaysIso, chileDateString } from "@/lib/chile-date";
 import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
@@ -232,6 +232,9 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
   const [rcvNotice, setRcvNotice] = useState<string | null>(null);
   // Mes que mira el cuadre RCV; se navega con ‹ › al lado del título.
   const [rcvMonth, setRcvMonth] = useState(() => chileDateString().slice(0, 7));
+  const [rcvCat, setRcvCat] = useState<RcvCat>("todo");
+  const rcvCatCounts = useMemo(() => contarPorTipoRcv(allItems, rcvMonth), [allItems, rcvMonth]);
+  const rcvEsMesActual = rcvMonth === chileDateString().slice(0, 7);
 
   const normalized = useMemo(() => allItems.map((item) => normalizeItem(item, dateMode)), [allItems, dateMode]);
   const normalizedQuery = debouncedQuery.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -373,8 +376,24 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
                   <span style={{ minWidth: 96, textAlign: "center", fontSize: 10.5, fontWeight: 850, color: "var(--text)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMonth(`${rcvMonth}-15`)}</span>
                   <MonthNavButton label="Mes siguiente" disabled={rcvMonth >= chileDateString().slice(0, 7)} onClick={() => setRcvMonth((m) => shiftMonthKey(m, 1))}>›</MonthNavButton>
                 </div>
+                {/* Las fichas de tipo, al lado del título. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {RCV_CAT_FILTERS.map((f) => {
+                    const active = rcvCat === f.key;
+                    return (
+                      <button key={f.key} onClick={() => setRcvCat(f.key)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer", transition: "all .18s ease" }}>
+                        {f.label}
+                        <span style={{ fontSize: 8, color: active ? "var(--accent)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{rcvCatCounts[f.key]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, animation: "fade-in-up 240ms cubic-bezier(.22,1,.36,1) both" }}>
+                {/* El amarillo, al lado de Actualizar RCV. */}
+                <span title="El SII recibe las boletas al cierre del día (vía RCOF); el cuadre definitivo queda al terminar el mes, antes del F29." style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 11px", borderRadius: 999, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
+                  ⚠ {rcvEsMesActual ? "Cuadre parcial · las boletas de hoy entran al cierre del día (RCOF)" : "Cuadre pendiente del RCV · aún no descargado"}
+                </span>
                 <button onClick={() => setRcvNotice("La descarga del RCV la hace la extensión Motor Local y llega en una próxima versión. Por ahora este cuadre muestra lo emitido con massDTE; al descargar el RCV aparecerán también los documentos de otros carriles.")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 11, border: "1px solid rgba(232,85,62,.35)", background: "rgba(232,85,62,.09)", color: "var(--accent)", fontSize: 10, fontWeight: 900, cursor: "pointer", transition: "all .18s ease", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)" }}>↻ Actualizar RCV</button>
               </div>
             </>
@@ -399,7 +418,7 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
 
       {rcvMode ? (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", animation: "fade-in-up 260ms cubic-bezier(.22,1,.36,1) both" }}>
-          <RcvCuadreView items={allItems} notice={rcvNotice} monthKey={rcvMonth} />
+          <RcvCuadreView items={allItems} notice={rcvNotice} monthKey={rcvMonth} catFilter={rcvCat} />
         </div>
       ) : (
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${sidebarCollapsed ? 32 : 236}px minmax(520px, 1fr) 324px`, transition: "grid-template-columns .24s cubic-bezier(.22,1,.36,1)", animation: "fade-in-up 260ms cubic-bezier(.22,1,.36,1) both" }}>
