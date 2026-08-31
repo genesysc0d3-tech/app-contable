@@ -57,9 +57,9 @@ function fmtDateLong(fecha: string) {
   return formatDisplayDateEsCl(fecha, { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; notice: string | null }) {
+export default function RcvCuadreView({ items, notice, monthKey }: { items: SearchItem[]; notice: string | null; monthKey: string }) {
   const [catFilter, setCatFilter] = useState<"todo" | FilaCat>("todo");
-  const monthKey = chileDateString().slice(0, 7);
+  const esMesActual = monthKey === chileDateString().slice(0, 7);
   const monthLabel = useMemo(() => {
     const label = formatDisplayDateEsCl(`${monthKey}-01`, { month: "long", year: "numeric" });
     return label.charAt(0).toUpperCase() + label.slice(1);
@@ -166,34 +166,29 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
 
   return (
     <div style={{ minHeight: 0, overflow: "auto", padding: "14px 18px 28px", background: "var(--surface)" }}>
-      {/* Filtros por tipo (mismo lenguaje que la biblioteca) */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-        {CAT_FILTERS.map((f) => {
-          const active = catFilter === f.key;
-          return (
-            <button key={f.key} onClick={() => setCatFilter(f.key)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer", transition: "all .18s ease" }}>
-              {f.label}
-              <span style={{ fontSize: 8, color: active ? "var(--accent)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{catCounts[f.key]}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Resumen del cuadre */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
-        <Stat n={String(totalDocs)} nColor="var(--accent)" label={`${catFilter === "todo" ? "Emitidos" : filtroLabel} con massDTE · ${monthLabel}`} />
-        <Sep />
-        <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label={catFilter === "todo" ? "Total emitido del mes" : `Total ${filtroLabel.toLowerCase()} del mes`} />
-        <Sep />
-        <Stat n="—" nColor="var(--text3)" label="En el RCV del SII · sin descargar" />
-      </div>
-
-      {/* Aviso: parcial + boletas del día + estado del carril de descarga */}
-      <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 14px", borderRadius: 12, border: "1px solid rgba(245,158,11,.22)", background: "rgba(245,158,11,.07)", fontSize: 10.5, lineHeight: 1.55, color: "var(--text2)" }}>
-        <span style={{ color: "var(--amber)", fontWeight: 900 }}>⚠</span>
-        <span>
-          <b style={{ color: "var(--text)" }}>{monthLabel} está en curso: este cuadre es parcial.</b> Las <b style={{ color: "var(--text)" }}>boletas de hoy todavía no aparecen</b> en el RCV — el SII las recibe al cierre del día (vía RCOF). El cuadre definitivo queda al terminar el mes, antes del F29.
-        </span>
+      {/* El gris: las fichas arriba (+ el amarillo a la derecha), y abajo las cifras. */}
+      <div style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
+          {CAT_FILTERS.map((f) => {
+            const active = catFilter === f.key;
+            return (
+              <button key={f.key} onClick={() => setCatFilter(f.key)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer", transition: "all .18s ease" }}>
+                {f.label}
+                <span style={{ fontSize: 8, color: active ? "var(--accent)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{catCounts[f.key]}</span>
+              </button>
+            );
+          })}
+          <span title="El SII recibe las boletas al cierre del día (vía RCOF); el cuadre definitivo queda al terminar el mes, antes del F29." style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7, padding: "5px 11px", borderRadius: 999, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
+            ⚠ {esMesActual ? "Cuadre parcial · las boletas de hoy entran al cierre del día (RCOF)" : "Cuadre pendiente del RCV · aún no descargado"}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px" }}>
+          <Stat n={String(totalDocs)} nColor="var(--accent)" label={`${catFilter === "todo" ? "Emitidos" : filtroLabel} con massDTE · ${monthLabel}`} />
+          <Sep />
+          <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label={catFilter === "todo" ? "Total emitido del mes" : `Total ${filtroLabel.toLowerCase()} del mes`} />
+          <Sep />
+          <Stat n="—" nColor="var(--text3)" label="En el RCV del SII · sin descargar" />
+        </div>
       </div>
 
       {notice && (

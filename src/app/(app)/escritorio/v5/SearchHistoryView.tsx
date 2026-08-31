@@ -101,6 +101,13 @@ function getMonthKey(fecha: string) {
   return chileDisplayMonthKey(fecha);
 }
 
+// Corre un monthKey "YYYY-MM" en ±N meses (para el navegador de mes del RCV).
+function shiftMonthKey(key: string, delta: number) {
+  const [year, month] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function getWorkspaceSubtitle(datePreset: DatePreset, selectedDate: string | null) {
   if (selectedDate || datePreset === "day" || datePreset === "today") return "del día";
   if (datePreset === "7d" || datePreset === "30d") return "del período";
@@ -223,6 +230,8 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
   // tabla + detalle) hasta apretar "Volver a biblioteca", que resetea todo.
   const [rcvMode, setRcvMode] = useState(false);
   const [rcvNotice, setRcvNotice] = useState<string | null>(null);
+  // Mes que mira el cuadre RCV; se navega con ‹ › al lado del título.
+  const [rcvMonth, setRcvMonth] = useState(() => chileDateString().slice(0, 7));
 
   const normalized = useMemo(() => allItems.map((item) => normalizeItem(item, dateMode)), [allItems, dateMode]);
   const normalizedQuery = debouncedQuery.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -358,9 +367,14 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
                   <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "-.02em", color: "var(--text)", whiteSpace: "nowrap" }}>RCV · Cuadre del mes</div>
                   <div style={{ fontSize: 8.5, fontWeight: 700, color: "var(--text3)", whiteSpace: "nowrap" }}>Registro de Compras y Ventas del SII</div>
                 </div>
+                {/* La fecha al lado del título + botones para cambiar de mes. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <MonthNavButton label="Mes anterior" onClick={() => setRcvMonth((m) => shiftMonthKey(m, -1))}>‹</MonthNavButton>
+                  <span style={{ minWidth: 96, textAlign: "center", fontSize: 10.5, fontWeight: 850, color: "var(--text)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMonth(`${rcvMonth}-15`)}</span>
+                  <MonthNavButton label="Mes siguiente" disabled={rcvMonth >= chileDateString().slice(0, 7)} onClick={() => setRcvMonth((m) => shiftMonthKey(m, 1))}>›</MonthNavButton>
+                </div>
               </div>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, animation: "fade-in-up 240ms cubic-bezier(.22,1,.36,1) both" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 11px", borderRadius: 999, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>Cuadre pendiente del RCV · aún no descargado</span>
                 <button onClick={() => setRcvNotice("La descarga del RCV la hace la extensión Motor Local y llega en una próxima versión. Por ahora este cuadre muestra lo emitido con massDTE; al descargar el RCV aparecerán también los documentos de otros carriles.")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 11, border: "1px solid rgba(232,85,62,.35)", background: "rgba(232,85,62,.09)", color: "var(--accent)", fontSize: 10, fontWeight: 900, cursor: "pointer", transition: "all .18s ease", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)" }}>↻ Actualizar RCV</button>
               </div>
             </>
@@ -385,7 +399,7 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
 
       {rcvMode ? (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", animation: "fade-in-up 260ms cubic-bezier(.22,1,.36,1) both" }}>
-          <RcvCuadreView items={allItems} notice={rcvNotice} />
+          <RcvCuadreView items={allItems} notice={rcvNotice} monthKey={rcvMonth} />
         </div>
       ) : (
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${sidebarCollapsed ? 32 : 236}px minmax(520px, 1fr) 324px`, transition: "grid-template-columns .24s cubic-bezier(.22,1,.36,1)", animation: "fade-in-up 260ms cubic-bezier(.22,1,.36,1) both" }}>
@@ -415,6 +429,10 @@ function SegmentedControl({ value, onChange }: { value: DateMode; onChange: (mod
       })}
     </div>
   );
+}
+
+function MonthNavButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return <button title={label} aria-label={label} disabled={disabled} onClick={onClick} style={{ width: 22, height: 22, borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: disabled ? "var(--text3)" : "var(--text)", display: "grid", placeItems: "center", cursor: disabled ? "default" : "pointer", fontSize: 12, fontWeight: 900, lineHeight: 1, opacity: disabled ? 0.5 : 1, transition: "all .18s ease" }}>{children}</button>;
 }
 
 function DatePill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
