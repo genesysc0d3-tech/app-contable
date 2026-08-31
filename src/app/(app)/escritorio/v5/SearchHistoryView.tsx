@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type { SearchItem } from "@/lib/tree-structure";
 import VisualizarArchivo from "./VisualizarArchivo";
+import RcvCuadreView from "./RcvCuadreView";
 import { addDaysIso, chileDateString } from "@/lib/chile-date";
 import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
@@ -218,6 +219,10 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(allItems[0]?.id ?? null);
   const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
+  // Modo "RCV · Cuadre del mes": reemplaza el visor completo (biblioteca +
+  // tabla + detalle) hasta apretar "Volver a biblioteca", que resetea todo.
+  const [rcvMode, setRcvMode] = useState(false);
+  const [rcvNotice, setRcvNotice] = useState<string | null>(null);
 
   const normalized = useMemo(() => allItems.map((item) => normalizeItem(item, dateMode)), [allItems, dateMode]);
   const normalizedQuery = debouncedQuery.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -344,21 +349,45 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
           {/* Sin marca duplicada acá (decisión fundador 2026-08-26): la marca
               vive UNA vez, en el header de arriba — que en modo búsqueda dice
               "Mesa boleta + factura" y al clickearla vuelve a la mesa. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)", whiteSpace: "nowrap" }}>{workspaceSubtitle}</span>
-            </div>
-            <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <DatePill active={datePreset === "all"} onClick={clearDateFilters}>Todas</DatePill>
-            {RANGE_FILTERS.map((r) => <DatePill key={r.key} active={datePreset === r.key} onClick={() => { setDatePreset(r.key); setSelectedDate(null); }}>{r.label}</DatePill>)}
-            <DatePill active={false} onClick={clearAllFilters}>Limpiar</DatePill>
-          </div>
+          {rcvMode ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, animation: "fade-in-up 240ms cubic-bezier(.22,1,.36,1) both" }}>
+                <button onClick={() => { setRcvMode(false); setRcvNotice(null); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 11, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 10, fontWeight: 850, cursor: "pointer", transition: "all .18s ease", boxShadow: "inset 0 1px 0 rgba(255,255,255,.05)" }}>← Volver a biblioteca</button>
+                {/* Título de dónde estamos, en el espacio libre de la barra (sin botón). */}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "-.02em", color: "var(--text)", whiteSpace: "nowrap" }}>RCV · Cuadre del mes</div>
+                  <div style={{ fontSize: 8.5, fontWeight: 700, color: "var(--text3)", whiteSpace: "nowrap" }}>Registro de Compras y Ventas del SII</div>
+                </div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, animation: "fade-in-up 240ms cubic-bezier(.22,1,.36,1) both" }}>
+                <button onClick={() => setRcvNotice("La descarga del RCV la hace la extensión Motor Local y llega en una próxima versión. Por ahora este cuadre muestra lo emitido con massDTE; al descargar el RCV aparecerán también los documentos de otros carriles.")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 11, border: "1px solid rgba(232,85,62,.35)", background: "rgba(232,85,62,.09)", color: "var(--accent)", fontSize: 10, fontWeight: 900, cursor: "pointer", transition: "all .18s ease", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)" }}>↻ Actualizar RCV</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+                <button onClick={() => setRcvMode(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 11, border: "1px solid rgba(232,85,62,.35)", background: "rgba(232,85,62,.09)", color: "var(--accent)", fontSize: 10, fontWeight: 900, cursor: "pointer", whiteSpace: "nowrap", transition: "all .18s ease", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)" }}>RCV · Cuadre del mes</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 760, letterSpacing: "-.015em", color: "var(--text2)", whiteSpace: "nowrap" }}>{workspaceSubtitle}</span>
+                </div>
+                <SegmentedControl value={dateMode} onChange={(mode) => { setDateMode(mode); clearDateFilters(); }} />
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <DatePill active={datePreset === "all"} onClick={clearDateFilters}>Todas</DatePill>
+                {RANGE_FILTERS.map((r) => <DatePill key={r.key} active={datePreset === r.key} onClick={() => { setDatePreset(r.key); setSelectedDate(null); }}>{r.label}</DatePill>)}
+                <DatePill active={false} onClick={clearAllFilters}>Limpiar</DatePill>
+              </div>
+            </>
+          )}
         </div>
       </header>
 
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${sidebarCollapsed ? 32 : 236}px minmax(520px, 1fr) 324px`, transition: "grid-template-columns .24s cubic-bezier(.22,1,.36,1)" }}>
+      {rcvMode ? (
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", animation: "fade-in-up 260ms cubic-bezier(.22,1,.36,1) both" }}>
+          <RcvCuadreView items={allItems} notice={rcvNotice} />
+        </div>
+      ) : (
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${sidebarCollapsed ? 32 : 236}px minmax(520px, 1fr) 324px`, transition: "grid-template-columns .24s cubic-bezier(.22,1,.36,1)", animation: "fade-in-up 260ms cubic-bezier(.22,1,.36,1) both" }}>
         <ExplorerSidebar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((v) => !v)} months={explorerMonths} filter={filter} selectedDate={selectedDate} collapsedMonths={collapsedMonths} libraryCollapsed={libraryCollapsed} datesCollapsed={datesCollapsed} onToggleLibrary={() => setLibraryCollapsed((v) => !v)} onToggleDates={() => setDatesCollapsed((v) => !v)} onToggleMonth={(key) => setCollapsedMonths((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; })} onAll={() => { setFilter("todo"); clearDateFilters(); }} onType={(type) => { setFilter(type); clearDateFilters(); }} onDate={(key) => { setDatePreset("day"); setSelectedDate(key); setFilter("todo"); }} onDateType={(key, type) => { setDatePreset("day"); setSelectedDate(key); setFilter(type); }} />
 
         <main style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -369,6 +398,7 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
           {selectedItem ? <ItemDetail item={selectedItem} onViewDocument={setViewingDocumentId} /> : <DetailPlaceholder />}
         </aside>
       </div>
+      )}
 
       {viewingDocumentId && <VisualizarArchivo documentoId={viewingDocumentId} onClose={() => setViewingDocumentId(null)} />}
     </div>
