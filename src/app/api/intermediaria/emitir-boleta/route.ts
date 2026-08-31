@@ -13,6 +13,9 @@ import { validarAccesoCuenta } from "@/lib/entitlements";
 import { puedeEmitir } from "@/lib/pagos/metering";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 /**
  * Capa intermediaria (emula Haulmer / OpenFactura).
@@ -55,6 +58,35 @@ async function handlePost(request: Request) {
   if (!usuario || !usuario.empresa_id) {
     return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
   }
+  // ILIMITADO A RITMO HUMANO (hoyo cazado por el fundador 2026-08-31): la
+  // boleta única es "ilimitada, no descuenta cupo" — la FRICCIÓN de hacerla
+  // de a una es el modelo de negocio. Sin freno de cadencia, un curl en loop
+  // emite la cartola completa gratis por acá. Un humano real hace 3-4/min
+  // (receptor + monto + confirmar); 5/min no toca la promesa del landing y
+  // le quita toda la gracia al script. Limiter GLOBAL (compartido entre
+  // instancias) para que la concurrencia tampoco lo esquive.
+  const limited = await enforceRateLimitGlobal({
+    key: rateLimitKey("emitir-unica", user.id),
+    limit: 5,
+    windowMs: 60_000,
+  });
+  if (limited) {
+    // Radar: patrón de automatización sobre única. Throttle local del propio
+    // evento (1 cada 30 min por usuario) para no inundar ops_events.
+    const aviso = checkRateLimit({ key: rateLimitKey("ops-unica-throttle", user.id), limit: 1, windowMs: 30 * 60_000 });
+    if (aviso.ok) {
+      await recordOpsEvent({
+        severity: "warn",
+        source: "emision",
+        eventName: "unica_ritmo_bloqueado",
+        summary: "Emisión única chocó el freno de cadencia (posible automatización)",
+        usuarioId: user.id,
+        metadata: { ruta: "emitir-boleta", limite_min: 5 },
+      });
+    }
+    return limited;
+  }
+
   // Emitir DTEs es un acto tributario: viewer queda fuera.
   if (!ROLES_EMISION.has(String(usuario.rol))) {
     return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO", detalle: "Tu rol no permite emitir documentos" }, { status: 403 });

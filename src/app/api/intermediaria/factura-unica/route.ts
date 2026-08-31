@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
+import { recordOpsEvent } from "@/lib/ops/events";
 import { validarRut, formatRut } from "@/lib/rut";
 import { derivarMontosFactura } from "@/lib/facturas/plantilla";
 import { chileDateString } from "@/lib/chile-date";
@@ -34,6 +37,29 @@ export async function POST(request: Request) {
     if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
     if (!ROLES_EMISION.has(String(usuario.rol))) {
       return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO", detalle: "Tu rol no permite emitir documentos" }, { status: 403 });
+    }
+
+    // ILIMITADO A RITMO HUMANO: misma llave que la boleta única a propósito —
+    // un script no puede alternar entre las dos rutas para duplicar el ritmo.
+    // Ver el comentario largo en emitir-boleta/route.ts.
+    const limited = await enforceRateLimitGlobal({
+      key: rateLimitKey("emitir-unica", user.id),
+      limit: 5,
+      windowMs: 60_000,
+    });
+    if (limited) {
+      const aviso = checkRateLimit({ key: rateLimitKey("ops-unica-throttle", user.id), limit: 1, windowMs: 30 * 60_000 });
+      if (aviso.ok) {
+        await recordOpsEvent({
+          severity: "warn",
+          source: "emision",
+          eventName: "unica_ritmo_bloqueado",
+          summary: "Emisión única chocó el freno de cadencia (posible automatización)",
+          usuarioId: user.id,
+          metadata: { ruta: "factura-unica", limite_min: 5 },
+        });
+      }
+      return limited;
     }
     const empresa = usuario.empresas as unknown as { tipo_contribuyente: string | null } | null;
 
