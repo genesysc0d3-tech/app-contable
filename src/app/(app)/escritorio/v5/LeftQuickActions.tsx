@@ -223,6 +223,10 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
     // re-sembraba el estado de la mesa, así que el doc no aparecía hasta un F5.
     // La MESA viaja en la URL (bug 2026-08-27): sin ella el push devolvía al
     // usuario a boletas justo después de subir su plantilla de facturas.
+    // Cinturón contra la carrera del remount (bug 2026-08-31): si el push
+    // re-monta MesaController, el evento de +80ms se pierde y la mesa queda
+    // congelada hasta F5. El flag lo repone el controlador al montar.
+    try { sessionStorage.setItem("massdte:uploaded-at", JSON.stringify({ at: Date.now(), date: todayStr() })); } catch { /* sin sessionStorage el evento igual cubre */ }
     router.push(`/massdte?date=${todayStr()}&view=day&mesa=${esFacturas ? "factura" : "boleta"}`);
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent("massdte:uploaded", { detail: { date: todayStr() } }));
