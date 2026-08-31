@@ -1627,6 +1627,44 @@ export type Database = {
           },
         ]
       }
+      mcp_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          last_used_at: string | null
+          nombre: string
+          revoked_at: string | null
+          token_hash: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          nombre?: string
+          revoked_at?: string | null
+          token_hash: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          nombre?: string
+          revoked_at?: string | null
+          token_hash?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mcp_tokens_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medios_pago: {
         Row: {
           ambiente: string
@@ -2350,6 +2388,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limit_buckets: {
+        Row: {
+          count: number
+          key: string
+          reset_at: string
+        }
+        Insert: {
+          count: number
+          key: string
+          reset_at: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          reset_at?: string
+        }
+        Relationships: []
       }
       refills: {
         Row: {
@@ -3165,6 +3221,13 @@ export type Database = {
         }[]
       }
       empresa_autorizada: { Args: never; Returns: string }
+      rate_limit_hit: {
+        Args: { p_key: string; p_limit: number; p_window_ms: number }
+        Returns: {
+          allowed: boolean
+          retry_after_seconds: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
