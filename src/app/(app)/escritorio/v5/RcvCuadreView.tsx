@@ -223,8 +223,8 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
           })}
         </div>
         {/* Segmento de estado: el amarillo, resumido (detalle en tooltip) */}
-        <div title="Cuadre parcial: el RCV del SII aún no se descarga, y las boletas de hoy entran al cierre del día (vía RCOF). El cuadre definitivo queda al terminar el mes, antes del F29." style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 12px", border: "1px solid rgba(245,158,11,.28)", borderRadius: 12, background: "rgba(245,158,11,.06)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--amber)", flex: "none" }} />
+        <div title="Cuadre parcial: el RCV del SII aún no se descarga, y las boletas de hoy entran al cierre del día (vía RCOF). El cuadre definitivo queda al terminar el mes, antes del F29." style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", border: "1px solid rgba(245,158,11,.28)", borderRadius: 999, background: "rgba(245,158,11,.06)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap", alignSelf: "center" }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--amber)", flex: "none" }} />
           <span>{esMesActual ? "Parcial · RCV sin descargar" : "RCV sin descargar"}</span>
         </div>
       </div>
