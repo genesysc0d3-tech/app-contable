@@ -205,11 +205,6 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
             <span style={{ fontSize: 9, color: "var(--text2)", fontWeight: 700 }}>RCV del SII · sin descargar aún</span>
           </span>
         </div>
-        {/* Segmento de estado: el amarillo, resumido (detalle en tooltip) */}
-        <div title="Cuadre parcial: el RCV del SII aún no se descarga, y las boletas de hoy entran al cierre del día (vía RCOF). El cuadre definitivo queda al terminar el mes, antes del F29." style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 12px", border: "1px solid rgba(245,158,11,.28)", borderRadius: 12, background: "rgba(245,158,11,.06)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--amber)", flex: "none" }} />
-          <span>{esMesActual ? "Parcial · RCV sin descargar" : "RCV sin descargar"}</span>
-        </div>
         {/* Segmento de mando: mes + fichas */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "7px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--bg-muted)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -226,6 +221,11 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
               </button>
             );
           })}
+        </div>
+        {/* Segmento de estado: el amarillo, resumido (detalle en tooltip) */}
+        <div title="Cuadre parcial: el RCV del SII aún no se descarga, y las boletas de hoy entran al cierre del día (vía RCOF). El cuadre definitivo queda al terminar el mes, antes del F29." style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 12px", border: "1px solid rgba(245,158,11,.28)", borderRadius: 12, background: "rgba(245,158,11,.06)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--amber)", flex: "none" }} />
+          <span>{esMesActual ? "Parcial · RCV sin descargar" : "RCV sin descargar"}</span>
         </div>
       </div>
 
