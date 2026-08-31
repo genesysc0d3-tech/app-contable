@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 const baseTabs = [
   { id: "subidos", label: "Check de agregados",
@@ -23,7 +23,9 @@ export default function TabsV5({
   /** Etiqueta de la 3ª pestaña: "Boletas" (mesa BO) o "Facturas" (mesa FA). */
   boletasLabel?: string;
 }) {
-  const tabs = baseTabs.map((t) => (t.id === "boletas" ? { ...t, label: boletasLabel } : t));
+  // Memoizado: si se recrea en cada render, el useCallback de abajo no puede
+  // declararlo como dependencia y el compilador de React se salta el archivo.
+  const tabs = useMemo(() => baseTabs.map((t) => (t.id === "boletas" ? { ...t, label: boletasLabel } : t)), [boletasLabel]);
   const [tab, setTab] = useState("subidos");
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
@@ -42,7 +44,7 @@ export default function TabsV5({
     indicator.style.width = nextArrow
       ? (nextArrow.offsetLeft + nextArrow.offsetWidth - btn.offsetLeft) + "px"
       : btnRect.width + "px";
-  }, [tab]);
+  }, [tab, tabs]);
 
   useEffect(() => {
     const handler = (e: Event) => setTab((e as CustomEvent).detail);
