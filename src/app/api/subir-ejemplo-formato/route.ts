@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MAX_BASE64_LARGO } from "@/lib/parsers/excel-guard";
-import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const limited = enforceRateLimit({
+  const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("subir-ejemplo-formato", user.id),
     limit: 12,
     windowMs: 60_000,

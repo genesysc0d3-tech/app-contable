@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireMcpAccess } from "@/lib/mcp/auth";
 import { handleMcpRpc, type McpTools } from "@/lib/mcp/server";
 import { getPendientesEmision, type EmpresaCtx } from "@/lib/intermediario/pendientes-emision";
-import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
 
 // Conector MCP de massDTE — copiloto de revisión (fase 1, solo lectura).
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
   const access = await requireMcpAccess(request);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  const limited = enforceRateLimit({
+  const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("mcp", access.usuarioId),
     limit: 60,
     windowMs: 60_000,

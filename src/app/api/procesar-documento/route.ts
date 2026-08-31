@@ -3,11 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
-import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/lib/document-processing/abuse-guard";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
-import { recordOpsError } from "@/lib/ops/events";
+import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 
 function cleanGroupedImages(value: unknown, args: { empresaId: string; documentoId: string }) {
   if (!Array.isArray(value)) return [];
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   // Auditoría interna #2: esta ruta re-encola con force:true — sin freno, un
   // loop sobre UN documento quema IA infinita sin tocar el límite de subida.
   // Reprocesar es un acto manual y raro: 6/min por usuario sobra.
-  const limited = enforceRateLimit({
+  const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("procesar-documento", user.id),
     limit: 6,
     windowMs: 60_000,
@@ -80,7 +81,20 @@ export async function POST(request: Request) {
   // Cast estructural: el query-builder tipado de Supabase hace explotar la
   // instanciación de tipos (TS2589) contra el cliente mínimo del guard.
   const topeIa = await verificarTopeDiarioIa(svc as unknown as JobsCountClient, usuario.empresa_id);
-  if (!topeIa.ok) return NextResponse.json(respuestaTopeIa(topeIa), { status: 429 });
+  if (!topeIa.ok) {
+    if (topeIa.usados === topeIa.tope) {
+      await recordOpsEvent({
+        severity: "warn",
+        source: "ia",
+        eventName: "tope_diario_ia_alcanzado",
+        summary: `Empresa alcanzó el tope diario de jobs de IA (${topeIa.tope})`,
+        empresaId: usuario.empresa_id,
+        usuarioId: user.id,
+        metadata: { usados: topeIa.usados, tope: topeIa.tope, ruta: "procesar-documento" },
+      });
+    }
+    return NextResponse.json(respuestaTopeIa(topeIa), { status: 429 });
+  }
 
   const groupedImagesInput = Array.isArray(body.grouped_images) ? body.grouped_images : null;
   const groupedImages = cleanGroupedImages(groupedImagesInput, {

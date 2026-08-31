@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { findTransactionBlockStart } from "@/lib/parsers/heuristic";
 import { MAX_BASE64_LARGO, hojaExcedeCeldas } from "@/lib/parsers/excel-guard";
-import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
+import { recordOpsEvent } from "@/lib/ops/events";
 import type { Row } from "@/lib/parsers/types";
 
 const PREVIEW_ROWS = 30;
@@ -14,7 +16,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const limited = enforceRateLimit({
+  const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("preview-formato", user.id),
     limit: 12,
     windowMs: 60_000,
@@ -38,6 +40,14 @@ export async function POST(request: Request) {
   // Techo de celdas ANTES de expandir: un rango declarado gigante infla
   // millones de strings con defval y bota la función.
   if (workbook.SheetNames.some((n) => hojaExcedeCeldas(workbook.Sheets[n]))) {
+    await recordOpsEvent({
+      severity: "warn",
+      source: "upload",
+      eventName: "excel_zip_bomb_rechazado",
+      summary: "Excel con rango declarado gigante rechazado en preview-formato",
+      usuarioId: user.id,
+      metadata: { ruta: "preview-formato", nombre: body.nombre ?? null },
+    });
     return NextResponse.json({ error: "EXCEL_DEMASIADO_GRANDE" }, { status: 422 });
   }
 

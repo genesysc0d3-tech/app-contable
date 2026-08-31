@@ -5,7 +5,8 @@ import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { eleccionEmpresaPendiente } from "@/lib/entitlements";
 import { validateProcesarUploadPayload } from "@/lib/upload/process-upload-validation";
-import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/lib/document-processing/abuse-guard";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const limited = enforceRateLimit({
+  const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("subir-procesar", user.id),
     limit: 20,
     windowMs: 60_000,
@@ -114,7 +115,22 @@ export async function POST(request: Request) {
   // empresa, ANTES de crear el documento — el rate-limit por minuto solo
   // frena ráfagas, no el goteo 24/7.
   const topeIa = await verificarTopeDiarioIa(svc as unknown as JobsCountClient, usuario.empresa_id);
-  if (!topeIa.ok) return NextResponse.json(respuestaTopeIa(topeIa), { status: 429 });
+  if (!topeIa.ok) {
+    // Radar: se registra SOLO al cruzar el tope (no en cada 429 posterior,
+    // para que un abuso sostenido no inunde ops_events).
+    if (topeIa.usados === topeIa.tope) {
+      await recordOpsEvent({
+        severity: "warn",
+        source: "ia",
+        eventName: "tope_diario_ia_alcanzado",
+        summary: `Empresa alcanzó el tope diario de jobs de IA (${topeIa.tope})`,
+        empresaId: usuario.empresa_id,
+        usuarioId: user.id,
+        metadata: { usados: topeIa.usados, tope: topeIa.tope, ruta: "subir-procesar" },
+      });
+    }
+    return NextResponse.json(respuestaTopeIa(topeIa), { status: 429 });
+  }
 
   const { data: doc, error: docError } = await supabase
     .from("documentos_subidos")

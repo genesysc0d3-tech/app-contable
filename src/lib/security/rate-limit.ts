@@ -7,7 +7,7 @@ type Bucket = {
 
 type Store = Map<string, Bucket>;
 
-type RateLimitOptions = {
+export type RateLimitOptions = {
   key: string;
   limit: number;
   windowMs: number;
