@@ -36,6 +36,13 @@ describe("handleMcpRpc — protocolo", () => {
     expect(lista.map((t) => t.name)).toContain("pendientes_emision");
     for (const t of lista) {
       expect(t.name).not.toMatch(/emitir|emision_real|firmar/);
+      // REGLA ETERNA del fundador (2026-08-31): la boleta/factura ÚNICA es el
+      // canal gratis (sin propuesta_id → no descuenta tier) y su fricción
+      // manual ES el modelo de negocio. Una tool de única en el MCP dejaría
+      // a la IA convertir una cartola de 100 movs en 100 únicas gratis.
+      // TODO lo que entre por MCP entra al tier: los write-tools futuros solo
+      // crean PROPUESTAS (con propuesta_id ⇒ contarMasivas las cuenta).
+      expect(t.name).not.toMatch(/unic/i);
     }
   });
 

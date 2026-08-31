@@ -6,6 +6,15 @@
 // (ver route.ts) empiezan acá con la #2: el catálogo NO TIENE verbo de
 // emisión — "emitir" ni siquiera existe como herramienta.
 //
+// REGLA DE NEGOCIO (fundador, 2026-08-31): "todo lo que entra por MCP entra
+// al tier". La ÚNICA (boleta/factura del formulario manual) es el canal
+// gratis — sin propuesta_id, no descuenta cupo — y su fricción de a-una ES
+// el modelo. Por eso: (1) jamás una tool de única (el test lo hace morder);
+// (2) los write-tools futuros (staging fase 2) solo crean PROPUESTAS, que
+// nacen con propuesta_id y por construcción las cuenta contarMasivas;
+// (3) los endpoints de única autentican por cookie de sesión — el Bearer
+// del MCP ni siquiera puede tocarlos.
+//
 // Protocolo: MCP streamable HTTP, respuestas JSON directas (sin SSE). Solo
 // requests individuales (el spec 2025 eliminó el batching).
 
