@@ -6,7 +6,9 @@ import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { detectHeuristic } from "@/lib/parsers/heuristic";
 import { detectByNames } from "@/lib/parsers/named";
 import { hojaExcedeCeldas } from "@/lib/parsers/excel-guard";
-import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
+import { recordOpsEvent } from "@/lib/ops/events";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { descargarDocumento } from "@/lib/storage";
 
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const limited = enforceRateLimit({
+  const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("parser-preview", user.id),
     limit: 12,
     windowMs: 60_000,
@@ -70,6 +72,15 @@ export async function POST(request: Request) {
   // declarar un rango gigante que sheet_to_json expande a millones de celdas.
   const workbook = XLSX.read(ab, { type: "array", sheetRows: 10_000 });
   if (workbook.SheetNames.some((n) => hojaExcedeCeldas(workbook.Sheets[n]))) {
+    await recordOpsEvent({
+      severity: "warn",
+      source: "upload",
+      eventName: "excel_zip_bomb_rechazado",
+      summary: "Excel con rango declarado gigante rechazado en el mapeo visual",
+      empresaId: empresaIdEfectiva,
+      usuarioId: user.id,
+      metadata: { ruta: "parser-preview", documento_id },
+    });
     return NextResponse.json({ error: "EXCEL_DEMASIADO_GRANDE" }, { status: 422 });
   }
 
