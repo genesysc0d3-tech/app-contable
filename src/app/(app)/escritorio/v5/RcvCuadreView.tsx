@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { SearchItem } from "@/lib/tree-structure";
 import { chileDateString } from "@/lib/chile-date";
 import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
@@ -24,8 +24,15 @@ const TIPO_LABEL: Record<number, { label: string; cod: string; color: string }> 
   61: { label: "Nota de crédito", cod: "61", color: "#8b5cf6" },
 };
 
-export type FilaCat = "factura" | "boleta" | "nota";
-export type RcvCat = "todo" | FilaCat;
+type FilaCat = "factura" | "boleta" | "nota";
+type RcvCat = "todo" | FilaCat;
+
+// Corre un monthKey "YYYY-MM" en ±N meses.
+function shiftMonthKey(key: string, delta: number) {
+  const [year, month] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 type Fila = {
   key: string;
@@ -43,15 +50,15 @@ type Fila = {
   docCount: number;
 };
 
-export const CAT_FILTERS: { key: RcvCat; label: string }[] = [
+const CAT_FILTERS: { key: RcvCat; label: string }[] = [
   { key: "todo", label: "Todos" },
   { key: "factura", label: "Facturas" },
   { key: "boleta", label: "Boletas" },
   { key: "nota", label: "Notas" },
 ];
 
-// Conteo por tipo para las fichas de la barra (las pinta el padre).
-export function contarPorTipoRcv(items: SearchItem[], monthKey: string) {
+// Conteo por tipo para las fichas.
+function contarPorTipoRcv(items: SearchItem[], monthKey: string) {
   const counts: Record<RcvCat, number> = { todo: 0, factura: 0, boleta: 0, nota: 0 };
   for (const item of items) {
     if (item.type !== "boleta") continue;
@@ -73,7 +80,11 @@ function fmtDateLong(fecha: string) {
   return formatDisplayDateEsCl(fecha, { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function RcvCuadreView({ items, notice, monthKey, catFilter }: { items: SearchItem[]; notice: string | null; monthKey: string; catFilter: RcvCat }) {
+export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; notice: string | null }) {
+  const [monthKey, setMonthKey] = useState(() => chileDateString().slice(0, 7));
+  const [catFilter, setCatFilter] = useState<RcvCat>("todo");
+  const esMesActual = monthKey === chileDateString().slice(0, 7);
+  const catCounts = useMemo(() => contarPorTipoRcv(items, monthKey), [items, monthKey]);
   const monthLabel = useMemo(() => {
     const label = formatDisplayDateEsCl(`${monthKey}-01`, { month: "long", year: "numeric" });
     return label.charAt(0).toUpperCase() + label.slice(1);
@@ -174,13 +185,48 @@ export default function RcvCuadreView({ items, notice, monthKey, catFilter }: { 
 
   return (
     <div style={{ minHeight: 0, overflow: "auto", padding: "14px 18px 28px", background: "var(--surface)" }}>
-      {/* El gris: solo las cifras (las fichas y el amarillo viven en la barra). */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
-        <Stat n={String(totalDocs)} nColor="var(--accent)" label={`${catFilter === "todo" ? "Emitidos" : filtroLabel} con massDTE · ${monthLabel}`} />
-        <Sep />
-        <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label={catFilter === "todo" ? "Total emitido del mes" : `Total ${filtroLabel.toLowerCase()} del mes`} />
-        <Sep />
-        <Stat n="—" nColor="var(--text3)" label="En el RCV del SII · sin descargar" />
+      {/* Barra D2 (elección del fundador): tres segmentos delgados en un
+          renglón — datos | mando (mes + fichas) | estado (el amarillo). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {/* Segmento de datos */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "7px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--bg-muted)" }}>
+          <span style={{ display: "flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-.02em", color: "var(--accent)", fontVariantNumeric: "tabular-nums lining-nums" }}>{totalDocs}</span>
+            <span style={{ fontSize: 9, color: "var(--text2)", fontWeight: 700 }}>{catFilter === "todo" ? "emitidos" : filtroLabel.toLowerCase()}</span>
+          </span>
+          <span style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--border)" }} />
+          <span style={{ display: "flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-.02em", color: "var(--text)", fontVariantNumeric: "tabular-nums lining-nums" }}>{fmtMoney(totalMonto)}</span>
+            <span style={{ fontSize: 9, color: "var(--text2)", fontWeight: 700 }}>total</span>
+          </span>
+          <span style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--border)" }} />
+          <span style={{ display: "flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text3)" }}>—</span>
+            <span style={{ fontSize: 9, color: "var(--text2)", fontWeight: 700 }}>RCV del SII · sin descargar aún</span>
+          </span>
+        </div>
+        {/* Segmento de mando: mes + fichas */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "7px 14px", border: "1px solid var(--border)", borderRadius: 12, background: "var(--bg-muted)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <MonthNavButton label="Mes anterior" onClick={() => setMonthKey((m) => shiftMonthKey(m, -1))}>‹</MonthNavButton>
+            <span style={{ minWidth: 96, textAlign: "center", fontSize: 10, fontWeight: 850, color: "var(--text)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{monthLabel}</span>
+            <MonthNavButton label="Mes siguiente" disabled={esMesActual} onClick={() => setMonthKey((m) => shiftMonthKey(m, 1))}>›</MonthNavButton>
+          </div>
+          {CAT_FILTERS.map((f) => {
+            const active = catFilter === f.key;
+            return (
+              <button key={f.key} onClick={() => setCatFilter(f.key)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer", transition: "all .18s ease" }}>
+                {f.label}
+                <span style={{ fontSize: 8, color: active ? "var(--accent)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{catCounts[f.key]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {/* Segmento de estado: el amarillo, con la info completa */}
+        <div title="El SII recibe las boletas al cierre del día (vía RCOF); el cuadre definitivo queda al terminar el mes, antes del F29. Aprieta «Actualizar RCV» para descargarlo cuando el carril esté disponible." style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", border: "1px solid rgba(245,158,11,.28)", borderRadius: 12, background: "rgba(245,158,11,.06)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--amber)", flex: "none" }} />
+          <span>{esMesActual ? "Cuadre parcial · RCV sin descargar · las boletas de hoy entran al cierre (RCOF)" : `RCV de ${monthLabel} sin descargar · cuadre pendiente`}</span>
+        </div>
       </div>
 
       {notice && (
@@ -244,17 +290,8 @@ function FilaRow({ fila }: { fila: Fila }) {
   );
 }
 
-function Stat({ n, nColor, label }: { n: string; nColor: string; label: string }) {
-  return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <span style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-.02em", color: nColor, fontVariantNumeric: "tabular-nums lining-nums" }}>{n}</span>
-      <span style={{ fontSize: 9, color: "var(--text2)", fontWeight: 700 }}>{label}</span>
-    </span>
-  );
-}
-
-function Sep() {
-  return <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)" }} />;
+function MonthNavButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return <button title={label} aria-label={label} disabled={disabled} onClick={onClick} style={{ width: 22, height: 22, borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: disabled ? "var(--text3)" : "var(--text)", display: "grid", placeItems: "center", cursor: disabled ? "default" : "pointer", fontSize: 12, fontWeight: 900, lineHeight: 1, opacity: disabled ? 0.5 : 1, transition: "all .18s ease" }}>{children}</button>;
 }
 
 function Swatch({ massdte }: { massdte?: boolean }) {
