@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { recordOpsError } from "@/lib/ops/events";
@@ -27,6 +28,16 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, error: "No autenticado" }, { status: 401 });
+
+  // Auditoría interna #2: esta ruta re-encola con force:true — sin freno, un
+  // loop sobre UN documento quema IA infinita sin tocar el límite de subida.
+  // Reprocesar es un acto manual y raro: 6/min por usuario sobra.
+  const limited = enforceRateLimit({
+    key: rateLimitKey("procesar-documento", user.id),
+    limit: 6,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
 
   const { data: usuario } = await supabase
     .from("usuarios")
