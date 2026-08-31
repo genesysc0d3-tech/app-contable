@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { SearchItem } from "@/lib/tree-structure";
 import { chileDateString } from "@/lib/chile-date";
 import { chileDisplayDateKey, chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
@@ -24,6 +24,8 @@ const TIPO_LABEL: Record<number, { label: string; cod: string; color: string }> 
   61: { label: "Nota de crédito", cod: "61", color: "#8b5cf6" },
 };
 
+type FilaCat = "factura" | "boleta" | "nota";
+
 type Fila = {
   key: string;
   dateKey: string;
@@ -36,7 +38,15 @@ type Fila = {
   detalleSub: string;
   monto: number;
   esNota: boolean;
+  cat: FilaCat;
 };
+
+const CAT_FILTERS: { key: "todo" | FilaCat; label: string }[] = [
+  { key: "todo", label: "Todos" },
+  { key: "factura", label: "Facturas" },
+  { key: "boleta", label: "Boletas" },
+  { key: "nota", label: "Notas" },
+];
 
 function fmtMoney(n: number) {
   return `$${Math.round(n).toLocaleString("es-CL")}`;
@@ -46,7 +56,8 @@ function fmtDateLong(fecha: string) {
   return formatDisplayDateEsCl(fecha, { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function RcvCuadreView({ items, notice, onActualizar }: { items: SearchItem[]; notice: string | null; onActualizar: () => void }) {
+export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; notice: string | null }) {
+  const [catFilter, setCatFilter] = useState<"todo" | FilaCat>("todo");
   const monthKey = chileDateString().slice(0, 7);
   const monthLabel = useMemo(() => {
     const label = formatDisplayDateEsCl(`${monthKey}-01`, { month: "long", year: "numeric" });
@@ -91,6 +102,7 @@ export default function RcvCuadreView({ items, notice, onActualizar }: { items: 
           detalleSub: d.receptor_rut ? `· ${String(d.receptor_rut)}` : "",
           monto: esNota ? -total : total,
           esNota,
+          cat: tipoDte === 56 || tipoDte === 61 ? "nota" : "factura",
         });
       } else {
         // Boletas 39/41: el SII solo ve el total del día (RCOF).
@@ -114,20 +126,42 @@ export default function RcvCuadreView({ items, notice, onActualizar }: { items: 
       detalleSub: "· RCOF",
       monto: acc.total,
       esNota: false,
+      cat: "boleta" as const,
     }));
 
     const filas = [...individuales, ...resumenes].sort((a, b) => b.dateKey.localeCompare(a.dateKey) || b.folio.localeCompare(a.folio));
     return { filas, totalDocs: docs, totalMonto: monto };
   }, [items, monthKey]);
 
+  const filasFiltradas = useMemo(() => catFilter === "todo" ? filas : filas.filter((f) => f.cat === catFilter), [catFilter, filas]);
+
   const grupos = useMemo(() => {
     const map = new Map<string, Fila[]>();
-    for (const fila of filas) map.set(fila.dateLabel, [...(map.get(fila.dateLabel) ?? []), fila]);
+    for (const fila of filasFiltradas) map.set(fila.dateLabel, [...(map.get(fila.dateLabel) ?? []), fila]);
     return Array.from(map.entries());
+  }, [filasFiltradas]);
+
+  const catCounts = useMemo(() => {
+    const counts = { todo: filas.length, factura: 0, boleta: 0, nota: 0 };
+    for (const fila of filas) counts[fila.cat] += 1;
+    return counts;
   }, [filas]);
 
   return (
     <div style={{ minHeight: 0, overflow: "auto", padding: "14px 18px 28px", background: "var(--surface)" }}>
+      {/* Filtros por tipo (mismo lenguaje que la biblioteca) */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {CAT_FILTERS.map((f) => {
+          const active = catFilter === f.key;
+          return (
+            <button key={f.key} onClick={() => setCatFilter(f.key)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, border: active ? "1px solid rgba(232,85,62,.45)" : "1px solid var(--border)", background: active ? "rgba(232,85,62,.11)" : "var(--surface)", color: active ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 850, cursor: "pointer", transition: "all .18s ease" }}>
+              {f.label}
+              <span style={{ fontSize: 8, color: active ? "var(--accent)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{catCounts[f.key]}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Resumen del cuadre */}
       <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
         <Stat n={String(totalDocs)} nColor="var(--accent)" label={`Emitidos con massDTE · ${monthLabel}`} />
@@ -155,9 +189,9 @@ export default function RcvCuadreView({ items, notice, onActualizar }: { items: 
       )}
 
       {/* Tabla del período */}
-      {filas.length === 0 ? (
+      {filasFiltradas.length === 0 ? (
         <div style={{ marginTop: 24, padding: 36, textAlign: "center", color: "var(--text2)", fontSize: 11, border: "1px dashed var(--border)", borderRadius: 14 }}>
-          Sin documentos emitidos con massDTE en {monthLabel}. Cuando emitas, acá se cuadran contra el RCV del SII.
+          {filas.length === 0 ? `Sin documentos emitidos con massDTE en ${monthLabel}. Cuando emitas, acá se cuadran contra el RCV del SII.` : "Sin documentos de este tipo en el mes."}
         </div>
       ) : (
         <div style={{ marginTop: 14, border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
@@ -182,7 +216,6 @@ export default function RcvCuadreView({ items, notice, onActualizar }: { items: 
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}><Swatch massdte /> Emitido con massDTE</span>
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}><Swatch /> Por otro carril (aparece al descargar el RCV)</span>
         <span style={{ color: "var(--text3)" }}>Facturas y notas cruzan por folio · boletas por total del día (RCOF)</span>
-        <button onClick={onActualizar} style={{ marginLeft: "auto", border: "1px solid rgba(232,85,62,.35)", borderRadius: 10, background: "rgba(232,85,62,.1)", color: "var(--accent)", padding: "7px 12px", fontSize: 10, fontWeight: 900, cursor: "pointer" }}>↻ Actualizar RCV</button>
       </div>
     </div>
   );
