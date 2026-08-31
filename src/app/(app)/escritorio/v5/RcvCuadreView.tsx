@@ -39,6 +39,7 @@ type Fila = {
   monto: number;
   esNota: boolean;
   cat: FilaCat;
+  docCount: number;
 };
 
 const CAT_FILTERS: { key: "todo" | FilaCat; label: string }[] = [
@@ -64,7 +65,7 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
     return label.charAt(0).toUpperCase() + label.slice(1);
   }, [monthKey]);
 
-  const { filas, totalDocs, totalMonto } = useMemo(() => {
+  const { filas } = useMemo(() => {
     // Solo documentos EMITIDOS del mes en curso (fecha de emisión SII).
     const emitidas = items.filter((item) => {
       if (item.type !== "boleta") return false;
@@ -73,9 +74,7 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
     });
 
     const individuales: Fila[] = [];
-    const boletasPorDia = new Map<string, { count: number; total: number; fecha: string }>();
-    let docs = 0;
-    let monto = 0;
+    const boletasPorDia = new Map<string, { count: number; total: number; fecha: string; folioMin: number | null; folioMax: number | null }>();
 
     for (const item of emitidas) {
       const d = item.data ?? {};
@@ -83,18 +82,17 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
       const dateKey = chileDisplayDateKey(fecha);
       const total = typeof d.monto_total === "number" ? d.monto_total : (item.monto ?? 0);
       const tipoDte = Number(d.tipo_dte ?? 39);
-      docs += 1;
 
       if (TIPO_LABEL[tipoDte]) {
         // Facturas y notas: cruzan por folio, van una a una.
         const meta = TIPO_LABEL[tipoDte];
         const esNota = tipoDte === 61;
-        monto += esNota ? -total : total;
         individuales.push({
           key: item.id,
           dateKey,
           dateLabel: fmtDateLong(fecha),
-          folio: d.folio ? String(d.folio).padStart(7, "0") : "-",
+          // Mismo formato de folio que el resto de la app (#968).
+          folio: d.folio ? `#${Number(d.folio)}` : "-",
           tipoLabel: meta.label,
           tipoCod: meta.cod,
           tipoColor: meta.color,
@@ -103,13 +101,19 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
           monto: esNota ? -total : total,
           esNota,
           cat: tipoDte === 56 || tipoDte === 61 ? "nota" : "factura",
+          docCount: 1,
         });
       } else {
-        // Boletas 39/41: el SII solo ve el total del día (RCOF).
-        monto += total;
-        const acc = boletasPorDia.get(dateKey) ?? { count: 0, total: 0, fecha };
+        // Boletas 39/41: el SII solo ve el total del día (RCOF), pero el RCOF
+        // sí reporta el RANGO de folios consumidos — lo mostramos.
+        const acc = boletasPorDia.get(dateKey) ?? { count: 0, total: 0, fecha, folioMin: null, folioMax: null };
         acc.count += 1;
         acc.total += total;
+        const folio = d.folio != null ? Number(d.folio) : NaN;
+        if (!Number.isNaN(folio)) {
+          acc.folioMin = acc.folioMin == null ? folio : Math.min(acc.folioMin, folio);
+          acc.folioMax = acc.folioMax == null ? folio : Math.max(acc.folioMax, folio);
+        }
         boletasPorDia.set(dateKey, acc);
       }
     }
@@ -118,7 +122,8 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
       key: `boletas-${dateKey}`,
       dateKey,
       dateLabel: fmtDateLong(acc.fecha),
-      folio: "—",
+      // Rango de folios del día (lo que el RCOF le informa al SII).
+      folio: acc.folioMin == null ? "—" : acc.folioMin === acc.folioMax ? `#${acc.folioMin}` : `#${acc.folioMin}–#${acc.folioMax}`,
       tipoLabel: "Boletas",
       tipoCod: "39",
       tipoColor: "var(--blue)",
@@ -127,10 +132,11 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
       monto: acc.total,
       esNota: false,
       cat: "boleta" as const,
+      docCount: acc.count,
     }));
 
     const filas = [...individuales, ...resumenes].sort((a, b) => b.dateKey.localeCompare(a.dateKey) || b.folio.localeCompare(a.folio));
-    return { filas, totalDocs: docs, totalMonto: monto };
+    return { filas };
   }, [items, monthKey]);
 
   const filasFiltradas = useMemo(() => catFilter === "todo" ? filas : filas.filter((f) => f.cat === catFilter), [catFilter, filas]);
@@ -142,10 +148,21 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
   }, [filasFiltradas]);
 
   const catCounts = useMemo(() => {
-    const counts = { todo: filas.length, factura: 0, boleta: 0, nota: 0 };
-    for (const fila of filas) counts[fila.cat] += 1;
+    const counts = { todo: 0, factura: 0, boleta: 0, nota: 0 };
+    for (const fila of filas) { counts[fila.cat] += fila.docCount; counts.todo += fila.docCount; }
     return counts;
   }, [filas]);
+
+  // El resumen sigue al filtro: si miras solo Facturas, el conteo y el total
+  // son de facturas.
+  const { totalDocs, totalMonto } = useMemo(() => {
+    let docs = 0;
+    let monto = 0;
+    for (const fila of filasFiltradas) { docs += fila.docCount; monto += fila.monto; }
+    return { totalDocs: docs, totalMonto: monto };
+  }, [filasFiltradas]);
+
+  const filtroLabel = CAT_FILTERS.find((f) => f.key === catFilter)?.label ?? "Todos";
 
   return (
     <div style={{ minHeight: 0, overflow: "auto", padding: "14px 18px 28px", background: "var(--surface)" }}>
@@ -164,14 +181,11 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
 
       {/* Resumen del cuadre */}
       <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "13px 16px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--bg-muted)" }}>
-        <Stat n={String(totalDocs)} nColor="var(--accent)" label={`Emitidos con massDTE · ${monthLabel}`} />
+        <Stat n={String(totalDocs)} nColor="var(--accent)" label={`${catFilter === "todo" ? "Emitidos" : filtroLabel} con massDTE · ${monthLabel}`} />
         <Sep />
-        <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label="Total emitido del mes" />
+        <Stat n={fmtMoney(totalMonto)} nColor="var(--text)" label={catFilter === "todo" ? "Total emitido del mes" : `Total ${filtroLabel.toLowerCase()} del mes`} />
         <Sep />
         <Stat n="—" nColor="var(--text3)" label="En el RCV del SII · sin descargar" />
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, padding: "7px 13px", borderRadius: 11, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", color: "var(--amber)", fontSize: 10, fontWeight: 850 }}>
-          Cuadre pendiente del RCV
-        </span>
       </div>
 
       {/* Aviso: parcial + boletas del día + estado del carril de descarga */}
@@ -221,7 +235,7 @@ export default function RcvCuadreView({ items, notice }: { items: SearchItem[]; 
   );
 }
 
-const COLUMNS = "90px 150px minmax(220px,1fr) 110px 150px";
+const COLUMNS = "118px 150px minmax(220px,1fr) 110px 150px";
 
 function FilaRow({ fila }: { fila: Fila }) {
   return (

@@ -360,7 +360,7 @@ export default function SearchHistoryView({ items: allItems }: { items: SearchIt
                 </div>
               </div>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, animation: "fade-in-up 240ms cubic-bezier(.22,1,.36,1) both" }}>
-                <span style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700 }}>aún no descargado</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 11px", borderRadius: 999, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.28)", color: "var(--amber)", fontSize: 9, fontWeight: 850, whiteSpace: "nowrap" }}>Cuadre pendiente del RCV · aún no descargado</span>
                 <button onClick={() => setRcvNotice("La descarga del RCV la hace la extensión Motor Local y llega en una próxima versión. Por ahora este cuadre muestra lo emitido con massDTE; al descargar el RCV aparecerán también los documentos de otros carriles.")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 11, border: "1px solid rgba(232,85,62,.35)", background: "rgba(232,85,62,.09)", color: "var(--accent)", fontSize: 10, fontWeight: 900, cursor: "pointer", transition: "all .18s ease", boxShadow: "0 0 12px rgba(232,85,62,.08), inset 0 1px 0 var(--border)" }}>↻ Actualizar RCV</button>
               </div>
             </>
