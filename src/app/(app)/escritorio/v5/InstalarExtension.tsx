@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useExtensionStatus } from "./useExtensionStatus";
 import { EXTENSION_STORE_URL, EXTENSION_NOMBRE, mensajeExtensionDesactualizada } from "@/lib/extension";
+import AnimacionConectaSII from "./AnimacionConectaSII";
 
 /**
  * Aviso + CTA de instalación de la extensión, con detección automática:
@@ -173,15 +174,14 @@ export default function InstalarExtension({ escalera }: { escalera?: EscaleraDat
         />
       </div>
 
+      {/* la película: instala → tu clave cifrada → SII con tu sesión → boletas
+          de verdad (iterada con mocks; misma gramática visual del landing) */}
+      <AnimacionConectaSII />
+
       {/* paso 3, sub-momento A: instalar la extensión */}
       {status !== "ready" && (
-        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid color-mix(in srgb, var(--text, #e8eaf0) 10%, transparent)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text, #e8eaf0)" }}>Último paso: conecta tu SII</div>
-          <p style={{ margin: "5px 0 0", fontSize: 12, lineHeight: 1.6, color: "var(--text2, #8b92a3)", maxWidth: 620 }}>
-            massDTE emite en el SII <b style={{ color: "var(--text, #e8eaf0)" }}>desde tu navegador, con tu sesión</b> — por eso
-            necesita la extensión {EXTENSION_NOMBRE}. Toma 1 minuto y tus boletas salen al tiro.
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             {publicada ? (
               <a href={EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 12, fontWeight: 750, color: "#fff", background: "var(--accent, #E8553E)", borderRadius: 10, padding: "9px 16px", textDecoration: "none", whiteSpace: "nowrap" }}>
@@ -207,14 +207,9 @@ export default function InstalarExtension({ escalera }: { escalera?: EscaleraDat
 
       {/* paso 3, sub-momento B: guardar la clave del SII en la bóveda */}
       {status === "ready" && !bovedaLista && (
-        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid color-mix(in srgb, var(--text, #e8eaf0) 10%, transparent)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text, #e8eaf0)" }}>✓ Extensión conectada — ahora tu clave del SII</div>
-          <p style={{ margin: "5px 0 0", fontSize: 12, lineHeight: 1.6, color: "var(--text2, #8b92a3)", maxWidth: 620 }}>
-            Con ella la extensión entra al SII por ti, igual que si lo hicieras a mano. Se guarda en la
-            configuración de la extensión y <b style={{ color: "var(--text, #e8eaf0)" }}>queda cifrada en tu computador</b> — ni
-            massDTE ni nadie más la ve.
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--green, #22c55e)" }}>✓ Extensión conectada</span>
             <button type="button" onClick={abrirOpciones}
               style={{ fontSize: 12, fontWeight: 750, color: "#fff", background: "var(--accent, #E8553E)", border: "none", borderRadius: 10, padding: "9px 16px", cursor: "pointer", whiteSpace: "nowrap", opacity: abriendoOpciones ? 0.7 : 1 }}>
               {abriendoOpciones ? "Abriendo…" : "Guardar mi clave"}
