@@ -28,6 +28,7 @@ const MCP_URL = "https://app.massdte.cl/api/mcp";
 // claude.ai movió los conectores a Personalizar (2026-09): la ruta vieja
 // /settings/connectors quedó como stub que solo dice "se movieron".
 const CLAUDE_CONNECTORS_URL = "https://claude.ai/new#settings/customize-connectors";
+const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
 
 export default function ConectorMcpConfig() {
   const [conexiones, setConexiones] = useState<ConexionMcp[] | null>(null);
@@ -36,7 +37,7 @@ export default function ConectorMcpConfig() {
   const [copiado, setCopiado] = useState(false);
   const [, startTransition] = useTransition();
 
-  const conectarClaude = async () => {
+  const conectar = async (destino: string) => {
     try {
       await navigator.clipboard.writeText(MCP_URL);
       setCopiado(true);
@@ -44,7 +45,7 @@ export default function ConectorMcpConfig() {
     } catch {
       // sin permiso de portapapeles: la URL queda visible abajo para copiarla a mano
     }
-    window.open(CLAUDE_CONNECTORS_URL, "_blank", "noopener");
+    window.open(destino, "_blank", "noopener");
   };
 
   const cargar = () => {
@@ -76,22 +77,32 @@ export default function ConectorMcpConfig() {
       </div>
 
       <div style={{ padding: "13px 15px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 750, color: "var(--text)" }}>Conectar tu Claude</div>
+            <div style={{ fontSize: 12, fontWeight: 750, color: "var(--text)" }}>
+              {copiado ? "Dirección copiada ✓" : "Conectar tu asistente"}
+            </div>
             <div style={{ marginTop: 2, fontSize: 10.5, color: "var(--text3)" }}>
-              Copia la dirección y abre los conectores de Claude — pega, agrega y autoriza.
+              Copia la dirección y abre los conectores — pega, agrega y autoriza.
             </div>
           </div>
-          <button
-            onClick={() => void conectarClaude()}
-            style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--accent)", color: "#fff", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer", flexShrink: 0 }}
-          >
-            {copiado ? "Dirección copiada ✓" : "Conectar tu Claude"}
-          </button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => void conectar(CLAUDE_CONNECTORS_URL)}
+              style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--accent)", color: "#fff", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
+            >
+              Conectar tu Claude
+            </button>
+            <button
+              onClick={() => void conectar(CHATGPT_CONNECTORS_URL)}
+              style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface)", color: "var(--text)", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
+            >
+              Conectar tu ChatGPT
+            </button>
+          </div>
         </div>
         <ol style={{ margin: 0, paddingLeft: 16, fontSize: 10.5, color: "var(--text2)", lineHeight: 1.7 }}>
-          <li>En Claude, aprieta «Agregar conector personalizado».</li>
+          <li>En tu asistente, aprieta «Agregar conector personalizado».</li>
           <li>Pega la dirección (ya queda copiada): <code style={{ fontSize: 10, color: "var(--text)", background: "var(--bg-muted)", padding: "1px 6px", borderRadius: 6 }}>{MCP_URL}</code></li>
           <li>Aprieta «Agregar» y autoriza con tu cuenta de massDTE. Listo.</li>
         </ol>
