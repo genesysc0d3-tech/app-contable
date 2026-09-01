@@ -42,6 +42,22 @@ function Feat({ t, ok = true, strong = false }: { t: string; ok?: boolean; stron
   );
 }
 
+// Pago rechazado PERSISTENTE (Matías, 2026-09-01): el aviso de la vuelta de la
+// pasarela vive en la URL y se pierde al navegar; si el último pago de la
+// cuenta (72 h) quedó rechazado, /planes lo dice aunque entres días después.
+// Helper fuera del componente: el lint prohíbe Date.now() durante el render.
+async function ultimoPagoRechazado(sb: ReturnType<typeof createServiceClient<Database>>, cuentaId: string): Promise<boolean> {
+  const { data } = await sb
+    .from("pagos")
+    .select("estado, created_at")
+    .eq("cuenta_id", cuentaId)
+    .gte("created_at", new Date(Date.now() - 72 * 3600_000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.estado === "rechazado";
+}
+
 export default async function PlanesPage({ searchParams }: { searchParams: Promise<{ plan?: string; tarjeta?: string; cobro?: string }> }) {
   const usuario = await getUsuario();
   if (!usuario) redirect("/onboarding");
@@ -104,22 +120,8 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
         .maybeSingle()
     : { data: null };
 
-  // Pago rechazado PERSISTENTE (Matías, 2026-09-01): el aviso de la vuelta de
-  // la pasarela vive en la URL y se pierde al navegar; si el último pago de la
-  // cuenta (72 h) quedó rechazado, esta página lo dice aunque entres días
-  // después desde cero.
-  if (!aviso && cuentaId && !cuota.suscripcionActiva) {
-    const { data: ultimoPago } = await sb
-      .from("pagos")
-      .select("estado, created_at")
-      .eq("cuenta_id", cuentaId)
-      .gte("created_at", new Date(Date.now() - 72 * 3600_000).toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (ultimoPago?.estado === "rechazado") {
-      aviso = "Tu último pago fue rechazado por el banco — no se te cobró nada. Revisa cupo o compras por internet, o intenta con otra tarjeta.";
-    }
+  if (!aviso && cuentaId && !cuota.suscripcionActiva && (await ultimoPagoRechazado(sb, cuentaId))) {
+    aviso = "Tu último pago fue rechazado por el banco — no se te cobró nada. Revisa cupo o compras por internet, o intenta con otra tarjeta.";
   }
 
   const tienePlan = cuota.suscripcionActiva || Boolean(usuario.empresas?.plan_activo);
