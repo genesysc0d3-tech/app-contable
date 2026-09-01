@@ -294,6 +294,7 @@ export default async function DevDiagnosticoPage() {
           <Row label="dev_mode" value={`${boolText(data.usuarioDevMode)} · informativo para Genesys`} />
           <Row label="vetado" value={boolText(data.usuarioVetado)} ok={data.vetadoOk} />
           <Row label="Email calza" value={boolText(data.emailOk)} ok={data.emailOk} />
+          <Row label="MFA (aal2)" value={data.mfaOk ? "sesión verificada con segundo factor" : data.mfaEnrolado ? "factor enrolado, falta el challenge — cierra sesión y vuelve a entrar" : "SIN factor — enrola TOTP en Seguridad de la cuenta"} ok={data.mfaOk} />
           <Row label="Resultado" value={data.ok ? "puede entrar a /dev/cuentas" : data.error ?? "bloqueado"} ok={data.ok} />
           {/*
             Antes acá se pintaba el mensaje crudo de la base, que nombra tabla,

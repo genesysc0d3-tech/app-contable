@@ -5,6 +5,10 @@ import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { detectHeuristic } from "@/lib/parsers/heuristic";
 import { detectByNames } from "@/lib/parsers/named";
+import { hojaExcedeCeldas } from "@/lib/parsers/excel-guard";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
+import { recordOpsEvent } from "@/lib/ops/events";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { descargarDocumento } from "@/lib/storage";
 
@@ -17,6 +21,13 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const limited = await enforceRateLimitGlobal({
+    key: rateLimitKey("parser-preview", user.id),
+    limit: 12,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
 
   const { data: usuario } = await supabase
     .from("usuarios")
@@ -57,7 +68,21 @@ export async function POST(request: Request) {
   try { fileBuf = await descargarDocumento(provider, documento.storage_path, bajar); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
   const ab = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
-  const workbook = XLSX.read(ab, { type: "array" });
+  // El archivo ya pasó el cap de 10MB al subir, pero 10MB COMPRIMIDOS pueden
+  // declarar un rango gigante que sheet_to_json expande a millones de celdas.
+  const workbook = XLSX.read(ab, { type: "array", sheetRows: 10_000 });
+  if (workbook.SheetNames.some((n) => hojaExcedeCeldas(workbook.Sheets[n]))) {
+    await recordOpsEvent({
+      severity: "warn",
+      source: "upload",
+      eventName: "excel_zip_bomb_rechazado",
+      summary: "Excel con rango declarado gigante rechazado en el mapeo visual",
+      empresaId: empresaIdEfectiva,
+      usuarioId: user.id,
+      metadata: { ruta: "parser-preview", documento_id },
+    });
+    return NextResponse.json({ error: "EXCEL_DEMASIADO_GRANDE" }, { status: 422 });
+  }
 
   type SheetData = {
     name: string;

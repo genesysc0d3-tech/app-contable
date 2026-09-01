@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { checkRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { POLICY_VERSION } from "@/lib/legal/version";
@@ -54,11 +55,13 @@ function esBot(formData: FormData): boolean {
 
 export async function signIn(formData: FormData) {
   // Freno anti fuerza-bruta por IP+email (además del rate-limit de Supabase):
-  // 8 intentos por 5 minutos. In-memory por instancia — no es perfecto en
-  // serverless, pero Fluid reusa instancias y Supabase es la red de fondo.
+  // 8 intentos por 5 minutos. GLOBAL (bucket compartido en Postgres, auditoría
+  // #6b): el credential-stuffing distribuido ya no reparte el contador entre
+  // instancias serverless. Fallback consciente al limiter local si la base no
+  // responde.
   const ip = await clientIp();
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
-  const rl = checkRateLimit({ key: rateLimitKey("login", ip, email), limit: 8, windowMs: 5 * 60 * 1000 });
+  const rl = await checkRateLimitGlobal({ key: rateLimitKey("login", ip, email), limit: 8, windowMs: 5 * 60 * 1000 });
   if (!rl.ok) return { error: "Demasiados intentos — espera un momento" };
 
   const supabase = await createClient();
@@ -143,7 +146,7 @@ export async function signUp(formData: FormData) {
   // suficiente para humanos y corta el registro masivo automatizado.
   {
     const ip = await clientIp();
-    const rl = checkRateLimit({ key: rateLimitKey("signup", ip), limit: 5, windowMs: 60 * 60 * 1000 });
+    const rl = await checkRateLimitGlobal({ key: rateLimitKey("signup", ip), limit: 5, windowMs: 60 * 60 * 1000 });
     if (!rl.ok) return { error: "Demasiados intentos — espera un momento" };
   }
   const supabase = await createClient();

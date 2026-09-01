@@ -143,8 +143,7 @@ export default function MesaController({
   // datos recién entraron. Esto reemplaza el router.refresh() del uploader, que no
   // actualizaba la mesa (el estado no se re-siembra de initialMesa sin remount/F5).
   useEffect(() => {
-    const onUploaded = (e: Event) => {
-      const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesa.selDate;
+    const recargarDia = (date: string) => {
       const [yy, mm] = date.split("-");
       const month = `${yy}-${Number(mm) - 1}`; // calendar.m es 0-indexed
       // La MESA ACTIVA viaja en el refresco (bug 2026-08-27): sin ella cargaba
@@ -163,8 +162,50 @@ export default function MesaController({
         if (res.ok) { cacheRef.current.set(key, res.mesa); setMesa(res.mesa); broadcastMesa(res.mesa); }
       })();
     };
+
+    // VIGILANCIA post-subida (bug 2026-08-31, cazado con cartola real): la
+    // frescura colgaba de Realtime + del poll de DocCardList, pero ese poll
+    // solo se arma si el doc YA está visible — si la recarga inicial se pierde
+    // (carrera con router.push) o Realtime no entrega (falló en silencio en el
+    // navegador con el server 100% sano), la mesa queda congelada hasta F5.
+    // Serie de recargas silenciosas con backoff: garantiza que el doc aparezca
+    // y que su término se vea aunque la IA tarde minutos y Realtime esté muerto.
+    const VIGILANCIA_MS = [4_000, 12_000, 30_000, 60_000, 100_000, 150_000, 210_000];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const vigilar = (date: string) => {
+      for (const t of timers) clearTimeout(t);
+      timers.length = 0;
+      for (const ms of VIGILANCIA_MS) timers.push(setTimeout(() => recargarDia(date), ms));
+    };
+
+    const onUploaded = (e: Event) => {
+      const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesa.selDate;
+      recargarDia(date);
+      vigilar(date);
+    };
     window.addEventListener("massdte:uploaded", onUploaded);
-    return () => window.removeEventListener("massdte:uploaded", onUploaded);
+
+    // Cinturón contra la carrera del remount: si el evento se disparó mientras
+    // este controlador se estaba re-montando (router.push del uploader), el
+    // flag en sessionStorage lo repone al montar.
+    try {
+      const flag = sessionStorage.getItem("massdte:uploaded-at");
+      if (flag) {
+        const { at, date } = JSON.parse(flag) as { at: number; date?: string };
+        if (Date.now() - at < 120_000) {
+          sessionStorage.removeItem("massdte:uploaded-at");
+          recargarDia(date ?? mesa.selDate);
+          vigilar(date ?? mesa.selDate);
+        } else {
+          sessionStorage.removeItem("massdte:uploaded-at");
+        }
+      }
+    } catch { /* sessionStorage puede no estar (SSR/privacidad): el evento igual cubre */ }
+
+    return () => {
+      window.removeEventListener("massdte:uploaded", onUploaded);
+      for (const t of timers) clearTimeout(t);
+    };
   }, [mesa]);
 
   // ── COLUMNA VERTEBRAL DE FRESCURA (patrón Linear/Figma/Notion) ───────────────
@@ -197,7 +238,14 @@ export default function MesaController({
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "boletas_emitidas", filter: `empresa_id=eq.${empresaId}` }, onBoleta)
       .on("postgres_changes", { event: "*", schema: "public", table: "propuestas_ia", filter: `empresa_id=eq.${empresaId}` }, bump)
       .on("postgres_changes", { event: "*", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` }, bump)
-      .subscribe();
+      .subscribe((status) => {
+        // Observabilidad (bug 2026-08-31): Realtime falló EN SILENCIO en el
+        // navegador con el servidor 100% sano y nadie se enteró. Al menos que
+        // quede en la consola para el próximo diagnóstico.
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(`[massdte] canal realtime de la mesa: ${status} — la frescura queda en manos del poll/vigilancia`);
+        }
+      });
     return () => { if (timer) clearTimeout(timer); supabase.removeChannel(ch); };
   }, [empresaId]);
 

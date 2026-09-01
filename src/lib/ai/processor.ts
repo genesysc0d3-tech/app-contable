@@ -15,6 +15,7 @@ import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
 import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
+import { notasPropuestasONull, rutPropuestoONull, sanearCampoIdentidad } from "./saneo";
 import {
   loadReglas,
   classifyWithRules,
@@ -465,12 +466,17 @@ export async function procesarDocumento(
     emp?.operacion_hint_default && HINTS_VALIDOS.has(emp.operacion_hint_default)
       ? (emp.operacion_hint_default as DocumentoHint)
       : null;
+  // Saneo de identidad (auditoría interna #5): razón social, giro y alias son
+  // texto que ESCRIBE el cliente y se interpola en el bloque que el prompt
+  // trata como identidad confiable — sin sanear, giro = "IGNORA las
+  // categorías…" inyecta esquivando el recinto del contexto_usuario. Misma
+  // disciplina: una línea, sin comillas triples, con tope.
   const contextoEmpresa = emp
     ? "CONTEXTO DEL CONTRIBUYENTE (este documento es para emitir SUS boletas de venta):\n" +
-      `- Razón social: «${emp.razon_social}» | RUT: ${redactPiiHabilitado() ? maskRut(emp.rut) : emp.rut}` +
-      (emp.giro ? ` | Giro: ${emp.giro}` : "") +
+      `- Razón social: «${sanearCampoIdentidad(emp.razon_social, 80)}» | RUT: ${redactPiiHabilitado() ? maskRut(emp.rut) : emp.rut}` +
+      (emp.giro ? ` | Giro: ${sanearCampoIdentidad(emp.giro, 120)}` : "") +
       ` | ${emp.tipo_contribuyente === "exento" ? "exento de IVA" : "afecto a IVA"}\n` +
-      (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.join(", ")}.\n` : "") +
+      (aliasList.length ? `- También aparece en sus comprobantes como: ${aliasList.map((a) => sanearCampoIdentidad(a, 60)).filter(Boolean).join(", ")}.\n` : "") +
       "- Identifica al contribuyente por su razón social, RUT o esos nombres/cuentas: dinero HACIA él (PARA/destino) = entrada; dinero DESDE él (él pagó/envió) = salida. Decide la dirección por la EVIDENCIA del comprobante (ver PASO 0), NO por defecto.\n" +
       "- Un pago recibido (entrada) NORMALMENTE es una venta a boletear: clasifícalo (compraventa_crypto / factura_afecta / factura_exenta / operacion_forex / transferencia_p2p según corresponda). EXCEPCIÓN — usa 'no_comercial' SOLO con señales CLARAS de no-venta: reembolso/devolución, préstamo/mutuo, transferencia entre cuentas PROPIAS del usuario, aporte de capital, o venta de bien personal usado (Art. 17 N°8 LIR). Una SALIDA (él pagó) es compra/gasto y NO genera boleta."
     : "";
@@ -1367,7 +1373,10 @@ export async function procesarDocumento(
             // caer a ese piso si mindicador.cl no responde, así que nunca minimizamos
             // algo que la emisión luego demandaría (evita bloquear la boleta sin dato).
             receptor_nombre: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.receptor_nombre || null) : null,
-            receptor_rut: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.receptor_rut || null) : null,
+            // Auditoría #7: el RUT que DEVUELVE la IA se valida (módulo 11)
+            // antes de persistir — "nunca inventes RUTs" deja de ser una
+            // promesa del prompt y pasa a ser estructural.
+            receptor_rut: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? rutPropuestoONull(p.receptor_rut) : null,
             monto_neto: exentoFinal ? total : toNum(p.monto_neto),
             iva: exentoFinal ? 0 : toNum(p.iva),
             total,
@@ -1378,7 +1387,7 @@ export async function procesarDocumento(
             // impreso en el DTE (misma fuga que cerró PR #56, por otra columna). El
             // usuario puede escribir su propio detalle después (ruta consentida). Sobre
             // umbral se conserva (la identidad ahí es legítima/exigida).
-            notas: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? (p.notas || null) : null,
+            notas: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? notasPropuestasONull(p.notas) : null,
             // Auto-stage a "listo" SOLO con clasificación real por regla (regla_id).
             // El atajo template (boleta @0.95 sin match) nace "pendiente": el usuario
             // hace un gesto de bulk antes de que quede a un click del SII.

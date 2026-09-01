@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { getOperatorAal } from "@/lib/dev/operator-aal";
 
 export const DEV_OPERATOR_EMAIL = "genesysc0d3@gmail.com";
 export const DEV_SUPPORT_EMPRESA_COOKIE = "massdte_dev_support_empresa_id";
@@ -14,7 +15,7 @@ type Empresa = Tables<"empresas">;
 
 export type DevOperatorContext =
   | { ok: true; sb: Sb; userId: string; email: string; usuario: Usuario }
-  | { ok: false; error: "NO_AUTH" | "NOT_DEV_OPERATOR" | "BACKEND_CONFIG_MISSING" | "USUARIO_QUERY_FAILED"; detalle?: string };
+  | { ok: false; error: "NO_AUTH" | "NOT_DEV_OPERATOR" | "MFA_NO_ENROLADO" | "MFA_REQUERIDO" | "BACKEND_CONFIG_MISSING" | "USUARIO_QUERY_FAILED"; detalle?: string };
 
 export type DevOperatorDiagnostics = {
   authenticated: boolean;
@@ -30,6 +31,8 @@ export type DevOperatorDiagnostics = {
   emailOk: boolean;
   devModeOk: boolean;
   vetadoOk: boolean;
+  mfaEnrolado: boolean | null;
+  mfaOk: boolean;
   ok: boolean;
   error: string | null;
   detalle?: string;
@@ -76,6 +79,15 @@ export async function getDevOperatorContext(): Promise<DevOperatorContext> {
     return { ok: false, error: "NOT_DEV_OPERATOR" };
   }
 
+  // Tercer gate (auditoría interna #1): el god-mode exige sesión aal2. Esta
+  // cuenta puede migrar o purgar CUALQUIER empresa; email + dev_mode no
+  // defienden contra una password robada. FAIL-CLOSED como en el proxy: si el
+  // chequeo de aal falla, no hay god-mode. Sin factor enrolado tampoco
+  // (MFA_NO_ENROLADO manda a enrolar en /seguridad); con factor pero sesión
+  // aal1, el middleware ya empuja al challenge — esto es el cinturón.
+  const aal = await getOperatorAal(supabase, user);
+  if (!aal.ok) return { ok: false, error: aal.enrolado ? "MFA_REQUERIDO" : "MFA_NO_ENROLADO" };
+
   return { ok: true, sb, userId: user.id, email, usuario };
 }
 
@@ -97,6 +109,8 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
       emailOk: false,
       devModeOk: false,
       vetadoOk: false,
+      mfaEnrolado: null,
+      mfaOk: false,
       ok: false,
       error: "NO_AUTH",
     };
@@ -118,6 +132,8 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
       emailOk: (user.email ?? "").trim().toLowerCase() === DEV_OPERATOR_EMAIL,
       devModeOk: false,
       vetadoOk: false,
+      mfaEnrolado: null,
+      mfaOk: false,
       ok: false,
       error: "BACKEND_CONFIG_MISSING",
     };
@@ -143,6 +159,8 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
       emailOk: false,
       devModeOk: false,
       vetadoOk: false,
+      mfaEnrolado: null,
+      mfaOk: false,
       ok: false,
       error: "USUARIO_QUERY_FAILED",
       detalle: error.message,
@@ -152,6 +170,7 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
   const effectiveEmail = (usuario?.email || user.email || "").trim().toLowerCase();
   const emailOk = effectiveEmail === DEV_OPERATOR_EMAIL;
   const vetadoOk = usuario?.vetado !== true;
+  const aal = await getOperatorAal(supabase, user);
   return {
     authenticated: true,
     backendConfigured: true,
@@ -166,8 +185,12 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
     emailOk,
     devModeOk: usuario?.dev_mode === true,
     vetadoOk,
-    ok: !!usuario && emailOk && vetadoOk,
-    error: !!usuario && emailOk && vetadoOk ? null : "NOT_DEV_OPERATOR",
+    mfaEnrolado: aal.enrolado,
+    mfaOk: aal.ok,
+    ok: !!usuario && emailOk && vetadoOk && aal.ok,
+    error: !!usuario && emailOk && vetadoOk
+      ? (aal.ok ? null : aal.enrolado ? "MFA_REQUERIDO" : "MFA_NO_ENROLADO")
+      : "NOT_DEV_OPERATOR",
   };
 }
 

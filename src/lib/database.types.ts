@@ -1627,6 +1627,63 @@ export type Database = {
           },
         ]
       }
+      mcp_tokens: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          last_used_at: string | null
+          nombre: string
+          origen: string
+          refresh_token_hash: string | null
+          revoked_at: string | null
+          token_hash: string
+          usuario_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          nombre?: string
+          origen?: string
+          refresh_token_hash?: string | null
+          revoked_at?: string | null
+          token_hash: string
+          usuario_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          nombre?: string
+          origen?: string
+          refresh_token_hash?: string | null
+          revoked_at?: string | null
+          token_hash?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mcp_tokens_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "oauth_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mcp_tokens_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medios_pago: {
         Row: {
           ambiente: string
@@ -1737,6 +1794,78 @@ export type Database = {
             columns: ["transaccion_id"]
             isOneToOne: false
             referencedRelation: "transacciones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oauth_clients: {
+        Row: {
+          client_name: string
+          created_at: string
+          id: string
+          redirect_uris: Json
+        }
+        Insert: {
+          client_name?: string
+          created_at?: string
+          id?: string
+          redirect_uris: Json
+        }
+        Update: {
+          client_name?: string
+          created_at?: string
+          id?: string
+          redirect_uris?: Json
+        }
+        Relationships: []
+      }
+      oauth_codes: {
+        Row: {
+          client_id: string
+          code_challenge: string
+          code_hash: string
+          created_at: string
+          expires_at: string
+          redirect_uri: string
+          scope: string
+          used_at: string | null
+          usuario_id: string
+        }
+        Insert: {
+          client_id: string
+          code_challenge: string
+          code_hash: string
+          created_at?: string
+          expires_at: string
+          redirect_uri: string
+          scope?: string
+          used_at?: string | null
+          usuario_id: string
+        }
+        Update: {
+          client_id?: string
+          code_challenge?: string
+          code_hash?: string
+          created_at?: string
+          expires_at?: string
+          redirect_uri?: string
+          scope?: string
+          used_at?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_codes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "oauth_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oauth_codes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -2350,6 +2479,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limit_buckets: {
+        Row: {
+          count: number
+          key: string
+          reset_at: string
+        }
+        Insert: {
+          count: number
+          key: string
+          reset_at: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          reset_at?: string
+        }
+        Relationships: []
       }
       refills: {
         Row: {
@@ -3165,6 +3312,13 @@ export type Database = {
         }[]
       }
       empresa_autorizada: { Args: never; Returns: string }
+      rate_limit_hit: {
+        Args: { p_key: string; p_limit: number; p_window_ms: number }
+        Returns: {
+          allowed: boolean
+          retry_after_seconds: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

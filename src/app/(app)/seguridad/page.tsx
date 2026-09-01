@@ -41,9 +41,20 @@ export default function SeguridadPage() {
     setMsg(null);
     setBusy(true);
     const supabase = createClient();
+    // Auto-sanado (bug cazado por el fundador 2026-09-01): si el usuario
+    // apretó Activar y navegó sin cancelar, queda un factor SIN VERIFICAR
+    // huérfano — y el próximo enroll muere por nombre duplicado (el nombre
+    // llevaba solo la fecha). Antes de enrolar: limpiar los no verificados.
+    const { data: existentes } = await supabase.auth.mfa.listFactors();
+    for (const f of existentes?.all ?? []) {
+      if (f.status === "unverified") {
+        await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+      }
+    }
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({
       factorType: "totp",
-      friendlyName: `TOTP ${new Date().toISOString().slice(0, 10)}`,
+      // Con hora incluida: dos intentos el mismo día ya no chocan de nombre.
+      friendlyName: `TOTP ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
     });
     setBusy(false);
     if (enrollError || !data) {
@@ -151,7 +162,15 @@ export default function SeguridadPage() {
       ) : (
         <section className="flex flex-col gap-3 rounded border border-neutral-200 p-4">
           <p className="text-sm">1. Escanea el código con tu app (Google Authenticator, Authy, etc.):</p>
-          <div className="w-44" dangerouslySetInnerHTML={{ __html: enrolling.qr }} />
+          {/* Supabase entrega el QR como data-URL (data:image/svg+xml;…), no
+              como SVG crudo: inyectarlo como innerHTML pintaba texto/nada y el
+              QR "no se tomaba" (bug cazado por el fundador al enrolar). */}
+          {enrolling.qr.startsWith("data:") ? (
+            // eslint-disable-next-line @next/next/no-img-element -- data-URL local, next/image no aplica
+            <img src={enrolling.qr} alt="Código QR para tu app de códigos" className="h-44 w-44 bg-white p-2 rounded" />
+          ) : (
+            <div className="w-44" dangerouslySetInnerHTML={{ __html: enrolling.qr }} />
+          )}
           <p className="text-xs text-neutral-500 break-all">
             ¿No puedes escanear? Clave: <code>{enrolling.secret}</code>
           </p>

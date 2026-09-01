@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import EmisorForm from "../../empresa/EmisorForm";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
+import ConectorMcpConfig from "../../empresa/ConectorMcpConfig";
 import SoporteAccesoConfig from "../../empresa/SoporteAccesoConfig";
 import EmissionProviderConfig, { FacturasCarrilInline, type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
@@ -678,6 +679,13 @@ export default function EmpresaPopup({
                 sub: "Tú autorizas, tú cortas",
                 done: false,
               },
+              {
+                n: 8,
+                icon: "M9 7V3m6 4V3M7 7h10v6a5 5 0 0 1-10 0V7zM12 18v3",
+                title: "Conector MCP",
+                sub: "Tu IA conectada · Opcional",
+                done: false,
+              },
             ].map((s, i) => (
               <button
                 key={i}
@@ -806,6 +814,7 @@ export default function EmpresaPopup({
                   { key: "telegram", content: <TelegramConfig /> },
                   { key: "facturacion", content: <FacturacionUsoPanel /> },
                   { key: "soporte", content: <SoporteAccesoConfig /> },
+                  { key: "conector", content: <ConectorMcpConfig /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}

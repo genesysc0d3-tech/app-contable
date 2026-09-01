@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { MAX_BASE64_LARGO } from "@/lib/parsers/excel-guard";
+import { rateLimitKey } from "@/lib/security/rate-limit";
+import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const limited = await enforceRateLimitGlobal({
+    key: rateLimitKey("subir-ejemplo-formato", user.id),
+    limit: 12,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
 
   const { data: usuario } = await supabase
     .from("usuarios")
@@ -23,12 +33,16 @@ export async function POST(request: Request) {
   if (!body.base64 || !body.nombre) {
     return NextResponse.json({ error: "ARCHIVO_REQUERIDO" }, { status: 422 });
   }
+  if (body.base64.length > MAX_BASE64_LARGO) {
+    return NextResponse.json({ error: "ARCHIVO_DEMASIADO_GRANDE" }, { status: 413 });
+  }
 
   const buffer = Buffer.from(body.base64, "base64");
 
-  // Parse the Excel and compute fingerprint
+  // Parse the Excel and compute fingerprint. Solo se usa la fila 0 de cada
+  // hoja: sheetRows acota la materialización aunque el rango declarado mienta.
   const XLSX = await import("xlsx");
-  const workbook = XLSX.read(buffer, { type: "array" });
+  const workbook = XLSX.read(buffer, { type: "array", sheetRows: 5 });
 
   const fingerprints: string[] = [];
 

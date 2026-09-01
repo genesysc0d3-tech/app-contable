@@ -216,7 +216,7 @@ export default async function DevCuentasPage({
   const result = await listarDevCuentas({ query });
   if (!result.ok) {
     if (result.error === "NO_AUTH") redirect("/auth/login?next=/dev/cuentas");
-    if (result.error === "NOT_DEV_OPERATOR") redirect("/dev/diagnostico");
+    if (result.error === "NOT_DEV_OPERATOR" || result.error === "MFA_NO_ENROLADO" || result.error === "MFA_REQUERIDO") redirect("/dev/diagnostico");
     if (result.status === 403 || result.status === 404) notFound();
     throw new Error(`${result.error}${result.detalle ? `: ${result.detalle}` : ""}`);
   }
