@@ -35,6 +35,8 @@ interface Item {
   monto_total: number;
   balde: "listas" | "por_revisar" | "bloqueadas";
   listo_emitir: boolean;
+  /** Avisos que NO impiden emitir (NO_BOLETAR aprobado, TIPO_ASUMIDO…): triángulo, no veto. */
+  advertencias?: { code: string; msg: string }[];
   motivo_no_listo: string | null;
   motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | "editado_sin_aprobar" | null;
   tipo_sugerido: number | null;
@@ -187,9 +189,16 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // periodo y es reactivo a la navegación del calendario. Refrescar = reloadMesa.
   const data = initial;
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">(
-    () => initial && initial.totales.listas_emitir === 0 && (initial.totales.por_revisar ?? 0) > 0 ? "por_revisar" : "listas",
-  );
+  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">(() => {
+    // Filtro inicial: mostrar SIEMPRE algo. Con 0 listas el default caía en
+    // "Listas" (vacío) aunque hubiera bloqueadas — el usuario veía una pestaña
+    // "trabada" sin sus documentos (cazado por el fundador 2026-09-01: aprobó 2
+    // no-boleteables y Emitir se veía vacía en vez de mostrarlas con su motivo).
+    if (!initial || initial.totales.listas_emitir > 0) return "listas";
+    if ((initial.totales.por_revisar ?? 0) > 0) return "por_revisar";
+    if ((initial.totales.bloqueadas ?? 0) > 0) return "bloqueadas";
+    return "listas";
+  });
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -483,6 +492,14 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             if (!glosa || glosa === titulo) return null;
             return <div className="sub" style={{ color: "var(--text)", opacity: .78 }} title={glosa}>{glosa}</div>;
           })()}
+          {/* Advertencias sin veto (el humano manda, la app solo dice "ojo"):
+              triángulo ámbar con el aviso — la fila sigue seleccionable. */}
+          {item.listo_emitir && (item.advertencias?.length ?? 0) > 0 && (
+            <div className="sub" style={{ color: "var(--amber, #f59e0b)", display: "flex", alignItems: "flex-start", gap: 5 }} title={item.advertencias!.map((a) => a.msg).join("\n")}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span>{item.advertencias![0].msg}{item.advertencias!.length > 1 ? ` (+${item.advertencias!.length - 1})` : ""}</span>
+            </div>
+          )}
           {item.motivo_no_listo && (
             <div className="sub rn">
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -536,7 +553,15 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
       <div className="sec" style={{flex:1}}>
         {/* Recordatorio de la extensión: el carril real (sii_local) emite vía la
             extensión local, así que si falta la avisamos acá antes de intentar emitir. */}
-        {proveedorBoletas === "sii_local" && <InstalarExtension />}
+        {proveedorBoletas === "sii_local" && (
+          <InstalarExtension
+            escalera={{
+              docNombre: grupos.find((g) => g.docId)?.nombre ?? null,
+              listas: selectableItems.length,
+              montoListo: data?.totales.monto_listo ?? null,
+            }}
+          />
+        )}
         {/* Plan/cupo agotado: el 402 del metering aterriza acá con su copy y un
             botón real a Planes (no solo la sugerencia en texto). */}
         {planCta && (
@@ -708,7 +733,20 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             </div>
           )}
           <div className="r">
-            <button className="emit" onClick={() => (proveedorReal && !esFacturas ? setLoteOpen(true) : setConfirmOpen(true))} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
+            <button className="emit" onClick={() => {
+              // Con el paso 3 de la escalera pendiente (sin extensión o sin
+              // bóveda), Emitir no abre un modal que va a rebotar con error:
+              // lleva al paso y lo destaca (el muro se volvió escalera).
+              const esc = document.getElementById("escalera-emision");
+              if (esc && esc.dataset.listo === "0") {
+                esc.scrollIntoView({ behavior: "smooth", block: "center" });
+                esc.style.borderColor = "var(--accent)";
+                esc.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent)";
+                window.setTimeout(() => { esc.style.borderColor = ""; esc.style.boxShadow = ""; }, 1600);
+                return;
+              }
+              if (proveedorReal && !esFacturas) setLoteOpen(true); else setConfirmOpen(true);
+            }} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (

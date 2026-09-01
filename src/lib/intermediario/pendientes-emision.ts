@@ -42,8 +42,17 @@ export async function getPendientesEmision(
     `)
     .eq("empresa_id", empresaId)
     .eq("mesa", mesaActiva)
-    .in("estado", estados)
-    .in("tipo_propuesto", mesaActiva === "factura" ? ["factura_afecta", "factura_exenta"] : TIPOS_EMITIBLES);
+    .in("estado", estados);
+  // Facturas: solo sus dos tipos. Boletas (fundador 2026-09-01, «el humano
+  // manda»): los tipos emitibles Y ADEMÁS toda propuesta APROBADA aunque su
+  // tipo sea otro (gasto, honorarios, factura en mesa boleta…) — antes el
+  // filtro SQL las hacía desaparecer de Emitir y el usuario veía la pestaña
+  // «pegada». El motor (evaluarEmision) les pone sus advertencias
+  // (NO_BOLETAR/TIPO_ASUMIDO); lo editado-no-aprobado de otros tipos sigue
+  // fuera (es un gasto a medio editar, no una decisión).
+  propsQuery = mesaActiva === "factura"
+    ? propsQuery.in("tipo_propuesto", ["factura_afecta", "factura_exenta"])
+    : propsQuery.or(`tipo_propuesto.in.(${TIPOS_EMITIBLES.join(",")}),estado.eq.aprobado`);
   // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
   if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);
   const { data: propuestas, error: pErr } = await propsQuery.order("created_at", { ascending: false });

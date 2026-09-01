@@ -33,8 +33,20 @@ describe("evaluarEmision — motor de reglas", () => {
     expect(v.totales?.iva).toBe(0);
   });
 
-  it("sueldo / remuneración → BLOQUEADAS por no ser venta (Art. 2 DL 825)", () => {
+  // Criterio 3 de Matías + fundador (2026-09-01): la APROBACIÓN humana manda.
+  // Aprobada, "no parece venta" es triángulo de advertencia y se emite igual
+  // (tipo asumido por régimen); SIN aprobar, la duda de la IA sigue vetando.
+  it("sueldo APROBADO → LISTAS con advertencia NO_BOLETAR + TIPO_ASUMIDO (advertir, no bloquear)", () => {
     const v = evaluarEmision(baseInput({ descripcion: "Pago de sueldo mensual" }), empresaAfecta);
+    expect(v.balde).toBe("listas");
+    expect(v.puedeEmitir).toBe(true);
+    expect(v.advertencias.map((a) => a.code)).toContain("NO_BOLETAR");
+    expect(v.advertencias.map((a) => a.code)).toContain("TIPO_ASUMIDO");
+    expect(v.tipoDte).toBe(39); // empresa afecta ⇒ asume 39 (IVA de más nunca multa)
+  });
+
+  it("sueldo SIN aprobar (editado) → BLOQUEADAS por NO_BOLETAR (la duda de la IA sigue vetando)", () => {
+    const v = evaluarEmision(baseInput({ descripcion: "Pago de sueldo mensual", estado: "editado" }), empresaAfecta);
     expect(v.balde).toBe("bloqueadas");
     expect(v.puedeEmitir).toBe(false);
     expect(v.bloqueos.map((b) => b.code)).toContain("NO_BOLETAR");
@@ -65,9 +77,15 @@ describe("evaluarEmision — motor de reglas", () => {
     expect(v.bloqueos.map((b) => b.code)).toContain("YA_EMITIDA");
   });
 
-  it("transferencia pelada (baja confianza) → POR_REVISAR, no emitible", () => {
+  it("transferencia pelada APROBADA → LISTAS (aprobar ES la decisión humana; la duda no la devuelve)", () => {
     const v = evaluarEmision(baseInput({ descripcion: "Transferencia recibida" }), empresaExenta);
     expect(v.confianzaTipo).toBeLessThan(0.8);
+    expect(v.balde).toBe("listas");
+    expect(v.puedeEmitir).toBe(true);
+  });
+
+  it("transferencia pelada SIN aprobar (editada) → POR_REVISAR, no emitible", () => {
+    const v = evaluarEmision(baseInput({ descripcion: "Transferencia recibida", estado: "editado" }), empresaExenta);
     expect(v.balde).toBe("por_revisar");
     expect(v.puedeEmitir).toBe(false);
     expect(v.advertencias.map((a) => a.code)).toContain("BAJA_CONFIANZA");
@@ -90,8 +108,8 @@ describe("evaluarEmision — motor de reglas", () => {
   });
 
   // Regresión: el bias de "empresa afecta" no debe ocultar una glosa vaga.
-  it("transferencia pelada con empresa AFECTA → POR_REVISAR (el bias no tapa la duda)", () => {
-    const v = evaluarEmision(baseInput({ descripcion: "Transferencia recibida" }), empresaAfecta);
+  it("transferencia pelada con empresa AFECTA sin aprobar → POR_REVISAR (el bias no tapa la duda)", () => {
+    const v = evaluarEmision(baseInput({ descripcion: "Transferencia recibida", estado: "editado" }), empresaAfecta);
     expect(v.balde).toBe("por_revisar");
     expect(v.puedeEmitir).toBe(false);
   });
