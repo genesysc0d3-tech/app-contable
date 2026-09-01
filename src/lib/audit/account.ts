@@ -15,6 +15,7 @@ export type CuentaAuditAction =
   | "persona_invitada"
   | "persona_agregada"
   | "propuesta_aprobada"
+  | "mcp_conector_desconectado"
   | "propuestas_aprobadas"
   | "emision_autorizacion_aceptada"
   | "boleta_emitida"

@@ -86,7 +86,16 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
 
 export async function POST(request: Request) {
   const access = await requireMcpAccess(request);
-  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  if (!access.ok) {
+    // Descubrimiento OAuth (RFC 9728): el 401 le dice al cliente MCP dónde
+    // está el metadata del recurso para iniciar el flujo de autorización.
+    const headers: Record<string, string> = {};
+    if (access.status === 401) {
+      const origin = new URL(request.url).origin;
+      headers["WWW-Authenticate"] = `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`;
+    }
+    return NextResponse.json({ error: access.error }, { status: access.status, headers });
+  }
 
   const limited = await enforceRateLimitGlobal({
     key: rateLimitKey("mcp", access.usuarioId),
