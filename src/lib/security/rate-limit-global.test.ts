@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceRateLimitGlobal, type RateLimitRpcClient } from "./rate-limit-global";
+import { checkRateLimitGlobalEstricto, enforceRateLimitGlobal, type RateLimitRpcClient } from "./rate-limit-global";
 
 // Protege el limiter GLOBAL (#6b): decide con el bucket compartido de
 // Postgres, y si la base no responde cae al limiter local en vez de abrirse
@@ -39,5 +39,25 @@ describe("enforceRateLimitGlobal", () => {
     expect(await enforceRateLimitGlobal({ key, limit: 1, windowMs: 60_000 }, null)).toBeNull();
     const segunda = await enforceRateLimitGlobal({ key, limit: 1, windowMs: 60_000 }, null);
     expect(segunda?.status).toBe(429);
+  });
+});
+
+describe("checkRateLimitGlobalEstricto — fail-CLOSED para escritura anónima", () => {
+  it("con el bucket sano, decide igual que el global", async () => {
+    const ok = await checkRateLimitGlobalEstricto({ key: "t:e1", limit: 5, windowMs: 60_000 }, rpcCon(true));
+    expect(ok.ok).toBe(true);
+    const no = await checkRateLimitGlobalEstricto({ key: "t:e2", limit: 5, windowMs: 60_000 }, rpcCon(false, 42));
+    expect(no.ok).toBe(false);
+    expect(no.retryAfterSeconds).toBe(42);
+  });
+
+  it("si la RPC falla → CERRADO, jamás el fallback local (el hueco del escéptico)", async () => {
+    const res = await checkRateLimitGlobalEstricto({ key: `t:e3:${Date.now()}`, limit: 100, windowMs: 60_000 }, rpcQueFalla());
+    expect(res.ok).toBe(false);
+  });
+
+  it("sin cliente (env ausente) → CERRADO", async () => {
+    const res = await checkRateLimitGlobalEstricto({ key: `t:e4:${Date.now()}`, limit: 100, windowMs: 60_000 }, null);
+    expect(res.ok).toBe(false);
   });
 });
