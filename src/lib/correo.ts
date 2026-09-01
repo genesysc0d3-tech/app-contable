@@ -74,6 +74,30 @@ export function plantillaPlanContratado(args: {
   };
 }
 
+/**
+ * Al cliente: su tarjeta quedó guardada pero el PRIMER cobro rebotó — el plan
+ * NO está activo. Sin este correo el cliente queda con señales cruzadas: Flow
+ * le confirma la tarjeta por correo y nuestro rechazo vivía solo en un banner
+ * (caso real Lc Services 2026-09-01: creyó que tenía el plan).
+ */
+export function plantillaCobroRechazado(args: {
+  planNombre: string;
+  montoClp: number;
+}): { asunto: string; html: string } {
+  return {
+    asunto: `Tu pago fue rechazado — el plan ${args.planNombre} aún no está activo`,
+    html: marco(`
+  <p style="font-size:15px;line-height:1.55">Tu tarjeta quedó registrada correctamente, pero tu banco
+  <b>rechazó el cobro</b> de ${clp(args.montoClp)} del plan <b>${args.planNombre}</b>.</p>
+  <p style="font-size:14px;line-height:1.55"><b>No se te cobró nada</b> y el plan todavía no está activo.</p>
+  <p style="font-size:13.5px;color:#555;line-height:1.6">Suele ser falta de cupo o que la tarjeta tiene
+  bloqueadas las compras por internet (se activa en la app de tu banco). Cuando esté resuelto,
+  entra a Planes y aprieta el botón de tu plan: el cobro sale al tiro con la tarjeta que ya guardaste.</p>
+  <a href="https://app.massdte.cl/planes" style="display:inline-block;margin-top:8px;background:#E8553E;color:#fff;text-decoration:none;font-size:13.5px;font-weight:700;padding:11px 22px;border-radius:10px">Reintentar el pago</a>
+  <p style="font-size:12.5px;color:#777;margin-top:14px">¿No era lo que esperabas? Escríbenos a soporte@massdte.cl y lo vemos contigo.</p>`),
+  };
+}
+
 /** A nosotros: quién contrató qué. Va a cobros@ (es plata, no soporte). */
 export function plantillaAvisoContratacion(args: {
   clienteNombre: string;
