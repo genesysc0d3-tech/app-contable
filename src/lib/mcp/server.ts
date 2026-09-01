@@ -51,18 +51,25 @@ function rpcResult(id: unknown, result: unknown): McpRpcOutcome {
 
 // Verbos VETADOS en el catálogo, con dientes en runtime (no solo en tests):
 // emitir/firmar (barrera #2), unic (regla eterna de la única: el canal gratis
-// jamás se automatiza) y aprobar (2026-09-01: la única escritura permitida es
-// DESESCALANTE — devolver al check humano; escalar hacia la emisión es del
-// humano). Si alguien registra una tool con estos nombres, el servidor entero
-// se niega a atender: el error es imposible de no ver en el primer smoke.
+// jamás se automatiza) y aprobar. Si alguien registra una tool con estos
+// nombres, el servidor entero se niega a atender: el error es imposible de no
+// ver en el primer smoke.
+//
+// Las DOS manos del copiloto viven en una allowlist EXACTA de escritura
+// (decisión del fundador 2026-09-01): devolver_a_revision (el freno) y
+// dejar_en_emitir (el staging — deja propuestas en la pestaña Emitir; el
+// botón Emitir sigue siendo un acto del humano en la app, y todo lo staged
+// nace con propuesta_id ⇒ descuenta tier al emitir). Cualquier otra tool
+// cuyo nombre roce los verbos vetados muere acá.
 const NOMBRES_VETADOS = /emitir|emision_real|firmar|aprobar|unic/i;
+const ESCRITURAS_PERMITIDAS = new Set(["devolver_a_revision", "dejar_en_emitir"]);
 
 export async function handleMcpRpc(
   body: unknown,
   tools: McpTools,
   serverInfo = { name: "massdte", version: "0.1.0" },
 ): Promise<McpRpcOutcome> {
-  const vetada = Object.keys(tools).find((n) => NOMBRES_VETADOS.test(n));
+  const vetada = Object.keys(tools).find((n) => !ESCRITURAS_PERMITIDAS.has(n) && NOMBRES_VETADOS.test(n));
   if (vetada) {
     return rpcError(null, -32603, `Catálogo inválido: la herramienta "${vetada}" usa un verbo vetado (emitir/firmar/aprobar/única no existen en este conector)`);
   }
