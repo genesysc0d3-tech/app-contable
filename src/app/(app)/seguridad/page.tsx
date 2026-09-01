@@ -41,9 +41,20 @@ export default function SeguridadPage() {
     setMsg(null);
     setBusy(true);
     const supabase = createClient();
+    // Auto-sanado (bug cazado por el fundador 2026-09-01): si el usuario
+    // apretó Activar y navegó sin cancelar, queda un factor SIN VERIFICAR
+    // huérfano — y el próximo enroll muere por nombre duplicado (el nombre
+    // llevaba solo la fecha). Antes de enrolar: limpiar los no verificados.
+    const { data: existentes } = await supabase.auth.mfa.listFactors();
+    for (const f of existentes?.all ?? []) {
+      if (f.status === "unverified") {
+        await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+      }
+    }
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({
       factorType: "totp",
-      friendlyName: `TOTP ${new Date().toISOString().slice(0, 10)}`,
+      // Con hora incluida: dos intentos el mismo día ya no chocan de nombre.
+      friendlyName: `TOTP ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
     });
     setBusy(false);
     if (enrollError || !data) {
