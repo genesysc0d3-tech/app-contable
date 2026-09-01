@@ -61,6 +61,17 @@ describe("handleMcpRpc — protocolo", () => {
     expect(JSON.parse(result.content[0].text)).toEqual({ totales: { listas: 2 } });
   });
 
+  it("las DOS manos del copiloto (freno y staging) SÍ pasan el veto de runtime", async () => {
+    const conManos = {
+      ...tools,
+      devolver_a_revision: { def: { name: "devolver_a_revision", description: "x", inputSchema: {} }, run: async () => ({}) },
+      dejar_en_emitir: { def: { name: "dejar_en_emitir", description: "x", inputSchema: {} }, run: async () => ({}) },
+    };
+    const out = await handleMcpRpc({ jsonrpc: "2.0", id: 8, method: "tools/list" }, conManos);
+    const lista = (out as { json: { result: { tools: Array<{ name: string }> } } }).json.result.tools;
+    expect(lista.map((t) => t.name)).toContain("dejar_en_emitir");
+  });
+
   it("un catálogo con verbo vetado (aprobar/emitir/única) apaga el servidor entero", async () => {
     const saboteado = {
       ...tools,
