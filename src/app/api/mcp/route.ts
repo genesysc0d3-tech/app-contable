@@ -88,6 +88,68 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         return { mes, documentos: emitidas.length, monto_total: total, por_tipo_dte: porTipo };
       },
     },
+    dejar_en_emitir: {
+      def: {
+        name: "dejar_en_emitir",
+        title: "Dejar en Emitir",
+        description:
+          "Aprueba propuestas revisadas y las deja LISTAS en la pestaña Emitir de la app. NO emite: el botón Emitir es siempre un acto del humano. Úsala después de revisar con el usuario qué corresponde boletear — cada documento que él emita descuenta de su plan como siempre.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            propuesta_ids: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 1,
+              maxItems: 50,
+              description: "IDs de propuestas (los `id` de pendientes_emision) a dejar listas",
+            },
+            motivo: { type: "string", description: "Por qué se aprueban (queda en la auditoría y lo ve el usuario)" },
+          },
+          required: ["propuesta_ids", "motivo"],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false },
+      },
+      run: async (args) => {
+        const ids = Array.isArray(args.propuesta_ids)
+          ? args.propuesta_ids.filter((v): v is string => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v))
+          : [];
+        const motivo = typeof args.motivo === "string" ? args.motivo.trim().slice(0, 300) : "";
+        if (ids.length === 0 || ids.length > 50) throw new Error("propuesta_ids: entre 1 y 50 IDs válidos");
+        if (!motivo) throw new Error("motivo: obligatorio — di por qué se aprueban");
+
+        // Solo estados PRE-emisión suben a 'aprobado'. Lo emitido, rechazado o
+        // descartado no se toca; NO se escribe cliente_id ni reglas de
+        // aprendizaje (la IA externa no alimenta el sistema de reglas).
+        const { count, error } = await ctx.svc
+          .from("propuestas_ia")
+          .update({ estado: "aprobado" }, { count: "exact" })
+          .in("id", ids)
+          .eq("empresa_id", ctx.empresaId)
+          .in("estado", ["pendiente", "editado", "listo"]);
+        if (error) throw new Error("No se pudieron dejar listas las propuestas");
+
+        const listas = count ?? 0;
+        await recordOpsEvent({
+          severity: listas >= 20 ? "warn" : "info",
+          source: "auth",
+          eventName: "mcp_dejar_en_emitir",
+          summary: `MCP dejó ${listas}/${ids.length} propuesta(s) listas en Emitir: ${motivo}`,
+          empresaId: ctx.empresaId,
+          usuarioId: ctx.usuarioId,
+          resourceType: "propuestas_ia",
+          metadata: { listas, solicitadas: ids.length, origen: "mcp", token_id: ctx.tokenId },
+        });
+        return {
+          listas,
+          solicitadas: ids.length,
+          nota:
+            listas === ids.length
+              ? "Propuestas aprobadas y esperando en la pestaña Emitir. La emisión es del usuario, en la app."
+              : `${listas} aprobada(s); el resto no estaba en estado pre-emisión (quizás ya se emitió o fue descartada).`,
+        };
+      },
+    },
     devolver_a_revision: {
       def: {
         name: "devolver_a_revision",
