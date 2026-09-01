@@ -35,7 +35,12 @@ describe("handleMcpRpc — protocolo", () => {
     const lista = (out as { json: { result: { tools: Array<{ name: string }> } } }).json.result.tools;
     expect(lista.map((t) => t.name)).toContain("pendientes_emision");
     for (const t of lista) {
-      expect(t.name).not.toMatch(/emitir|emision_real|firmar/);
+      // Tercer verbo vetado (fundador, 2026-09-01): APROBAR. La única
+      // escritura permitida es DESESCALANTE (devolver_a_revision) — la IA
+      // puede mandar documentos DE VUELTA al check humano, jamás hacia la
+      // emisión. Aprobar escala (deja listo para emitir) y queda del lado
+      // del humano en la app.
+      expect(t.name).not.toMatch(/emitir|emision_real|firmar|aprobar/);
       // REGLA ETERNA del fundador (2026-08-31): la boleta/factura ÚNICA es el
       // canal gratis (sin propuesta_id → no descuenta tier) y su fricción
       // manual ES el modelo de negocio. Una tool de única en el MCP dejaría
@@ -54,6 +59,17 @@ describe("handleMcpRpc — protocolo", () => {
     const result = (out as { json: { result: { content: Array<{ type: string; text: string }> } } }).json.result;
     expect(result.content[0].type).toBe("text");
     expect(JSON.parse(result.content[0].text)).toEqual({ totales: { listas: 2 } });
+  });
+
+  it("un catálogo con verbo vetado (aprobar/emitir/única) apaga el servidor entero", async () => {
+    const saboteado = {
+      ...tools,
+      aprobar_propuesta: { def: { name: "aprobar_propuesta", description: "x", inputSchema: {} }, run: async () => ({}) },
+    };
+    const out = await handleMcpRpc({ jsonrpc: "2.0", id: 9, method: "tools/list" }, saboteado);
+    const err = (out as { json: { error: { code: number; message: string } } }).json.error;
+    expect(err.code).toBe(-32603);
+    expect(err.message).toContain("aprobar_propuesta");
   });
 
   it("herramienta desconocida → error -32602, jamás ejecución", async () => {
