@@ -5,6 +5,7 @@ import { getPendientesEmision, type EmpresaCtx } from "@/lib/intermediario/pendi
 import { clientIpFromRequest, rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 // Conector MCP de massDTE — copiloto de revisión (fase 1, solo lectura).
 //
@@ -18,7 +19,13 @@ import { chileDateString } from "@/lib/chile-date";
 //  4. CRIPTO: emitir exige la bóveda SII (llave partida), que solo se abre
 //     con la sesión-navegador del propio usuario. Este servidor no la tiene.
 //
-// Techo si roban el token: leer pendientes de UNA empresa autorizada.
+// La ÚNICA escritura del catálogo es DESESCALANTE (regla del fundador,
+// 2026-09-01): devolver_a_revision mueve documentos listos DE VUELTA al
+// check humano — la IA puede agregar cautela, jamás quitarla. Aprobar y
+// emitir siguen siendo actos del humano en la app.
+//
+// Techo si roban el token: leer pendientes de UNA empresa autorizada y, como
+// mucho, devolver sus documentos listos a revisión (fricción, cero daño).
 
 function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok: true }): McpTools {
   return {
@@ -79,6 +86,85 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           porTipo[k] = (porTipo[k] ?? 0) + 1;
         }
         return { mes, documentos: emitidas.length, monto_total: total, por_tipo_dte: porTipo };
+      },
+    },
+    devolver_a_revision: {
+      def: {
+        name: "devolver_a_revision",
+        title: "Devolver a revisión",
+        description:
+          "Devuelve documentos que están LISTOS para emitir al balde 'por revisar' (el check humano). Es la única escritura de este conector y solo agrega supervisión: nunca aprueba ni emite. Úsala cuando detectes algo raro en un documento listo — monto que no calza, receptor dudoso, posible duplicado — explicando el motivo.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            propuesta_ids: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 1,
+              maxItems: 50,
+              description: "IDs de propuestas (los `id` de pendientes_emision) a devolver al check",
+            },
+            motivo: { type: "string", description: "Por qué se devuelven (queda en la auditoría y lo ve el usuario)" },
+          },
+          required: ["propuesta_ids", "motivo"],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false },
+      },
+      run: async (args) => {
+        const ids = Array.isArray(args.propuesta_ids)
+          ? args.propuesta_ids.filter((v): v is string => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v))
+          : [];
+        const motivo = typeof args.motivo === "string" ? args.motivo.trim().slice(0, 300) : "";
+        if (ids.length === 0 || ids.length > 50) throw new Error("propuesta_ids: entre 1 y 50 IDs válidos");
+        if (!motivo) throw new Error("motivo: obligatorio — di por qué se devuelve");
+
+        // Guard: con una emisión EN CURSO no se toca la mesa (el runner del
+        // lote está leyendo lo aprobado; moverle el piso a mitad de lote es
+        // pedirse un descuadre). Pausa y que el humano decida.
+        const { data: jobVivo, error: jobErr } = await ctx.svc
+          .from("emision_jobs")
+          .select("job_id")
+          .eq("empresa_id", ctx.empresaId)
+          .eq("estado", "running")
+          .limit(1);
+        if (jobErr) throw new Error("No se pudo verificar si hay una emisión en curso");
+        if (jobVivo && jobVivo.length > 0) {
+          return {
+            devueltas: 0,
+            error: "EMISION_EN_CURSO",
+            nota: "Hay una emisión corriendo en este momento; no se puede devolver nada hasta que termine. Pídele al usuario reintentar cuando cierre el lote.",
+          };
+        }
+
+        // Solo estados PRE-emisión "staged" vuelven al check. Lo emitido, lo
+        // descartado y lo pendiente no se tocan (idempotente por construcción).
+        const { count, error } = await ctx.svc
+          .from("propuestas_ia")
+          .update({ estado: "pendiente" }, { count: "exact" })
+          .in("id", ids)
+          .eq("empresa_id", ctx.empresaId)
+          .in("estado", ["aprobado", "listo"]);
+        if (error) throw new Error("No se pudieron devolver los documentos");
+
+        const devueltas = count ?? 0;
+        await recordOpsEvent({
+          severity: devueltas >= 20 ? "warn" : "info",
+          source: "auth",
+          eventName: "mcp_devolver_a_revision",
+          summary: `MCP devolvió ${devueltas}/${ids.length} documento(s) a revisión: ${motivo}`,
+          empresaId: ctx.empresaId,
+          usuarioId: ctx.usuarioId,
+          resourceType: "propuestas_ia",
+          metadata: { devueltas, solicitadas: ids.length, origen: "mcp", token_id: ctx.tokenId },
+        });
+        return {
+          devueltas,
+          solicitadas: ids.length,
+          nota:
+            devueltas === ids.length
+              ? "Documentos devueltos al balde 'por revisar'. El usuario los verá en el Check de agregados."
+              : `${devueltas} devuelto(s); el resto no estaba en estado listo/aprobado (quizás ya se emitió o ya estaba en revisión).`,
+        };
       },
     },
   };
