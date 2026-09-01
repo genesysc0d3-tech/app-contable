@@ -35,6 +35,8 @@ interface Item {
   monto_total: number;
   balde: "listas" | "por_revisar" | "bloqueadas";
   listo_emitir: boolean;
+  /** Avisos que NO impiden emitir (NO_BOLETAR aprobado, TIPO_ASUMIDO…): triángulo, no veto. */
+  advertencias?: { code: string; msg: string }[];
   motivo_no_listo: string | null;
   motivo_code: "no_boletar" | "monto_invalido" | "falta_receptor" | "editado_sin_aprobar" | null;
   tipo_sugerido: number | null;
@@ -490,6 +492,14 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             if (!glosa || glosa === titulo) return null;
             return <div className="sub" style={{ color: "var(--text)", opacity: .78 }} title={glosa}>{glosa}</div>;
           })()}
+          {/* Advertencias sin veto (el humano manda, la app solo dice "ojo"):
+              triángulo ámbar con el aviso — la fila sigue seleccionable. */}
+          {item.listo_emitir && (item.advertencias?.length ?? 0) > 0 && (
+            <div className="sub" style={{ color: "var(--amber, #f59e0b)", display: "flex", alignItems: "flex-start", gap: 5 }} title={item.advertencias!.map((a) => a.msg).join("\n")}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span>{item.advertencias![0].msg}{item.advertencias!.length > 1 ? ` (+${item.advertencias!.length - 1})` : ""}</span>
+            </div>
+          )}
           {item.motivo_no_listo && (
             <div className="sub rn">
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>

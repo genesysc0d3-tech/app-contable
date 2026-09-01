@@ -92,7 +92,7 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
   );
 
   // La decisión humana guardada (Paso P) manda sobre la heurística.
-  const tipoDte: 39 | 41 | null = input.tipoDtePersistido ?? clasif.tipo_dte;
+  let tipoDte: 39 | 41 | null = input.tipoDtePersistido ?? clasif.tipo_dte;
 
   const bloqueos: Marca[] = [];
   const advertencias: Marca[] = [];
@@ -108,8 +108,27 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
   if (input.yaEmitida) {
     bloqueos.push({ code: "YA_EMITIDA", msg: "Esta operación ya tiene una boleta emitida." });
   }
+  // La APROBACIÓN humana manda sobre la heurística (criterio 3 de Matías:
+  // advertir, nunca bloquear — y pedido del fundador 2026-09-01: "si las
+  // acepté, no tiene sentido que me las bloquee"). Con la propuesta aprobada,
+  // "no parece una venta" es un triángulo de advertencia, no un veto. Sin
+  // aprobar, sigue siendo bloqueo: la duda de la IA vuelve al Check.
+  const aprobadaPorHumano = input.estado === "aprobado";
   if (clasif.sugerencia === "no_boletar") {
-    bloqueos.push({ code: "NO_BOLETAR", msg: `No parece una venta: ${clasif.razones[0] ?? "movimiento no comercial"}.` });
+    const marca = { code: "NO_BOLETAR", msg: `Ojo: no parece una venta (${clasif.razones[0] ?? "movimiento no comercial"}). La apruebas tú — se emitirá igual.` };
+    if (aprobadaPorHumano) advertencias.push(marca);
+    else bloqueos.push({ code: "NO_BOLETAR", msg: `No parece una venta: ${clasif.razones[0] ?? "movimiento no comercial"}.` });
+  }
+
+  // Aprobada sin tipo decidido (la heurística no propuso 39/41): asumir por el
+  // régimen de la empresa — exenta emite 41, afecta 39 (IVA de más nunca multa;
+  // de menos sí). Se avisa con triángulo para que el Check pueda corregirlo.
+  if (tipoDte == null && aprobadaPorHumano) {
+    tipoDte = ctx.empresa?.tipo_contribuyente === "exento" ? 41 : 39;
+    advertencias.push({
+      code: "TIPO_ASUMIDO",
+      msg: `Tipo asumido: ${tipoDte === 41 ? "exenta" : "afecta"} (por el régimen de tu empresa). Si no corresponde, cámbialo en Check.`,
+    });
   }
 
   let totales: EmisionVerdict["totales"] = null;
@@ -142,7 +161,10 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
   // ensemble aunque la glosa sea vaga. Por eso miramos también el peso de la
   // glosa: si es débil (zona default/neutral, ≤ 0.4), la duda es real y va a
   // revisar igual — "Listas" no debe mentir. La decisión humana lo desactiva.
-  const sinDecisionHumana = input.tipoDtePersistido == null;
+  // La aprobación TAMBIÉN es decisión humana (fundador 2026-09-01): una
+  // propuesta aprobada no rebota a Check por la inseguridad de la IA — las
+  // dudas van como advertencia (NO_BOLETAR/TIPO_ASUMIDO) y se emite igual.
+  const sinDecisionHumana = input.tipoDtePersistido == null && !aprobadaPorHumano;
   const glosaDebil = clasif.angulos.glosa.peso <= 0.4;
   const bajaConfianza = sinDecisionHumana && (
     glosaDebil ||
