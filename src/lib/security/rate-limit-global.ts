@@ -70,3 +70,39 @@ export async function enforceRateLimitGlobal(
   const result = await checkRateLimitGlobal(options, cliente);
   return result.ok ? null : rateLimitResponse(result);
 }
+
+// Variante FAIL-CLOSED para endpoints de ESCRITURA ANÓNIMA (hoy: el registro
+// OAuth). El fallback al limiter local reabre el bypass por concurrencia
+// (10/h pasa a ser 10/h POR INSTANCIA) — inaceptable donde un anónimo
+// inserta filas. Acá, si el bucket compartido no responde, CERRADO: un
+// registro de conector puede esperar un reintento; una tabla llenada por
+// botnet no se vacía sola. (Hallazgo del escéptico, 2026-09-01.)
+export async function checkRateLimitGlobalEstricto(
+  options: RateLimitOptions,
+  cliente: RateLimitRpcClient | null = serviceClient(),
+): Promise<RateLimitResult> {
+  const key = rateLimitKey(options.key);
+  if (!cliente) {
+    return { ok: false, limit: options.limit, remaining: 0, resetAt: Date.now() + 60_000, retryAfterSeconds: 60 };
+  }
+  try {
+    const { data, error } = await cliente.rpc("rate_limit_hit", {
+      p_key: key,
+      p_limit: options.limit,
+      p_window_ms: options.windowMs,
+    });
+    const fila = data?.[0];
+    if (!error && fila) {
+      return {
+        ok: fila.allowed,
+        limit: options.limit,
+        remaining: fila.allowed ? 1 : 0,
+        resetAt: Date.now() + fila.retry_after_seconds * 1000,
+        retryAfterSeconds: fila.allowed ? 0 : fila.retry_after_seconds,
+      };
+    }
+  } catch {
+    // sin señal ⇒ cerrado
+  }
+  return { ok: false, limit: options.limit, remaining: 0, resetAt: Date.now() + 60_000, retryAfterSeconds: 60 };
+}

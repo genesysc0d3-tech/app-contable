@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMcpAccess } from "@/lib/mcp/auth";
 import { handleMcpRpc, type McpTools } from "@/lib/mcp/server";
 import { getPendientesEmision, type EmpresaCtx } from "@/lib/intermediario/pendientes-emision";
-import { rateLimitKey } from "@/lib/security/rate-limit";
+import { clientIpFromRequest, rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
 
@@ -85,6 +85,18 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
 }
 
 export async function POST(request: Request) {
+  // Throttle PRE-AUTH por IP (hallazgo del escéptico): sin esto, cada token
+  // basura de un bot dispara un SELECT a mcp_tokens antes de cualquier
+  // freno — amplificación de carga sin autenticar. Generoso para clientes
+  // reales (los MCP hosts hacen pocas llamadas/min); fallback local OK acá
+  // (es disponibilidad, no escritura anónima).
+  const preLimited = await enforceRateLimitGlobal({
+    key: rateLimitKey("mcp-preauth", clientIpFromRequest(request)),
+    limit: 120,
+    windowMs: 60_000,
+  });
+  if (preLimited) return preLimited;
+
   const access = await requireMcpAccess(request);
   if (!access.ok) {
     // Descubrimiento OAuth (RFC 9728): el 401 le dice al cliente MCP dónde
