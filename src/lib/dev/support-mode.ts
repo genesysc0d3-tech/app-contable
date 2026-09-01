@@ -6,7 +6,19 @@ import type { Database, Tables } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { getOperatorAal } from "@/lib/dev/operator-aal";
 
-export const DEV_OPERATOR_EMAIL = "genesysc0d3@gmail.com";
+// Operadores del panel /dev (allowlist, 2026-09-01: entra Matías — socio
+// contador). Estar acá NO basta: cada operador exige además su propio
+// usuarios.dev_mode = true (kill-switch por columna) y sesión aal2 (TOTP
+// enrolado y desafiado). Quitar a alguien = sacarlo de la lista o apagarle
+// dev_mode, lo que sea más rápido.
+export const DEV_OPERATOR_EMAILS = [
+  "genesysc0d3@gmail.com",
+  "mvillegas@plantributario.com",
+] as const;
+export const DEV_OPERATOR_EMAIL = DEV_OPERATOR_EMAILS[0]; // compat: el titular
+export function esEmailOperador(email: string): boolean {
+  return (DEV_OPERATOR_EMAILS as readonly string[]).includes(email);
+}
 export const DEV_SUPPORT_EMPRESA_COOKIE = "massdte_dev_support_empresa_id";
 
 type Sb = SupabaseClient<Database>;
@@ -75,7 +87,7 @@ export async function getDevOperatorContext(): Promise<DevOperatorContext> {
   // Doble gate como promete la doc: email operador + usuarios.dev_mode + no vetado.
   // dev_mode funciona como kill-switch por columna: si la cuenta se compromete, basta
   // ponerla en false para cortar el god-mode aunque el email siga siendo el del operador.
-  if (email !== DEV_OPERATOR_EMAIL || !usuario || usuario.vetado === true || usuario.dev_mode !== true) {
+  if (!esEmailOperador(email) || !usuario || usuario.vetado === true || usuario.dev_mode !== true) {
     return { ok: false, error: "NOT_DEV_OPERATOR" };
   }
 
@@ -129,7 +141,7 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
       usuarioNombre: null,
       usuarioDevMode: null,
       usuarioVetado: null,
-      emailOk: (user.email ?? "").trim().toLowerCase() === DEV_OPERATOR_EMAIL,
+      emailOk: esEmailOperador((user.email ?? "").trim().toLowerCase()),
       devModeOk: false,
       vetadoOk: false,
       mfaEnrolado: null,
@@ -168,7 +180,7 @@ export async function getDevOperatorDiagnostics(): Promise<DevOperatorDiagnostic
   }
 
   const effectiveEmail = (usuario?.email || user.email || "").trim().toLowerCase();
-  const emailOk = effectiveEmail === DEV_OPERATOR_EMAIL;
+  const emailOk = esEmailOperador(effectiveEmail);
   const vetadoOk = usuario?.vetado !== true;
   const aal = await getOperatorAal(supabase, user);
   return {
