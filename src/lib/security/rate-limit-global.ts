@@ -7,7 +7,7 @@
 // la base por request no se justifica ahí.
 
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
-import { checkRateLimit, rateLimitKey, rateLimitResponse, type RateLimitOptions } from "./rate-limit";
+import { checkRateLimit, rateLimitKey, rateLimitResponse, type RateLimitOptions, type RateLimitResult } from "./rate-limit";
 
 // Cliente estructural mínimo para poder testear la decisión sin Supabase real.
 export type RateLimitRpcClient = {
@@ -30,10 +30,11 @@ function serviceClient(): RateLimitRpcClient | null {
   return cachedSvc;
 }
 
-export async function enforceRateLimitGlobal(
+// Versión "check" para server actions (que devuelven objetos, no Response).
+export async function checkRateLimitGlobal(
   options: RateLimitOptions,
   cliente: RateLimitRpcClient | null = serviceClient(),
-): Promise<Response | null> {
+): Promise<RateLimitResult> {
   const key = rateLimitKey(options.key);
   if (cliente) {
     try {
@@ -44,22 +45,28 @@ export async function enforceRateLimitGlobal(
       });
       const fila = data?.[0];
       if (!error && fila) {
-        if (fila.allowed) return null;
-        return rateLimitResponse({
-          ok: false,
+        return {
+          ok: fila.allowed,
           limit: options.limit,
-          remaining: 0,
+          remaining: fila.allowed ? 1 : 0,
           resetAt: Date.now() + fila.retry_after_seconds * 1000,
-          retryAfterSeconds: fila.retry_after_seconds,
-        });
+          retryAfterSeconds: fila.allowed ? 0 : fila.retry_after_seconds,
+        };
       }
     } catch {
       // cae al fallback local
     }
   }
   // FALLBACK CONSCIENTE: si la base no responde (o la RPC aún no existe),
-  // manda el limiter en memoria — peor que el global, mejor que nada, y la
-  // subida legítima no se cae por un hipo de infraestructura.
-  const local = checkRateLimit({ ...options, key });
-  return local.ok ? null : rateLimitResponse(local);
+  // manda el limiter en memoria — peor que el global, mejor que nada, y el
+  // uso legítimo no se cae por un hipo de infraestructura.
+  return checkRateLimit({ ...options, key });
+}
+
+export async function enforceRateLimitGlobal(
+  options: RateLimitOptions,
+  cliente: RateLimitRpcClient | null = serviceClient(),
+): Promise<Response | null> {
+  const result = await checkRateLimitGlobal(options, cliente);
+  return result.ok ? null : rateLimitResponse(result);
 }
