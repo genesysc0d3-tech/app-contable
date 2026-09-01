@@ -56,6 +56,31 @@ export function redirectCoincide(solicitada: string, registradas: unknown): bool
   return registradas.some((r) => typeof r === "string" && r === solicitada);
 }
 
+// "Consola curada" automática (decisión del fundador 2026-09-01, patrón
+// Google/GitHub adaptado al MCP): el registro dinámico solo acepta callbacks
+// de plataformas CONOCIDAS. Agregar un cliente nuevo (Cursor, etc.) = una
+// línea acá, igual que aprobar una app en la consola de Google. Sin
+// loopback/localhost en prod: el desarrollo local usa tokens manuales.
+const REDIRECT_ALLOWLIST: RegExp[] = [
+  /^https:\/\/claude\.ai\//,
+  /^https:\/\/claude\.com\//,
+  /^https:\/\/www\.claude\.com\//,
+  /^https:\/\/chatgpt\.com\//,
+  /^https:\/\/chat\.openai\.com\//,
+  /^https:\/\/platform\.openai\.com\//,
+];
+
+export function redirectEnAllowlistConector(uri: string): boolean {
+  return REDIRECT_ALLOWLIST.some((re) => re.test(uri));
+}
+
+// Normalización para el registro IDEMPOTENTE: mismas URIs (sin importar el
+// orden) ⇒ mismo cliente. Colapsa el crecimiento de oauth_clients a ~1 fila
+// por plataforma (claude.ai siempre se registra igual).
+export function urisNormalizadas(uris: string[]): string {
+  return JSON.stringify([...uris].sort());
+}
+
 // Registro dinámico (RFC 7591): validación mínima y estricta del metadata.
 export type RegistroCliente = { client_name: string; redirect_uris: string[] };
 

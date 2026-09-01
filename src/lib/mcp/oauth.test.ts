@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createHash, randomBytes } from "node:crypto";
 import {
   generarCodigoAutorizacion,
+  redirectEnAllowlistConector,
+  urisNormalizadas,
   generarRefreshToken,
   hashOauthSecreto,
   metadataAuthorizationServer,
@@ -82,6 +84,36 @@ describe("registro dinámico — metadata estricta", () => {
   it("máximo 10 URIs (nada de registrar un diccionario)", () => {
     const muchas = Array.from({ length: 11 }, (_, i) => `https://a.com/cb${i}`);
     expect("error" in validarRegistroCliente({ redirect_uris: muchas })).toBe(true);
+  });
+});
+
+describe("allowlist de callbacks — la consola curada (decisión del fundador)", () => {
+  it("claude.ai y OpenAI pasan", () => {
+    expect(redirectEnAllowlistConector("https://claude.ai/api/mcp/auth_callback")).toBe(true);
+    expect(redirectEnAllowlistConector("https://claude.com/callback")).toBe(true);
+    expect(redirectEnAllowlistConector("https://chatgpt.com/connector_platform_oauth_redirect")).toBe(true);
+  });
+
+  it("dominios desconocidos NO pasan — aunque sean https válidos", () => {
+    expect(redirectEnAllowlistConector("https://evil.com/cb")).toBe(false);
+    expect(redirectEnAllowlistConector("https://claude.ai.evil.com/cb")).toBe(false);
+    expect(redirectEnAllowlistConector("https://cursor.sh/cb")).toBe(false); // hasta que se agregue a la lista
+  });
+
+  it("loopback NO pasa en el registro de prod (dev local usa tokens manuales)", () => {
+    expect(redirectEnAllowlistConector("http://127.0.0.1:33418/cb")).toBe(false);
+    expect(redirectEnAllowlistConector("http://localhost:8080/cb")).toBe(false);
+  });
+});
+
+describe("urisNormalizadas — la firma del registro idempotente", () => {
+  it("el orden no importa: mismas URIs ⇒ misma firma", () => {
+    expect(urisNormalizadas(["https://a.com/1", "https://b.com/2"]))
+      .toBe(urisNormalizadas(["https://b.com/2", "https://a.com/1"]));
+  });
+
+  it("URIs distintas ⇒ firmas distintas", () => {
+    expect(urisNormalizadas(["https://a.com/1"])).not.toBe(urisNormalizadas(["https://a.com/2"]));
   });
 });
 
