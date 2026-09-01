@@ -151,7 +151,15 @@ export default function SeguridadPage() {
       ) : (
         <section className="flex flex-col gap-3 rounded border border-neutral-200 p-4">
           <p className="text-sm">1. Escanea el código con tu app (Google Authenticator, Authy, etc.):</p>
-          <div className="w-44" dangerouslySetInnerHTML={{ __html: enrolling.qr }} />
+          {/* Supabase entrega el QR como data-URL (data:image/svg+xml;…), no
+              como SVG crudo: inyectarlo como innerHTML pintaba texto/nada y el
+              QR "no se tomaba" (bug cazado por el fundador al enrolar). */}
+          {enrolling.qr.startsWith("data:") ? (
+            // eslint-disable-next-line @next/next/no-img-element -- data-URL local, next/image no aplica
+            <img src={enrolling.qr} alt="Código QR para tu app de códigos" className="h-44 w-44 bg-white p-2 rounded" />
+          ) : (
+            <div className="w-44" dangerouslySetInnerHTML={{ __html: enrolling.qr }} />
+          )}
           <p className="text-xs text-neutral-500 break-all">
             ¿No puedes escanear? Clave: <code>{enrolling.secret}</code>
           </p>
