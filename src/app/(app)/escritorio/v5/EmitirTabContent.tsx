@@ -187,9 +187,16 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // periodo y es reactivo a la navegación del calendario. Refrescar = reloadMesa.
   const data = initial;
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">(
-    () => initial && initial.totales.listas_emitir === 0 && (initial.totales.por_revisar ?? 0) > 0 ? "por_revisar" : "listas",
-  );
+  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">(() => {
+    // Filtro inicial: mostrar SIEMPRE algo. Con 0 listas el default caía en
+    // "Listas" (vacío) aunque hubiera bloqueadas — el usuario veía una pestaña
+    // "trabada" sin sus documentos (cazado por el fundador 2026-09-01: aprobó 2
+    // no-boleteables y Emitir se veía vacía en vez de mostrarlas con su motivo).
+    if (!initial || initial.totales.listas_emitir > 0) return "listas";
+    if ((initial.totales.por_revisar ?? 0) > 0) return "por_revisar";
+    if ((initial.totales.bloqueadas ?? 0) > 0) return "bloqueadas";
+    return "listas";
+  });
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
