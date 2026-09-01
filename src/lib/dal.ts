@@ -4,6 +4,7 @@ import { createClient as createServiceClient, type SupabaseClient } from "@supab
 import { createClient } from "./supabase/server";
 import type { Database, Tables } from "./database.types";
 import { validarAccesoCuenta, trialDisponibleCuenta } from "./entitlements";
+import { puedeEmitir } from "./pagos/metering";
 import { getDevSupportMode, type DevSupportMode } from "./dev/support-mode";
 
 export type Usuario = Tables<"usuarios">;
@@ -99,6 +100,15 @@ export async function requireActiveEmpresa(): Promise<UsuarioConEmpresa> {
   // entrar si la cuenta tiene trial disponible (global o cortesía, auditoría #4): el
   // gate de emisión decide al emitir. Sin plan ni trial → a Planes (comportamiento previo).
   if (!acceso.planActivo && !(await trialDisponibleCuenta(accesoClient, acceso.cuentaId))) {
+    redirect("/planes");
+  }
+
+  // Paywall DURO del trial (Matías, 2026-09-01): con el trial TERMINADO
+  // (días o boletas agotados) no se navega más la app — toda página aterriza
+  // en /planes, que sin plan ni trial vigente no ofrece "volver". Antes este
+  // corte vivía solo en el gate de emisión, y un trial vencido podía seguir
+  // paseándose por las mesas.
+  if (!acceso.planActivo && !(await puedeEmitir(accesoClient, usuario.empresa_id))) {
     redirect("/planes");
   }
 
