@@ -28,13 +28,23 @@ export async function requireMcpAccess(request: Request): Promise<McpAccess> {
   if (!url || !key) return { ok: false, status: 500, error: "BACKEND_CONFIG_MISSING" };
   const svc = createServiceClient<Database>(url, key);
 
-  const { data: fila, error } = await svc
+  // expires_at entra a database.types al aplicar la migración OAuth; cast
+  // sin tipos mientras tanto (mismo patrón que el nacimiento de mcp_tokens).
+  type FilaToken = { id: string; usuario_id: string; revoked_at: string | null; expires_at: string | null };
+  const sinTipos = svc as unknown as SupabaseClient;
+  const { data, error } = await sinTipos
     .from("mcp_tokens")
-    .select("id, usuario_id, revoked_at")
+    .select("id, usuario_id, revoked_at, expires_at")
     .eq("token_hash", hashMcpToken(token))
     .maybeSingle();
   if (error) return { ok: false, status: 500, error: "TOKEN_QUERY_FAILED" };
+  const fila = data as FilaToken | null;
   if (!fila || fila.revoked_at) return { ok: false, status: 401, error: "TOKEN_INVALIDO" };
+  // Tokens OAuth expiran (1 h; el conector renueva con su refresh). Los
+  // manuales del script no traen expires_at y siguen siendo de largo plazo.
+  if (fila.expires_at && new Date(fila.expires_at).getTime() < Date.now()) {
+    return { ok: false, status: 401, error: "TOKEN_EXPIRADO" };
+  }
 
   const { data: usuario } = await svc
     .from("usuarios")
