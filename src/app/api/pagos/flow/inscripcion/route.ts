@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { activarSuscripcionFlow, confirmarInscripcion } from "@/lib/pagos/flow";
-import { avisarContratacion } from "@/lib/pagos/avisos";
+import { avisarCobroRechazado, avisarContratacion } from "@/lib/pagos/avisos";
 import { recordOpsError } from "@/lib/ops/events";
 
 /**
@@ -53,6 +53,10 @@ async function procesar(token: string | null) {
       cuentaId: res.cuentaId ?? undefined,
       error: activacion.detalle ?? activacion.error,
     });
+    // Contrapeso del correo feliz de Flow ("tarjeta registrada"): sin este
+    // aviso el cliente cree que contrató (caso real Lc Services 2026-09-01 —
+    // el banner del redirect no basta). Fail-open, como todos los avisos.
+    await avisarCobroRechazado(res.cuentaId ?? "");
     return NextResponse.redirect(`${APP_URL}/planes?cobro=rechazado`, { status: 303 });
   }
 
