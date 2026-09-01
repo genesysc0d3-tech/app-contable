@@ -25,7 +25,9 @@ function fmtFecha(iso: string): string {
 }
 
 const MCP_URL = "https://app.massdte.cl/api/mcp";
-const CLAUDE_CONNECTORS_URL = "https://claude.ai/settings/connectors";
+// claude.ai movió los conectores a Personalizar (2026-09): la ruta vieja
+// /settings/connectors quedó como stub que solo dice "se movieron".
+const CLAUDE_CONNECTORS_URL = "https://claude.ai/new#settings/customize-connectors";
 
 export default function ConectorMcpConfig() {
   const [conexiones, setConexiones] = useState<ConexionMcp[] | null>(null);
