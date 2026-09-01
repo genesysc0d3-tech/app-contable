@@ -536,7 +536,15 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
       <div className="sec" style={{flex:1}}>
         {/* Recordatorio de la extensión: el carril real (sii_local) emite vía la
             extensión local, así que si falta la avisamos acá antes de intentar emitir. */}
-        {proveedorBoletas === "sii_local" && <InstalarExtension />}
+        {proveedorBoletas === "sii_local" && (
+          <InstalarExtension
+            escalera={{
+              docNombre: grupos.find((g) => g.docId)?.nombre ?? null,
+              listas: selectableItems.length,
+              montoListo: data?.totales.monto_listo ?? null,
+            }}
+          />
+        )}
         {/* Plan/cupo agotado: el 402 del metering aterriza acá con su copy y un
             botón real a Planes (no solo la sugerencia en texto). */}
         {planCta && (
@@ -708,7 +716,20 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             </div>
           )}
           <div className="r">
-            <button className="emit" onClick={() => (proveedorReal && !esFacturas ? setLoteOpen(true) : setConfirmOpen(true))} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
+            <button className="emit" onClick={() => {
+              // Con el paso 3 de la escalera pendiente (sin extensión o sin
+              // bóveda), Emitir no abre un modal que va a rebotar con error:
+              // lleva al paso y lo destaca (el muro se volvió escalera).
+              const esc = document.getElementById("escalera-emision");
+              if (esc && esc.dataset.listo === "0") {
+                esc.scrollIntoView({ behavior: "smooth", block: "center" });
+                esc.style.borderColor = "var(--accent)";
+                esc.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent)";
+                window.setTimeout(() => { esc.style.borderColor = ""; esc.style.boxShadow = ""; }, 1600);
+                return;
+              }
+              if (proveedorReal && !esFacturas) setLoteOpen(true); else setConfirmOpen(true);
+            }} disabled={emitiendo || selectedCount === 0 || lockedByOther}>
               {emitiendo ? (
                 <span className="sp" style={{display:"inline-block"}} />
               ) : (
