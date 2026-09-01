@@ -75,9 +75,12 @@ export function verificarExtensionCompatible(
  *
  * `recheck()` vuelve a "checking" y re-lanza el ping (botón "Actualizar" tras instalar).
  */
-export function useExtensionStatus(): { status: ExtensionStatus; version: string | null; desactualizada: boolean; hayVersionNueva: boolean; versionPublicada: string; recheck: () => void } {
+export function useExtensionStatus(): { status: ExtensionStatus; version: string | null; hayBoveda: boolean | null; desactualizada: boolean; hayVersionNueva: boolean; versionPublicada: string; recheck: () => void } {
   const [status, setStatus] = useState<ExtensionStatus>("checking");
   const [version, setVersion] = useState<string | null>(null);
+  // has_vault del PONG: si ESTE navegador ya tiene bóveda SII (solo el booleano,
+  // jamás de quién). null = aún no se sabe (sin PONG o extensión vieja sin el campo).
+  const [hayBoveda, setHayBoveda] = useState<boolean | null>(null);
   const pingRef = useRef<{ nonce: string; timeoutId: number } | null>(null);
   // Espejo de `status` para leerlo dentro del intervalo de polling sin recrear el effect.
   const statusRef = useRef<ExtensionStatus>("checking");
@@ -112,16 +115,24 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+  // Espejo de hayBoveda: con la extensión lista pero SIN bóveda hay que seguir
+  // preguntando — el usuario está guardando su clave en las Opciones y la
+  // escalera debe avanzar sola cuando termine.
+  const hayBovedaRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    hayBovedaRef.current = hayBoveda;
+  }, [hayBoveda]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.source !== window) return;
-      const data = event.data as { source?: string; type?: string; nonce?: string; extension_version?: string };
+      const data = event.data as { source?: string; type?: string; nonce?: string; extension_version?: string; has_vault?: boolean };
       if (data?.source !== "app-contable-extension") return;
       if (data.type === "APP_CONTABLE_EXTENSION_PONG" && pingRef.current && data.nonce === pingRef.current.nonce) {
         window.clearTimeout(pingRef.current.timeoutId);
         setStatus("ready");
         setVersion(data.extension_version ?? null);
+        setHayBoveda(typeof data.has_vault === "boolean" ? data.has_vault : null);
       }
     }
     window.addEventListener("message", onMessage);
@@ -137,13 +148,13 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     function scheduleNextPing() {
       const delay = Date.now() - pollStart < 60000 ? 2500 : 15000;
       pollTimer = window.setTimeout(() => {
-        if (statusRef.current !== "ready") postPing();
+        if (statusRef.current !== "ready" || hayBovedaRef.current === false) postPing();
         scheduleNextPing();
       }, delay);
     }
     scheduleNextPing();
     const onVisible = () => {
-      if (document.visibilityState === "visible" && statusRef.current !== "ready") postPing();
+      if (document.visibilityState === "visible" && (statusRef.current !== "ready" || hayBovedaRef.current === false)) postPing();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -157,6 +168,7 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
   return {
     status,
     version,
+    hayBoveda,
     desactualizada: status === "ready" && extensionDesactualizada(version),
     // Aviso suave: hay una versión publicada más nueva que la instalada.
     hayVersionNueva: status === "ready" && hayVersionNuevaDeExtension(version),
