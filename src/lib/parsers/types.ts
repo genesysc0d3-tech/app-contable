@@ -17,6 +17,16 @@ export interface AdapterConfig {
    *    entradas implícitas (or salidas — see default_tipo_flujo).
    */
   layout?: "two_cols" | "single_col" | "transactions_log";
+  /**
+   * FIRMA de la plantilla massDTE (headers exactos Fecha|Glosa|Monto que emite
+   * /api/generar-template). SOLO la pone detectByNames — la heurística también
+   * emite layout transactions_log como last-resort para cartolas de una columna
+   * (caso real: BCI editada por el cliente), así que el layout NO basta como
+   * firma. Auditoría cerebro 2026-09-02.
+   */
+  plantilla?: boolean;
+  /** Columnas OPCIONALES de la plantilla massDTE extendida (índices, -1 = no existe). */
+  plantilla_cols?: { tipo: number; receptor_rut: number; receptor_nombre: number; medio_pago: number };
   /** Only meaningful when layout = "transactions_log". Default: "entrada". */
   default_tipo_flujo?: "entrada" | "salida";
   columns: {
@@ -67,6 +77,11 @@ export interface ParsedLine {
   monto: number;
   descripcion: string;
   n_documento: string;
+  /** Campos opcionales de la plantilla massDTE extendida (el cliente clasificó). */
+  plantilla_tipo?: string | null;
+  plantilla_receptor_rut?: string | null;
+  plantilla_receptor_nombre?: string | null;
+  plantilla_medio_pago?: string | null;
   /** 1-based row number in the original Excel sheet (for user-facing display). */
   excel_row?: number;
   /** Saldo de la fila si la cartola tiene columna saldo. Usado para validar duplicados. */
@@ -89,6 +104,8 @@ export interface OrchestratorResult {
    * `null` when the legacy fallback (layer 4) was used.
    */
   preExtracted: PreExtractedMovimiento[] | null;
+  /** true solo si el adapter que parseó lleva la FIRMA de la plantilla massDTE. */
+  plantilla: boolean;
 }
 
 export interface PreExtractedMovimiento {
@@ -98,6 +115,11 @@ export interface PreExtractedMovimiento {
   tipo_flujo: "entrada" | "salida";
   origen: string;
   n_documento: string | null;
+  /** Campos opcionales de la plantilla massDTE extendida. */
+  plantilla_tipo?: string | null;
+  plantilla_receptor_rut?: string | null;
+  plantilla_receptor_nombre?: string | null;
+  plantilla_medio_pago?: string | null;
   excel_row?: number;
   saldo?: number;
 }

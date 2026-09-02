@@ -7,6 +7,32 @@
 
 export type FileCategory = "grande" | "chico" | "imagen";
 
+/**
+ * ¿El Excel es la plantilla massDTE? MISMA detección del server
+ * (detectPlantillaBoletas, lib pura — una función, dos lados). Se usa para NO
+ * mostrar el botón "más info a IA": en la plantilla el cliente ya clasificó
+ * fila a fila y la nota no se leería (fix del contexto placebo). Ilegible
+ * client-side ⇒ false (se muestra el botón; el acuse server-side es la verdad).
+ */
+export async function esPlantillaMassdte(file: File): Promise<boolean> {
+  const ext = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? "";
+  if (!["xls", "xlsx", "xlsm"].includes(ext)) return false;
+  try {
+    const [{ read, utils }, { detectPlantillaBoletas }] = await Promise.all([
+      import("xlsx"),
+      import("@/lib/parsers/named"),
+    ]);
+    const buffer = await file.arrayBuffer();
+    const wb = read(buffer, { type: "array", sheetRows: 12 });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    if (!sheet) return false;
+    const rows = utils.sheet_to_json(sheet, { header: 1, defval: "" }) as (string | number)[][];
+    return detectPlantillaBoletas(rows) != null;
+  } catch {
+    return false;
+  }
+}
+
 const ROW_THRESHOLD = 50;
 const PDF_SIZE_THRESHOLD = 300 * 1024; // 300KB
 const FALLBACK_SIZE_THRESHOLD = 500 * 1024; // 500KB

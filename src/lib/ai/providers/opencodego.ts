@@ -132,6 +132,26 @@ export class OpenCodeGoProvider implements AIProvider {
     };
   }
 
+  async revisarContexto(
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<{ raw: unknown; tokens_input: number; tokens_output: number; modelo: string }> {
+    const data = await this.fetchChat([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ]);
+    const choice = data.choices?.[0];
+    const text = typeof choice?.message?.content === "string" ? choice.message.content : "";
+    let raw: unknown = null;
+    try { raw = parseJsonFromContent<unknown>(text); } catch { raw = null; }
+    return {
+      raw,
+      tokens_input: data.usage?.prompt_tokens ?? 0,
+      tokens_output: data.usage?.completion_tokens ?? 0,
+      modelo: data.model ?? this.model,
+    };
+  }
+
   async classifyMovimientos(
     movimientos: MovimientoExtraido[],
     systemPrompt?: string

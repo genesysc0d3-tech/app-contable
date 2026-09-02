@@ -254,6 +254,22 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     for (const key of expandedDocsRef.current) if (key !== "__sueltas__") cargarJuzgadas(key);
   }, [data, cargarJuzgadas]);
 
+  // Una BLOQUEADA vive en una cartola ya aprobada: para editarla hay que
+  // devolver la cartola completa primero (modelo cartola-unidad). El botón
+  // viejo "Resolver en Check" aterrizaba en el visor decidida, que te mandaba
+  // de vuelta a Emitir — loop circular cazado en la auditoría 2026-09-02.
+  async function devolverYCorregir(item: { documento_id: string | null; documento_created_at: string | null; fecha: string }) {
+    if (!item.documento_id || devolviendo) return;
+    setDevolviendo(item.documento_id);
+    try {
+      const r = await devolverCartola(item.documento_id);
+      if (r.error) { toast(r.error, "error"); return; }
+      toast(`Cartola devuelta a Check (${r.count} quedan listas) — corrige y aprueba de nuevo`);
+      goToCheck(item);
+      reload();
+    } finally { setDevolviendo(null); }
+  }
+
   async function handleDevolverCartola(docId: string, nombre: string) {
     if (devolviendo) return;
     setDevolviendo(docId);
@@ -533,7 +549,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             style={isDisabled ? {} : {cursor:"pointer"}}
           >{isSelected ? "✓" : ""}</div>
         )}
-        <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); else if (!enCartola && !isDisabled) toggleItem(item.id); }}
+        <div className="inf" onClick={() => { if (item.balde === "bloqueadas" && item.documento_id) void devolverYCorregir(item); else if (item.balde !== "listas") goToCheck(item); else if (!enCartola && !isDisabled) toggleItem(item.id); }}
           style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !enCartola && !isDisabled)) ? { cursor: "pointer" } : undefined}>
           <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
           <div className="sub">
@@ -565,9 +581,15 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
               {nextActionLabel(item.motivo_code) && <><br />{nextActionLabel(item.motivo_code)}</>}
             </div>
           )}
-          {item.balde !== "listas" && item.documento_id && (
+          {item.balde === "bloqueadas" && item.documento_id ? (
+            <button onClick={(e) => { e.stopPropagation(); void devolverYCorregir(item); }}
+              disabled={devolviendo === item.documento_id}
+              style={{ fontSize: 10, fontWeight: 700, color: "#E8553E", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 2, textAlign: "left", display: "block" }}>
+              ← Devolver la cartola y corregir
+            </button>
+          ) : item.balde !== "listas" && item.documento_id ? (
             <div className="sub" style={{ color: "#E8553E", fontWeight: 600, marginTop: 2 }}>Resolver en Check →</div>
-          )}
+          ) : null}
           {item.balde === "listas" && item.documento_id && (
             <button onClick={(e) => { e.stopPropagation(); goToCheck(item); }} title="Corregir el tipo en Check"
               style={{ fontSize: 10, fontWeight: 500, color: "var(--text2)", background: "transparent", border: "none", cursor: "pointer", padding: 0, marginTop: 2, textAlign: "left", display: "block" }}>Corregir en Check →</button>
@@ -901,8 +923,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                     </div>
                     {it.motivo_no_listo && <div style={{ fontSize: 9, color: "var(--amber)", marginTop: 5, lineHeight: 1.4 }}>⚠ {it.motivo_no_listo}</div>}
                     {it.documento_id && (
-                      <button onClick={() => { goToCheck(it); setPopupDoc(null); }}
-                        style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10, fontWeight: 600, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 7, padding: "6px 11px", cursor: "pointer", paddingTop: 6 }}>Resolver en Check →</button>
+                      <button onClick={() => { if (it.balde === "bloqueadas" && it.documento_id) { void devolverYCorregir(it); } else { goToCheck(it); } setPopupDoc(null); }}
+                        style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10, fontWeight: 600, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 7, padding: "6px 11px", cursor: "pointer", paddingTop: 6 }}>{it.balde === "bloqueadas" && it.documento_id ? "← Devolver la cartola y corregir" : "Resolver en Check →"}</button>
                     )}
                   </div>
                 ))}

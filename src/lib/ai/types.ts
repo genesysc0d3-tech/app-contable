@@ -16,6 +16,8 @@ export interface PropuestaExtraida {
   tipo_propuesto: "boleta" | "factura" | "gasto" | "registro_crypto" | "ignorar" | "boleta_honorarios" | "factura_afecta" | "factura_exenta" | "compraventa_crypto" | "transferencia_p2p" | "operacion_forex" | "gasto_egreso" | "no_comercial" | "impuesto" | "cotizacion_previsional" | "remuneracion" | "arriendo" | "dividendo" | "comision" | "interes" | "retencion" | "donacion";
   receptor_nombre: string | null;
   receptor_rut: string | null;
+  /** Medio de pago fijado por el cliente en la plantilla extendida (opcional). */
+  medio_pago?: string | null;
   monto_neto: number;
   iva: number;
   total: number;
@@ -64,6 +66,17 @@ export interface AIProvider {
     movimientos: MovimientoExtraido[],
     systemPrompt: string
   ): Promise<ClassifyOnlyResponse>;
+
+  /**
+   * Pregunta única del veredicto de contexto (fix "contexto placebo"): ¿la
+   * nota del dueño contradice la clasificación por defecto? Salida estricta;
+   * el caller hace fail-open si falta el método, falla la llamada o el JSON
+   * no parsea.
+   */
+  revisarContexto?(
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<{ raw: unknown; tokens_input: number; tokens_output: number; modelo: string }>;
 
   /** Calculate cost in USD for given token usage. */
   getCost(tokensInput: number, tokensOutput: number): number;

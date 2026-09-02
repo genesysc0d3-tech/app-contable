@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { computeFingerprint } from "./fingerprint";
 import { detectHeuristic } from "./heuristic";
-import { detectByNames } from "./named";
+import { detectByNames, detectPlantillaBoletas } from "./named";
 import { esPlantillaFacturas } from "../facturas/plantilla";
 import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
 import { validate } from "./validator";
@@ -68,6 +68,50 @@ export async function parseExcelWithOrchestrator(
 
     const fingerprint = computeFingerprint(rows);
 
+    // Layer 1.5: FIRMA de la plantilla massDTE — antes del CACHE y de la
+    // heurística: un adapter heurístico cacheado para este fingerprint
+    // también le ganaba y perdía el flag (e2e 2026-09-02).
+    // Es nuestro propio archivo (headers exactos de /api/generar-template);
+    // si calza, gana sin competir: la heurística podía capturarla como
+    // transactions_log genérico y perder el flag plantilla (e2e 2026-09-02).
+    const plantillaCfg = detectPlantillaBoletas(rows);
+    if (plantillaCfg) {
+      const result = tryApply(rows, plantillaCfg, sheetName);
+      if (result) {
+        const adapterId = await saveAdapter({
+          fingerprint,
+          source: "named",
+          nombre: `Plantilla massDTE (${sheetName})`,
+          config: plantillaCfg,
+        });
+        const orchResult: OrchestratorResult = {
+          content: result.content,
+          capa_usada: 3,
+          fingerprint,
+          adapter_id: adapterId,
+          rows_extracted: result.rowsExtracted,
+          validator_failed_checks: [],
+          warnings: result.warnings,
+          error: null,
+          preExtracted: result.preExtracted,
+          plantilla: true,
+        };
+        await logParserEvent({
+          documento_id: opts?.documento_id,
+          fingerprint,
+          capa_usada: 3,
+          capa_exitosa: 3,
+          adapter_id: adapterId,
+          rows_extracted: result.rowsExtracted,
+          validator_failed_checks: [],
+          warnings: result.warnings,
+          duration_ms: Date.now() - start,
+        });
+        return { content: result.content, result: orchResult };
+      }
+    }
+
+
     // Layer 0: adapter cache (aislado por empresa: no aplica el manual de otro tenant)
     const cached = await getAdapterByFingerprint(fingerprint, opts?.empresa_id);
     if (cached) {
@@ -84,6 +128,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          plantilla: cached.config.plantilla === true,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -126,6 +171,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          plantilla: heuristicCfg.plantilla === true,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -163,6 +209,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          plantilla: namedCfg.plantilla === true,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -206,6 +253,7 @@ export async function parseExcelWithOrchestrator(
       validator_failed_checks: [],
       warnings: ["fell_back_to_legacy_sheet_to_csv"],
       error: null,
+      plantilla: false,
       preExtracted: null,
     },
   };
