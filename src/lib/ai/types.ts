@@ -16,6 +16,8 @@ export interface PropuestaExtraida {
   tipo_propuesto: "boleta" | "factura" | "gasto" | "registro_crypto" | "ignorar" | "boleta_honorarios" | "factura_afecta" | "factura_exenta" | "compraventa_crypto" | "transferencia_p2p" | "operacion_forex" | "gasto_egreso" | "no_comercial" | "impuesto" | "cotizacion_previsional" | "remuneracion" | "arriendo" | "dividendo" | "comision" | "interes" | "retencion" | "donacion";
   receptor_nombre: string | null;
   receptor_rut: string | null;
+  /** Medio de pago fijado por el cliente en la plantilla extendida (opcional). */
+  medio_pago?: string | null;
   monto_neto: number;
   iva: number;
   total: number;

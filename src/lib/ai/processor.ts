@@ -565,9 +565,27 @@ export async function procesarDocumento(
     if (bypassMode) {
       const movs = preExtracted! as MovimientoExtraido[];
 
-      // 1. Rules pass — try to classify each movimiento with user/global rules
+      // 1. Rules pass — try to classify each movimiento with user/global rules.
+      // PLANTILLA (2026-09-02): en la plantilla no hay nada que adivinar — las
+      // reglas GLOBALES no juegan (una regla de glosa le ganaba a la fila donde
+      // el cliente escribió su tipo). Precedencia: fila explícita del cliente >
+      // su regla aprendida > default de la plantilla. Las de USUARIO sí corren
+      // sobre filas sin tipo (son su propio aprendizaje).
       reglas = await loadReglas(empresaId);
-      const ruleResult = classifyWithRules(movs, reglas);
+      const reglasActivas = opts?.esPlantilla === true ? reglas.filter((r) => r.empresa_id != null) : reglas;
+      const ruleResultCrudo = classifyWithRules(movs, reglasActivas);
+      const ruleResult = opts?.esPlantilla !== true ? ruleResultCrudo : (() => {
+        // La fila con tipo explícito le gana incluso a la regla de usuario.
+        const conTipo = (idx: number) => {
+          const m = movs[idx] as (typeof movs)[number] & { plantilla_tipo?: string | null };
+          return Boolean((m.plantilla_tipo ?? "").trim());
+        };
+        const clasificados = ruleResultCrudo.clasificados.filter((c) => !conTipo(c.movimiento_index));
+        const devueltos = ruleResultCrudo.clasificados
+          .filter((c) => conTipo(c.movimiento_index))
+          .map((c) => ({ movimiento_index: c.movimiento_index, movimiento: movs[c.movimiento_index] }));
+        return { clasificados, noClasificados: [...ruleResultCrudo.noClasificados, ...devueltos] };
+      })();
       for (const c of ruleResult.clasificados) {
         ruleClassifications.set(c.movimiento_index, {
           propuesta: c.propuesta,
@@ -591,11 +609,25 @@ export async function procesarDocumento(
       if (isTemplate) {
         // Auto-classify all noClasificados as "boleta"
         for (const nc of ruleResult.noClasificados) {
+          // Plantilla extendida (2026-09-02): si el cliente clasificó la fila
+          // (Tipo/RUT/nombre/medio de pago), su palabra manda — es la señal
+          // más barata y más confiable del pipeline.
+          const mp = nc.movimiento as typeof nc.movimiento & {
+            plantilla_tipo?: string | null;
+            plantilla_receptor_rut?: string | null;
+            plantilla_receptor_nombre?: string | null;
+            plantilla_medio_pago?: string | null;
+          };
+          const tipoCliente = (mp.plantilla_tipo ?? "").trim().toLowerCase();
+          const tipoPropuesto = tipoCliente.startsWith("exent") ? "exenta"
+            : tipoCliente.startsWith("afect") ? "boleta"
+            : "boleta";
           templatePropuestas.push({
             movimiento_index: nc.movimiento_index,
-            tipo_propuesto: "boleta" as PropuestaExtraida["tipo_propuesto"],
-            receptor_nombre: null,
-            receptor_rut: null,
+            tipo_propuesto: tipoPropuesto as PropuestaExtraida["tipo_propuesto"],
+            receptor_nombre: mp.plantilla_receptor_nombre ?? null,
+            receptor_rut: mp.plantilla_receptor_rut ?? null,
+            medio_pago: mp.plantilla_medio_pago ?? null,
             monto_neto: nc.movimiento.monto,
             iva: 0,
             total: nc.movimiento.monto,
@@ -1389,6 +1421,9 @@ export async function procesarDocumento(
             // antes de persistir — "nunca inventes RUTs" deja de ser una
             // promesa del prompt y pasa a ser estructural.
             receptor_rut: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? rutPropuestoONull(p.receptor_rut) : null,
+            // Medio de pago de la plantilla extendida (el cliente lo fijó): no es
+            // identidad de tercero, no entra en la minimización.
+            medio_pago: (p as { medio_pago?: string | null }).medio_pago ?? null,
             monto_neto: exentoFinal ? total : toNum(p.monto_neto),
             iva: exentoFinal ? 0 : toNum(p.iva),
             total,

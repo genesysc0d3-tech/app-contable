@@ -6,6 +6,49 @@ import type { AdapterConfig, Row } from "./types";
  * Chile style). Also detects the simplified "plantilla boletas" format
  * with Fecha, Glosa, Monto columns.
  */
+/**
+ * Detección DIRECTA de la plantilla massDTE (headers exactos Fecha|Glosa|Monto
+ * + opcionales). Corre ANTES de la heurística en el orchestrator: es NUESTRA
+ * firma (la emite /api/generar-template) y la heurística podía ganarle con las
+ * columnas opcionales presentes (cazado por e2e 2026-09-02: el flag plantilla
+ * nunca llegaba y las filas del cliente se iban a la IA).
+ */
+export function detectPlantillaBoletas(rows: Row[]): AdapterConfig | null {
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const norm = r.map((c) => String(c ?? "").toLowerCase().trim());
+    const fechaIdx = norm.findIndex((c) => c === "fecha" || c.startsWith("fecha "));
+    const glosaIdx = norm.findIndex((c) => c === "glosa");
+    const montoIdx = norm.findIndex((c) => c === "monto");
+    if (fechaIdx < 0 || glosaIdx < 0 || montoIdx < 0) continue;
+    const tipoIdx = norm.findIndex((c) => c.startsWith("tipo"));
+    const rutRecIdx = norm.findIndex((c) => c.startsWith("rut receptor"));
+    const nomRecIdx = norm.findIndex((c) => c.startsWith("nombre receptor"));
+    const medioIdx = norm.findIndex((c) => c.startsWith("medio de pago"));
+    return {
+      header_row: i,
+      skip_rows_before_data: i + 1,
+      date_format: "dd/mm/yyyy",
+      number_format: "chilean",
+      layout: "transactions_log",
+      plantilla: true,
+      plantilla_cols: { tipo: tipoIdx, receptor_rut: rutRecIdx, receptor_nombre: nomRecIdx, medio_pago: medioIdx },
+      default_tipo_flujo: "entrada",
+      columns: {
+        fecha: fechaIdx,
+        descripcion: glosaIdx,
+        monto: montoIdx,
+        cargo: montoIdx,
+        abono: montoIdx,
+        n_documento: -1,
+        saldo: -1,
+      },
+    };
+  }
+  return null;
+}
+
 export function detectByNames(rows: Row[]): AdapterConfig | null {
   for (let i = 0; i < Math.min(rows.length, 50); i++) {
     const r = rows[i];
@@ -22,6 +65,13 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
     const montoIdx = norm.findIndex((c) => c === "monto");
 
     if (fechaIdx >= 0 && glosaIdx >= 0 && montoIdx >= 0) {
+      // Columnas OPCIONALES de la plantilla extendida (2026-09-02): el cliente
+      // puede clasificar tipo/receptor/medio de pago fila a fila. Se detectan
+      // por prefijo del header ("Tipo (opcional)", "RUT receptor (opcional…)").
+      const tipoIdx = norm.findIndex((c) => c.startsWith("tipo"));
+      const rutRecIdx = norm.findIndex((c) => c.startsWith("rut receptor"));
+      const nomRecIdx = norm.findIndex((c) => c.startsWith("nombre receptor"));
+      const medioIdx = norm.findIndex((c) => c.startsWith("medio de pago"));
       return {
         header_row: i,
         skip_rows_before_data: i + 1,
@@ -29,6 +79,7 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
         number_format: "chilean",
         layout: "transactions_log",
         plantilla: true,
+        plantilla_cols: { tipo: tipoIdx, receptor_rut: rutRecIdx, receptor_nombre: nomRecIdx, medio_pago: medioIdx },
         default_tipo_flujo: "entrada",
         columns: {
           fecha: fechaIdx,

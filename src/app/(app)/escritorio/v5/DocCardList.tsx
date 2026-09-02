@@ -322,6 +322,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                     Error: {progreso.error}
                   </div>
                 )}
+                {/* Salida de emergencia (2026-09-02): cuando la lectura falla, el
+                    cliente no queda botado — la plantilla es el camino simple que
+                    siempre funciona (la llena él, cero adivinanza). */}
+                {doc.estado === "error" && !isBoletaUnica && (
+                  <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.5, marginTop: 3 }}>
+                    ¿No resulta? <a href="/api/generar-template" style={{ color: "var(--accent)", fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 2 }}>Baja la plantilla</a>, copia tus movimientos ahí y súbela — ese camino nunca falla.
+                  </div>
+                )}
                 <div className="da">
                   {/* Documento congelado: tiene boletas emitidas → bloqueado */}
                   {frozen && (

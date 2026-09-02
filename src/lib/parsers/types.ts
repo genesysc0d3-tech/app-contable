@@ -25,6 +25,8 @@ export interface AdapterConfig {
    * firma. Auditoría cerebro 2026-09-02.
    */
   plantilla?: boolean;
+  /** Columnas OPCIONALES de la plantilla massDTE extendida (índices, -1 = no existe). */
+  plantilla_cols?: { tipo: number; receptor_rut: number; receptor_nombre: number; medio_pago: number };
   /** Only meaningful when layout = "transactions_log". Default: "entrada". */
   default_tipo_flujo?: "entrada" | "salida";
   columns: {
@@ -75,6 +77,11 @@ export interface ParsedLine {
   monto: number;
   descripcion: string;
   n_documento: string;
+  /** Campos opcionales de la plantilla massDTE extendida (el cliente clasificó). */
+  plantilla_tipo?: string | null;
+  plantilla_receptor_rut?: string | null;
+  plantilla_receptor_nombre?: string | null;
+  plantilla_medio_pago?: string | null;
   /** 1-based row number in the original Excel sheet (for user-facing display). */
   excel_row?: number;
   /** Saldo de la fila si la cartola tiene columna saldo. Usado para validar duplicados. */
@@ -108,6 +115,11 @@ export interface PreExtractedMovimiento {
   tipo_flujo: "entrada" | "salida";
   origen: string;
   n_documento: string | null;
+  /** Campos opcionales de la plantilla massDTE extendida. */
+  plantilla_tipo?: string | null;
+  plantilla_receptor_rut?: string | null;
+  plantilla_receptor_nombre?: string | null;
+  plantilla_medio_pago?: string | null;
   excel_row?: number;
   saldo?: number;
 }
