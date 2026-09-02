@@ -121,9 +121,9 @@ export default function HintSelector({
             left: pos.left,
             maxHeight: `calc(100vh - ${pos.top + 16}px)`,
           }}
-          className="z-[200] w-64 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-y-auto animate-fade-in py-1"
+          className="z-[200] w-72 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-y-auto animate-fade-in py-2"
         >
-          <div className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
+          <div className="px-4 pt-1.5 pb-2 text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
             Tipo de operaciones
           </div>
           {OPCIONES.map((o) => (
@@ -131,18 +131,18 @@ export default function HintSelector({
               key={o.id}
               type="button"
               onClick={() => seleccionar(o.id)}
-              className={`w-[calc(100%-8px)] mx-1 rounded-lg flex items-start gap-2 px-2.5 py-2 text-left transition-colors ${
+              className={`w-[calc(100%-12px)] mx-1.5 rounded-lg flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors ${
                 o.id === value
                   ? "bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
                   : "hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"
               }`}
             >
-              <div className="w-3 h-3 mt-0.5 shrink-0 text-[#E8553E]">
+              <div className="w-3 h-3 mt-[3px] shrink-0 text-[#E8553E]">
                 {o.id === value && <Check size={12} weight="bold" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold">{o.label}</p>
-                <p className="text-[10px] text-[var(--muted-light)] mt-0.5">{o.desc}</p>
+                <p className="text-[11.5px] font-semibold leading-snug">{o.label}</p>
+                <p className="text-[10px] text-[var(--muted-light)] mt-1 leading-snug">{o.desc}</p>
               </div>
             </button>
           ))}
