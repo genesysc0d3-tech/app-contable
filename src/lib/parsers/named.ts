@@ -28,6 +28,7 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
         date_format: "dd/mm/yyyy",
         number_format: "chilean",
         layout: "transactions_log",
+        plantilla: true,
         default_tipo_flujo: "entrada",
         columns: {
           fecha: fechaIdx,

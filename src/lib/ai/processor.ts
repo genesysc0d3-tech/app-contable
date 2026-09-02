@@ -27,7 +27,7 @@ import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validati
 
 /** Extended propuesta with SII traceability fields used internally. */
 type EnrichedPropuesta = PropuestaExtraida & {
-  __fuente?: "regla_usuario" | "regla_global" | "ia_opencode";
+  __fuente?: "regla_usuario" | "regla_global" | "ia_opencode" | "plantilla";
   __regla_id?: string | null;
   /** tipo_dte recordado por una regla de usuario (39/41); null = el gate decide. */
   __tipo_dte?: number | null;
@@ -424,7 +424,7 @@ export async function procesarDocumento(
   contenido: string,
   ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number },
   preExtracted?: PreExtractedMovimiento[],
-  opts?: { deadline?: number }
+  opts?: { deadline?: number; esPlantilla?: boolean }
 ): Promise<{ movimientos_total: number; error?: string }> {
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
@@ -577,11 +577,16 @@ export async function procesarDocumento(
         });
       }
 
-      // 2. Detect template format: all entries are simple (fecha+desc+monto,
-      // no cargo/abono split, no n_documento). Skip AI entirely, classify
-      // all as "boleta" with high confidence.
-      const isTemplate = movs.length > 0 &&
-        movs.every((m) => m.tipo_flujo === "entrada" && !m.n_documento);
+      // 2. Plantilla massDTE: el atajo se gatea por la FIRMA del parser
+      // (headers exactos Fecha|Glosa|Monto de /api/generar-template), no por
+      // la forma de los datos. La heurística vieja ("todo entrada sin
+      // n_documento") se tragó una cartola BCI real editada por el cliente
+      // (contadores borran los cargos) y vistió 91 movimientos de "boleta 95%"
+      // sin que la IA corriera jamás — auditoría cerebro 2026-09-02. En la
+      // plantilla real el cliente YA clasificó (eligió la hoja de boletas):
+      // saltarse la IA ahí es correcto por diseño, no una suposición.
+      const isTemplate = opts?.esPlantilla === true && movs.length > 0 &&
+        movs.every((m) => m.tipo_flujo === "entrada");
 
       if (isTemplate) {
         // Auto-classify all noClasificados as "boleta"
@@ -594,16 +599,20 @@ export async function procesarDocumento(
             monto_neto: nc.movimiento.monto,
             iva: 0,
             total: nc.movimiento.monto,
-            confianza: 0.95,
+            // 0.9 honesto: la evidencia es la firma de la plantilla (el cliente
+            // clasificó al elegirla), no un análisis del movimiento. La confianza
+            // jamás supera el techo de su evidencia (veredicto 4 agentes).
+            confianza: 0.9,
             // notas = detalle/glosa EDITABLE por el humano (máxima precedencia en la
-            // boleta). NO meter marcadores internos acá: "clasificación automática"
-            // ya vive en __fuente="regla_global". Sin edición, la glosa cae a la
-            // glosa común de la cartola o a la del banco (ver armar-boleta.ts).
+            // boleta). Sin edición, la glosa cae a la glosa común de la cartola o a
+            // la del banco (ver armar-boleta.ts).
             notas: null,
             spread_compra: null,
             spread_venta: null,
             spread_ganancia: null,
-            __fuente: "regla_global",
+            // Fuente propia: "regla_global" acá contaminaba la auditoría (ninguna
+            // regla matcheó). La plantilla es su propia evidencia.
+            __fuente: "plantilla",
             __regla_id: null,
           });
         }
@@ -1358,9 +1367,12 @@ export async function procesarDocumento(
           // bulk-elegible (BULK_MIN_CONFIANZA 0.8) para que "Poner listas (N)" las
           // tome. NO auto-stagea: el estado sigue la regla de abajo (queda
           // "pendiente" salvo regla_id), respetando el gesto de bulk deliberado.
+          // Techo por evidencia: auto-clasificado determinista SIN regla queda en
+          // 0.8 — bulk-elegible (BULK_MIN_CONFIANZA) pero pinta "media", no el
+          // verde de ALTA (0.85). El 0.9 anterior vestía un supuesto de análisis.
           const confianzaFinal =
             tipoDteAuto != null && enriched.__regla_id == null
-              ? Math.max(confianza ?? 0, 0.9)
+              ? Math.max(confianza ?? 0, 0.8)
               : confianza;
           return {
             empresa_id: empresaId,

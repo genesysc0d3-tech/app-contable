@@ -20,11 +20,14 @@ export async function parseExcel(
   content: string;
   preExtracted: PreExtractedMovimiento[] | null;
   capa_usada: number;
+  /** Firma de la plantilla massDTE (ver AdapterConfig.plantilla). */
+  plantilla: boolean;
 }> {
   const { content, result } = await parseExcelWithOrchestrator(buffer, opts);
   return {
     content,
     preExtracted: result.preExtracted,
     capa_usada: result.capa_usada,
+    plantilla: result.plantilla,
   };
 }

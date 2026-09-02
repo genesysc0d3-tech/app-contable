@@ -17,6 +17,14 @@ export interface AdapterConfig {
    *    entradas implícitas (or salidas — see default_tipo_flujo).
    */
   layout?: "two_cols" | "single_col" | "transactions_log";
+  /**
+   * FIRMA de la plantilla massDTE (headers exactos Fecha|Glosa|Monto que emite
+   * /api/generar-template). SOLO la pone detectByNames — la heurística también
+   * emite layout transactions_log como last-resort para cartolas de una columna
+   * (caso real: BCI editada por el cliente), así que el layout NO basta como
+   * firma. Auditoría cerebro 2026-09-02.
+   */
+  plantilla?: boolean;
   /** Only meaningful when layout = "transactions_log". Default: "entrada". */
   default_tipo_flujo?: "entrada" | "salida";
   columns: {
@@ -89,6 +97,8 @@ export interface OrchestratorResult {
    * `null` when the legacy fallback (layer 4) was used.
    */
   preExtracted: PreExtractedMovimiento[] | null;
+  /** true solo si el adapter que parseó lleva la FIRMA de la plantilla massDTE. */
+  plantilla: boolean;
 }
 
 export interface PreExtractedMovimiento {

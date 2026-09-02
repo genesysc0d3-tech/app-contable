@@ -84,6 +84,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          plantilla: cached.config.plantilla === true,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -126,6 +127,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          plantilla: heuristicCfg.plantilla === true,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -163,6 +165,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          plantilla: namedCfg.plantilla === true,
         };
         await logParserEvent({
           documento_id: opts?.documento_id,
@@ -206,6 +209,7 @@ export async function parseExcelWithOrchestrator(
       validator_failed_checks: [],
       warnings: ["fell_back_to_legacy_sheet_to_csv"],
       error: null,
+      plantilla: false,
       preExtracted: null,
     },
   };
