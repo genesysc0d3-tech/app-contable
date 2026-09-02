@@ -443,7 +443,9 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   }
 
   const lbl: CSSProperties = { fontSize: 10, fontWeight: 750, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".07em", display: "block", marginBottom: 5 };
-  const inp: CSSProperties = { width: "100%", fontSize: 12.5, padding: "8px 11px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" };
+  const inp: CSSProperties = { width: "100%", fontSize: 12.5, padding: "8px 11px", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--text) 14%, transparent)", background: "color-mix(in srgb, var(--text) 4%, transparent)", color: "var(--text)", outline: "none" };
+  // Selects nativos vestidos: sin la flecha del sistema, chevron propio (mismo look del toolbar)
+  const sel: CSSProperties = { ...inp, cursor: "pointer", appearance: "none", WebkitAppearance: "none", padding: "8px 26px 8px 11px", background: `color-mix(in srgb, var(--text) 4%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center` };
   const linkBtn: CSSProperties = { background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontSize: 10.5, fontWeight: 650, color: "var(--text2)", textAlign: "left", textDecoration: "underline", textUnderlineOffset: 3 };
   const conf = Math.round((propuesta.confianza ?? 0) * 100);
   const confCol = (propuesta.confianza ?? 0) >= ALTA ? "var(--green)" : (propuesta.confianza ?? 0) >= MEDIA ? "var(--amber)" : "var(--text2)";
@@ -508,7 +510,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
               <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:8}}>
                 <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" aria-label="RUT del receptor" aria-invalid={!rutValido || undefined} style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
                 <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" aria-label="Nombre o razón social del receptor" style={inp} />
-                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
+                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...sel,borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":undefined}}>
                   <option value="">Medio de pago…</option>
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
@@ -535,7 +537,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
       <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2}}>
         <span style={{fontSize:10.5,fontWeight:650,color:"var(--text3)",flexShrink:0}}>Cliente</span>
         <select value={selClienteId} onChange={e => {const v=e.target.value;if(v==="__new__"){setShowNewCliente(true);setSelClienteId("")}else{setShowNewCliente(false);setSelClienteId(v)}}}
-          style={{width:220,background:"var(--bg-muted)",border:"1px solid var(--border)",borderRadius:9,color:"var(--text)",fontSize:11.5,padding:"8px 10px",cursor:"pointer"}}>
+          style={{...sel,width:220,fontSize:11.5,borderRadius:999}}>
           <option value="">Sin cliente asignado</option>
           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>)}
           <option value="__new__">+ Crear cliente nuevo</option>
