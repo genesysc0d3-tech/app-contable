@@ -160,9 +160,9 @@ export default function MedioPagoControl({
             role="option"
             aria-selected={!medio}
             onClick={() => cambiar("")}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${!medio ? "bg-[var(--accent-light)] text-[#E8553E]" : "hover:bg-[var(--surface)]"}`}
+            className={`w-[calc(100%-8px)] mx-1 rounded-lg flex items-center gap-2 px-2.5 py-2 text-left transition-colors ${!medio ? "bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"}`}
           >
-            <div className="w-3 h-3 shrink-0">{!medio && <Check size={12} weight="bold" />}</div>
+            <div className="w-3 h-3 shrink-0 text-[#E8553E]">{!medio && <Check size={12} weight="bold" />}</div>
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-semibold">Sin elegir</p>
               {esCartola && <p className="text-[10px] text-[var(--muted-light)] mt-0.5">Las boletas saldrían como Efectivo</p>}
@@ -175,9 +175,9 @@ export default function MedioPagoControl({
               role="option"
               aria-selected={m === medio}
               onClick={() => cambiar(m)}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${m === medio ? "bg-[var(--accent-light)] text-[#E8553E]" : "hover:bg-[var(--surface)]"}`}
+              className={`w-[calc(100%-8px)] mx-1 rounded-lg flex items-center gap-2 px-2.5 py-2 text-left transition-colors ${m === medio ? "bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"}`}
             >
-              <div className="w-3 h-3 shrink-0">{m === medio && <Check size={12} weight="bold" />}</div>
+              <div className="w-3 h-3 shrink-0 text-[#E8553E]">{m === medio && <Check size={12} weight="bold" />}</div>
               <div className="flex-1 min-w-0 flex items-center gap-2">
                 <p className="text-[11px] font-semibold">{m}</p>
                 {m === sugerido && !medio && (

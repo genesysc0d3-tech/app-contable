@@ -131,13 +131,13 @@ export default function HintSelector({
               key={o.id}
               type="button"
               onClick={() => seleccionar(o.id)}
-              className={`w-full flex items-start gap-2 px-3 py-2 text-left transition-colors ${
+              className={`w-[calc(100%-8px)] mx-1 rounded-lg flex items-start gap-2 px-2.5 py-2 text-left transition-colors ${
                 o.id === value
-                  ? "bg-[var(--accent-light)] text-[#E8553E]"
-                  : "hover:bg-[var(--surface)]"
+                  ? "bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
+                  : "hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"
               }`}
             >
-              <div className="w-3 h-3 mt-0.5 shrink-0">
+              <div className="w-3 h-3 mt-0.5 shrink-0 text-[#E8553E]">
                 {o.id === value && <Check size={12} weight="bold" />}
               </div>
               <div className="flex-1 min-w-0">
