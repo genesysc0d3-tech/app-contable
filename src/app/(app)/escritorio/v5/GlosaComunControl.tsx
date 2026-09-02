@@ -59,7 +59,7 @@ export default function GlosaComunControl({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0, flexWrap: "wrap" }}>
       <button
         type="button"
         role="switch"

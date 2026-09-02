@@ -338,7 +338,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     <span style={{ fontSize: 9, color: "var(--text3)", marginLeft: "auto" }}>{selDoc.movimientos_detectados ?? 0} mov</span>
                   </div>
                   {selDoc.estado === "procesado" && (
-                    <div style={{ padding: "0 16px 6px" }}>
+                    <div style={{ padding: "0 16px 6px", display: "flex", flexDirection: "column", gap: 8 }}>
                       <GlosaComunControl documentoId={selDoc.id} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
                       {mesa.mesaActiva !== "factura" && <MedioPagoControl documentoId={selDoc.id} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />}
                     </div>
@@ -433,9 +433,13 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
             ) : (
               <>
                 {selDoc?.estado === "procesado" && (
-                  <div style={{ padding: "11px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0, background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
-                    <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
-                    <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
+                  <div style={{ padding: "11px 18px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 9, flexShrink: 0, background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
+                      </div>
+                    </div>
                     {mesa.mesaActiva !== "factura" && <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />}
                   </div>
                 )}

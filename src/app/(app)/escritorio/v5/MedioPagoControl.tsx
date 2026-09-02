@@ -46,7 +46,7 @@ export default function MedioPagoControl({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 7, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 0, flexWrap: "wrap" }}>
       <span style={{ fontSize: 10, fontWeight: 800, color: avisa ? "var(--amber)" : "var(--text3)", textTransform: "uppercase", letterSpacing: ".07em" }}>
         Pago
       </span>
@@ -82,7 +82,7 @@ export default function MedioPagoControl({
         </button>
       )}
       {avisa && (
-        <span style={{ fontSize: 10.5, color: "var(--text3)", lineHeight: 1.4, maxWidth: 300 }}>
+        <span style={{ fontSize: 10.5, color: "var(--text3)", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           Es una cartola bancaria: sin elegir, las boletas salen como <b>Efectivo</b>.
         </span>
       )}
