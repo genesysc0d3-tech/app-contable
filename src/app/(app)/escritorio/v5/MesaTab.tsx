@@ -130,6 +130,19 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     return m;
   }, [mesa.propuestas]);
 
+  // Cartolas completamente DECIDIDAS (pedido fundador 2026-09-01): sin pendientes
+  // ni listas — todo aprobado (en Emitir) o juzgado. Se tachan en la mesa del Check.
+  const docsDecididos = useMemo(() => {
+    const s = new Set<string>();
+    propsByDoc.forEach((arr, id) => {
+      if (arr.length === 0) return;
+      const sinDecidir = arr.some((p) => p.estado === "pendiente" || p.estado === "editado" || p.estado === "listo");
+      const hayAprobada = arr.some((p) => p.estado === "aprobado");
+      if (!sinDecidir && hayAprobada) s.add(id);
+    });
+    return s;
+  }, [propsByDoc]);
+
   // Nombre + monto por documento para las filas del árbol (Telegram muestra
   // receptor·monto en vez del nombre de archivo). Toma la 1ª propuesta del doc.
   const infoByDoc = useMemo(() => {
@@ -245,20 +258,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       setEliminando(false);
     }
   };
-  const puedeEliminarSel = Boolean(selDoc) && tipo !== "boleta" && !selFrozen && selDoc?.estado !== "procesando";
-
-  // Cartolas completamente DECIDIDAS (pedido fundador 2026-09-01): sin pendientes
-  // ni listas — todo aprobado (en Emitir) o juzgado. Se tachan en la mesa del Check.
-  const docsDecididos = useMemo(() => {
-    const s = new Set<string>();
-    propsByDoc.forEach((arr, id) => {
-      if (arr.length === 0) return;
-      const sinDecidir = arr.some((p) => p.estado === "pendiente" || p.estado === "editado" || p.estado === "listo");
-      const hayAprobada = arr.some((p) => p.estado === "aprobado");
-      if (!sinDecidir && hayAprobada) s.add(id);
-    });
-    return s;
-  }, [propsByDoc]);
+  const puedeEliminarSel = Boolean(selDoc) && tipo !== "boleta" && !selFrozen && selDoc?.estado !== "procesando" && !(selDoc && docsDecididos.has(selDoc.id));
 
   // Un DocCardList (árbol) por panel, con la lista de su fuente; selección compartida.
   const renderArbol = (list: DocRow[]) => (
@@ -301,7 +301,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
         ) : tipo === "massdte" && selDoc.estado === "procesado" && pend.length > 0 ? (
-          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} />
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
