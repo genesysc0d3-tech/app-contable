@@ -90,8 +90,16 @@ export default function CartolaEditor({
   // Guard anti-doble-click por fila: sin esto, dos clics rápidos en ✓/✕/restaurar
   // disparaban la mutación dos veces.
   const actingRef = useRef<Set<string>>(new Set());
+  // Regla del fundador (2026-09-01): el ✕ deja la fila TACHADA DONDE ESTABA, no
+  // la teletransporta al grupo Juzgadas (que suele estar colapsado ⇒ "desapareció").
+  // Recordamos en qué sección vivía cada rechazada de ESTA sesión del popup; al
+  // reabrir, vuelve a su casa natural (Juzgadas). Restaurar la saca del mapa.
+  const [juzgadasEnSesion, setJuzgadasEnSesion] = useState<Map<string, SectionKey>>(new Map());
 
   // Agrupar por ESTADO (la fecha bancaria NO agrupa — va como columna en la fila).
+  // Con juicio aún pendiente (las tachadas que se quedan en su grupo no son juzgables).
+  const esJuzgable = (p: Propuesta) => p.estado === "pendiente" || p.estado === "editado";
+
   const groups = useMemo(() => {
     const g: Record<SectionKey, Propuesta[]> = { pendientes: [], listas: [], rechazadas: [], emision: [] };
     for (const p of propuestas) {
@@ -99,15 +107,20 @@ export default function CartolaEditor({
       // está comprometida a Emitir.
       if (p.estado === "pendiente" || p.estado === "editado") g.pendientes.push(p);
       else if (p.estado === "listo") g.listas.push(p);
-      else if (p.estado === "rechazado" || p.estado === "descartado") g.rechazadas.push(p);
+      else if (p.estado === "rechazado" || p.estado === "descartado") {
+        const casa = juzgadasEnSesion.get(p.id);
+        g[casa && casa !== "rechazadas" ? casa : "rechazadas"].push(p);
+      }
       else if (p.estado === "aprobado") g.emision.push(p);
     }
     return g;
-  }, [propuestas]);
+  }, [propuestas, juzgadasEnSesion]);
 
   // Total = todo lo vivo (excluye rechazadas), como el agregado del visor resumen.
   const total = useMemo(
     () => [...groups.pendientes, ...groups.listas, ...groups.emision]
+      // Las tachadas aparcadas en su grupo (juzgadasEnSesion) no son vivas: fuera del total.
+      .filter((p) => p.estado !== "rechazado" && p.estado !== "descartado")
       .reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0),
     [groups],
   );
@@ -115,7 +128,7 @@ export default function CartolaEditor({
   // Cuántas pendientes se prepararían realmente en bulk (el resto, < BULK_MIN_CONFIANZA,
   // se revisan a mano). El label del botón bulk muestra este número, no el total.
   const pendElegibles = useMemo(
-    () => groups.pendientes.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA).length,
+    () => groups.pendientes.filter((p) => esJuzgable(p) && (p.confianza ?? 0) >= BULK_MIN_CONFIANZA).length,
     [groups.pendientes],
   );
 
@@ -133,13 +146,13 @@ export default function CartolaEditor({
     return [...por.values()].sort((a, b) => b.items.length - a.items.length);
   }, [groups.pendientes]);
   const ordenVisualPendientes = useMemo(
-    () => pendientesAgrupadas.flatMap((g) => g.items.map((p) => p.id)),
+    () => pendientesAgrupadas.flatMap((g) => g.items.filter(esJuzgable).map((p) => p.id)),
     [pendientesAgrupadas],
   );
 
   // La selección solo puede contener filas que sigan pendientes (tras un refresh,
   // lo ya juzgado sale solo de la selección).
-  const pendientesIds = useMemo(() => new Set(groups.pendientes.map((p) => p.id)), [groups.pendientes]);
+  const pendientesIds = useMemo(() => new Set(groups.pendientes.filter(esJuzgable).map((p) => p.id)), [groups.pendientes]);
   useEffect(() => {
     setSel((prev) => {
       const next = new Set([...prev].filter((id) => pendientesIds.has(id)));
@@ -192,9 +205,13 @@ export default function CartolaEditor({
       const ids = [...sel];
       const r = accion === "listo" ? await ponerListo(ids) : await rechazarPropuestas(ids);
       if (r.error) toast(r.error, "error");
-      else toast(accion === "listo"
-        ? `${r.count} marcadas listas`
-        : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+      else {
+        // La selección múltiple solo toma pendientes/editadas: quedan tachadas en su sitio.
+        if (accion === "sin_boleta") setJuzgadasEnSesion((prev) => { const m = new Map(prev); for (const id of ids) m.set(id, "pendientes"); return m; });
+        toast(accion === "listo"
+          ? `${r.count} marcadas listas`
+          : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+      }
       setSel(new Set());
       onAction();
     } finally { setBusyBulk(false); }
@@ -211,7 +228,7 @@ export default function CartolaEditor({
       if (!expanded[key]) continue;
       if (key === "pendientes" && pendientesAgrupadas.length > 1) {
         for (const g of pendientesAgrupadas) {
-          rows.push({ kind: "subheader", section: key, sigla: g.sigla, label: g.label, color: g.color, bg: g.bg, ids: g.items.map((p) => p.id), count: g.items.length });
+          rows.push({ kind: "subheader", section: key, sigla: g.sigla, label: g.label, color: g.color, bg: g.bg, ids: g.items.filter(esJuzgable).map((p) => p.id), count: g.items.length });
           if (!subColapsados.has(g.sigla)) for (const p of g.items) rows.push({ kind: "tx", section: key, p });
         }
       } else if (key === "pendientes") {
@@ -297,13 +314,23 @@ export default function CartolaEditor({
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
+  // La sección donde vive una propuesta viva — para dejarla tachada AHÍ al rechazar.
+  function seccionDe(p: Propuesta): SectionKey {
+    if (p.estado === "listo") return "listas";
+    if (p.estado === "aprobado") return "emision";
+    return "pendientes";
+  }
   async function rejectOne(p: Propuesta) {
     if (actingRef.current.has(p.id)) return;
     actingRef.current.add(p.id);
     try {
+      const casa = seccionDe(p);
       const r = await rechazarPropuesta(p.id);
       if (r.error) toast(r.error, "error");
-      else toast(p.movimientos_raw?.tipo_flujo === "salida" ? "Listo: egreso sin boleta (queda tachado, recuperable)" : "Marcada sin boleta (queda tachada, recuperable)");
+      else {
+        setJuzgadasEnSesion((prev) => new Map(prev).set(p.id, casa));
+        toast(p.movimientos_raw?.tipo_flujo === "salida" ? "Listo: egreso sin boleta (queda tachado, recuperable)" : "Marcada sin boleta (queda tachada, recuperable)");
+      }
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
@@ -313,7 +340,11 @@ export default function CartolaEditor({
     actingRef.current.add(p.id);
     try {
       const r = await restaurarPropuesta(p.id);
-      if (r.error) toast(r.error, "error"); else toast("Restaurada — quedó pendiente");
+      if (r.error) toast(r.error, "error");
+      else {
+        setJuzgadasEnSesion((prev) => { const m = new Map(prev); m.delete(p.id); return m; });
+        toast("Restaurada — quedó pendiente");
+      }
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
@@ -426,7 +457,7 @@ export default function CartolaEditor({
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
                       selected={sel.has(row.p.id)}
-                      onSelect={row.section === "pendientes" ? (shift: boolean) => toggleSel(row.p.id, shift) : undefined}
+                      onSelect={row.section === "pendientes" && esJuzgable(row.p) ? (shift: boolean) => toggleSel(row.p.id, shift) : undefined}
                     />
                     {expandedRows.has(row.p.id) && (
                       <ExpandedDetail
