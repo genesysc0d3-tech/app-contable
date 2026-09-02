@@ -204,7 +204,9 @@ export function RowActionBtn({ onClick, icon, type }: { onClick: () => void; ico
   const cl = type === "aprove" ? "var(--green)" : type === "edit" ? "var(--amber)" : "var(--red)";
   return (
     <button onClick={onClick}
-      style={{width:22,height:22,borderRadius:4,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,background:bg,color:cl}}
+      style={{width:28,height:28,borderRadius:9,border:`1px solid color-mix(in srgb, ${cl} 28%, transparent)`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,background:bg,color:cl,transition:"transform .15s, background .15s"}}
+      onMouseEnter={(e)=>{e.currentTarget.style.transform="scale(1.08)";}}
+      onMouseLeave={(e)=>{e.currentTarget.style.transform="";}}
     >{icon}</button>
   );
 }
@@ -440,24 +442,26 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     onClose();
   }
 
-  const lbl: CSSProperties = { fontSize: 9, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 3 };
-  const inp: CSSProperties = { width: "100%", fontSize: 11, padding: "6px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" };
-  const linkBtn: CSSProperties = { background: "none", border: "none", padding: "3px 0", cursor: "pointer", fontSize: 9, fontWeight: 600, color: "var(--text3)", textAlign: "left" };
+  const lbl: CSSProperties = { fontSize: 10, fontWeight: 750, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".07em", display: "block", marginBottom: 5 };
+  const inp: CSSProperties = { width: "100%", fontSize: 12.5, padding: "8px 11px", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--text) 14%, transparent)", background: "color-mix(in srgb, var(--text) 4%, transparent)", color: "var(--text)", outline: "none" };
+  // Selects nativos vestidos: sin la flecha del sistema, chevron propio (mismo look del toolbar)
+  const sel: CSSProperties = { ...inp, cursor: "pointer", appearance: "none", WebkitAppearance: "none", padding: "8px 26px 8px 11px", background: `color-mix(in srgb, var(--text) 4%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center` };
+  const linkBtn: CSSProperties = { background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontSize: 10.5, fontWeight: 650, color: "var(--text2)", textAlign: "left", textDecoration: "underline", textUnderlineOffset: 3 };
   const conf = Math.round((propuesta.confianza ?? 0) * 100);
   const confCol = (propuesta.confianza ?? 0) >= ALTA ? "var(--green)" : (propuesta.confianza ?? 0) >= MEDIA ? "var(--amber)" : "var(--text2)";
 
   return (
-    <div className="pc op" style={{padding:"2px 16px 12px"}}>
+    <div className="pc op" style={{margin:"3px 14px 9px",padding:"13px 16px",borderRadius:12,border:"1px solid color-mix(in srgb, var(--accent) 20%, transparent)",background:"linear-gradient(170deg, color-mix(in srgb, var(--accent) 4%, var(--surface)), var(--surface))",boxShadow:"0 8px 24px rgba(0,0,0,.25)"}}>
       {/* Header: confianza + glosa bancaria de referencia (el tipo vive en el toggle, no repetido) */}
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-        <span style={{color:confCol,fontSize:11,fontWeight:700}}>{conf}%</span>
+        <span style={{color:confCol,fontSize:13,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{conf}%</span>
         {!compact && <TermHint width={250}>Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada.</TermHint>}
-        <span style={{marginLeft:"auto",fontSize:8,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"46%"}} title={propuesta.movimientos_raw.descripcion}>del banco (no se imprime): {propuesta.movimientos_raw.descripcion}</span>
+        <span style={{marginLeft:"auto",fontSize:10.5,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"50%"}} title={propuesta.movimientos_raw.descripcion}>del banco (no se imprime): {propuesta.movimientos_raw.descripcion}</span>
       </div>
 
       {noBoletea ? (
         <>
-          <div style={{fontSize:10,color:"var(--text2)",marginBottom:8,lineHeight:1.4}}>
+          <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.55}}>
             {/* Copy corregido (feedback fundador): decía "cambia el tipo en Emitir",
                 pero a Emitir solo llegan aprobadas — el cambio se hace acá mismo
                 con el lápiz. Nunca apuntar a otra pestaña para un gesto local. */}
@@ -486,15 +490,15 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
               <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
                 {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--accent)"]] as const).map(([k,l,c])=>{
                   const active = tipo===k;
-                  return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:9,fontWeight:700,padding:"6px 12px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
+                  return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:10.5,fontWeight:750,padding:"8px 15px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}
               </div>
             </div>
             <div>
               <label style={lbl}>Monto</label>
-              <input type="number" value={total} onChange={e=>setTotal(Math.round(Number(e.target.value)||0))} style={{...inp,fontWeight:700,fontSize:13,textAlign:"right"}} />
+              <input type="number" value={total} onChange={e=>setTotal(Math.round(Number(e.target.value)||0))} style={{...inp,fontWeight:800,fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums"}} />
             </div>
-            <div style={{fontSize:9,fontWeight:600,color:conflicto?"var(--amber)":"var(--text3)",paddingBottom:8,textAlign:"right",whiteSpace:"nowrap"}}>
+            <div style={{fontSize:11,fontWeight:650,color:conflicto?"var(--amber)":"var(--text3)",paddingBottom:9,textAlign:"right",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>
               {conflicto ? "⚠ afecta con IVA $0" : isAfecta ? <>neto {fmt(neto)} · IVA {fmt(iva)}</> : "exenta · sin IVA"}
             </div>
           </div>
@@ -503,17 +507,17 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
           {receptorAbierto ? (
             <div style={{marginBottom:8}}>
               <label style={lbl}>Receptor{requiereReceptor && <span style={{color:"var(--amber)",textTransform:"none",letterSpacing:0}}> · obligatorio sobre 135 UF (RUT, nombre y medio de pago)</span>}</label>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:6}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1fr",gap:8}}>
                 <input value={rut} onChange={e=>setRut(e.target.value)} placeholder="RUT" aria-label="RUT del receptor" aria-invalid={!rutValido || undefined} style={{...inp,borderColor:!rutValido?"var(--red)":requiereReceptor&&!rutTrim?"var(--amber)":"var(--border)"}} />
                 <input value={razon} onChange={e=>setRazon(e.target.value)} placeholder="Nombre / razón social" aria-label="Nombre o razón social del receptor" style={inp} />
-                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...inp,cursor:"pointer",borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":"var(--border)"}}>
+                <select value={medioPago} onChange={e=>setMedioPago(e.target.value)} aria-label="Medio de pago" style={{...sel,borderColor:requiereReceptor&&!medioPago.trim()?"var(--amber)":undefined}}>
                   <option value="">Medio de pago…</option>
                   {PAGOS_INLINE.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               {!rutValido && <div role="alert" style={{fontSize:10,color:"var(--red)",marginTop:2}}>RUT no válido</div>}
               {showMasDatos ? (
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
                   <input value={direccion} onChange={e=>setDireccion(e.target.value)} placeholder="Dirección (opcional)" style={inp} />
                   <input value={comuna} onChange={e=>setComuna(e.target.value)} placeholder="Comuna (opcional)" style={inp} />
                   <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail (opcional)" type="email" style={inp} />
@@ -531,9 +535,9 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
 
       {/* Pie denso: Cliente (izq, opcional, no imprime) + acciones (der) */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2}}>
-        <span style={{fontSize:9,color:"var(--text3)",flexShrink:0}}>Cliente</span>
+        <span style={{fontSize:10.5,fontWeight:650,color:"var(--text3)",flexShrink:0}}>Cliente</span>
         <select value={selClienteId} onChange={e => {const v=e.target.value;if(v==="__new__"){setShowNewCliente(true);setSelClienteId("")}else{setShowNewCliente(false);setSelClienteId(v)}}}
-          style={{width:200,background:"var(--bg-muted)",border:"1px solid var(--border)",borderRadius:7,color:"var(--text)",fontSize:10,padding:"6px 8px",cursor:"pointer"}}>
+          style={{...sel,width:220,fontSize:11.5,borderRadius:999}}>
           <option value="">Sin cliente asignado</option>
           {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.rut})</option>)}
           <option value="__new__">+ Crear cliente nuevo</option>
@@ -541,17 +545,17 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         <div style={{flex:1}} />
         <button onClick={handleAprobar} disabled={busy || !puedeStagear}
           title={!puedeStagear ? "Falta el monto y —sobre 135 UF— RUT, nombre y medio de pago del receptor" : undefined}
-          style={{fontSize:10,padding:"7px 22px",borderRadius:7,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:700,background:"var(--green)",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:5,opacity:busy||!puedeStagear?0.45:1}}>
+          style={{fontSize:12,padding:"9px 26px",borderRadius:10,border:"none",cursor:busy||!puedeStagear?"default":"pointer",fontWeight:800,background:"var(--green)",color:"#0a1f12",display:"flex",alignItems:"center",justifyContent:"center",gap:6,opacity:busy||!puedeStagear?0.45:1,boxShadow:"0 4px 14px rgba(34,197,94,.25)"}}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {busy ? "..." : "Poner listo"}
         </button>
         <button onClick={handleRechazar} disabled={busy}
-          style={{fontSize:10,padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,background:"rgba(239,68,68,.08)",color:"var(--accent)",opacity:busy?0.5:1}}>
+          style={{fontSize:11.5,padding:"9px 16px",borderRadius:10,border:"1px solid rgba(239,68,68,.25)",cursor:"pointer",fontWeight:750,background:"rgba(239,68,68,.07)",color:"var(--red)",opacity:busy?0.5:1}}>
           ✕ {busy ? "..." : "Rechazar"}
         </button>
       </div>
       {showNewCliente && (
-        <div style={{display:"flex",gap:6,marginTop:8}}>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
           <input placeholder="Nombre" value={newClienteNombre} onChange={e => setNewClienteNombre(e.target.value)} style={{...inp,flex:1}} />
           <input placeholder="RUT" value={newClienteRut} onChange={e => setNewClienteRut(e.target.value)} style={{...inp,width:120}} />
         </div>

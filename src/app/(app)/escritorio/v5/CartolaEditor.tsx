@@ -43,14 +43,20 @@ type FlatRow =
   | { kind: "subheader"; section: SectionKey; sigla: string; label: string; color: string; bg: string; ids: string[]; count: number }
   | { kind: "tx"; section: SectionKey; p: Propuesta };
 
+/* Piel premium (2026-09-01, pedido fundador: el estilo del landing con TODA
+   la info): filas como cards con profundidad y aire, tipografía legible,
+   acciones que aparecen al hover — cero dato eliminado. */
 const CSS = `
-.ce-scroll{scrollbar-width:thin;}
-.ce-row{display:flex;align-items:center;gap:6px;padding:6px 16px;border-bottom:1px solid var(--border);cursor:pointer;}
-.ce-row:hover{background:color-mix(in srgb, var(--text) 2%, transparent);}
-.ce-reject{opacity:.28;transition:opacity .15s;}
+.ce-scroll{scrollbar-width:thin;padding:4px 0 10px;}
+.ce-row{display:flex;align-items:center;gap:9px;padding:10px 13px;margin:5px 14px 0;cursor:pointer;
+  border:1px solid color-mix(in srgb, var(--text) 8%, transparent);border-radius:12px;
+  background:linear-gradient(165deg, color-mix(in srgb, var(--text) 4%, var(--surface)), var(--surface));
+  transition:border-color .18s, box-shadow .18s, transform .18s;}
+.ce-row:hover{border-color:color-mix(in srgb, var(--text) 18%, transparent);box-shadow:0 6px 18px rgba(0,0,0,.28);transform:translateY(-1px);}
+.ce-reject{opacity:.22;transition:opacity .15s;}
 .ce-row:hover .ce-reject,.ce-reject:hover{opacity:1;}
-.ce-stat{display:inline-flex;align-items:center;gap:5px;border:none;background:transparent;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);padding:2px 4px;border-radius:6px;}
-.ce-stat:hover{background:color-mix(in srgb, var(--text) 5%, transparent);color:var(--text);}
+.ce-stat{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;background:transparent;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 9px;border-radius:99px;}
+.ce-stat:hover{background:color-mix(in srgb, var(--text) 6%, transparent);border-color:color-mix(in srgb, var(--text) 10%, transparent);color:var(--text);}
 `;
 
 function confColor(c: number | null | undefined) {
@@ -84,8 +90,16 @@ export default function CartolaEditor({
   // Guard anti-doble-click por fila: sin esto, dos clics rápidos en ✓/✕/restaurar
   // disparaban la mutación dos veces.
   const actingRef = useRef<Set<string>>(new Set());
+  // Regla del fundador (2026-09-01): el ✕ deja la fila TACHADA DONDE ESTABA, no
+  // la teletransporta al grupo Juzgadas (que suele estar colapsado ⇒ "desapareció").
+  // Recordamos en qué sección vivía cada rechazada de ESTA sesión del popup; al
+  // reabrir, vuelve a su casa natural (Juzgadas). Restaurar la saca del mapa.
+  const [juzgadasEnSesion, setJuzgadasEnSesion] = useState<Map<string, SectionKey>>(new Map());
 
   // Agrupar por ESTADO (la fecha bancaria NO agrupa — va como columna en la fila).
+  // Con juicio aún pendiente (las tachadas que se quedan en su grupo no son juzgables).
+  const esJuzgable = (p: Propuesta) => p.estado === "pendiente" || p.estado === "editado";
+
   const groups = useMemo(() => {
     const g: Record<SectionKey, Propuesta[]> = { pendientes: [], listas: [], rechazadas: [], emision: [] };
     for (const p of propuestas) {
@@ -93,15 +107,20 @@ export default function CartolaEditor({
       // está comprometida a Emitir.
       if (p.estado === "pendiente" || p.estado === "editado") g.pendientes.push(p);
       else if (p.estado === "listo") g.listas.push(p);
-      else if (p.estado === "rechazado" || p.estado === "descartado") g.rechazadas.push(p);
+      else if (p.estado === "rechazado" || p.estado === "descartado") {
+        const casa = juzgadasEnSesion.get(p.id);
+        g[casa && casa !== "rechazadas" ? casa : "rechazadas"].push(p);
+      }
       else if (p.estado === "aprobado") g.emision.push(p);
     }
     return g;
-  }, [propuestas]);
+  }, [propuestas, juzgadasEnSesion]);
 
   // Total = todo lo vivo (excluye rechazadas), como el agregado del visor resumen.
   const total = useMemo(
     () => [...groups.pendientes, ...groups.listas, ...groups.emision]
+      // Las tachadas aparcadas en su grupo (juzgadasEnSesion) no son vivas: fuera del total.
+      .filter((p) => p.estado !== "rechazado" && p.estado !== "descartado")
       .reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0),
     [groups],
   );
@@ -109,7 +128,7 @@ export default function CartolaEditor({
   // Cuántas pendientes se prepararían realmente en bulk (el resto, < BULK_MIN_CONFIANZA,
   // se revisan a mano). El label del botón bulk muestra este número, no el total.
   const pendElegibles = useMemo(
-    () => groups.pendientes.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA).length,
+    () => groups.pendientes.filter((p) => esJuzgable(p) && (p.confianza ?? 0) >= BULK_MIN_CONFIANZA).length,
     [groups.pendientes],
   );
 
@@ -127,13 +146,13 @@ export default function CartolaEditor({
     return [...por.values()].sort((a, b) => b.items.length - a.items.length);
   }, [groups.pendientes]);
   const ordenVisualPendientes = useMemo(
-    () => pendientesAgrupadas.flatMap((g) => g.items.map((p) => p.id)),
+    () => pendientesAgrupadas.flatMap((g) => g.items.filter(esJuzgable).map((p) => p.id)),
     [pendientesAgrupadas],
   );
 
   // La selección solo puede contener filas que sigan pendientes (tras un refresh,
   // lo ya juzgado sale solo de la selección).
-  const pendientesIds = useMemo(() => new Set(groups.pendientes.map((p) => p.id)), [groups.pendientes]);
+  const pendientesIds = useMemo(() => new Set(groups.pendientes.filter(esJuzgable).map((p) => p.id)), [groups.pendientes]);
   useEffect(() => {
     setSel((prev) => {
       const next = new Set([...prev].filter((id) => pendientesIds.has(id)));
@@ -186,9 +205,13 @@ export default function CartolaEditor({
       const ids = [...sel];
       const r = accion === "listo" ? await ponerListo(ids) : await rechazarPropuestas(ids);
       if (r.error) toast(r.error, "error");
-      else toast(accion === "listo"
-        ? `${r.count} marcadas listas`
-        : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+      else {
+        // La selección múltiple solo toma pendientes/editadas: quedan tachadas en su sitio.
+        if (accion === "sin_boleta") setJuzgadasEnSesion((prev) => { const m = new Map(prev); for (const id of ids) m.set(id, "pendientes"); return m; });
+        toast(accion === "listo"
+          ? `${r.count} marcadas listas`
+          : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+      }
       setSel(new Set());
       onAction();
     } finally { setBusyBulk(false); }
@@ -205,7 +228,7 @@ export default function CartolaEditor({
       if (!expanded[key]) continue;
       if (key === "pendientes" && pendientesAgrupadas.length > 1) {
         for (const g of pendientesAgrupadas) {
-          rows.push({ kind: "subheader", section: key, sigla: g.sigla, label: g.label, color: g.color, bg: g.bg, ids: g.items.map((p) => p.id), count: g.items.length });
+          rows.push({ kind: "subheader", section: key, sigla: g.sigla, label: g.label, color: g.color, bg: g.bg, ids: g.items.filter(esJuzgable).map((p) => p.id), count: g.items.length });
           if (!subColapsados.has(g.sigla)) for (const p of g.items) rows.push({ kind: "tx", section: key, p });
         }
       } else if (key === "pendientes") {
@@ -291,13 +314,23 @@ export default function CartolaEditor({
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
+  // La sección donde vive una propuesta viva — para dejarla tachada AHÍ al rechazar.
+  function seccionDe(p: Propuesta): SectionKey {
+    if (p.estado === "listo") return "listas";
+    if (p.estado === "aprobado") return "emision";
+    return "pendientes";
+  }
   async function rejectOne(p: Propuesta) {
     if (actingRef.current.has(p.id)) return;
     actingRef.current.add(p.id);
     try {
+      const casa = seccionDe(p);
       const r = await rechazarPropuesta(p.id);
       if (r.error) toast(r.error, "error");
-      else toast(p.movimientos_raw?.tipo_flujo === "salida" ? "Listo: egreso sin boleta (queda tachado, recuperable)" : "Marcada sin boleta (queda tachada, recuperable)");
+      else {
+        setJuzgadasEnSesion((prev) => new Map(prev).set(p.id, casa));
+        toast(p.movimientos_raw?.tipo_flujo === "salida" ? "Listo: egreso sin boleta (queda tachado, recuperable)" : "Marcada sin boleta (queda tachada, recuperable)");
+      }
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
@@ -307,7 +340,11 @@ export default function CartolaEditor({
     actingRef.current.add(p.id);
     try {
       const r = await restaurarPropuesta(p.id);
-      if (r.error) toast(r.error, "error"); else toast("Restaurada — quedó pendiente");
+      if (r.error) toast(r.error, "error");
+      else {
+        setJuzgadasEnSesion((prev) => { const m = new Map(prev); m.delete(p.id); return m; });
+        toast("Restaurada — quedó pendiente");
+      }
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
@@ -325,7 +362,7 @@ export default function CartolaEditor({
       <style>{CSS}</style>
 
       {/* ── Barra de estado (siempre visible, NO scrollea) ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderBottom: "1px solid var(--border)", flexShrink: 0, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0, flexWrap: "wrap", background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
         {(["listas", "pendientes", "rechazadas"] as SectionKey[]).map((k) => {
           const n = groups[k].length;
           if (n === 0) return null;
@@ -341,13 +378,13 @@ export default function CartolaEditor({
             onClick={() => toggleConjunto(ordenVisualPendientes)}
             disabled={busyBulk}
             title="Marca o desmarca todas las pendientes; después puedes des-clickear las que no van"
-            style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--border)", background: sel.size === groups.pendientes.length ? "color-mix(in srgb, var(--accent) 10%, transparent)" : "transparent", color: "var(--text2)", cursor: "pointer" }}
+            style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 99, border: "1px solid var(--border)", background: sel.size === groups.pendientes.length ? "color-mix(in srgb, var(--accent) 10%, transparent)" : "transparent", color: "var(--text2)", cursor: "pointer" }}
           >
             {sel.size === groups.pendientes.length ? "Ninguna" : `Seleccionar todas (${groups.pendientes.length})`}
           </button>
         )}
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text2)" }}>
-          Total <b style={{ color: "var(--text)" }}>{fmt(total)}</b>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text2)", display: "inline-flex", alignItems: "baseline", gap: 7 }}>
+          Total <b style={{ color: "var(--text)", fontSize: 15, fontWeight: 800, fontVariantNumeric: "tabular-nums", letterSpacing: "-.01em" }}>{fmt(total)}</b>
         </span>
       </div>
 
@@ -359,15 +396,15 @@ export default function CartolaEditor({
           <span style={{ fontSize: 10, color: "var(--text3)" }}>shift+click = rango</span>
           <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button onClick={() => bulkSel("listo")} disabled={busyBulk}
-              style={{ fontSize: 10, fontWeight: 800, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.1)", color: "var(--green)", cursor: "pointer" }}>
+              style={{ fontSize: 11.5, fontWeight: 800, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.1)", color: "var(--green)", cursor: "pointer" }}>
               ✓ Poner en lista
             </button>
             <button onClick={() => bulkSel("sin_boleta")} disabled={busyBulk}
-              style={{ fontSize: 10, fontWeight: 800, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.1)", color: "var(--red)", cursor: "pointer" }}>
+              style={{ fontSize: 11.5, fontWeight: 800, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.1)", color: "var(--red)", cursor: "pointer" }}>
               ✕ Sin boleta (egreso)
             </button>
             <button onClick={() => setSel(new Set())} disabled={busyBulk}
-              style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer" }}>
+              style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 99, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer" }}>
               Limpiar
             </button>
           </span>
@@ -420,7 +457,7 @@ export default function CartolaEditor({
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
                       selected={sel.has(row.p.id)}
-                      onSelect={row.section === "pendientes" ? (shift: boolean) => toggleSel(row.p.id, shift) : undefined}
+                      onSelect={row.section === "pendientes" && esJuzgable(row.p) ? (shift: boolean) => toggleSel(row.p.id, shift) : undefined}
                     />
                     {expandedRows.has(row.p.id) && (
                       <ExpandedDetail
@@ -457,17 +494,17 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
   return (
     <div
       onClick={onToggle}
-      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 16px", cursor: "pointer", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
+      style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 18px 7px", cursor: "pointer" }}
     >
-      <span style={{ fontSize: 8, color: "var(--text2)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▶</span>
-      <span style={{ width: 8, height: 8, borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
-      <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
-      <span style={{ fontSize: 10, color: "var(--text2)" }}>{count}</span>
+      <span style={{ fontSize: 9, color: "var(--text3)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▶</span>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: meta.color, boxShadow: `0 0 8px ${meta.color}`, flexShrink: 0 }} />
+      <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: meta.color }}>{meta.label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text2)", background: "color-mix(in srgb, var(--text) 7%, transparent)", borderRadius: 99, padding: "1px 8px" }}>{count}</span>
       {onStageAll && (
         <button
           onClick={(e) => { e.stopPropagation(); onStageAll(); }}
           disabled={bulkDisabled}
-          style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "var(--green)", cursor: bulkDisabled ? "default" : "pointer", opacity: bulkDisabled ? 0.5 : 1 }}
+          style={{ marginLeft: "auto", fontSize: 10.5, fontWeight: 750, padding: "5px 13px", borderRadius: 99, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.08)", color: "var(--green)", cursor: bulkDisabled ? "default" : "pointer", opacity: bulkDisabled ? 0.5 : 1 }}
         >
           {busy ? "..." : bulkLabel}
         </button>
@@ -500,26 +537,27 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, selected = f
       ) : (
         <span style={{ width: 16, flexShrink: 0 }} />
       )}
-      <span style={{ transform: isOpen ? "rotate(90deg)" : "none", color: isOpen ? "var(--accent)" : "var(--text2)", fontSize: 10, transition: "transform .2s", flexShrink: 0 }}>▶</span>
-      <span title={tm.label} style={{ flexShrink: 0, minWidth: 38, textAlign: "center", fontSize: 7, fontWeight: 800, letterSpacing: ".04em", padding: "2px 5px", borderRadius: 8, background: tm.bg, color: tm.color }}>{tm.sigla}</span>
+      <span style={{ transform: isOpen ? "rotate(90deg)" : "none", color: isOpen ? "var(--accent)" : "var(--text3)", fontSize: 10, transition: "transform .2s", flexShrink: 0 }}>▶</span>
+      {/* Tile de tipo estilo landing: cuadrado con tinte, no un mini-tag */}
+      <span title={tm.label} style={{ flexShrink: 0, display: "grid", placeItems: "center", minWidth: 44, height: 30, fontSize: 9, fontWeight: 800, letterSpacing: ".05em", borderRadius: 9, background: tm.bg, color: tm.color, border: `1px solid color-mix(in srgb, ${tm.color} 30%, transparent)` }}>{tm.sigla}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Tachada = juicio completado (sin boleta), no eliminada: sigue a la vista. */}
-        <div style={{ fontSize: 10, fontWeight: 500, color: rechazada ? "var(--text3)" : "var(--text)", textDecoration: rechazada ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion}</div>
-        {p.receptor_nombre && <div style={{ fontSize: 8, color: "var(--text2)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.receptor_nombre}</div>}
+        <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-.01em", color: rechazada ? "var(--text3)" : "var(--text)", textDecoration: rechazada ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion}</div>
+        {p.receptor_nombre && <div style={{ fontSize: 10.5, color: "var(--text2)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.receptor_nombre}</div>}
       </div>
       {/* Fecha bancaria = columna (dato), no agrupador */}
-      <span style={{ flexShrink: 0, fontSize: 9, color: "var(--text3)", minWidth: 48, textAlign: "right" }}>{fmtShort(p.movimientos_raw?.fecha)}</span>
-      <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 600, color: "var(--text)", minWidth: 64, textAlign: "right" }}>{fmt(p.total ?? p.movimientos_raw?.monto)}</span>
-      <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, color: confColor(p.confianza), minWidth: 30, textAlign: "right" }}>{conf}%</span>
-      {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "var(--green)", letterSpacing: ".05em" }}>LISTO</span>}
-      {enEmision && <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 800, color: "var(--blue)", letterSpacing: ".05em" }}>EN EMISIÓN</span>}
+      <span style={{ flexShrink: 0, fontSize: 10.5, color: "var(--text3)", minWidth: 56, textAlign: "right" }}>{fmtShort(p.movimientos_raw?.fecha)}</span>
+      <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 750, fontVariantNumeric: "tabular-nums", letterSpacing: "-.01em", color: rechazada ? "var(--text3)" : "var(--text)", minWidth: 76, textAlign: "right" }}>{fmt(p.total ?? p.movimientos_raw?.monto)}</span>
+      <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: confColor(p.confianza), minWidth: 34, textAlign: "right" }}>{conf}%</span>
+      {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--green)", letterSpacing: ".06em", padding: "3px 8px", borderRadius: 99, background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.3)" }}>LISTO</span>}
+      {enEmision && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--blue)", letterSpacing: ".06em", padding: "3px 8px", borderRadius: 99, background: "rgba(96,165,250,.1)", border: "1px solid rgba(96,165,250,.3)" }}>EN EMISIÓN</span>}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* ✓ solo en borradores (pendiente/editado): nunca demotar una 'listo' (ya staged) ni una 'aprobado' (ya en Emitir) */}
         {(p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
         {rechazada ? (
           /* Restaurar reemplaza al ✎ en rechazadas: el detalle acá solo llevaba a un error engañoso */
           <button onClick={onRestore}
-            style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(34,197,94,.35)", background: "transparent", color: "var(--green)", cursor: "pointer" }}>
+            style={{ fontSize: 10.5, fontWeight: 750, padding: "5px 12px", borderRadius: 99, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.08)", color: "var(--green)", cursor: "pointer" }}>
             Restaurar
           </button>
         ) : (
@@ -545,8 +583,8 @@ function SubGroupHeader({ sigla, label, color, bg, count, marcadas, onToggleGrup
   const todas = marcadas === count && count > 0;
   const algunas = marcadas > 0 && !todas;
   return (
-    <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 16px", cursor: "pointer", background: "color-mix(in srgb, var(--text) 3%, transparent)", borderBottom: "1px solid var(--border)" }}>
-      <span style={{ fontSize: 7, color: "var(--text3)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▶</span>
+    <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 18px 3px", cursor: "pointer" }}>
+      <span style={{ fontSize: 8, color: "var(--text3)", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▶</span>
       {/* Casilla maestra del grupo: marca/desmarca la familia entera; con parte
           marcada muestra estado intermedio. "Todas menos una" = marcar todas y
           des-clickear la que sobra. */}
@@ -559,10 +597,10 @@ function SubGroupHeader({ sigla, label, color, bg, count, marcadas, onToggleGrup
         aria-label={`Seleccionar todo el grupo ${sigla}`}
         style={{ width: 15, height: 15, flexShrink: 0, accentColor: "var(--accent)", cursor: "pointer" }}
       />
-      <span style={{ fontSize: 7, fontWeight: 800, letterSpacing: ".04em", padding: "2px 6px", borderRadius: 8, background: bg, color }}>{sigla}</span>
-      <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text2)" }}>{label}</span>
-      <span style={{ fontSize: 9, color: "var(--text3)" }}>{count}</span>
-      {marcadas > 0 && <span style={{ marginLeft: "auto", fontSize: 8, fontWeight: 700, color: "var(--accent)" }}>{marcadas} seleccionada{marcadas === 1 ? "" : "s"}</span>}
+      <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: ".05em", padding: "3px 9px", borderRadius: 8, background: bg, color, border: `1px solid color-mix(in srgb, ${color} 28%, transparent)` }}>{sigla}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)" }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text3)", background: "color-mix(in srgb, var(--text) 6%, transparent)", borderRadius: 99, padding: "0px 7px" }}>{count}</span>
+      {marcadas > 0 && <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 750, color: "var(--accent)" }}>{marcadas} seleccionada{marcadas === 1 ? "" : "s"}</span>}
     </div>
   );
 }

@@ -59,7 +59,7 @@ export default function GlosaComunControl({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0, minWidth: 0 }}>
       <button
         type="button"
         role="switch"
@@ -70,15 +70,15 @@ export default function GlosaComunControl({
         title="Activa o desactiva el detalle para todas las boletas de este documento"
         style={{
           display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
-          background: "transparent", color: activa ? "var(--green)" : "var(--text3)", fontSize: 9, fontWeight: 800,
+          background: "transparent", color: activa ? "var(--green)" : "var(--text3)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".02em",
         }}
       >
         <span style={{
-          width: 26, height: 15, borderRadius: 999, padding: 2, background: activa ? "rgba(34,197,94,.35)" : "var(--bg-muted)",
+          width: 32, height: 18, borderRadius: 999, padding: 2, background: activa ? "rgba(34,197,94,.35)" : "var(--bg-muted)",
           border: "1px solid var(--border)", display: "inline-flex", alignItems: "center",
           justifyContent: activa ? "flex-end" : "flex-start", transition: "all .15s",
         }}>
-          <span style={{ width: 11, height: 11, borderRadius: "50%", background: activa ? "var(--green)" : "var(--text3)" }} />
+          <span style={{ width: 13, height: 13, borderRadius: "50%", background: activa ? "var(--green)" : "var(--text3)", boxShadow: activa ? "0 0 8px rgba(34,197,94,.6)" : "none", transition: "all .15s" }} />
         </span>
         Detalle
       </button>
@@ -93,13 +93,13 @@ export default function GlosaComunControl({
           aria-label="Detalle común de las boletas de este documento"
           title="Mismo detalle para todas las boletas de este documento (máx 80). Vacío usa el default por tipo."
           style={{
-            flex: 1, minWidth: 160, height: 24, borderRadius: 6, border: "1px solid var(--border)",
-            background: "var(--bg-muted)", color: "var(--text)", padding: "0 8px", fontSize: 9, outline: "none",
+            flex: 1, minWidth: 0, height: 30, borderRadius: 999, border: "1px solid color-mix(in srgb, var(--text) 14%, transparent)",
+            background: "color-mix(in srgb, var(--text) 4%, transparent)", color: "var(--text)", padding: "0 13px", fontSize: 11.5, outline: "none",
           }}
         />
       )}
       {activa && (
-        <span style={{ fontSize: 8, color: "var(--text3)" }}>{glosa.length}/80</span>
+        <span style={{ fontSize: 10, fontVariantNumeric: "tabular-nums", color: glosa.length >= 80 ? "var(--red)" : "var(--text3)" }}>{glosa.length}/80</span>
       )}
     </div>
   );

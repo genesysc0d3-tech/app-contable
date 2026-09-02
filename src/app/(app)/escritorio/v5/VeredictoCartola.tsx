@@ -49,7 +49,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta",
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null };
   propuestas: Propuesta[];
@@ -64,6 +64,9 @@ export default function VeredictoCartola({
   eliminarArmado?: boolean;
   /** Vocabulario por mesa: una plantilla de facturas NO es una cartola. */
   mesa?: "boleta" | "factura";
+  /** Cartola completamente DECIDIDA (todo aprobado/juzgado): el visor cambia de
+      modo — sin Editar/Eliminar/Aprobar; el camino de vuelta vive en Emitir. */
+  decidida?: boolean;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -81,6 +84,7 @@ export default function VeredictoCartola({
   // "Listo" = estado='listo' (preparada, staged, aún NO en Emitir). El Aprobar
   // atómico SOLO promueve estas → el desglose de la confirmación se calcula sobre
   // ellas, no sobre toda la composición del doc (que puede incluir ya-aprobadas).
+  const aprobadas = propuestas.filter((p) => p.estado === "aprobado").length;
   const listasProps = propuestas.filter((p) => p.estado === "listo");
   const listas = listasProps.length;
   const totalListas = listasProps.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -123,8 +127,8 @@ export default function VeredictoCartola({
       <style>{CB_CSS}</style>
 
       {/* IZQUIERDA: el archivo (chip; Stage 4 = mini-preview del Excel). Click = Editar. */}
-      <button className="vcart-file" onClick={onEditar} title="Editar transacciones"
-        style={{ width: "clamp(120px, 17vh, 190px)", flexShrink: 0, alignSelf: "stretch", minHeight: "8em", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-muted)", cursor: "pointer", padding: "0.9em", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.55em", position: "relative", color: "var(--text2)" }}>
+      <button className="vcart-file" onClick={decidida ? undefined : onEditar} title={decidida ? "Cartola enviada a Emitir — para tocarla, devuélvela desde esa pestaña" : "Editar transacciones"}
+        style={{ width: "clamp(120px, 17vh, 190px)", flexShrink: 0, alignSelf: "stretch", minHeight: "8em", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-muted)", cursor: decidida ? "default" : "pointer", padding: "0.9em", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.55em", position: "relative", color: "var(--text2)" }}>
         {(() => {
           const { Glifo, color } = FILE_META[extDe(doc.nombre_archivo)];
           return (
@@ -135,17 +139,19 @@ export default function VeredictoCartola({
         })()}
         <div style={{ fontSize: "0.82em", fontWeight: 700, color: "var(--text)", textAlign: "center", lineHeight: 1.25, maxWidth: "100%", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{doc.nombre_archivo}</div>
         <div style={{ fontSize: "0.72em", color: "var(--text3)" }}>{count} movimientos</div>
-        <span style={{ position: "absolute", right: 6, bottom: 6, fontSize: "0.62em", fontWeight: 700, color: "#fff", background: "rgba(0,0,0,.55)", borderRadius: 5, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3 }}>
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>editar
-        </span>
+        {!decidida && (
+          <span style={{ position: "absolute", right: 6, bottom: 6, fontSize: "0.62em", fontWeight: 700, color: "#fff", background: "rgba(0,0,0,.55)", borderRadius: 5, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>editar
+          </span>
+        )}
       </button>
 
       {/* PRINCIPAL: header + agregados */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "0.5em" }}>
           <span style={{ fontSize: "1.5em", fontWeight: 600, color: "var(--text2)", letterSpacing: "-.02em", lineHeight: 1 }}>{mesa === "factura" ? "Plantilla" : "Cartola"}</span>
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: dotColor }}>
-            <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: dotColor }} />{listas}/{count} listas
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: decidida ? "var(--blue)" : dotColor }}>
+            <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: decidida ? "var(--blue)" : dotColor }} />{decidida ? `${aprobadas} en Emitir` : `${listas}/${count} listas`}
           </span>
           <button onClick={onClose} title="Cerrar" style={{ width: "2.15em", height: "2.15em", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -166,13 +172,34 @@ export default function VeredictoCartola({
           {exentas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(91,156,246,.13)", color: "var(--blue)" }}>Exenta · {exentas}</span>}
           {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(232,85,62,.13)", color: "var(--accent)" }}>Afecta · {afectas}</span>}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 12, fontSize: "1.02em", color: "var(--text2)" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--green)" }} />{listas} listas</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: pendientes > 0 ? "var(--amber)" : "var(--text3)" }} />{pendientes} pendientes</span>
+            {decidida ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--blue)" }} />{aprobadas} en Emitir</span>
+            ) : (<>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--green)" }} />{listas} listas</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: pendientes > 0 ? "var(--amber)" : "var(--text3)" }} />{pendientes} pendientes</span>
+            </>)}
           </span>
         </div>
       </div>
 
-      {/* ACCIONES */}
+      {/* ACCIONES — decidida: la cartola ya se fue a Emitir; acá no hay nada que
+          editar/aprobar/eliminar (Eliminar borraría aprobadas comprometidas). El
+          único gesto es IR a Emitir, donde vive la última mirada y el Devolver. */}
+      {decidida ? (
+        <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.9em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: "1em", fontWeight: 800, color: "var(--blue)" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+            Todo enviado a Emitir
+          </div>
+          <button className="vcart-cb" onClick={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "emitir" }))}
+            style={{ background: "color-mix(in srgb, var(--blue) 16%, transparent)", color: "var(--blue)", fontSize: "1.05em" }}>
+            Ver en Emitir →
+          </button>
+          <div style={{ fontSize: "0.8em", color: "var(--text3)", textAlign: "center", lineHeight: 1.45 }}>
+            ¿Te arrepentiste? Devuélvela completa desde la pestaña Emitir.
+          </div>
+        </div>
+      ) : (
       <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "1.1em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
         <button className="vcart-cb" onClick={onEditar} disabled={busy} style={{ background: "var(--bg-muted)", color: "var(--text)", fontSize: "1.12em" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Editar
@@ -216,6 +243,7 @@ export default function VeredictoCartola({
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }

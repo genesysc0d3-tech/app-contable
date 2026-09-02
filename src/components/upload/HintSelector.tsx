@@ -52,7 +52,7 @@ export default function HintSelector({
     if (left + MENU_W + MARGIN > vw) {
       left = Math.max(MARGIN, vw - MENU_W - MARGIN);
     }
-    const top = openUp ? Math.max(MARGIN, r.top - MENU_H_EST - 4) : r.bottom + 4;
+    const top = openUp ? Math.max(MARGIN, r.top - MENU_H_EST - 8) : r.bottom + 8;
     setPos({ top, left, openUp });
     setOpen(true);
   }
@@ -105,11 +105,12 @@ export default function HintSelector({
         onClick={toggleMenu}
         disabled={saving}
         title="Tipo de operaciones en esta cartola — ayuda al clasificador a elegir afecta/exenta"
-        className="btn-press flex items-center gap-1 text-[10px] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50"
+        className="btn-press"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 999, padding: "0 12px", height: 30, whiteSpace: "nowrap", flexShrink: 0, outline: "none", background: "transparent", cursor: "pointer", opacity: saving ? 0.5 : 1, transition: "color .15s, border-color .15s" }}
       >
-        <Lightbulb size={10} weight="bold" className="text-[#F59E0B]" />
-        <span>Tipo: <b className="text-[var(--foreground)]">{opcionActual.label}</b></span>
-        <CaretDown size={8} weight="bold" className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        <Lightbulb size={12} weight="bold" color="#F59E0B" />
+        <span>Tipo: <b style={{ color: "var(--foreground)" }}>{opcionActual.label}</b></span>
+        <CaretDown size={10} weight="bold" style={{ transition: "transform .15s", transform: open ? "rotate(180deg)" : "none" }} />
       </button>
 
       {open && pos && typeof document !== "undefined" && createPortal(
@@ -120,32 +121,33 @@ export default function HintSelector({
             top: pos.top,
             left: pos.left,
             maxHeight: `calc(100vh - ${pos.top + 16}px)`,
+            zIndex: 200, width: 288, borderRadius: 16, border: "1px solid var(--border)",
+            overflowY: "auto", padding: 10,
           }}
-          className="z-[200] w-64 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-y-auto animate-fade-in py-1"
+          className="pop-menu animate-fade-in"
         >
-          <div className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
+          <div style={{ padding: "8px 12px 10px", fontSize: 9, fontWeight: 650, textTransform: "uppercase", letterSpacing: ".12em", color: "var(--muted-light)" }}>
             Tipo de operaciones
           </div>
-          {OPCIONES.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => seleccionar(o.id)}
-              className={`w-full flex items-start gap-2 px-3 py-2 text-left transition-colors ${
-                o.id === value
-                  ? "bg-[var(--accent-light)] text-[#E8553E]"
-                  : "hover:bg-[var(--surface)]"
-              }`}
-            >
-              <div className="w-3 h-3 mt-0.5 shrink-0">
-                {o.id === value && <Check size={12} weight="bold" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold">{o.label}</p>
-                <p className="text-[10px] text-[var(--muted-light)] mt-0.5">{o.desc}</p>
-              </div>
-            </button>
-          ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {OPCIONES.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => seleccionar(o.id)}
+                className={`pop-item${o.id === value ? " activo" : ""}`}
+                style={{ width: "100%", borderRadius: 12, border: "none", display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", textAlign: "left", cursor: "pointer", transition: "background .12s", color: "var(--foreground)" }}
+              >
+                <div style={{ width: 14, height: 14, marginTop: 2, flexShrink: 0, color: "#E8553E" }}>
+                  {o.id === value && <Check size={13} weight="bold" />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 650, lineHeight: 1.25 }}>{o.label}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 10.5, lineHeight: 1.4, color: "var(--muted-light)" }}>{o.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>,
         document.body,
       )}
