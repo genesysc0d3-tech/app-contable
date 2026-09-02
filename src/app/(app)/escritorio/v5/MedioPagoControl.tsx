@@ -57,9 +57,11 @@ export default function MedioPagoControl({
         aria-label="Método de pago de todas las boletas de este documento"
         title="El SII pide el método de pago en cada boleta. Acá lo fijas para todas las de este documento."
         style={{
-          height: 30, borderRadius: 9, border: `1px solid ${avisa ? "rgba(245,158,11,.45)" : "var(--border)"}`,
-          background: "var(--bg-muted)", color: medio ? "var(--text)" : "var(--text3)",
-          padding: "0 9px", fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer",
+          height: 30, borderRadius: 999, border: `1px solid ${avisa ? "rgba(245,158,11,.4)" : "color-mix(in srgb, var(--text) 14%, transparent)"}`,
+          background: `${avisa ? "rgba(245,158,11,.06)" : "color-mix(in srgb, var(--text) 4%, transparent)"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 11px center`,
+          color: medio ? "var(--text)" : avisa ? "var(--amber)" : "var(--text3)",
+          padding: "0 26px 0 13px", fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer",
+          appearance: "none", WebkitAppearance: "none", minWidth: 0, flexShrink: 0, textOverflow: "ellipsis",
         }}
       >
         <option value="">{sugerido ? `Elegir (sugerido: ${sugerido})` : "Elegir…"}</option>
@@ -82,7 +84,7 @@ export default function MedioPagoControl({
         </button>
       )}
       {avisa && (
-        <span style={{ fontSize: 10.5, color: "var(--text3)", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1, maxWidth: 235 }}>
+        <span style={{ fontSize: 10.5, color: "var(--text3)", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1, maxWidth: 170 }}>
           Es una cartola bancaria: sin elegir, las boletas salen como <b>Efectivo</b>.
         </span>
       )}

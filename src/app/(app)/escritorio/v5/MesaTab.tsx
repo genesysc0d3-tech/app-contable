@@ -439,6 +439,9 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                       <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
                     </div>
                     {mesa.mesaActiva !== "factura" && (
+                      <div aria-hidden style={{ width: 1, height: 18, background: "color-mix(in srgb, var(--text) 12%, transparent)", flexShrink: 0 }} />
+                    )}
+                    {mesa.mesaActiva !== "factura" && (
                       <div style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden" }}>
                         <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />
                       </div>

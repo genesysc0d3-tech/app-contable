@@ -93,8 +93,8 @@ export default function GlosaComunControl({
           aria-label="Detalle común de las boletas de este documento"
           title="Mismo detalle para todas las boletas de este documento (máx 80). Vacío usa el default por tipo."
           style={{
-            flex: 1, minWidth: 0, height: 30, borderRadius: 9, border: "1px solid var(--border)",
-            background: "var(--bg-muted)", color: "var(--text)", padding: "0 11px", fontSize: 11.5, outline: "none",
+            flex: 1, minWidth: 0, height: 30, borderRadius: 999, border: "1px solid color-mix(in srgb, var(--text) 14%, transparent)",
+            background: "color-mix(in srgb, var(--text) 4%, transparent)", color: "var(--text)", padding: "0 13px", fontSize: 11.5, outline: "none",
           }}
         />
       )}
