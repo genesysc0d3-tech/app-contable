@@ -11,6 +11,7 @@ import dynamic from "next/dynamic";
 import { type LoteItemInput } from "./EmitirLoteModal";
 import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
+import { devolverCartola, ultimaMiradaCartola } from "../../revisar/actions";
 
 // Perf: el modal de emisión en lote sale del bundle inicial; se precarga en idle
 // tras montar la pestaña (effect abajo) — abrirlo sigue siendo instantáneo.
@@ -226,6 +227,43 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   }, [empresaId, esFacturas]);
   // File-first: qué documentos están expandidos + qué popup de "por revisar" está abierta.
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
+  // Última mirada del conglomerado (pedido fundador 2026-09-01): las juzgadas
+  // (sin boleta) de cada cartola, cargadas on-demand al expandir, en un
+  // desplegable tachado. Y "Devolver a Check": la cartola completa retrocede.
+  const [juzgadasByDoc, setJuzgadasByDoc] = useState<Record<string, { loading: boolean; juzgadas: Array<{ id: string; descripcion: string; monto: number; fecha: string | null }>; emitidas: Array<{ id: string; descripcion: string; monto: number; folio: number | null }> }>>({});
+  const [juzgadasOpen, setJuzgadasOpen] = useState<Set<string>>(new Set());
+  const [devolviendo, setDevolviendo] = useState<string | null>(null);
+
+  const cargarJuzgadas = useCallback((docId: string) => {
+    setJuzgadasByDoc((prev) => {
+      if (prev[docId]) return prev; // ya cargadas o cargando
+      void ultimaMiradaCartola(docId).then((r) => {
+        setJuzgadasByDoc((p) => ({ ...p, [docId]: { loading: false, juzgadas: r.juzgadas, emitidas: r.emitidas } }));
+      });
+      return { ...prev, [docId]: { loading: true, juzgadas: [], emitidas: [] } };
+    });
+  }, []);
+
+  const dataRef = useRef(data);
+  const expandedDocsRef = useRef(expandedDocs);
+  expandedDocsRef.current = expandedDocs;
+  useEffect(() => {
+    if (dataRef.current === data) return;
+    dataRef.current = data;
+    setJuzgadasByDoc({});
+    for (const key of expandedDocsRef.current) if (key !== "__sueltas__") cargarJuzgadas(key);
+  }, [data, cargarJuzgadas]);
+
+  async function handleDevolverCartola(docId: string, nombre: string) {
+    if (devolviendo) return;
+    setDevolviendo(docId);
+    try {
+      const r = await devolverCartola(docId);
+      if (r.error) toast(r.error, "error");
+      else toast(`${nombre}: ${r.count} devueltas a Check (quedan listas)`);
+      reload();
+    } finally { setDevolviendo(null); }
+  }
   const [popupDoc, setPopupDoc] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<EmitirResult | null>(null);
   // Foto receptor/monto de lo enviado: el recibo de fallos la necesita aunque
@@ -290,7 +328,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     ? proveedorFacturas === "sii_local"
     : proveedorBoletas === "sii_local" || proveedorBoletas === "simpleapi";
 
-  const selectableItems = itemsList.filter(i => i.listo_emitir);
+  // Universo de selección = TODO lo emitible, sin filtros: los pills de arriba
+  // son lupa para mirar, jamás selección (cartola = unidad; si el filtro
+  // recortara la selección, alguien emitiría más o menos de lo que cree ver).
+  const selectableItems = useMemo(() => (data?.items ?? []).filter(i => i.listo_emitir), [data]);
 
   // File-first: agrupar la lista visible por DOCUMENTO (cartola/archivo). En vez de
   // N filas sueltas, se ve el archivo y se expande. documento_id null → "sueltas".
@@ -445,14 +486,24 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   function toggleDoc(key: string) {
     setExpandedDocs(prev => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) next.delete(key);
+      else {
+        next.add(key);
+        // Al abrir una cartola real, trae sus juzgadas para la última mirada.
+        if (key !== "__sueltas__") cargarJuzgadas(key);
+      }
       return next;
     });
   }
 
-  // Selección a nivel documento: marca/desmarca todas las "listas" de esa cartola.
+  // Selección a nivel documento (cartola = UNIDAD, decisión fundador 2026-09-01):
+  // marca/desmarca TODO lo emitible de esa cartola, ignorando los filtros-lupa.
+  // Dentro de una cartola no se selecciona por fila — se emite completa o se
+  // devuelve completa a Check.
   function toggleDocSelect(items: Item[]) {
-    const emitibles = items.filter(i => i.listo_emitir).map(i => i.id);
+    const docId = items[0]?.documento_id ?? null;
+    const universo = docId ? (data?.items ?? []).filter((i) => i.documento_id === docId) : items;
+    const emitibles = universo.filter(i => i.listo_emitir).map(i => i.id);
     const todasSel = emitibles.length > 0 && emitibles.every(id => selected.has(id));
     setSelected(prev => {
       const next = new Set(prev);
@@ -469,14 +520,21 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     const isSelected = selected.has(item.id);
     const tipo = activeTipo(item);
     const isAfecta = tipo === 39;
+    // Cartola = unidad: sus filas NO se seleccionan de a una (el checkbox vive en
+    // el header del conglomerado). Solo las sueltas conservan checkbox propio.
+    const enCartola = Boolean(item.documento_id);
     return (
       <div key={item.id} className={`em-item ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}>
-        <div className={`cb ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}
-          onClick={() => !isDisabled && toggleItem(item.id)}
-          style={isDisabled ? {} : {cursor:"pointer"}}
-        >{isSelected ? "✓" : ""}</div>
-        <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); else if (!isDisabled) toggleItem(item.id); }}
-          style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !isDisabled)) ? { cursor: "pointer" } : undefined}>
+        {enCartola ? (
+          <div style={{ width: 16, flexShrink: 0 }} />
+        ) : (
+          <div className={`cb ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}
+            onClick={() => !isDisabled && toggleItem(item.id)}
+            style={isDisabled ? {} : {cursor:"pointer"}}
+          >{isSelected ? "✓" : ""}</div>
+        )}
+        <div className="inf" onClick={() => { if (item.balde !== "listas") goToCheck(item); else if (!enCartola && !isDisabled) toggleItem(item.id); }}
+          style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !enCartola && !isDisabled)) ? { cursor: "pointer" } : undefined}>
           <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
           <div className="sub">
             {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
@@ -663,7 +721,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
               const rev = porRevisarByDoc.get(key)?.length ?? 0;
               const listas = g.items.filter(i => i.balde === "listas").length;
               const monto = g.items.reduce((s, i) => s + i.monto_total, 0);
-              const emitibles = g.items.filter(i => i.listo_emitir);
+              const universoDoc = g.docId ? (data?.items ?? []).filter((i) => i.documento_id === g.docId) : g.items;
+              const emitibles = universoDoc.filter(i => i.listo_emitir);
               const docSel = emitibles.length > 0 && emitibles.every(i => selected.has(i.id));
               return (
                 <div key={key} style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--bg-muted)", overflow: "hidden" }}>
@@ -672,7 +731,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="9 6 15 12 9 18"/></svg>
                     </span>
                     {emitibles.length > 0 && (
-                      <div className={`cb ${docSel ? "sel" : ""}`} onClick={(e) => { e.stopPropagation(); toggleDocSelect(g.items); }} style={{ cursor: "pointer" }}>{docSel ? "✓" : ""}</div>
+                      <div role="checkbox" aria-checked={docSel} aria-label={`Seleccionar la cartola completa (${emitibles.length} boletas)`}
+                        title={`Selecciona la cartola COMPLETA: sus ${emitibles.length} boletas por emitir. Acá no se emite a pedazos — si algo no te cuadra, devuélvela a Check.`}
+                        onClick={(e) => { e.stopPropagation(); toggleDocSelect(g.items); }}
+                        style={{ width: 19, height: 19, borderRadius: 6, border: docSel ? "1.5px solid var(--accent)" : "1.5px solid var(--text2)", background: docSel ? "var(--accent)" : "var(--surface2)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, cursor: "pointer", flexShrink: 0, transition: "all .15s" }}>{docSel ? "✓" : ""}</div>
                     )}
                     <span style={{ color: "var(--text2)", display: "flex", flexShrink: 0 }}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 3v5h5"/><path d="M6 3h8l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/></svg>
@@ -680,7 +742,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nombre}</div>
                       <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 1, display: "flex", gap: 8, alignItems: "center" }}>
-                        <span>{listas} {listas === 1 ? "lista" : "listas"}</span>
+                        <span>{listas} por emitir</span>
+                        {g.docId && (juzgadasByDoc[g.docId]?.emitidas.length ?? 0) > 0 && (
+                          <span style={{ color: "var(--green)", fontWeight: 700 }}>· {juzgadasByDoc[g.docId]!.emitidas.length} ya en el SII</span>
+                        )}
                         {rev > 0 && (
                           <button onClick={(e) => { e.stopPropagation(); setPopupDoc(key); }}
                             style={{ color: "var(--amber)", fontWeight: 600, background: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 10 }}>· {rev} por revisar →</button>
@@ -707,11 +772,62 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                         })}
                       </div>
                     )}
+                    {/* Devolver la cartola COMPLETA a Check (pedido fundador 2026-09-01):
+                        'aprobado' → 'listo'. Deshacer el Aprobar sin perder el juicio. */}
+                    {g.docId && listas > 0 && (
+                      <button onClick={(e) => { e.stopPropagation(); void handleDevolverCartola(g.docId!, g.nombre); }}
+                        disabled={devolviendo === g.docId}
+                        title="Devuelve la cartola completa a Check de agregados: las boletas quedan listas de nuevo (no pierdes el juicio), y apruebas cuando quieras."
+                        style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: "var(--text2)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "4px 11px", cursor: devolviendo === g.docId ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                        ← {devolviendo === g.docId ? "Devolviendo…" : "Devolver a Check"}
+                      </button>
+                    )}
                     <div style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: "tabular-nums", textAlign: "right", flexShrink: 0 }}>{fmt(monto)}</div>
                   </div>
                   {isOpen && (
                     <div style={{ padding: "2px 8px 8px", borderTop: "1px solid var(--border)" }}>
                       {g.items.map(renderItem)}
+                      {/* La última mirada: lo que NO va a boleta (juzgado en Check),
+                          tachado y colapsado. La cartola llega entera a Emitir. */}
+                      {g.docId && (juzgadasByDoc[g.docId]?.emitidas.length ?? 0) > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2, margin: "6px 3px 0", padding: "0 2px" }}>
+                          {juzgadasByDoc[g.docId]!.emitidas.map((it) => (
+                            <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text3)", padding: "3px 0" }}>
+                              <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--green)", border: "1px solid rgba(34,197,94,.35)", borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap" }}>✓ ya en el SII{it.folio != null ? ` · folio ${it.folio}` : ""}</span>
+                              <span style={{ flex: 1, minWidth: 0, textDecoration: "line-through", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.descripcion}>{it.descripcion}</span>
+                              <span style={{ flexShrink: 0, textDecoration: "line-through", fontVariantNumeric: "tabular-nums" }}>{fmt(it.monto)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {g.docId && (() => {
+                        const j = juzgadasByDoc[g.docId];
+                        if (!j || (j.loading && j.juzgadas.length === 0)) return null;
+                        if (j.juzgadas.length === 0) return null;
+                        const jOpen = juzgadasOpen.has(g.docId);
+                        return (
+                          <div style={{ margin: "6px 3px 2px" }}>
+                            <button onClick={() => setJuzgadasOpen((prev) => { const n = new Set(prev); if (n.has(g.docId!)) n.delete(g.docId!); else n.add(g.docId!); return n; })}
+                              style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", padding: "4px 2px", fontSize: 10.5, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                              <span style={{ display: "flex", transform: jOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="9 6 15 12 9 18"/></svg>
+                              </span>
+                              Sin boleta (juzgadas) · {j.juzgadas.length}
+                            </button>
+                            {jOpen && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "2px 0 4px 18px" }}>
+                                {j.juzgadas.map((it) => (
+                                  <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text3)", padding: "3px 0" }}>
+                                    <span style={{ flex: 1, minWidth: 0, textDecoration: "line-through", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.descripcion}>{it.descripcion}</span>
+                                    {it.fecha && <span style={{ flexShrink: 0, fontSize: 10 }}>{formatShortDateEsCl(it.fecha, true)}</span>}
+                                    <span style={{ flexShrink: 0, textDecoration: "line-through", fontVariantNumeric: "tabular-nums" }}>{fmt(it.monto)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

@@ -464,6 +464,95 @@ export async function editarGlosaEmitible(
 // Aprobar cartola (atómico): promueve a Emitir TODAS las propuestas del documento
 // que quedaron en "listo" (estado 'listo' → 'aprobado'). Es el único gatillo hacia
 // Emitir para una cartola: nada cae en la cola hasta apretar esto.
+// Devolver cartola (espejo de aprobarCartola, pedido fundador 2026-09-01): desde
+// la pestaña Emitir, la cartola COMPLETA retrocede un paso — 'aprobado' → 'listo'.
+// Devolver es "me arrepentí de enviar", no "me arrepentí del juicio": las juzgadas
+// (rechazadas) no se tocan, y las listas quedan de nuevo esperando el Aprobar.
+export async function devolverCartola(
+  documentoId: string
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const { data: props, error: qErr } = await ctx.sb
+    .from("propuestas_ia")
+    .select("id, movimientos_raw!inner(documento_id)")
+    .eq("empresa_id", ctx.empresaId)
+    .eq("estado", "aprobado")
+    .eq("movimientos_raw.documento_id", documentoId);
+  if (qErr) return { error: qErr.message, count: 0 };
+  const ids = (props ?? []).map((p) => p.id);
+  if (ids.length === 0) return { ok: true, count: 0 };
+  let devueltas = 0;
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const { error, count } = await ctx.sb
+      .from("propuestas_ia")
+      .update({ estado: "listo" }, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch)
+      // Guard: solo degrada 'aprobado'. Jamás toca emitidas/rechazadas.
+      .eq("estado", "aprobado");
+    if (error) return { error: error.message, count: devueltas };
+    devueltas += count ?? 0;
+  }
+  await recordCuentaAudit({
+    sb: ctx.sb, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+    accion: "cartola_devuelta_a_check", recursoTipo: "documento_subido", recursoId: documentoId,
+    resumen: `${devueltas} propuestas devueltas de Emitir a Check (quedan listas)`, metadata: { cantidad: devueltas, documentoId },
+  });
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: devueltas };
+}
+
+// La "última mirada" del conglomerado en Emitir (solo lectura, on-demand al
+// expandir): las juzgadas (sin boleta, tachadas) y las YA EMITIDAS de esta
+// cartola ("✓ en el SII" — irreversibles: ni se re-emiten ni se devuelven).
+export async function ultimaMiradaCartola(
+  documentoId: string
+): Promise<{
+  ok?: boolean; error?: string;
+  juzgadas: Array<{ id: string; descripcion: string; monto: number; fecha: string | null }>;
+  emitidas: Array<{ id: string; descripcion: string; monto: number; folio: number | null }>;
+}> {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, juzgadas: [], emitidas: [] };
+  type Mov = { documento_id: string; descripcion: string | null; monto: number | null; fecha: string | null };
+  const movDe = (raw: unknown) => (Array.isArray(raw) ? raw[0] : raw) as Mov | undefined;
+
+  // Juzgadas: propuestas rechazadas/descartadas del documento.
+  const { data, error } = await ctx.sb
+    .from("propuestas_ia")
+    .select("id, total, movimientos_raw!inner(documento_id, descripcion, monto, fecha)")
+    .eq("empresa_id", ctx.empresaId)
+    .in("estado", ["rechazado", "descartado"])
+    .eq("movimientos_raw.documento_id", documentoId)
+    .limit(600);
+  if (error) return { error: error.message, juzgadas: [], emitidas: [] };
+  const juzgadas = (data ?? []).map((p) => {
+    const m = movDe(p.movimientos_raw);
+    return { id: p.id as string, descripcion: m?.descripcion ?? "(sin glosa)", monto: (p.total as number | null) ?? m?.monto ?? 0, fecha: m?.fecha ?? null };
+  });
+
+  // Emitidas: en propuestas no hay estado 'emitida' — la verdad vive en
+  // boletas_emitidas.propuesta_id (mismo criterio con que pendientes-emision
+  // las excluye de la cola). Join profundo hasta el documento.
+  const { data: bols, error: bErr } = await ctx.sb
+    .from("boletas_emitidas")
+    .select("id, folio, monto_total, propuesta_id, propuestas_ia!inner(movimientos_raw!inner(documento_id, descripcion))")
+    .eq("empresa_id", ctx.empresaId)
+    .neq("estado", "anulada")
+    .eq("propuestas_ia.movimientos_raw.documento_id", documentoId)
+    .limit(600);
+  if (bErr) return { error: bErr.message, juzgadas, emitidas: [] };
+  const emitidas = (bols ?? []).map((b) => {
+    const prop = (Array.isArray(b.propuestas_ia) ? b.propuestas_ia[0] : b.propuestas_ia) as { movimientos_raw: unknown } | undefined;
+    const m = movDe(prop?.movimientos_raw);
+    return { id: b.id as string, descripcion: m?.descripcion ?? "(sin glosa)", monto: (b.monto_total as number | null) ?? 0, folio: (b.folio as number | null) ?? null };
+  });
+  return { ok: true, juzgadas, emitidas };
+}
+
 export async function aprobarCartola(
   documentoId: string
 ): Promise<{ ok?: boolean; error?: string; count: number }> {
