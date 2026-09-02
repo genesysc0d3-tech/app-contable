@@ -409,17 +409,17 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M15 18l-6-6 6-6" /></svg>
                     Volver
                   </button>
-                  <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text3)" }}>Mapear columnas</span>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Mapear columnas</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text3)" }}>Editar</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
-                  <button onClick={() => setEditarScreen("mapear")} onMouseEnter={() => prefetchPreview(editarCartolaId)} onFocus={() => prefetchPreview(editarCartolaId)} style={{ fontSize: 10, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 7, padding: "5px 10px", cursor: "pointer" }}>↔ Mapear columnas</button>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Editar</span>
+                  <span style={{ fontSize: 14.5, fontWeight: 750, letterSpacing: "-.01em", color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
+                  <button onClick={() => setEditarScreen("mapear")} onMouseEnter={() => prefetchPreview(editarCartolaId)} onFocus={() => prefetchPreview(editarCartolaId)} style={{ fontSize: 11, fontWeight: 650, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 99, padding: "7px 14px", cursor: "pointer" }}>↔ Mapear columnas</button>
                 </>
               )}
-              <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} title="Cerrar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+              <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} title="Cerrar" style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", fontSize: 17, lineHeight: 1 }}>×</button>
             </div>
             {editarScreen === "mapear" ? (
               <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "var(--text)", fontFamily: "var(--font-geist-sans), sans-serif" }}>
@@ -433,7 +433,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
             ) : (
               <>
                 {selDoc?.estado === "procesado" && (
-                  <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+                  <div style={{ padding: "11px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0, background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
                     <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
                     <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
                     {mesa.mesaActiva !== "factura" && <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />}

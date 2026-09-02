@@ -46,8 +46,8 @@ export default function MedioPagoControl({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 7, flexWrap: "wrap" }}>
-      <span style={{ fontSize: 9, fontWeight: 800, color: avisa ? "var(--amber)" : "var(--text3)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 7, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: avisa ? "var(--amber)" : "var(--text3)", textTransform: "uppercase", letterSpacing: ".07em" }}>
         Pago
       </span>
       <select
@@ -57,9 +57,9 @@ export default function MedioPagoControl({
         aria-label="Método de pago de todas las boletas de este documento"
         title="El SII pide el método de pago en cada boleta. Acá lo fijas para todas las de este documento."
         style={{
-          height: 24, borderRadius: 6, border: `1px solid ${avisa ? "rgba(245,158,11,.45)" : "var(--border)"}`,
+          height: 30, borderRadius: 9, border: `1px solid ${avisa ? "rgba(245,158,11,.45)" : "var(--border)"}`,
           background: "var(--bg-muted)", color: medio ? "var(--text)" : "var(--text3)",
-          padding: "0 6px", fontSize: 9, fontWeight: 700, outline: "none", cursor: "pointer",
+          padding: "0 9px", fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer",
         }}
       >
         <option value="">{sugerido ? `Elegir (sugerido: ${sugerido})` : "Elegir…"}</option>
@@ -73,7 +73,7 @@ export default function MedioPagoControl({
           onClick={() => cambiar(sugerido)}
           disabled={saving}
           style={{
-            fontSize: 9, fontWeight: 800, padding: "3px 8px", borderRadius: 6,
+            fontSize: 10.5, fontWeight: 800, padding: "6px 12px", borderRadius: 99,
             border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.1)",
             color: "var(--green)", cursor: "pointer",
           }}
@@ -82,7 +82,7 @@ export default function MedioPagoControl({
         </button>
       )}
       {avisa && (
-        <span style={{ fontSize: 8, color: "var(--text3)", lineHeight: 1.3, maxWidth: 260 }}>
+        <span style={{ fontSize: 10.5, color: "var(--text3)", lineHeight: 1.4, maxWidth: 300 }}>
           Es una cartola bancaria: sin elegir, las boletas salen como <b>Efectivo</b>.
         </span>
       )}
