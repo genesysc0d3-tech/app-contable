@@ -316,3 +316,13 @@ select option {
   to { opacity: 1; transform: none; }
 }
 .animate-auth-swap { animation: auth-swap 0.3s ease; }
+
+/* Popovers del editor v5 (HintSelector / MedioPagoControl). Estilos acá y no
+   en Tailwind: las utilidades de spacing no se compilan en este proyecto
+   (comprobado 2026-09-01: .px-3/.p-2.5 computan 0), así que el layout de los
+   popovers vive inline + estas clases de tema/hover que sí llegan al CSS. */
+.pop-menu { background: #fff; box-shadow: 0 12px 32px rgba(0,0,0,0.18); }
+.dark .pop-menu { background: #1c1c1e; box-shadow: 0 12px 32px rgba(0,0,0,0.5); }
+.pop-item { background: transparent; }
+.pop-item:hover { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.pop-item.activo { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
