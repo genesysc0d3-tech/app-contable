@@ -121,31 +121,33 @@ export default function HintSelector({
             left: pos.left,
             maxHeight: `calc(100vh - ${pos.top + 16}px)`,
           }}
-          className="z-[200] w-72 rounded-xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-y-auto animate-fade-in py-2"
+          className="z-[200] w-72 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-[var(--border)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] overflow-y-auto animate-fade-in p-2"
         >
-          <div className="px-4 pt-1.5 pb-2 text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-light)]">
+          <div className="px-3 pt-2 pb-2.5 text-[9px] font-semibold uppercase tracking-[.12em] text-[var(--muted-light)] opacity-80">
             Tipo de operaciones
           </div>
-          {OPCIONES.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => seleccionar(o.id)}
-              className={`w-[calc(100%-12px)] mx-1.5 rounded-lg flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors ${
-                o.id === value
-                  ? "bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
-                  : "hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"
-              }`}
-            >
-              <div className="w-3 h-3 mt-[3px] shrink-0 text-[#E8553E]">
-                {o.id === value && <Check size={12} weight="bold" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11.5px] font-semibold leading-snug">{o.label}</p>
-                <p className="text-[10px] text-[var(--muted-light)] mt-1 leading-snug">{o.desc}</p>
-              </div>
-            </button>
-          ))}
+          <div className="flex flex-col gap-1">
+            {OPCIONES.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => seleccionar(o.id)}
+                className={`w-full rounded-xl flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                  o.id === value
+                    ? "bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
+                    : "hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"
+                }`}
+              >
+                <div className="w-3.5 h-3.5 mt-[2px] shrink-0 text-[#E8553E]">
+                  {o.id === value && <Check size={13} weight="bold" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold leading-tight">{o.label}</p>
+                  <p className="text-[10.5px] text-[var(--muted-light)] mt-[3px] leading-snug opacity-90">{o.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>,
         document.body,
       )}
