@@ -158,6 +158,13 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";
     const saldo = c.saldo >= 0 ? parseChileanNumber(r[c.saldo]) : undefined;
 
+    // Plantilla extendida: campos que el cliente clasificó fila a fila.
+    const pc = cfg.plantilla_cols;
+    const celda = (idx: number | undefined) => {
+      if (idx === undefined || idx < 0) return null;
+      const v = String(r[idx] ?? "").trim();
+      return v || null;
+    };
     lines.push({
       tipo,
       fecha,
@@ -166,6 +173,12 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       n_documento,
       excel_row: i + 1,
       saldo,
+      ...(pc ? {
+        plantilla_tipo: celda(pc.tipo),
+        plantilla_receptor_rut: celda(pc.receptor_rut),
+        plantilla_receptor_nombre: celda(pc.receptor_nombre),
+        plantilla_medio_pago: celda(pc.medio_pago),
+      } : {}),
     });
   }
 
@@ -181,6 +194,16 @@ export function linesToPreExtracted(lines: ParsedLine[]): PreExtractedMovimiento
   return lines.map((l) => ({
     fecha: l.fecha,
     descripcion: l.descripcion,
+    // Campos de la plantilla extendida: solo viajan si la fila trae alguno
+    // (mantiene el shape mínimo para cartolas normales y sus tests).
+    ...(l.plantilla_tipo != null || l.plantilla_receptor_rut != null || l.plantilla_receptor_nombre != null || l.plantilla_medio_pago != null
+      ? {
+          plantilla_tipo: l.plantilla_tipo ?? null,
+          plantilla_receptor_rut: l.plantilla_receptor_rut ?? null,
+          plantilla_receptor_nombre: l.plantilla_receptor_nombre ?? null,
+          plantilla_medio_pago: l.plantilla_medio_pago ?? null,
+        }
+      : {}),
     monto: l.monto,
     tipo_flujo: l.tipo === "ENTRADA" ? "entrada" : "salida",
     origen: "cartola_preparseada",

@@ -23,11 +23,15 @@ import {
   type ClasificacionRegla,
 } from "./classifier";
 import { recordOpsEvent } from "../ops/events";
+import {
+  construirResumenClasificacion, construirPromptVeredicto, parseVeredicto,
+  aplicarVeredictoEnSitio, VEREDICTO_SYSTEM_PROMPT, type VeredictoPersistido,
+} from "./contexto-veredicto";
 import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validation";
 
 /** Extended propuesta with SII traceability fields used internally. */
 type EnrichedPropuesta = PropuestaExtraida & {
-  __fuente?: "regla_usuario" | "regla_global" | "ia_opencode";
+  __fuente?: "regla_usuario" | "regla_global" | "ia_opencode" | "plantilla";
   __regla_id?: string | null;
   /** tipo_dte recordado por una regla de usuario (39/41); null = el gate decide. */
   __tipo_dte?: number | null;
@@ -424,7 +428,7 @@ export async function procesarDocumento(
   contenido: string,
   ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number },
   preExtracted?: PreExtractedMovimiento[],
-  opts?: { deadline?: number }
+  opts?: { deadline?: number; esPlantilla?: boolean }
 ): Promise<{ movimientos_total: number; error?: string }> {
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
@@ -565,9 +569,27 @@ export async function procesarDocumento(
     if (bypassMode) {
       const movs = preExtracted! as MovimientoExtraido[];
 
-      // 1. Rules pass — try to classify each movimiento with user/global rules
+      // 1. Rules pass — try to classify each movimiento with user/global rules.
+      // PLANTILLA (2026-09-02): en la plantilla no hay nada que adivinar — las
+      // reglas GLOBALES no juegan (una regla de glosa le ganaba a la fila donde
+      // el cliente escribió su tipo). Precedencia: fila explícita del cliente >
+      // su regla aprendida > default de la plantilla. Las de USUARIO sí corren
+      // sobre filas sin tipo (son su propio aprendizaje).
       reglas = await loadReglas(empresaId);
-      const ruleResult = classifyWithRules(movs, reglas);
+      const reglasActivas = opts?.esPlantilla === true ? reglas.filter((r) => r.empresa_id != null) : reglas;
+      const ruleResultCrudo = classifyWithRules(movs, reglasActivas);
+      const ruleResult = opts?.esPlantilla !== true ? ruleResultCrudo : (() => {
+        // La fila con tipo explícito le gana incluso a la regla de usuario.
+        const conTipo = (idx: number) => {
+          const m = movs[idx] as (typeof movs)[number] & { plantilla_tipo?: string | null };
+          return Boolean((m.plantilla_tipo ?? "").trim());
+        };
+        const clasificados = ruleResultCrudo.clasificados.filter((c) => !conTipo(c.movimiento_index));
+        const devueltos = ruleResultCrudo.clasificados
+          .filter((c) => conTipo(c.movimiento_index))
+          .map((c) => ({ movimiento_index: c.movimiento_index, movimiento: movs[c.movimiento_index] }));
+        return { clasificados, noClasificados: [...ruleResultCrudo.noClasificados, ...devueltos] };
+      })();
       for (const c of ruleResult.clasificados) {
         ruleClassifications.set(c.movimiento_index, {
           propuesta: c.propuesta,
@@ -577,33 +599,56 @@ export async function procesarDocumento(
         });
       }
 
-      // 2. Detect template format: all entries are simple (fecha+desc+monto,
-      // no cargo/abono split, no n_documento). Skip AI entirely, classify
-      // all as "boleta" with high confidence.
-      const isTemplate = movs.length > 0 &&
-        movs.every((m) => m.tipo_flujo === "entrada" && !m.n_documento);
+      // 2. Plantilla massDTE: el atajo se gatea por la FIRMA del parser
+      // (headers exactos Fecha|Glosa|Monto de /api/generar-template), no por
+      // la forma de los datos. La heurística vieja ("todo entrada sin
+      // n_documento") se tragó una cartola BCI real editada por el cliente
+      // (contadores borran los cargos) y vistió 91 movimientos de "boleta 95%"
+      // sin que la IA corriera jamás — auditoría cerebro 2026-09-02. En la
+      // plantilla real el cliente YA clasificó (eligió la hoja de boletas):
+      // saltarse la IA ahí es correcto por diseño, no una suposición.
+      const isTemplate = opts?.esPlantilla === true && movs.length > 0 &&
+        movs.every((m) => m.tipo_flujo === "entrada");
 
       if (isTemplate) {
         // Auto-classify all noClasificados as "boleta"
         for (const nc of ruleResult.noClasificados) {
+          // Plantilla extendida (2026-09-02): si el cliente clasificó la fila
+          // (Tipo/RUT/nombre/medio de pago), su palabra manda — es la señal
+          // más barata y más confiable del pipeline.
+          const mp = nc.movimiento as typeof nc.movimiento & {
+            plantilla_tipo?: string | null;
+            plantilla_receptor_rut?: string | null;
+            plantilla_receptor_nombre?: string | null;
+            plantilla_medio_pago?: string | null;
+          };
+          const tipoCliente = (mp.plantilla_tipo ?? "").trim().toLowerCase();
+          const tipoPropuesto = tipoCliente.startsWith("exent") ? "exenta"
+            : tipoCliente.startsWith("afect") ? "boleta"
+            : "boleta";
           templatePropuestas.push({
             movimiento_index: nc.movimiento_index,
-            tipo_propuesto: "boleta" as PropuestaExtraida["tipo_propuesto"],
-            receptor_nombre: null,
-            receptor_rut: null,
+            tipo_propuesto: tipoPropuesto as PropuestaExtraida["tipo_propuesto"],
+            receptor_nombre: mp.plantilla_receptor_nombre ?? null,
+            receptor_rut: mp.plantilla_receptor_rut ?? null,
+            medio_pago: mp.plantilla_medio_pago ?? null,
             monto_neto: nc.movimiento.monto,
             iva: 0,
             total: nc.movimiento.monto,
-            confianza: 0.95,
+            // 0.9 honesto: la evidencia es la firma de la plantilla (el cliente
+            // clasificó al elegirla), no un análisis del movimiento. La confianza
+            // jamás supera el techo de su evidencia (veredicto 4 agentes).
+            confianza: 0.9,
             // notas = detalle/glosa EDITABLE por el humano (máxima precedencia en la
-            // boleta). NO meter marcadores internos acá: "clasificación automática"
-            // ya vive en __fuente="regla_global". Sin edición, la glosa cae a la
-            // glosa común de la cartola o a la del banco (ver armar-boleta.ts).
+            // boleta). Sin edición, la glosa cae a la glosa común de la cartola o a
+            // la del banco (ver armar-boleta.ts).
             notas: null,
             spread_compra: null,
             spread_venta: null,
             spread_ganancia: null,
-            __fuente: "regla_global",
+            // Fuente propia: "regla_global" acá contaminaba la auditoría (ninguna
+            // regla matcheó). La plantilla es su propia evidencia.
+            __fuente: "plantilla",
             __regla_id: null,
           });
         }
@@ -1290,9 +1335,67 @@ export async function procesarDocumento(
       validMovimientos
     );
 
+    // ── VEREDICTO DE CONTEXTO (fix "contexto placebo", 4 agentes 2026-09-02) ──
+    // Solo cuando hay nota del dueño Y el carril fue 100% determinístico (cero
+    // movimientos a IA) Y no es plantilla (ahí el cliente ya clasificó fila a
+    // fila). UNA llamada, downgrade-only, fail-open CON RASTRO.
+    let veredictoDoc: VeredictoPersistido | null = null;
+    const carrilSinIA = bypassMode && totalLotes === 0;
+    if (carrilSinIA && opts?.esPlantilla !== true && contextoUsuarioRaw !== "" && validPropuestas.length > 0) {
+      try {
+        const prov = getAIProvider();
+        if (prov.revisarContexto) {
+          const resumen = construirResumenClasificacion(
+            validPropuestas.map((vp) => ({
+              tipo_propuesto: vp.tipo_propuesto,
+              tipo_dte: (vp as EnrichedPropuesta).__tipo_dte ?? null,
+              total: toNum(vp.total),
+              __fuente: (vp as EnrichedPropuesta).__fuente,
+            })),
+            { tipoContribuyente: emp?.tipo_contribuyente ?? null, hint: docHint },
+          );
+          const r = await prov.revisarContexto(
+            VEREDICTO_SYSTEM_PROMPT,
+            construirPromptVeredicto(resumen, contextoUsuarioRaw),
+          );
+          totalTokensInput += r.tokens_input;
+          totalTokensOutput += r.tokens_output;
+          const v = parseVeredicto(r.raw);
+          if (v) {
+            veredictoDoc = { ...v, revisado: true, modelo: r.modelo };
+            // ops_events SIN texto libre (el motivo puede hacer eco del contexto)
+            await recordOpsEvent({
+              sb: supabase, severity: v.contradice ? "warn" : "info", source: "ia",
+              eventName: "contexto_veredicto",
+              summary: `Veredicto de contexto: ${v.contradice ? "CONTRADICE" : "sin conflicto"} (${validPropuestas.length} propuestas).`,
+              empresaId,
+              resourceType: "documento",
+              resourceId: documentoId,
+              metadata: { contradice: v.contradice, propuestas: validPropuestas.length },
+            });
+          } else {
+            veredictoDoc = { contradice: false, motivo: null, revisado: false, modelo: r.modelo };
+          }
+        }
+      } catch (e) {
+        // Fail-open: el statu quo es el comportamiento de siempre; un RegionError
+        // no puede amarillear un lote correcto. Pero queda RASTRO para que
+        // "me ignoró" sea distinguible de "el modelo se cayó".
+        veredictoDoc = { contradice: false, motivo: null, revisado: false, modelo: null };
+        await recordOpsEvent({
+          sb: supabase, severity: "warn", source: "ia",
+          eventName: "contexto_veredicto_error",
+          summary: `El veredicto de contexto falló (fail-open): ${e instanceof Error ? e.message.slice(0, 120) : "error"}`,
+          empresaId,
+          resourceType: "documento",
+          resourceId: documentoId,
+        }).catch(() => {});
+      }
+    }
+
     // Save propuestas_ia in batches, linked to saved movimiento IDs
     if (savedIds.length > 0 && validPropuestas.length > 0) {
-      const propuestasToInsert = validPropuestas
+      const propuestasToInsertBase = validPropuestas
         .filter((p) => originalToNewIndex.has(p.movimiento_index))
         .map((p) => {
           const newIndex = originalToNewIndex.get(p.movimiento_index)!;
@@ -1358,9 +1461,12 @@ export async function procesarDocumento(
           // bulk-elegible (BULK_MIN_CONFIANZA 0.8) para que "Poner listas (N)" las
           // tome. NO auto-stagea: el estado sigue la regla de abajo (queda
           // "pendiente" salvo regla_id), respetando el gesto de bulk deliberado.
+          // Techo por evidencia: auto-clasificado determinista SIN regla queda en
+          // 0.8 — bulk-elegible (BULK_MIN_CONFIANZA) pero pinta "media", no el
+          // verde de ALTA (0.85). El 0.9 anterior vestía un supuesto de análisis.
           const confianzaFinal =
             tipoDteAuto != null && enriched.__regla_id == null
-              ? Math.max(confianza ?? 0, 0.9)
+              ? Math.max(confianza ?? 0, 0.8)
               : confianza;
           return {
             empresa_id: empresaId,
@@ -1377,6 +1483,9 @@ export async function procesarDocumento(
             // antes de persistir — "nunca inventes RUTs" deja de ser una
             // promesa del prompt y pasa a ser estructural.
             receptor_rut: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? rutPropuestoONull(p.receptor_rut) : null,
+            // Medio de pago de la plantilla extendida (el cliente lo fijó): no es
+            // identidad de tercero, no entra en la minimización.
+            medio_pago: (p as { medio_pago?: string | null }).medio_pago ?? null,
             monto_neto: exentoFinal ? total : toNum(p.monto_neto),
             iva: exentoFinal ? 0 : toNum(p.iva),
             total,
@@ -1408,6 +1517,13 @@ export async function procesarDocumento(
             regla_id: enriched.__regla_id ?? null,
           };
         });
+
+      // Downgrade-only del veredicto ANTES del insert: nada aparece verde/en
+      // bulk para luego cambiar (anti-patrón del rebote ya matado en Check).
+      if (veredictoDoc?.contradice) {
+        for (const fila of propuestasToInsertBase) aplicarVeredictoEnSitio(fila);
+      }
+      const propuestasToInsert = propuestasToInsertBase;
 
       const { error: propError } = await insertInBatches(
         "propuestas_ia",
@@ -1445,6 +1561,10 @@ export async function procesarDocumento(
           duplicados_saltados: duplicadosSaltados,
           duplicados_detalle: duplicadosDetalle.length > 0 ? duplicadosDetalle : undefined,
           falsos_duplicados_warning: falsosDuplicadosWarning || undefined,
+          // Veredicto de contexto (fix placebo): la UI pinta el acuse desde acá.
+          // revisado:false = la llamada falló (fail-open) — distinguible de
+          // "sin conflicto" para que "me ignoró" sea reconstruible.
+          contexto_veredicto: veredictoDoc ?? undefined,
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);

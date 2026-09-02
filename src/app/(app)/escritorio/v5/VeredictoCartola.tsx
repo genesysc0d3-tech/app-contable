@@ -49,12 +49,13 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, contexto = null, veredicto = null,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null };
   propuestas: Propuesta[];
   tipoMix?: { afectas: number; exentas: number; gastos: number } | undefined;
   empresaId: string;
+  /** Legado: el visor es permanente — la ✕ se retiró (solo vaciaba el panel). */
   onClose: () => void;
   onEditar: () => void;
   onAprobar: () => void;
@@ -62,6 +63,10 @@ export default function VeredictoCartola({
   /** Eliminar el documento completo de la mesa (solo sin boletas emitidas; dos pasos, estado en el padre). */
   onEliminar?: () => void;
   eliminarArmado?: boolean;
+  /** Nota del dueño ("¿Qué es esta plata?") — para el acuse de recibo. */
+  contexto?: string | null;
+  /** Veredicto de contexto persistido por el processor (progreso_ia.contexto_veredicto). */
+  veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean; accion?: "mesa_facturas" | "no_son_ventas" | "revisar" } | null;
   /** Vocabulario por mesa: una plantilla de facturas NO es una cartola. */
   mesa?: "boleta" | "factura";
   /** Cartola completamente DECIDIDA (todo aprobado/juzgado): el visor cambia de
@@ -153,9 +158,6 @@ export default function VeredictoCartola({
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: decidida ? "var(--blue)" : dotColor }}>
             <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: decidida ? "var(--blue)" : dotColor }} />{decidida ? `${aprobadas} en Emitir` : `${listas}/${count} listas`}
           </span>
-          <button onClick={onClose} title="Cerrar" style={{ width: "2.15em", height: "2.15em", borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
         </div>
 
         {/* Héroe: el conteo (como el monto de una tx suelta) */}
@@ -180,6 +182,50 @@ export default function VeredictoCartola({
             </>)}
           </span>
         </div>
+
+        {/* ACUSE DE RECIBO del contexto (fix placebo): el cliente escribió una
+            nota — acá VE que se leyó y qué produjo. El motivo viene saneado del
+            server y va rotulado como generado por IA; nunca prescribe categoría. */}
+        {contexto && contexto.trim() && (() => {
+          const nota = contexto.trim().slice(0, 60) + (contexto.trim().length > 60 ? "…" : "");
+          if (veredicto?.contradice) {
+            // UNA frase, la ACCIÓN primero (pedido fundador 2026-09-02: "dijiste
+            // que son facturas → ve a la mesa de Facturas"). El detalle de la IA
+            // vive en el hover (title), no amontonado en el aviso.
+            const accion = veredicto.accion ?? "revisar";
+            const mensaje = accion === "mesa_facturas"
+              ? <><b>Dijiste que esto son facturas</b> — y esta es la mesa de boletas. Cámbiate a la mesa de <b>Facturas</b> (toca el logo de tu empresa) y sube el archivo allá.</>
+              : accion === "no_son_ventas"
+                ? <><b>Dijiste que esto no son ventas tuyas</b> — entonces no llevan boleta. En <b>Editar</b>, apriétales ✕ (sin boleta). ¿Dudas? Tu contador manda.</>
+                : <><b>Tu nota dice otra cosa que la clasificación.</b> Las {count} quedaron pendientes — revísalas en <b>Editar</b> antes de aprobar.</>;
+            return (
+              <div title={veredicto.motivo ? `IA: ${veredicto.motivo} (generado a partir de tu nota "${nota}")` : undefined}
+                style={{ marginTop: "0.6em", display: "flex", gap: 7, alignItems: "flex-start", padding: "0.55em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)", fontSize: "0.85em", lineHeight: 1.45, color: "var(--text)" }}>
+                <span style={{ color: "var(--amber)", flexShrink: 0 }}>⚠</span>
+                <span>{mensaje}</span>
+              </div>
+            );
+          }
+          if (veredicto && veredicto.revisado) {
+            return (
+              <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+                ✦ Leímos tu nota <b style={{ color: "var(--text2)" }}>&ldquo;{nota}&rdquo;</b>: la clasificación ya calza con lo que dijiste — no cambió nada.
+              </div>
+            );
+          }
+          if (veredicto && !veredicto.revisado) {
+            return (
+              <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+                ✦ Tu nota <b style={{ color: "var(--text2)" }}>&ldquo;{nota}&rdquo;</b> quedó guardada, pero no alcanzamos a contrastarla — dale una mirada extra al Editar.
+              </div>
+            );
+          }
+          return (
+            <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+              ✦ Tu nota <b style={{ color: "var(--text2)" }}>&ldquo;{nota}&rdquo;</b> se usó al clasificar estos movimientos.
+            </div>
+          );
+        })()}
       </div>
 
       {/* ACCIONES — decidida: la cartola ya se fue a Emitir; acá no hay nada que
@@ -200,25 +246,31 @@ export default function VeredictoCartola({
           </div>
         </div>
       ) : (
+      confirming && puedeAprobar ? (
+        /* CONFIRMACIÓN COMPACTA (pedido fundador 2026-09-02): antes el resumen
+           multilínea se apilaba SOBRE Editar/Aprobar/Eliminar y los botones se
+           corrían (Eliminar quedaba cortado). Ahora la columna entera SE
+           REEMPLAZA por la confirmación — una línea de resumen, el CTA y
+           Cancelar — y al cancelar vuelve todo idéntico. Nada se mueve. */
+        <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.7em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
+          <div style={{ fontSize: "0.85em", color: "var(--text2)", lineHeight: 1.4, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <b style={{ color: "var(--text)" }}>{listas}</b> a Emitir
+            {afectasListas > 0 && <> · afecta {afectasListas}</>}
+            {exentasListas > 0 && <> · exenta {exentasListas}</>}
+            {" "}· <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
+          </div>
+          <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar y enviar a Emitir
+          </button>
+          <div style={{ fontSize: "0.75em", color: "var(--text3)", textAlign: "center" }}>El envío al SII se confirma en Emitir.</div>
+          <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
+        </div>
+      ) : (
       <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "1.1em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
         <button className="vcart-cb" onClick={onEditar} disabled={busy} style={{ background: "var(--bg-muted)", color: "var(--text)", fontSize: "1.12em" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Editar
         </button>
-        {confirming && puedeAprobar ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.55em" }}>
-            <div style={{ fontSize: "0.82em", color: "var(--text2)", lineHeight: 1.45, textAlign: "center" }}>
-              Vas a dejar <b style={{ color: "var(--text)" }}>{listas}</b> listas en <b style={{ color: "var(--text)" }}>Emitir</b>
-              {afectasListas > 0 && <> · afecta {afectasListas}</>}
-              {exentasListas > 0 && <> · exenta {exentasListas}</>}
-              <br />total <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
-              <br /><span style={{ fontSize: "0.92em", color: "var(--text3)" }}>El envío al SII se confirma en la pestaña Emitir.</span>
-            </div>
-            <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar y enviar a Emitir
-            </button>
-            <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
-          </div>
-        ) : (
+        {(
           <>
             {/* Aprobar SIEMPRE visible: poner las tx listas en el popup Editar es la
                 palanca que lo habilita — esa es la barrera hacia Emitir. */}
@@ -243,6 +295,7 @@ export default function VeredictoCartola({
           </button>
         )}
       </div>
+      )
       )}
     </div>
   );

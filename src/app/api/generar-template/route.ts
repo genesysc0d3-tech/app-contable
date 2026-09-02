@@ -31,20 +31,39 @@ export async function GET(request: Request) {
     });
   }
 
+  // Plantilla EXTENDIDA (2026-09-02, hoja de trabajo del contador): 3 columnas
+  // obligatorias + 4 opcionales rotuladas. Las opcionales se detectan por
+  // header (named.ts) y son 100% deterministas — lo que el cliente escribe
+  // manda. La fila-guía explica cada una; el parser la salta (fecha inválida).
   const wsData = [
-    ["Fecha", "Glosa", "Monto"],
-    ["dd-mm-aaaa", "Descripción del servicio o producto", "Monto en CLP"],
-    ["13-05-2026", "Honorarios asesoría contable", 250000],
-    ["13-05-2026", "Venta de productos", 180000],
-    ["14-05-2026", "Servicio de consultoría", 350000],
+    ["Fecha", "Glosa", "Monto", "Tipo (opcional)", "RUT receptor (opcional)", "Nombre receptor (opcional)", "Medio de pago (opcional)"],
+    [
+      "dd-mm-aaaa",
+      "Qué vendiste o prestaste",
+      "Monto en CLP",
+      "Afecta o Exenta — vacío: lo decide tu empresa",
+      "Obligatorio solo si la venta supera ~$5,5 millones; bajo eso no se guarda (privacidad)",
+      "Vacío = sin identificar (legal bajo ese monto)",
+      "Transferencia / Efectivo / Tarjeta — vacío: Transferencia",
+    ],
+    ["13-05-2026", "Honorarios asesoría contable", 250000, "", "", "", ""],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
+  // Fila TOTAL con fórmula de fábrica: los contadores cuadran contra el total
+  // del banco. El parser la salta solo (sin fecha) — visto en cartolas reales.
+  XLSX.utils.sheet_add_aoa(ws, [["", "TOTAL (la app no lo cuenta como venta)"]], { origin: "A200" });
+  ws["C200"] = { t: "n", f: "SUM(C3:C199)" };
+  if (ws["!ref"]) ws["!ref"] = ws["!ref"].replace(/:.*$/, ":G200");
 
   ws["!cols"] = [
     { wch: 14 },
     { wch: 40 },
     { wch: 14 },
+    { wch: 22 },
+    { wch: 30 },
+    { wch: 28 },
+    { wch: 26 },
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, "Boletas");

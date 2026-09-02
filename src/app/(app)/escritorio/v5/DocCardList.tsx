@@ -45,6 +45,7 @@ interface DocRaw {
   glosa_comun?: string | null;
   medio_pago_comun?: string | null;
   glosa_activa?: boolean | null;
+  contexto_usuario?: string | null;
 }
 
 type DocProg = { total: number; emitida: number; lista: number; porRevisar: number; noAplica: number };
@@ -320,6 +321,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   <div className="warn">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     Error: {progreso.error}
+                  </div>
+                )}
+                {/* Salida de emergencia (2026-09-02): cuando la lectura falla, el
+                    cliente no queda botado — la plantilla es el camino simple que
+                    siempre funciona (la llena él, cero adivinanza). */}
+                {doc.estado === "error" && !isBoletaUnica && (
+                  <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.5, marginTop: 3 }}>
+                    ¿No resulta? <a href="/api/generar-template" style={{ color: "var(--accent)", fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 2 }}>Baja la plantilla</a>, copia tus movimientos ahí y súbela — ese camino nunca falla.
                   </div>
                 )}
                 <div className="da">

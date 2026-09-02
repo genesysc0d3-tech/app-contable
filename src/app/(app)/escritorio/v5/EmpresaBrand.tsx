@@ -168,7 +168,10 @@ export default function EmpresaBrand({
           onClick={() => (searchMode ? salirDeBusqueda() : setOpen((value) => !value))}
           aria-expanded={searchMode ? undefined : open}
           aria-label={searchMode ? "Volver a la mesa" : "Cambiar empresa"}
-          title={searchMode ? "Volver a la mesa" : undefined}
+          // El hover dice QUÉ empresa está activa: con logo-solo (sin texto), un
+          // logo desactualizado (empresa renombrada, PNG viejo) confundía hasta
+          // en auditoría interna — el nombre real siempre a un hover.
+          title={searchMode ? "Volver a la mesa" : `${nombre} — cambiar empresa`}
           style={{ display: "flex", alignItems: "center", gap: logoOk ? 6 : 9, minWidth: 0, maxWidth, border: 0, padding: 0, margin: 0, background: "transparent", color: "inherit", cursor: pending ? "wait" : "pointer", textAlign: "left" }}
         >
           {brandContent}

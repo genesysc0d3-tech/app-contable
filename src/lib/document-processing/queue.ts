@@ -259,19 +259,21 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
     // Telegram = 1 venta: salta la 2ª pasada IA de agrupado y acorta el timeout OCR.
     const esTelegram = metadata.origen === "telegram";
     const { groupedText } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000 } : undefined);
-    return { contenido: groupedText, preExtracted: null };
+    return { contenido: groupedText, preExtracted: null, plantilla: false };
   }
 
   const fileBuffer = await descargarDocumento(provider, job.storage_path, bajar);
 
   let contenido: string;
   let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
+  let plantilla = false;
 
   if (job.tipo === "excel") {
     const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer;
     const parsed = await parseExcel(ab, { documento_id: job.documento_id, empresa_id: job.empresa_id });
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
+    plantilla = parsed.plantilla;
   } else if (job.tipo === "pdf") {
     contenido = await leerTextoPdf(sb, job, fileBuffer);
   } else if (job.tipo === "imagen") {
@@ -285,7 +287,7 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
     contenido = fileBuffer.toString("utf-8");
   }
 
-  return { contenido, preExtracted };
+  return { contenido, preExtracted, plantilla };
 }
 
 /**
@@ -518,7 +520,7 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: r.movimientos_total };
     }
 
-    const { contenido, preExtracted } = await extractContentFromJob(sb, job);
+    const { contenido, preExtracted, plantilla } = await extractContentFromJob(sb, job);
     if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
 
     let movimientosTotal: number;
@@ -535,7 +537,7 @@ async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
       // Presupuesto de tiempo: si el modelo de turno es lento y no alcanza,
       // el processor hace yield con checkpoint y seguimos en otra invocación.
       const deadline = Date.now() + JOB_TIME_BUDGET_MS;
-      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined, { deadline });
+      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined, { deadline, esPlantilla: plantilla });
       if (result.error) throw new Error(result.error);
       movimientosTotal = result.movimientos_total;
     }
