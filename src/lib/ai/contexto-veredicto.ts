@@ -21,15 +21,26 @@
 //
 // La plantilla massDTE queda exenta: ahí el cliente ya clasificó fila a fila.
 
+/** Acción sugerida — LISTA CERRADA (la IA elige, jamás redacta la acción):
+ *  - "mesa_facturas": la nota dice que son facturas / cliente empresa → el
+ *    archivo va en la mesa de Facturas.
+ *  - "no_son_ventas": la nota dice que no son ventas (préstamos, plata de
+ *    terceros, cuenta personal) → marcarlas sin boleta.
+ *  - "revisar": cualquier otro choque → revisión fila a fila en Editar. */
+export type VeredictoAccion = "mesa_facturas" | "no_son_ventas" | "revisar";
+const ACCIONES_VALIDAS = new Set<VeredictoAccion>(["mesa_facturas", "no_son_ventas", "revisar"]);
+
 export type ContextoVeredicto = {
   contradice: boolean;
   /** Motivo SANEADO (≤200 chars, sin URLs/correos/RUTs/tokens PII) o null. */
   motivo: string | null;
+  accion: VeredictoAccion;
 };
 
 export type VeredictoPersistido = {
   contradice: boolean;
   motivo: string | null;
+  accion?: VeredictoAccion;
   /** false = la llamada falló y se hizo fail-open (distinguible de "no contradice"). */
   revisado: boolean;
   modelo: string | null;
@@ -77,7 +88,11 @@ export const VEREDICTO_SYSTEM_PROMPT =
   "Ejemplos de contradicción: 'recibo plata para pasársela a un tercero', 'no son ventas mías', " +
   "'es mi cuenta personal', 'a esta empresa le emito factura, no boleta'. " +
   "Si la nota es compatible o solo agrega detalle, NO contradice. " +
-  'Responde SOLO este JSON: {"contradice": true|false, "motivo": "una frase operativa de máximo 140 caracteres que compare la nota con la clasificación, SIN citar leyes ni sugerir categorías"}';
+  "Si contradice, elige la acción EXACTA de esta lista: " +
+  "'mesa_facturas' (la nota dice que emite FACTURAS o que el pagador es una empresa), " +
+  "'no_son_ventas' (la nota dice que los abonos NO son ventas suyas: préstamos, plata de terceros, cuenta personal), " +
+  "'revisar' (cualquier otro choque). " +
+  'Responde SOLO este JSON: {"contradice": true|false, "accion": "mesa_facturas"|"no_son_ventas"|"revisar", "motivo": "una frase operativa de máximo 140 caracteres que compare la nota con la clasificación, SIN citar leyes ni sugerir categorías"}';
 
 export function construirPromptVeredicto(resumen: string, contextoRecintado: string): string {
   // El recinto es el MISMO del clasificador (processor.ts): fence """ marcado
@@ -99,7 +114,12 @@ export function parseVeredicto(raw: unknown): ContextoVeredicto | null {
   const o = raw as Record<string, unknown>;
   if (typeof o.contradice !== "boolean") return null;
   const motivo = typeof o.motivo === "string" ? sanearMotivo(o.motivo) : null;
-  return { contradice: o.contradice, motivo };
+  // Acción: enum cerrado — cualquier cosa fuera de la lista cae a "revisar"
+  // (la IA elige entre opciones nuestras, jamás inventa la acción).
+  const accion: VeredictoAccion = ACCIONES_VALIDAS.has(o.accion as VeredictoAccion)
+    ? (o.accion as VeredictoAccion)
+    : "revisar";
+  return { contradice: o.contradice, motivo, accion };
 }
 
 /**

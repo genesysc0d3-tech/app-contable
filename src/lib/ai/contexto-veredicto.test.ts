@@ -43,9 +43,13 @@ describe("aplicarVeredictoEnSitio — downgrade-only y monotónico", () => {
 });
 
 describe("parseVeredicto — estricto, todo lo raro es null (fail-open)", () => {
-  it("acepta el shape exacto", () => {
-    expect(parseVeredicto({ contradice: true, motivo: "tu nota dice factura y la clasificación propone boleta" }))
-      .toEqual({ contradice: true, motivo: "tu nota dice factura y la clasificación propone boleta" });
+  it("acepta el shape exacto (con acción del enum)", () => {
+    expect(parseVeredicto({ contradice: true, accion: "mesa_facturas", motivo: "tu nota dice factura y la clasificación propone boleta" }))
+      .toEqual({ contradice: true, accion: "mesa_facturas", motivo: "tu nota dice factura y la clasificación propone boleta" });
+  });
+  it("una acción fuera del enum (o inventada por la IA) cae a 'revisar'", () => {
+    expect(parseVeredicto({ contradice: true, accion: "aprueba_todo_sin_mirar", motivo: "lo que sea x" })!.accion).toBe("revisar");
+    expect(parseVeredicto({ contradice: false, motivo: "sin conflicto detectado" })!.accion).toBe("revisar");
   });
   it("rechaza contradice no-booleano, null, strings y arrays", () => {
     expect(parseVeredicto({ contradice: "true", motivo: "x" })).toBeNull();

@@ -66,7 +66,7 @@ export default function VeredictoCartola({
   /** Nota del dueño ("¿Qué es esta plata?") — para el acuse de recibo. */
   contexto?: string | null;
   /** Veredicto de contexto persistido por el processor (progreso_ia.contexto_veredicto). */
-  veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } | null;
+  veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean; accion?: "mesa_facturas" | "no_son_ventas" | "revisar" } | null;
   /** Vocabulario por mesa: una plantilla de facturas NO es una cartola. */
   mesa?: "boleta" | "factura";
   /** Cartola completamente DECIDIDA (todo aprobado/juzgado): el visor cambia de
@@ -189,14 +189,20 @@ export default function VeredictoCartola({
         {contexto && contexto.trim() && (() => {
           const nota = contexto.trim().slice(0, 60) + (contexto.trim().length > 60 ? "…" : "");
           if (veredicto?.contradice) {
+            // UNA frase, la ACCIÓN primero (pedido fundador 2026-09-02: "dijiste
+            // que son facturas → ve a la mesa de Facturas"). El detalle de la IA
+            // vive en el hover (title), no amontonado en el aviso.
+            const accion = veredicto.accion ?? "revisar";
+            const mensaje = accion === "mesa_facturas"
+              ? <><b>Dijiste que esto son facturas</b> — y esta es la mesa de boletas. Cámbiate a la mesa de <b>Facturas</b> (toca el logo de tu empresa) y sube el archivo allá.</>
+              : accion === "no_son_ventas"
+                ? <><b>Dijiste que esto no son ventas tuyas</b> — entonces no llevan boleta. En <b>Editar</b>, apriétales ✕ (sin boleta). ¿Dudas? Tu contador manda.</>
+                : <><b>Tu nota dice otra cosa que la clasificación.</b> Las {count} quedaron pendientes — revísalas en <b>Editar</b> antes de aprobar.</>;
             return (
-              <div style={{ marginTop: "0.6em", display: "flex", gap: 7, alignItems: "flex-start", padding: "0.55em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)", fontSize: "0.82em", lineHeight: 1.45, color: "var(--text)" }}>
+              <div title={veredicto.motivo ? `IA: ${veredicto.motivo} (generado a partir de tu nota "${nota}")` : undefined}
+                style={{ marginTop: "0.6em", display: "flex", gap: 7, alignItems: "flex-start", padding: "0.55em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)", fontSize: "0.85em", lineHeight: 1.45, color: "var(--text)" }}>
                 <span style={{ color: "var(--amber)", flexShrink: 0 }}>⚠</span>
-                <span>
-                  Tu nota <b>&ldquo;{nota}&rdquo;</b> contradice cómo se clasificó esta cartola
-                  {veredicto.motivo ? <> — <i>{veredicto.motivo}</i> <span style={{ color: "var(--text3)" }}>(generado por IA a partir de tu nota)</span></> : null}.
-                  {" "}Quedaron en amarillo, fuera del preparado automático: entra a <b>Editar</b> y revísalas tú. Si la clasificación estaba bien, márcalas listas — mandas tú.
-                </span>
+                <span>{mensaje}</span>
               </div>
             );
           }
