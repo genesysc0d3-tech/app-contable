@@ -32,6 +32,7 @@ export type DocRow = {
   id: string; nombre_archivo: string; tipo: string; estado: string;
   movimientos_detectados: number | null; created_at: string; progreso_ia: unknown;
   tipo_operacion_hint: string | null; glosa_comun: string | null; glosa_activa: boolean | null;
+  contexto_usuario?: string | null;
 };
 
 export type MesaParams = { date?: string; month?: string; view?: string; mesa?: string };
@@ -132,7 +133,7 @@ export async function fetchMesaDateDependent(
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
-    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
+    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun,contexto_usuario").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),

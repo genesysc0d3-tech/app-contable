@@ -23,6 +23,10 @@ import {
   type ClasificacionRegla,
 } from "./classifier";
 import { recordOpsEvent } from "../ops/events";
+import {
+  construirResumenClasificacion, construirPromptVeredicto, parseVeredicto,
+  aplicarVeredictoEnSitio, VEREDICTO_SYSTEM_PROMPT, type VeredictoPersistido,
+} from "./contexto-veredicto";
 import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "../sii/validation";
 
 /** Extended propuesta with SII traceability fields used internally. */
@@ -1331,9 +1335,67 @@ export async function procesarDocumento(
       validMovimientos
     );
 
+    // ── VEREDICTO DE CONTEXTO (fix "contexto placebo", 4 agentes 2026-09-02) ──
+    // Solo cuando hay nota del dueño Y el carril fue 100% determinístico (cero
+    // movimientos a IA) Y no es plantilla (ahí el cliente ya clasificó fila a
+    // fila). UNA llamada, downgrade-only, fail-open CON RASTRO.
+    let veredictoDoc: VeredictoPersistido | null = null;
+    const carrilSinIA = bypassMode && totalLotes === 0;
+    if (carrilSinIA && opts?.esPlantilla !== true && contextoUsuarioRaw !== "" && validPropuestas.length > 0) {
+      try {
+        const prov = getAIProvider();
+        if (prov.revisarContexto) {
+          const resumen = construirResumenClasificacion(
+            validPropuestas.map((vp) => ({
+              tipo_propuesto: vp.tipo_propuesto,
+              tipo_dte: (vp as EnrichedPropuesta).__tipo_dte ?? null,
+              total: toNum(vp.total),
+              __fuente: (vp as EnrichedPropuesta).__fuente,
+            })),
+            { tipoContribuyente: emp?.tipo_contribuyente ?? null, hint: docHint },
+          );
+          const r = await prov.revisarContexto(
+            VEREDICTO_SYSTEM_PROMPT,
+            construirPromptVeredicto(resumen, contextoUsuarioRaw),
+          );
+          totalTokensInput += r.tokens_input;
+          totalTokensOutput += r.tokens_output;
+          const v = parseVeredicto(r.raw);
+          if (v) {
+            veredictoDoc = { ...v, revisado: true, modelo: r.modelo };
+            // ops_events SIN texto libre (el motivo puede hacer eco del contexto)
+            await recordOpsEvent({
+              sb: supabase, severity: v.contradice ? "warn" : "info", source: "ia",
+              eventName: "contexto_veredicto",
+              summary: `Veredicto de contexto: ${v.contradice ? "CONTRADICE" : "sin conflicto"} (${validPropuestas.length} propuestas).`,
+              empresaId,
+              resourceType: "documento",
+              resourceId: documentoId,
+              metadata: { contradice: v.contradice, propuestas: validPropuestas.length },
+            });
+          } else {
+            veredictoDoc = { contradice: false, motivo: null, revisado: false, modelo: r.modelo };
+          }
+        }
+      } catch (e) {
+        // Fail-open: el statu quo es el comportamiento de siempre; un RegionError
+        // no puede amarillear un lote correcto. Pero queda RASTRO para que
+        // "me ignoró" sea distinguible de "el modelo se cayó".
+        veredictoDoc = { contradice: false, motivo: null, revisado: false, modelo: null };
+        await recordOpsEvent({
+          sb: supabase, severity: "warn", source: "ia",
+          eventName: "contexto_veredicto_error",
+          summary: `El veredicto de contexto falló (fail-open): ${e instanceof Error ? e.message.slice(0, 120) : "error"}`,
+          empresaId,
+          resourceType: "documento",
+          resourceId: documentoId,
+        }).catch(() => {});
+      }
+    }
+
     // Save propuestas_ia in batches, linked to saved movimiento IDs
     if (savedIds.length > 0 && validPropuestas.length > 0) {
-      const propuestasToInsert = validPropuestas
+      const propuestasToInsertBase = validPropuestas
         .filter((p) => originalToNewIndex.has(p.movimiento_index))
         .map((p) => {
           const newIndex = originalToNewIndex.get(p.movimiento_index)!;
@@ -1456,6 +1518,13 @@ export async function procesarDocumento(
           };
         });
 
+      // Downgrade-only del veredicto ANTES del insert: nada aparece verde/en
+      // bulk para luego cambiar (anti-patrón del rebote ya matado en Check).
+      if (veredictoDoc?.contradice) {
+        for (const fila of propuestasToInsertBase) aplicarVeredictoEnSitio(fila);
+      }
+      const propuestasToInsert = propuestasToInsertBase;
+
       const { error: propError } = await insertInBatches(
         "propuestas_ia",
         propuestasToInsert
@@ -1492,6 +1561,10 @@ export async function procesarDocumento(
           duplicados_saltados: duplicadosSaltados,
           duplicados_detalle: duplicadosDetalle.length > 0 ? duplicadosDetalle : undefined,
           falsos_duplicados_warning: falsosDuplicadosWarning || undefined,
+          // Veredicto de contexto (fix placebo): la UI pinta el acuse desde acá.
+          // revisado:false = la llamada falló (fail-open) — distinguible de
+          // "sin conflicto" para que "me ignoró" sea reconstruible.
+          contexto_veredicto: veredictoDoc ?? undefined,
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);

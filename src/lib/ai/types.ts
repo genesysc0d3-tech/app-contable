@@ -67,6 +67,17 @@ export interface AIProvider {
     systemPrompt: string
   ): Promise<ClassifyOnlyResponse>;
 
+  /**
+   * Pregunta única del veredicto de contexto (fix "contexto placebo"): ¿la
+   * nota del dueño contradice la clasificación por defecto? Salida estricta;
+   * el caller hace fail-open si falta el método, falla la llamada o el JSON
+   * no parsea.
+   */
+  revisarContexto?(
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<{ raw: unknown; tokens_input: number; tokens_output: number; modelo: string }>;
+
   /** Calculate cost in USD for given token usage. */
   getCost(tokensInput: number, tokensOutput: number): number;
 }

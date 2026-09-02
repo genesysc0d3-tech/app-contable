@@ -2,13 +2,16 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useToast } from "@/components/Toast";
-import { classifyFile } from "@/lib/file-classifier";
+import { classifyFile, esPlantillaMassdte } from "@/lib/file-classifier";
 import type { FileCategory } from "@/lib/file-classifier";
 import { MAX_PROCESAR_UPLOAD_BYTES } from "@/lib/upload/process-upload-validation";
 
 interface QueuedFile {
   id: string; file: File; category: FileCategory;
   customName: string; error?: string;
+  /** Plantilla massDTE detectada client-side: el botón de contexto no aplica
+   *  (el cliente ya clasificó fila a fila — fix del contexto placebo). */
+  esPlantilla?: boolean;
   /** Lo que el dueño escribió sobre esta cartola. Viaja CON el archivo, así se
    *  procesa bien a la primera y no hay que reprocesar. */
   contexto?: string;
@@ -61,6 +64,7 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
       files.map(async (f) => ({
         id: `q-${++idCounter}`, file: f,
         category: await classifyFile(f),
+        esPlantilla: await esPlantillaMassdte(f),
         customName: f.name.replace(/\.[^.]+$/, ""),
         // El server rechaza >10MB (413): se marca aquí y no se envía
         error: f.size > MAX_PROCESAR_UPLOAD_BYTES ? "Supera 10MB — no se subirá" : undefined,
@@ -243,7 +247,7 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
                     procese bien a la primera, sin reprocesar. */}
                 {/* En facturas no hay IA que contextualizar: el pipeline es
                     determinístico (cada fila ya es una factura decidida). */}
-                {!esFacturas && <button onClick={() => abrirContexto(q)}
+                {!esFacturas && !q.esPlantilla && <button onClick={() => abrirContexto(q)}
                   className={`dz-ia-btn${q.contexto ? " puesto" : ""}`}
                   title={q.contexto ? "Editar el contexto de este archivo" : "Contarle a la IA qué es esta cartola"}
                   aria-label={q.contexto ? "Editar el contexto de este archivo" : "Contarle a la IA qué es esta cartola"}>
@@ -295,8 +299,8 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
             onClick={(e) => e.stopPropagation()}>
             <h4 id="dz-ctx-t">¿Qué es esta plata?</h4>
             <p className="dz-ctx-ph">
-              Una o dos frases sobre <b>{ctxArchivo.customName}</b>. Le sirve al clasificador
-              para no tratar como venta algo que no lo es.
+              Una o dos frases sobre <b>{ctxArchivo.customName}</b>. La usamos al clasificar, y
+              si algo no calza con tu nota te lo marcamos en amarillo antes de aprobar.
             </p>
 
             <div className="dz-ctx-chips">

@@ -45,6 +45,7 @@ interface DocRaw {
   glosa_comun?: string | null;
   medio_pago_comun?: string | null;
   glosa_activa?: boolean | null;
+  contexto_usuario?: string | null;
 }
 
 type DocProg = { total: number; emitida: number; lista: number; porRevisar: number; noAplica: number };

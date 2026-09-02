@@ -49,7 +49,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, contexto = null, veredicto = null,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null };
   propuestas: Propuesta[];
@@ -62,6 +62,10 @@ export default function VeredictoCartola({
   /** Eliminar el documento completo de la mesa (solo sin boletas emitidas; dos pasos, estado en el padre). */
   onEliminar?: () => void;
   eliminarArmado?: boolean;
+  /** Nota del dueño ("¿Qué es esta plata?") — para el acuse de recibo. */
+  contexto?: string | null;
+  /** Veredicto de contexto persistido por el processor (progreso_ia.contexto_veredicto). */
+  veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } | null;
   /** Vocabulario por mesa: una plantilla de facturas NO es una cartola. */
   mesa?: "boleta" | "factura";
   /** Cartola completamente DECIDIDA (todo aprobado/juzgado): el visor cambia de
@@ -180,6 +184,44 @@ export default function VeredictoCartola({
             </>)}
           </span>
         </div>
+
+        {/* ACUSE DE RECIBO del contexto (fix placebo): el cliente escribió una
+            nota — acá VE que se leyó y qué produjo. El motivo viene saneado del
+            server y va rotulado como generado por IA; nunca prescribe categoría. */}
+        {contexto && contexto.trim() && (() => {
+          const nota = contexto.trim().slice(0, 60) + (contexto.trim().length > 60 ? "…" : "");
+          if (veredicto?.contradice) {
+            return (
+              <div style={{ marginTop: "0.6em", display: "flex", gap: 7, alignItems: "flex-start", padding: "0.55em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)", fontSize: "0.82em", lineHeight: 1.45, color: "var(--text)" }}>
+                <span style={{ color: "var(--amber)", flexShrink: 0 }}>⚠</span>
+                <span>
+                  Tu nota <b>&ldquo;{nota}&rdquo;</b> contradice cómo se clasificó esta cartola
+                  {veredicto.motivo ? <> — <i>{veredicto.motivo}</i> <span style={{ color: "var(--text3)" }}>(generado por IA a partir de tu nota)</span></> : null}.
+                  {" "}Quedaron en amarillo, fuera del preparado automático: entra a <b>Editar</b> y revísalas tú. Si la clasificación estaba bien, márcalas listas — mandas tú.
+                </span>
+              </div>
+            );
+          }
+          if (veredicto && veredicto.revisado) {
+            return (
+              <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+                ✦ Leímos tu nota <b style={{ color: "var(--text2)" }}>&ldquo;{nota}&rdquo;</b>: la clasificación ya calza con lo que dijiste — no cambió nada.
+              </div>
+            );
+          }
+          if (veredicto && !veredicto.revisado) {
+            return (
+              <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+                ✦ Tu nota <b style={{ color: "var(--text2)" }}>&ldquo;{nota}&rdquo;</b> quedó guardada, pero no alcanzamos a contrastarla — dale una mirada extra al Editar.
+              </div>
+            );
+          }
+          return (
+            <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+              ✦ Tu nota <b style={{ color: "var(--text2)" }}>&ldquo;{nota}&rdquo;</b> se usó al clasificar estos movimientos.
+            </div>
+          );
+        })()}
       </div>
 
       {/* ACCIONES — decidida: la cartola ya se fue a Emitir; acá no hay nada que
