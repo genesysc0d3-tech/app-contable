@@ -87,7 +87,7 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc, bare }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc, bare, docsDecididos }: {
   docs: DocRaw[]; empresaId: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
@@ -103,6 +103,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   // Modo panel del tablero del Check: cada panel ya rotula su origen, así que se omiten
   // el "Agregados recientes" y el encabezado de grupo por origen (redundantes).
   bare?: boolean;
+  // Documentos completamente DECIDIDOS (pedido fundador 2026-09-01): todo aprobado
+  // o juzgado, nada pendiente/listo. Se muestran tachados en la mesa del Check —
+  // la cartola ya se fue a Emitir (o quedó juzgada entera).
+  docsDecididos?: Set<string>;
 }) {
   const router = useRouter();
   const ctxReload = useMesaReload();
@@ -243,7 +247,10 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
               <div className="dh" style={isBoletaUnica ? { padding: "6px 8px", gap: 5 } : undefined}>
                 {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"var(--accent)",fontSize:9,fontWeight:900,flexShrink:0}}>B1</span>}
                 <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px color-mix(in srgb, ${st[doc.estado]??"var(--text2)"} 25%, transparent)`}} />
-                <span className="nm">{doc.nombre_archivo}</span>
+                <span className="nm" style={docsDecididos?.has(doc.id) ? { textDecoration: "line-through", opacity: .55 } : undefined}>{doc.nombre_archivo}</span>
+                {docsDecididos?.has(doc.id) && (
+                  <span title="Cartola decidida completa: lo emitible está en Emitir y el resto quedó juzgado." style={{ fontSize: 9, padding: "1px 6px", borderRadius: 999, background: "rgba(91,156,246,.12)", color: "var(--blue)", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>en Emitir</span>
+                )}
                 {isBoletaUnica && <span style={{fontSize:9,padding:"1px 5px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"var(--accent)",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
@@ -515,7 +522,13 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       <button key={doc.id} type="button" className={`agg-fr${selectedDocId === doc.id ? " sel" : ""}`} title={doc.nombre_archivo}
                         onClick={() => { if (onSelectDoc) { onSelectDoc(doc); return; } if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
                         <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
-                        <span className="nm">{nm}</span>
+                        {/* Cartola completamente decidida (fundador 2026-09-01): tachada +
+                            chip "en Emitir". El juicio terminó acá; lo que sigue vive en Emitir. */}
+                        <span className="nm" style={docsDecididos?.has(doc.id) ? { textDecoration: "line-through", opacity: .55 } : undefined}>{nm}</span>
+                        {docsDecididos?.has(doc.id) && (
+                          <span title="Cartola decidida completa: lo emitible está en Emitir y el resto quedó juzgado."
+                            style={{ fontSize: 9, padding: "1px 6px", borderRadius: 999, background: "rgba(91,156,246,.12)", color: "var(--blue)", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>en Emitir</span>
+                        )}
                         {stuckN > 0 && (
                           <span className="stuck" style={{ color: (stuck?.bloqueadas ?? 0) > 0 ? "var(--red)" : "var(--amber)" }}
                             title={`${stuckN} en Emitir — ${stuck?.bloqueadas ?? 0} bloqueada(s), ${stuck?.porRevisar ?? 0} por revisar`}>{stuckN}</span>

@@ -247,6 +247,19 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   };
   const puedeEliminarSel = Boolean(selDoc) && tipo !== "boleta" && !selFrozen && selDoc?.estado !== "procesando";
 
+  // Cartolas completamente DECIDIDAS (pedido fundador 2026-09-01): sin pendientes
+  // ni listas — todo aprobado (en Emitir) o juzgado. Se tachan en la mesa del Check.
+  const docsDecididos = useMemo(() => {
+    const s = new Set<string>();
+    propsByDoc.forEach((arr, id) => {
+      if (arr.length === 0) return;
+      const sinDecidir = arr.some((p) => p.estado === "pendiente" || p.estado === "editado" || p.estado === "listo");
+      const hayAprobada = arr.some((p) => p.estado === "aprobado");
+      if (!sinDecidir && hayAprobada) s.add(id);
+    });
+    return s;
+  }, [propsByDoc]);
+
   // Un DocCardList (árbol) por panel, con la lista de su fuente; selección compartida.
   const renderArbol = (list: DocRow[]) => (
     <DocCardList
@@ -260,6 +273,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       stuckByDoc={stuckByDoc}
       forceTree
       bare
+      docsDecididos={docsDecididos}
       selectedDocId={selDocId}
       onSelectDoc={(d) => setSelDocId(d.id)}
     />
