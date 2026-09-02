@@ -105,7 +105,7 @@ export default function HintSelector({
         onClick={toggleMenu}
         disabled={saving}
         title="Tipo de operaciones en esta cartola — ayuda al clasificador a elegir afecta/exenta"
-        className="btn-press flex items-center gap-1.5 text-[11.5px] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 border border-[var(--border)] rounded-full px-3 h-[30px] hover:border-[var(--muted)]"
+        className="btn-press flex items-center gap-1.5 text-[11.5px] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 border border-[var(--border)] rounded-full px-3 h-[30px] hover:border-[var(--muted)] whitespace-nowrap shrink-0"
       >
         <Lightbulb size={12} weight="bold" className="text-[#F59E0B]" />
         <span>Tipo: <b className="text-[var(--foreground)]">{opcionActual.label}</b></span>

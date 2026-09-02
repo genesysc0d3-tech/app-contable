@@ -59,7 +59,7 @@ export default function GlosaComunControl({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0, minWidth: 0 }}>
       <button
         type="button"
         role="switch"
@@ -93,7 +93,7 @@ export default function GlosaComunControl({
           aria-label="Detalle común de las boletas de este documento"
           title="Mismo detalle para todas las boletas de este documento (máx 80). Vacío usa el default por tipo."
           style={{
-            flex: 1, minWidth: 190, height: 30, borderRadius: 9, border: "1px solid var(--border)",
+            flex: 1, minWidth: 0, height: 30, borderRadius: 9, border: "1px solid var(--border)",
             background: "var(--bg-muted)", color: "var(--text)", padding: "0 11px", fontSize: 11.5, outline: "none",
           }}
         />

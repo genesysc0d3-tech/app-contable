@@ -433,14 +433,16 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
             ) : (
               <>
                 {selDoc?.estado === "procesado" && (
-                  <div style={{ padding: "11px 18px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 9, flexShrink: 0, background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
-                      </div>
+                  <div style={{ padding: "11px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexShrink: 0, background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
+                    <HintSelector documentoId={editarCartolaId} current={selDoc.tipo_operacion_hint ?? null} />
+                    <div style={{ flex: "2 1 240px", minWidth: 200 }}>
+                      <GlosaComunControl documentoId={editarCartolaId} hint={selDoc.tipo_operacion_hint ?? null} glosaInicial={selDoc.glosa_comun ?? null} activaInicial={selDoc.glosa_activa ?? true} mesa={mesa.mesaActiva} />
                     </div>
-                    {mesa.mesaActiva !== "factura" && <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />}
+                    {mesa.mesaActiva !== "factura" && (
+                      <div style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden" }}>
+                        <MedioPagoControl documentoId={editarCartolaId} esCartola={esCartolaBancaria(selDoc)} medioInicial={selDoc.medio_pago_comun ?? null} />
+                      </div>
+                    )}
                   </div>
                 )}
                 <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} />
