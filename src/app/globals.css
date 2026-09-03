@@ -329,3 +329,14 @@ select option {
 
 /* Spinner del Aprobar del visor (círculo de carga mientras la acción viaja). */
 @keyframes vcart-spin { to { transform: rotate(360deg); } }
+
+/* Tooltip propio de los chips de conectores (barra de la mesa): aparece con
+   una pausa cortita y un pop suave, como el del navegador pero nuestro. */
+.conector-chip { position: relative; }
+.conector-tip {
+  position: absolute; top: calc(100% + 9px); left: 50%;
+  transform: translate(-50%, -4px) scale(.96); transform-origin: top center;
+  opacity: 0; pointer-events: none; z-index: 80;
+  transition: opacity .16s ease, transform .2s cubic-bezier(.2,1.4,.4,1);
+}
+.conector-chip:hover .conector-tip { opacity: 1; transform: translate(-50%, 0) scale(1); transition-delay: .28s; }
