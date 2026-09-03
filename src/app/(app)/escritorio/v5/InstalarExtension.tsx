@@ -143,9 +143,9 @@ export default function InstalarExtension({ escalera }: { escalera?: EscaleraDat
           <span title={`Instalada v${version} · publicada v${versionPublicada}`}
             style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 700, color: "var(--amber, #f59e0b)", background: "color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 28%, transparent)", borderRadius: 7, padding: "2px 8px" }}>
             {/* Sin link "actualizar" (fundador 2026-09-02): el Web Store no tiene botón
-                de actualizar y una página no puede abrir chrome://extensions — la acción
-                real del usuario es reiniciar Chrome (ahí se actualiza sola). */}
-            Hay una versión nueva (v{versionPublicada}) — reinicia Chrome y se actualiza sola
+                de actualizar y una página no puede abrir chrome://extensions — la acción real
+                del usuario es reiniciar su navegador (ahí se actualiza sola — vale para Edge/Brave). */}
+            Hay una versión nueva (v{versionPublicada}) — reinicia tu navegador y se actualiza sola
           </span>
         )}
       </div>
