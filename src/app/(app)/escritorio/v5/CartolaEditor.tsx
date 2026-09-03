@@ -18,7 +18,7 @@ import {
   ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA, BULK_MIN_CONFIANZA,
   type Propuesta, type ClienteResumen,
 } from "./revisar-shared";
-import { ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta } from "../../revisar/actions";
+import { ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 
 type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
@@ -95,6 +95,9 @@ export default function CartolaEditor({
   // Recordamos en qué sección vivía cada rechazada de ESTA sesión del popup; al
   // reabrir, vuelve a su casa natural (Juzgadas). Restaurar la saca del mapa.
   const [juzgadasEnSesion, setJuzgadasEnSesion] = useState<Map<string, SectionKey>>(new Map());
+  // Selección múltiple EN JUZGADAS (pedido fundador 2026-09-02): cambiarles el
+  // juicio en grupo — algunas o todas vuelven a pendiente con un gesto.
+  const [selJuz, setSelJuz] = useState<Set<string>>(new Set());
 
   // Agrupar por ESTADO (la fecha bancaria NO agrupa — va como columna en la fila).
   // Con juicio aún pendiente (las tachadas que se quedan en su grupo no son juzgables).
@@ -314,6 +317,30 @@ export default function CartolaEditor({
       onAction();
     } finally { actingRef.current.delete(p.id); }
   }
+  const juzgadasIds = useMemo(
+    () => new Set(propuestas.filter((p) => p.estado === "rechazado" || p.estado === "descartado").map((p) => p.id)),
+    [propuestas],
+  );
+  useEffect(() => {
+    setSelJuz((prev) => {
+      const next = new Set([...prev].filter((id) => juzgadasIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [juzgadasIds]);
+  function toggleSelJuz(id: string) {
+    setSelJuz((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  async function bulkRestaurar() {
+    if (selJuz.size === 0 || busyBulk) return;
+    setBusyBulk(true);
+    try {
+      const r = await restaurarPropuestas([...selJuz]);
+      if (r.error) toast(r.error, "error"); else toast(`${r.count} restauradas — quedaron pendientes`);
+      setSelJuz(new Set());
+      onAction();
+    } finally { setBusyBulk(false); }
+  }
+
   // La sección donde vive una propuesta viva — para dejarla tachada AHÍ al rechazar.
   function seccionDe(p: Propuesta): SectionKey {
     if (p.estado === "listo") return "listas";
@@ -433,6 +460,13 @@ export default function CartolaEditor({
                     onStageAll={row.section === "pendientes" ? stagePendientes : undefined}
                     stageableCount={row.section === "pendientes" ? pendElegibles : undefined}
                     busy={busyBulk}
+                    juzTotal={row.section === "rechazadas" ? groups.rechazadas.length : undefined}
+                    juzSel={row.section === "rechazadas" ? selJuz.size : undefined}
+                    onToggleJuzTodas={row.section === "rechazadas" ? () => {
+                      const ids = groups.rechazadas.map((p) => p.id);
+                      setSelJuz((prev) => prev.size === ids.length ? new Set() : new Set(ids));
+                    } : undefined}
+                    onRestaurarSel={row.section === "rechazadas" ? bulkRestaurar : undefined}
                   />
                 ) : row.kind === "subheader" ? (
                   <SubGroupHeader
@@ -456,8 +490,12 @@ export default function CartolaEditor({
                       onStage={() => stageOne(row.p)}
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
-                      selected={sel.has(row.p.id)}
-                      onSelect={row.section === "pendientes" && esJuzgable(row.p) ? (shift: boolean) => toggleSel(row.p.id, shift) : undefined}
+                      selected={sel.has(row.p.id) || selJuz.has(row.p.id)}
+                      onSelect={row.section === "pendientes" && esJuzgable(row.p)
+                        ? (shift: boolean) => toggleSel(row.p.id, shift)
+                        : (row.p.estado === "rechazado" || row.p.estado === "descartado")
+                          ? () => toggleSelJuz(row.p.id)
+                          : undefined}
                     />
                     {expandedRows.has(row.p.id) && (
                       <ExpandedDetail
@@ -481,9 +519,11 @@ export default function CartolaEditor({
 }
 
 /* ─── Header de sección ─── */
-function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCount, busy }: {
+function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCount, busy, juzTotal, juzSel, onToggleJuzTodas, onRestaurarSel }: {
   section: SectionKey; count: number; open: boolean; onToggle: () => void;
   onStageAll?: () => void; stageableCount?: number; busy?: boolean;
+  /** Juzgadas (fundador 2026-09-02): seleccionar algunas o todas y cambiarles el juicio. */
+  juzTotal?: number; juzSel?: number; onToggleJuzTodas?: () => void; onRestaurarSel?: () => void;
 }) {
   const meta = SECTION_META[section];
   const bulkDisabled = busy || stageableCount === 0;
@@ -508,6 +548,24 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
         >
           {busy ? "..." : bulkLabel}
         </button>
+      )}
+      {onToggleJuzTodas && (
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onToggleJuzTodas}
+            style={{ fontSize: 10.5, fontWeight: 700, padding: "5px 12px", borderRadius: 99, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer" }}
+          >
+            {juzSel === juzTotal && (juzTotal ?? 0) > 0 ? "Desmarcar todas" : `Seleccionar todas (${juzTotal ?? 0})`}
+          </button>
+          <button
+            onClick={onRestaurarSel}
+            disabled={busy || (juzSel ?? 0) === 0}
+            title="Las seleccionadas vuelven a Pendientes: les cambias el juicio y decides de nuevo"
+            style={{ fontSize: 10.5, fontWeight: 750, padding: "5px 13px", borderRadius: 99, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.08)", color: "var(--green)", cursor: busy || (juzSel ?? 0) === 0 ? "default" : "pointer", opacity: busy || (juzSel ?? 0) === 0 ? 0.5 : 1 }}
+          >
+            {busy ? "..." : `Restaurar (${juzSel ?? 0})`}
+          </button>
+        </span>
       )}
     </div>
   );
