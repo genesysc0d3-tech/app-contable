@@ -214,6 +214,13 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         //    Boleta (39/41) → e-Boleta; factura (33/34) → portal gratuito, con su
         //    propio contrato (receptor completo, forma de pago, clave del cert).
         const esFactura = full.tipoDte === 33 || full.tipoDte === 34;
+        // MODO ENSAYO (fase de validación del RPA de facturas): con la perilla
+        // puesta, el job viaja learn_only — el worker LLENA el formulario del
+        // portal, verifica el total y SE DETIENE antes de "Validar" (ni folio,
+        // ni firma, ni clave del certificado). Perilla escondida, sin UI:
+        //   localStorage.setItem("massdte:fact-ensayo", "1")
+        let ensayo = false;
+        try { ensayo = window.localStorage.getItem("massdte:fact-ensayo") === "1"; } catch { /* sin storage: modo normal */ }
         let payloadJob: object;
         let msgType: string;
         if (esFactura) {
@@ -236,6 +243,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
               },
               detalle: full.detalle,
               logoutAfter: false, // lote: deja la sesión SII abierta para encadenar
+              learnOnly: ensayo,
               jobId: job.jobId,
               expiresAt: job.expiresAt,
             });
