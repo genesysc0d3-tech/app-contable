@@ -129,10 +129,12 @@ export default function MesaController({
         broadcastMesa(res.mesa);
       }
     };
-    // silent = refresh de fondo (realtime/poll): sin startTransition → NO atenúa la
-    // mesa (sin parpadeo). El refresh por acción del usuario sí usa la transición.
-    if (opts?.silent) void run();
-    else startTransition(run);
+    // SIEMPRE silencioso (bug fundador 2026-09-02): tras cerrar el popup la mesa
+    // quedaba gris 5-6s mientras llegaba el rango fresco — pero es el MISMO rango,
+    // así que se sigue mostrando lo que hay y se swapea al llegar. La atenuación
+    // queda solo para navigate (ahí el rango en pantalla sí es el equivocado).
+    void opts;
+    void run();
   }, [mesa]);
 
   // Desde Emitir: abrir una tx en Check. Deja el doc pendiente, cambia a la
