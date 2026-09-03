@@ -175,7 +175,9 @@ export async function rechazarPropuestas(
       .update({ estado: "rechazado" }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
-      .in("estado", ["pendiente", "editado"]);
+      // 'listo' incluido (2026-09-02): una lista también puede juzgarse sin
+      // boleta en grupo. 'aprobado' sigue fuera (comprometida a Emitir).
+      .in("estado", ["pendiente", "editado", "listo"]);
     if (error) return { error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`, count: marcadas };
     marcadas += count ?? 0;
   }
@@ -464,6 +466,32 @@ export async function editarGlosaEmitible(
 // Aprobar cartola (atómico): promueve a Emitir TODAS las propuestas del documento
 // que quedaron en "listo" (estado 'listo' → 'aprobado'). Es el único gatillo hacia
 // Emitir para una cartola: nada cae en la cola hasta apretar esto.
+// Volver a PENDIENTE en grupo (pedido fundador 2026-09-02: toda sección puede
+// cambiar de estado). Des-stagea listas — el juicio se re-abre sin perder nada.
+// Guard: solo desde 'listo' (jamás degrada aprobadas ni resucita juzgadas acá).
+export async function volverAPendientes(
+  propuestaIds: string[]
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  let devueltas = 0;
+  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
+    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+    const { error, count } = await ctx.sb
+      .from("propuestas_ia")
+      .update({ estado: "pendiente" }, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch)
+      .eq("estado", "listo");
+    if (error) return { error: error.message, count: devueltas };
+    devueltas += count ?? 0;
+  }
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: devueltas };
+}
+
 // Restaurar EN GRUPO (pedido fundador 2026-09-02): en Juzgadas se pueden
 // seleccionar algunas o todas y cambiarles el juicio de una — vuelven a
 // 'pendiente'. Guard: solo desde rechazado/descartado (jamás resucita emitidas
