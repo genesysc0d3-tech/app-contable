@@ -464,6 +464,33 @@ export async function editarGlosaEmitible(
 // Aprobar cartola (atómico): promueve a Emitir TODAS las propuestas del documento
 // que quedaron en "listo" (estado 'listo' → 'aprobado'). Es el único gatillo hacia
 // Emitir para una cartola: nada cae en la cola hasta apretar esto.
+// Restaurar EN GRUPO (pedido fundador 2026-09-02): en Juzgadas se pueden
+// seleccionar algunas o todas y cambiarles el juicio de una — vuelven a
+// 'pendiente'. Guard: solo desde rechazado/descartado (jamás resucita emitidas
+// ni degrada aprobadas).
+export async function restaurarPropuestas(
+  propuestaIds: string[]
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  let restauradas = 0;
+  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
+    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+    const { error, count } = await ctx.sb
+      .from("propuestas_ia")
+      .update({ estado: "pendiente" }, { count: "exact" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch)
+      .in("estado", ["rechazado", "descartado"]);
+    if (error) return { error: error.message, count: restauradas };
+    restauradas += count ?? 0;
+  }
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: restauradas };
+}
+
 // Devolver cartola (espejo de aprobarCartola, pedido fundador 2026-09-01): desde
 // la pestaña Emitir, la cartola COMPLETA retrocede un paso — 'aprobado' → 'listo'.
 // Devolver es "me arrepentí de enviar", no "me arrepentí del juicio": las juzgadas
