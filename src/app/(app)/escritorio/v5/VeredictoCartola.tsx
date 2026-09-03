@@ -265,7 +265,9 @@ export default function VeredictoCartola({
             {" "}· <b style={{ color: "var(--text)" }}>{fmt(totalListas)}</b>
           </div>
           <button className="vcart-cb" onClick={() => { setConfirming(false); onAprobar(); }} disabled={busy} style={{ background: "var(--accent)", color: "#fff", fontSize: "1.05em" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar y enviar a Emitir
+            {busy
+              ? <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: "vcart-spin .8s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.2-8.56" /></svg>Enviando…</>
+              : <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar y enviar a Emitir</>}
           </button>
           <div style={{ fontSize: "0.75em", color: "var(--text3)", textAlign: "center" }}>El envío al SII se confirma en Emitir.</div>
           <button onClick={() => setConfirming(false)} disabled={busy} style={{ border: "1px solid var(--border)", borderRadius: 11, background: "transparent", color: "var(--text2)", fontSize: "0.9em", fontWeight: 600, padding: "0.55em", cursor: "pointer" }}>Cancelar</button>
@@ -282,7 +284,9 @@ export default function VeredictoCartola({
             <button className="vcart-cb" onClick={() => setConfirming(true)} disabled={busy || !puedeAprobar}
               title={!puedeAprobar ? (pendientes > 0 ? guiaPendientesTexto : "No hay transacciones listas para aprobar") : undefined}
               style={{ background: "var(--accent)", color: "#fff", fontSize: "1.12em" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar {listas}
+              {busy
+                ? <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: "vcart-spin .8s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.2-8.56" /></svg>Enviando…</>
+                : <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>Aprobar {listas}</>}
             </button>
             {!puedeAprobar && (
               <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, marginTop: "-0.4em" }}>

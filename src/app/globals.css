@@ -326,3 +326,6 @@ select option {
 .pop-item { background: transparent; }
 .pop-item:hover { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
 .pop-item.activo { background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+
+/* Spinner del Aprobar del visor (círculo de carga mientras la acción viaja). */
+@keyframes vcart-spin { to { transform: rotate(360deg); } }

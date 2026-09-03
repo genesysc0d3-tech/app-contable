@@ -5,7 +5,7 @@ import RightColumnView from "./RightColumnView";
 import Mesa, { type MesaProps } from "./Mesa";
 import GuardarailOrbe from "./GuardarailOrbe";
 import CalendarStrip, { type NavParams } from "./CalendarStrip";
-import { cargarMesa } from "./actions";
+import type { CargarMesaResult } from "./actions";
 import { MesaReloadContext, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
@@ -18,6 +18,21 @@ const keyOf = (view: string, date: string, month: string, mesa: "boleta" | "fact
 
 // Avisa a los slots estáticos (card de Registros) los nuevos números del rango,
 // para que Ventas/Actividad sigan al calendario maestro.
+// Carga por HTTP (/api/mesa) y NO por server action: las actions de un mismo
+// cliente corren EN FILA, así que el precalentador y los refresh realtime
+// dejaban Aprobar/Rechazar esperando detrás de cargas pesadas ("mesa gris
+// tildada", bug fundador 2026-09-02). Por HTTP corren en paralelo.
+async function cargarMesa(params: { date?: string; month?: string; view?: string; mesa?: string }): Promise<CargarMesaResult> {
+  try {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
+    const r = await fetch(`/api/mesa?${qs.toString()}`, { cache: "no-store" });
+    return (await r.json()) as CargarMesaResult;
+  } catch {
+    return { ok: false, error: "FETCH_FAILED" };
+  }
+}
+
 function broadcastMesa(m: MesaDateDependent) {
   window.dispatchEvent(new CustomEvent("mesa-updated", {
     detail: { ventasDocs: m.ventasDocs, ventasTotal: m.ventasTotal, actividadCount: m.actividadItems.length, actividadUltimo: m.actividadItems[0]?.descripcion ?? null, periodo: m.calendar.selectedDateLabel, calYear: m.calendar.y, calMonth: m.calendar.m },
