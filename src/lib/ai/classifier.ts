@@ -179,14 +179,15 @@ function buildPropuestaFromRule(
 
 /**
  * Sufijos societarios chilenos (conjunto cerrado por ley): si la contraparte de
- * una transferencia es una persona JURÍDICA, corresponde FACTURA, no boleta.
- * Caso real de la auditoría cerebro 2026-09-02: 26 transferencias de "M & E SpA"
- * propuestas como boleta exenta por la regla P2P. "S.A." exige puntos para no
- * capturar apellidos; "spa" a secas puede dar falso positivo (un spa de masajes)
- * — aceptable: la propuesta nace factura PENDIENTE y el humano decide.
+ * una transferencia es una persona JURÍDICA, NORMALMENTE corresponde factura.
+ * DOCTRINA (fundador 2026-09-02): esto es un DISCLAIMER, jamás un cambio de
+ * estado — la propuesta queda BOLETA tal como salió de la regla, y la señal
+ * viaja como advertencia ignorable (triángulo en Emitir). Si el clasificador
+ * se equivoca (un spa de masajes, un apellido raro), ignorarlo cuesta CERO
+ * clicks; boletear a una empresa es legal y decisión del emisor.
+ * Caso real de la auditoría: 26 transferencias de "M & E SpA".
  */
-const TIPOS_BOLETEABLES_REGLA = new Set(["boleta", "exenta", "transferencia_p2p", "compraventa_crypto", "operacion_forex"]);
-const SUFIJO_SOCIETARIO = /\b(spa|ltda\.?|limitada|eirl|e\.i\.r\.l\.?|s\.a\.?)(?=[\s,.]|$)/i;
+export const SUFIJO_SOCIETARIO = /\b(spa|ltda\.?|limitada|eirl|e\.i\.r\.l\.?|s\.a\.?)(?=[\s,.]|$)/i;
 
 /**
  * Classify a batch of movimientos using the loaded rules.
@@ -206,18 +207,6 @@ export function classifyWithRules(
     const matchingRule = reglas.find((r) => ruleMatches(mov, r));
     if (matchingRule) {
       const propuesta = buildPropuestaFromRule(mov, i, matchingRule);
-      // Guardarraíl societario: una regla GLOBAL boleteable contra una glosa con
-      // razón social propone FACTURA (pendiente, confianza media), jamás boleta.
-      // Solo globales: si el usuario creó su propia regla para esa contraparte,
-      // su juicio manda (puede boletear a quien él decida).
-      if (
-        !matchingRule.empresa_id &&
-        TIPOS_BOLETEABLES_REGLA.has(propuesta.tipo_propuesto) &&
-        SUFIJO_SOCIETARIO.test(mov.descripcion ?? "")
-      ) {
-        propuesta.tipo_propuesto = "factura";
-        propuesta.confianza = Math.min(propuesta.confianza ?? 0.75, 0.75);
-      }
       clasificados.push({
         movimiento_index: i,
         propuesta,
@@ -225,7 +214,6 @@ export function classifyWithRules(
         fuente: matchingRule.empresa_id ? "regla_usuario" : "regla_global",
         // Solo las reglas de usuario (empresa_id set) auto-pasan a listas con el
         // tipo recordado. Las globales dejan tipo_dte null → el gate decide.
-        // La degradación a factura invalida el tipo_dte de boleta recordado.
         tipo_dte: matchingRule.empresa_id ? (matchingRule.tipo_dte ?? null) : null,
       });
     } else {

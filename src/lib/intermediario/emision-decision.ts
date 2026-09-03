@@ -17,6 +17,7 @@
  *   - Of. SII 963/2018: cripto = activo incorporal, exento de IVA.
  */
 
+import { SUFIJO_SOCIETARIO } from "../ai/classifier";
 import { clasificarBoleta, type DocumentoHint, type EmpresaContext, type PatronContext } from "../sii/clasificador-tipo";
 import { validarBoleta } from "../sii/validation";
 
@@ -118,6 +119,17 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
     const marca = { code: "NO_BOLETAR", msg: `Ojo: no parece una venta (${clasif.razones[0] ?? "movimiento no comercial"}). La apruebas tú — se emitirá igual.` };
     if (aprobadaPorHumano) advertencias.push(marca);
     else bloqueos.push({ code: "NO_BOLETAR", msg: `No parece una venta: ${clasif.razones[0] ?? "movimiento no comercial"}.` });
+  }
+
+  // DISCLAIMER societario (fundador 2026-09-02: "siempre disclaimer, jamás
+  // cambiar el estado"): la contraparte parece una empresa (SpA/Ltda/EIRL/S.A.)
+  // — a empresas normalmente se factura, pero boletear a una empresa es legal y
+  // decisión del emisor. Triángulo ignorable, nunca veto ni cambio de tipo.
+  if (SUFIJO_SOCIETARIO.test(glosa)) {
+    advertencias.push({
+      code: "RECEPTOR_EMPRESA",
+      msg: "El pagador parece una empresa (SpA/Ltda): a empresas normalmente se les factura. Si igual va boleta, apruébala nomás — se emite igual.",
+    });
   }
 
   // Aprobada sin tipo decidido (la heurística no propuso 39/41): asumir por el
