@@ -29,9 +29,12 @@ function Badge({ ok }: { ok: boolean }) {
 
 function Chip({ ok, title, children }: { ok: boolean; title: string; children: React.ReactNode }) {
   return (
-    <span title={title} style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 4, cursor: "default", opacity: ok ? 1 : 0.55 }}>
+    <span className="conector-chip" aria-label={title} style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "default", opacity: ok ? 1 : 0.55 }}>
       {children}
       <Badge ok={ok} />
+      <span className="conector-tip" role="tooltip" style={{ background: "var(--bg-muted, #161616)", border: "1px solid var(--border, rgba(255,255,255,.1))", borderRadius: 8, padding: "6px 10px", fontSize: 10.5, fontWeight: 600, lineHeight: 1.35, color: "var(--text, #e8eaf0)", whiteSpace: "nowrap", boxShadow: "0 10px 26px rgba(0,0,0,.45)" }}>
+        {title}
+      </span>
     </span>
   );
 }
@@ -76,8 +79,6 @@ function LogoTelegram({ size = 15 }: { size?: number }) {
   );
 }
 
-const txt = { fontSize: 8, fontWeight: 800, letterSpacing: ".04em", color: "var(--text2)" } as const;
-
 export default function ConectoresChips() {
   const { status, hayBoveda } = useExtensionStatus();
   const [mcp, setMcp] = useState<EstadoMcp | null>(null);
@@ -115,7 +116,6 @@ export default function ConectoresChips() {
       {mcp != null && (
         <Chip ok={mcpOk} title={mcpOk ? `Conector MCP activo: ${quien}` : "Sin asistente conectado — botón Conectar tu Claude/ChatGPT en el panel Conector MCP"}>
           <LogoMcp />
-          <span style={txt}>MCP</span>
           {mcp.claude && <LogoClaude />}
           {mcp.chatgpt && <LogoChatGpt />}
         </Chip>
