@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyWithRules, ruleMatches } from "./classifier";
+import { classifyWithRules, ruleMatches, SUFIJO_SOCIETARIO } from "./classifier";
 
 // Denylist de no-ventas (migración 20260902180000_denylist_no_venta.sql):
 // patrones espejo 1:1 — si la migración cambia, esto debe cambiar.
@@ -50,9 +50,9 @@ const CASOS: [string, "entrada" | "salida", string][] = [
   ["ABONO POR TRF DESDE OTRO BANCO EN LINEA", "entrada", "transferencia_p2p"],
   ["ABONO TERCEROS 11111111-1 J.EJEMPLO SINTETICO", "entrada", "transferencia_p2p"],
   ["TRANSFER DE PERSONA SINTETICA", "entrada", "transferencia_p2p"],
-  // Sufijo societario ⇒ el guard degrada la boleta P2P a FACTURA (auditoría
+  // Sufijo societario ⇒ la propuesta QUEDA boleta (doctrina disclaimer: jamás
   // cerebro 2026-09-02: 26 transferencias de una SpA propuestas como boleta).
-  ["TRANSFERENCIA DE EMPRESA SINTETICA SPA", "entrada", "factura"],
+  ["TRANSFERENCIA DE EMPRESA SINTETICA SPA", "entrada", "transferencia_p2p"],
   ["Transferencia recibida de: Cliente Sintetico", "entrada", "transferencia_p2p"],
   ["CARGO POR TRANSF DE FONDOS AUTOSERVICIO", "salida", "gasto_egreso"],
   ["TRANSFER A PROVEEDOR SINTETICO SP", "salida", "gasto_egreso"],
@@ -132,7 +132,7 @@ describe("denylist de no-ventas + guard societario (auditoría cerebro 2026-09-0
     }
   });
 
-  it("transferencia de una SpA/Ltda/EIRL → FACTURA pendiente (jamás boleta), confianza ≤ 0.75", () => {
+  it("transferencia de una SpA/Ltda/EIRL QUEDA boleta (doctrina disclaimer: el aviso jamás cambia el estado) y el SUFIJO la detecta", () => {
     for (const glosa of [
       "Transferencia recibida de M & E SpA",
       "TRANSFERENCIA DE COMERCIAL SINTETICA LTDA",
@@ -140,8 +140,16 @@ describe("denylist de no-ventas + guard societario (auditoría cerebro 2026-09-0
       "TRANSF DE INVERSIONES SINTETICAS S.A.",
     ]) {
       const r = classifyWithRules([mov(glosa, "entrada")], TODAS);
-      expect(r.clasificados[0].propuesta.tipo_propuesto).toBe("factura");
-      expect(r.clasificados[0].propuesta.confianza).toBeLessThanOrEqual(0.75);
+      // La clasificación NO se toca — si el detector se equivoca, ignorar el
+      // triángulo cuesta cero clicks (fundador 2026-09-02).
+      expect(r.clasificados[0].propuesta.tipo_propuesto).toBe("transferencia_p2p");
+      expect(SUFIJO_SOCIETARIO.test(glosa)).toBe(true);
+    }
+  });
+
+  it("el sufijo NO muerde apellidos ni palabras comunes", () => {
+    for (const glosa of ["Transferencia recibida de MARIA SALAS", "TRANSFER DE JUAN ESPARZA"]) {
+      expect(SUFIJO_SOCIETARIO.test(glosa)).toBe(false);
     }
   });
 
