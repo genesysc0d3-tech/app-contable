@@ -334,9 +334,11 @@ select option {
    una pausa cortita y un pop suave, como el del navegador pero nuestro. */
 .conector-chip { position: relative; }
 .conector-tip {
-  position: absolute; top: calc(100% + 9px); left: 50%;
-  transform: translate(-50%, -4px) scale(.96); transform-origin: top center;
+  /* anclado a la DERECHA: los chips viven en el borde derecho de la barra y
+     centrado se cortaba contra el viewport */
+  position: absolute; top: calc(100% + 9px); right: -6px;
+  transform: translateY(-4px) scale(.96); transform-origin: top right;
   opacity: 0; pointer-events: none; z-index: 80;
   transition: opacity .16s ease, transform .2s cubic-bezier(.2,1.4,.4,1);
 }
-.conector-chip:hover .conector-tip { opacity: 1; transform: translate(-50%, 0) scale(1); transition-delay: .28s; }
+.conector-chip:hover .conector-tip { opacity: 1; transform: translateY(0) scale(1); transition-delay: .28s; }
