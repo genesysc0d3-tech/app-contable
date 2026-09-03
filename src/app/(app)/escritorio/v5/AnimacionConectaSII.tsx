@@ -95,7 +95,7 @@ export default function AnimacionConectaSII() {
         flotando = false;
         store.style.transition = "none"; store.style.opacity = "1"; store.style.scale = "1";
         agc.textContent = "Agregar a Chrome"; agc.style.transform = ""; agc.style.background = "linear-gradient(160deg,#3b8bf0,#1a73e8)";
-        mdock.style.transition = "none"; mdock.style.opacity = "0";
+        mdock.style.transition = "none"; mdock.style.opacity = "0"; mdock.style.transform = "";
         slot.style.borderColor = "";
         chip.style.transition = "none"; chip.style.left = "26px"; chip.style.top = "84px";
         chip.style.opacity = "0"; chip.style.scale = ".94"; chip.style.rotate = "0deg"; chip.style.translate = "0 0";
@@ -104,7 +104,8 @@ export default function AnimacionConectaSII() {
         fh.style.opacity = "0";
         [v1Ref.current, v2Ref.current].forEach((v) => { if (v) { v.style.opacity = "0"; v.style.transform = "translateY(10px) scale(.92)"; v.style.transition = "none"; } });
         ls.forEach((l) => { l.style.background = "rgba(255,255,255,.07)"; l.style.boxShadow = "none"; });
-        mon.style.boxShadow = ""; mon.style.borderColor = "";
+        mon.style.transition = "none"; mon.style.boxShadow = ""; mon.style.borderColor = "";
+        mon.style.transform = "";
         // candado y hint pegados al chip
         pad.style.left = `${chip.offsetLeft + chip.offsetWidth - 16}px`;
         pad.style.top = `${chip.offsetTop - 11}px`;
@@ -157,8 +158,16 @@ export default function AnimacionConectaSII() {
         ponerCap(2);
         await wait(1250); if (!vivo) return;
 
-        /* 5 · el monitor se enciende, la tira corre y las boletas salen */
-        mon.style.transition = "box-shadow .8s, border-color .8s";
+        /* 5 · el monitor se enciende, la tira corre y las boletas salen.
+           Con la izquierda ya vacía (el chip se hundió), la pantallita migra
+           al CENTRO del escenario — pedido fundador 2026-09-02: que no quede
+           colgada a la derecha con un hoyo al lado. */
+        const dx = (stage.clientWidth - mon.offsetWidth) / 2 - mon.offsetLeft;
+        mon.style.transition = `transform .9s ${VIAJE}, box-shadow .8s, border-color .8s`;
+        mon.style.transform = `translateX(${dx}px)`;
+        // el ícono acoplado en la ranura vive en coordenadas del escenario: viaja con el monitor
+        mdock.style.transition = `transform .9s ${VIAJE}`;
+        mdock.style.transform = `translateX(${dx}px)`;
         mon.style.boxShadow = "0 18px 44px #00000090, 0 0 44px #22c55e1f";
         mon.style.borderColor = "rgba(34,197,94,.18)";
         for (const l of ls) {
