@@ -212,8 +212,9 @@ export default function CartolaEditor({
       const r = accion === "listo" ? await ponerListo(ids) : await rechazarPropuestas(ids);
       if (r.error) toast(r.error, "error");
       else {
-        // La selección múltiple solo toma pendientes/editadas: quedan tachadas en su sitio.
-        if (accion === "sin_boleta") setJuzgadasEnSesion((prev) => { const m = new Map(prev); for (const id of ids) m.set(id, "pendientes"); return m; });
+        // Lote deliberado → las juzgadas SE MUDAN al grupo Sin boleta (el
+        // tachado-en-su-lugar es solo para el ✕ individual, que protege el
+        // contexto bajo el cursor — bug cazado por el fundador 2026-09-02).
         toast(accion === "listo"
           ? `${r.count} marcadas listas`
           : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
@@ -350,10 +351,8 @@ export default function CartolaEditor({
       const ids = [...selListas];
       const r = accion === "pendiente" ? await volverAPendientes(ids) : await rechazarPropuestas(ids);
       if (r.error) toast(r.error, "error");
-      else {
-        if (accion === "sin_boleta") setJuzgadasEnSesion((prev) => { const m = new Map(prev); for (const id of ids) m.set(id, "listas"); return m; });
-        toast(accion === "pendiente" ? `${r.count} de vuelta en pendientes` : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
-      }
+      // Lote deliberado → van al grupo Sin boleta (sin parking; ver bulkSel).
+      else toast(accion === "pendiente" ? `${r.count} de vuelta en pendientes` : `${r.count} marcadas sin boleta (recuperables en Juzgadas)`);
       setSelListas(new Set());
       onAction();
     } finally { setBusyBulk(false); }
