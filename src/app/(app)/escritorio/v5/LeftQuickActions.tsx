@@ -293,7 +293,7 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="mass-title">{esFacturas ? "MASSDTE FACTURA" : "SUBIR CARTOLAS"}</span>
+              <span className="mass-title">{esFacturas ? "MASSDTE FACTURAS" : "MASSDTE BOLETAS"}</span>
               <span className="mass-subtitle" style={{ display: "block" }}>{readOnlyReason ?? (esFacturas ? "Plantilla obligatoria" : "Subida masiva de cartolas")}</span>
             </span>
             <svg className="mass-receipts" viewBox="0 0 52 28" aria-hidden="true">
