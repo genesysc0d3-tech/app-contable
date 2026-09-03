@@ -113,7 +113,7 @@ export default function TabsV5({
         }
       `}</style>
       {/* TAB BAR + STATS */}
-      <div ref={barRef} className="tab-bar" style={{position:"relative",display:"flex",alignItems:"center",gap:2,padding:"8px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
+      <div ref={barRef} className="tab-bar" style={{position:"relative",zIndex:5,display:"flex",alignItems:"center",gap:2,padding:"8px 16px",borderBottom:"1px solid var(--bg-muted)",flexShrink:0}}>
         {tabs.map((t, i) => {
           const active = t.id === tab;
           const arrowActive = i > 0 && tabs[i - 1].id === tab;
@@ -142,8 +142,6 @@ export default function TabsV5({
           boxShadow:"0 2px 12px rgba(232,85,62,.35)",
         }} />
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-          <ConectoresChips />
-          <span style={{fontSize:9,color:"var(--text3)"}}>·</span>
           <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
             <span style={{fontSize:13,fontWeight:300}}>{pendCount}</span>
             <span style={{fontSize:9}}>esperando</span>
@@ -154,6 +152,8 @@ export default function TabsV5({
             <span style={{fontSize:9}}>aprobados</span>
           </span>
           <span style={{fontSize:9,color:"var(--text2)",marginLeft:4}}>{fecha}</span>
+          <span style={{fontSize:9,color:"var(--text3)"}}>·</span>
+          <ConectoresChips />
         </div>
       </div>
 
