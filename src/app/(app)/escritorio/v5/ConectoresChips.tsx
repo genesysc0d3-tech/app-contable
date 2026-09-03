@@ -7,8 +7,8 @@ import { useExtensionStatus } from "./useExtensionStatus";
  * Chips de estado en la barra de la mesa (iterado con el fundador 2026-09-02):
  * cada chip es el LOGO REAL con un badge redondo sobrepuesto en la esquina
  * (✓ verde conectado / ✕ apagado) — sin agrandar la barra.
- *  - SII: logo oficial (public/sii-logo.svg, Wikimedia) + "ext" → la extensión
- *    conectada con bóveda lista (mismo criterio que Emitir).
+ *  - Extensión: icono massDTE + "ex/ten/sión" apilado → conectada con bóveda
+ *    lista (mismo criterio que Emitir).
  *  - MCP: glifo oficial del protocolo + "MCP" + los logos de los asistentes
  *    enchufados (Claude / ChatGPT), leídos de GET /api/mcp/estado.
  */
@@ -101,8 +101,10 @@ export default function ConectoresChips() {
       {status !== "checking" && (
         <Chip ok={siiOk} title={siiOk ? "Extensión conectada con el SII" : "Extensión no conectada — pestaña Emitir para instalarla"}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/sii-logo.svg" alt="SII" style={{ height: 15, width: "auto", display: "block" }} />
-          <span style={txt}>ext</span>
+          <img src="/icon-192.png" alt="Extensión massDTE" style={{ height: 15, width: 15, borderRadius: 4, display: "block" }} />
+          <span aria-hidden style={{ display: "flex", flexDirection: "column", justifyContent: "center", fontSize: 4.5, fontWeight: 800, letterSpacing: ".06em", lineHeight: 1.15, color: "var(--text2)", textTransform: "uppercase" }}>
+            <span>ex</span><span>ten</span><span>sión</span>
+          </span>
         </Chip>
       )}
       {mcp != null && (
