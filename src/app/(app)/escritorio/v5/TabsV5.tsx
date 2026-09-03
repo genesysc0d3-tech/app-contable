@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import ConectoresChips from "./ConectoresChips";
 
 const baseTabs = [
   { id: "subidos", label: "Check de agregados",
@@ -141,6 +142,8 @@ export default function TabsV5({
           boxShadow:"0 2px 12px rgba(232,85,62,.35)",
         }} />
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <ConectoresChips />
+          <span style={{fontSize:9,color:"var(--text3)"}}>·</span>
           <span style={{fontSize:9,color:"var(--text2)",display:"flex",alignItems:"center",gap:3}}>
             <span style={{fontSize:13,fontWeight:300}}>{pendCount}</span>
             <span style={{fontSize:9}}>esperando</span>

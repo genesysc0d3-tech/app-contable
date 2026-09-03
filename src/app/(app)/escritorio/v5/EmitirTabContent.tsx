@@ -200,7 +200,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     if ((initial.totales.bloqueadas ?? 0) > 0) return "bloqueadas";
     return "listas";
   });
-  const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta">("todos");
+  const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta" | "mixta">("todos");
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loteOpen, setLoteOpen] = useState(false);
@@ -324,10 +324,21 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     if (statusFilter === "listas") filtered = filtered.filter(i => i.balde === "listas");
     else if (statusFilter === "por_revisar") filtered = filtered.filter(i => i.balde === "por_revisar");
     else if (statusFilter === "bloqueadas") filtered = filtered.filter(i => i.balde === "bloqueadas");
-    if (typeFilter === "afecta") filtered = filtered.filter(i => i.tipo_sugerido === 39);
-    else if (typeFilter === "exenta") filtered = filtered.filter(i => i.tipo_sugerido === 41);
+    if (typeFilter === "afecta") filtered = filtered.filter(i => i.tipo_sugerido === 39 || i.tipo_sugerido === 33);
+    else if (typeFilter === "exenta") filtered = filtered.filter(i => i.tipo_sugerido === 41 || i.tipo_sugerido === 34);
+    else if (typeFilter === "mixta") {
+      // Mixta = la CARTOLA trae de los dos mundos (afectas Y exentas). Se
+      // muestran completas — el filtro es lupa sobre documentos, no recorta filas.
+      const afectas = new Set<string>(), exentas = new Set<string>();
+      for (const i of filtered) {
+        const doc = i.documento_id ?? "sueltas";
+        const t = i.tipo_sugerido ?? (esFacturas ? 33 : 39);
+        if (t === 39 || t === 33) afectas.add(doc); else exentas.add(doc);
+      }
+      filtered = filtered.filter(i => { const doc = i.documento_id ?? "sueltas"; return afectas.has(doc) && exentas.has(doc); });
+    }
     return filtered;
-  }, [data, statusFilter, typeFilter]);
+  }, [data, statusFilter, typeFilter, esFacturas]);
 
   const listasCount = data?.totales.listas_emitir ?? 0;
   const porRevisarCount = data?.totales.por_revisar ?? 0;
@@ -715,6 +726,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <button className={`pl ${typeFilter === "todos" ? "act" : "ina"}`} onClick={() => setTypeFilter("todos")}>Todos</button>
           <button className={`pl ${typeFilter === "afecta" ? "act" : "ina"}`} onClick={() => setTypeFilter("afecta")}>Afecta</button>
           <button className={`pl ${typeFilter === "exenta" ? "act" : "ina"}`} onClick={() => setTypeFilter("exenta")}>Exenta</button>
+          <button className={`pl ${typeFilter === "mixta" ? "act" : "ina"}`} title="Cartolas que traen afectas Y exentas juntas" onClick={() => setTypeFilter("mixta")}>Mixta</button>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
             {selectableItems.length > 0 && (
               <label className="sc" style={{ marginLeft: 0 }}>
