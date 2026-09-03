@@ -49,7 +49,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, contexto = null, veredicto = null,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null };
   propuestas: Propuesta[];
@@ -63,6 +63,8 @@ export default function VeredictoCartola({
   /** Eliminar el documento completo de la mesa (solo sin boletas emitidas; dos pasos, estado en el padre). */
   onEliminar?: () => void;
   eliminarArmado?: boolean;
+  /** Cuántas propuestas del doc quedaron juzgadas (sin boleta) — para el estado "todo juzgado". */
+  juzgadas?: number;
   /** Nota del dueño ("¿Qué es esta plata?") — para el acuse de recibo. */
   contexto?: string | null;
   /** Veredicto de contexto persistido por el processor (progreso_ia.contexto_veredicto). */
@@ -118,7 +120,10 @@ export default function VeredictoCartola({
       : pendientesSalidas > 0
         ? `Resuelve las ${pendientes} pendientes en Editar: las ventas déjalas listas y a las salidas apriétales Rechazar (no llevan boleta).`
         : `Deja listas las ${pendientes} pendientes en Editar para habilitar Aprobar`;
-  const todasListas = count > 0 && pendientes === 0;
+  // TODO JUZGADO (bug cazado por el fundador 2026-09-02): sin vivas, el visor
+  // caía a una rama legacy. Acá se muestra honesto: 0 listas, N sin boleta.
+  const todoJuzgado = propuestas.length === 0 && juzgadas > 0;
+  const todasListas = count > 0 && pendientes === 0 && !todoJuzgado;
   // Solo se puede aprobar si de verdad hay algo staged (evita 'Aprobar 0' cuando la
   // cartola ya fue enviada entera a Emitir: pendientes===0 pero listas===0).
   const puedeAprobar = todasListas && listas > 0;
@@ -281,7 +286,9 @@ export default function VeredictoCartola({
             </button>
             {!puedeAprobar && (
               <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, marginTop: "-0.4em" }}>
-                {pendientes > 0 ? guiaPendientes : <>Todo enviado a Emitir</>}
+                {pendientes > 0 ? guiaPendientes
+                  : todoJuzgado ? <>Las {juzgadas} quedaron <b>sin boleta</b> (juzgadas). ¿Te arrepentiste? Restáuralas en <b>Editar</b>.</>
+                  : <>Todo enviado a Emitir</>}
               </div>
             )}
           </>
