@@ -18,6 +18,16 @@ export async function GET() {
   if (!url || !key) return NextResponse.json({ error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   const service = createServiceClient(url, key);
 
+  const { data: usuario } = await service
+    .from("usuarios").select("empresa_id").eq("id", user.id).maybeSingle();
+  let telegram = false;
+  if (usuario?.empresa_id) {
+    const { count } = await service
+      .from("telegram_chats").select("chat_id", { count: "exact", head: true })
+      .eq("empresa_id", usuario.empresa_id).eq("activo", true);
+    telegram = (count ?? 0) > 0;
+  }
+
   const { data, error } = await service
     .from("mcp_tokens")
     .select("expires_at, refresh_token_hash, origen, oauth_clients(redirect_uris)")
@@ -38,5 +48,5 @@ export async function GET() {
     else otros += 1; // token manual del script u otro cliente permitido
   }
 
-  return NextResponse.json({ claude, chatgpt, otros }, { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({ claude, chatgpt, otros, telegram }, { headers: { "cache-control": "no-store" } });
 }
