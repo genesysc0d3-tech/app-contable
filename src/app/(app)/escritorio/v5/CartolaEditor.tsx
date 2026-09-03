@@ -18,7 +18,7 @@ import {
   ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA, BULK_MIN_CONFIANZA,
   type Propuesta, type ClienteResumen,
 } from "./revisar-shared";
-import { ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas } from "../../revisar/actions";
+import { ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas, volverAPendientes } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 
 type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
@@ -98,6 +98,9 @@ export default function CartolaEditor({
   // Selección múltiple EN JUZGADAS (pedido fundador 2026-09-02): cambiarles el
   // juicio en grupo — algunas o todas vuelven a pendiente con un gesto.
   const [selJuz, setSelJuz] = useState<Set<string>>(new Set());
+  // Selección múltiple EN LISTAS (fundador 2026-09-02: toda sección cambia de
+  // estado por grupo o individual): a pendientes o sin boleta, de una.
+  const [selListas, setSelListas] = useState<Set<string>>(new Set());
 
   // Agrupar por ESTADO (la fecha bancaria NO agrupa — va como columna en la fila).
   // Con juicio aún pendiente (las tachadas que se quedan en su grupo no son juzgables).
@@ -327,6 +330,44 @@ export default function CartolaEditor({
       return next.size === prev.size ? prev : next;
     });
   }, [juzgadasIds]);
+  const listasIds = useMemo(
+    () => new Set(propuestas.filter((p) => p.estado === "listo").map((p) => p.id)),
+    [propuestas],
+  );
+  useEffect(() => {
+    setSelListas((prev) => {
+      const next = new Set([...prev].filter((id) => listasIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [listasIds]);
+  function toggleSelLista(id: string) {
+    setSelListas((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  async function bulkListas(accion: "pendiente" | "sin_boleta") {
+    if (selListas.size === 0 || busyBulk) return;
+    setBusyBulk(true);
+    try {
+      const ids = [...selListas];
+      const r = accion === "pendiente" ? await volverAPendientes(ids) : await rechazarPropuestas(ids);
+      if (r.error) toast(r.error, "error");
+      else {
+        if (accion === "sin_boleta") setJuzgadasEnSesion((prev) => { const m = new Map(prev); for (const id of ids) m.set(id, "listas"); return m; });
+        toast(accion === "pendiente" ? `${r.count} de vuelta en pendientes` : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+      }
+      setSelListas(new Set());
+      onAction();
+    } finally { setBusyBulk(false); }
+  }
+  // Individual: una lista vuelve a pendiente (↩) sin perder nada.
+  async function volverUna(p: Propuesta) {
+    if (actingRef.current.has(p.id)) return;
+    actingRef.current.add(p.id);
+    try {
+      const r = await volverAPendientes([p.id]);
+      if (r.error) toast(r.error, "error"); else toast("De vuelta en pendientes");
+      onAction();
+    } finally { actingRef.current.delete(p.id); }
+  }
   function toggleSelJuz(id: string) {
     setSelJuz((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
@@ -460,6 +501,14 @@ export default function CartolaEditor({
                     onStageAll={row.section === "pendientes" ? stagePendientes : undefined}
                     stageableCount={row.section === "pendientes" ? pendElegibles : undefined}
                     busy={busyBulk}
+                    listasTotal={row.section === "listas" ? groups.listas.length : undefined}
+                    listasSel={row.section === "listas" ? selListas.size : undefined}
+                    onToggleListasTodas={row.section === "listas" ? () => {
+                      const ids = groups.listas.filter((p) => p.estado === "listo").map((p) => p.id);
+                      setSelListas((prev) => prev.size === ids.length ? new Set() : new Set(ids));
+                    } : undefined}
+                    onListasAPendientes={row.section === "listas" ? () => bulkListas("pendiente") : undefined}
+                    onListasSinBoleta={row.section === "listas" ? () => bulkListas("sin_boleta") : undefined}
                     juzTotal={row.section === "rechazadas" ? groups.rechazadas.length : undefined}
                     juzSel={row.section === "rechazadas" ? selJuz.size : undefined}
                     onToggleJuzTodas={row.section === "rechazadas" ? () => {
@@ -490,12 +539,15 @@ export default function CartolaEditor({
                       onStage={() => stageOne(row.p)}
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
-                      selected={sel.has(row.p.id) || selJuz.has(row.p.id)}
+                      onVolver={row.p.estado === "listo" ? () => volverUna(row.p) : undefined}
+                      selected={sel.has(row.p.id) || selJuz.has(row.p.id) || selListas.has(row.p.id)}
                       onSelect={row.section === "pendientes" && esJuzgable(row.p)
                         ? (shift: boolean) => toggleSel(row.p.id, shift)
                         : (row.p.estado === "rechazado" || row.p.estado === "descartado")
                           ? () => toggleSelJuz(row.p.id)
-                          : undefined}
+                          : row.p.estado === "listo"
+                            ? () => toggleSelLista(row.p.id)
+                            : undefined}
                     />
                     {expandedRows.has(row.p.id) && (
                       <ExpandedDetail
@@ -519,11 +571,13 @@ export default function CartolaEditor({
 }
 
 /* ─── Header de sección ─── */
-function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCount, busy, juzTotal, juzSel, onToggleJuzTodas, onRestaurarSel }: {
+function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCount, busy, juzTotal, juzSel, onToggleJuzTodas, onRestaurarSel, listasTotal, listasSel, onToggleListasTodas, onListasAPendientes, onListasSinBoleta }: {
   section: SectionKey; count: number; open: boolean; onToggle: () => void;
   onStageAll?: () => void; stageableCount?: number; busy?: boolean;
   /** Juzgadas (fundador 2026-09-02): seleccionar algunas o todas y cambiarles el juicio. */
   juzTotal?: number; juzSel?: number; onToggleJuzTodas?: () => void; onRestaurarSel?: () => void;
+  /** Listas (fundador 2026-09-02): toda sección cambia de estado en grupo. */
+  listasTotal?: number; listasSel?: number; onToggleListasTodas?: () => void; onListasAPendientes?: () => void; onListasSinBoleta?: () => void;
 }) {
   const meta = SECTION_META[section];
   const bulkDisabled = busy || stageableCount === 0;
@@ -549,6 +603,32 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
           {busy ? "..." : bulkLabel}
         </button>
       )}
+      {onToggleListasTodas && (
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onToggleListasTodas}
+            style={{ fontSize: 10.5, fontWeight: 700, padding: "5px 12px", borderRadius: 99, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer" }}
+          >
+            {listasSel === listasTotal && (listasTotal ?? 0) > 0 ? "Desmarcar todas" : `Seleccionar todas (${listasTotal ?? 0})`}
+          </button>
+          <button
+            onClick={onListasAPendientes}
+            disabled={busy || (listasSel ?? 0) === 0}
+            title="Las seleccionadas vuelven a Pendientes — el juicio se reabre sin perder nada"
+            style={{ fontSize: 10.5, fontWeight: 750, padding: "5px 13px", borderRadius: 99, border: "1px solid rgba(245,158,11,.35)", background: "rgba(245,158,11,.08)", color: "var(--amber)", cursor: busy || (listasSel ?? 0) === 0 ? "default" : "pointer", opacity: busy || (listasSel ?? 0) === 0 ? 0.5 : 1 }}
+          >
+            {busy ? "..." : `A pendientes (${listasSel ?? 0})`}
+          </button>
+          <button
+            onClick={onListasSinBoleta}
+            disabled={busy || (listasSel ?? 0) === 0}
+            title="Las seleccionadas quedan tachadas sin boleta (recuperables desde Juzgadas)"
+            style={{ fontSize: 10.5, fontWeight: 750, padding: "5px 13px", borderRadius: 99, border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.07)", color: "var(--red)", cursor: busy || (listasSel ?? 0) === 0 ? "default" : "pointer", opacity: busy || (listasSel ?? 0) === 0 ? 0.5 : 1 }}
+          >
+            {busy ? "..." : `Sin boleta (${listasSel ?? 0})`}
+          </button>
+        </span>
+      )}
       {onToggleJuzTodas && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
           <button
@@ -572,10 +652,12 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
 }
 
 /* ─── Fila de tx (colapsada) ─── */
-function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, selected = false, onSelect }: {
+function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, onVolver, selected = false, onSelect }: {
   p: Propuesta; isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
+  /** Solo listas: ↩ vuelve a pendiente (fundador 2026-09-02: cambio de estado individual en toda sección). */
+  onVolver?: () => void;
   selected?: boolean;
-  /** Presente solo en filas con juicio pendiente: casilla de selección múltiple. */
+  /** Casilla de selección múltiple (pendientes, listas y juzgadas — cada una con su lote). */
   onSelect?: (shift: boolean) => void;
 }) {
   const tm = tipoMeta(p.tipo_propuesto);
@@ -612,6 +694,7 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, selected = f
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* ✓ solo en borradores (pendiente/editado): nunca demotar una 'listo' (ya staged) ni una 'aprobado' (ya en Emitir) */}
         {(p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
+        {onVolver && <RowActionBtn type="edit" icon="↩" onClick={onVolver} />}
         {rechazada ? (
           /* Restaurar reemplaza al ✎ en rechazadas: el detalle acá solo llevaba a un error engañoso */
           <button onClick={onRestore}
