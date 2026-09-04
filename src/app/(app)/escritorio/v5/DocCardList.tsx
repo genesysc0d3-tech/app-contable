@@ -53,7 +53,7 @@ type DocProg = { total: number; emitida: number; lista: number; porRevisar: numb
 // Avance del documento por el pipeline. La barra mide sobre el "boleteable"
 // (total − no aplican) para que refleje el avance real de emisión; el desglose
 // reconcilia al total (incluye "no aplican": gastos/descartadas).
-function DocProgressBar({ p }: { p: DocProg }) {
+function DocProgressBar({ p, unidad = "boletas" }: { p: DocProg; unidad?: string }) {
   const boleteable = p.total - p.noAplica;
   const seg = (n: number) => (boleteable > 0 ? `${(n / boleteable) * 100}%` : "0%");
   const parts = [
@@ -65,7 +65,7 @@ function DocProgressBar({ p }: { p: DocProg }) {
     <div style={{ marginTop: 7, display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 8.5, color: "var(--text3)" }}>
         <span style={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Avance de emisión</span>
-        <span><b style={{ color: "var(--text)" }}>{p.emitida}</b>/{boleteable} boletas{p.noAplica > 0 ? ` · ${p.total} mov` : ""}</span>
+        <span><b style={{ color: "var(--text)" }}>{p.emitida}</b>/{boleteable} {unidad}{p.noAplica > 0 ? ` · ${p.total} mov` : ""}</span>
       </div>
       {boleteable > 0 && (
         <div style={{ display: "flex", height: 6, borderRadius: 999, overflow: "hidden", background: "var(--bg-muted)", border: "1px solid var(--border)" }}>
@@ -88,8 +88,10 @@ function DocProgressBar({ p }: { p: DocProg }) {
   );
 }
 
-export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc, bare, docsDecididos }: {
+export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa, tipoMix, docProgress, periodoMode = "day", onSelectDoc, selectedDocId, forceTree, infoByDoc, stuckByDoc, bare, docsDecididos, mesa = "boleta" }: {
   docs: DocRaw[]; empresaId: string;
+  /** Carril de la mesa: cambia el vocabulario (boleta ↔ factura, cartola ↔ planilla). */
+  mesa?: string;
   tipoEmpresa?: string | null;
   tipoMix?: Record<string, { afectas: number; exentas: number; gastos: number }>;
   docProgress?: Record<string, DocProg>;
@@ -109,6 +111,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   // la cartola ya se fue a Emitir (o quedó juzgada entera).
   docsDecididos?: Set<string>;
 }) {
+  const esFacturas = mesa === "factura";
   const router = useRouter();
   const ctxReload = useMesaReload();
   const [docs, setDocs] = useState(initialDocs);
@@ -233,7 +236,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
             movimientos_encontrados?:number; error?:string;
             duplicados_detalle?:{descripcion:string;monto:number;fecha:string;tipo_flujo:string;motivo:string;n_documento:string|null}[];
             falsos_duplicados_warning?:boolean; duplicados_saltados?:number;
+            // Plantilla de facturas: filas que NO entraron (y por qué). El
+            // processor siempre las guardó; antes nadie las mostraba y el
+            // cliente creía haber facturado todo.
+            errores_filas?:{fila:number;error:string}[];
+            advertencias?:{fila:number;advertencia:string}[];
           } | null;
+          const filasMalas = progreso?.errores_filas ?? [];
+          const filasAviso = progreso?.advertencias ?? [];
           const dupDetalle = progreso?.duplicados_detalle ?? [];
           const dupCount = progreso?.duplicados_saltados ?? 0;
           const hasWarning = progreso?.falsos_duplicados_warning ?? false;
@@ -277,6 +287,46 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                 })()}
               </div>
               <div className="db" style={isBoletaUnica ? { padding: "0 8px 6px", gap: 2 } : undefined}>
+                {/* Filas que NO entraron (2026-09-03): el processor de plantillas
+                    siempre las guardó en progreso_ia.errores_filas, pero ninguna
+                    pantalla las mostraba — el cliente subía 4 filas, veía "2
+                    movimientos" y perdía una factura sin enterarse. Advertir sí,
+                    bloquear jamás: las buenas siguen su camino. */}
+                {doc.estado === "procesado" && filasMalas.length > 0 && (
+                  <div className="warn" style={{ display: "block" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      {filasMalas.length === 1 ? "1 fila quedó fuera y no se va a facturar" : `${filasMalas.length} filas quedaron fuera y no se van a facturar`}
+                    </div>
+                    <div style={{ marginTop: 3, paddingLeft: 14 }}>
+                      {filasMalas.slice(0, 4).map((e, i) => (
+                        <div key={i} style={{ fontSize: 9, lineHeight: 1.5 }}>
+                          {e.fila > 0 ? <b>Fila {e.fila}:</b> : null} {e.error}
+                        </div>
+                      ))}
+                      {filasMalas.length > 4 && (
+                        <div style={{ fontSize: 9, lineHeight: 1.5, opacity: .75 }}>y {filasMalas.length - 4} más.</div>
+                      )}
+                      <div style={{ fontSize: 9, lineHeight: 1.5, marginTop: 2, opacity: .85 }}>
+                        Corrígelas en tu Excel y sube el archivo de nuevo — las {doc.movimientos_detectados ?? 0} que sí entraron ya están acá.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Avisos por fila: totales que ningún neto entero reproduce
+                    exacto (el peso de diferencia que Matías confirmó que nadie
+                    reclama) y receptores sin giro. La factura entra igual — se
+                    avisa, no se corrige por dentro ni se bota. */}
+                {doc.estado === "procesado" && filasAviso.length > 0 && (
+                  <details className="om-list" style={{marginTop:0}}>
+                    <summary className="om-btn" style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:4,fontSize:9,color:"var(--amber)"}}>
+                      Ver {filasAviso.length} aviso{filasAviso.length !== 1 ? "s" : ""} <span style={{fontSize:7}}>▼</span>
+                    </summary>
+                    {filasAviso.map((a, i) => (
+                      <div key={i} className="om-it"><span className="dt"></span><span className="nm">Fila {a.fila}: {a.advertencia}</span></div>
+                    ))}
+                  </details>
+                )}
                 {doc.estado === "procesado" && hasWarning && (
                   <div className="warn">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -389,7 +439,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   )}
                 </div>
                 {!isBoletaUnica && doc.estado === "procesado" && prog && prog.total > 0 && (
-                  <DocProgressBar p={prog} />
+                  <DocProgressBar p={prog} unidad={esFacturas ? "facturas" : "boletas"} />
                 )}
                 {!isBoletaUnica && doc.estado === "procesado" && (
                   <GlosaComunControl
@@ -442,11 +492,11 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           const origenDe = (d: DocRaw): "massdte" | "telegram" | "boleta" =>
             isBoletaTipo(d.tipo) ? "boleta" : esTelegramNombre(d.nombre_archivo ?? "") ? "telegram" : "massdte";
           const grupos: { key: "massdte" | "telegram" | "boleta"; label: string; sub: string; icon: ReactNode }[] = [
-            { key: "massdte", label: "MassDTE", sub: "cartolas",
+            { key: "massdte", label: "MassDTE", sub: esFacturas ? "planillas" : "cartolas",
               icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 4h8a1 1 0 0 1 1 1v10.5" opacity=".5"/><path d="M5 7.5h8.5a1 1 0 0 1 1 1V21l-1.7-1-1.7 1-1.7-1-1.7 1-1.7-1V8.5a1 1 0 0 1 1-1Z"/><path d="M7.5 12h5"/><path d="M7.5 15h3.5"/></svg> },
             { key: "telegram", label: "Telegram", sub: "comprobantes",
               icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-11 11"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg> },
-            { key: "boleta", label: "Boleta única", sub: "emisión directa",
+            { key: "boleta", label: esFacturas ? "Factura única" : "Boleta única", sub: "emisión directa",
               icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v15.2l-2-1.1-2 1.1-2-1.1-2 1.1-2-1.1-2 1.1V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M9 8h6"/><path d="M9 11.5h5"/></svg> },
           ];
           const byOrigen: Record<string, DocRaw[]> = { massdte: [], telegram: [], boleta: [] };

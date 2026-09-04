@@ -42,6 +42,7 @@ export async function procesarPlantillaFacturas(
   for (const f of facturas) {
     const montos = derivarMontosFactura(f.totalClp, emisorExento);
     if (montos.advertencia) advertencias.push({ fila: f.fila, advertencia: montos.advertencia });
+    for (const aviso of f.advertencias) advertencias.push({ fila: f.fila, advertencia: aviso });
 
     const { data: mov, error: movErr } = await sb
       .from("movimientos_raw")
@@ -71,7 +72,7 @@ export async function procesarPlantillaFacturas(
       detalle: f.detalle,
       receptor_rut: f.receptorRut,
       receptor_nombre: f.receptorRazonSocial,
-      receptor_giro: f.receptorGiro,
+      receptor_giro: f.receptorGiro || null,
       receptor_direccion: f.receptorDireccion,
       receptor_comuna: f.receptorComuna,
       receptor_email: f.receptorEmail,
