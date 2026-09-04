@@ -43,5 +43,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      # El registro de npm se cae y devuelve 503 (nos bloqueó dos deploys el
+      # 2026-09-03, 7 min de timeout cada uno). Reintenta 3 veces; si TODAS
+      # fallan porque el endpoint está caído, avisa y sigue — pero una
+      # vulnerabilidad real sigue botando el build, que es lo que este paso
+      # existe para hacer.
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          for intento in 1 2 3; do
+            salida=$(npm audit --omit=dev --audit-level=high 2>&1) && exit 0
+            echo "$salida"
+            if ! echo "$salida" | grep -q "audit endpoint returned an error"; then
+              echo "::error::npm audit encontró vulnerabilidades (severidad high o mayor)."
+              exit 1
+            fi
+            echo "Intento $intento: el registro de npm no respondió. Reintentando…"
+            sleep 15
+          done
+          echo "::warning::npm audit no pudo correr: el registro de npm está caído (503). Las dependencias NO fueron auditadas en este build."
