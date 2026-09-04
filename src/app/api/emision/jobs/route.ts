@@ -430,9 +430,12 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  // Mismo criterio que el POST: si el trial puede emitir, tiene que poder ver
-  // sus propios jobs (si no, emite y queda ciego al resultado).
-  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
+  // SIN gate de plan/trial a propósito (auditoría adversarial 2026-09-04): este
+  // GET solo informa el estado del candado de emisión y lo sondea un hook cada
+  // 5 s por pestaña — meterle `puedeEmitir` costaba ~10 queries por sondeo, en
+  // una ruta que no emite nada. Ver los jobs PROPIOS no es facturable; el guard
+  // igual exige sesión, rol de emisión y pertenencia a la cuenta.
+  const guard = await requireAccountApiAccess({ requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   let businessMode = false;

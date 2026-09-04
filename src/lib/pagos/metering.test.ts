@@ -9,6 +9,7 @@ import {
   addDaysStr,
   addOneMonth,
   decidirGate,
+  derechoDeEmision,
   type EstadoCuota,
 } from "./metering";
 
@@ -91,10 +92,13 @@ describe("trialVigente — ventana del período de prueba (pura, fechas inyectad
     expect(trialVigente(creada, alDia4, dias, 50, max).activo).toBe(false);
   });
 
-  it("sin inicio: el trial aún no parte y se considera vigente completo", () => {
+  it("sin inicio: FAIL-CLOSED, no se regala acceso", () => {
+    // created_at es NOT NULL: un null acá significa que la fila de empresas no
+    // se pudo leer. Antes esto devolvía "vigente completo" y ese booleano hoy
+    // abre 10 rutas de API (auditoría adversarial 2026-09-04).
     const r = trialVigente(null, new Date("2026-06-12T12:00:00Z"), dias, 0, max);
-    expect(r.activo).toBe(true);
-    expect(r.diasRestantes).toBe(dias);
+    expect(r.activo).toBe(false);
+    expect(r.diasRestantes).toBe(0);
   });
 
   it("dentro de la ventana y bajo el cupo: activo", () => {
@@ -167,6 +171,40 @@ describe("helpers de fecha calendario", () => {
     expect(addOneMonth("2024-01-31")).toBe("2024-02-29"); // bisiesto
     expect(addOneMonth("2026-12-15")).toBe("2027-01-15");
     expect(addOneMonth("2026-06-12")).toBe("2026-07-12");
+  });
+});
+
+describe("derechoDeEmision — quién puede emitir (mismas puertas que decidirGate)", () => {
+  const base = (over: Partial<EstadoCuota> = {}): EstadoCuota => ({
+    plan: null, cuota: 0, refills: 0, uso: 0, disponible: 0,
+    trial: null, suscripcionActiva: false, suscripcionEstado: null, ...over,
+  });
+  const trialOk = { activo: true, inicio: "2026-06-10T12:00:00Z", diasRestantes: 2, boletasUsadas: 0, boletasMax: 100 };
+
+  it("plan activo → puede", () => {
+    expect(derechoDeEmision(base({ suscripcionActiva: true }))).toBe(true);
+  });
+
+  it("trial vigente sin plan → puede", () => {
+    expect(derechoDeEmision(base({ trial: trialOk }))).toBe(true);
+  });
+
+  it("trial vencido → no puede", () => {
+    expect(derechoDeEmision(base({ trial: { ...trialOk, activo: false } }))).toBe(false);
+  });
+
+  // ★ El agujero que cazó la auditoría adversarial: un moroso que alcanzó a
+  // crear una empresa nueva volvía al trial por esa empresa (created_at
+  // reciente) y emitía boletas ÚNICAS ilimitadas, que no pasan por el gate de
+  // cuota. decidirGate ya cerraba esta puerta; esta función no.
+  it("suscripción morosa NO vuelve al trial aunque la empresa sea nueva", () => {
+    expect(derechoDeEmision(base({ suscripcionEstado: "morosa", trial: trialOk }))).toBe(false);
+    expect(derechoDeEmision(base({ suscripcionEstado: "cancelada", trial: trialOk }))).toBe(false);
+    expect(derechoDeEmision(base({ suscripcionEstado: "pausada", trial: trialOk }))).toBe(false);
+  });
+
+  it("suscripción pendiente (nunca llegó a activarse) SÍ cae al trial", () => {
+    expect(derechoDeEmision(base({ suscripcionEstado: "pendiente", trial: trialOk }))).toBe(true);
   });
 });
 
