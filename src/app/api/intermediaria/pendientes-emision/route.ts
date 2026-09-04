@@ -3,7 +3,7 @@ import { getPendientesEmision, type EmpresaCtx } from "@/lib/intermediario/pendi
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 
 export async function GET(request: Request) {
-  const guard = await requireAccountApiAccess({ requirePlan: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true });
   if (!guard.ok) return guard.response;
   const { data: empresa } = await guard.service
     .from("empresas")

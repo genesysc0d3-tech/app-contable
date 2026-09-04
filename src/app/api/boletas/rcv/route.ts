@@ -10,7 +10,7 @@ function monthRange(year: number, month: number) {
 }
 
 export async function GET(request: Request) {
-  const guard = await requireAccountApiAccess({ requirePlan: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true });
   if (!guard.ok) return guard.response;
 
   const url = new URL(request.url);

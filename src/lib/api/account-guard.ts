@@ -5,6 +5,7 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
+import { puedeEmitir } from "@/lib/pagos/metering";
 import { debeRefrescarUltimoAcceso, sesionVencidaPorInactividad } from "@/lib/auth/inactividad-sesion";
 
 type Sb = SupabaseClient<Database>;
@@ -24,7 +25,19 @@ export type AccountGuardResult =
   | { ok: false; response: NextResponse };
 
 export async function requireAccountApiAccess(options: {
+  /**
+   * Exige plan PAGADO (o activado a mano). Corta con 402 PLAN_INACTIVO.
+   * OJO: no conoce el trial — usar solo donde el trial NO debe entrar.
+   */
   requirePlan?: boolean;
+  /**
+   * Exige plan activo **o trial vigente** (2026-09-04). Es lo que necesita la
+   * emisión: con `requirePlan` a secas, quien está en trial recibía 402 y el
+   * trial que promete la landing no existía en el carril real — el gate que sí
+   * lo entiende vivía 200 líneas más abajo, inalcanzable. La fuente de verdad
+   * es UNA (`puedeEmitir` → `estadoCuota`), no un booleano paralelo.
+   */
+  requirePlanOTrial?: boolean;
   requireEmissionRole?: boolean;
 } = {}): Promise<AccountGuardResult> {
   const supabase = await createClient();
@@ -65,7 +78,8 @@ export async function requireAccountApiAccess(options: {
   if (support?.ok) {
     const cuenta = await contextoCuentaPorEmpresa(support.sb, support.empresaId);
     if (!cuenta) return { ok: false, response: NextResponse.json({ ok: false, error: "EMPRESA_SIN_CUENTA" }, { status: 403 }) };
-    if (options.requirePlan && !cuenta.planActivo) {
+    if ((options.requirePlan || options.requirePlanOTrial) && !cuenta.planActivo
+        && !(options.requirePlanOTrial && await puedeEmitir(support.sb, support.empresaId))) {
       return { ok: false, response: NextResponse.json({ ok: false, error: "PLAN_INACTIVO" }, { status: 402 }) };
     }
 
@@ -99,6 +113,11 @@ export async function requireAccountApiAccess(options: {
   const acceso = await validarAccesoCuenta(service, user.id, usuario.empresa_id);
   if (!acceso.ok) return { ok: false, response: NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 }) };
   if (options.requirePlan && !acceso.planActivo) {
+    return { ok: false, response: NextResponse.json({ ok: false, error: "PLAN_INACTIVO" }, { status: 402 }) };
+  }
+  // Plan pagado O trial vigente. El cupo del trial (100 masivas) lo sigue
+  // cobrando el gate de cuota de cada ruta; acá solo se decide si entra.
+  if (options.requirePlanOTrial && !acceso.planActivo && !(await puedeEmitir(service, usuario.empresa_id))) {
     return { ok: false, response: NextResponse.json({ ok: false, error: "PLAN_INACTIVO" }, { status: 402 }) };
   }
 

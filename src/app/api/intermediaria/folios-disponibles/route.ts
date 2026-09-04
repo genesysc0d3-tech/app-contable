@@ -7,7 +7,7 @@ import { requireAccountApiAccess } from "@/lib/api/account-guard";
  * cuando hay 0.
  */
 export async function GET() {
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   const { data: cafs } = await guard.service

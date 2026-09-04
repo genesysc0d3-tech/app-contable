@@ -27,7 +27,7 @@ function getPdfMeta(proveedorRespuesta: unknown): { storagePath: string | null; 
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const guard = await requireAccountApiAccess({ requirePlan: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true });
   if (!guard.ok) return guard.response;
 
   const { data: boleta, error } = await guard.service
