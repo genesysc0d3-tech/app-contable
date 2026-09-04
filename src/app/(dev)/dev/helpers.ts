@@ -53,7 +53,12 @@ export function haceDiasIso(dias: number): string {
   return new Date(Date.now() - dias * 86_400_000).toISOString();
 }
 
-/** Si una empresa sigue dentro de la ventana de trial de su plan. */
+/**
+ * Si una empresa sigue dentro de la ventana de trial de su plan.
+ * OJO: el INICIO no se lee de `empresas.trial_inicio` a secas — el reloj parte
+ * al abrir la cuenta (fundador 2026-09-04). Quien llame acá debe pasar
+ * `inicioTrial(empresa)` de lib/pagos/metering, que es la fuente única.
+ */
 export function trialVigente(
   trialInicio: string | null,
   trialDias: number,

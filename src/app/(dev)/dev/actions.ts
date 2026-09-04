@@ -12,6 +12,7 @@ import type { Database, TablesUpdate } from "@/lib/database.types";
 import { contextoCuentaPorEmpresa, trialGlobalHabilitado } from "@/lib/entitlements";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { inicioTrial } from "@/lib/pagos/metering";
 import { purgarCuentaCompleta, type PurgaResumen } from "@/lib/derechos/purga-cuenta";
 import { clearDevSupportEmpresaCookie, getDevOperatorContext, getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { cuotaEmpresaMes, periodoActualChile, rangoMesActualChileUtc } from "./helpers";
@@ -238,7 +239,7 @@ export async function buscarEmpresa(
 
   const { data: empresas, error } = await sb
     .from("empresas")
-    .select("id, razon_social, rut, plan, plan_activo, trial_inicio")
+    .select("id, razon_social, rut, plan, plan_activo, trial_inicio, created_at")
     .or(`rut.ilike.${patronRut},razon_social.ilike.${patronNombre}`)
     .order("razon_social", { ascending: true })
     .limit(8);
@@ -287,7 +288,10 @@ export async function buscarEmpresa(
     const { cuota, planCodigo } = cuotaEmpresaMes({
       susPlanCodigo: susPorEmpresa.get(e.id) ?? null,
       empresaPlan: e.plan,
-      trialInicio: e.trial_inicio,
+      // Misma regla que el sistema real: el trial parte al abrir la cuenta y
+      // `trial_inicio` es solo el override manual (ver inicioTrial). Sin esto
+      // el panel mostraba cuota 0 para cuentas que SÍ están en trial.
+      trialInicio: inicioTrial(e),
       refillsMes: refillsPorEmpresa.get(e.id) ?? 0,
       planes,
     });
