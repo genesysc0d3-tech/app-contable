@@ -827,12 +827,17 @@ export async function purgarCuenta(
   }
 
   // La auditoría por-cuenta ya no existe (se purgó): registra en ops_events.
+  // Si algún archivo no se pudo borrar, el evento sube a `error`: el titular
+  // ejerció supresión y quedó un binario suyo vivo en un proveedor. Eso se
+  // cierra a mano, y tiene que verse — no puede quedar dentro de un "listo".
+  const archivosPendientes = resumen.archivosFallidos.length;
   await recordOpsEvent({
     sb: gate.sb,
-    severity: "warn",
+    severity: archivosPendientes > 0 ? "error" : "warn",
     source: "dev-support",
-    eventName: "cuenta_purgada",
-    summary: `Operador dev purgó la cuenta «${cuenta.nombre}»: ${resumen.empresas} empresas, ${resumen.documentos} docs, ${resumen.auditChunks} audit_chunks, ${resumen.parserLogs} parser_logs`,
+    eventName: archivosPendientes > 0 ? "cuenta_purgada_con_archivos_pendientes" : "cuenta_purgada",
+    summary: `Operador dev purgó la cuenta «${cuenta.nombre}»: ${resumen.empresas} empresas, ${resumen.documentos} docs, ${resumen.archivos} archivos borrados, ${resumen.auditChunks} audit_chunks, ${resumen.parserLogs} parser_logs`
+      + (archivosPendientes > 0 ? ` — ⚠ ${archivosPendientes} archivo(s) NO se pudieron borrar del almacenamiento: hay que eliminarlos a mano` : ""),
     metadata: { cuentaId, usuario_id: gate.userId, ...resumen },
   }).catch(() => {});
 
