@@ -16,7 +16,7 @@ function parseAmount(value: string | null) {
 }
 
 export async function GET(request: Request) {
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   const url = new URL(request.url);

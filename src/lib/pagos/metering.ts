@@ -15,8 +15,9 @@
  *
  * Sin suscripción activa la empresa corre en modo trial: los parámetros
  * (días y boletas) viven en planes_config (fila 'pro') para poder
- * ajustarlos sin deploy; el reloj parte con la primera emisión masiva
- * (empresas.trial_inicio).
+ * ajustarlos sin deploy. El reloj parte cuando se ABRE LA CUENTA
+ * (empresas.created_at); `empresas.trial_inicio` quedó solo como override
+ * manual de soporte (cortesía / reinicio), no como marca de activación.
  *
  * NOTA imports: relativos (no alias @/) para que vitest resuelva el módulo
  * sin config extra, igual que los tests de src/lib/sii.
@@ -72,9 +73,22 @@ export function addOneMonth(fecha: string): string {
 }
 
 /**
+ * Cuándo empieza a correr el trial de una empresa (fundador 2026-09-04):
+ * manda la fecha de creación de la cuenta. `trial_inicio` sobrevive solo como
+ * override manual de soporte (cortesía o reinicio), y por eso gana si está.
+ * Emitir ya NO escribe esta fecha: si lo hiciera, la primera emisión de una
+ * cuenta de 2 días le regalaría 3 días más.
+ */
+export function inicioTrial(empresa: { trial_inicio?: string | null; created_at?: string | null } | null): string | null {
+  return empresa?.trial_inicio ?? empresa?.created_at ?? null;
+}
+
+/**
  * Ventana de trial como función pura (fechas inyectadas, testeable).
- * inicio null = el trial aún no parte (la primera emisión masiva lo activa),
- * así que se considera vigente con todos los días por delante.
+ * El llamador pasa siempre una fecha real (trial_inicio manual, o la creación
+ * de la empresa). `inicio` null solo puede ocurrir si la empresa no tiene
+ * fecha de creación —imposible en la práctica— y se trata como "recién
+ * empieza" para no negarle el acceso a nadie por un dato faltante.
  */
 export function trialVigente(
   inicio: string | null,
@@ -83,7 +97,11 @@ export function trialVigente(
   usadas: number,
   max: number,
 ): { activo: boolean; diasRestantes: number } {
-  if (!inicio) return { activo: true, diasRestantes: dias };
+  // FAIL-CLOSED (auditoría adversarial 2026-09-04): sin fecha de inicio no se
+  // regala acceso. `empresas.created_at` es NOT NULL, así que un null acá
+  // significa que la fila no se pudo leer — y este booleano hoy abre 10 rutas
+  // de API, no solo una página.
+  if (!inicio) return { activo: false, diasRestantes: 0 };
   const inicioMs = new Date(inicio).getTime();
   if (!Number.isFinite(inicioMs)) return { activo: false, diasRestantes: 0 };
   const restanteMs = inicioMs + dias * DIA_MS - ahora.getTime();
@@ -233,12 +251,12 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
 
   const [planTrialRes, empresaRes] = await Promise.all([
     sb.from("planes_config").select("trial_dias, trial_boletas").eq("codigo", "pro").maybeSingle(),
-    sb.from("empresas").select("trial_inicio").eq("id", empresaId).maybeSingle(),
+    sb.from("empresas").select("trial_inicio, created_at").eq("id", empresaId).maybeSingle(),
   ]);
 
   const trialDias = planTrialRes.data?.trial_dias ?? 3;
   const trialMax = planTrialRes.data?.trial_boletas ?? 100;
-  const inicio = empresaRes.data?.trial_inicio ?? null;
+  const inicio = inicioTrial(empresaRes.data);
   // El cupo del trial se mide desde su inicio (no por mes calendario).
   const boletasUsadas = inicio ? await contarMasivas(sb, [empresaId], inicio) : 0;
   const vigencia = trialVigente(inicio, ahora, trialDias, boletasUsadas, trialMax);
@@ -262,23 +280,41 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
 }
 
 /**
- * ¿La empresa puede USAR la emisión ahora? (gate de acceso de página + boleta única,
- * auditoría #4). = plan activo (o manual), o trial disponible y no terminado. El cupo
- * de las MASIVAS lo decide aparte verificarEmisionMasiva (que además arranca el trial).
+ * ¿La empresa puede USAR la emisión ahora? (gate de acceso de página, boleta
+ * única y —desde 2026-09-04— del guard de la API). El cupo de las MASIVAS lo
+ * decide aparte verificarEmisionMasiva.
+ *
+ * Debe respetar las MISMAS puertas que decidirGate, porque las dos contestan la
+ * pregunta "¿este tiene derecho a emitir?" desde distintos lados. La auditoría
+ * adversarial cazó que no lo hacía: sin el corte por suscripción caída, una
+ * cuenta morosa que hubiera alcanzado a crear una empresa nueva volvía al trial
+ * por esa empresa (su created_at es reciente) y emitía boletas ÚNICAS
+ * ilimitadas —que no pasan por el gate de cuota— durante 3 días.
  */
 export async function puedeEmitir(sb: Sb, empresaId: string, ahora: Date = new Date()): Promise<boolean> {
-  const estado = await estadoCuota(sb, empresaId, ahora);
+  return derechoDeEmision(await estadoCuota(sb, empresaId, ahora));
+}
+
+/**
+ * La regla, pura y testeable (el resto de `puedeEmitir` es ir a buscar el
+ * estado). Mismas puertas que `decidirGate`, en el mismo orden.
+ */
+export function derechoDeEmision(estado: EstadoCuota): boolean {
   if (estado.suscripcionActiva) return true;
+  // Hubo suscripción y no está activa (morosa/pausada/cancelada): se regulariza
+  // en Planes, no se vuelve al trial por la puerta de atrás (igual que decidirGate).
+  if (estado.suscripcionEstado && estado.suscripcionEstado !== "pendiente") return false;
   if (!estado.trial) return false; // sin plan y sin trial disponible
-  // trial sin iniciar (elegible) o vigente → puede entrar; terminado → no.
-  return estado.trial.inicio === null || estado.trial.activo;
+  return estado.trial.activo;
 }
 
 export type GateEmision =
   | { ok: true }
   | { ok: false; codigo: "SIN_PLAN" | "TRIAL_TERMINADO" | "CUOTA_AGOTADA"; detalle: string; disponible: number };
 
-export type GateDecision = GateEmision | { ok: "activar_trial" };
+// El trial ya no se "activa" al emitir (parte con la cuenta), así que la
+// decisión del gate es simplemente pasa/no pasa.
+export type GateDecision = GateEmision;
 
 /**
  * Lógica PURA del gate de emisión masiva: dado el estado de cuota y la cantidad,
@@ -318,19 +354,11 @@ export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision
     };
   }
 
-  // Trial sin iniciar: la primera emisión masiva activa el reloj (solo si cabe).
-  if (!trial.inicio) {
-    if (cantidad > trial.boletasMax) {
-      return {
-        ok: false,
-        codigo: "CUOTA_AGOTADA",
-        detalle: `El período de prueba incluye ${trial.boletasMax} documentos masivos — selecciona menos o contrata un plan.`,
-        disponible: trial.boletasMax,
-      };
-    }
-    return { ok: "activar_trial" };
-  }
-
+  // El reloj YA parte al abrir la cuenta (decisión del fundador 2026-09-04), así
+  // que acá no se "activa" nada: emitir no puede correr la fecha de inicio — si
+  // lo hiciera, una cuenta de 2 días se auto-regalaría 3 días más en su primera
+  // emisión. `trial.inicio` solo es null si la empresa no tiene fecha de
+  // creación (imposible en la práctica); se trata como trial sin empezar.
   if (!trial.activo) {
     return {
       ok: false,
@@ -351,8 +379,8 @@ export function decidirGate(estado: EstadoCuota, cantidad: number): GateDecision
 
 /**
  * Gate de la emisión masiva: ¿puede esta empresa emitir `cantidad` boletas
- * masivas ahora? Si el trial no ha partido, la primera emisión lo activa
- * (setea empresas.trial_inicio) y se permite.
+ * masivas ahora? El trial ya viene corriendo desde que se abrió la cuenta, así
+ * que este gate solo deja pasar o no: no escribe ninguna fecha.
  */
 export async function verificarEmisionMasiva(
   sb: Sb,
@@ -364,22 +392,6 @@ export async function verificarEmisionMasiva(
   const ahora = opts?.ahora ?? new Date();
   const estado = await estadoCuota(sb, empresaId, ahora);
   const decision = decidirGate(estado, cantidad);
-
-  if (decision.ok === "activar_trial") {
-    const { error } = await sb
-      .from("empresas")
-      .update({ trial_inicio: ahora.toISOString() })
-      .eq("id", empresaId);
-    if (error) {
-      return {
-        ok: false,
-        codigo: "SIN_PLAN",
-        detalle: "No se pudo iniciar el período de prueba — intenta de nuevo.",
-        disponible: 0,
-      };
-    }
-    return { ok: true };
-  }
 
   return decision;
 }

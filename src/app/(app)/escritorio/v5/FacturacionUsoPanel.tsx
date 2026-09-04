@@ -208,9 +208,10 @@ export default function FacturacionUsoPanel() {
 
         {enTrial && data.trial && (
           <div style={infoLine}>
-            {data.trial.inicio
-              ? `Prueba activa · ${data.trial.diasRestantes} ${data.trial.diasRestantes === 1 ? "día" : "días"} · ${data.trial.boletasUsadas}/${data.trial.boletasMax} boletas`
-              : `Prueba gratis: tu primera emisión masiva activa ${data.trial.diasRestantes} días o ${data.trial.boletasMax} boletas.`}
+            {/* El reloj parte al abrir la cuenta (2026-09-04): la rama "aún no
+                empieza" ya no existe y su copy mentía — decía que la primera
+                emisión activaba el trial cuando ya estaba corriendo. */}
+            {`Prueba activa · ${data.trial.diasRestantes} ${data.trial.diasRestantes === 1 ? "día" : "días"} · ${data.trial.boletasUsadas}/${data.trial.boletasMax} boletas`}
           </div>
         )}
         {data.suscripcion?.estado === "activa" && data.suscripcion.proximoCobro && (

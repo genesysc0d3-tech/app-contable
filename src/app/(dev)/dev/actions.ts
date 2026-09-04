@@ -12,6 +12,7 @@ import type { Database, TablesUpdate } from "@/lib/database.types";
 import { contextoCuentaPorEmpresa, trialGlobalHabilitado } from "@/lib/entitlements";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { inicioTrial } from "@/lib/pagos/metering";
 import { purgarCuentaCompleta, type PurgaResumen } from "@/lib/derechos/purga-cuenta";
 import { clearDevSupportEmpresaCookie, getDevOperatorContext, getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { cuotaEmpresaMes, periodoActualChile, rangoMesActualChileUtc } from "./helpers";
@@ -238,7 +239,7 @@ export async function buscarEmpresa(
 
   const { data: empresas, error } = await sb
     .from("empresas")
-    .select("id, razon_social, rut, plan, plan_activo, trial_inicio")
+    .select("id, razon_social, rut, plan, plan_activo, trial_inicio, created_at")
     .or(`rut.ilike.${patronRut},razon_social.ilike.${patronNombre}`)
     .order("razon_social", { ascending: true })
     .limit(8);
@@ -287,7 +288,10 @@ export async function buscarEmpresa(
     const { cuota, planCodigo } = cuotaEmpresaMes({
       susPlanCodigo: susPorEmpresa.get(e.id) ?? null,
       empresaPlan: e.plan,
-      trialInicio: e.trial_inicio,
+      // Misma regla que el sistema real: el trial parte al abrir la cuenta y
+      // `trial_inicio` es solo el override manual (ver inicioTrial). Sin esto
+      // el panel mostraba cuota 0 para cuentas que SÍ están en trial.
+      trialInicio: inicioTrial(e),
       refillsMes: refillsPorEmpresa.get(e.id) ?? 0,
       planes,
     });
@@ -564,6 +568,61 @@ export async function setCuentaTrialCortesia(
   }).catch(() => {});
 
   revalidatePath(`/dev/cuentas/${cuentaId}`);
+  return { ok: true };
+}
+
+
+/**
+ * REINICIAR EL RELOJ DEL TRIAL de una empresa (operador, 2026-09-04).
+ *
+ * El trial arranca solo, con la creación de la cuenta, y se apaga cuando pasan
+ * sus días — el temporizador "desactiva el cosito". Esto es la única forma de
+ * volver a prenderlo: escribe `empresas.trial_inicio` (el override manual) con
+ * la hora actual, así el cliente vuelve a tener sus días completos desde HOY.
+ *
+ * Ojo, esto NO es lo mismo que "prestarle la prueba" (`trial_cortesia`): esa
+ * palanca decide si la cuenta PUEDE tener trial cuando el global está apagado,
+ * pero no mueve la fecha — a una empresa creada hace 10 días la cortesía sola
+ * no le sirve de nada, porque su ventana ya venció.
+ *
+ * Regala días de servicio real: queda auditado como cualquier otra
+ * intervención de soporte.
+ */
+export async function reiniciarTrialEmpresa(
+  empresaId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof empresaId !== "string" || !UUID_RE.test(empresaId)) return { error: "Empresa inválida" };
+
+  const ahora = new Date().toISOString();
+  const { data: empresa, error: buscarError } = await gate.sb
+    .from("empresas")
+    .select("id, razon_social")
+    .eq("id", empresaId)
+    .maybeSingle();
+  if (buscarError) return { error: buscarError.message };
+  if (!empresa) return { error: "Empresa no encontrada" };
+
+  const { error } = await gate.sb
+    .from("empresas")
+    .update({ trial_inicio: ahora })
+    .eq("id", empresaId);
+  if (error) return { error: error.message };
+
+  const cuenta = await contextoCuentaPorEmpresa(gate.sb, empresaId);
+  await recordCuentaAudit({
+    sb: gate.sb,
+    cuentaId: cuenta?.cuentaId ?? null,
+    empresaId,
+    usuarioId: gate.userId,
+    accion: "trial_reiniciado",
+    recursoTipo: "empresa",
+    recursoId: empresaId,
+    resumen: `Operador dev reinició la prueba gratis de ${empresa.razon_social} (cuenta desde ${ahora})`,
+  }).catch(() => {});
+
+  if (cuenta?.cuentaId) revalidatePath(`/dev/cuentas/${cuenta.cuentaId}`);
   return { ok: true };
 }
 

@@ -53,7 +53,19 @@ export function haceDiasIso(dias: number): string {
   return new Date(Date.now() - dias * 86_400_000).toISOString();
 }
 
-/** Si una empresa sigue dentro de la ventana de trial de su plan. */
+/**
+ * Si una empresa sigue dentro de la ventana de trial de su plan.
+ * OJO, tres diferencias con el sistema real (esto es display-only, pero el
+ * operador decide mirando esta pantalla):
+ *  1. El INICIO no sale de `empresas.trial_inicio` a secas — el reloj parte al
+ *     abrir la cuenta (fundador 2026-09-04): pasar `inicioTrial(empresa)` de
+ *     lib/pagos/metering, que es la fuente única.
+ *  2. Acá solo se miran los DÍAS; el sistema real además corta al agotarse las
+ *     100 boletas (`trialVigente` de metering recibe usadas/max).
+ *  3. Acá no se consulta `config_global.trial_habilitado` ni
+ *     `cuentas.trial_cortesia`: con el trial público apagado, el panel puede
+ *     mostrar cupo de prueba a una cuenta que el sistema trata como SIN_PLAN.
+ */
 export function trialVigente(
   trialInicio: string | null,
   trialDias: number,
@@ -87,11 +99,16 @@ export function cuotaEmpresaMes(args: {
 }): { cuota: number; planCodigo: string | null } {
   const codigo = args.susPlanCodigo ?? args.empresaPlan;
   const plan = codigo ? args.planes.get(codigo) : undefined;
+  // Una empresa en trial PURO no tiene plan ni suscripción, así que `plan` es
+  // undefined y el panel mostraba cuota 0 justo para las cuentas cuyo cupo el
+  // operador quiere ver. El sistema real saca los parámetros del trial de la
+  // fila 'pro' de planes_config (lib/pagos/metering), así que acá igual.
+  const planTrial = plan ?? args.planes.get("pro");
   let base = 0;
   if (args.susPlanCodigo && plan) {
     base = plan.cuota_masivas;
-  } else if (plan && trialVigente(args.trialInicio, plan.trial_dias)) {
-    base = plan.trial_boletas;
+  } else if (planTrial && trialVigente(args.trialInicio, planTrial.trial_dias)) {
+    base = planTrial.trial_boletas;
   }
   return { cuota: base + args.refillsMes, planCodigo: plan?.codigo ?? codigo ?? null };
 }

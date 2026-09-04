@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const guard = await requireAccountApiAccess({ requirePlan: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true });
   if (!guard.ok) return guard.response;
 
   const { data, error } = await guard.service

@@ -98,7 +98,12 @@ export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
   if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
 
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  // Plan O TRIAL (2026-09-04): con `requirePlan` a secas, quien estaba en trial
+  // recibía 402 ACÁ y nunca llegaba al gate de cuota de más abajo — el trial que
+  // promete la landing no existía en el carril que emite documentos REALES. El
+  // cupo de 100 masivas lo sigue cobrando ese gate; las boletas únicas siguen
+  // ilimitadas, en trial también (política vigente).
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
   const limited = enforceRateLimit({
     key: rateLimitKey("emision-jobs-post", guard.userId),
@@ -425,7 +430,12 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  // SIN gate de plan/trial a propósito (auditoría adversarial 2026-09-04): este
+  // GET solo informa el estado del candado de emisión y lo sondea un hook cada
+  // 5 s por pestaña — meterle `puedeEmitir` costaba ~10 queries por sondeo, en
+  // una ruta que no emite nada. Ver los jobs PROPIOS no es facturable; el guard
+  // igual exige sesión, rol de emisión y pertenencia a la cuenta.
+  const guard = await requireAccountApiAccess({ requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   let businessMode = false;

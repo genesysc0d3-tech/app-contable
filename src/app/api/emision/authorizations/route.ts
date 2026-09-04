@@ -12,7 +12,7 @@ import {
 import { enforceRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 
 export async function GET(request: Request) {
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   const url = new URL(request.url);
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
   if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
 
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   const limited = enforceRateLimit({
