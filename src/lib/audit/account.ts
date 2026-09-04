@@ -32,7 +32,8 @@ export type CuentaAuditAction =
   | "documento_deshecho"
   | "documento_cancelado"
   | "plan_cambiado_dev"
-  | "trial_cortesia_cambiado";
+  | "trial_cortesia_cambiado"
+  | "trial_reiniciado";
 
 export async function recordCuentaAudit(args: {
   sb: Sb;

@@ -8,7 +8,7 @@ import { requireAccountApiAccess } from "@/lib/api/account-guard";
  * o cambiar de equipo, así que la fuente de verdad es boletas_emitidas.
  */
 export async function GET(request: Request) {
-  const guard = await requireAccountApiAccess({ requirePlan: true, requireEmissionRole: true });
+  const guard = await requireAccountApiAccess({ requirePlanOTrial: true, requireEmissionRole: true });
   if (!guard.ok) return guard.response;
 
   const tipoDte = Number(new URL(request.url).searchParams.get("tipo_dte"));

@@ -4,10 +4,12 @@ import {
   periodoDePago,
   clpConIva,
   trialVigente,
+  inicioTrial,
   chileMonthUtcRange,
   addDaysStr,
   addOneMonth,
   decidirGate,
+  derechoDeEmision,
   type EstadoCuota,
 } from "./metering";
 
@@ -62,10 +64,41 @@ describe("trialVigente — ventana del período de prueba (pura, fechas inyectad
   const dias = 3;
   const max = 100;
 
-  it("sin inicio: el trial aún no parte y se considera vigente completo", () => {
+  // REGLA DEL FUNDADOR (2026-09-04): el reloj parte al ABRIR LA CUENTA, no con
+  // la primera emisión. Estos tests muerden si alguien vuelve a atar el inicio
+  // del trial al acto de emitir.
+  it("inicioTrial: sin override manda la creación de la cuenta", () => {
+    expect(inicioTrial({ trial_inicio: null, created_at: "2026-09-01T10:00:00Z" })).toBe("2026-09-01T10:00:00Z");
+  });
+
+  it("inicioTrial: el override de soporte gana (cortesía / reinicio)", () => {
+    expect(inicioTrial({ trial_inicio: "2026-09-03T00:00:00Z", created_at: "2026-09-01T10:00:00Z" }))
+      .toBe("2026-09-03T00:00:00Z");
+  });
+
+  it("el reloj corre desde la fecha de creación de la cuenta, haya emitido o no", () => {
+    const creada = "2026-09-01T10:00:00Z";
+    // Día 2 sin haber emitido NADA: sigue vigente.
+    expect(trialVigente(creada, new Date("2026-09-03T09:00:00Z"), dias, 0, max).activo).toBe(true);
+    // Día 4 sin haber emitido nada: se venció igual. El trial no espera.
+    expect(trialVigente(creada, new Date("2026-09-05T09:00:00Z"), dias, 0, max).activo).toBe(false);
+  });
+
+  it("emitir no puede estirar el trial: lo que manda es la fecha de inicio", () => {
+    const creada = "2026-09-01T10:00:00Z";
+    const alDia4 = new Date("2026-09-05T09:00:00Z");
+    // Con o sin consumo, al día 4 está vencido: el reloj es de calendario.
+    expect(trialVigente(creada, alDia4, dias, 0, max).activo).toBe(false);
+    expect(trialVigente(creada, alDia4, dias, 50, max).activo).toBe(false);
+  });
+
+  it("sin inicio: FAIL-CLOSED, no se regala acceso", () => {
+    // created_at es NOT NULL: un null acá significa que la fila de empresas no
+    // se pudo leer. Antes esto devolvía "vigente completo" y ese booleano hoy
+    // abre 10 rutas de API (auditoría adversarial 2026-09-04).
     const r = trialVigente(null, new Date("2026-06-12T12:00:00Z"), dias, 0, max);
-    expect(r.activo).toBe(true);
-    expect(r.diasRestantes).toBe(dias);
+    expect(r.activo).toBe(false);
+    expect(r.diasRestantes).toBe(0);
   });
 
   it("dentro de la ventana y bajo el cupo: activo", () => {
@@ -141,6 +174,40 @@ describe("helpers de fecha calendario", () => {
   });
 });
 
+describe("derechoDeEmision — quién puede emitir (mismas puertas que decidirGate)", () => {
+  const base = (over: Partial<EstadoCuota> = {}): EstadoCuota => ({
+    plan: null, cuota: 0, refills: 0, uso: 0, disponible: 0,
+    trial: null, suscripcionActiva: false, suscripcionEstado: null, ...over,
+  });
+  const trialOk = { activo: true, inicio: "2026-06-10T12:00:00Z", diasRestantes: 2, boletasUsadas: 0, boletasMax: 100 };
+
+  it("plan activo → puede", () => {
+    expect(derechoDeEmision(base({ suscripcionActiva: true }))).toBe(true);
+  });
+
+  it("trial vigente sin plan → puede", () => {
+    expect(derechoDeEmision(base({ trial: trialOk }))).toBe(true);
+  });
+
+  it("trial vencido → no puede", () => {
+    expect(derechoDeEmision(base({ trial: { ...trialOk, activo: false } }))).toBe(false);
+  });
+
+  // ★ El agujero que cazó la auditoría adversarial: un moroso que alcanzó a
+  // crear una empresa nueva volvía al trial por esa empresa (created_at
+  // reciente) y emitía boletas ÚNICAS ilimitadas, que no pasan por el gate de
+  // cuota. decidirGate ya cerraba esta puerta; esta función no.
+  it("suscripción morosa NO vuelve al trial aunque la empresa sea nueva", () => {
+    expect(derechoDeEmision(base({ suscripcionEstado: "morosa", trial: trialOk }))).toBe(false);
+    expect(derechoDeEmision(base({ suscripcionEstado: "cancelada", trial: trialOk }))).toBe(false);
+    expect(derechoDeEmision(base({ suscripcionEstado: "pausada", trial: trialOk }))).toBe(false);
+  });
+
+  it("suscripción pendiente (nunca llegó a activarse) SÍ cae al trial", () => {
+    expect(derechoDeEmision(base({ suscripcionEstado: "pendiente", trial: trialOk }))).toBe(true);
+  });
+});
+
 describe("decidirGate — gate puro de emisión masiva (todas las ramas)", () => {
   const base = (over: Partial<EstadoCuota> = {}): EstadoCuota => ({
     plan: null, cuota: 0, refills: 0, uso: 0, disponible: 0,
@@ -171,8 +238,8 @@ describe("decidirGate — gate puro de emisión masiva (todas las ramas)", () =>
   });
 
   it("suscripción pendiente → cae al trial (no bloquea por la puerta de atrás)", () => {
-    expect(decidirGate(base({ suscripcionEstado: "pendiente", trial: trial({ inicio: null }) }), 5))
-      .toEqual({ ok: "activar_trial" });
+    expect(decidirGate(base({ suscripcionEstado: "pendiente", trial: trial(), disponible: 100 }), 5))
+      .toEqual({ ok: true });
   });
 
   it("sin trial y sin suscripción → SIN_PLAN", () => {
@@ -181,13 +248,15 @@ describe("decidirGate — gate puro de emisión masiva (todas las ramas)", () =>
     if (r.ok === false) expect(r.codigo).toBe("SIN_PLAN");
   });
 
-  it("trial sin iniciar y cabe (incluso al tope) → señal activar_trial", () => {
-    expect(decidirGate(base({ trial: trial({ inicio: null, boletasMax: 100 }) }), 100))
-      .toEqual({ ok: "activar_trial" });
+  // El reloj parte al ABRIR LA CUENTA (fundador 2026-09-04): el gate ya no
+  // "activa" nada, solo deja pasar o no. Emitir no puede correr la fecha.
+  it("trial vigente y cabe (incluso al tope) → pasa", () => {
+    expect(decidirGate(base({ trial: trial({ boletasMax: 100 }), disponible: 100 }), 100))
+      .toEqual({ ok: true });
   });
 
-  it("trial sin iniciar pero excede el cupo → CUOTA_AGOTADA (no activa el reloj)", () => {
-    const r = decidirGate(base({ trial: trial({ inicio: null, boletasMax: 100 }) }), 101);
+  it("trial vigente pero excede el cupo → CUOTA_AGOTADA", () => {
+    const r = decidirGate(base({ trial: trial({ boletasMax: 100 }), disponible: 100 }), 101);
     expect(r.ok).toBe(false);
     if (r.ok === false) { expect(r.codigo).toBe("CUOTA_AGOTADA"); expect(r.disponible).toBe(100); }
   });

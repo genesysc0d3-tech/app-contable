@@ -96,8 +96,9 @@ export default async function PlanesPage({ searchParams }: { searchParams: Promi
     aviso = "Tu tarjeta quedó registrada. Elige un plan para activarlo.";
   } else if (cuota.suscripcionEstado === "morosa") aviso = "Tu suscripción está morosa — regulariza el pago para reactivar la emisión.";
   else if (cuota.suscripcionEstado === "pausada") aviso = "Tu suscripción está pausada — reactívala para seguir emitiendo.";
-  else if (trial && trial.activo && trial.inicio) aviso = `Período de prueba activo — ${trial.diasRestantes} ${trial.diasRestantes === 1 ? "día restante" : "días restantes"} · ${trial.boletasUsadas} de ${trial.boletasMax} boletas usadas`;
-  else if (trial && trial.activo && !trial.inicio) aviso = `Prueba gratis: tu primera emisión masiva activa ${trial.diasRestantes} días o ${trial.boletasMax} boletas, lo que ocurra primero.`;
+  // El reloj corre desde que se abrió la cuenta (2026-09-04): ya no existe el
+  // estado "prueba disponible pero sin empezar", así que tampoco su aviso.
+  else if (trial && trial.activo) aviso = `Período de prueba activo — ${trial.diasRestantes} ${trial.diasRestantes === 1 ? "día restante" : "días restantes"} · ${trial.boletasUsadas} de ${trial.boletasMax} boletas usadas`;
   else if (trial && !trial.activo) aviso = "Tu período de prueba terminó — contrata un plan para seguir emitiendo.";
 
   // El trial (disponible o corriendo) también da acceso al escritorio: quien está
