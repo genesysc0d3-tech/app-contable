@@ -374,6 +374,35 @@ export async function estadoPago(flowOrder: string | number): Promise<FlowPagoSt
   return res.ok ? res.data : null;
 }
 
+/**
+ * ¿Un pago que dimos por bueno se dio vuelta? (contracargo, anulación, reversa).
+ *
+ * Función pura para poder probarla sin tocar la red, y deliberadamente
+ * DESCONFIADA: solo devuelve "revertir" cuando Flow responde de forma EXPLÍCITA
+ * que la orden quedó anulada. Si la API no contesta, contesta cualquier cosa o
+ * el estado viene raro, la respuesta es "sin_cambio" — porque bajarle el plan a
+ * un cliente que sí pagó, por un hipo de la red, es peor que tardar un día en
+ * detectar una reversa.
+ *
+ * Por qué existe (2026-09-04): no había NINGÚN camino por el que una reversa de
+ * Flow llegara al sistema. `estadoPago` estaba escrita y no la llamaba nadie, y
+ * el webhook de MercadoPago solo trata refund/chargeback de un addon. Un
+ * contracargo dejaba la suscripción activa y el plan encendido hasta el
+ * vencimiento: servicio gratis, sin alerta.
+ */
+export function decidirReversaFlow(args: {
+  /** `status` que devuelve Flow, o null si la consulta falló. */
+  statusFlow: number | null | undefined;
+  /** Estado que tenemos guardado nosotros. */
+  estadoLocal: string | null;
+}): "revertir" | "sin_cambio" {
+  // Solo nos interesan los pagos que HOY damos por buenos: revertir uno ya
+  // revertido no hace nada, y uno rechazado nunca encendió el plan.
+  if (args.estadoLocal !== "aprobado") return "sin_cambio";
+  if (args.statusFlow !== FLOW_PAGO.ANULADA) return "sin_cambio";
+  return "revertir";
+}
+
 // ─────────────────────── Ciclo de suscripción ────────────────────────────────
 
 /**
