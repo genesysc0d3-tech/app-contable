@@ -51,7 +51,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 export default function VeredictoCartola({
   doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null,
 }: {
-  doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null };
+  doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null; progreso_ia?: unknown };
   propuestas: Propuesta[];
   tipoMix?: { afectas: number; exentas: number; gastos: number } | undefined;
   empresaId: string;
@@ -187,6 +187,31 @@ export default function VeredictoCartola({
             </>)}
           </span>
         </div>
+
+        {/* FILAS QUE NO ENTRARON (2026-09-03): el processor de plantillas
+            siempre las guardó en progreso_ia.errores_filas, pero el visor solo
+            mostraba las que SÍ entraron — el cliente subía 4 filas, leía "2
+            movimientos · 2/2 listas" y perdía una factura sin enterarse.
+            Advertir sí, bloquear jamás: las buenas siguen su camino. */}
+        {(() => {
+          const errs = ((doc.progreso_ia as { errores_filas?: { fila: number; error: string }[] } | null)?.errores_filas) ?? [];
+          if (errs.length === 0) return null;
+          return (
+            <div style={{ marginTop: "0.6em", display: "flex", gap: 7, alignItems: "flex-start", padding: "0.55em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)", fontSize: "0.85em", lineHeight: 1.45, color: "var(--text)" }}>
+              <span style={{ color: "var(--amber)", flexShrink: 0 }}>⚠</span>
+              <span>
+                <b>{errs.length === 1 ? "1 fila de tu archivo quedó fuera" : `${errs.length} filas de tu archivo quedaron fuera`}</b> — no se van a facturar.
+                {errs.slice(0, 3).map((e, i) => (
+                  <span key={i} style={{ display: "block", color: "var(--text2)", fontSize: "0.94em" }}>
+                    {e.fila > 0 ? `Fila ${e.fila}: ` : ""}{e.error}
+                  </span>
+                ))}
+                {errs.length > 3 && <span style={{ display: "block", color: "var(--text3)", fontSize: "0.94em" }}>y {errs.length - 3} más.</span>}
+                <span style={{ display: "block", color: "var(--text3)", fontSize: "0.94em", marginTop: 2 }}>Corrígelas en tu Excel y sube el archivo de nuevo.</span>
+              </span>
+            </div>
+          );
+        })()}
 
         {/* ACUSE DE RECIBO del contexto (fix placebo): el cliente escribió una
             nota — acá VE que se leyó y qué produjo. El motivo viene saneado del

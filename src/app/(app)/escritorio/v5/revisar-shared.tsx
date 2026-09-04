@@ -345,6 +345,14 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const isGasto = propuesta.tipo_propuesto === "gasto_egreso";
   const isNoComercial = propuesta.tipo_propuesto === "no_comercial";
   const noBoletea = isGasto || isNoComercial;
+  // Este editor nació en la mesa de boletas y la mesa de facturas lo heredó
+  // entero: hablaba de "boleta" y, peor, al aprobar escribía tipo_propuesto
+  // "boleta"/tipo_dte 39 — convertía una FACTURA en boleta (2026-09-03). El
+  // carril se decide igual que en EditorAmpliado: la mesa manda.
+  const esFactura = (propuesta as unknown as { mesa?: string | null }).mesa === "factura"
+    || propuesta.tipo_propuesto === "factura_afecta"
+    || propuesta.tipo_propuesto === "factura_exenta";
+  const doc = esFactura ? "factura" : "boleta";
 
   // Campos editables (editable, sin lock). El tipo lo decide PRIMERO la clasificación
   // de la propuesta (tipo_dte persistido → tipo_propuesto), y SOLO como desempate la
@@ -409,8 +417,8 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     const patch = noBoletea
       ? { notas: detalle.trim() || null }
       : {
-          tipo_propuesto: isAfecta ? "boleta" : "exenta",
-          tipo_dte: isAfecta ? 39 : 41,
+          tipo_propuesto: esFactura ? (isAfecta ? "factura_afecta" : "factura_exenta") : (isAfecta ? "boleta" : "exenta"),
+          tipo_dte: esFactura ? (isAfecta ? 33 : 34) : (isAfecta ? 39 : 41),
           total: Math.round(total), monto_neto: neto, iva,
           receptor_rut: rutTrim || null, receptor_nombre: razon.trim() || null,
           receptor_direccion: direccion.trim() || null, receptor_comuna: comuna.trim() || null,
@@ -456,7 +464,9 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
         <span style={{color:confCol,fontSize:13,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{conf}%</span>
         {!compact && <TermHint width={250}>Qué tan segura está la IA de esta clasificación, según la glosa bancaria, el monto y tu historial. Verde (≥85%) es confiable; bajo eso, dale una mirada.</TermHint>}
-        <span style={{marginLeft:"auto",fontSize:10.5,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"50%"}} title={propuesta.movimientos_raw.descripcion}>del banco (no se imprime): {propuesta.movimientos_raw.descripcion}</span>
+        {/* Origen de la glosa: "del banco" miente cuando la fila vino de una
+            planilla de facturas que el propio usuario escribió. */}
+        <span style={{marginLeft:"auto",fontSize:10.5,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"50%"}} title={propuesta.movimientos_raw.descripcion}>{(propuesta.movimientos_raw as unknown as { origen?: string | null }).origen === "plantilla_facturas" ? "de tu planilla" : "del banco (no se imprime)"}: {propuesta.movimientos_raw.descripcion}</span>
       </div>
 
       {noBoletea ? (
@@ -480,7 +490,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
               <span>Detalle (opcional)</span>
               <span style={{fontWeight:600,color:detalle.length>=80?"var(--red)":"var(--text3)"}}>{detalle.length}/80</span>
             </label>
-            <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} placeholder="Qué se vendió o prestó (se imprime en la boleta)" style={inp} />
+            <input value={detalle} maxLength={80} onChange={e=>setDetalle(e.target.value)} placeholder={`Qué se vendió o prestó (se imprime en la ${doc})`} style={inp} />
           </div>
 
           {/* Fila resumen: Tipo + Monto + neto/IVA vivo — todo en un renglón denso */}
@@ -488,7 +498,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             <div>
               <label style={lbl}>Tipo</label>
               <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
-                {([["exenta","Exenta · 41","var(--blue)"],["afecta","Afecta · 39","var(--accent)"]] as const).map(([k,l,c])=>{
+                {([["exenta",esFactura?"Exenta · 34":"Exenta · 41","var(--blue)"],["afecta",esFactura?"Afecta · 33":"Afecta · 39","var(--accent)"]] as const).map(([k,l,c])=>{
                   const active = tipo===k;
                   return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:10.5,fontWeight:750,padding:"8px 15px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}

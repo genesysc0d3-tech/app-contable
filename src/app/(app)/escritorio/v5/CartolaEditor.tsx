@@ -28,7 +28,7 @@ const SECTION_META: Record<SectionKey, { label: string; color: string }> = {
   listas: { label: "Listas", color: "var(--green)" },
   // "Sin boleta" (no "Rechazadas"): el ✕ es un JUICIO completado — típicamente un
   // egreso que no lleva boleta — no una eliminación. La tx queda visible y tachada.
-  rechazadas: { label: "Sin boleta (juzgadas)", color: "var(--text3)" },
+  rechazadas: { label: "Sin documento (juzgadas)", color: "var(--text3)" },
   emision: { label: "En emisión", color: "var(--blue)" },
 };
 const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision"];
@@ -65,14 +65,17 @@ function confColor(c: number | null | undefined) {
 }
 
 export default function CartolaEditor({
-  propuestas, clientes, empresaId, empresaTipo, onAction,
+  propuestas, clientes, empresaId, empresaTipo, onAction, mesa = "boleta",
 }: {
   propuestas: Propuesta[];
   clientes: ClienteResumen[];
   empresaId: string;
   empresaTipo?: string | null;
   onAction: () => void;
+  /** Carril: en la mesa de facturas el documento es una factura, no una boleta. */
+  mesa?: string;
 }) {
+  const docPalabra = mesa === "factura" ? "factura" : "boleta";
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
@@ -468,7 +471,7 @@ export default function CartolaEditor({
             </button>
             <button onClick={() => bulkSel("sin_boleta")} disabled={busyBulk}
               style={{ fontSize: 11.5, fontWeight: 800, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.1)", color: "var(--red)", cursor: "pointer" }}>
-              ✕ Sin boleta (egreso)
+              ✕ Sin {docPalabra} (egreso)
             </button>
             <button onClick={() => setSel(new Set())} disabled={busyBulk}
               style={{ fontSize: 11.5, fontWeight: 700, padding: "6px 14px", borderRadius: 99, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer" }}>
@@ -493,6 +496,7 @@ export default function CartolaEditor({
               >
                 {row.kind === "header" ? (
                   <SectionHeader
+                    docPalabra={docPalabra}
                     section={row.section}
                     count={row.count}
                     open={expanded[row.section]}
@@ -570,13 +574,15 @@ export default function CartolaEditor({
 }
 
 /* ─── Header de sección ─── */
-function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCount, busy, juzTotal, juzSel, onToggleJuzTodas, onRestaurarSel, listasTotal, listasSel, onToggleListasTodas, onListasAPendientes, onListasSinBoleta }: {
+function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCount, busy, juzTotal, juzSel, onToggleJuzTodas, onRestaurarSel, listasTotal, listasSel, onToggleListasTodas, onListasAPendientes, onListasSinBoleta, docPalabra = "boleta" }: {
   section: SectionKey; count: number; open: boolean; onToggle: () => void;
   onStageAll?: () => void; stageableCount?: number; busy?: boolean;
   /** Juzgadas (fundador 2026-09-02): seleccionar algunas o todas y cambiarles el juicio. */
   juzTotal?: number; juzSel?: number; onToggleJuzTodas?: () => void; onRestaurarSel?: () => void;
   /** Listas (fundador 2026-09-02): toda sección cambia de estado en grupo. */
   listasTotal?: number; listasSel?: number; onToggleListasTodas?: () => void; onListasAPendientes?: () => void; onListasSinBoleta?: () => void;
+  /** Carril de la mesa: "boleta" o "factura". */
+  docPalabra?: string;
 }) {
   const meta = SECTION_META[section];
   const bulkDisabled = busy || stageableCount === 0;
@@ -624,7 +630,7 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
             title="Las seleccionadas quedan tachadas sin boleta (recuperables desde Juzgadas)"
             style={{ fontSize: 10.5, fontWeight: 750, padding: "5px 13px", borderRadius: 99, border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.07)", color: "var(--red)", cursor: busy || (listasSel ?? 0) === 0 ? "default" : "pointer", opacity: busy || (listasSel ?? 0) === 0 ? 0.5 : 1 }}
           >
-            {busy ? "..." : `Sin boleta (${listasSel ?? 0})`}
+            {busy ? "..." : `Sin ${docPalabra} (${listasSel ?? 0})`}
           </button>
         </span>
       )}

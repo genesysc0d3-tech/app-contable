@@ -274,6 +274,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       forceTree
       bare
       docsDecididos={docsDecididos}
+      mesa={mesa.mesaActiva}
       selectedDocId={selDocId}
       onSelectDoc={(d) => setSelDocId(d.id)}
     />
@@ -397,8 +398,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       <DocPanelsBoard
         panels={[
           { id: "telegram", titulo: "Telegram", sub: "comprobantes", count: grupos.telegram.length, render: () => renderArbol(grupos.telegram) },
-          { id: "massdte", titulo: "massDTE", sub: "cartolas", count: grupos.massdte.length, render: () => renderArbol(grupos.massdte) },
-          { id: "boleta", titulo: "Boleta única", sub: "emisión directa", count: grupos.boleta.length, render: () => renderArbol(grupos.boleta) },
+          { id: "massdte", titulo: "massDTE", sub: mesa.mesaActiva === "factura" ? "planillas" : "cartolas", count: grupos.massdte.length, render: () => renderArbol(grupos.massdte) },
+          { id: "boleta", titulo: mesa.mesaActiva === "factura" ? "Factura única" : "Boleta única", sub: "emisión directa", count: grupos.boleta.length, render: () => renderArbol(grupos.boleta) },
         ]}
       />
 
@@ -462,7 +463,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     )}
                   </div>
                 )}
-                <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} />
+                <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} mesa={mesa.mesaActiva} />
                 <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
                   <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}>Cerrar</button>
                 </div>
