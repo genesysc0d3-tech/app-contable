@@ -18,6 +18,9 @@
 // Protocolo: MCP streamable HTTP, respuestas JSON directas (sin SSE). Solo
 // requests individuales (el spec 2025 eliminó el batching).
 
+import { createVault } from "../ai/tokenize";
+import { sanitizarSalidaExterna } from "../ai/borde-externo";
+
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 export type McpToolDef = {
@@ -107,12 +110,21 @@ export async function handleMcpRpc(
           : {};
       try {
         const out = await tool.run(args);
-        return rpcResult(req.id, { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] });
+        // EL BORDE (2026-09-04): acá —y solo acá— la salida de CUALQUIER
+        // herramienta se vuelve texto para un modelo que no controlamos. Por eso
+        // la identidad se tapa en este punto y no en cada tool: una herramienta
+        // futura nace tapada aunque su autor no sepa que el problema existe.
+        // No es opcional ni configurable desde route.ts a propósito.
+        const vault = createVault();
+        const seguro = sanitizarSalidaExterna(out, vault);
+        return rpcResult(req.id, { content: [{ type: "text", text: JSON.stringify(seguro, null, 2) }] });
       } catch (error) {
         // Error de herramienta: va como resultado isError (spec MCP), sin
-        // filtrar detalles internos.
+        // filtrar detalles internos. El mensaje TAMBIÉN pasa por el borde: un
+        // error de la base puede traer datos adentro.
         const msg = error instanceof Error ? error.message : "Error ejecutando la herramienta";
-        return rpcResult(req.id, { content: [{ type: "text", text: msg }], isError: true });
+        const msgSeguro = String(sanitizarSalidaExterna(msg, createVault()));
+        return rpcResult(req.id, { content: [{ type: "text", text: msgSeguro }], isError: true });
       }
     }
     default:

@@ -7,7 +7,7 @@ import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
 import { recordOpsEvent } from "@/lib/ops/events";
 
-// Conector MCP de massDTE — copiloto de revisión (fase 1, solo lectura).
+// Conector MCP de massDTE — copiloto de revisión (lee y ORDENA; no emite).
 //
 // Las 4 barreras independientes que impiden que este canal emita:
 //  1. IDENTIDAD (lib/mcp/auth.ts): el token hereda veto/membresía/plan con
@@ -19,7 +19,15 @@ import { recordOpsEvent } from "@/lib/ops/events";
 //  4. CRIPTO: emitir exige la bóveda SII (llave partida), que solo se abre
 //     con la sesión-navegador del propio usuario. Este servidor no la tiene.
 //
-// La ÚNICA escritura del catálogo es DESESCALANTE (regla del fundador,
+// VOCABULARIO (fundador 2026-09-04): en este producto NUNCA se "aprueba" —
+// se JUZGA. El acto de aprobación es apretar Emitir, y ese es del humano en la
+// app. Todo lo que sale a la superficie (descripción de tools, pantalla de
+// consentimiento, auditoría) dice "dejar listo" u "ordenar", jamás "aprobar".
+// El valor 'aprobado' de la columna es interno y no promete nada al cliente.
+//
+// Las escrituras del catálogo son DOS y ambas son pre-emisión y reversibles
+// (mueven documentos entre baldes, nada irreversible). La primera es
+// DESESCALANTE (regla del fundador,
 // 2026-09-01): devolver_a_revision mueve documentos listos DE VUELTA al
 // check humano — la IA puede agregar cautela, jamás quitarla. Aprobar y
 // emitir siguen siendo actos del humano en la app.
@@ -93,7 +101,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         name: "dejar_en_emitir",
         title: "Dejar en Emitir",
         description:
-          "Aprueba propuestas revisadas y las deja LISTAS en la pestaña Emitir de la app. NO emite: el botón Emitir es siempre un acto del humano. Úsala después de revisar con el usuario qué corresponde boletear — cada documento que él emita descuenta de su plan como siempre.",
+          "Deja LISTOS en la pestaña Emitir los documentos que ya juzgaste junto al usuario. No aprueba ni emite nada: aprobar es apretar Emitir, y ese acto es siempre del humano en la app. Úsala después de revisar con él qué corresponde documentar — cada documento que él emita descuenta de su plan como siempre.",
         inputSchema: {
           type: "object",
           properties: {
@@ -104,7 +112,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
               maxItems: 50,
               description: "IDs de propuestas (los `id` de pendientes_emision) a dejar listas",
             },
-            motivo: { type: "string", description: "Por qué se aprueban (queda en la auditoría y lo ve el usuario)" },
+            motivo: { type: "string", description: "Por qué se dejan listos (queda en la auditoría y lo ve el usuario)" },
           },
           required: ["propuesta_ids", "motivo"],
         },
@@ -116,7 +124,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           : [];
         const motivo = typeof args.motivo === "string" ? args.motivo.trim().slice(0, 300) : "";
         if (ids.length === 0 || ids.length > 50) throw new Error("propuesta_ids: entre 1 y 50 IDs válidos");
-        if (!motivo) throw new Error("motivo: obligatorio — di por qué se aprueban");
+        if (!motivo) throw new Error("motivo: obligatorio — di por qué se dejan listos");
 
         // Solo estados PRE-emisión suben a 'aprobado'. Lo emitido, rechazado o
         // descartado no se toca; NO se escribe cliente_id ni reglas de
@@ -145,8 +153,8 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           solicitadas: ids.length,
           nota:
             listas === ids.length
-              ? "Propuestas aprobadas y esperando en la pestaña Emitir. La emisión es del usuario, en la app."
-              : `${listas} aprobada(s); el resto no estaba en estado pre-emisión (quizás ya se emitió o fue descartada).`,
+              ? "Documentos listos y esperando en la pestaña Emitir. Aprobar y emitir es del usuario, en la app."
+              : `${listas} dejada(s) lista(s); el resto no estaba en estado pre-emisión (quizás ya se emitió o fue descartada).`,
         };
       },
     },
