@@ -4,7 +4,7 @@ import type { Database } from "@/lib/database.types";
 import { chileDateString } from "@/lib/chile-date";
 import { addDaysStr, addOneMonth, clpConIva, periodoActual } from "@/lib/pagos/metering";
 import { actualizarMontoSuscripcion, mpConfigurado, obtenerRecurso } from "@/lib/pagos/mercadopago";
-import { cobrarCuenta, flowConfigurado, ordenDeCobro } from "@/lib/pagos/flow";
+import { cobrarCuenta, decidirReversaFlow, estadoPago, flowConfigurado, ordenDeCobro } from "@/lib/pagos/flow";
 import { syncPlanActivo } from "@/lib/pagos/activacion";
 import { getUfClp } from "@/lib/sii/uf";
 import { empresasActivasDeCuenta } from "@/lib/entitlements";
@@ -18,9 +18,19 @@ import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
  *      (acceso hasta el fin del período ya pagado).
  * (b) El día 1 de cada mes (fecha Chile) re-ancla el monto mensual a la UF
  *     del día vía PUT /preapproval si difiere más de 1%.
+ * (c) Reconcilia contra Flow los cobros que dimos por buenos: si alguno se dio
+ *     vuelta (contracargo/anulación), suspende la suscripción y apaga el plan.
  */
 
 const GRACIA_DIAS = 5;
+/**
+ * Ventana de reconciliación de reversas. Un contracargo de tarjeta puede llegar
+ * meses después del cobro, así que se mira más atrás que un ciclo mensual; el
+ * tope por corrida evita que un mes cargado convierta el cron en una tormenta
+ * de llamadas a Flow (se completa al día siguiente).
+ */
+const VENTANA_REVERSAS_DIAS = 120;
+const TOPE_REVERSAS_POR_CORRIDA = 60;
 type Sb = SupabaseClient<Database>;
 
 async function apagarPlan(sb: Sb, args: { cuentaId?: string | null; empresaId?: string | null }) {
@@ -267,7 +277,92 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, hoy, renovadas, cobrosFallidos, morosas, desactivadas, actualizadas });
+    // ── (c) RECONCILIACIÓN DE REVERSAS DE FLOW ──────────────────────────────
+    // Flow cobra de forma síncrona, así que no hay webhook que nos avise cuando
+    // una orden se da vuelta después (contracargo, anulación). Hasta hoy eso no
+    // llegaba por ningún lado: la suscripción seguía activa y el plan encendido
+    // hasta el vencimiento — servicio gratis y sin alerta. Acá le preguntamos a
+    // Flow, que es la fuente de verdad, por los cobros que damos por buenos.
+    //
+    // Va al final y con su propio try/catch: si la API de Flow no contesta, el
+    // resto del cron (que sí cobra) ya se ejecutó.
+    let reversas = 0;
+    if (flowConfigurado()) {
+      try {
+        const desde = new Date(Date.now() - VENTANA_REVERSAS_DIAS * 86_400_000).toISOString();
+        const { data: pagosFlow } = await sb
+          .from("pagos")
+          .select("id, cuenta_id, proveedor_ref, monto_clp, estado")
+          .eq("proveedor", "flow")
+          .eq("estado", "aprobado")
+          .gte("created_at", desde)
+          .order("created_at", { ascending: false })
+          .limit(TOPE_REVERSAS_POR_CORRIDA);
+
+        let consultados = 0;
+        let sinRespuesta = 0;
+        for (const pago of pagosFlow ?? []) {
+          if (!pago.proveedor_ref) continue;
+          consultados += 1;
+          const enFlow = await estadoPago(pago.proveedor_ref);
+          if (!enFlow) sinRespuesta += 1;
+          // `estadoPago` devuelve null si la consulta falló: eso NO es una
+          // reversa. decidirReversaFlow es deliberadamente desconfiada.
+          if (decidirReversaFlow({ statusFlow: enFlow?.status, estadoLocal: pago.estado }) !== "revertir") continue;
+
+          reversas += 1;
+          await sb.from("pagos").update({ estado: "revertido", raw: enFlow as unknown as never }).eq("id", pago.id);
+
+          // El plan se apaga: ese cobro ya no existe. La suscripción queda
+          // 'morosa' (no 'cancelada') porque el cliente puede regularizar en
+          // Planes — es el mismo estado que deja un cobro fallido.
+          if (pago.cuenta_id) {
+            await sb
+              .from("suscripciones")
+              .update({ estado: "morosa", updated_at: new Date().toISOString() })
+              .eq("cuenta_id", pago.cuenta_id)
+              .eq("estado", "activa");
+            await apagarPlan(sb, { cuentaId: pago.cuenta_id });
+          }
+
+          await recordOpsEvent({
+            sb,
+            severity: "critical",
+            source: "pagos/cron",
+            eventName: "flow_pago_revertido",
+            summary: `Un cobro de Flow se dio vuelta (${pago.monto_clp ?? "?"} CLP) — plan apagado y suscripción morosa`,
+            resourceType: "pago",
+            resourceId: pago.id,
+            metadata: { flow_order: pago.proveedor_ref, cuenta_id: pago.cuenta_id, status_flow: enFlow?.status ?? null },
+          });
+        }
+
+        // Un radar que no puede consultar NADA no es un radar tranquilo: es uno
+        // apagado. Si Flow no contestó por ninguna orden (llaves malas, FLOW_ENV
+        // apuntando al ambiente equivocado, API caída), hay que enterarse — si
+        // no, la reconciliación "pasa" todos los días sin mirar nada.
+        if (consultados > 0 && sinRespuesta === consultados) {
+          await recordOpsEvent({
+            sb,
+            severity: "warn",
+            source: "pagos/cron",
+            eventName: "flow_reconciliacion_ciega",
+            summary: `Flow no respondió por ninguna de las ${consultados} órdenes consultadas — revisar llaves y FLOW_ENV`,
+            metadata: { consultados, ambiente: process.env.FLOW_ENV?.trim() ?? "sandbox" },
+          });
+        }
+      } catch (err) {
+        await recordOpsError({
+          severity: "error",
+          source: "pagos/cron",
+          eventName: "flow_reconciliacion_fallo",
+          summary: "No se pudo reconciliar reversas contra Flow (se reintenta mañana)",
+          error: err,
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true, hoy, renovadas, cobrosFallidos, morosas, desactivadas, actualizadas, reversas });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[pagos/cron]", msg);

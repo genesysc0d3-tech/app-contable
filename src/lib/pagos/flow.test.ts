@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro, ordenDeRefill, prorratearUpgrade } from "./flow";
+import { decidirReversaFlow, firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro, ordenDeRefill, prorratearUpgrade } from "./flow";
 
 // La firma es la pieza que hay que poder probar sola: si está mal, TODA llamada
 // a Flow falla con el mismo error genérico y no se distingue de una llave
@@ -200,5 +200,40 @@ describe("prorratearUpgrade — se cobra solo la diferencia por los días que fa
     // periodo_hasta corrupto muy en el futuro no puede inflar el cobro.
     const m = prorratearUpgrade({ ...base, hoy: "2026-08-25", periodoHasta: "2027-08-24" });
     expect(m).toBeLessThanOrEqual(Math.round(20_000 * 1.19));
+  });
+});
+
+describe("decidirReversaFlow — un cobro que se dio vuelta apaga el plan, la duda NO", () => {
+  // FLOW_PAGO: 1 pendiente · 2 pagada · 3 rechazada · 4 anulada
+  it("Flow dice ANULADA sobre un pago que dábamos por bueno → revertir", () => {
+    expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: "aprobado" })).toBe("revertir");
+  });
+
+  it("Flow dice PAGADA → no se toca nada", () => {
+    expect(decidirReversaFlow({ statusFlow: 2, estadoLocal: "aprobado" })).toBe("sin_cambio");
+  });
+
+  // ★ Lo importante: la incertidumbre NUNCA baja un plan. Bajárselo a alguien
+  // que sí pagó, por un hipo de la red, es peor que tardar un día en detectar
+  // una reversa — el cron corre todos los días.
+  it("la consulta a Flow falló (null/undefined) → NO se revierte", () => {
+    expect(decidirReversaFlow({ statusFlow: null, estadoLocal: "aprobado" })).toBe("sin_cambio");
+    expect(decidirReversaFlow({ statusFlow: undefined, estadoLocal: "aprobado" })).toBe("sin_cambio");
+  });
+
+  it("un status raro o desconocido tampoco revierte", () => {
+    for (const raro of [0, 1, 3, 5, 99, -1, NaN]) {
+      expect(decidirReversaFlow({ statusFlow: raro, estadoLocal: "aprobado" })).toBe("sin_cambio");
+    }
+  });
+
+  it("es idempotente: un pago ya revertido no se vuelve a procesar", () => {
+    expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: "revertido" })).toBe("sin_cambio");
+  });
+
+  it("un pago rechazado o pendiente no gatilla nada (nunca encendió el plan)", () => {
+    expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: "rechazado" })).toBe("sin_cambio");
+    expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: "pendiente" })).toBe("sin_cambio");
+    expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: null })).toBe("sin_cambio");
   });
 });
