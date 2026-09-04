@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, purgarCuenta, migrarEmpresaACuenta } from "../actions";
+import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, reiniciarTrialEmpresa, purgarCuenta, migrarEmpresaACuenta } from "../actions";
 import { C } from "../colors";
 
 /**
@@ -359,6 +359,50 @@ export function TrialCortesiaToggle({ cuentaId, cortesia }: { cuentaId: string; 
       Prestarle la prueba gratis a esta cuenta
       {estado === "error" ? <span style={{ color: C.accent }}>· error</span> : on ? <span style={{ color: C.green }}>· activa</span> : null}
     </label>
+  );
+}
+
+
+/**
+ * Reiniciar el reloj de la prueba gratis de UNA empresa. El trial parte solo
+ * con la cuenta y el temporizador lo apaga; esto lo vuelve a prender con los
+ * días completos desde hoy. Dos pasos porque regala servicio real.
+ */
+export function ReiniciarTrialButton({ empresaId, nombre }: { empresaId: string; nombre: string }) {
+  const router = useRouter();
+  const [armado, setArmado] = useState(false);
+  const [estado, setEstado] = useState<"idle" | "loading" | "error" | "ok">("idle");
+
+  async function reiniciar() {
+    if (estado === "loading") return;
+    if (!armado) { setArmado(true); return; }
+    setEstado("loading");
+    const res = await reiniciarTrialEmpresa(empresaId);
+    if ("error" in res) { setEstado("error"); setArmado(false); return; }
+    setEstado("ok");
+    setArmado(false);
+    router.refresh();
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+      <button
+        onClick={reiniciar}
+        onBlur={() => setArmado(false)}
+        disabled={estado === "loading"}
+        style={{
+          border: `1px solid ${armado ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px",
+          background: armado ? "rgba(232,85,62,.12)" : "transparent",
+          color: armado ? C.accent : C.text2, fontSize: 12, fontWeight: 700,
+          cursor: estado === "loading" ? "default" : "pointer",
+        }}
+      >
+        {estado === "loading" ? "..." : armado ? "¿Seguro? Su prueba parte de nuevo hoy" : "↻ Reiniciar la prueba"}
+      </button>
+      <span style={{ color: C.text3 }}>{nombre}</span>
+      {estado === "error" && <span style={{ color: C.accent }}>· error</span>}
+      {estado === "ok" && <span style={{ color: C.green }}>· reiniciada</span>}
+    </div>
   );
 }
 

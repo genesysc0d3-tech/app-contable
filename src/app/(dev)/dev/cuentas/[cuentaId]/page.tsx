@@ -9,7 +9,7 @@
  */
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, fmtProveedor, type DevCuentaDetalle } from "@/lib/dev/account-360";
-import { CopiarButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
+import { CopiarButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, ReiniciarTrialButton, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
 import {
   C,
   CompactRow,
@@ -660,6 +660,20 @@ export default async function DevCuentaDetallePage({
             ojo="La prueba emite documentos tributarios REALES: los folios que gaste no se pueden deshacer, aunque le quites la cortesía después."
           />
           <TrialCortesiaToggle cuentaId={cuentaId} cortesia={cuenta.trialCortesia} />
+        </Section>
+
+        <Section title="Reiniciar la prueba gratis" tone="warning">
+          <Explica
+            tono="warning"
+            que="Le vuelve a prender la prueba a UNA empresa, con sus días completos contados desde hoy."
+            cuando="El trial se le acabó y quieres darle otra pasada, o llegó tarde a usarlo y se le venció sin emitir nada."
+            ojo="La prueba parte SOLA cuando se abre la cuenta y el reloj la apaga al vencer: esto es lo único que la vuelve a prender. Prestarle la prueba (arriba) NO mueve la fecha. Y emite documentos REALES: los folios que gaste no se deshacen."
+          />
+          {detalle.empresas.length === 0
+            ? <div style={{ fontSize: 12, color: C.text3 }}>Esta cuenta no tiene empresas.</div>
+            : detalle.empresas.map((e) => (
+                <ReiniciarTrialButton key={e.id} empresaId={e.id} nombre={e.nombre} />
+              ))}
         </Section>
 
         {/*
