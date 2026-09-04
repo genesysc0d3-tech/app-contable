@@ -13,14 +13,20 @@ export default function AutorizarForm({ clienteNombre, solicitud }: { clienteNom
       <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: "-.02em" }}>
         «{clienteNombre}» quiere conectarse a tu massDTE
       </h1>
+      {/* Esta pantalla decía solo "podrá leer" cuando el conector también
+          ORDENA la mesa (deja documentos listos y los devuelve a revisión).
+          Autorizar creyendo que das lectura y dar además escritura no es un
+          consentimiento específico: acá se declara todo lo que hace (2026-09-04). */}
       <p style={{ marginTop: 10, fontSize: 13, color: "var(--text2, #8b867e)", lineHeight: 1.6 }}>
-        Podrá <b style={{ color: "var(--text, #f1efeb)" }}>leer</b> tus pendientes de emisión y resúmenes para ayudarte con la revisión.
+        Podrá <b style={{ color: "var(--text, #f1efeb)" }}>leer</b> tus pendientes y resúmenes, y <b style={{ color: "var(--text, #f1efeb)" }}>ordenar tu mesa</b> para ayudarte con la revisión.
       </p>
       <ul style={{ margin: "12px 0 0", padding: 0, listStyle: "none", fontSize: 12.5, color: "var(--text2, #8b867e)", display: "grid", gap: 7 }}>
         <li>✅ Ve pendientes y resúmenes de tu empresa</li>
-        <li>🚫 No emite documentos — emitir es siempre un acto tuyo en la app</li>
+        <li>✅ Deja documentos listos en tu pestaña Emitir, y los devuelve a revisión</li>
+        <li>🚫 <b style={{ color: "var(--text, #f1efeb)" }}>No emite</b> — apretar Emitir es siempre un acto tuyo en la app</li>
         <li>🚫 No ve ni toca tu clave del SII</li>
-        <li>🔌 Lo desconectas cuando quieras desde tu empresa en la app</li>
+        <li>🕶️ Los nombres y RUT de tus contrapartes salen tapados: tu asistente ve etiquetas, no identidades</li>
+        <li>🔌 Lo desconectas cuando quieras desde Empresa → Conector MCP</li>
       </ul>
       {error && (
         <p style={{ marginTop: 14, padding: "9px 12px", borderRadius: 10, background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.3)", color: "#f0a9a0", fontSize: 12.5 }}>{error}</p>

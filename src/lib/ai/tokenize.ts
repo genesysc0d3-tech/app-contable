@@ -122,6 +122,17 @@ function esPlataforma(nombre: string): boolean {
  * creándolo y registrando la identidad real en la bóveda si es nuevo. Fusiona datos:
  * si el token ya existía sin RUT y ahora llega el RUT, lo completa.
  */
+/**
+ * Etiqueta estable para una identidad que viene en CAMPOS separados (no dentro
+ * de un texto). Lo usa el borde de salida hacia modelos externos
+ * (lib/ai/borde-externo.ts); `tokenizeForAI` sigue siendo el camino para texto
+ * libre. Misma bóveda ⇒ la misma persona recibe la misma etiqueta venga de una
+ * glosa o de una columna.
+ */
+export function tokenizarIdentidad(vault: Vault, rut: string | null, nombre: string | null): string {
+  return tokenFor(vault, rut, nombre);
+}
+
 function tokenFor(vault: Vault, rut: string | null, nombre: string | null): string {
   const nr = rut ? normRut(rut) : null;
   const nn = nombre ? normName(nombre) : null;
