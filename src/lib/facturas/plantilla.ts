@@ -135,7 +135,6 @@ export function parsePlantillaFacturas(rows: FilaCruda[]): { facturas: FacturaFi
     const comuna = texto(col(r, c.comuna));
     const faltantes = [
       !razon && "Razón Social",
-      !giro && "Giro",
       !direccion && "Dirección",
       !comuna && "Comuna",
     ].filter(Boolean);
@@ -144,17 +143,22 @@ export function parsePlantillaFacturas(rows: FilaCruda[]): { facturas: FacturaFi
       continue;
     }
 
+    // El GIRO no bota la fila (espec firmada de Matías: persona natural es
+    // facturable con giro manual — advertir, nunca bloquear). Además el portal
+    // del SII lo autocompleta al digitar el RUT cuando el receptor es empresa,
+    // y si no lo trae el worker pausa pidiéndolo (GIRO_RECEPTOR_REQUERIDO).
+    // Botarla acá era el único eslabón que rompía esa cadena.
     facturas.push({
       fila,
       receptorRut: formatRut(rutCrudo),
       detalle,
       totalClp: total,
       receptorRazonSocial: razon!,
-      receptorGiro: giro!,
+      receptorGiro: giro ?? "",
       receptorDireccion: direccion!,
       receptorComuna: comuna!,
       receptorEmail: texto(col(r, c.email)),
-      advertencias: [],
+      advertencias: giro ? [] : ["Sin giro: si el SII no lo completa solo, te lo va a pedir antes de emitir"],
     });
   }
   return { facturas, errores };

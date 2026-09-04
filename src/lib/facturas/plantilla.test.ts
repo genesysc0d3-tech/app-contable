@@ -43,9 +43,23 @@ describe("parsePlantillaFacturas — filas buenas siguen, filas malas se reporta
     expect(f.receptorComuna).toBe("Santiago");
   });
 
+  it("persona natural SIN GIRO entra igual, con aviso (no se bota)", () => {
+    // Espec firmada de Matías: persona natural es facturable con giro manual —
+    // advertir, nunca bloquear. Además el portal del SII autocompleta el giro al
+    // digitar el RUT, y si no lo trae el worker lo pide (GIRO_RECEPTOR_REQUERIDO).
+    const { facturas, errores } = parsePlantillaFacturas(filas(
+      [RUT_OK2, "Clases particulares", 80000, "Juan Pérez", "", "Calle 1", "Santiago"],
+    ));
+    expect(errores).toEqual([]);
+    expect(facturas).toHaveLength(1);
+    expect(facturas[0].receptorGiro).toBe("");
+    expect(facturas[0].advertencias[0]).toContain("Sin giro");
+  });
+
   it("receptor incompleto NO pasa: la factura individualiza a su receptor", () => {
-    // Decisión del fundador 2026-08-25: razón social, giro, dirección y comuna
-    // son obligatorios — sin ellos el documento no existe.
+    // Decisión del fundador 2026-08-25: razón social, dirección y comuna son
+    // obligatorios — sin ellos el documento no existe. El giro es la excepción
+    // (ver el test de persona natural, arriba).
     const { facturas, errores } = parsePlantillaFacturas(filas([RUT_OK2, "Venta", 50000]));
     expect(facturas).toEqual([]);
     expect(errores[0].error).toContain("Faltan datos del receptor");

@@ -1062,7 +1062,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                     : "Modo de prueba: se simula, no se informa al SII. Una boleta real no se puede deshacer. Si algo sale mal, escríbenos a soporte."}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text3)", lineHeight: 1.5 }}>
-                  La boleta documenta el ingreso; el impuesto a la renta se declara aparte (F22) sobre la ganancia, no sobre el total.
+                  {esFacturas ? "La factura" : "La boleta"} documenta el ingreso; el impuesto a la renta se declara aparte (F22) sobre la ganancia, no sobre el total.
                 </div>
                 <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
                   <button onClick={() => setConfirmOpen(false)}
