@@ -186,16 +186,16 @@ describe("la disciplina de fases sigue en pie", () => {
 
   it("el borrado es el último control de la página", () => {
     const purgar = detalle.indexOf("<PurgarCuentaButton");
-    for (const control of ["<PlanToggle", "<TrialCortesiaToggle", "<ReiniciarTrialButton", "<MigrarEmpresaForm"]) {
+    for (const control of ["<PlanToggle", "<TrialCortesiaToggle", "<ReiniciarTrialButton", "<CarrilEmisionSelector", "<MigrarEmpresaForm"]) {
       expect(detalle.indexOf(control)).toBeLessThan(purgar);
     }
   });
 
   it("cada control que escribe tiene su Explica", () => {
-    // Seis bloques Explica: ver como cliente, plan, prestar la prueba,
-    // reiniciar la prueba, traer empresa, borrar.
+    // Siete bloques Explica: ver como cliente, plan, prestar la prueba,
+    // reiniciar la prueba, carril de emisión, traer empresa, borrar.
     const explicas = detalle.match(/<Explica/g) ?? [];
-    expect(explicas.length).toBe(6);
+    expect(explicas.length).toBe(7);
   });
 
   it("hay atajos a las fases: ordenar en vertical sin atajo solo aleja", () => {

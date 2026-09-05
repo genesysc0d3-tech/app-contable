@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, reiniciarTrialEmpresa, purgarCuenta, migrarEmpresaACuenta } from "../actions";
+import { entrarModoClienteDev, setCuentaPlan, setTrialGlobal, setCuentaTrialCortesia, reiniciarTrialEmpresa, purgarCuenta, migrarEmpresaACuenta, setCarrilEmision } from "../actions";
 import { C } from "../colors";
 
 /**
@@ -402,6 +402,83 @@ export function ReiniciarTrialButton({ empresaId, nombre }: { empresaId: string;
       <span style={{ color: C.text3 }}>{nombre}</span>
       {estado === "error" && <span style={{ color: C.accent }}>· error</span>}
       {estado === "ok" && <span style={{ color: C.green }}>· reiniciada</span>}
+    </div>
+  );
+}
+
+/**
+ * CARRIL DE EMISIÓN de una empresa, por mesa.
+ *
+ * Antes esto era un UPDATE a mano contra producción. Es lo que más se toca en
+ * soporte (el caso de Matías fue justo este) y por SQL no queda auditado, no
+ * valida nada y un WHERE mal escrito toca a todas las empresas.
+ *
+ * Pasar a un carril REAL pide confirmación: desde ese momento el próximo lote
+ * de esa empresa emite documentos tributarios de verdad, con folios que no se
+ * deshacen. Volver al simulador no la pide — apagar nunca es el paso peligroso.
+ */
+const CARRILES = [
+  { valor: "mock", etiqueta: "Simulador", real: false },
+  { valor: "sii_local", etiqueta: "Extensión", real: true },
+  { valor: "simpleapi", etiqueta: "SimpleAPI", real: true },
+] as const;
+
+export function CarrilEmisionSelector({ empresaId, nombre, boletas, facturas }: {
+  empresaId: string; nombre: string; boletas: string; facturas: string;
+}) {
+  const router = useRouter();
+  const [armado, setArmado] = useState<string | null>(null);
+  const [estado, setEstado] = useState<"idle" | "loading" | "error">("idle");
+
+  async function cambiar(carril: "boleta" | "factura", proveedor: "mock" | "sii_local" | "simpleapi", esReal: boolean) {
+    if (estado === "loading") return;
+    const llave = `${carril}:${proveedor}`;
+    if (esReal && armado !== llave) { setArmado(llave); return; }
+    setEstado("loading");
+    const res = await setCarrilEmision(empresaId, carril, proveedor);
+    setArmado(null);
+    if ("error" in res) { setEstado("error"); return; }
+    setEstado("idle");
+    router.refresh();
+  }
+
+  const fila = (carril: "boleta" | "factura", actual: string) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontSize: 11, color: C.text3, width: 60 }}>{carril === "boleta" ? "Boletas" : "Facturas"}</span>
+      <div style={{ display: "flex", border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        {CARRILES.map((c) => {
+          const activo = actual === c.valor;
+          const pidiendo = armado === `${carril}:${c.valor}`;
+          return (
+            <button
+              key={c.valor}
+              onClick={() => { if (!activo) cambiar(carril, c.valor, c.real); }}
+              onBlur={() => setArmado(null)}
+              disabled={estado === "loading" || activo}
+              title={activo ? "Carril actual" : c.real ? "Emite documentos tributarios REALES" : "No emite nada: simulador"}
+              style={{
+                border: "none", padding: "5px 11px", fontSize: 11, fontWeight: 700,
+                background: pidiendo ? "rgba(232,85,62,.18)" : activo ? "rgba(34,197,94,.14)" : "transparent",
+                color: pidiendo ? C.accent : activo ? C.green : C.text2,
+                cursor: activo || estado === "loading" ? "default" : "pointer",
+              }}
+            >
+              {pidiendo ? "¿Seguro? emite de verdad" : c.etiqueta}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.text2 }}>
+        {nombre}
+        {estado === "error" && <span style={{ color: C.accent, fontWeight: 600 }}> · error</span>}
+      </div>
+      {fila("boleta", boletas)}
+      {fila("factura", facturas)}
     </div>
   );
 }
