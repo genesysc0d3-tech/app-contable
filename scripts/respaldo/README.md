@@ -50,9 +50,14 @@ mkdir -p ~/.massdte-respaldo && chmod 700 ~/.massdte-respaldo
 #   PGURL R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET
 #   RESEND_KEY ALERTA_A
 #   SUPABASE_URL SUPABASE_SERVICE_ROLE   <- para bajar el Storage (paso 5)
+#   HC_URL   <- OPCIONAL: URL de healthchecks.io. El script le hace ping al
+#               terminar OK; si no llega en 24h, healthchecks avisa por AUSENCIA
+#               (dead-man switch). Sin esta var, el latido es no-op.
 cp respaldar.sh ~/.massdte-respaldo/ && chmod +x ~/.massdte-respaldo/respaldar.sh
-sed "s|\$HOME|$HOME|g" cl.massdte.respaldo.plist > ~/Library/LaunchAgents/cl.massdte.respaldo.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cl.massdte.respaldo.plist
+# LaunchDAEMON de sistema (no Agent): corre tras un corte de luz sin sesión.
+sudo cp cl.massdte.respaldo.plist /Library/LaunchDaemons/cl.massdte.respaldo.plist
+sudo chown root:wheel /Library/LaunchDaemons/cl.massdte.respaldo.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/cl.massdte.respaldo.plist
 ```
 
 ## Las seis trampas que costaron encontrar

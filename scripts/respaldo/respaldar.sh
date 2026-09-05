@@ -81,8 +81,21 @@ morir(){
   local motivo="$1"
   log "FALLÓ: $motivo"
   avisar "$motivo"
+  latir /fail
   limpiar
   exit 1
+}
+
+# Latido externo (dead-man switch). Independiente de todo lo demás: si el mini
+# se apaga, se cuelga o el script ni arranca, este ping NO llega y healthchecks
+# avisa por AUSENCIA — el silencio pasa a ser la alarma. La idea venía del carril
+# viejo (`scripts/backup/`) y se había perdido al reescribir. No-op si la URL no
+# está: cero efecto hasta que el fundador cree el check y la ponga en el config.
+#   OK   -> HC_URL           (reinicia el reloj de 24h)
+#   FALLA-> HC_URL/fail      (avisa al toque)
+latir(){
+  [ -n "${HC_URL:-}" ] || return 0
+  curl -fsS --max-time 20 "${HC_URL}${1:-}" >/dev/null 2>&1 || true
 }
 
 limpiar(){
@@ -292,8 +305,10 @@ if [ "${ARCHIVOS_FALLIDOS:-0}" = "1" ]; then
   # haría que un PDF caído tape un volcado sano.
   log "== fin CON AVISOS: la base quedó bien, algún archivo no se pudo copiar =="
   avisar "La base quedó respaldada y verificada, pero algún archivo (Storage o R2) no se pudo copiar. Revisa el registro."
+  latir
   exit 0
 fi
 
 log "== fin OK — $(ls -1 "$DEST"/massdte-*.sql.gz 2>/dev/null | wc -l | tr -d ' ') respaldos guardados =="
+latir
 exit 0
