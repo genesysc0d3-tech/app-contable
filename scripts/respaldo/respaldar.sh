@@ -16,6 +16,11 @@ DEST="$HOME/Respaldos/massdte"
 LOG="$HOME/.massdte-respaldo/respaldo.log"
 LOCK="$HOME/.massdte-respaldo/.corriendo"
 PGBIN="/opt/homebrew/opt/postgresql@17/bin"
+# RUTA ABSOLUTA de rclone, no el nombre a secas: launchd no hereda el PATH de
+# Homebrew, así que bajo el agente nocturno `rclone` no existe. Estuvo parchado
+# a mano en el Mac mini durante dos semanas y el repo no lo sabía — la próxima
+# copia del guión habría roto la subida a R2 en silencio.
+RCLONE="${RCLONE:-/opt/homebrew/bin/rclone}"
 # Instancia PROPIA de Postgres 17 solo para verificar, en un puerto aparte: no
 # toca el postgresql@16 del equipo (que ocupa el 5432 y se usa para otras cosas),
 # y la levanta el propio guión — así no depende de launchd ni de que alguien
@@ -168,7 +173,7 @@ log "guardado: $ARCHIVO ($(du -h "$ARCHIVO" | cut -f1))"
 # ── 4. segunda copia en R2 ─────────────────────────────────────────────────
 if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   RCLONE_CONFIG=/dev/null \
-  rclone --config /dev/null copy "$ARCHIVO" ":s3:$R2_BUCKET/respaldos-db/" \
+  "$RCLONE" --config /dev/null copy "$ARCHIVO" ":s3:$R2_BUCKET/respaldos-db/" \
     --s3-provider Cloudflare \
     --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
     --s3-access-key-id "$R2_ACCESS_KEY_ID" \
@@ -200,7 +205,7 @@ ARCHIVOS_FALLIDOS=0
 if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   mkdir -p "$DEST/archivos/r2"
   RCLONE_CONFIG=/dev/null \
-  rclone --config /dev/null copy ":s3:$R2_BUCKET/" "$DEST/archivos/r2/" \
+  "$RCLONE" --config /dev/null copy ":s3:$R2_BUCKET/" "$DEST/archivos/r2/" \
     --s3-provider Cloudflare \
     --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
     --s3-access-key-id "$R2_ACCESS_KEY_ID" \
@@ -221,9 +226,14 @@ if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE:-}" ]; then
     # ya está y pesa lo mismo → nada que hacer
     if [ -f "$destino" ] && [ "$(wc -c < "$destino" | tr -d ' ')" = "$tam" ]; then continue; fi
     mkdir -p "$(dirname "$destino")"
+    # La ruta va CODIFICADA: los clientes suben archivos con espacios, tildes y
+    # paréntesis ("BANCO ESTADO.xlsx" fue el primero que cayó). Sin esto curl
+    # rechaza la URL y el archivo queda sin respaldar. Se respetan las barras:
+    # son la jerarquía de carpetas, no un carácter a escapar.
+    ruta_url=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/"))' "$ruta")
     if curl -fsS --max-time 120 \
          -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
-         "$SUPABASE_URL/storage/v1/object/$bucket/$ruta" -o "$destino" 2>>"$LOG"; then
+         "$SUPABASE_URL/storage/v1/object/$bucket/$ruta_url" -o "$destino" 2>>"$LOG"; then
       BAJADOS=$((BAJADOS+1))
     else
       log "AVISO: no pude bajar $bucket/$ruta"
