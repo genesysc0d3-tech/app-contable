@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enviarCorreo } from "@/lib/correo";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { collectOpsSnapshot } from "@/lib/ops/diagnostics";
@@ -69,7 +70,36 @@ async function sendAlert(snapshot: OpsSnapshot) {
 
   if (await sendTelegramAlert(formatAlertText(snapshot))) sent = true;
 
+  // CORREO (2026-09-05): el canal más fácil. El bot de ops nunca se creó y el
+  // vigilante del respaldo gritaba al vacío — el hallazgo quedaba en el panel,
+  // que hay que ir a mirar. Resend YA está en producción y la app ya manda
+  // correos: reusarlo no exige crear nada. Misma dirección que usa el propio
+  // respaldo del Mac mini para sus alertas, así todo llega al mismo buzón.
+  if (await sendEmailAlert(snapshot)) sent = true;
+
   return sent;
+}
+
+async function sendEmailAlert(snapshot: OpsSnapshot): Promise<boolean> {
+  const para = process.env.OPS_ALERTA_EMAIL?.trim();
+  if (!para) return false;
+  const criticos = snapshot.findings.filter((f) => f.severity === "critical");
+  const lineas = criticos
+    .map((f) => `<li style="margin:6px 0"><b>${escapeHtml(f.eventName)}</b>: ${escapeHtml(f.summary)}</li>`)
+    .join("");
+  const html = `
+<div style="font-family:-apple-system,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:28px 20px;color:#1a1a1a">
+  <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;margin-bottom:18px">mass<span style="color:#E8553E">DTE</span> · ops</div>
+  <p style="font-size:15px;font-weight:700;margin:0 0 10px">Algo crítico en producción</p>
+  <ul style="padding-left:18px;font-size:14px;line-height:1.45">${lineas}</ul>
+  <p style="font-size:12px;color:#666;margin-top:16px">Revisado ${escapeHtml(snapshot.checkedAt)} · estado ${escapeHtml(snapshot.status)}. Detalle en el panel /dev.</p>
+</div>`;
+  const r = await enviarCorreo({ para, asunto: `[massDTE ops] ${criticos.length} crítico${criticos.length === 1 ? "" : "s"} en producción`, html });
+  return r.ok;
+}
+
+function escapeHtml(v: string): string {
+  return v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export async function GET(request: Request) {

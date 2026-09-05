@@ -14,8 +14,30 @@ Esto lo cubre desde el Mac mini, que está encendido 24/7.
    exista — un volcado que nunca se restauró es un archivo, no un respaldo
 3. Comprime y guarda local
 4. Sube una segunda copia a Cloudflare R2
-5. Rota a 14 días, conservando el primero de cada mes
-6. **Si algo falla, manda un correo.** Si todo anduvo, silencio
+5. **Baja los ARCHIVOS al disco del mini**: el bucket de R2 (PDFs emitidos,
+   nómina del SII) y el Storage de Supabase (cartolas e imágenes del cliente).
+   El volcado se lleva el esquema `storage`, pero eso son los METADATOS: sin
+   este paso, restaurar deja una base que sabe que existía un archivo en tal
+   ruta y esa ruta vacía. Se **copia**, nunca se sincroniza: si alguien borra
+   arriba por error, la copia de acá tiene que sobrevivirlo
+6. Rota a 14 días **solo los volcados**, conservando el primero de cada mes y
+   los hechos a demanda. Los archivos no se rotan: pesan poco (~220 MB) y el
+   archivo que se borró arriba es justo el que uno quiere de vuelta
+7. **Si algo falla, manda un correo.** Si todo anduvo, silencio. Un archivo que
+   no se pudo copiar avisa pero NO invalida el volcado: son dos cosas distintas
+
+## Antes de tocar Supabase: respaldo a demanda (REGLA, 2026-09-05)
+
+Cada vez que se va a tocar algo en Supabase —una migración, un borrado, un
+cambio de esquema— se corre esto **antes**, en el Mac mini:
+
+```bash
+~/.massdte-respaldo/respaldar.sh --ahora
+```
+
+Lleva la hora en el nombre, así tres cambios en un mismo día dejan tres
+respaldos distintos en vez de pisarse. Y la rotación no los toca: se hicieron
+justamente porque alguien iba a mover algo.
 
 ## Instalación en una máquina nueva
 
@@ -27,9 +49,15 @@ mkdir -p ~/.massdte-respaldo && chmod 700 ~/.massdte-respaldo
 # crear ~/.massdte-respaldo/config (chmod 600) con:
 #   PGURL R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET
 #   RESEND_KEY ALERTA_A
+#   SUPABASE_URL SUPABASE_SERVICE_ROLE   <- para bajar el Storage (paso 5)
+#   HC_URL   <- OPCIONAL: URL de healthchecks.io. El script le hace ping al
+#               terminar OK; si no llega en 24h, healthchecks avisa por AUSENCIA
+#               (dead-man switch). Sin esta var, el latido es no-op.
 cp respaldar.sh ~/.massdte-respaldo/ && chmod +x ~/.massdte-respaldo/respaldar.sh
-sed "s|\$HOME|$HOME|g" cl.massdte.respaldo.plist > ~/Library/LaunchAgents/cl.massdte.respaldo.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cl.massdte.respaldo.plist
+# LaunchDAEMON de sistema (no Agent): corre tras un corte de luz sin sesión.
+sudo cp cl.massdte.respaldo.plist /Library/LaunchDaemons/cl.massdte.respaldo.plist
+sudo chown root:wheel /Library/LaunchDaemons/cl.massdte.respaldo.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/cl.massdte.respaldo.plist
 ```
 
 ## Las seis trampas que costaron encontrar

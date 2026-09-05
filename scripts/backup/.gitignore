@@ -1,5 +1,0 @@
-# Never commit secrets or actual backups
-config.env
-*.gpg
-*.fc
-*.log
