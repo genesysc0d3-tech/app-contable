@@ -55,7 +55,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         const mesa = args.mesa === "factura" ? ("factura" as const) : ("boleta" as const);
         const { data: empresa } = await ctx.svc
           .from("empresas")
-          .select("giro, razon_social, tipo_contribuyente")
+          .select("giro, razon_social, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
           .eq("id", ctx.empresaId)
           .maybeSingle();
         const empresaCtx = (empresa as EmpresaCtx | null) ?? { giro: null, razon_social: "", tipo_contribuyente: null };

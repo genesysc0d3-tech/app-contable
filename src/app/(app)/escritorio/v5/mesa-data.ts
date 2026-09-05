@@ -41,6 +41,10 @@ export type EmpresaMesa = {
   giro: string | null;
   razon_social: string;
   tipo_contribuyente: string | null;
+  /** Defaults POR CARRIL (2026-09-04). Viajan crudos: quien decide qué tipo
+   *  aplica es `tipoDelCarril`, no cada consumidor. NULL = hereda el general. */
+  boletas_tipo_default?: string | null;
+  facturas_tipo_default?: string | null;
 };
 
 /**
@@ -244,6 +248,7 @@ export async function fetchMesaDateDependent(
   // ── Pendientes de emisión (cola del tab Emitir) — depende de empresa, no del rango ──
   const pendientes = await getPendientesEmision(supabase, empresaId, {
     giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente,
+    boletas_tipo_default: empresa.boletas_tipo_default, facturas_tipo_default: empresa.facturas_tipo_default,
   }, { start: workStart, end: workEnd }, { mesa: mesaActiva }).catch((e) => {
     // NUNCA tragar en silencio: una cola vacía por error se ve igual que "no hay
     // nada que emitir" y el usuario pierde boletas sin saberlo.
@@ -281,7 +286,8 @@ export async function fetchMesaDateDependent(
   // si falla, la tarjeta/orbe simplemente no aparece (nunca rompe la mesa).
   const guardarail = await computeGuardarailEmision(
     supabase, empresaId,
-    { giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente },
+    { giro: empresa.giro, razon_social: empresa.razon_social, tipo_contribuyente: empresa.tipo_contribuyente,
+      boletas_tipo_default: empresa.boletas_tipo_default, facturas_tipo_default: empresa.facturas_tipo_default },
     nowChile,
   ).catch((e) => { console.error("[mesa] guardarail de emisión falló", e); return null; });
 

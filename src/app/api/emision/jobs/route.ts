@@ -13,6 +13,7 @@ import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { CURRENT_EMISSION_AUTHORIZATION_VERSION, getEmissionAuthorizationStatus } from "@/lib/emission/authorizations";
 import { validarRut } from "@/lib/sii/validation";
 import { guardTipoDteEmisor } from "@/lib/sii/tipo-dte-emisor-guard";
+import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import { verificarEmisionMasiva } from "@/lib/pagos/metering";
 
 type Provider = "sii_local" | "simpleapi";
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
 
   const { data: empresa, error: empresaError } = await guard.service
     .from("empresas")
-    .select("rut, tipo_contribuyente")
+    .select("rut, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
     .eq("id", guard.empresaId)
     .maybeSingle();
   if (empresaError) {
@@ -325,7 +326,17 @@ export async function POST(request: Request) {
   // factura 33). Fail-closed: rechaza y enruta a Check (NO normaliza en
   // silencio: en el carril real la UI mostraría "Afecta" mientras emite exenta
   // → descuadre). El mock sí normaliza (arma todo el payload, es seguro allá).
-  const guardTipo = guardTipoDteEmisor(tipoDte as 33 | 34 | 39 | 41, empresa?.tipo_contribuyente ?? null);
+  // El guard juzga con el tipo DEL CARRIL del documento (2026-09-04): un 33/34
+  // se mide contra `facturas_tipo_default` y un 39/41 contra
+  // `boletas_tipo_default`, heredando el general de la empresa cuando el carril
+  // no tiene valor propio. Antes los cuatro tipos se medían contra el mismo
+  // `tipo_contribuyente`, así que una empresa con boletas exentas y facturas
+  // afectas no podía emitir sus facturas.
+  const carrilDelDte = tipoDte === 33 || tipoDte === 34 ? "factura" : "boleta";
+  const guardTipo = guardTipoDteEmisor(
+    tipoDte as 33 | 34 | 39 | 41,
+    tipoDelCarril(empresa ?? null, carrilDelDte),
+  );
   if (!guardTipo.ok) {
     return NextResponse.json(
       { ok: false, error: guardTipo.code, detalle: "Tu empresa es exenta: esta venta no puede emitirse como afecta (con IVA). Cámbiala a exenta en Revisar." },
