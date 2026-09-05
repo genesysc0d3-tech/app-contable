@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, type AprenderResultado } from "@/lib/ai/aprender-regla";
+import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
+import { derivarMontosDte } from "@/lib/sii/montos-dte";
 
 const BATCH_SIZE = 50;
 
@@ -186,6 +188,86 @@ export async function rechazarPropuestas(
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   return { ok: true, count: marcadas };
+}
+
+/**
+ * CAMBIO DE TIPO EN BLOQUE — afecta ⇄ exenta sobre las seleccionadas.
+ *
+ * "El cliente siempre tiene la razón" (fundador 2026-09-04): la clasificación
+ * propone, pero el humano puede tomar veinte movimientos y decir que son
+ * afectos. Antes eso era de a uno, abriendo cada tarjeta.
+ *
+ * Lo que SÍ se respeta por encima del cliente: un emisor EXENTO en ese carril
+ * no puede emitir afecta — fabricaría IVA que no existe, y el guard
+ * fail-closed de la emisión lo rechazaría igual, pero recién al emitir. Mejor
+ * decirlo acá, cuando todavía se puede arreglar, y decir DÓNDE se arregla.
+ *
+ * Estados: solo pendiente/editado/listo (mismo criterio que el juicio "sin
+ * boleta" en lote). Una 'aprobado' está comprometida a Emitir y no se toca.
+ *
+ * El total NO se toca nunca: es lo que entró al banco. Lo que se recalcula es
+ * cómo se reparte entre neto e IVA (`derivarMontosDte`, punto único).
+ */
+export async function cambiarTipoPropuestas(
+  propuestaIds: string[],
+  destino: "afecta" | "exenta",
+  mesa: "boleta" | "factura" = "boleta",
+): Promise<{ ok?: boolean; error?: string; count: number }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+
+  const { data: empresa } = await ctx.sb
+    .from("empresas")
+    .select("tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
+    .eq("id", ctx.empresaId)
+    .maybeSingle();
+  if (destino === "afecta" && carrilEsExento(empresa, mesa)) {
+    return {
+      error: mesa === "factura"
+        ? "Tus facturas están configuradas como exentas: una afecta llevaría IVA que no puedes cobrar. Cámbialo en Empresa → Emisor si tu giro es afecto."
+        : "Tus boletas están configuradas como exentas: una afecta llevaría IVA que no puedes cobrar. Cámbialo en Empresa → Emisor si tu giro es afecto.",
+      count: 0,
+    };
+  }
+
+  const afecta = destino === "afecta";
+  const tipoPropuesto = mesa === "factura"
+    ? (afecta ? "factura_afecta" : "factura_exenta")
+    : (afecta ? "boleta" : "exenta");
+  const tipoDte = mesa === "factura" ? (afecta ? 33 : 34) : (afecta ? 39 : 41);
+
+  let cambiadas = 0;
+  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
+    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+    // Se lee el total de CADA una: el reparto neto/IVA depende de su monto, así
+    // que no hay un UPDATE único que sirva para todo el lote.
+    const { data: filas, error: leerError } = await ctx.sb
+      .from("propuestas_ia")
+      .select("id, total")
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", batch)
+      .in("estado", ["pendiente", "editado", "listo"]);
+    if (leerError) return { error: leerError.message, count: cambiadas };
+
+    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null }>) {
+      const { neto, iva } = derivarMontosDte(Number(fila.total ?? 0), afecta);
+      const { error, count } = await ctx.sb
+        .from("propuestas_ia")
+        .update({ tipo_propuesto: tipoPropuesto, tipo_dte: tipoDte, monto_neto: neto, iva, estado: "editado" }, { count: "exact" })
+        .eq("empresa_id", ctx.empresaId)
+        .eq("id", fila.id)
+        .in("estado", ["pendiente", "editado", "listo"]);
+      if (error) return { error: error.message, count: cambiadas };
+      cambiadas += count ?? 0;
+    }
+  }
+
+  if (cambiadas === 0) return { error: "No se cambió ninguna (¿ya estaban emitidas o comprometidas a Emitir?)", count: 0 };
+  revalidatePath("/revisar");
+  revalidatePath("/escritorio");
+  revalidatePath("/massdte");
+  return { ok: true, count: cambiadas };
 }
 
 export async function rechazarPropuesta(propuestaId: string) {
