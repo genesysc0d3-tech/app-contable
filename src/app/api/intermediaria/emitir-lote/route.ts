@@ -150,18 +150,6 @@ export async function POST(request: Request) {
     });
   }
 
-  // Emisión real (no mock) exige certificado digital delegado al intermediario.
-  // El lote solo emite boletas (39/41), así que el proveedor relevante es el de boletas.
-  if (emisionConfig.boletasProveedor !== "mock") {
-    const cert = await verificarCertificado(usuario.empresa_id);
-    if (!cert.ok) {
-      return NextResponse.json(
-        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
-        { status: 412 },
-      );
-    }
-  }
-
   const lock = await acquireCuentaEmissionLock({
     sb,
     cuentaId: acceso.cuentaId,
@@ -194,6 +182,31 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  // CERTIFICADO DELEGADO: solo SimpleAPI lo necesita (2026-09-04).
+  //
+  // Este gate estaba ARRIBA, antes de saber qué traía el lote, y preguntaba
+  // `boletasProveedor !== "mock"`. Tres errores apilados: juzgaba un lote de
+  // FACTURAS con el proveedor de BOLETAS; trataba "no es mock" como "es
+  // SimpleAPI"; y corría antes de los bloqueos que sí saben distinguir el
+  // carril. Un cliente con la extensión (sii_local) recibía "el contribuyente
+  // aún no cargó su certificado digital SII" — un .pfx que su carril no usa,
+  // con sus facturas detenidas.
+  //
+  // La regla: preguntar por el proveedor EXACTO. `sii_local` firma con la clave
+  // del propio cliente en su navegador y no delega nada; `mock` no emite. El
+  // único que necesita certificado delegado es `simpleapi`.
+  const proveedorDelLote = hayFacturas ? emisionConfig.facturasProveedor : emisionConfig.boletasProveedor;
+  if (proveedorDelLote === "simpleapi") {
+    const cert = await verificarCertificado(usuario.empresa_id);
+    if (!cert.ok) {
+      lockEstado = "cancelled";
+      return NextResponse.json(
+        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
+        { status: 412 },
+      );
+    }
+  }
+
   const formaPagoLote = body.forma_pago_lote === "contado" ? "Contado" : body.forma_pago_lote === "credito" ? "Crédito" : null;
   if (hayFacturas && !formaPagoLote) {
     lockEstado = "cancelled";
@@ -315,7 +328,7 @@ export async function POST(request: Request) {
 
       const proveedorFactura = providerForTipoDte(emisionConfig, tipoFactura);
       if (proveedorFactura !== "mock") {
-        results.push({ propuesta_id: pid, ok: false, error_code: "PROVEEDOR_NO_IMPLEMENTADO", error_message: "El carril real de facturas llega con la próxima actualización — por ahora solo modo de prueba" });
+        results.push({ propuesta_id: pid, ok: false, error_code: "PROVEEDOR_NO_IMPLEMENTADO", error_message: "Esta empresa tiene las facturas configuradas en un carril que no emite por acá. Cámbialo a «SII Local» en Empresa → Emisión para emitir con la extensión." });
         continue;
       }
 
