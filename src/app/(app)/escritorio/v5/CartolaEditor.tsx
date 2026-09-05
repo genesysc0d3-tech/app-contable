@@ -18,7 +18,7 @@ import {
   ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA, BULK_MIN_CONFIANZA,
   type Propuesta, type ClienteResumen,
 } from "./revisar-shared";
-import { ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas, volverAPendientes } from "../../revisar/actions";
+import { cambiarTipoPropuestas, ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas, volverAPendientes } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 
 type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
@@ -223,6 +223,25 @@ export default function CartolaEditor({
           : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
       }
       setSel(new Set());
+      onAction();
+    } finally { setBusyBulk(false); }
+  }
+
+  /**
+   * Cambio de tipo EN BLOQUE (fundador 2026-09-04: "puedes seleccionar varias
+   * tx y ponerlas afectas si quieres, el cliente siempre tiene la razón").
+   *
+   * La selección NO se limpia: cambiar el tipo es un ajuste, no un juicio —
+   * lo normal es marcar veinte, ponerlas afectas y recién ahí mandarlas a la
+   * lista, sin tener que volver a marcarlas.
+   */
+  async function bulkTipo(destino: "afecta" | "exenta") {
+    if (sel.size === 0 || busyBulk) return;
+    setBusyBulk(true);
+    try {
+      const r = await cambiarTipoPropuestas([...sel], destino, mesa === "factura" ? "factura" : "boleta");
+      if (r.error) toast(r.error, "error");
+      else toast(`${r.count} ${r.count === 1 ? "quedó" : "quedaron"} como ${destino}`);
       onAction();
     } finally { setBusyBulk(false); }
   }
@@ -464,6 +483,20 @@ export default function CartolaEditor({
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderBottom: "1px solid var(--border)", background: "color-mix(in srgb, var(--accent) 6%, transparent)", flexShrink: 0 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>{sel.size} seleccionada{sel.size === 1 ? "" : "s"}</span>
           <span style={{ fontSize: 10, color: "var(--text3)" }}>shift+click = rango</span>
+          {/* Afecta/Exenta ANTES del juicio: se ajusta el tipo y recién
+              después se manda a la lista, sin perder la selección. */}
+          <span style={{ display: "flex", gap: 6, marginLeft: 4 }}>
+            <button onClick={() => bulkTipo("afecta")} disabled={busyBulk}
+              title="Marca las seleccionadas como venta AFECTA (con IVA 19%)"
+              style={{ fontSize: 11, fontWeight: 700, padding: "5px 11px", borderRadius: 99, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: busyBulk ? "default" : "pointer" }}>
+              Afecta
+            </button>
+            <button onClick={() => bulkTipo("exenta")} disabled={busyBulk}
+              title="Marca las seleccionadas como venta EXENTA (sin IVA)"
+              style={{ fontSize: 11, fontWeight: 700, padding: "5px 11px", borderRadius: 99, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: busyBulk ? "default" : "pointer" }}>
+              Exenta
+            </button>
+          </span>
           <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button onClick={() => bulkSel("listo")} disabled={busyBulk}
               style={{ fontSize: 11.5, fontWeight: 800, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(34,197,94,.35)", background: "rgba(34,197,94,.1)", color: "var(--green)", cursor: "pointer" }}>

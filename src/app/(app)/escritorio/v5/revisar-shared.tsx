@@ -498,9 +498,15 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
             <div>
               <label style={lbl}>Tipo</label>
               <div style={{display:"flex",width:"fit-content",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
+                {/* Emisor EXENTO no puede pasar a afecta (fundador 2026-09-05: exento
+                    solo exento; el mixto es privilegio del afecto). Antes se podía
+                    marcar y la emisión lo forzaba a exenta igual: la pantalla mentía. */}
                 {([["exenta",esFactura?"Exenta · 34":"Exenta · 41","var(--blue)"],["afecta",esFactura?"Afecta · 33":"Afecta · 39","var(--accent)"]] as const).map(([k,l,c])=>{
                   const active = tipo===k;
-                  return <button key={k} onClick={()=>setTipo(k)} style={{fontSize:10.5,fontWeight:750,padding:"8px 15px",border:"none",cursor:active?"default":"pointer",background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
+                  const off = k === "afecta" && empresaTipoContribuyente === "exento";
+                  return <button key={k} onClick={()=>{ if (!off) setTipo(k); }} disabled={off}
+                    title={off ? "Tu empresa emite exento: no puede recargar IVA. Si de verdad tienes una operación afecta, primero necesitas esa actividad declarada en el SII; recién después la activas en Empresa → Emisor." : undefined}
+                    style={{fontSize:10.5,fontWeight:750,padding:"8px 15px",border:"none",cursor:off||active?"default":"pointer",opacity:off?0.4:1,background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}
               </div>
             </div>

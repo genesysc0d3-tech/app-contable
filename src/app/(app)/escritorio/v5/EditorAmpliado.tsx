@@ -37,7 +37,19 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   // tipo_propuesto) y SOLO como desempate la sugerencia de la empresa. Un default de
   // empresa 'afecto' NUNCA puede pisar una exención POR LEY (cripto/forex/P2P,
   // Of. SII 963/2018): eso fabricaría IVA inexistente sobre una venta exenta.
-  // Misma derivación que ExpandedDetail (revisar-shared). Siempre editable (sin lock).
+  /**
+   * EMISOR EXENTO ⇒ NO PUEDE PASAR A AFECTA (regla del fundador 2026-09-05:
+   * "si eres exento no puedes hacer afecto; solo si eres afecto puedes hacer
+   * mixto"). Al revés SÍ: un afecto puede marcar exenta cuando corresponda.
+   *
+   * Hasta hoy el selector era "siempre editable" y la emisión forzaba 41 igual
+   * — la pantalla decía Afecta y salía Exenta. Un descuadre silencioso es peor
+   * que un botón apagado que explica por qué.
+   *
+   * `empresaTipo` ya viene del CARRIL de la mesa abierta, no del general.
+   */
+  const emisorExento = empresaTipo === "exento";
+  // Misma derivación que ExpandedDetail (revisar-shared).
   const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
@@ -207,12 +219,19 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
               <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
                 {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["afecta", "Afecta · con IVA · 39", "var(--accent)"]] as const).map(([k, lbl, c]) => {
                   const active = tipo === k;
+                  const off = k === "afecta" && emisorExento;
                   return (
-                    <button key={k} onClick={() => setTipo(k)}
-                      style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", border: "none", cursor: active ? "default" : "pointer", background: active ? `color-mix(in srgb, ${c} 20%, transparent)` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
+                    <button key={k} onClick={() => { if (!off) setTipo(k); }} disabled={off}
+                      title={off ? "Tu empresa emite exento: no puede recargar IVA. Si de verdad tienes una operación afecta, primero necesitas esa actividad declarada en el SII; recién después la activas en Empresa → Emisor." : undefined}
+                      style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", border: "none", cursor: off || active ? "default" : "pointer", opacity: off ? 0.4 : 1, background: active ? `color-mix(in srgb, ${c} 20%, transparent)` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
                   );
                 })}
               </div>
+              {emisorExento && (
+                <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 6 }}>
+                  Tu empresa emite exento. Para emitir afecta necesitas la actividad declarada en el SII.
+                </div>
+              )}
             </div>
 
             {/* Detalle + monto */}
