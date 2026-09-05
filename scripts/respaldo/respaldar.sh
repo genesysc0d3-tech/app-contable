@@ -16,6 +16,35 @@ DEST="$HOME/Respaldos/massdte"
 LOG="$HOME/.massdte-respaldo/respaldo.log"
 LOCK="$HOME/.massdte-respaldo/.corriendo"
 PGBIN="/opt/homebrew/opt/postgresql@17/bin"
+# RUTA ABSOLUTA de rclone, no el nombre a secas: launchd no hereda el PATH de
+# Homebrew, así que bajo el agente nocturno `rclone` no existe. Estuvo parchado
+# a mano en el Mac mini durante dos semanas y el repo no lo sabía — la próxima
+# copia del guión habría roto la subida a R2 en silencio.
+RCLONE="${RCLONE:-/opt/homebrew/bin/rclone}"
+
+# ── TLS VERIFICADO contra Supabase (2026-09-05) ────────────────────────────
+# La conexión al pooler YA iba cifrada (TLS 1.3), pero sin `sslmode` libpq usa
+# el modo `prefer`: cifra si puede y NO verifica el certificado del servidor.
+# Contra un espía pasivo alcanza; contra alguien que se meta en el medio
+# haciéndose pasar por el pooler, le entregábamos usuario y clave — y esta
+# conexión se lleva la base ENTERA todas las noches.
+#
+# `verify-full` exige además que el certificado sea de quien dice ser. El
+# pooler lo firma la CA propia de Supabase, que no está en el almacén del
+# sistema, así que va fijada en un archivo al lado del config.
+#
+# CA raíz: "Supabase Root 2021 CA", vence 2031-04-26. Huella SHA-256:
+#   80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA
+#
+# Si el archivo falta, el respaldo NO corre: preferimos una noche sin respaldo
+# —que avisa por correo— antes que mandar la base entera por un canal que no
+# sabemos con quién habla. Una noche se recupera; una base filtrada no.
+# OJO: NO se exporta al entorno. Estas variables valen para CUALQUIER conexión
+# de libpq, y el Postgres de verificación corre local sin TLS: exportarlas hizo
+# que ni siquiera arrancara. Van SOLO delante de los comandos que salen a
+# Supabase (el fail-closed cazó el error en la primera corrida).
+CA_SUPABASE="$HOME/.massdte-respaldo/supabase-root.crt"
+TLS_SUPABASE=(env PGSSLMODE=verify-full PGSSLROOTCERT="$CA_SUPABASE")
 # Instancia PROPIA de Postgres 17 solo para verificar, en un puerto aparte: no
 # toca el postgresql@16 del equipo (que ocupa el 5432 y se usa para otras cosas),
 # y la levanta el propio guión — así no depende de launchd ni de que alguien
@@ -26,7 +55,21 @@ RETENCION_DIAS=14
 # Tablas cuyo conteo debe coincidir entre el origen y la restauración.
 TABLAS_TESTIGO="propuestas_ia movimientos_raw documentos_subidos clasificacion_reglas empresas usuarios"
 
-STAMP=$(date +%Y-%m-%d)
+# Modo A DEMANDA (`respaldar.sh --ahora`): regla del fundador 2026-09-05 — cada
+# vez que se toca algo de Supabase (una migración, un borrado, un cambio de
+# esquema) se hace un respaldo completo ANTES, sí o sí.
+#
+# Lleva la hora en el nombre a propósito: si en un mismo día se tocan tres
+# cosas, el tercer respaldo no puede pisar al primero. El nocturno mantiene su
+# nombre por día, que es lo que la rotación sabe leer.
+AHORA=0
+[ "${1:-}" = "--ahora" ] && AHORA=1
+
+if [ "$AHORA" = "1" ]; then
+  STAMP=$(date +%Y-%m-%d-%H%M)
+else
+  STAMP=$(date +%Y-%m-%d)
+fi
 ARCHIVO="$DEST/massdte-$STAMP.sql.gz"
 TMPSQL=""
 DBTMP="verif_respaldo_$$"
@@ -38,8 +81,21 @@ morir(){
   local motivo="$1"
   log "FALLÓ: $motivo"
   avisar "$motivo"
+  latir /fail
   limpiar
   exit 1
+}
+
+# Latido externo (dead-man switch). Independiente de todo lo demás: si el mini
+# se apaga, se cuelga o el script ni arranca, este ping NO llega y healthchecks
+# avisa por AUSENCIA — el silencio pasa a ser la alarma. La idea venía del carril
+# viejo (`scripts/backup/`) y se había perdido al reescribir. No-op si la URL no
+# está: cero efecto hasta que el fundador cree el check y la ponga en el config.
+#   OK   -> HC_URL           (reinicia el reloj de 24h)
+#   FALLA-> HC_URL/fail      (avisa al toque)
+latir(){
+  [ -n "${HC_URL:-}" ] || return 0
+  curl -fsS --max-time 20 "${HC_URL}${1:-}" >/dev/null 2>&1 || true
 }
 
 limpiar(){
@@ -103,6 +159,8 @@ asegurar_postgres_verificacion(){
 source "$CONF"
 mkdir -p "$DEST" "$(dirname "$LOG")"
 
+[ -f "$CA_SUPABASE" ] || { log "sin el certificado de Supabase en $CA_SUPABASE"; avisar "Falta el certificado raíz de Supabase ($CA_SUPABASE): sin él no se verifica con quién hablamos y el respaldo no corre."; exit 1; }
+
 # Un candado con el PID adentro: si el proceso ya no existe, el candado es basura
 # de una corrida que se murió y no debe bloquear la de hoy.
 if [ -f "$LOCK" ]; then
@@ -113,11 +171,11 @@ if [ -f "$LOCK" ]; then
 fi
 echo $$ > "$LOCK"
 trap limpiar EXIT
-log "== inicio =="
+if [ "$AHORA" = "1" ]; then log "== inicio (a demanda) =="; else log "== inicio =="; fi
 
 # ── 1. volcar ──────────────────────────────────────────────────────────────
 TMPSQL=$(mktemp "/tmp/massdte-dump.XXXXXX.sql")
-"$PGBIN/pg_dump" "$PGURL" --no-owner --no-privileges \
+"${TLS_SUPABASE[@]}" "$PGBIN/pg_dump" "$PGURL" --no-owner --no-privileges \
   --schema=public --schema=auth --schema=storage \
   -f "$TMPSQL" 2>>"$LOG" || morir "pg_dump devolvió error"
 [ -s "$TMPSQL" ] || morir "el volcado salió vacío"
@@ -154,7 +212,7 @@ log "guardado: $ARCHIVO ($(du -h "$ARCHIVO" | cut -f1))"
 # ── 4. segunda copia en R2 ─────────────────────────────────────────────────
 if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   RCLONE_CONFIG=/dev/null \
-  rclone --config /dev/null copy "$ARCHIVO" ":s3:$R2_BUCKET/respaldos-db/" \
+  "$RCLONE" --config /dev/null copy "$ARCHIVO" ":s3:$R2_BUCKET/respaldos-db/" \
     --s3-provider Cloudflare \
     --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
     --s3-access-key-id "$R2_ACCESS_KEY_ID" \
@@ -163,13 +221,94 @@ if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   log "subido a R2"
 fi
 
+# ── 4.b los ARCHIVOS al disco del mini ─────────────────────────────────────
+# El volcado se lleva `storage` pero eso es la TABLA DE METADATOS: nombres,
+# rutas, permisos. Los archivos en sí no viajan ahí. Sin este paso, restaurar
+# dejaba una base que sabe perfectamente que existía "cartola-agosto.xlsx" en
+# tal ruta, y esa ruta vacía. Para una boleta ya emitida eso es quedarse sin el
+# respaldo del documento tributario.
+#
+# Se COPIA, nunca se sincroniza: si alguien borra un archivo arriba por error,
+# la copia de acá tiene que sobrevivirlo. Un respaldo que se borra solo cuando
+# el original se borra no es un respaldo.
+#
+# Incremental: rclone salta lo que ya está, y el Storage se baja por lista
+# comparando tamaño. La primera corrida trae todo (unos 220 MB), las siguientes
+# unos pocos MB.
+#
+# Si esto falla NO se invalida el volcado —la base es lo crítico— pero se avisa
+# igual al final, porque un paso que falla en silencio es peor que no tenerlo.
+ARCHIVOS_FALLIDOS=0
+
+# R2 (PDFs emitidos, nómina del SII y los propios respaldos de la base)
+if [ -n "${R2_ACCOUNT_ID:-}" ]; then
+  mkdir -p "$DEST/archivos/r2"
+  RCLONE_CONFIG=/dev/null \
+  "$RCLONE" --config /dev/null copy ":s3:$R2_BUCKET/" "$DEST/archivos/r2/" \
+    --s3-provider Cloudflare \
+    --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+    --s3-access-key-id "$R2_ACCESS_KEY_ID" \
+    --s3-secret-access-key "$R2_SECRET_ACCESS_KEY" \
+    --s3-no-check-bucket --ignore-existing 2>>"$LOG" \
+    || { log "AVISO: falló la copia de R2"; ARCHIVOS_FALLIDOS=1; }
+  log "R2 al día: $(find "$DEST/archivos/r2" -type f | wc -l | tr -d ' ') archivos"
+fi
+
+# Supabase Storage (cartolas e imágenes que sube el cliente). La lista sale de
+# la base que ya tenemos a mano; cada objeto se baja con el service role.
+if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE:-}" ]; then
+  mkdir -p "$DEST/archivos/storage"
+  BAJADOS=0
+  while IFS='|' read -r bucket ruta tam; do
+    [ -z "$bucket" ] && continue
+    destino="$DEST/archivos/storage/$bucket/$ruta"
+    # ya está y pesa lo mismo → nada que hacer
+    if [ -f "$destino" ] && [ "$(wc -c < "$destino" | tr -d ' ')" = "$tam" ]; then continue; fi
+    mkdir -p "$(dirname "$destino")"
+    # La ruta va CODIFICADA: los clientes suben archivos con espacios, tildes y
+    # paréntesis ("BANCO ESTADO.xlsx" fue el primero que cayó). Sin esto curl
+    # rechaza la URL y el archivo queda sin respaldar. Se respetan las barras:
+    # son la jerarquía de carpetas, no un carácter a escapar.
+    ruta_url=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/"))' "$ruta")
+    if curl -fsS --max-time 120 \
+         -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+         "$SUPABASE_URL/storage/v1/object/$bucket/$ruta_url" -o "$destino" 2>>"$LOG"; then
+      BAJADOS=$((BAJADOS+1))
+    else
+      log "AVISO: no pude bajar $bucket/$ruta"
+      rm -f "$destino"
+      ARCHIVOS_FALLIDOS=1
+    fi
+  done < <("${TLS_SUPABASE[@]}" "$PGBIN/psql" "$PGURL" -Atq -F'|' -c \
+      "select bucket_id, name, coalesce((metadata->>'size')::bigint,0) from storage.objects where name is not null" 2>>"$LOG")
+  log "Storage al día: $BAJADOS nuevos, $(find "$DEST/archivos/storage" -type f | wc -l | tr -d ' ') en total"
+fi
+
 # ── 5. rotar: 14 días, salvando el primero de cada mes ─────────────────────
+# OJO: la rotación es SOLO de los volcados de la base y SOLO local. Ni la copia
+# de R2 ni los archivos se rotan a propósito: pesan poco (unos 220 MB en total)
+# y un archivo de un cliente que se borró arriba es justamente el que uno quiere
+# tener de vuelta.
 find "$DEST" -name 'massdte-*.sql.gz' -mtime "+$RETENCION_DIAS" | while read -r viejo; do
   case "$(basename "$viejo")" in
+    # Los de a demanda (con hora en el nombre) se hicieron porque alguien iba a
+    # tocar la base: ese es justo el que uno quiere de vuelta. No se rotan.
+    massdte-????-??-??-????.sql.gz) log "conservo a demanda: $(basename "$viejo")" ;;
     *-01.sql.gz) log "conservo mensual: $(basename "$viejo")" ;;
     *) rm -f "$viejo"; log "rotado: $(basename "$viejo")" ;;
   esac
 done
 
+if [ "${ARCHIVOS_FALLIDOS:-0}" = "1" ]; then
+  # La base quedó respaldada y verificada; lo que falló son archivos. Se avisa,
+  # pero el respaldo NO se declara fallido: son dos cosas distintas y mezclarlas
+  # haría que un PDF caído tape un volcado sano.
+  log "== fin CON AVISOS: la base quedó bien, algún archivo no se pudo copiar =="
+  avisar "La base quedó respaldada y verificada, pero algún archivo (Storage o R2) no se pudo copiar. Revisa el registro."
+  latir
+  exit 0
+fi
+
 log "== fin OK — $(ls -1 "$DEST"/massdte-*.sql.gz 2>/dev/null | wc -l | tr -d ' ') respaldos guardados =="
+latir
 exit 0
