@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useExtensionStatus } from "./useExtensionStatus";
+import { LOGO_MASSDTE_64 } from "./logo-massdte-inline";
 
 /**
  * Chips de estado en la barra de la mesa (iterado con el fundador 2026-09-02):
@@ -56,8 +57,9 @@ function LogoExtension({ desactualizada }: { desactualizada?: boolean }) {
     <span style={{ position: "relative", display: "inline-flex" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/icon-192.png"
+        src={LOGO_MASSDTE_64}
         alt="Extensión massDTE"
+        decoding="sync"
         style={{
           height: 19, width: 19, borderRadius: 5, display: "block",
           filter: desactualizada ? "grayscale(1) brightness(.65)" : "none",
