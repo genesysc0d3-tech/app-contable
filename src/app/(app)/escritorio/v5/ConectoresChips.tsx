@@ -27,26 +27,47 @@ function Badge({ ok }: { ok: boolean }) {
 }
 
 /**
- * Versión de la extensión, en la esquina superior DERECHA del logo — espejo del
- * tick, que vive abajo a la izquierda (fundador 2026-09-04). Va en posición
- * absoluta a propósito: se ve siempre, sin empujar ni un pixel de la barra, que
- * es la restricción de siempre en esta fila.
+ * Estado de la VERSIÓN de la extensión (idea del fundador 2026-09-04, después
+ * de descartar tooltip, globito en la esquina, lengüeta del borde, texto en la
+ * fila, versión vertical y letras A/D):
+ *
+ * el LOGO MISMO es el indicador. Al día se ve normal; desactualizada se apaga a
+ * gris y le cae encima la flecha circular de actualizar, en gris claro (no
+ * blanca: blanco grita y esto es un aviso, no una alarma). No se agrega nada a la
+ * barra: cambia lo que ya estaba, que es la única forma de que el ojo lo pesque
+ * sin que estorbe el resto del tiempo.
+ *
+ * El número de versión y el "reinicia tu navegador y se actualiza sola" siguen
+ * en el tooltip del chip, que es donde uno los va a buscar cuando algo falla.
  */
-function BadgeVersion({ texto, atencion }: { texto: string; atencion?: boolean }) {
+function LogoExtension({ desactualizada }: { desactualizada?: boolean }) {
   return (
-    <span aria-hidden style={{
-      position: "absolute", right: -9, top: -7, height: 11, borderRadius: 99,
-      display: "grid", placeItems: "center", padding: "0 3px",
-      fontSize: 7.5, fontWeight: 800, lineHeight: 1, letterSpacing: "-.02em",
-      fontVariantNumeric: "tabular-nums",
-      color: atencion ? "#fff" : "var(--text2, #8b867e)",
-      background: atencion ? "var(--amber, #f59e0b)" : "var(--bg-muted, #1c1c1e)",
-      border: "1.5px solid var(--bg, #0b0b0c)",
-    }}>{texto}</span>
+    <span style={{ position: "relative", display: "inline-flex" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/icon-192.png"
+        alt="Extensión massDTE"
+        style={{
+          height: 19, width: 19, borderRadius: 5, display: "block",
+          filter: desactualizada ? "grayscale(1) brightness(.65)" : "none",
+        }}
+      />
+      {desactualizada && (
+        <span aria-hidden style={{
+          position: "absolute", inset: 0, display: "grid", placeItems: "center",
+          color: "#c9c9c9", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.7))",
+        }}>
+          <svg width="11.5" height="11.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+            <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" />
+            <path d="M20.7 3.8v4.9h-4.9" />
+          </svg>
+        </span>
+      )}
+    </span>
   );
 }
 
-function Chip({ ok, title, children, badgeVersion }: { ok: boolean; title: string; children: React.ReactNode; badgeVersion?: { texto: string; atencion?: boolean } }) {
+function Chip({ ok, title, children }: { ok: boolean; title: string; children: React.ReactNode }) {
   return (
     <span className="conector-chip" aria-label={title} style={{ display: "inline-flex", alignItems: "center", cursor: "default" }}>
       {/* La opacidad va SOLO en el logo: si envuelve al chip entero arrastra al
@@ -57,7 +78,6 @@ function Chip({ ok, title, children, badgeVersion }: { ok: boolean; title: strin
         {children}
       </span>
       <Badge ok={ok} />
-      {badgeVersion && <BadgeVersion texto={badgeVersion.texto} atencion={badgeVersion.atencion} />}
       <span className="conector-tip" role="tooltip" style={{ background: "var(--bg-muted, #161616)", border: "1px solid var(--border, rgba(255,255,255,.1))", borderRadius: 8, padding: "6px 10px", fontSize: 10.5, fontWeight: 600, lineHeight: 1.35, color: "var(--text, #e8eaf0)", whiteSpace: "nowrap", boxShadow: "0 10px 26px rgba(0,0,0,.45)" }}>
         {title}
       </span>
@@ -123,14 +143,13 @@ export default function ConectoresChips() {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 14, color: "var(--text2)" }}>
       {/* verificando (primer render) no muestra ✕ prematuro */}
-      {/* La VERSIÓN va en el tooltip (2026-09-04): es lo primero que uno
+      {/* La VERSIÓN va también en el tooltip (2026-09-04): es lo primero que uno
           pregunta cuando algo del carril de emisión falla, y hasta hoy había que
           ir a buscarla al popup de empresa. No agranda la barra: vive en el
           globito que ya existía. */}
       {status !== "checking" && (
         <Chip
           ok={siiOk}
-          badgeVersion={version ? { texto: version, atencion: hayVersionNueva } : undefined}
           title={
             siiOk
               ? `Extensión conectada con el SII · v${version ?? "?"}${hayVersionNueva ? ` (hay v${versionPublicada}: reinicia tu navegador y se actualiza sola)` : ""}`
@@ -139,8 +158,8 @@ export default function ConectoresChips() {
                 : "Extensión no conectada — pestaña Emitir para instalarla"
           }
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon-192.png" alt="Extensión massDTE" style={{ height: 19, width: 19, borderRadius: 5, display: "block" }} />
+          <LogoExtension desactualizada={hayVersionNueva} />
+
         </Chip>
       )}
       {mcp != null && (
