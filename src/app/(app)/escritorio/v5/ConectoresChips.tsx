@@ -14,6 +14,17 @@ import { useExtensionStatus } from "./useExtensionStatus";
 
 type EstadoMcp = { claude: boolean; chatgpt: boolean; otros: number; telegram?: boolean };
 
+/**
+ * MEMORIA DE LA PESTAÑA (2026-09-04, bug del fundador): cambiar de mesa
+ * re-monta el árbol y este componente volvía a pedir /api/mcp/estado desde
+ * cero, con los chips ocultos mientras tanto — se veían desaparecer y volver
+ * de a uno. Los conectores no se desenchufan porque cambiaste de mesa.
+ *
+ * Solo memoria de la pestaña (no localStorage): un refresh vuelve a preguntar.
+ * Arranca vacío, así el primer render del cliente calza con el del servidor.
+ */
+let ultimoMcp: EstadoMcp | null = null;
+
 function Badge({ ok }: { ok: boolean }) {
   return (
     <span aria-hidden style={{
@@ -125,13 +136,13 @@ function LogoTelegram({ size = 19 }: { size?: number }) {
 
 export default function ConectoresChips() {
   const { status, hayBoveda, version, hayVersionNueva, versionPublicada } = useExtensionStatus();
-  const [mcp, setMcp] = useState<EstadoMcp | null>(null);
+  const [mcp, setMcp] = useState<EstadoMcp | null>(() => ultimoMcp);
 
   useEffect(() => {
     let vivo = true;
     fetch("/api/mcp/estado", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (vivo && d) setMcp(d as EstadoMcp); })
+      .then((d) => { if (!d) return; ultimoMcp = d as EstadoMcp; if (vivo) setMcp(ultimoMcp); })
       .catch(() => { /* sin red: el chip MCP simplemente no aparece */ });
     return () => { vivo = false; };
   }, []);

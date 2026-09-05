@@ -75,15 +75,31 @@ export function verificarExtensionCompatible(
  *
  * `recheck()` vuelve a "checking" y re-lanza el ping (botón "Actualizar" tras instalar).
  */
+/**
+ * MEMORIA DE LA PESTAÑA (2026-09-04, bug del fundador): al cambiar de mesa el
+ * árbol se re-monta (el `key` del controlador incluye la mesa), y hasta hoy el
+ * hook volvía a "checking" — los chips de la barra desaparecían y reaparecían
+ * de a uno, como si se hubiera desconectado todo.
+ *
+ * La extensión no deja de estar instalada porque cambiaste de mesa. Guardamos
+ * el último estado CONOCIDO fuera de React y el próximo montaje parte de ahí,
+ * mientras el ping vuelve a correr en silencio y lo corrige si cambió.
+ *
+ * Vive solo en memoria de la pestaña (no localStorage): un refresh de página
+ * debe volver a preguntar de verdad. Y arranca vacío, así el primer render del
+ * cliente sigue coincidiendo con el HTML del servidor (hidratación intacta).
+ */
+let ultimoConocido: { status: ExtensionStatus; version: string | null; hayBoveda: boolean | null } | null = null;
+
 export function useExtensionStatus(): { status: ExtensionStatus; version: string | null; hayBoveda: boolean | null; desactualizada: boolean; hayVersionNueva: boolean; versionPublicada: string; recheck: () => void } {
-  const [status, setStatus] = useState<ExtensionStatus>("checking");
-  const [version, setVersion] = useState<string | null>(null);
+  const [status, setStatus] = useState<ExtensionStatus>(() => ultimoConocido?.status ?? "checking");
+  const [version, setVersion] = useState<string | null>(() => ultimoConocido?.version ?? null);
   // has_vault del PONG: si ESTE navegador ya tiene bóveda SII (solo el booleano,
   // jamás de quién). null = aún no se sabe (sin PONG o extensión vieja sin el campo).
-  const [hayBoveda, setHayBoveda] = useState<boolean | null>(null);
+  const [hayBoveda, setHayBoveda] = useState<boolean | null>(() => ultimoConocido?.hayBoveda ?? null);
   const pingRef = useRef<{ nonce: string; timeoutId: number } | null>(null);
   // Espejo de `status` para leerlo dentro del intervalo de polling sin recrear el effect.
-  const statusRef = useRef<ExtensionStatus>("checking");
+  const statusRef = useRef<ExtensionStatus>(ultimoConocido?.status ?? "checking");
 
   // Solo postea el ping + arma el timeout (que puede pasar a "missing"). NO hace un
   // setState SÍNCRONO, así se puede invocar desde el effect de montaje sin violar
@@ -94,7 +110,11 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     const nonce =
       typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
     const timeoutId = window.setTimeout(
-      () => setStatus((current) => (current === "checking" ? "missing" : current)),
+      () => setStatus((current) => {
+        if (current !== "checking") return current;
+        ultimoConocido = { status: "missing", version: null, hayBoveda: null };
+        return "missing";
+      }),
       1200,
     );
     pingRef.current = { nonce, timeoutId };
@@ -130,9 +150,12 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
       if (data?.source !== "app-contable-extension") return;
       if (data.type === "APP_CONTABLE_EXTENSION_PONG" && pingRef.current && data.nonce === pingRef.current.nonce) {
         window.clearTimeout(pingRef.current.timeoutId);
+        const v = data.extension_version ?? null;
+        const b = typeof data.has_vault === "boolean" ? data.has_vault : null;
+        ultimoConocido = { status: "ready", version: v, hayBoveda: b };
         setStatus("ready");
-        setVersion(data.extension_version ?? null);
-        setHayBoveda(typeof data.has_vault === "boolean" ? data.has_vault : null);
+        setVersion(v);
+        setHayBoveda(b);
       }
     }
     window.addEventListener("message", onMessage);
