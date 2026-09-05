@@ -64,7 +64,7 @@ export async function verificarCertificado(
     return {
       ok: false,
       error: "NO_CERTIFICADO",
-      mensaje: "El intermediario no puede emitir: el contribuyente aún no cargó su certificado digital SII",
+      mensaje: "Para emitir por SimpleAPI falta cargar el certificado digital del SII de la empresa. Si emites con la extensión (SII Local), este certificado no hace falta — revisa el carril en Empresa → Emisión.",
     };
   }
   return { ok: true };

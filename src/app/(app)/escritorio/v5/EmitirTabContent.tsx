@@ -105,7 +105,7 @@ function errorLoteAmable(code?: string, detalle?: string): string {
   switch (code) {
     case "EMPRESA_SIN_CUENTA": return "Tu cuenta aún no está activada para emitir. Escríbenos si no sabes por qué.";
     case "EMPRESA_SIN_DATOS_FISCALES": return "Faltan datos de tu empresa (RUT o razón social). Complétalos en Empresa.";
-    case "CERTIFICADO_REQUERIDO": return "Falta tu certificado digital del SII para emitir en real.";
+    case "CERTIFICADO_REQUERIDO": return "Falta el certificado digital del SII de tu empresa para el carril SimpleAPI. Si emites con la extensión, no lo necesitas: revisa el carril en Empresa → Emisión.";
     case "EMISION_BLOQUEADA": return "Ya hay una emisión en curso en tu cuenta. Espera a que termine.";
     case "PLAN_INACTIVO":
     case "SIN_PLAN": return "Necesitas un plan activo para emitir. Actívalo en Planes.";
