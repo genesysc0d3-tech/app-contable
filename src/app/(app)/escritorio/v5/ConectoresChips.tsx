@@ -26,7 +26,27 @@ function Badge({ ok }: { ok: boolean }) {
   );
 }
 
-function Chip({ ok, title, children }: { ok: boolean; title: string; children: React.ReactNode }) {
+/**
+ * Versión de la extensión, en la esquina superior DERECHA del logo — espejo del
+ * tick, que vive abajo a la izquierda (fundador 2026-09-04). Va en posición
+ * absoluta a propósito: se ve siempre, sin empujar ni un pixel de la barra, que
+ * es la restricción de siempre en esta fila.
+ */
+function BadgeVersion({ texto, atencion }: { texto: string; atencion?: boolean }) {
+  return (
+    <span aria-hidden style={{
+      position: "absolute", right: -9, top: -7, height: 11, borderRadius: 99,
+      display: "grid", placeItems: "center", padding: "0 3px",
+      fontSize: 7.5, fontWeight: 800, lineHeight: 1, letterSpacing: "-.02em",
+      fontVariantNumeric: "tabular-nums",
+      color: atencion ? "#fff" : "var(--text2, #8b867e)",
+      background: atencion ? "var(--amber, #f59e0b)" : "var(--bg-muted, #1c1c1e)",
+      border: "1.5px solid var(--bg, #0b0b0c)",
+    }}>{texto}</span>
+  );
+}
+
+function Chip({ ok, title, children, badgeVersion }: { ok: boolean; title: string; children: React.ReactNode; badgeVersion?: { texto: string; atencion?: boolean } }) {
   return (
     <span className="conector-chip" aria-label={title} style={{ display: "inline-flex", alignItems: "center", cursor: "default" }}>
       {/* La opacidad va SOLO en el logo: si envuelve al chip entero arrastra al
@@ -37,6 +57,7 @@ function Chip({ ok, title, children }: { ok: boolean; title: string; children: R
         {children}
       </span>
       <Badge ok={ok} />
+      {badgeVersion && <BadgeVersion texto={badgeVersion.texto} atencion={badgeVersion.atencion} />}
       <span className="conector-tip" role="tooltip" style={{ background: "var(--bg-muted, #161616)", border: "1px solid var(--border, rgba(255,255,255,.1))", borderRadius: 8, padding: "6px 10px", fontSize: 10.5, fontWeight: 600, lineHeight: 1.35, color: "var(--text, #e8eaf0)", whiteSpace: "nowrap", boxShadow: "0 10px 26px rgba(0,0,0,.45)" }}>
         {title}
       </span>
@@ -109,6 +130,7 @@ export default function ConectoresChips() {
       {status !== "checking" && (
         <Chip
           ok={siiOk}
+          badgeVersion={version ? { texto: version, atencion: hayVersionNueva } : undefined}
           title={
             siiOk
               ? `Extensión conectada con el SII · v${version ?? "?"}${hayVersionNueva ? ` (hay v${versionPublicada}: reinicia tu navegador y se actualiza sola)` : ""}`
