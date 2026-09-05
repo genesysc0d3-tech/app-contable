@@ -627,6 +627,67 @@ export async function reiniciarTrialEmpresa(
 }
 
 /**
+ * CARRIL DE EMISIÓN por empresa, desde el panel (2026-09-05).
+ *
+ * Hasta hoy esto se cambiaba con un UPDATE a mano contra la base de
+ * producción. Es de las cosas que más se tocan en soporte —el caso de Matías
+ * fue exactamente este— y hacerlo por SQL no deja auditoría, no valida nada y
+ * un WHERE mal escrito toca a todas las empresas.
+ *
+ * Cada carril se cambia por separado a propósito: una empresa puede estar
+ * emitiendo boletas por la extensión y facturas en mock mientras se prueba.
+ *
+ * NO toca la configuración tributaria (afecta/exenta): eso es del cliente y se
+ * decide en Empresa → Emisor. Acá solo se elige POR DÓNDE sale el documento.
+ */
+export async function setCarrilEmision(
+  empresaId: string,
+  carril: "boleta" | "factura",
+  proveedor: "mock" | "sii_local" | "simpleapi",
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateOperador();
+  if ("error" in gate) return gate;
+  if (typeof empresaId !== "string" || !UUID_RE.test(empresaId)) return { error: "Empresa inválida" };
+  if (carril !== "boleta" && carril !== "factura") return { error: "Carril inválido" };
+  if (proveedor !== "mock" && proveedor !== "sii_local" && proveedor !== "simpleapi") {
+    return { error: "Proveedor inválido" };
+  }
+
+  const columna = carril === "factura" ? "facturas_emision_proveedor" : "boletas_emision_proveedor";
+  const { data: empresa, error: buscarError } = await gate.sb
+    .from("empresas")
+    .select(`id, razon_social, ${columna}`)
+    .eq("id", empresaId)
+    .maybeSingle();
+  if (buscarError) return { error: buscarError.message };
+  if (!empresa) return { error: "Empresa no encontrada" };
+
+  const anterior = (empresa as unknown as Record<string, string | null>)[columna] ?? "mock";
+  if (anterior === proveedor) return { ok: true };
+
+  const { error } = await gate.sb
+    .from("empresas")
+    .update({ [columna]: proveedor })
+    .eq("id", empresaId);
+  if (error) return { error: error.message };
+
+  const cuenta = await contextoCuentaPorEmpresa(gate.sb, empresaId);
+  await recordCuentaAudit({
+    sb: gate.sb,
+    cuentaId: cuenta?.cuentaId ?? null,
+    empresaId,
+    usuarioId: gate.userId,
+    accion: "carril_emision_cambiado",
+    recursoTipo: "empresa",
+    recursoId: empresaId,
+    resumen: `Operador dev cambió el carril de ${carril === "factura" ? "facturas" : "boletas"} de ${(empresa as unknown as { razon_social: string }).razon_social}: ${anterior} → ${proveedor}`,
+  }).catch(() => {});
+
+  if (cuenta?.cuentaId) revalidatePath(`/dev/cuentas/${cuenta.cuentaId}`);
+  return { ok: true };
+}
+
+/**
  * MIGRACIÓN DE EMPRESA entre cuentas (LEGO del fundador, 2026-08-22): los datos
  * cuelgan de empresa_id y no se mueven jamás — esto re-apunta el ÚNICO vínculo
  * cuenta_empresas hacia la cuenta destino. Solo operador, nunca cliente.
