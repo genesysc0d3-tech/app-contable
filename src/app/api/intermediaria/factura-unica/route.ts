@@ -7,6 +7,7 @@ import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { validarRut, formatRut } from "@/lib/rut";
 import { derivarMontosFactura } from "@/lib/facturas/plantilla";
+import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { chileDateString } from "@/lib/chile-date";
 
 /**
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
 
     const { data: usuario } = await supabase
       .from("usuarios")
-      .select("empresa_id, rol, empresas!usuarios_empresa_id_fkey(tipo_contribuyente)")
+      .select("empresa_id, rol, empresas!usuarios_empresa_id_fkey(tipo_contribuyente, facturas_tipo_default)")
       .eq("id", user.id)
       .single();
     if (!usuario?.empresa_id) return NextResponse.json({ ok: false, error: "USUARIO_SIN_EMPRESA" }, { status: 403 });
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
       }
       return limited;
     }
-    const empresa = usuario.empresas as unknown as { tipo_contribuyente: string | null } | null;
+    const empresa = usuario.empresas as unknown as { tipo_contribuyente: string | null; facturas_tipo_default: string | null } | null;
 
     let body: Record<string, unknown> = {};
     try { body = await request.json(); } catch {
@@ -89,7 +90,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "MONTO_INVALIDO", detalle: "El valor total debe ser mayor a cero" }, { status: 400 });
     }
 
-    const emisorExento = empresa?.tipo_contribuyente === "exento";
+    // El tipo lo manda el carril FACTURA, no el general de la empresa
+    // (2026-09-04): quien tiene boletas exentas y facturas afectas ya no queda
+    // atrapado en una sola verdad. NULL en el carril hereda el general.
+    const emisorExento = carrilEsExento(empresa, "factura");
     const montos = derivarMontosFactura(total, emisorExento);
     const hoy = chileDateString();
 

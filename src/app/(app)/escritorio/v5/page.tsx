@@ -18,6 +18,7 @@ import type { SearchItem } from "@/lib/tree-structure";
 import { estadoEleccionEmpresa, listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import EleccionEmpresaModal from "./EleccionEmpresaModal";
 import { chileDateString } from "@/lib/chile-date";
+import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
@@ -142,7 +143,12 @@ export default async function V5Page({ searchParams }: {
   const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
   const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
   const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
-  const esRcvExento = usuario.empresas.tipo_contribuyente === "exento";
+  // El tipo que ve la UI sale del CARRIL de la mesa abierta (2026-09-04), no del
+  // general de la empresa: quien tiene boletas exentas y facturas afectas ve en
+  // cada mesa su propia verdad. El RCV cuadra BOLETAS, así que mira ese carril.
+  const tipoBoletas = tipoDelCarril(usuario.empresas, "boleta");
+  const tipoFacturas = tipoDelCarril(usuario.empresas, "factura");
+  const esRcvExento = tipoBoletas === "exento";
   const boletasRcvData = boletasRcvRes.data;
   const [searchDocsData, searchBoletasData, searchPropsData] = searchTriple;
 
@@ -431,7 +437,7 @@ export default async function V5Page({ searchParams }: {
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
           empresaRazon={usuario.empresas.razon_social}
-          empresaTipo={usuario.empresas.tipo_contribuyente}
+          empresaTipo={mesaParam === "factura" ? tipoFacturas : tipoBoletas}
           clientes={clData.data ?? []}
           rcvContent={rcvContent}
           searchHistoryItems={searchHistoryItems}
@@ -459,7 +465,7 @@ export default async function V5Page({ searchParams }: {
              {mesaParam === "factura" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction
                 mesa="factura"
-                empresaTipo={usuario.empresas.tipo_contribuyente}
+                empresaTipo={tipoFacturas}
                 empresaId={empresaId}
                 emisionProveedor={boletasProveedor}
                 facturasProveedor={facturasProveedor}
@@ -474,7 +480,7 @@ export default async function V5Page({ searchParams }: {
             </div></GlowWrap>}
              {mesaParam === "boleta" && <GlowWrap glow style={{borderRadius:16,overflow:"visible"}}><div style={{background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)"}}>
               <EmisionDirectaAction
-                empresaTipo={usuario.empresas.tipo_contribuyente}
+                empresaTipo={tipoBoletas}
                 empresaId={empresaId}
                 emisionProveedor={boletasProveedor}
                 facturasProveedor={facturasProveedor}

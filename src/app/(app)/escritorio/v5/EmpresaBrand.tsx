@@ -159,7 +159,7 @@ export default function EmpresaBrand({
       {/* Título de la mesa activa, sobre el logo — el usuario siempre sabe en
           qué mundo está parado sin abrir nada. En modo búsqueda (que cruza
           ambas mesas) dice "Mesa boleta + factura". */}
-      <span aria-hidden style={{ position: "absolute", left: 1, top: -13, fontSize: 8, fontWeight: 850, letterSpacing: ".09em", textTransform: "uppercase", color: searchMode ? "var(--text2)" : mesa === "factura" ? "var(--lime)" : "var(--text3)", pointerEvents: "none", whiteSpace: "nowrap" }}>
+      <span aria-hidden style={{ position: "absolute", left: 1, top: -14.5, fontSize: 9.5, fontWeight: 850, letterSpacing: ".07em", textTransform: "uppercase", color: searchMode ? "var(--text2)" : mesa === "factura" ? "var(--lime)" : "var(--text3)", pointerEvents: "none", whiteSpace: "nowrap" }}>
         {searchMode ? "Mesa boleta + factura" : mesa === "factura" ? "Mesa facturas" : "Mesa boletas"}
       </span>
       {canSwitch ? (

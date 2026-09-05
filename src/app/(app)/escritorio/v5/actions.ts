@@ -831,7 +831,7 @@ export async function cargarMesa(params: MesaParams): Promise<CargarMesaResult> 
     if (!ctx.ok) return { ok: false, error: ctx.error };
     const { data: empresa } = await ctx.sb
       .from("empresas")
-      .select("giro, razon_social, tipo_contribuyente")
+      .select("giro, razon_social, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
       .eq("id", ctx.empresaId)
       .maybeSingle();
     if (!empresa) return { ok: false, error: "EMPRESA_NO_ENCONTRADA" };
