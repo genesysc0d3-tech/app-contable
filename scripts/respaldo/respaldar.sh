@@ -26,7 +26,21 @@ RETENCION_DIAS=14
 # Tablas cuyo conteo debe coincidir entre el origen y la restauración.
 TABLAS_TESTIGO="propuestas_ia movimientos_raw documentos_subidos clasificacion_reglas empresas usuarios"
 
-STAMP=$(date +%Y-%m-%d)
+# Modo A DEMANDA (`respaldar.sh --ahora`): regla del fundador 2026-09-05 — cada
+# vez que se toca algo de Supabase (una migración, un borrado, un cambio de
+# esquema) se hace un respaldo completo ANTES, sí o sí.
+#
+# Lleva la hora en el nombre a propósito: si en un mismo día se tocan tres
+# cosas, el tercer respaldo no puede pisar al primero. El nocturno mantiene su
+# nombre por día, que es lo que la rotación sabe leer.
+AHORA=0
+[ "${1:-}" = "--ahora" ] && AHORA=1
+
+if [ "$AHORA" = "1" ]; then
+  STAMP=$(date +%Y-%m-%d-%H%M)
+else
+  STAMP=$(date +%Y-%m-%d)
+fi
 ARCHIVO="$DEST/massdte-$STAMP.sql.gz"
 TMPSQL=""
 DBTMP="verif_respaldo_$$"
@@ -113,7 +127,7 @@ if [ -f "$LOCK" ]; then
 fi
 echo $$ > "$LOCK"
 trap limpiar EXIT
-log "== inicio =="
+if [ "$AHORA" = "1" ]; then log "== inicio (a demanda) =="; else log "== inicio =="; fi
 
 # ── 1. volcar ──────────────────────────────────────────────────────────────
 TMPSQL=$(mktemp "/tmp/massdte-dump.XXXXXX.sql")
@@ -163,13 +177,87 @@ if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   log "subido a R2"
 fi
 
+# ── 4.b los ARCHIVOS al disco del mini ─────────────────────────────────────
+# El volcado se lleva `storage` pero eso es la TABLA DE METADATOS: nombres,
+# rutas, permisos. Los archivos en sí no viajan ahí. Sin este paso, restaurar
+# dejaba una base que sabe perfectamente que existía "cartola-agosto.xlsx" en
+# tal ruta, y esa ruta vacía. Para una boleta ya emitida eso es quedarse sin el
+# respaldo del documento tributario.
+#
+# Se COPIA, nunca se sincroniza: si alguien borra un archivo arriba por error,
+# la copia de acá tiene que sobrevivirlo. Un respaldo que se borra solo cuando
+# el original se borra no es un respaldo.
+#
+# Incremental: rclone salta lo que ya está, y el Storage se baja por lista
+# comparando tamaño. La primera corrida trae todo (unos 220 MB), las siguientes
+# unos pocos MB.
+#
+# Si esto falla NO se invalida el volcado —la base es lo crítico— pero se avisa
+# igual al final, porque un paso que falla en silencio es peor que no tenerlo.
+ARCHIVOS_FALLIDOS=0
+
+# R2 (PDFs emitidos, nómina del SII y los propios respaldos de la base)
+if [ -n "${R2_ACCOUNT_ID:-}" ]; then
+  mkdir -p "$DEST/archivos/r2"
+  RCLONE_CONFIG=/dev/null \
+  rclone --config /dev/null copy ":s3:$R2_BUCKET/" "$DEST/archivos/r2/" \
+    --s3-provider Cloudflare \
+    --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+    --s3-access-key-id "$R2_ACCESS_KEY_ID" \
+    --s3-secret-access-key "$R2_SECRET_ACCESS_KEY" \
+    --s3-no-check-bucket --ignore-existing 2>>"$LOG" \
+    || { log "AVISO: falló la copia de R2"; ARCHIVOS_FALLIDOS=1; }
+  log "R2 al día: $(find "$DEST/archivos/r2" -type f | wc -l | tr -d ' ') archivos"
+fi
+
+# Supabase Storage (cartolas e imágenes que sube el cliente). La lista sale de
+# la base que ya tenemos a mano; cada objeto se baja con el service role.
+if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE:-}" ]; then
+  mkdir -p "$DEST/archivos/storage"
+  BAJADOS=0
+  while IFS='|' read -r bucket ruta tam; do
+    [ -z "$bucket" ] && continue
+    destino="$DEST/archivos/storage/$bucket/$ruta"
+    # ya está y pesa lo mismo → nada que hacer
+    if [ -f "$destino" ] && [ "$(wc -c < "$destino" | tr -d ' ')" = "$tam" ]; then continue; fi
+    mkdir -p "$(dirname "$destino")"
+    if curl -fsS --max-time 120 \
+         -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+         "$SUPABASE_URL/storage/v1/object/$bucket/$ruta" -o "$destino" 2>>"$LOG"; then
+      BAJADOS=$((BAJADOS+1))
+    else
+      log "AVISO: no pude bajar $bucket/$ruta"
+      rm -f "$destino"
+      ARCHIVOS_FALLIDOS=1
+    fi
+  done < <("$PGBIN/psql" "$PGURL" -Atq -F'|' -c \
+      "select bucket_id, name, coalesce((metadata->>'size')::bigint,0) from storage.objects where name is not null" 2>>"$LOG")
+  log "Storage al día: $BAJADOS nuevos, $(find "$DEST/archivos/storage" -type f | wc -l | tr -d ' ') en total"
+fi
+
 # ── 5. rotar: 14 días, salvando el primero de cada mes ─────────────────────
+# OJO: la rotación es SOLO de los volcados de la base y SOLO local. Ni la copia
+# de R2 ni los archivos se rotan a propósito: pesan poco (unos 220 MB en total)
+# y un archivo de un cliente que se borró arriba es justamente el que uno quiere
+# tener de vuelta.
 find "$DEST" -name 'massdte-*.sql.gz' -mtime "+$RETENCION_DIAS" | while read -r viejo; do
   case "$(basename "$viejo")" in
+    # Los de a demanda (con hora en el nombre) se hicieron porque alguien iba a
+    # tocar la base: ese es justo el que uno quiere de vuelta. No se rotan.
+    massdte-????-??-??-????.sql.gz) log "conservo a demanda: $(basename "$viejo")" ;;
     *-01.sql.gz) log "conservo mensual: $(basename "$viejo")" ;;
     *) rm -f "$viejo"; log "rotado: $(basename "$viejo")" ;;
   esac
 done
+
+if [ "${ARCHIVOS_FALLIDOS:-0}" = "1" ]; then
+  # La base quedó respaldada y verificada; lo que falló son archivos. Se avisa,
+  # pero el respaldo NO se declara fallido: son dos cosas distintas y mezclarlas
+  # haría que un PDF caído tape un volcado sano.
+  log "== fin CON AVISOS: la base quedó bien, algún archivo no se pudo copiar =="
+  avisar "La base quedó respaldada y verificada, pero algún archivo (Storage o R2) no se pudo copiar. Revisa el registro."
+  exit 0
+fi
 
 log "== fin OK — $(ls -1 "$DEST"/massdte-*.sql.gz 2>/dev/null | wc -l | tr -d ' ') respaldos guardados =="
 exit 0
