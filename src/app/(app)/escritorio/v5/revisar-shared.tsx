@@ -505,7 +505,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
                   const active = tipo===k;
                   const off = k === "afecta" && empresaTipoContribuyente === "exento";
                   return <button key={k} onClick={()=>{ if (!off) setTipo(k); }} disabled={off}
-                    title={off ? "Tu empresa está configurada como exenta: no puede emitir con IVA. Se cambia en Empresa → Emisor." : undefined}
+                    title={off ? "Tu empresa emite exento: no puede recargar IVA. Si de verdad tienes una operación afecta, primero necesitas esa actividad declarada en el SII; recién después la activas en Empresa → Emisor." : undefined}
                     style={{fontSize:10.5,fontWeight:750,padding:"8px 15px",border:"none",cursor:off||active?"default":"pointer",opacity:off?0.4:1,background:active?`color-mix(in srgb, ${c} 20%, transparent)`:"transparent",color:active?c:"var(--text3)",transition:"all .12s"}}>{l}</button>;
                 })}
               </div>

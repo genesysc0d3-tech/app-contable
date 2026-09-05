@@ -222,14 +222,14 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
                   const off = k === "afecta" && emisorExento;
                   return (
                     <button key={k} onClick={() => { if (!off) setTipo(k); }} disabled={off}
-                      title={off ? "Tu empresa está configurada como exenta: no puede emitir con IVA. Se cambia en Empresa → Emisor." : undefined}
+                      title={off ? "Tu empresa emite exento: no puede recargar IVA. Si de verdad tienes una operación afecta, primero necesitas esa actividad declarada en el SII; recién después la activas en Empresa → Emisor." : undefined}
                       style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", border: "none", cursor: off || active ? "default" : "pointer", opacity: off ? 0.4 : 1, background: active ? `color-mix(in srgb, ${c} 20%, transparent)` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>
                   );
                 })}
               </div>
               {emisorExento && (
                 <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 6 }}>
-                  Tu empresa emite exento. Se cambia en Empresa → Emisor.
+                  Tu empresa emite exento. Para emitir afecta necesitas la actividad declarada en el SII.
                 </div>
               )}
             </div>

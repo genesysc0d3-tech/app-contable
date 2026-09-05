@@ -225,8 +225,8 @@ export async function cambiarTipoPropuestas(
   if (destino === "afecta" && carrilEsExento(empresa, mesa)) {
     return {
       error: mesa === "factura"
-        ? "Tus facturas están configuradas como exentas: una afecta llevaría IVA que no puedes cobrar. Cámbialo en Empresa → Emisor si tu giro es afecto."
-        : "Tus boletas están configuradas como exentas: una afecta llevaría IVA que no puedes cobrar. Cámbialo en Empresa → Emisor si tu giro es afecto.",
+        ? "Tus facturas emiten exento: una afecta llevaría IVA que no puedes recargar. Si tienes operaciones afectas, necesitas esa actividad declarada en el SII y después activarla en Empresa → Emisor."
+        : "Tus boletas emiten exento: una afecta llevaría IVA que no puedes recargar. Si tienes operaciones afectas, necesitas esa actividad declarada en el SII y después activarla en Empresa → Emisor.",
       count: 0,
     };
   }
@@ -316,6 +316,13 @@ export async function editarPropuesta(
    * mixto"). El selector de la UI ya viene apagado, pero una server action es
    * un endpoint público: la regla tiene que vivir también acá.
    *
+   * El fundamento no es que "sea exento" como categoría — en el IVA la calidad
+   * afecta/exenta es de la OPERACIÓN. Lo que se lo impide es no tener actividad
+   * afecta declarada en su inicio de actividades: no está autorizado a recargar
+   * IVA, y si lo recarga igual tiene que enterarlo en arcas fiscales de todas
+   * formas, además de generarle al receptor un crédito fiscal improcedente. Por
+   * eso el mensaje manda al SII primero y a nuestro selector después.
+   *
    * Solo muerde cuando se INTENTA setear un tipo afecto — editar la glosa de
    * una propuesta que ya trae 39 no pasa por este guard.
    *
@@ -330,7 +337,7 @@ export async function editarPropuesta(
       .maybeSingle();
     const carril = campos.tipo_dte === 33 ? "factura" : "boleta";
     if (carrilEsExento(empresa, carril)) {
-      return { error: "Tu empresa está configurada como exenta: no puede emitir con IVA. Se cambia en Empresa → Emisor." };
+      return { error: "Tu empresa emite exento: no puede recargar IVA. Si de verdad tienes una operación afecta, primero necesitas esa actividad declarada en el SII; recién después la activas en Empresa → Emisor." };
     }
   }
 
