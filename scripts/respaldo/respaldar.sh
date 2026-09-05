@@ -21,6 +21,30 @@ PGBIN="/opt/homebrew/opt/postgresql@17/bin"
 # a mano en el Mac mini durante dos semanas y el repo no lo sabía — la próxima
 # copia del guión habría roto la subida a R2 en silencio.
 RCLONE="${RCLONE:-/opt/homebrew/bin/rclone}"
+
+# ── TLS VERIFICADO contra Supabase (2026-09-05) ────────────────────────────
+# La conexión al pooler YA iba cifrada (TLS 1.3), pero sin `sslmode` libpq usa
+# el modo `prefer`: cifra si puede y NO verifica el certificado del servidor.
+# Contra un espía pasivo alcanza; contra alguien que se meta en el medio
+# haciéndose pasar por el pooler, le entregábamos usuario y clave — y esta
+# conexión se lleva la base ENTERA todas las noches.
+#
+# `verify-full` exige además que el certificado sea de quien dice ser. El
+# pooler lo firma la CA propia de Supabase, que no está en el almacén del
+# sistema, así que va fijada en un archivo al lado del config.
+#
+# CA raíz: "Supabase Root 2021 CA", vence 2031-04-26. Huella SHA-256:
+#   80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA
+#
+# Si el archivo falta, el respaldo NO corre: preferimos una noche sin respaldo
+# —que avisa por correo— antes que mandar la base entera por un canal que no
+# sabemos con quién habla. Una noche se recupera; una base filtrada no.
+# OJO: NO se exporta al entorno. Estas variables valen para CUALQUIER conexión
+# de libpq, y el Postgres de verificación corre local sin TLS: exportarlas hizo
+# que ni siquiera arrancara. Van SOLO delante de los comandos que salen a
+# Supabase (el fail-closed cazó el error en la primera corrida).
+CA_SUPABASE="$HOME/.massdte-respaldo/supabase-root.crt"
+TLS_SUPABASE=(env PGSSLMODE=verify-full PGSSLROOTCERT="$CA_SUPABASE")
 # Instancia PROPIA de Postgres 17 solo para verificar, en un puerto aparte: no
 # toca el postgresql@16 del equipo (que ocupa el 5432 y se usa para otras cosas),
 # y la levanta el propio guión — así no depende de launchd ni de que alguien
@@ -122,6 +146,8 @@ asegurar_postgres_verificacion(){
 source "$CONF"
 mkdir -p "$DEST" "$(dirname "$LOG")"
 
+[ -f "$CA_SUPABASE" ] || { log "sin el certificado de Supabase en $CA_SUPABASE"; avisar "Falta el certificado raíz de Supabase ($CA_SUPABASE): sin él no se verifica con quién hablamos y el respaldo no corre."; exit 1; }
+
 # Un candado con el PID adentro: si el proceso ya no existe, el candado es basura
 # de una corrida que se murió y no debe bloquear la de hoy.
 if [ -f "$LOCK" ]; then
@@ -136,7 +162,7 @@ if [ "$AHORA" = "1" ]; then log "== inicio (a demanda) =="; else log "== inicio 
 
 # ── 1. volcar ──────────────────────────────────────────────────────────────
 TMPSQL=$(mktemp "/tmp/massdte-dump.XXXXXX.sql")
-"$PGBIN/pg_dump" "$PGURL" --no-owner --no-privileges \
+"${TLS_SUPABASE[@]}" "$PGBIN/pg_dump" "$PGURL" --no-owner --no-privileges \
   --schema=public --schema=auth --schema=storage \
   -f "$TMPSQL" 2>>"$LOG" || morir "pg_dump devolvió error"
 [ -s "$TMPSQL" ] || morir "el volcado salió vacío"
@@ -240,7 +266,7 @@ if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE:-}" ]; then
       rm -f "$destino"
       ARCHIVOS_FALLIDOS=1
     fi
-  done < <("$PGBIN/psql" "$PGURL" -Atq -F'|' -c \
+  done < <("${TLS_SUPABASE[@]}" "$PGBIN/psql" "$PGURL" -Atq -F'|' -c \
       "select bucket_id, name, coalesce((metadata->>'size')::bigint,0) from storage.objects where name is not null" 2>>"$LOG")
   log "Storage al día: $BAJADOS nuevos, $(find "$DEST/archivos/storage" -type f | wc -l | tr -d ' ') en total"
 fi
