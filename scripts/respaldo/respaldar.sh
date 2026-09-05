@@ -119,10 +119,16 @@ avisar(){
     "subject": "El respaldo de la base FALLO",
     "html": sys.argv[2],
   }))' "$ALERTA_A" "$cuerpo")
-  local codigo
-  codigo=$(curl -s -o /tmp/aviso.out -w '%{http_code}' -X POST "https://api.resend.com/emails" \
-    -H "Authorization: Bearer $RESEND_KEY" -H "Content-Type: application/json" \
-    --data "$cuerpo_json" 2>/dev/null)
+  # La cabecera con el token va por ARCHIVO (curl -H @-, leído de stdin), no como
+  # argumento: así el RESEND_KEY no aparece en `ps aux` mientras corre el curl.
+  # El archivo del body es temporal 600 y se borra al toque.
+  local codigo bodyfile
+  bodyfile=$(mktemp "/tmp/massdte-aviso.XXXXXX.json"); chmod 600 "$bodyfile"
+  printf '%s' "$cuerpo_json" > "$bodyfile"
+  codigo=$(printf 'Authorization: Bearer %s' "$RESEND_KEY" | curl -s -o /dev/null -w '%{http_code}' -X POST "https://api.resend.com/emails" \
+    -H @- -H "Content-Type: application/json" \
+    --data @"$bodyfile" 2>/dev/null)
+  rm -f "$bodyfile"
   if [ "$codigo" = "200" ]; then
     log "aviso enviado"
   else
@@ -212,11 +218,10 @@ log "guardado: $ARCHIVO ($(du -h "$ARCHIVO" | cut -f1))"
 # ── 4. segunda copia en R2 ─────────────────────────────────────────────────
 if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   RCLONE_CONFIG=/dev/null \
+  RCLONE_S3_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" RCLONE_S3_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
   "$RCLONE" --config /dev/null copy "$ARCHIVO" ":s3:$R2_BUCKET/respaldos-db/" \
     --s3-provider Cloudflare \
     --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
-    --s3-access-key-id "$R2_ACCESS_KEY_ID" \
-    --s3-secret-access-key "$R2_SECRET_ACCESS_KEY" \
     --s3-no-check-bucket 2>>"$LOG" || morir "no pude subir a R2"
   log "subido a R2"
 fi
@@ -244,11 +249,10 @@ ARCHIVOS_FALLIDOS=0
 if [ -n "${R2_ACCOUNT_ID:-}" ]; then
   mkdir -p "$DEST/archivos/r2"
   RCLONE_CONFIG=/dev/null \
+  RCLONE_S3_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" RCLONE_S3_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
   "$RCLONE" --config /dev/null copy ":s3:$R2_BUCKET/" "$DEST/archivos/r2/" \
     --s3-provider Cloudflare \
     --s3-endpoint "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
-    --s3-access-key-id "$R2_ACCESS_KEY_ID" \
-    --s3-secret-access-key "$R2_SECRET_ACCESS_KEY" \
     --s3-no-check-bucket --ignore-existing 2>>"$LOG" \
     || { log "AVISO: falló la copia de R2"; ARCHIVOS_FALLIDOS=1; }
   log "R2 al día: $(find "$DEST/archivos/r2" -type f | wc -l | tr -d ' ') archivos"
@@ -270,8 +274,8 @@ if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE:-}" ]; then
     # rechaza la URL y el archivo queda sin respaldar. Se respetan las barras:
     # son la jerarquía de carpetas, no un carácter a escapar.
     ruta_url=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/"))' "$ruta")
-    if curl -fsS --max-time 120 \
-         -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+    if printf 'Authorization: Bearer %s' "$SUPABASE_SERVICE_ROLE" | curl -fsS --max-time 120 \
+         -H @- \
          "$SUPABASE_URL/storage/v1/object/$bucket/$ruta_url" -o "$destino" 2>>"$LOG"; then
       BAJADOS=$((BAJADOS+1))
     else
