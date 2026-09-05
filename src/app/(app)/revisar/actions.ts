@@ -310,6 +310,30 @@ export async function editarPropuesta(
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
 
+  /**
+   * EMISOR EXENTO ⇒ NO PUEDE PASAR A AFECTA (regla del fundador 2026-09-05:
+   * "si eres exento no puedes hacer afecto; solo si eres afecto puedes hacer
+   * mixto"). El selector de la UI ya viene apagado, pero una server action es
+   * un endpoint público: la regla tiene que vivir también acá.
+   *
+   * Solo muerde cuando se INTENTA setear un tipo afecto — editar la glosa de
+   * una propuesta que ya trae 39 no pasa por este guard.
+   *
+   * Fail-closed a propósito: sin este corte, la propuesta quedaba "Afecta" en
+   * pantalla y la emisión la forzaba a exenta igual. La pantalla mentía.
+   */
+  if (campos.tipo_dte === 39 || campos.tipo_dte === 33) {
+    const { data: empresa } = await ctx.sb
+      .from("empresas")
+      .select("tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
+      .eq("id", ctx.empresaId)
+      .maybeSingle();
+    const carril = campos.tipo_dte === 33 ? "factura" : "boleta";
+    if (carrilEsExento(empresa, carril)) {
+      return { error: "Tu empresa está configurada como exenta: no puede emitir con IVA. Se cambia en Empresa → Emisor." };
+    }
+  }
+
   // Allowlist explícita: las server actions son endpoints públicos y el tipo
   // TS no limita el payload en runtime. Con service role, un spread directo
   // permitiría setear cualquier columna (empresa_id, estado, confianza...).
