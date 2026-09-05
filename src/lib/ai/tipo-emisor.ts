@@ -1,5 +1,10 @@
 // Normalización del tipo de venta según el EMISOR (la empresa), no el receptor.
 //
+// El tipo del emisor se lee POR CARRIL (2026-09-04): una boleta se mide contra
+// `boletas_tipo_default` y una factura contra `facturas_tipo_default`, heredando
+// `tipo_contribuyente` cuando el carril no tiene valor propio. Antes los dos
+// mundos compartían una sola verdad y la empresa mixta tenía que elegir.
+//
 // Un contribuyente EXENTO no puede emitir un DTE afecto (boleta/factura con IVA):
 // su venta va como boleta/factura EXENTA (DTE 41/34, sin IVA). Este módulo mapea el
 // tipo afecto propuesto a su equivalente exento GENÉRICO cuando la empresa es exenta.
@@ -16,6 +21,16 @@
 // NO toca: gasto_egreso / no_comercial (no son ventas), boleta_honorarios (BHE, va
 // fuera de la app), ni los tipos que ya son exentos (compraventa_crypto, etc.).
 
+import { carrilEsExento, type CarrilDocumento, type EmpresaTipos } from "../sii/tipo-por-carril";
+
+/** A qué carril pertenece cada tipo afecto: el default que manda es el de SU
+ *  carril (2026-09-04), no un único `tipo_contribuyente` para los dos mundos. */
+const CARRIL_DEL_TIPO: Record<string, CarrilDocumento> = {
+  boleta: "boleta",
+  factura: "factura",
+  factura_afecta: "factura",
+};
+
 const AFECTO_A_EXENTO: Record<string, string> = {
   boleta: "exenta",
   factura: "factura_exenta",
@@ -26,9 +41,10 @@ const AFECTO_A_EXENTO: Record<string, string> = {
  *  devuelve su equivalente exento genérico; si no, devuelve el tipo tal cual. */
 export function normalizarTipoPorEmisor(
   tipoBase: string,
-  tipoContribuyenteEmpresa: string | null | undefined,
+  empresa: EmpresaTipos | null | undefined,
 ): string {
-  if (tipoContribuyenteEmpresa !== "exento") return tipoBase;
+  const carril = CARRIL_DEL_TIPO[tipoBase];
+  if (!carril || !carrilEsExento(empresa, carril)) return tipoBase;
   return AFECTO_A_EXENTO[tipoBase] ?? tipoBase;
 }
 
@@ -36,7 +52,8 @@ export function normalizarTipoPorEmisor(
  *  (para forzar iva=0 y monto_neto=total de forma coherente con el tipo). */
 export function esVentaExentaEmisor(
   tipoBase: string,
-  tipoContribuyenteEmpresa: string | null | undefined,
+  empresa: EmpresaTipos | null | undefined,
 ): boolean {
-  return tipoContribuyenteEmpresa === "exento" && tipoBase in AFECTO_A_EXENTO;
+  const carril = CARRIL_DEL_TIPO[tipoBase];
+  return carril != null && carrilEsExento(empresa, carril) && tipoBase in AFECTO_A_EXENTO;
 }

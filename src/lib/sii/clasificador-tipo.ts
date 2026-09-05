@@ -6,7 +6,7 @@
  *   1. Glosa textual (keywords + patterns regex)
  *   2. Giro de la empresa
  *   3. Patrón de la transacción (frecuencia, monto, recurrencia)
- *   4. tipo_contribuyente de la empresa (biés: afecto → +0.3, exento → +0.3)
+ *   4. tipo del emisor EN EL CARRIL BOLETA (biés: afecto → +0.3, exento → +0.3)
  *
  * Si los 3 coinciden → confianza alta. Si discrepan → defaultiar a AFECTA
  * con confianza baja, marcar para revisión humana.
@@ -22,6 +22,8 @@
  * usuario puede override por item antes de emitir. La fuente de verdad
  * sigue siendo la decisión del usuario (o su contador).
  */
+
+import { tipoDelCarril } from "./tipo-por-carril";
 
 export type TipoBoletaSugerido = "afecta" | "exenta" | "no_boletar";
 export type TipoDTE = 39 | 41 | null; // null cuando no_boletar
@@ -43,6 +45,12 @@ export interface EmpresaContext {
   giro?: string | null;
   razon_social?: string;
   tipo_contribuyente?: string | null;
+  /** Default POR CARRIL (2026-09-04). Este clasificador solo juzga BOLETAS, así
+   *  que lo que manda acá es `boletas_tipo_default`; si viene NULL hereda
+   *  `tipo_contribuyente`, que es como se comportaba antes. La regla de herencia
+   *  no se escribe acá: vive en `tipoDelCarril`. */
+  boletas_tipo_default?: string | null;
+  facturas_tipo_default?: string | null;
   /** Default de operación declarado por la cuenta (p2p_cripto/servicios/…). Entra
    *  como BIAS de desempate (beatable), NO como el hint por-cartola (autoritativo). */
   operacion_default?: DocumentoHint;
@@ -269,6 +277,12 @@ export function clasificarBoleta(
   // porque un hint "servicios/ventas" (afecta) no puede taparla.
   const exencionPorLey = glosa.veredicto === "exenta" && glosa.peso >= 0.8;
 
+  // El tipo del EMISOR se lee del carril BOLETA, no del general de la empresa
+  // (2026-09-04): una empresa mixta puede tener las boletas exentas y las
+  // facturas afectas. Si el carril no tiene valor propio, hereda el general —
+  // así nada cambia para quien nunca tocó la configuración.
+  const tipoEmisor = tipoDelCarril(empresa, "boleta");
+
   // Si el usuario marcó la naturaleza de la cartola explícitamente
   // (p2p_cripto, forex_divisas, servicios, ventas), eso es autoritativo... salvo
   // que un hint "afecta" contradiga una exención por ley o a un contribuyente
@@ -277,7 +291,7 @@ export function clasificarBoleta(
   if (hintAngle.veredicto === "afecta" || hintAngle.veredicto === "exenta") {
     const hintForzariaAfectaIndebida =
       hintAngle.veredicto === "afecta" &&
-      (exencionPorLey || empresa.tipo_contribuyente === "exento");
+      (exencionPorLey || tipoEmisor === "exento");
     if (!hintForzariaAfectaIndebida) {
       const otras = [glosa, giro, pat].filter((r) => r.veredicto !== "neutral").map((r) => r.razon);
       return {
@@ -302,9 +316,9 @@ export function clasificarBoleta(
   // Al revés sí aplica: un "exento" legítimamente domina una señal "afecta" por
   // naturaleza (servicio/venta), que es el caso base, no una exención especial.
   // (exencionPorLey se computó arriba, antes del hint.)
-  if (empresa.tipo_contribuyente === "afecto" && !exencionPorLey) {
+  if (tipoEmisor === "afecto" && !exencionPorLey) {
     votos.afecta += 0.9;
-  } else if (empresa.tipo_contribuyente === "exento") {
+  } else if (tipoEmisor === "exento") {
     votos.exenta += 0.9;
   }
   // Si es "auto", no hay biés. El clasificador decide libremente.
@@ -322,7 +336,7 @@ export function clasificarBoleta(
   } else if (
     defaultAngle.veredicto === "afecta" &&
     !exencionPorLey &&
-    empresa.tipo_contribuyente !== "exento"
+    tipoEmisor !== "exento"
   ) {
     votos.afecta += 0.85;
   }

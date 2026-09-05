@@ -18,6 +18,7 @@ import { validarAccesoCuenta } from "@/lib/entitlements";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 
 /**
  * Emisión en lote: dado un array de propuesta_ids, emite una boleta por cada
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("empresa_id, rol, dev_mode, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente)")
+    .select("empresa_id, rol, dev_mode, empresas!usuarios_empresa_id_fkey(rut, razon_social, giro, direccion, comuna, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default)")
     .eq("id", user.id)
     .single();
   if (!usuario?.empresa_id) {
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
   }
   const empresa = usuario.empresas as unknown as {
     rut: string; razon_social: string; giro: string | null; direccion: string | null; comuna: string | null; tipo_contribuyente: string | null;
+    boletas_tipo_default: string | null; facturas_tipo_default: string | null;
   } | null;
   if (!empresa?.rut) {
     return NextResponse.json({ ok: false, error: "EMPRESA_SIN_DATOS_FISCALES" }, { status: 422 });
@@ -293,7 +295,7 @@ export async function POST(request: Request) {
       const tipoFactura: 33 | 34 =
         p.tipo_dte === 33 || p.tipo_dte === 34
           ? (p.tipo_dte as 33 | 34)
-          : empresa.tipo_contribuyente === "exento" ? 34 : 33;
+          : carrilEsExento(empresa, "factura") ? 34 : 33;
       if (!receptor_rut || !validarRutFactura(receptor_rut)) {
         results.push({ propuesta_id: pid, ok: false, error_code: "RECEPTOR_RUT_REQUERIDO", error_message: "La factura exige un RUT de receptor válido" });
         continue;
@@ -433,6 +435,8 @@ export async function POST(request: Request) {
         giro: empresa.giro,
         razon_social: empresa.razon_social,
         tipo_contribuyente: empresa.tipo_contribuyente,
+        boletas_tipo_default: empresa.boletas_tipo_default,
+        facturas_tipo_default: empresa.facturas_tipo_default,
       },
       undefined,
       docHintRaw as DocumentoHint,
@@ -460,7 +464,7 @@ export async function POST(request: Request) {
     // Un contribuyente EXENTO no puede emitir afecta (39): fabricaría IVA inexistente.
     // El override de la UI o un tipo persistido no mandan sobre la naturaleza fiscal
     // del emisor (misma regla que la normalización afecta→exenta del insert).
-    if (empresa.tipo_contribuyente === "exento") tipoDte = 41;
+    if (carrilEsExento(empresa, "boleta")) tipoDte = 41;
     const proveedorEfectivo = providerForTipoDte(emisionConfig, tipoDte);
 
     // Payload canónico (glosa/receptor/medio) vía el armador único — MISMA regla

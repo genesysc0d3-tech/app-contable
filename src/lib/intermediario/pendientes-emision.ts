@@ -5,7 +5,16 @@ import { evaluarEmision } from "@/lib/intermediario/emision-decision";
 import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
-export type EmpresaCtx = { giro: string | null; razon_social: string; tipo_contribuyente: string | null; operacion_default?: DocumentoHint };
+export type EmpresaCtx = {
+  giro: string | null;
+  razon_social: string;
+  tipo_contribuyente: string | null;
+  /** Defaults POR CARRIL (2026-09-04): viajan crudos hasta el clasificador, que
+   *  resuelve la herencia con `tipoDelCarril`. NULL = hereda el general. */
+  boletas_tipo_default?: string | null;
+  facturas_tipo_default?: string | null;
+  operacion_default?: DocumentoHint;
+};
 
 const HINTS_OPERACION = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 

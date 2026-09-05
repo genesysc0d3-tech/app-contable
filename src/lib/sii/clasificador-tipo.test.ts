@@ -208,3 +208,48 @@ describe("decidirTipoDteAuto — asimetría de seguridad del 39 (fabrica IVA)", 
     expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
   });
 });
+
+/**
+ * DEFAULT POR CARRIL (2026-09-04). Este clasificador solo juzga BOLETAS, así
+ * que quien manda es `boletas_tipo_default`; `facturas_tipo_default` no tiene
+ * ninguna injerencia acá. Los tests MUERDEN: si alguien vuelve a leer
+ * `tipo_contribuyente` a secas, fallan.
+ */
+describe("clasificarBoleta — el biés del emisor sale del carril BOLETA", () => {
+  it("boletas exentas manda aunque el general diga afecto", () => {
+    const r = clasificarBoleta(
+      mov("pago cliente servicios"),
+      { giro: null, razon_social: "Mixta SpA", tipo_contribuyente: "afecto", boletas_tipo_default: "exento", facturas_tipo_default: "afecto" },
+    );
+    expect(r.sugerencia).toBe("exenta");
+    expect(r.tipo_dte).toBe(41);
+  });
+
+  it("el carril de FACTURAS no contamina la boleta", () => {
+    const r = clasificarBoleta(
+      mov("pago cliente servicios"),
+      { giro: null, razon_social: "Mixta SpA", tipo_contribuyente: "afecto", boletas_tipo_default: "afecto", facturas_tipo_default: "exento" },
+    );
+    expect(r.sugerencia).toBe("afecta");
+    expect(r.tipo_dte).toBe(39);
+  });
+
+  it("sin valor propio hereda el general (nada cambia para quien no lo tocó)", () => {
+    const r = clasificarBoleta(
+      mov("pago cliente servicios"),
+      { giro: null, razon_social: "Vieja SpA", tipo_contribuyente: "exento", boletas_tipo_default: null, facturas_tipo_default: null },
+    );
+    expect(r.sugerencia).toBe("exenta");
+  });
+
+  it("la exención POR LEY sigue mandando sobre un carril 'afecto' mal puesto", () => {
+    const r = clasificarBoleta(
+      mov("venta usdt binance p2p"),
+      { giro: null, razon_social: "Cripto SpA", tipo_contribuyente: "afecto", boletas_tipo_default: "afecto", facturas_tipo_default: "afecto" },
+      undefined,
+      "p2p_cripto",
+    );
+    expect(r.sugerencia).toBe("exenta");
+    expect(r.tipo_dte).toBe(41);
+  });
+});

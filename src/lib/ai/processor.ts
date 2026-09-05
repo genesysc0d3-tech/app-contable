@@ -12,6 +12,7 @@ import type {
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
@@ -440,7 +441,7 @@ export async function procesarDocumento(
   // bien dirección y montos. Nunca va en el system prompt global (compartido).
   const { data: emp } = await supabase
     .from("empresas")
-    .select("razon_social, rut, giro, tipo_contribuyente, operacion_hint_default")
+    .select("razon_social, rut, giro, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default, operacion_hint_default")
     .eq("id", empresaId)
     .maybeSingle();
   const { data: identidades } = await supabase
@@ -1411,8 +1412,8 @@ export async function procesarDocumento(
           // monto_neto = total). Punto único que corrige los 3 carriles (atajo template
           // + IA/OpenCode + reglas). No toca gasto/no_comercial ni los ya exentos.
           const tipoBase = normTipo(p.tipo_propuesto);
-          const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp?.tipo_contribuyente);
-          const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp?.tipo_contribuyente);
+          const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp ?? null);
+          const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp ?? null);
           // ── Cable de auto-clasificación de tipo_dte ──────────────────────────
           // Persistir tipo_dte apaga `sinDecisionHumana` en el gate (la propuesta
           // nace en "listas", no rebota a Check). Solo cuando la decisión es
@@ -1421,10 +1422,12 @@ export async function procesarDocumento(
           // Gated a VENTAS de entrada y NUNCA sobre no_boletar (guardarraíl:
           // préstamo/cuenta propia/sueldo se apartan aunque la cartola sea cripto).
           // Reusa el MISMO clasificarBoleta del gate downstream (coherente).
-          const empExento = emp?.tipo_contribuyente === "exento";
+          const empExento = carrilEsExento(emp ?? null, "boleta");
           const clasifTipo = clasificarBoleta(
             { descripcion: mov?.descripcion ?? "", monto: total ?? 0, fecha: mov?.fecha ?? "", receptor_nombre: p.receptor_nombre },
-            { giro: emp?.giro, razon_social: emp?.razon_social, tipo_contribuyente: emp?.tipo_contribuyente, operacion_default: empHintDefault },
+            { giro: emp?.giro, razon_social: emp?.razon_social, tipo_contribuyente: emp?.tipo_contribuyente,
+              boletas_tipo_default: emp?.boletas_tipo_default, facturas_tipo_default: emp?.facturas_tipo_default,
+              operacion_default: empHintDefault },
             undefined,
             docHint,
           );

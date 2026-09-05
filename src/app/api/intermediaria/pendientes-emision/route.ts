@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   if (!guard.ok) return guard.response;
   const { data: empresa } = await guard.service
     .from("empresas")
-    .select("giro, razon_social, tipo_contribuyente")
+    .select("giro, razon_social, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
     .eq("id", guard.empresaId)
     .maybeSingle();
   const empresaCtx = (empresa as EmpresaCtx | null) ?? { giro: null, razon_social: "", tipo_contribuyente: null };
