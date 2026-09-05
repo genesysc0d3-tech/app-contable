@@ -83,7 +83,7 @@ function LogoTelegram({ size = 19 }: { size?: number }) {
 }
 
 export default function ConectoresChips() {
-  const { status, hayBoveda } = useExtensionStatus();
+  const { status, hayBoveda, version, hayVersionNueva, versionPublicada } = useExtensionStatus();
   const [mcp, setMcp] = useState<EstadoMcp | null>(null);
 
   useEffect(() => {
@@ -102,8 +102,21 @@ export default function ConectoresChips() {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 14, color: "var(--text2)" }}>
       {/* verificando (primer render) no muestra ✕ prematuro */}
+      {/* La VERSIÓN va en el tooltip (2026-09-04): es lo primero que uno
+          pregunta cuando algo del carril de emisión falla, y hasta hoy había que
+          ir a buscarla al popup de empresa. No agranda la barra: vive en el
+          globito que ya existía. */}
       {status !== "checking" && (
-        <Chip ok={siiOk} title={siiOk ? "Extensión conectada con el SII" : "Extensión no conectada — pestaña Emitir para instalarla"}>
+        <Chip
+          ok={siiOk}
+          title={
+            siiOk
+              ? `Extensión conectada con el SII · v${version ?? "?"}${hayVersionNueva ? ` (hay v${versionPublicada}: reinicia tu navegador y se actualiza sola)` : ""}`
+              : version
+                ? `Extensión v${version} detectada, pero sin bóveda lista — ábrela para poner tu clave del SII`
+                : "Extensión no conectada — pestaña Emitir para instalarla"
+          }
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icon-192.png" alt="Extensión massDTE" style={{ height: 19, width: 19, borderRadius: 5, display: "block" }} />
         </Chip>
