@@ -7,7 +7,7 @@ import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
 import ConectorMcpConfig from "../../empresa/ConectorMcpConfig";
 import SoporteAccesoConfig from "../../empresa/SoporteAccesoConfig";
-import EmissionProviderConfig, { FacturasCarrilInline, type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
+import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
 import FacturacionUsoPanel from "./FacturacionUsoPanel";
@@ -648,8 +648,8 @@ export default function EmpresaPopup({
                 n: 3,
                 icon: "M4 7h16M7 4v16M17 4v16M4 17h16",
                 title: "Emisión",
-                sub: "Modo de prueba o SII local",
-                done: proveedorBoletas !== "mock",
+                sub: "Cómo salen tus boletas y tus facturas",
+                done: proveedorBoletas !== "mock" && proveedorVivo.facturas !== "mock",
               },
               {
                 n: 4,
@@ -807,7 +807,7 @@ export default function EmpresaPopup({
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <><EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /><FacturasCarrilInline inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /></> },
+                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },

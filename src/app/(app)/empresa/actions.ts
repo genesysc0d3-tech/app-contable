@@ -19,6 +19,10 @@ export interface DatosEmisor {
   comuna?: string | null;
   email_sii?: string | null;
   tipo_contribuyente?: string;
+  /** Tipo por CARRIL (2026-09-04): una empresa puede tener el giro de boletas
+   *  exento y el de facturas afecto. null/ausente = hereda tipo_contribuyente. */
+  boletas_tipo_default?: string;
+  facturas_tipo_default?: string;
   /** Default de operación del contribuyente: semilla para auto-clasificar la 1ª
    *  cartola (p2p_cripto/forex_divisas/servicios/ventas/mixto). null = la IA decide. */
   operacion_hint_default?: string | null;
@@ -164,6 +168,14 @@ export async function setDatosEmisor(
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
   if (datos.tipo_contribuyente !== undefined) update.tipo_contribuyente = datos.tipo_contribuyente;
+  // Allow-list explícita, igual que el resto: nada de spread del payload.
+  const TIPOS_VALIDOS = new Set(["afecto", "exento", "auto"]);
+  if (datos.boletas_tipo_default !== undefined && TIPOS_VALIDOS.has(datos.boletas_tipo_default)) {
+    update.boletas_tipo_default = datos.boletas_tipo_default;
+  }
+  if (datos.facturas_tipo_default !== undefined && TIPOS_VALIDOS.has(datos.facturas_tipo_default)) {
+    update.facturas_tipo_default = datos.facturas_tipo_default;
+  }
   if (datos.operacion_hint_default !== undefined) {
     const h = datos.operacion_hint_default;
     if (h !== null && !HINTS_OPERACION_VALIDOS.has(h)) {

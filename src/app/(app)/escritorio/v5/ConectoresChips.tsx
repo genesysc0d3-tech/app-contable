@@ -26,6 +26,47 @@ function Badge({ ok }: { ok: boolean }) {
   );
 }
 
+/**
+ * Estado de la VERSIÓN de la extensión (idea del fundador 2026-09-04, después
+ * de descartar tooltip, globito en la esquina, lengüeta del borde, texto en la
+ * fila, versión vertical y letras A/D):
+ *
+ * el LOGO MISMO es el indicador. Al día se ve normal; desactualizada se apaga a
+ * gris y le cae encima la flecha circular de actualizar, en gris claro (no
+ * blanca: blanco grita y esto es un aviso, no una alarma). No se agrega nada a la
+ * barra: cambia lo que ya estaba, que es la única forma de que el ojo lo pesque
+ * sin que estorbe el resto del tiempo.
+ *
+ * El número de versión y el "reinicia tu navegador y se actualiza sola" siguen
+ * en el tooltip del chip, que es donde uno los va a buscar cuando algo falla.
+ */
+function LogoExtension({ desactualizada }: { desactualizada?: boolean }) {
+  return (
+    <span style={{ position: "relative", display: "inline-flex" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/icon-192.png"
+        alt="Extensión massDTE"
+        style={{
+          height: 19, width: 19, borderRadius: 5, display: "block",
+          filter: desactualizada ? "grayscale(1) brightness(.65)" : "none",
+        }}
+      />
+      {desactualizada && (
+        <span aria-hidden style={{
+          position: "absolute", inset: 0, display: "grid", placeItems: "center",
+          color: "#c9c9c9", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.7))",
+        }}>
+          <svg width="11.5" height="11.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+            <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" />
+            <path d="M20.7 3.8v4.9h-4.9" />
+          </svg>
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Chip({ ok, title, children }: { ok: boolean; title: string; children: React.ReactNode }) {
   return (
     <span className="conector-chip" aria-label={title} style={{ display: "inline-flex", alignItems: "center", cursor: "default" }}>
@@ -83,7 +124,7 @@ function LogoTelegram({ size = 19 }: { size?: number }) {
 }
 
 export default function ConectoresChips() {
-  const { status, hayBoveda } = useExtensionStatus();
+  const { status, hayBoveda, version, hayVersionNueva, versionPublicada } = useExtensionStatus();
   const [mcp, setMcp] = useState<EstadoMcp | null>(null);
 
   useEffect(() => {
@@ -102,10 +143,23 @@ export default function ConectoresChips() {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 14, color: "var(--text2)" }}>
       {/* verificando (primer render) no muestra ✕ prematuro */}
+      {/* La VERSIÓN va también en el tooltip (2026-09-04): es lo primero que uno
+          pregunta cuando algo del carril de emisión falla, y hasta hoy había que
+          ir a buscarla al popup de empresa. No agranda la barra: vive en el
+          globito que ya existía. */}
       {status !== "checking" && (
-        <Chip ok={siiOk} title={siiOk ? "Extensión conectada con el SII" : "Extensión no conectada — pestaña Emitir para instalarla"}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon-192.png" alt="Extensión massDTE" style={{ height: 19, width: 19, borderRadius: 5, display: "block" }} />
+        <Chip
+          ok={siiOk}
+          title={
+            siiOk
+              ? `Extensión conectada con el SII · v${version ?? "?"}${hayVersionNueva ? ` (hay v${versionPublicada}: reinicia tu navegador y se actualiza sola)` : ""}`
+              : version
+                ? `Extensión v${version} detectada, pero sin bóveda lista — ábrela para poner tu clave del SII`
+                : "Extensión no conectada — pestaña Emitir para instalarla"
+          }
+        >
+          <LogoExtension desactualizada={hayVersionNueva} />
+
         </Chip>
       )}
       {mcp != null && (

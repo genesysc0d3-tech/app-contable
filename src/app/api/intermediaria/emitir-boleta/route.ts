@@ -161,15 +161,21 @@ async function handlePost(request: Request) {
   const proveedorRespuesta: Record<string, unknown> | null = null;
 
   if (proveedorEfectivo !== "mock") {
-    // Emisión real exige certificado digital delegado al intermediario. El
-    // check vive ANTES del futuro carril backend para que al implementarlo
-    // no se pueda olvidar. Mock (simulación) no lo necesita.
-    const cert = await verificarCertificado(usuario.empresa_id);
-    if (!cert.ok) {
-      return NextResponse.json(
-        { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
-        { status: 412 },
-      );
+    // El certificado delegado lo exige SOLO SimpleAPI (2026-09-04): `sii_local`
+    // firma con la clave del propio cliente en su navegador y no delega nada.
+    // Preguntar por el proveedor EXACTO, nunca "no es mock" — ese atajo fue el
+    // que hizo que un cliente con la extensión recibiera un error de .pfx.
+    // (Acá el bloqueo de sii_local ya corrió más arriba, así que a esta altura
+    // solo puede quedar simpleapi; el chequeo explícito es la red por si mañana
+    // aparece un cuarto carril.)
+    if (proveedorEfectivo === "simpleapi") {
+      const cert = await verificarCertificado(usuario.empresa_id);
+      if (!cert.ok) {
+        return NextResponse.json(
+          { ok: false, error: "CERTIFICADO_REQUERIDO", detalle: cert.mensaje ?? "La empresa no tiene certificado digital SII delegado" },
+          { status: 412 },
+        );
+      }
     }
     return NextResponse.json(
       { ok: false, error: "PROVEEDOR_NO_IMPLEMENTADO", detalle: "Este proveedor no tiene carril backend habilitado para emisión directa." },

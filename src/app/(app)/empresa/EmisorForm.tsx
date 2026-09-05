@@ -36,6 +36,15 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
   const [tipoContribuyente, setTipoContribuyente] = useState(
     inicial.tipo_contribuyente ?? "auto"
   );
+  // Tipo POR CARRIL (2026-09-04): una empresa puede tener el giro de boletas
+  // exento y el de facturas afecto. Si nunca se tocó, cada carril hereda el
+  // valor general — así nadie cambia de comportamiento por estrenar esto.
+  const [boletasTipo, setBoletasTipo] = useState(
+    inicial.boletas_tipo_default ?? inicial.tipo_contribuyente ?? "auto"
+  );
+  const [facturasTipo, setFacturasTipo] = useState(
+    inicial.facturas_tipo_default ?? inicial.tipo_contribuyente ?? "auto"
+  );
   // "" = sin default (la IA decide). Semilla para auto-clasificar la 1ª cartola.
   const [operacionHint, setOperacionHint] = useState(inicial.operacion_hint_default ?? "");
 
@@ -55,6 +64,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
     comuna: inicial.comuna ?? "",
     email_sii: inicial.email_sii ?? "",
     tipo_contribuyente: inicial.tipo_contribuyente ?? "auto",
+    boletas_tipo_default: inicial.boletas_tipo_default ?? inicial.tipo_contribuyente ?? "auto",
+    facturas_tipo_default: inicial.facturas_tipo_default ?? inicial.tipo_contribuyente ?? "auto",
     operacion_hint_default: inicial.operacion_hint_default ?? null,
   });
 
@@ -75,6 +86,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
       comuna,
       email_sii: emailSii,
       tipo_contribuyente: tipoContribuyente,
+      boletas_tipo_default: boletasTipo,
+      facturas_tipo_default: facturasTipo,
       operacion_hint_default: operacionHint || null,
     };
 
@@ -424,95 +437,30 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
             Tipo de contribuyente
           </div>
           <div style={{ marginTop: 2, fontSize: 11, color: "var(--text2, #8b92a3)" }}>
-            Define el tipo de boleta por defecto.
+            Con qué tipo nacen tus documentos. Boletas y facturas pueden ser distintas: hay empresas
+            con un giro exento y otro afecto. Es un punto de partida — el cerebro te avisa si una
+            venta no calza, y puedes cambiarlas a mano, de a una o varias a la vez.
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: compact ? 7 : 10 }}>
-          <button
-            type="button"
-            onClick={() => setTipoContribuyente("afecto")}
-            style={{
-              borderRadius: 12,
-              border: tipoContribuyente === "afecto"
-                ? "1px solid color-mix(in srgb, var(--green, #22c55e) 35%, transparent)"
-                : "1px solid var(--border, rgba(255,255,255,.06))",
-              background: tipoContribuyente === "afecto"
-                ? "color-mix(in srgb, var(--green, #22c55e) 18%, transparent)"
-                : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
-              padding: compact ? "7px 8px" : "12px 12px",
-              fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "afecto" ? "var(--green, #22c55e)" : "var(--text2, #8b92a3)",
-              boxShadow: tipoContribuyente === "afecto"
-                ? "0 14px 34px color-mix(in srgb, var(--green, #22c55e) 12%, transparent)"
-                : "none",
-              cursor: "pointer",
-              transition: "all 160ms ease",
-            }}
-          >
-            AFECTO
-            <span style={{ display: "block", marginTop: compact ? 2 : 4, fontSize: compact ? 9 : 10, fontWeight: 500, opacity: 0.7 }}>
-              Boleta con IVA 19%
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTipoContribuyente("auto")}
-            style={{
-              borderRadius: 12,
-              border: tipoContribuyente === "auto"
-                ? "1px solid color-mix(in srgb, var(--accent, #E8553E) 35%, transparent)"
-                : "1px solid var(--border, rgba(255,255,255,.06))",
-              background: tipoContribuyente === "auto"
-                ? "color-mix(in srgb, var(--accent, #E8553E) 18%, transparent)"
-                : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
-              padding: compact ? "7px 8px" : "12px 12px",
-              fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "auto" ? "var(--accent, #E8553E)" : "var(--text2, #8b92a3)",
-              boxShadow: tipoContribuyente === "auto"
-                ? "0 14px 34px color-mix(in srgb, var(--accent, #E8553E) 12%, transparent)"
-                : "none",
-              cursor: "pointer",
-              transition: "all 160ms ease",
-            }}
-          >
-            AUTO
-            <span style={{ display: "block", marginTop: compact ? 2 : 4, fontSize: compact ? 9 : 10, fontWeight: 500, opacity: 0.7 }}>
-              La app elige según cada venta
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTipoContribuyente("exento")}
-            style={{
-              borderRadius: 12,
-              border: tipoContribuyente === "exento"
-                ? "1px solid color-mix(in srgb, var(--blue, #5b9cf6) 35%, transparent)"
-                : "1px solid var(--border, rgba(255,255,255,.06))",
-              background: tipoContribuyente === "exento"
-                ? "color-mix(in srgb, var(--blue, #5b9cf6) 18%, transparent)"
-                : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
-              padding: compact ? "7px 8px" : "12px 16px",
-              fontSize: compact ? 10 : 12, fontWeight: 700,
-              color: tipoContribuyente === "exento" ? "var(--blue, #5b9cf6)" : "var(--text2, #8b92a3)",
-              boxShadow: tipoContribuyente === "exento"
-                ? "0 14px 34px color-mix(in srgb, var(--blue, #5b9cf6) 12%, transparent)"
-                : "none",
-              cursor: "pointer",
-              transition: "all 160ms ease",
-            }}
-          >
-            EXENTO
-            <span style={{ display: "block", marginTop: compact ? 2 : 4, fontSize: compact ? 9 : 10, fontWeight: 500, opacity: 0.7 }}>
-              Boleta sin IVA
-            </span>
-          </button>
-        </div>
+        <TipoTributarioSelector
+          etiqueta="Boletas"
+          sufijo="DTE 39/41"
+          valor={boletasTipo}
+          onChange={setBoletasTipo}
+          compact={compact}
+        />
+        <div style={{ height: compact ? 10 : 14 }} />
+        <TipoTributarioSelector
+          etiqueta="Facturas"
+          sufijo="DTE 33/34"
+          valor={facturasTipo}
+          onChange={setFacturasTipo}
+          compact={compact}
+        />
 
         {/* Consecuencia tributaria de elegir EXENTO (hallazgo del contador) */}
-        {tipoContribuyente === "exento" && (
+        {(boletasTipo === "exento" || facturasTipo === "exento") && (
           <div style={{
             marginTop: compact ? 8 : 12,
             fontSize: compact ? 11 : 12, lineHeight: 1.45,
@@ -702,6 +650,67 @@ function Field({
           {hint}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+
+/**
+ * Los tres tipos tributarios de un carril. Antes esto eran ~100 líneas
+ * repetidas para un único selector de empresa; ahora se usa dos veces (boletas
+ * y facturas), que es justo lo que evita duplicar el bloque entero.
+ *
+ * "AUTO" no es una respuesta tributaria: es decir "que decida la clasificación
+ * de cada venta". Los otros dos son el punto de partida — el cerebro igual
+ * avisa cuando algo no calza, y el usuario puede cambiar cada documento.
+ */
+function TipoTributarioSelector({ etiqueta, sufijo, valor, onChange, compact }: {
+  etiqueta: string;
+  sufijo: string;
+  valor: string;
+  onChange: (v: string) => void;
+  compact?: boolean;
+}) {
+  const opciones = [
+    { key: "afecto", label: "AFECTO", sub: "Con IVA 19%", color: "var(--green, #22c55e)" },
+    { key: "auto", label: "AUTO", sub: "La app elige según cada venta", color: "var(--accent, #E8553E)" },
+    { key: "exento", label: "EXENTO", sub: "Sin IVA", color: "var(--blue, #5b9cf6)" },
+  ];
+  return (
+    <div>
+      <div style={{ fontSize: compact ? 11 : 12, fontWeight: 800, color: "var(--text, #e8eaf0)", marginBottom: compact ? 5 : 7 }}>
+        {etiqueta}
+        <span style={{ marginLeft: 6, fontSize: compact ? 9 : 10, fontWeight: 600, color: "var(--text3, #697080)" }}>{sufijo}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: compact ? 7 : 10 }}>
+        {opciones.map((o) => {
+          const activo = valor === o.key;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => onChange(o.key)}
+              style={{
+                borderRadius: 12,
+                border: activo ? `1px solid color-mix(in srgb, ${o.color} 35%, transparent)` : "1px solid var(--border, rgba(255,255,255,.06))",
+                background: activo ? `color-mix(in srgb, ${o.color} 18%, transparent)` : "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
+                padding: compact ? "7px 8px" : "12px 12px",
+                fontSize: compact ? 10 : 12,
+                fontWeight: 700,
+                color: activo ? o.color : "var(--text2, #8b92a3)",
+                boxShadow: activo ? `0 14px 34px color-mix(in srgb, ${o.color} 12%, transparent)` : "none",
+                cursor: "pointer",
+                transition: "all 160ms ease",
+              }}
+            >
+              {o.label}
+              <span style={{ display: "block", marginTop: compact ? 2 : 4, fontSize: compact ? 9 : 10, fontWeight: 500, opacity: 0.7 }}>
+                {o.sub}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

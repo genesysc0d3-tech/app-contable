@@ -167,7 +167,7 @@ export default function EmissionProviderConfig({
     save({ ...state, boletasProveedor: proveedor });
   }
 
-  // Facturas se configura en el paso "Emisor" (FacturasCarrilInline); acá solo boletas.
+  // Boletas y facturas se configuran ACÁ, juntas (ver FacturasCarrilInline abajo).
   const showMockBoletas = devMode || inicialAlMontar.boletasProveedor === "mock" || state.boletasProveedor === "mock";
   const combinedMode = state.boletasProveedor === "sii_local" && state.facturasProveedor === "simpleapi";
 
@@ -297,9 +297,11 @@ export default function EmissionProviderConfig({
           />
         </ProviderGroup>
 
-        {/* Facturas 33/34 se configura en el paso "Emisor" (FacturasCarrilInline),
-            junto al Tipo de contribuyente — pedido del fundador 2026-08-26. Acá
-            (paso Emisión) queda solo Boletas para no duplicar el selector. */}
+        {/* Las DOS configuraciones viven acá (fundador 2026-09-04): son de la
+            EMPRESA, no de la mesa. Antes facturas estaba en el paso "Emisor" y
+            escondida tras devMode, así que el cliente no tenía cómo verla ni
+            corregirla. */}
+        <FacturasCarrilInline inicial={inicial} devMode={devMode} onProveedorChange={onProveedorChange} />
 
         <div style={{
           marginTop: 12,
@@ -314,7 +316,7 @@ export default function EmissionProviderConfig({
               {combinedMode ? "Modo combinado recomendado" : "Configuración por documento"}
             </div>
             <div style={{ marginTop: 3, fontSize: 11, color: "var(--text3, #697080)", lineHeight: 1.45 }}>
-              Boletas: {providerLabel(state.boletasProveedor)}. Facturas: {providerLabel(state.facturasProveedor)}. SimpleAPI usará la misma extensión como bóveda local cifrada.{devMode ? " El proxy efímero ya existe; falta conectarlo desde la extensión." : ""}
+              Boletas: {providerLabel(state.boletasProveedor)}. Facturas: {providerLabel(state.facturasProveedor)}. Con SII local todo sale por la misma extensión, con tu propia clave.{devMode ? " SimpleAPI: el proxy efímero existe, falta conectarlo desde la extensión." : ""}
             </div>
           </div>
         </div>
@@ -541,6 +543,17 @@ function ProviderButton({ active, title, description, disabled, badge, confirmin
 // contribuyente, no enterrada en el paso Emisión). Reusa el mismo guardado
 // (setEmisionConfig) y no pisa el proveedor de boletas. Dev-only, igual que el
 // grupo Facturas original (rollout gradual).
+/**
+ * Carril de FACTURAS (33/34). Vive junto al de boletas en el paso "Emisión"
+ * (fundador 2026-09-04): las dos configuraciones son de la empresa, no de la
+ * mesa, así que se ven y se cambian desde el mismo lugar sin importar en qué
+ * mesa esté el usuario.
+ *
+ * Antes estaba escondido detrás de `devMode` y en el paso "Emisor". Eso dejó a
+ * los clientes sin ninguna forma de ver ni corregir su carril de facturas — y
+ * como el default de la base era `simpleapi`, uno se topó con un pedido de
+ * certificado que no podía resolver ni entender.
+ */
 export function FacturasCarrilInline({ inicial, devMode, onProveedorChange }: {
   inicial: EmissionProviderState;
   devMode: boolean;
@@ -550,8 +563,6 @@ export function FacturasCarrilInline({ inicial, devMode, onProveedorChange }: {
   const [state, setState] = useState(inicial);
   const [confirmReal, setConfirmReal] = useState<FacturasEmisionProveedor | null>(null);
   const [pending, start] = useTransition();
-
-  if (!devMode) return null;
 
   function selectFacturas(proveedor: FacturasEmisionProveedor) {
     if (state.facturasProveedor === "mock" && proveedor !== "mock" && confirmReal !== proveedor) {
@@ -573,26 +584,36 @@ export function FacturasCarrilInline({ inicial, devMode, onProveedorChange }: {
     <div style={{ marginTop: 18 }}>
       <div style={{ fontSize: 13, fontWeight: 850, color: "var(--text, #e8eaf0)" }}>
         Facturas <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: "var(--text3, #697080)" }}>DTE 33/34</span>
-        <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 800, color: "var(--accent)", background: "rgba(232,85,62,.12)", padding: "2px 7px", borderRadius: 999 }}>DEV</span>
       </div>
       <div style={{ fontSize: 11, color: "var(--text3, #697080)", marginTop: 3, marginBottom: 10, lineHeight: 1.45 }}>
-        Cómo emites tus facturas. SII Local usa el portal gratuito del SII por la misma extensión de las boletas (necesita la clave del certificado en la extensión).
+        Cómo emites tus facturas. SII local usa el portal del SII con la misma extensión de las boletas (necesita la clave de tu certificado en la extensión).
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>
-        <ProviderButton
-          active={state.facturasProveedor === "mock"}
-          title="Modo de prueba"
-          description="Simula facturas sin informar al SII."
-          disabled={pending}
-          onClick={() => selectFacturas("mock")}
-        />
+        {(devMode || state.facturasProveedor === "mock") && (
+          <ProviderButton
+            active={state.facturasProveedor === "mock"}
+            title="Modo de prueba"
+            description="Simula facturas sin informar al SII."
+            disabled={pending}
+            onClick={() => selectFacturas("mock")}
+          />
+        )}
         <ProviderButton
           active={state.facturasProveedor === "sii_local"}
-          title="SII Local (portal gratuito)"
-          description="Emite facturas 33/34 reales en el Sistema de Facturación Gratuito del SII."
+          title="SII local"
+          description="Emite facturas 33/34 reales en el portal del SII, con la misma extensión de las boletas."
           disabled={pending}
           confirming={confirmReal === "sii_local"}
           onClick={() => selectFacturas("sii_local")}
+        />
+        <ProviderButton
+          active={state.facturasProveedor === "simpleapi"}
+          title="SimpleAPI"
+          badge="Próximamente"
+          description="Alternativa con certificado digital propio. Disponible pronto."
+          disabled={pending || !devMode}
+          confirming={confirmReal === "simpleapi"}
+          onClick={() => selectFacturas("simpleapi")}
         />
       </div>
     </div>
