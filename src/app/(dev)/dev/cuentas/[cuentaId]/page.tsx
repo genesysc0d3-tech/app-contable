@@ -9,7 +9,7 @@
  */
 import { notFound, redirect } from "next/navigation";
 import { obtenerDevCuentaDetalle, fmtProveedor, type DevCuentaDetalle } from "@/lib/dev/account-360";
-import { CopiarButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, ReiniciarTrialButton, PurgarCuentaButton, MigrarEmpresaForm } from "../DevCuentaActions";
+import { CopiarButton, VerComoClienteButton, PlanToggle, TrialCortesiaToggle, ReiniciarTrialButton, PurgarCuentaButton, MigrarEmpresaForm, CarrilEmisionSelector } from "../DevCuentaActions";
 import {
   C,
   CompactRow,
@@ -673,6 +673,20 @@ export default async function DevCuentaDetallePage({
             ? <div style={{ fontSize: 12, color: C.text3 }}>Esta cuenta no tiene empresas.</div>
             : detalle.empresas.map((e) => (
                 <ReiniciarTrialButton key={e.id} empresaId={e.id} nombre={e.nombre} />
+              ))}
+        </Section>
+
+        <Section title="Carril de emisión" tone="warning">
+          <Explica
+            tono="warning"
+            que="Elige POR DÓNDE sale cada documento de una empresa: el simulador, la extensión del cliente o SimpleAPI."
+            cuando="El cliente instaló la extensión y hay que sacarlo del simulador, o algo del carril real falla y hay que devolverlo al simulador mientras se arregla."
+            ojo="Pasar a un carril real significa que el próximo lote emite documentos tributarios DE VERDAD, con folios que no se deshacen. No toca la configuración de afecta/exenta: eso es del cliente, en Empresa → Emisor."
+          />
+          {detalle.empresas.length === 0
+            ? <div style={{ fontSize: 12, color: C.text3 }}>Esta cuenta no tiene empresas.</div>
+            : detalle.empresas.map((e) => (
+                <CarrilEmisionSelector key={e.id} empresaId={e.id} nombre={e.nombre} boletas={e.proveedorBoletas} facturas={e.proveedorFacturas} />
               ))}
         </Section>
 
