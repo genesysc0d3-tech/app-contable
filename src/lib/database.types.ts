@@ -3313,6 +3313,7 @@ export type Database = {
           de_usuario_id: string | null
           id: string
           leido_at: string | null
+          objeto_doc_id: string | null
           objeto_empresa_id: string | null
           objeto_id: string | null
           objeto_label: string | null
@@ -3327,6 +3328,7 @@ export type Database = {
           de_usuario_id?: string | null
           id?: string
           leido_at?: string | null
+          objeto_doc_id?: string | null
           objeto_empresa_id?: string | null
           objeto_id?: string | null
           objeto_label?: string | null
@@ -3341,6 +3343,7 @@ export type Database = {
           de_usuario_id?: string | null
           id?: string
           leido_at?: string | null
+          objeto_doc_id?: string | null
           objeto_empresa_id?: string | null
           objeto_id?: string | null
           objeto_label?: string | null
