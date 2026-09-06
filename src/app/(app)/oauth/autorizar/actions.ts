@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { generarCodigoAutorizacion, hashOauthSecreto, redirectCoincide, CODE_TTL_MS, OAUTH_SCOPE } from "@/lib/mcp/oauth";
+import { validarAccesoCuenta } from "@/lib/entitlements";
+import { MCP_REQUIERE_PLAN } from "@/lib/mcp/copy";
 
 // Consentimiento OAuth del conector MCP. El código de autorización nace ACÁ,
 // solo después de que el usuario logueado apretó "Autorizar" — nunca antes.
@@ -40,6 +42,16 @@ export async function autorizarConector(solicitud: SolicitudOauth): Promise<{ er
   if (!solicitud.code_challenge || solicitud.code_challenge.length < 40) {
     return { error: "Solicitud inválida (falta PKCE)." };
   }
+
+  // PLAN ANTES DE AUTORIZAR (2ª auditoría, 2026-09-06): el conector exige
+  // plan activo (lib/mcp/auth.ts) pero esta pantalla dejaba autorizar en
+  // trial — el usuario decía "sí" y su asistente recibía 403 en cada llamada:
+  // "el conector no funciona". Decisión del fundador: en trial se bloquea y
+  // se dice claro, ANTES de que exista un código.
+  const { data: usuario } = await svc.from("usuarios").select("empresa_id").eq("id", user.id).maybeSingle();
+  if (!usuario?.empresa_id) return { error: "Tu cuenta aún no tiene empresa — termina el registro en la app." };
+  const acceso = await validarAccesoCuenta(svc, user.id, usuario.empresa_id);
+  if (!acceso.ok || !acceso.planActivo) return { error: MCP_REQUIERE_PLAN };
 
   const code = generarCodigoAutorizacion();
   const { error } = await svc.from("oauth_codes").insert({
