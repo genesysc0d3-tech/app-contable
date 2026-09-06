@@ -187,7 +187,9 @@ describe("la ruta del MCP usa la manguera (censo sobre el código)", () => {
 
   it("los eventos del conector van con source mcp y con el token como resourceId (no en metadata, que lo redacta)", () => {
     expect(src).not.toMatch(/source: "auth"/);
-    expect(src).not.toMatch(/token_id: ctx\.tokenId/);
+    // En METADATA no: el sanitizador de ops redacta cualquier clave con "token".
+    // Como COLUMNA de asistente_observaciones sí (es el enlace al conector).
+    expect(src).not.toMatch(/metadata: \{[^}]*token_id/);
     expect((src.match(/resourceId: ctx\.tokenId/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
