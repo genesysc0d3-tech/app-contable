@@ -463,6 +463,56 @@ export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?:
 }
 
 export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?: string }> {
+  return aceptarInvitacionPor({ tokenHash: hashInviteToken(token) });
+}
+
+/**
+ * La invitación pendiente dirigida al correo de la sesión (para que el
+ * onboarding ofrezca "Unirte al team" en vez de obligar a crear empresa).
+ * Solo lectura; devuelve lo mínimo para pintar la tarjeta.
+ */
+export async function invitacionPendienteParaMi(): Promise<{ id: string; empresa: string; invitadoPor: string | null } | null> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) return null;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) return null;
+    const sb = createServiceClient<Database>(url, key);
+    const { data: inv } = await sb
+      .from("empresa_invitaciones")
+      .select("id, empresa_id, invited_by")
+      .ilike("email", user.email)
+      .eq("estado", "pendiente")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!inv) return null;
+    const [{ data: emp }, { data: quien }] = await Promise.all([
+      sb.from("empresas").select("razon_social").eq("id", inv.empresa_id).maybeSingle(),
+      inv.invited_by ? sb.from("usuarios").select("nombre").eq("id", inv.invited_by).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    return { id: inv.id, empresa: emp?.razon_social ?? "un team", invitadoPor: quien?.nombre ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Unirse desde el onboarding a la invitación dirigida a MI correo. Misma
+ * validación que por link (correo de la sesión = correo invitado, confirmado,
+ * pendiente, vigente): el link solo agrega "tener el link", y acá la
+ * invitación ya estaba dirigida a este correo.
+ */
+export async function unirseAlTeamPendiente(invitacionId: string): Promise<{ error?: string }> {
+  const id = String(invitacionId ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Invitación no encontrada" };
+  return aceptarInvitacionPor({ id });
+}
+
+async function aceptarInvitacionPor(buscar: { tokenHash: string } | { id: string }): Promise<{ error?: string }> {
   const supportBlock = await blockSupportWrite();
   if (supportBlock) return supportBlock;
 
@@ -475,12 +525,11 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
 
-  const tokenHash = hashInviteToken(token);
-  const { data: invitacion, error: invError } = await sb
+  let q = sb
     .from("empresa_invitaciones")
-    .select("id, empresa_id, email, rol, estado, expires_at, empresas_permitidas")
-    .eq("token_hash", tokenHash)
-    .maybeSingle();
+    .select("id, empresa_id, email, rol, estado, expires_at, empresas_permitidas");
+  q = "tokenHash" in buscar ? q.eq("token_hash", buscar.tokenHash) : q.eq("id", buscar.id);
+  const { data: invitacion, error: invError } = await q.maybeSingle();
 
   if (invError) return { error: invError.message };
   if (!invitacion) return { error: "Invitación no encontrada" };

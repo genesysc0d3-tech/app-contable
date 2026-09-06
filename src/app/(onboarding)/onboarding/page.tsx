@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { crearEmpresa } from "./actions";
+import { invitacionPendienteParaMi, unirseAlTeamPendiente } from "@/app/(app)/empresa/actions";
 import { signOut } from "@/app/(auth)/auth/actions";
 import { createClient } from "@/lib/supabase/client";
 
@@ -44,11 +45,25 @@ export default function OnboardingPage() {
   // Email de la sesión activa: quien entró con la cuenta equivocada (ej. otro
   // Google) necesita verlo y poder salir sin quedar atrapado en el onboarding.
   const [email, setEmail] = useState<string | null>(null);
+  // Invitación al team dirigida a este correo (hoyo 2026-09-06: quien entraba
+  // invitado caía acá y solo podía crear una empresa). Si existe, se ofrece
+  // unirse ARRIBA del formulario; si no, una línea abajo dice cómo se hace.
+  const [invitacion, setInvitacion] = useState<{ id: string; empresa: string; invitadoPor: string | null } | null>(null);
+  const [uniendo, setUniendo] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+    void invitacionPendienteParaMi().then(setInvitacion);
   }, []);
+
+  async function unirse() {
+    if (!invitacion || uniendo) return;
+    setUniendo(true);
+    setError(null);
+    const r = await unirseAlTeamPendiente(invitacion.id);
+    if (r?.error) { setError(r.error); setUniendo(false); }
+  }
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
@@ -73,6 +88,24 @@ export default function OnboardingPage() {
             nombre completo como razón social.
           </p>
         </div>
+
+        {invitacion && (
+          <div className="rounded-2xl border border-[#e8553e]/30 bg-[#e8553e]/10 p-5 text-center space-y-3">
+            <p className="text-sm text-white/90 leading-relaxed">
+              {invitacion.invitadoPor ? <><span className="font-semibold">{invitacion.invitadoPor}</span> te invitó</> : "Te invitaron"} al team de{" "}
+              <span className="font-semibold">{invitacion.empresa}</span>.
+            </p>
+            <button
+              type="button"
+              onClick={unirse}
+              disabled={uniendo}
+              className="w-full rounded-xl bg-[#e8553e] hover:bg-[#e8553e]/90 disabled:opacity-50 px-4 py-3 text-sm font-semibold text-white transition-colors"
+            >
+              {uniendo ? "Uniéndote…" : "Unirme al team"}
+            </button>
+            <p className="text-xs text-white/40">O crea tu propia empresa más abajo.</p>
+          </div>
+        )}
 
         <div className="rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 p-6">
           {error && (
@@ -157,6 +190,12 @@ export default function OnboardingPage() {
             </button>
           </form>
         </div>
+
+        {!invitacion && (
+          <p className="text-center text-xs text-white/35 leading-relaxed">
+            ¿Te vas a unir a un team? Pídele el link de invitación a quien te invitó y ábrelo con esta misma sesión.
+          </p>
+        )}
 
         {email && (
           <p className="text-center text-sm text-white/40">

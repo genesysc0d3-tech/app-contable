@@ -61,13 +61,19 @@ export function useTeamChat(enabled: boolean, usuarioId: string | null) {
     return r;
   }, []);
 
+  // Cazado en la prueba real (2026-09-06): el "¿había no leídos?" se decidía
+  // DENTRO del updater de setState, que React corre después — así que el
+  // servidor nunca se enteraba y el mensaje quedaba sin leer para siempre.
+  // Se decide con la lista actual (ref), antes de tocar el estado.
+  const mensajesRef = useRef<TeamMensaje[]>([]);
+  useEffect(() => { mensajesRef.current = mensajes; }, [mensajes]);
+
   const leer = useCallback((de: string) => {
-    let habia = false;
-    setMensajes((prev) => prev.map((m) => {
-      if (m.de === de && m.para === usuarioId && !m.leidoAt) { habia = true; return { ...m, leidoAt: new Date().toISOString() }; }
-      return m;
-    }));
-    if (habia) void marcarLeidosTeam(de);
+    const habia = mensajesRef.current.some((m) => m.de === de && m.para === usuarioId && !m.leidoAt);
+    if (!habia) return;
+    const ahora = new Date().toISOString();
+    setMensajes((prev) => prev.map((m) => (m.de === de && m.para === usuarioId && !m.leidoAt ? { ...m, leidoAt: ahora } : m)));
+    void marcarLeidosTeam(de);
   }, [usuarioId]);
 
   return { mensajes, cargado, noLeidosPor, noLeidos, conversacion, enviar, leer, refrescar };
