@@ -15,7 +15,7 @@ import TeamBusinessPanel from "./TeamBusinessPanel";
 import UsageCountersPanel from "./UsageCountersPanel";
 import { EmisionDirectaAction, MassDTEAction, HeaderActionsRow, RCVButton } from "./LeftQuickActions";
 import type { SearchItem } from "@/lib/tree-structure";
-import { estadoEleccionEmpresa, listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
+import { estadoEleccionEmpresa, estadoTeam, listarEmpresasSelector, listarEquipoBusiness, listarResumenCupos } from "./actions";
 import EleccionEmpresaModal from "./EleccionEmpresaModal";
 import { chileDateString } from "@/lib/chile-date";
 import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
@@ -96,7 +96,7 @@ export default async function V5Page({ searchParams }: {
   const [
     mesaInicial,
     [clData, cafsData],
-    [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa],
+    [empresasSelector, equipoBusiness, resumenCupos, eleccionEmpresa, team],
     [boletasRcvRes, searchTriple],
   ] = await Promise.all([
     fetchMesaDateDependent(supabase, empresaId, {
@@ -115,6 +115,7 @@ export default async function V5Page({ searchParams }: {
       listarEquipoBusiness(),
       listarResumenCupos(),
       estadoEleccionEmpresa(),
+      estadoTeam(),
     ]),
     Promise.all([
     supabase.from("boletas_emitidas")
@@ -443,7 +444,7 @@ export default async function V5Page({ searchParams }: {
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} /></span></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} team={team} /></span></div>}
           actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createHash, randomBytes } from "crypto";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
@@ -226,7 +227,12 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
 
     if (membresiasError) return { ok: false, error: "EMPRESAS_QUERY_FAILED", detalle: membresiasError.message };
 
-    const ids = (membresias ?? []).map((row) => row.empresa_id);
+    // Ticks del team (2026-09-06): quien no es titular ve SOLO las empresas
+    // que le marcaron. La base ya lo exige (empresa_autorizada); acá es para
+    // que el selector no ofrezca puertas que después rebotan.
+    const esTitular = ctx.supportMode ? true : await esTitularDeCuenta(ctx.sb, acceso.cuentaId, ctx.userId);
+    const ticks = esTitular ? null : await ticksDeUsuario(ctx.sb, acceso.cuentaId, ctx.userId);
+    const ids = (membresias ?? []).map((row) => row.empresa_id).filter((id) => !ticks || ticks.has(id));
     if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false, puedeAgregar: false };
 
     const { data: empresas, error: empresasError } = await ctx.sb
@@ -257,14 +263,9 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
     // cupo libre. El server re-valida todo en crearEmpresaAdicional — esto es
     // solo visibilidad del botón.
     let puedeAgregar = false;
-    if (multiempresa && !ctx.supportMode) {
-      const [{ data: cuentaRow }, { data: membresiaTitular }, cuenta] = await Promise.all([
-        ctx.sb.from("cuentas").select("owner_usuario_id").eq("id", acceso.cuentaId).maybeSingle(),
-        ctx.sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", acceso.cuentaId).eq("usuario_id", ctx.userId).maybeSingle(),
-        contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId),
-      ]);
-      const esTitular = cuentaRow?.owner_usuario_id === ctx.userId || membresiaTitular?.es_titular === true;
-      puedeAgregar = esTitular && !!cuenta && cuenta.empresasActivas < cuenta.empresasIncluidas;
+    if (multiempresa && !ctx.supportMode && esTitular) {
+      const cuenta = await contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId);
+      puedeAgregar = !!cuenta && cuenta.empresasActivas < cuenta.empresasIncluidas;
     }
 
     return {
@@ -303,6 +304,16 @@ export async function cambiarEmpresaActiva(empresaId: string): Promise<CambiarEm
 
     if (targetError) return { ok: false, error: "EMPRESA_TARGET_QUERY_FAILED", detalle: targetError.message };
     if (!target?.activa) return { ok: false, error: "EMPRESA_NO_DISPONIBLE" };
+
+    // Este endpoint REESCRIBE la empresa activa, que es la llave del RLS: sin
+    // tick (o sin ser titular) no se mueve a nadie ahí. Fail-closed.
+    if (!ctx.supportMode) {
+      const esTitular = await esTitularDeCuenta(ctx.sb, acceso.cuentaId, ctx.userId);
+      if (!esTitular) {
+        const ticks = await ticksDeUsuario(ctx.sb, acceso.cuentaId, ctx.userId);
+        if (!ticks.has(targetEmpresaId)) return { ok: false, error: "EMPRESA_SIN_TICK", detalle: "No tienes acceso a esa empresa." };
+      }
+    }
 
     if (ctx.supportMode) {
       // El operador cambia SU vista (cookie de soporte), jamás la empresa
@@ -915,4 +926,285 @@ export async function estadoIntervencionCliente(): Promise<EstadoIntervencionCli
     return { estado: "activa", expiraAt: estado.expiraAt, autorizadaAt: row?.canjeada_at ?? null };
   }
   return { estado: "ninguna" };
+}
+
+
+// ─── Team Business (fase 1, 2026-09-06) ─────────────────────────────────────
+// Diseño del fundador: en el popup del botón de empresa vive el apartado
+// Team. Agregas a alguien, le marcas con ticks qué empresas ve, y listo. La
+// regla dura vive en la base (empresa_autorizada + RPC team_*); acá solo se
+// pide y se pinta. Todo lo que escribe pasa por el titular.
+
+async function esTitularDeCuenta(sb: ReturnType<typeof getServiceClient>, cuentaId: string, userId: string) {
+  const [{ data: cuentaRow }, { data: membresia }] = await Promise.all([
+    sb.from("cuentas").select("owner_usuario_id").eq("id", cuentaId).maybeSingle(),
+    sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", cuentaId).eq("usuario_id", userId).eq("activo", true).maybeSingle(),
+  ]);
+  return cuentaRow?.owner_usuario_id === userId || membresia?.es_titular === true;
+}
+
+async function ticksDeUsuario(sb: ReturnType<typeof getServiceClient>, cuentaId: string, userId: string) {
+  const { data } = await sb
+    .from("cuenta_usuario_empresas")
+    .select("empresa_id")
+    .eq("cuenta_id", cuentaId)
+    .eq("usuario_id", userId);
+  return new Set((data ?? []).map((row) => row.empresa_id));
+}
+
+export type TeamMiembro = {
+  id: string;
+  nombre: string;
+  email: string | null;
+  iniciales: string;
+  esTitular: boolean;
+  /** Empresas que ve. El titular las ve todas (viene la lista completa). */
+  empresas: string[];
+};
+
+export type TeamInvitacion = {
+  id: string;
+  email: string;
+  expiresAt: string;
+  /** null = todas las empresas al aceptar. */
+  empresas: string[] | null;
+};
+
+export type TeamEstado =
+  | {
+      ok: true;
+      equipo: true;
+      esTitular: boolean;
+      cuentaId: string;
+      usuarioId: string;
+      empresas: Array<{ id: string; nombre: string }>;
+      miembros: TeamMiembro[];
+      pendientes: TeamInvitacion[];
+      cupo: { uso: number; total: number };
+    }
+  | { ok: true; equipo: false; plan: string | null }
+  | { ok: false; error: string; detalle?: string };
+
+function mensajeTeam(code: string | null | undefined): string {
+  switch (code) {
+    case "SOLO_TITULAR_CUENTA": return "Solo quien paga la cuenta puede cambiar el team.";
+    case "PLAN_INACTIVO": return "Tu plan no está activo.";
+    case "EQUIPO_NO_DISPONIBLE": return "El team viene con Business.";
+    case "CUPO_PERSONAS_AGOTADO": return "No quedan lugares en el team.";
+    case "EMAIL_YA_EN_CUENTA": return "Esa persona ya está en el team.";
+    case "INVITACION_YA_EXISTE": return "Ya hay una invitación pendiente para ese correo.";
+    case "EMAIL_INVALIDO": return "Ese correo no se ve bien.";
+    case "TICKS_VACIOS": return "Marca al menos una empresa.";
+    case "TICK_FUERA_DE_CUENTA": return "Una de esas empresas no es de tu cuenta.";
+    case "TITULAR_VE_TODO": return "El titular ve todas las empresas.";
+    case "NO_SE_QUITA_AL_TITULAR": return "Al titular no se lo puede quitar.";
+    case "NO_ES_MIEMBRO": return "Esa persona ya no está en el team.";
+    case "INVITACION_NO_PENDIENTE": return "Esa invitación ya no estaba pendiente.";
+    default: return code ? `No se pudo (${code}).` : "No se pudo.";
+  }
+}
+
+export async function estadoTeam(): Promise<TeamEstado> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return ctx;
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: acceso.codigo };
+    if (!acceso.planActivo) return { ok: true, equipo: false, plan: acceso.plan };
+
+    const { data: plan } = acceso.plan
+      ? await ctx.sb.from("planes_config").select("equipo, personas_incluidas").eq("codigo", acceso.plan).maybeSingle()
+      : { data: null };
+    if (plan?.equipo !== true) return { ok: true, equipo: false, plan: acceso.plan };
+
+    const [
+      { data: membresiasEmpresa, error: e1 },
+      { data: membresias, error: e2 },
+      { data: ticks, error: e3 },
+      { data: addons },
+      esTitular,
+    ] = await Promise.all([
+      ctx.sb.from("cuenta_empresas").select("empresa_id, es_principal, created_at").eq("cuenta_id", acceso.cuentaId).eq("activa", true)
+        .order("es_principal", { ascending: false }).order("created_at", { ascending: true }),
+      ctx.sb.from("cuenta_usuarios").select("usuario_id, es_titular").eq("cuenta_id", acceso.cuentaId).eq("activo", true).order("created_at", { ascending: true }),
+      ctx.sb.from("cuenta_usuario_empresas").select("usuario_id, empresa_id").eq("cuenta_id", acceso.cuentaId),
+      ctx.sb.from("cuenta_addons").select("cantidad").eq("cuenta_id", acceso.cuentaId).eq("tipo", "persona_adicional").eq("estado", "activo"),
+      ctx.supportMode ? Promise.resolve(false) : esTitularDeCuenta(ctx.sb, acceso.cuentaId, ctx.userId),
+    ]);
+    if (e1 || e2 || e3) return { ok: false, error: "TEAM_QUERY_FAILED", detalle: (e1 ?? e2 ?? e3)?.message };
+
+    const empresaIds = (membresiasEmpresa ?? []).map((row) => row.empresa_id);
+    const userIds = (membresias ?? []).map((row) => row.usuario_id);
+    const [{ data: empresas }, { data: usuarios }, { data: cuentaRow }, { data: pendientesRows }] = await Promise.all([
+      empresaIds.length ? ctx.sb.from("empresas").select("id, razon_social").in("id", empresaIds) : Promise.resolve({ data: [] as Array<{ id: string; razon_social: string }> }),
+      userIds.length ? ctx.sb.from("usuarios").select("id, nombre, email").in("id", userIds) : Promise.resolve({ data: [] as Array<{ id: string; nombre: string; email: string | null }> }),
+      ctx.sb.from("cuentas").select("owner_usuario_id").eq("id", acceso.cuentaId).maybeSingle(),
+      empresaIds.length
+        ? ctx.sb.from("empresa_invitaciones").select("id, email, expires_at, empresas_permitidas").in("empresa_id", empresaIds).eq("estado", "pendiente").gt("expires_at", new Date().toISOString()).order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] as Array<{ id: string; email: string; expires_at: string; empresas_permitidas: string[] | null }> }),
+    ]);
+
+    const nombreEmpresa = new Map((empresas ?? []).map((e) => [e.id, e.razon_social]));
+    const empresasOrdenadas = empresaIds.filter((id) => nombreEmpresa.has(id)).map((id) => ({ id, nombre: nombreEmpresa.get(id)! }));
+    const usuarioById = new Map((usuarios ?? []).map((u) => [u.id, u]));
+    const ticksPorUsuario = new Map<string, string[]>();
+    for (const t of ticks ?? []) ticksPorUsuario.set(t.usuario_id, [...(ticksPorUsuario.get(t.usuario_id) ?? []), t.empresa_id]);
+
+    const miembros: TeamMiembro[] = (membresias ?? []).flatMap((m) => {
+      const u = usuarioById.get(m.usuario_id);
+      if (!u) return [];
+      const titular = m.es_titular || cuentaRow?.owner_usuario_id === m.usuario_id;
+      return [{
+        id: u.id,
+        nombre: u.nombre || u.email || "—",
+        email: u.email,
+        iniciales: initialsFor(u.nombre ?? "", u.email),
+        esTitular: titular,
+        empresas: titular ? empresaIds : (ticksPorUsuario.get(u.id) ?? []),
+      }];
+    });
+    const pendientes: TeamInvitacion[] = (pendientesRows ?? []).map((p) => ({ id: p.id, email: p.email, expiresAt: p.expires_at, empresas: p.empresas_permitidas }));
+    const extras = (addons ?? []).reduce((sum, a) => sum + Math.max(0, Number(a.cantidad ?? 0)), 0);
+
+    return {
+      ok: true,
+      equipo: true,
+      esTitular,
+      cuentaId: acceso.cuentaId,
+      usuarioId: ctx.userId,
+      empresas: empresasOrdenadas,
+      miembros,
+      pendientes,
+      cupo: { uso: miembros.length + pendientes.length, total: Math.max(1, Number(plan.personas_incluidas ?? 1)) + extras },
+    };
+  } catch (error) {
+    return { ok: false, error: "TEAM_ESTADO_FAILED", detalle: error instanceof Error ? error.message : undefined };
+  }
+}
+
+type TeamAccion = { ok: true } | { ok: false, error: string };
+
+export async function invitarAlTeam(input: { email: string; empresas: string[] }): Promise<{ ok: true; invitePath: string } | { ok: false; error: string }> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: mensajeTeam(ctx.error) };
+    if (ctx.supportMode) return { ok: false, error: "En modo soporte no se toca el team." };
+    const email = String(input.email ?? "").trim().toLowerCase();
+    const empresas = (input.empresas ?? []).map(cleanId).filter((id): id is string => Boolean(id));
+    if (!email.includes("@")) return { ok: false, error: mensajeTeam("EMAIL_INVALIDO") };
+    if (empresas.length === 0) return { ok: false, error: mensajeTeam("TICKS_VACIOS") };
+
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data, error } = await ctx.sb.rpc("crear_empresa_invitacion_titular", {
+      p_email: email,
+      p_empresa_id: ctx.empresaId,
+      p_empresas_permitidas: empresas,
+      p_expires_at: expiresAt,
+      p_invited_by: ctx.userId,
+      p_rol: "contador",
+      p_token_hash: tokenHash,
+    });
+    if (error) return { ok: false, error: error.message };
+    const r = data?.[0];
+    if (!r?.ok || !r.invitacion_id || !r.cuenta_id) return { ok: false, error: mensajeTeam(r?.error) };
+
+    await recordCuentaAudit({
+      sb: ctx.sb, cuentaId: r.cuenta_id, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+      accion: "persona_invitada", recursoTipo: "empresa_invitacion", recursoId: r.invitacion_id,
+      resumen: "Persona invitada al team", metadata: { empresas },
+    });
+    revalidatePath("/massdte");
+    revalidatePath("/escritorio/v5");
+    return { ok: true, invitePath: `/invitar/${token}` };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo invitar." };
+  }
+}
+
+export async function cambiarTicksDelTeam(usuarioId: string, empresas: string[]): Promise<TeamAccion> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: mensajeTeam(ctx.error) };
+    if (ctx.supportMode) return { ok: false, error: "En modo soporte no se toca el team." };
+    const target = cleanId(usuarioId);
+    const ids = (empresas ?? []).map(cleanId).filter((id): id is string => Boolean(id));
+    if (!target) return { ok: false, error: mensajeTeam("NO_ES_MIEMBRO") };
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: mensajeTeam(acceso.codigo) };
+
+    const { data, error } = await ctx.sb.rpc("team_actualizar_ticks", { p_cuenta_id: acceso.cuentaId, p_usuario_id: target, p_empresas: ids, p_by: ctx.userId });
+    if (error) return { ok: false, error: error.message };
+    const r = data?.[0];
+    if (!r?.ok) return { ok: false, error: mensajeTeam(r?.error) };
+
+    await recordCuentaAudit({
+      sb: ctx.sb, cuentaId: acceso.cuentaId, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+      accion: "persona_ticks_cambiados", recursoTipo: "usuario", recursoId: target,
+      resumen: "Empresas visibles de una persona del team cambiadas", metadata: { empresas: ids },
+    });
+    revalidatePath("/massdte");
+    revalidatePath("/escritorio/v5");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo." };
+  }
+}
+
+export async function quitarDelTeam(usuarioId: string): Promise<TeamAccion> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: mensajeTeam(ctx.error) };
+    if (ctx.supportMode) return { ok: false, error: "En modo soporte no se toca el team." };
+    const target = cleanId(usuarioId);
+    if (!target) return { ok: false, error: mensajeTeam("NO_ES_MIEMBRO") };
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: mensajeTeam(acceso.codigo) };
+
+    const { data, error } = await ctx.sb.rpc("team_quitar_miembro", { p_cuenta_id: acceso.cuentaId, p_usuario_id: target, p_by: ctx.userId });
+    if (error) return { ok: false, error: error.message };
+    const r = data?.[0];
+    if (!r?.ok) return { ok: false, error: mensajeTeam(r?.error) };
+
+    await recordCuentaAudit({
+      sb: ctx.sb, cuentaId: acceso.cuentaId, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+      accion: "persona_quitada", recursoTipo: "usuario", recursoId: target,
+      resumen: "Persona quitada del team", metadata: { tokens_mcp_revocados: r.tokens_revocados },
+    });
+    revalidatePath("/massdte");
+    revalidatePath("/escritorio/v5");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo." };
+  }
+}
+
+export async function revocarInvitacionTeam(invitacionId: string): Promise<TeamAccion> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: mensajeTeam(ctx.error) };
+    if (ctx.supportMode) return { ok: false, error: "En modo soporte no se toca el team." };
+    const id = cleanId(invitacionId);
+    if (!id) return { ok: false, error: mensajeTeam("INVITACION_NO_PENDIENTE") };
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: mensajeTeam(acceso.codigo) };
+
+    const { data, error } = await ctx.sb.rpc("team_revocar_invitacion", { p_invitacion_id: id, p_by: ctx.userId });
+    if (error) return { ok: false, error: error.message };
+    const r = data?.[0];
+    if (!r?.ok) return { ok: false, error: mensajeTeam(r?.error) };
+
+    await recordCuentaAudit({
+      sb: ctx.sb, cuentaId: acceso.cuentaId, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+      accion: "invitacion_revocada", recursoTipo: "empresa_invitacion", recursoId: id,
+      resumen: "Invitación al team revocada",
+    });
+    revalidatePath("/massdte");
+    revalidatePath("/escritorio/v5");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo." };
+  }
 }
