@@ -222,3 +222,17 @@ export async function telegramHabilitadoEmpresa(sb: Sb, empresaId: string): Prom
   const extras = (data ?? []).reduce((s, r) => s + Math.max(0, Number(r.cantidad ?? 0)), 0);
   return ctx.telegramComprobantes + extras > 0;
 }
+
+
+/**
+ * ¿Es el titular de la cuenta pagadora? (dueño de la cuenta o membresía
+ * marcada es_titular). Es quien manda sobre el team y el único que puede usar
+ * el conector MCP (fundador 2026-09-06: "solo cuenta principal").
+ */
+export async function esTitularDeCuenta(sb: Sb, cuentaId: string, userId: string): Promise<boolean> {
+  const [{ data: cuenta }, { data: membresia }] = await Promise.all([
+    sb.from("cuentas").select("owner_usuario_id").eq("id", cuentaId).maybeSingle(),
+    sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", cuentaId).eq("usuario_id", userId).eq("activo", true).maybeSingle(),
+  ]);
+  return cuenta?.owner_usuario_id === userId || membresia?.es_titular === true;
+}

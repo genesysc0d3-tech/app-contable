@@ -33,7 +33,10 @@ persona", y ya. El chequeo va en el servidor al mandar.
   `useTeamChat` (poll 20 s + foco), `GuardarailOrbe` como contenedor (satélites,
   lobby, conversación, apuntar `ultimoDocAbierto`, salto con confirmación y
   `massdte:salto`/`massdte:volver` en sessionStorage). Test `team-chat.test.ts`.
-- Fase 4 (gris de emisión con dueño/avance + microatribución): pendiente.
+- Fase 4 (#475): avance en el gris + `AtribucionDoc`. Todo en main (#476).
+- Prueba real a dos navegadores (2026-09-06): funcionó el circuito completo;
+  tres hoyos arreglados en #477 (onboarding "Unirme al team", leído en
+  servidor, salto navega al mes si el doc no está en la mesa).
 
 ## Hechos verificados (2026-09-06)
 

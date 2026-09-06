@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { EquipoPersona } from "./actions";
+import { LogoMcp } from "./LogoMcp";
 
 type PresenceStatus = "active" | "idle" | "offline";
 
@@ -156,8 +157,15 @@ export default function TeamBusinessPanel({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {visible.map((persona) => (
-            <span key={persona.id} title={`${persona.nombre} · ${statusLabel(persona.status)}`} style={{ position: "relative", width: 28, height: 28, borderRadius: 999, display: "grid", placeItems: "center", background: persona.id === usuarioId ? "rgba(232,85,62,.14)" : "var(--bg-muted)", border: persona.id === usuarioId ? "1px solid rgba(232,85,62,.28)" : "1px solid var(--border)", color: persona.id === usuarioId ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 900, flexShrink: 0 }}>
+            <span key={persona.id} title={`${persona.nombre} · ${statusLabel(persona.status)}${persona.esTitular ? " · cuenta principal (conector MCP)" : ""}`} style={{ position: "relative", width: 28, height: 28, borderRadius: 999, display: "grid", placeItems: "center", background: persona.id === usuarioId ? "rgba(232,85,62,.14)" : "var(--bg-muted)", border: persona.id === usuarioId ? "1px solid rgba(232,85,62,.28)" : "1px solid var(--border)", color: persona.id === usuarioId ? "var(--accent)" : "var(--text2)", fontSize: 9, fontWeight: 900, flexShrink: 0 }}>
               {persona.iniciales}
+              {/* El conector MCP es solo de la cuenta principal (fundador
+                  2026-09-06): su glifo arriba del titular, y de nadie más. */}
+              {persona.esTitular && (
+                <span aria-hidden style={{ position: "absolute", left: "50%", top: -7, transform: "translateX(-50%)", width: 13, height: 13, borderRadius: 999, background: "var(--surface)", border: "1px solid var(--border)", display: "grid", placeItems: "center", color: "var(--text2)" }}>
+                  <LogoMcp size={8} />
+                </span>
+              )}
               <span style={{ position: "absolute", right: 0, bottom: 0, width: 8, height: 8, borderRadius: 999, background: statusColor(persona.status), border: "2px solid var(--surface)" }} />
             </span>
           ))}

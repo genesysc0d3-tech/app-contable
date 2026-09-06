@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { generarCodigoAutorizacion, hashOauthSecreto, redirectCoincide, CODE_TTL_MS, OAUTH_SCOPE } from "@/lib/mcp/oauth";
-import { validarAccesoCuenta } from "@/lib/entitlements";
-import { MCP_REQUIERE_PLAN } from "@/lib/mcp/copy";
+import { validarAccesoCuenta, esTitularDeCuenta } from "@/lib/entitlements";
+import { MCP_REQUIERE_PLAN, MCP_SOLO_TITULAR } from "@/lib/mcp/copy";
 
 // Consentimiento OAuth del conector MCP. El código de autorización nace ACÁ,
 // solo después de que el usuario logueado apretó "Autorizar" — nunca antes.
@@ -52,6 +52,7 @@ export async function autorizarConector(solicitud: SolicitudOauth): Promise<{ er
   if (!usuario?.empresa_id) return { error: "Tu cuenta aún no tiene empresa — termina el registro en la app." };
   const acceso = await validarAccesoCuenta(svc, user.id, usuario.empresa_id);
   if (!acceso.ok || !acceso.planActivo) return { error: MCP_REQUIERE_PLAN };
+  if (!(await esTitularDeCuenta(svc, acceso.cuentaId, user.id))) return { error: MCP_SOLO_TITULAR };
 
   const code = generarCodigoAutorizacion();
   const { error } = await svc.from("oauth_codes").insert({
