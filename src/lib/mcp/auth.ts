@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { validarAccesoCuenta } from "@/lib/entitlements";
+import { esTitularDeCuenta, validarAccesoCuenta } from "@/lib/entitlements";
 import { hashMcpToken, tokenDesdeAuthorization } from "@/lib/mcp/token";
 
 type Sb = SupabaseClient<Database>;
@@ -57,6 +57,9 @@ export async function requireMcpAccess(request: Request): Promise<McpAccess> {
   const acceso = await validarAccesoCuenta(svc, usuario.id, usuario.empresa_id);
   if (!acceso.ok) return { ok: false, status: 403, error: acceso.codigo };
   if (!acceso.planActivo) return { ok: false, status: 403, error: "PLAN_INACTIVO" };
+  // Solo la cuenta principal (fundador 2026-09-06): un miembro del team no
+  // conecta su asistente a los datos del titular. Fail-closed.
+  if (!(await esTitularDeCuenta(svc, acceso.cuentaId, usuario.id))) return { ok: false, status: 403, error: "SOLO_TITULAR" };
 
   // Huella de uso (fire-and-forget: no bloquea la request).
   void svc.from("mcp_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", fila.id).then(() => {});
