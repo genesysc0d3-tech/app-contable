@@ -176,7 +176,7 @@ describe("helpers de fecha calendario", () => {
 
 describe("derechoDeEmision — quién puede emitir (mismas puertas que decidirGate)", () => {
   const base = (over: Partial<EstadoCuota> = {}): EstadoCuota => ({
-    plan: null, cuota: 0, refills: 0, uso: 0, disponible: 0,
+    plan: null, cuota: 0, refills: 0, uso: 0, enVuelo: 0, disponible: 0,
     trial: null, suscripcionActiva: false, suscripcionEstado: null, ...over,
   });
   const trialOk = { activo: true, inicio: "2026-06-10T12:00:00Z", diasRestantes: 2, boletasUsadas: 0, boletasMax: 100 };
@@ -210,7 +210,7 @@ describe("derechoDeEmision — quién puede emitir (mismas puertas que decidirGa
 
 describe("decidirGate — gate puro de emisión masiva (todas las ramas)", () => {
   const base = (over: Partial<EstadoCuota> = {}): EstadoCuota => ({
-    plan: null, cuota: 0, refills: 0, uso: 0, disponible: 0,
+    plan: null, cuota: 0, refills: 0, uso: 0, enVuelo: 0, disponible: 0,
     trial: null, suscripcionActiva: false, suscripcionEstado: null, ...over,
   });
   const trial = (over: Partial<NonNullable<EstadoCuota["trial"]>> = {}) => ({
