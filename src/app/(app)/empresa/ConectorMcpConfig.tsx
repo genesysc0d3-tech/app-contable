@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { desconectarConectorMcp, listarConectoresMcp, type ConexionMcp } from "./conector-mcp-actions";
+import { MCP_REQUIERE_PLAN } from "@/lib/mcp/copy";
 
 // Panel "Conector MCP" del popup empresa (diseño del fundador): acá el
 // cliente VE a qué asistentes de IA está conectado y los DESCONECTA con un
@@ -30,8 +31,16 @@ const MCP_URL = "https://app.massdte.cl/api/mcp";
 const CLAUDE_CONNECTORS_URL = "https://claude.ai/new#settings/customize-connectors";
 const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
 
+/**
+ * Sin plan (trial) el panel se ve pero en GRIS y sin botones de conectar:
+ * decisión del fundador 2026-09-06 — "el mcp se bloquea en trial, sale gris
+ * en su plan y listo". El dato lo trae la misma acción que lista conexiones,
+ * con la misma regla que el consentimiento y el servidor MCP. `null` = aún
+ * cargando: no se pinta gris antes de saber.
+ */
 export default function ConectorMcpConfig() {
   const [conexiones, setConexiones] = useState<ConexionMcp[] | null>(null);
+  const [planActivo, setPlanActivo] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cortando, setCortando] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -50,7 +59,7 @@ export default function ConectorMcpConfig() {
 
   const cargar = () => {
     void listarConectoresMcp().then((res) => {
-      if (res.ok) { setConexiones(res.conexiones); setError(null); }
+      if (res.ok) { setConexiones(res.conexiones); setPlanActivo(res.planActivo); setError(null); }
       else setError("No se pudieron cargar las conexiones — reintenta.");
     });
   };
@@ -71,12 +80,18 @@ export default function ConectorMcpConfig() {
       <div>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, letterSpacing: "-.02em" }}>Conector MCP</h3>
         <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--text2)", lineHeight: 1.55 }}>
-          Conecta tu asistente de IA (Claude, ChatGPT) para que te ayude a revisar: <b style={{ color: "var(--text)" }}>solo lee</b> pendientes
-          y resúmenes. Nunca emite documentos ni ve tu clave del SII — emitir es siempre un acto tuyo en la app.
+          Conecta tu asistente de IA (Claude, ChatGPT) para que te ayude a revisar: <b style={{ color: "var(--text)" }}>lee</b> tus pendientes y resúmenes
+          y puede <b style={{ color: "var(--text)" }}>ordenar tu mesa</b> (dejar documentos listos en Emitir o devolverlos a revisión). Nunca emite
+          documentos ni ve tu clave del SII — emitir es siempre un acto tuyo en la app. Lee un mes a la vez, en páginas de 100.
         </p>
+        {planActivo === false && (
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--amber)", fontWeight: 650 }}>
+            {MCP_REQUIERE_PLAN}
+          </p>
+        )}
       </div>
 
-      <div style={{ padding: "13px 15px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ padding: "13px 15px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10, opacity: planActivo === false ? 0.45 : 1, pointerEvents: planActivo === false ? "none" : "auto" }} aria-disabled={planActivo === false}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 750, color: "var(--text)" }}>
@@ -88,12 +103,14 @@ export default function ConectorMcpConfig() {
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
+              disabled={planActivo === false}
               onClick={() => void conectar(CLAUDE_CONNECTORS_URL)}
               style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--accent)", color: "#fff", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
             >
               Conectar tu Claude
             </button>
             <button
+              disabled={planActivo === false}
               onClick={() => void conectar(CHATGPT_CONNECTORS_URL)}
               style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface)", color: "var(--text)", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
             >

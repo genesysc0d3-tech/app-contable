@@ -31,13 +31,31 @@ const CLAVE_NOMBRE = /(^|_)(nombre|razon_social|contraparte)(_|$)/i;
 /** Contacto de terceros: no le sirve al copiloto para nada. */
 const CLAVE_CONTACTO = /(^|_)(email|correo|telefono|fono|direccion|comuna|ciudad)(_|$)/i;
 /** Texto libre que puede traer identidad adentro (glosa del banco, notas). */
-const CLAVE_TEXTO = /(^|_)(descripcion|glosa|detalle|notas|motivo|observacion|nombre_archivo|documento_nombre|summary|mensaje)(_|$)/i;
+const CLAVE_TEXTO = /(^|_)(descripcion|glosa|detalle|notas|motivo|observacion|summary|mensaje)(_|$)/i;
+/**
+ * NO VIAJAN, punto (2ª auditoría, 2026-09-06). El nombre del archivo lo
+ * escribe el cliente y trae nombres y RUT ("cartola_juan_perez_76086428-5"),
+ * y el tokenizador de texto libre no pesca nombres en minúscula ni pegados
+ * con guion bajo. El asistente no lo necesita: tiene `documento_id`.
+ */
+const CLAVE_NO_VIAJA = /(^|_)(nombre_archivo|documento_nombre)(_|$)/i;
+/**
+ * Solo la PRESENCIA, como el RUT: "Asesorías Juan Pérez" identifica a un
+ * proveedor único de un rubro chico, y el tokenizador no lo tapa (no hay
+ * preposición). La señal "falta el giro" sí le sirve al copiloto.
+ */
+const CLAVE_GIRO = /(^|_)giro(_|$)/i;
+/** Confianza del clasificador: sale en BALDES, no con decimales (ver abajo). */
+const CLAVE_CONFIANZA = /(^|_)confianza(_|$)/i;
 /** Identificadores técnicos: pasan intactos (el modelo los necesita para escribir). */
 const CLAVE_ID = /(^|_)id(s)?(_|$)/i;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Barrido de último recurso para strings que nadie clasificó. */
-const RUT_SUELTO = /\b\d{1,3}(?:\.\d{3})*-[\dkK]\b|\b\d{7,8}-[\dkK]\b/g;
+// Sin `\b`: para la regex `_` es letra, así que "_76086428-5." no tenía borde y
+// el RUT pegado en un nombre de archivo se escapaba (2ª auditoría). Los
+// lookarounds cuentan cualquier cosa que no sea dígito/letra como borde.
+const RUT_SUELTO = /(?<![0-9A-Za-z])\d{1,3}(?:\.\d{3})*-[\dkK](?![0-9A-Za-z])|(?<![0-9A-Za-z])\d{7,8}-[\dkK](?![0-9A-Za-z])/g;
 const EMAIL_SUELTO = /\b[\w.%+-]+@[\w.-]+\.[a-z]{2,}\b/gi;
 const TELEFONO_SUELTO = /\b(?:\+?56)?\s?9\s?\d{4}\s?\d{4}\b/g;
 
@@ -53,11 +71,30 @@ export function enmascararNombre(nombre: string): string {
   return `${primera} ${partes[1][0].toUpperCase()}.`;
 }
 
-function limpiarTextoLibre(valor: string, vault: Vault): string {
-  return tokenizeForAI(valor, vault)
+function barrerIdentificadores(valor: string): string {
+  return valor
     .replace(RUT_SUELTO, "[RUT]")
     .replace(EMAIL_SUELTO, "[correo]")
     .replace(TELEFONO_SUELTO, "[teléfono]");
+}
+
+function limpiarTextoLibre(valor: string, vault: Vault): string {
+  return barrerIdentificadores(tokenizeForAI(valor, vault));
+}
+
+/**
+ * La confianza del clasificador sale en tres baldes, no en 0.83 (2026-09-06,
+ * decisión del fundador tras la 2ª auditoría). Con decimales es aritmética
+ * invertible — confianza = votos/total con pesos constantes — y en 3.000 filas
+ * se despejan los pesos de cada ángulo: eso son los "pesos del modelo". Al
+ * cliente no le sirve 0.83 vs 0.85; sí le sirve alta/media/baja. Las RAZONES,
+ * en cambio, salen completas a propósito: son la explicación, no la receta
+ * (lo que haría Anthropic: publicar el razonamiento, guardar los pesos).
+ */
+export function confianzaEnBalde(v: number): "alta" | "media" | "baja" {
+  if (v >= 0.8) return "alta";
+  if (v >= 0.5) return "media";
+  return "baja";
 }
 
 /**
@@ -95,16 +132,29 @@ export function sanitizarSalidaExterna(valor: unknown, vault: Vault = createVaul
       continue;
     }
     if (CLAVE_CONTACTO.test(clave)) continue; // no le sirve a la IA: no viaja
+    if (CLAVE_NO_VIAJA.test(clave)) continue;  // nombre de archivo: nombres y RUT adentro
+    if (CLAVE_GIRO.test(clave)) {
+      salida[`${clave}_presente`] = typeof v === "string" ? v.trim().length > 0 : v != null;
+      continue;
+    }
+    if (CLAVE_CONFIANZA.test(clave) && typeof v === "number") {
+      salida[clave] = confianzaEnBalde(v);
+      continue;
+    }
+    // TEXTO va ANTES que NOMBRE a propósito: un campo de texto cuyo nombre
+    // termine en "nombre" caería en la regla de persona (2ª auditoría).
+    if (CLAVE_TEXTO.test(clave)) {
+      salida[clave] = typeof v === "string" ? limpiarTextoLibre(v, vault) : sanitizarSalidaExterna(v, vault);
+      continue;
+    }
     if (CLAVE_NOMBRE.test(clave)) {
       if (typeof v !== "string" || !v.trim()) { salida[clave] = null; continue; }
       salida[clave] = {
         etiqueta: tokenizarIdentidad(vault, rutDelObjeto, v),
-        visible: enmascararNombre(v),
+        // `visible` también se barre: alguien escribe el RUT en el campo nombre
+        // ("76086428-5") y antes salía crudo como "nombre visible".
+        visible: barrerIdentificadores(enmascararNombre(v)),
       };
-      continue;
-    }
-    if (CLAVE_TEXTO.test(clave)) {
-      salida[clave] = typeof v === "string" ? limpiarTextoLibre(v, vault) : sanitizarSalidaExterna(v, vault);
       continue;
     }
     salida[clave] = sanitizarSalidaExterna(v, vault);
