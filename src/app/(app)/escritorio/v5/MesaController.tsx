@@ -148,7 +148,13 @@ export default function MesaController({
       if (detail?.documentoId) pendingOpenDoc.id = detail.documentoId;
       window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" }));
       const cur = `${mesa.calendar.y}-${mesa.calendar.m}`;
+      // Cazado en la prueba real del chat (2026-09-06): el doc era del MISMO
+      // mes pero de otro día, y la mesa estaba en vista día → nunca aparecía y
+      // el salto quedaba mudo. Si el doc no está en la mesa actual, se navega
+      // al mes completo (del doc, o el actual) para que entre.
+      const enMesa = Boolean(detail?.documentoId && (mesa.docsAgregados as Array<{ id: string }>).some((d) => d.id === detail.documentoId));
       if (detail?.month && detail.month !== cur) navigate({ view: "month", month: detail.month });
+      else if (!enMesa) navigate({ view: "month", month: detail?.month ?? cur });
       // Caso mismo-mes: el doc ya está en la mesa; empuja a MesaTab a abrirlo
       // (el caso de otro mes llega por "mesa-updated" tras cargar el calendario).
       window.setTimeout(() => window.dispatchEvent(new Event("massdte:try-open")), 80);
