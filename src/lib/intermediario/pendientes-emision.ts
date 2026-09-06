@@ -35,7 +35,7 @@ export async function getPendientesEmision(
   empresaId: string,
   empresaCtx: EmpresaCtx,
   range?: { start: string; end: string },
-  opts?: { soloAprobado?: boolean; mesa?: "boleta" | "factura" },
+  opts?: { soloAprobado?: boolean; mesa?: "boleta" | "factura"; limit?: number },
 ) {
   const mesaActiva: "boleta" | "factura" = opts?.mesa === "factura" ? "factura" : "boleta";
   // 'editado' es borrador (perdió el Aprobar) y NUNCA es emitible; la cola de Emitir
@@ -64,7 +64,11 @@ export async function getPendientesEmision(
     : propsQuery.or(`tipo_propuesto.in.(${TIPOS_EMITIBLES.join(",")}),estado.eq.aprobado`);
   // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
   if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);
-  const { data: propuestas, error: pErr } = await propsQuery.order("created_at", { ascending: false });
+  propsQuery = propsQuery.order("created_at", { ascending: false });
+  // Tope de filas (lo usa el conector MCP: 100 por llamada). La mesa y Emitir
+  // no lo pasan y siguen viendo todo el periodo, como siempre.
+  if (opts?.limit && opts.limit > 0) propsQuery = propsQuery.limit(opts.limit);
+  const { data: propuestas, error: pErr } = await propsQuery;
 
   if (pErr) throw new Error(pErr.message);
 

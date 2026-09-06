@@ -21,7 +21,8 @@ export type OpsSource =
   | "audit/cron"
   | "dev-support"
   | "auth"
-  | "derechos";
+  | "derechos"
+  | "mcp";
 
 type Sb = SupabaseClient<Database>;
 

@@ -6,6 +6,7 @@ import { clientIpFromRequest, rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { LIMITE_FILAS_LECTURA, MESES_HACIA_ATRAS_MAX, frenarLectura, mensajeDeFreno, ventanaDelMes } from "@/lib/mcp/manguera";
 
 // Conector MCP de massDTE — copiloto de revisión (lee y ORDENA; no emite).
 //
@@ -34,6 +35,13 @@ import { recordOpsEvent } from "@/lib/ops/events";
 //
 // Techo si roban el token: leer pendientes de UNA empresa autorizada y, como
 // mucho, devolver sus documentos listos a revisión (fricción, cero daño).
+//
+// LA MANGUERA (tanda 2 del plan MCP, 2026-09-05): lo que este conector
+// DEVUELVE vale más que lo que hace — las `razones` del clasificador son la
+// doctrina de massDTE. Por eso la lectura va acotada a un mes, 100 filas por
+// llamada y 10/min · 30/día por token (lib/mcp/manguera.ts). Antes: 1.000
+// filas × 60/min sin ventana ni rastro. Ahora cada freno que salta deja un
+// evento ops con source "mcp".
 
 function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok: true }): McpTools {
   return {
@@ -42,29 +50,65 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         name: "pendientes_emision",
         title: "Pendientes de emisión",
         description:
-          "Lista los documentos agregados en la mesa (boletas o facturas) con su balde: listas para emitir, por revisar, o bloqueadas (y por qué). Úsala para ayudar con el check antes de que el usuario emita en la app.",
+          `Lista los documentos agregados en la mesa (boletas o facturas) de UN mes con su balde: listas para emitir, por revisar, o bloqueadas (y por qué). Úsala para ayudar con el check antes de que el usuario emita en la app. Devuelve hasta ${LIMITE_FILAS_LECTURA} documentos por llamada (los más recientes); si el mes tiene más, lo indica y el detalle completo está en la app.`,
         inputSchema: {
           type: "object",
           properties: {
             mesa: { type: "string", enum: ["boleta", "factura"], description: "Mesa a consultar (default: boleta)" },
+            mes: { type: "string", description: `Mes a consultar en formato YYYY-MM (default: el mes en curso; hasta ${MESES_HACIA_ATRAS_MAX} meses atrás)` },
           },
         },
         annotations: { readOnlyHint: true, destructiveHint: false },
       },
       run: async (args) => {
         const mesa = args.mesa === "factura" ? ("factura" as const) : ("boleta" as const);
+        const ventana = ventanaDelMes(args.mes);
+
+        // Ritmo y techo POR TOKEN antes de tocar la base. Si salta, queda a la
+        // vista de ops (una vez por hora por token y motivo, no una lluvia).
+        const freno = await frenarLectura({ tokenId: ctx.tokenId });
+        if (!freno.ok) {
+          if (freno.avisar) {
+            await recordOpsEvent({
+              severity: "warn",
+              source: "mcp",
+              eventName: freno.motivo === "ritmo" ? "mcp_lectura_ritmo" : "mcp_lectura_tope_diario",
+              summary:
+                freno.motivo === "ritmo"
+                  ? "Un conector MCP superó las lecturas por minuto de pendientes_emision"
+                  : "Un conector MCP alcanzó el techo diario de lecturas de pendientes_emision",
+              empresaId: ctx.empresaId,
+              usuarioId: ctx.usuarioId,
+              resourceType: "mcp_tokens",
+              metadata: { origen: "mcp", token_id: ctx.tokenId, motivo: freno.motivo, mesa, mes: ventana.mes },
+            });
+          }
+          throw new Error(mensajeDeFreno(freno));
+        }
+
         const { data: empresa } = await ctx.svc
           .from("empresas")
           .select("giro, razon_social, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
           .eq("id", ctx.empresaId)
           .maybeSingle();
         const empresaCtx = (empresa as EmpresaCtx | null) ?? { giro: null, razon_social: "", tipo_contribuyente: null };
-        const result = await getPendientesEmision(ctx.svc, ctx.empresaId, empresaCtx, undefined, { mesa });
+        const result = await getPendientesEmision(
+          ctx.svc,
+          ctx.empresaId,
+          empresaCtx,
+          { start: ventana.start, end: ventana.end },
+          { mesa, limit: LIMITE_FILAS_LECTURA },
+        );
+        const posiblementeTruncado = result.items.length >= LIMITE_FILAS_LECTURA;
         return {
           mesa,
+          mes: ventana.mes,
           totales: result.totales,
           items: result.items,
-          nota: "Este conector no emite: la emisión es un acto del humano en la app (pestaña Emitir).",
+          posiblemente_truncado: posiblementeTruncado,
+          nota: posiblementeTruncado
+            ? `Se muestran los ${LIMITE_FILAS_LECTURA} documentos más recientes de ${ventana.mes}; el mes tiene más. El detalle completo está en la app. Este conector no emite.`
+            : "Este conector no emite: la emisión es un acto del humano en la app (pestaña Emitir).",
         };
       },
     },
@@ -140,7 +184,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         const listas = count ?? 0;
         await recordOpsEvent({
           severity: listas >= 20 ? "warn" : "info",
-          source: "auth",
+          source: "mcp",
           eventName: "mcp_dejar_en_emitir",
           summary: `MCP dejó ${listas}/${ids.length} propuesta(s) listas en Emitir: ${motivo}`,
           empresaId: ctx.empresaId,
@@ -219,7 +263,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         const devueltas = count ?? 0;
         await recordOpsEvent({
           severity: devueltas >= 20 ? "warn" : "info",
-          source: "auth",
+          source: "mcp",
           eventName: "mcp_devolver_a_revision",
           summary: `MCP devolvió ${devueltas}/${ids.length} documento(s) a revisión: ${motivo}`,
           empresaId: ctx.empresaId,
