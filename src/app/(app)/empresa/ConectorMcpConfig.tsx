@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { desconectarConectorMcp, listarConectoresMcp, type ConexionMcp } from "./conector-mcp-actions";
-import { MCP_REQUIERE_PLAN } from "@/lib/mcp/copy";
+import { MCP_REQUIERE_PLAN, MCP_SOLO_TITULAR } from "@/lib/mcp/copy";
 
 // Panel "Conector MCP" del popup empresa (diseño del fundador): acá el
 // cliente VE a qué asistentes de IA está conectado y los DESCONECTA con un
@@ -41,6 +41,8 @@ const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
 export default function ConectorMcpConfig() {
   const [conexiones, setConexiones] = useState<ConexionMcp[] | null>(null);
   const [planActivo, setPlanActivo] = useState<boolean | null>(null);
+  const [esTitular, setEsTitular] = useState<boolean | null>(null);
+  const apagado = planActivo === false || esTitular === false;
   const [error, setError] = useState<string | null>(null);
   const [cortando, setCortando] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -59,7 +61,7 @@ export default function ConectorMcpConfig() {
 
   const cargar = () => {
     void listarConectoresMcp().then((res) => {
-      if (res.ok) { setConexiones(res.conexiones); setPlanActivo(res.planActivo); setError(null); }
+      if (res.ok) { setConexiones(res.conexiones); setPlanActivo(res.planActivo); setEsTitular(res.esTitular); setError(null); }
       else setError("No se pudieron cargar las conexiones — reintenta.");
     });
   };
@@ -89,9 +91,14 @@ export default function ConectorMcpConfig() {
             {MCP_REQUIERE_PLAN}
           </p>
         )}
+        {planActivo !== false && esTitular === false && (
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--text2)", fontWeight: 650 }}>
+            {MCP_SOLO_TITULAR}
+          </p>
+        )}
       </div>
 
-      <div style={{ padding: "13px 15px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10, opacity: planActivo === false ? 0.45 : 1, pointerEvents: planActivo === false ? "none" : "auto" }} aria-disabled={planActivo === false}>
+      <div style={{ padding: "13px 15px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10, opacity: apagado ? 0.45 : 1, pointerEvents: apagado ? "none" : "auto" }} aria-disabled={apagado}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 750, color: "var(--text)" }}>
@@ -103,14 +110,14 @@ export default function ConectorMcpConfig() {
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
-              disabled={planActivo === false}
+              disabled={apagado}
               onClick={() => void conectar(CLAUDE_CONNECTORS_URL)}
               style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--accent)", color: "#fff", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
             >
               Conectar tu Claude
             </button>
             <button
-              disabled={planActivo === false}
+              disabled={apagado}
               onClick={() => void conectar(CHATGPT_CONNECTORS_URL)}
               style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface)", color: "var(--text)", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
             >

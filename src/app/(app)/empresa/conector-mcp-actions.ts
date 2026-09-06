@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { recordCuentaAudit } from "@/lib/audit/account";
-import { validarAccesoCuenta } from "@/lib/entitlements";
+import { validarAccesoCuenta, esTitularDeCuenta } from "@/lib/entitlements";
 
 // Conexiones MCP del usuario (panel "Conector MCP" del popup empresa):
 // ver a qué asistentes está conectado y DESCONECTAR al instante. Desconectar
@@ -38,7 +38,7 @@ function svcSinTipos(): SupabaseClient | null {
   return createServiceClient(url, key) as unknown as SupabaseClient;
 }
 
-export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: ConexionMcp[]; planActivo: boolean } | { ok: false; error: string }> {
+export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: ConexionMcp[]; planActivo: boolean; esTitular: boolean } | { ok: false; error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "NO_AUTH" };
@@ -72,11 +72,14 @@ export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: Con
   // server-side, con la misma regla que usa el consentimiento.
   const { data: usuario } = await svc.from("usuarios").select("empresa_id").eq("id", user.id).maybeSingle();
   let planActivo = false;
+  let esTitular = false;
   if (usuario?.empresa_id) {
     const acceso = await validarAccesoCuenta(svc, user.id, usuario.empresa_id);
     planActivo = acceso.ok && acceso.planActivo;
+    // Solo la cuenta principal usa el conector (fundador 2026-09-06).
+    esTitular = acceso.ok && (await esTitularDeCuenta(svc, acceso.cuentaId, user.id));
   }
-  return { ok: true, conexiones, planActivo };
+  return { ok: true, conexiones, planActivo, esTitular };
 }
 
 export async function desconectarConectorMcp(tokenId: string): Promise<{ ok: true } | { ok: false; error: string }> {

@@ -38,6 +38,8 @@ export type EquipoPersona = {
   iniciales: string;
   empresaActivaId: string | null;
   empresaActivaNombre: string | null;
+  /** Titular = cuenta principal: el único con conector MCP (2026-09-06). */
+  esTitular: boolean;
 };
 
 type EquipoBusinessResult =
@@ -589,15 +591,19 @@ export async function listarEquipoBusiness(): Promise<EquipoBusinessResult> {
       };
     }
 
-    const { data: membresias, error: membresiasError } = await ctx.sb
-      .from("cuenta_usuarios")
-      .select("usuario_id")
-      .eq("cuenta_id", acceso.cuentaId)
-      .eq("activo", true)
-      .order("created_at", { ascending: true });
+    const [{ data: membresias, error: membresiasError }, { data: cuentaRow }] = await Promise.all([
+      ctx.sb
+        .from("cuenta_usuarios")
+        .select("usuario_id, es_titular")
+        .eq("cuenta_id", acceso.cuentaId)
+        .eq("activo", true)
+        .order("created_at", { ascending: true }),
+      ctx.sb.from("cuentas").select("owner_usuario_id").eq("id", acceso.cuentaId).maybeSingle(),
+    ]);
     if (membresiasError) return { ok: false, error: "EQUIPO_QUERY_FAILED", detalle: membresiasError.message };
 
     const userIds = (membresias ?? []).map((row) => row.usuario_id);
+    const titulares = new Set((membresias ?? []).filter((m) => m.es_titular || m.usuario_id === cuentaRow?.owner_usuario_id).map((m) => m.usuario_id));
     const { data: usuarios, error: usuariosError } = userIds.length > 0
       ? await ctx.sb.from("usuarios").select("id, nombre, email, empresa_id").in("id", userIds)
       : { data: [], error: null };
@@ -621,6 +627,7 @@ export async function listarEquipoBusiness(): Promise<EquipoBusinessResult> {
         iniciales: initialsFor(usuario.nombre, usuario.email),
         empresaActivaId: usuario.empresa_id,
         empresaActivaNombre: empresaById.get(usuario.empresa_id) ?? null,
+        esTitular: titulares.has(usuario.id),
       }));
 
     return {
