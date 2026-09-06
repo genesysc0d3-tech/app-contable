@@ -1358,3 +1358,53 @@ export async function marcarLeidosTeam(de: string): Promise<void> {
       .is("leido_at", null);
   } catch { /* leer nunca rompe nada */ }
 }
+
+
+// ─── Microatribución (fase 4, 2026-09-06) ───────────────────────────────────
+// "Enviada a emitir por Matías · hace 2h": la mitad del valor percibido del
+// team, leyendo la auditoría que ya existe. Solo con equipo (en una cuenta de
+// una persona no dice nada nuevo). Si falla, no se pinta nada.
+
+export type AtribucionDoc = { nombre: string; iniciales: string; accion: string; at: string; usuarioId: string | null };
+
+const ACCION_HUMANA: Record<string, string> = {
+  propuestas_aprobadas: "Enviada a emitir",
+  cartola_devuelta_a_check: "Devuelta a Check",
+  propuesta_aprobada: "Aprobada",
+  documento_deshecho: "Deshecha",
+  documento_cancelado: "Cancelada",
+  boleta_emitida: "Emitida",
+  emision_fallida: "Emisión fallida",
+};
+
+export async function atribucionDeDoc(documentoId: string): Promise<AtribucionDoc | null> {
+  try {
+    const id = cleanId(documentoId);
+    if (!id) return null;
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return null;
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok || !acceso.plan) return null;
+    const { data: plan } = await ctx.sb.from("planes_config").select("equipo").eq("codigo", acceso.plan).maybeSingle();
+    if (plan?.equipo !== true) return null;
+
+    const { data: ev } = await ctx.sb
+      .from("cuenta_audit_events")
+      .select("accion, usuario_id, created_at")
+      .eq("cuenta_id", acceso.cuentaId)
+      .eq("recurso_id", id)
+      .in("accion", Object.keys(ACCION_HUMANA))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!ev) return null;
+
+    const { data: u } = ev.usuario_id
+      ? await ctx.sb.from("usuarios").select("nombre, email").eq("id", ev.usuario_id).maybeSingle()
+      : { data: null };
+    const nombre = u?.nombre || u?.email || "Alguien del team";
+    return { nombre, iniciales: initialsFor(u?.nombre ?? "", u?.email ?? null), accion: ACCION_HUMANA[ev.accion] ?? ev.accion, at: ev.created_at, usuarioId: ev.usuario_id };
+  } catch {
+    return null;
+  }
+}

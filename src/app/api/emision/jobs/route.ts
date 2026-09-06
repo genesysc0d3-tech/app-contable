@@ -76,15 +76,29 @@ async function bloqueoActual(sb: ServiceDb, cuentaId: string, businessMode: bool
     .maybeSingle();
   if (!lock) return null;
 
-  const usuario = businessMode
-    ? (await sb.from("usuarios").select("nombre, email").eq("id", lock.usuario_id).maybeSingle()).data
-    : null;
+  // Con equipo, el gris dice QUIÉN y CUÁNTO lleva: boletas de esa persona
+  // completadas en la última hora en esta cuenta (el lote toma un candado por
+  // boleta, así que el "avance" se lee de los jobs, no del candado).
+  const [usuario, avance] = businessMode
+    ? await Promise.all([
+        sb.from("usuarios").select("nombre, email").eq("id", lock.usuario_id).maybeSingle().then((r) => r.data),
+        sb.from("emision_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("cuenta_id", cuentaId)
+          .eq("usuario_id", lock.usuario_id)
+          .eq("estado", "completed")
+          .not("propuesta_id", "is", null)
+          .gte("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+          .then((r) => r.count ?? 0),
+      ])
+    : [null, 0];
 
   return buildVisibleEmissionLock({
     lock: lock as ActiveEmissionLock,
     businessMode,
     currentUserId,
     usuario,
+    avance,
   });
 }
 
