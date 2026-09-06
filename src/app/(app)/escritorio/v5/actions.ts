@@ -1208,3 +1208,153 @@ export async function revocarInvitacionTeam(invitacionId: string): Promise<TeamA
     return { ok: false, error: error instanceof Error ? error.message : "No se pudo." };
   }
 }
+
+
+// ─── Chat del team (fase 3, 2026-09-06) ─────────────────────────────────────
+// Mensajes 1 a 1 a nivel cuenta, persistidos (asíncronos). Se entregan por
+// poll desde el globito. La regla dura de "apuntar objeto": el RECEPTOR tiene
+// que tener tick (o ser titular) en la empresa del objeto — si no, "No puedes
+// compartir esto con esa persona". Se valida acá, con el service role, al
+// mandar: la referencia ni siquiera se guarda.
+
+export type TeamObjeto = { tipo: "documento"; id: string; empresaId: string; label: string; mes: string };
+export type TeamMensaje = {
+  id: string;
+  de: string | null;
+  para: string | null;
+  texto: string;
+  objeto: TeamObjeto | null;
+  leidoAt: string | null;
+  createdAt: string;
+};
+export type TeamChatEstado =
+  | { ok: true; mensajes: TeamMensaje[] }
+  | { ok: false; error: string };
+
+const MENSAJES_MAX = 300;
+const TEXTO_MAX = 1000;
+
+async function puedeVerEmpresa(sb: ReturnType<typeof getServiceClient>, cuentaId: string, userId: string, empresaId: string) {
+  if (await esTitularDeCuenta(sb, cuentaId, userId)) return true;
+  const ticks = await ticksDeUsuario(sb, cuentaId, userId);
+  return ticks.has(empresaId);
+}
+
+export async function mensajesTeam(): Promise<TeamChatEstado> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: acceso.codigo };
+
+    const { data, error } = await ctx.sb
+      .from("team_mensajes")
+      .select("id, de_usuario_id, para_usuario_id, texto, objeto_tipo, objeto_id, objeto_empresa_id, objeto_label, objeto_mes, leido_at, created_at")
+      .eq("cuenta_id", acceso.cuentaId)
+      .or(`de_usuario_id.eq.${ctx.userId},para_usuario_id.eq.${ctx.userId}`)
+      .order("created_at", { ascending: false })
+      .limit(MENSAJES_MAX);
+    if (error) return { ok: false, error: error.message };
+
+    const mensajes: TeamMensaje[] = (data ?? []).reverse().map((m) => ({
+      id: m.id,
+      de: m.de_usuario_id,
+      para: m.para_usuario_id,
+      texto: m.texto,
+      objeto: m.objeto_tipo === "documento" && m.objeto_id && m.objeto_empresa_id
+        ? { tipo: "documento", id: m.objeto_id, empresaId: m.objeto_empresa_id, label: m.objeto_label ?? "Documento", mes: m.objeto_mes ?? "" }
+        : null,
+      leidoAt: m.leido_at,
+      createdAt: m.created_at,
+    }));
+    return { ok: true, mensajes };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "CHAT_FAILED" };
+  }
+}
+
+export async function enviarMensajeTeam(input: { para: string; texto: string; objeto?: TeamObjeto | null }): Promise<{ ok: true; mensaje: TeamMensaje } | { ok: false; error: string }> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok) return { ok: false, error: mensajeTeam(ctx.error) };
+    // El operador de soporte mira, no habla por el cliente.
+    if (ctx.supportMode) return { ok: false, error: "En modo soporte no se escribe en el chat del team." };
+    const para = cleanId(input.para);
+    const texto = String(input.texto ?? "").trim().slice(0, TEXTO_MAX);
+    if (!para || para === ctx.userId) return { ok: false, error: "Elige a quién le escribes." };
+    if (!texto) return { ok: false, error: "Escribe algo." };
+
+    const acceso = await resolverAccesoCuenta(ctx);
+    if (!acceso.ok) return { ok: false, error: mensajeTeam(acceso.codigo) };
+
+    const { data: miembro } = await ctx.sb
+      .from("cuenta_usuarios")
+      .select("usuario_id")
+      .eq("cuenta_id", acceso.cuentaId)
+      .eq("usuario_id", para)
+      .eq("activo", true)
+      .maybeSingle();
+    if (!miembro) return { ok: false, error: "Esa persona no está en tu team." };
+
+    let objeto: TeamObjeto | null = null;
+    if (input.objeto) {
+      const objetoId = cleanId(input.objeto.id);
+      const empresaId = cleanId(input.objeto.empresaId);
+      if (!objetoId || !empresaId || input.objeto.tipo !== "documento") return { ok: false, error: "El objeto apuntado no es válido." };
+      // La empresa del objeto es de esta cuenta, y el documento existe en ella.
+      const { data: doc } = await ctx.sb.from("documentos_subidos").select("id").eq("id", objetoId).eq("empresa_id", empresaId).maybeSingle();
+      if (!doc) return { ok: false, error: "Ese documento ya no está." };
+      const { data: ce } = await ctx.sb.from("cuenta_empresas").select("empresa_id").eq("cuenta_id", acceso.cuentaId).eq("empresa_id", empresaId).eq("activa", true).maybeSingle();
+      if (!ce) return { ok: false, error: "Esa empresa no es de tu cuenta." };
+      // Quien manda lo ve; y quien recibe TAMBIÉN tiene que verlo (el tick).
+      if (!(await puedeVerEmpresa(ctx.sb, acceso.cuentaId, ctx.userId, empresaId))) return { ok: false, error: "No tienes acceso a esa empresa." };
+      if (!(await puedeVerEmpresa(ctx.sb, acceso.cuentaId, para, empresaId))) return { ok: false, error: "No puedes compartir esto con esa persona: no ve esa empresa." };
+      objeto = {
+        tipo: "documento",
+        id: objetoId,
+        empresaId,
+        label: String(input.objeto.label ?? "Documento").trim().slice(0, 120) || "Documento",
+        mes: /^\d{4}-\d{1,2}$/.test(String(input.objeto.mes ?? "")) ? String(input.objeto.mes) : "",
+      };
+    }
+
+    const { data, error } = await ctx.sb
+      .from("team_mensajes")
+      .insert({
+        cuenta_id: acceso.cuentaId,
+        de_usuario_id: ctx.userId,
+        para_usuario_id: para,
+        texto,
+        objeto_tipo: objeto?.tipo ?? null,
+        objeto_id: objeto?.id ?? null,
+        objeto_empresa_id: objeto?.empresaId ?? null,
+        objeto_label: objeto?.label ?? null,
+        objeto_mes: objeto?.mes || null,
+      })
+      .select("id, created_at")
+      .single();
+    if (error) return { ok: false, error: error.message };
+
+    return {
+      ok: true,
+      mensaje: { id: data.id, de: ctx.userId, para, texto, objeto, leidoAt: null, createdAt: data.created_at },
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo enviar." };
+  }
+}
+
+export async function marcarLeidosTeam(de: string): Promise<void> {
+  try {
+    const ctx = await getUsuarioActivo();
+    if (!ctx.ok || ctx.supportMode) return;
+    const deId = cleanId(de);
+    if (!deId) return;
+    await ctx.sb
+      .from("team_mensajes")
+      .update({ leido_at: new Date().toISOString() })
+      .eq("para_usuario_id", ctx.userId)
+      .eq("de_usuario_id", deId)
+      .is("leido_at", null);
+  } catch { /* leer nunca rompe nada */ }
+}

@@ -17,3 +17,9 @@ export function useMesaReload(): ((opts?: { silent?: boolean }) => void) | null 
 // Check (y navega el mes si hace falta) y MesaTab lo selecciona al aparecer en
 // la mesa. Singleton simple porque los tabs no comparten árbol React.
 export const pendingOpenDoc: { id: string | null } = { id: null };
+
+// "Último documento abierto" en el visor del Check: lo que el chat del team
+// puede APUNTAR ("mira esta cartola"). MesaTab lo actualiza al seleccionar;
+// null cuando no hay nada abierto. Singleton por la misma razón de arriba.
+export type DocAbierto = { id: string; label: string; month: string; empresaId: string };
+export const ultimoDocAbierto: { doc: DocAbierto | null } = { doc: null };

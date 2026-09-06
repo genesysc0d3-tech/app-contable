@@ -19,7 +19,7 @@ const CartolaEditor = dynamic(() => import("./CartolaEditor"), { ssr: false });
 import { aprobarCartola } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
-import { useMesaReload, pendingOpenDoc } from "./mesa-reload";
+import { useMesaReload, pendingOpenDoc, ultimoDocAbierto } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
@@ -63,6 +63,16 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
 
   const docs = mesa.docsAgregados as DocRow[];
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
+
+  // El chat del team puede APUNTAR lo que está abierto en el visor: se deja
+  // acá (singleton) y se avisa para que el globito ofrezca "apuntar esto".
+  useEffect(() => {
+    ultimoDocAbierto.doc = selDoc
+      ? { id: selDoc.id, label: selDoc.nombre_archivo ?? "Documento", month: `${mesa.calendar.y}-${mesa.calendar.m}`, empresaId }
+      : null;
+    window.dispatchEvent(new Event("massdte:doc-abierto"));
+    return () => { ultimoDocAbierto.doc = null; };
+  }, [selDoc, mesa.calendar.y, mesa.calendar.m, empresaId]);
 
   // Documentos agrupados por FUENTE para el tablero de 3 paneles del Check
   // (Telegram / massDTE / boleta única). Misma clasificación que el `tipo` del visor.

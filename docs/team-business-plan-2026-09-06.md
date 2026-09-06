@@ -24,6 +24,17 @@ persona", y ya. El chequeo va en el servidor al mandar.
 4. **Gris de emisión + microatribución** — banner con dueño y avance desde el
    estado real del lote; "clasificada por X · hace 2h" desde `cuenta_audit_events`.
 
+## Estado (2026-09-06)
+
+- Fase 1 PR #472 (mergeada a dev) + migración `20260906180000_team_ticks.sql` EN PROD.
+- Fase 2 PR #473 (mergeada a dev), sin migración.
+- Fase 3 chat: migración `20260906200000_team_mensajes.sql` (la aplica el
+  fundador), acciones `mensajesTeam/enviarMensajeTeam/marcarLeidosTeam`, hook
+  `useTeamChat` (poll 20 s + foco), `GuardarailOrbe` como contenedor (satélites,
+  lobby, conversación, apuntar `ultimoDocAbierto`, salto con confirmación y
+  `massdte:salto`/`massdte:volver` en sessionStorage). Test `team-chat.test.ts`.
+- Fase 4 (gris de emisión con dueño/avance + microatribución): pendiente.
+
 ## Hechos verificados (2026-09-06)
 
 - `crearInvitacionEmpresa` (`src/app/(app)/empresa/actions.ts:383`) existe y NADIE

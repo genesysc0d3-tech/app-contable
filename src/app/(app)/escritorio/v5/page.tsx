@@ -434,6 +434,7 @@ export default async function V5Page({ searchParams }: {
           // (router.refresh NO re-siembra la mesa) — evita mostrar datos de la empresa
           // anterior en Check/Emitir/Boletas.
           key={`${empresaId}:${mesaParam}`}
+          team={team}
           initialMesa={mesaInicial}
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
