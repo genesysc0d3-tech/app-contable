@@ -5,6 +5,9 @@ import { generarMcpToken, hashMcpToken } from "@/lib/mcp/token";
 import { clientIpFromRequest, rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 
+/** Conectores vivos por usuario: al canjear el 6º se revoca el más viejo (2ª auditoría, 2026-09-06). */
+const MAX_TOKENS_VIVOS_POR_USUARIO = 5;
+
 // Endpoint de tokens OAuth 2.1 (application/x-www-form-urlencoded, público
 // con PKCE — token_endpoint_auth_method "none", como exige el flujo de
 // clientes públicos del estándar MCP).
@@ -80,6 +83,24 @@ export async function POST(request: Request) {
     const accessToken = generarMcpToken();
     const refreshToken = generarRefreshToken();
     const { data: cliente } = await svc.from("oauth_clients").select("client_name").eq("id", clientId).maybeSingle();
+
+    // TOPE DE CONECTORES VIVOS POR USUARIO (2ª auditoría, 2026-09-06): la
+    // manguera es por token, así que sin tope N tokens = N mangueras. Un humano
+    // no tiene 5 asistentes. No se rechaza al 6º (rompería una conexión
+    // legítima nueva): se revoca el MÁS VIEJO, igual que un dispositivo nuevo
+    // desplaza al más antiguo en cualquier cuenta con límite de sesiones.
+    const { data: vivos } = await svc
+      .from("mcp_tokens")
+      .select("id, created_at")
+      .eq("usuario_id", fila.usuario_id)
+      .is("revoked_at", null)
+      .order("created_at", { ascending: true });
+    const sobran = (vivos ?? []).length - (MAX_TOKENS_VIVOS_POR_USUARIO - 1);
+    if (sobran > 0) {
+      const ids = (vivos ?? []).slice(0, sobran).map((t) => t.id);
+      await svc.from("mcp_tokens").update({ revoked_at: new Date().toISOString(), refresh_token_hash: null }).in("id", ids);
+    }
+
     const { error: insertError } = await svc.from("mcp_tokens").insert({
       usuario_id: fila.usuario_id,
       token_hash: hashMcpToken(accessToken),

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { validarAccesoCuenta } from "@/lib/entitlements";
 
 // Conexiones MCP del usuario (panel "Conector MCP" del popup empresa):
 // ver a qué asistentes está conectado y DESCONECTAR al instante. Desconectar
@@ -37,7 +38,7 @@ function svcSinTipos(): SupabaseClient | null {
   return createServiceClient(url, key) as unknown as SupabaseClient;
 }
 
-export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: ConexionMcp[] } | { ok: false; error: string }> {
+export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: ConexionMcp[]; planActivo: boolean } | { ok: false; error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "NO_AUTH" };
@@ -66,7 +67,16 @@ export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: Con
       creado: f.created_at,
       ultimoUso: f.last_used_at,
     }));
-  return { ok: true, conexiones };
+  // ¿Tiene plan? El conector exige plan activo (lib/mcp/auth.ts); en trial el
+  // panel se ve en gris y sin botones (fundador 2026-09-06). Se decide acá,
+  // server-side, con la misma regla que usa el consentimiento.
+  const { data: usuario } = await svc.from("usuarios").select("empresa_id").eq("id", user.id).maybeSingle();
+  let planActivo = false;
+  if (usuario?.empresa_id) {
+    const acceso = await validarAccesoCuenta(svc, user.id, usuario.empresa_id);
+    planActivo = acceso.ok && acceso.planActivo;
+  }
+  return { ok: true, conexiones, planActivo };
 }
 
 export async function desconectarConectorMcp(tokenId: string): Promise<{ ok: true } | { ok: false; error: string }> {

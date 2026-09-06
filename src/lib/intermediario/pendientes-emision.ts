@@ -35,7 +35,7 @@ export async function getPendientesEmision(
   empresaId: string,
   empresaCtx: EmpresaCtx,
   range?: { start: string; end: string },
-  opts?: { soloAprobado?: boolean; mesa?: "boleta" | "factura"; limit?: number },
+  opts?: { soloAprobado?: boolean; mesa?: "boleta" | "factura"; limit?: number; offset?: number },
 ) {
   const mesaActiva: "boleta" | "factura" = opts?.mesa === "factura" ? "factura" : "boleta";
   // 'editado' es borrador (perdió el Aprobar) y NUNCA es emitible; la cola de Emitir
@@ -65,10 +65,17 @@ export async function getPendientesEmision(
   // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
   if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);
   propsQuery = propsQuery.order("created_at", { ascending: false });
-  // Tope de filas (lo usa el conector MCP: 100 por llamada). La mesa y Emitir
-  // no lo pasan y siguen viendo todo el periodo, como siempre.
-  if (opts?.limit && opts.limit > 0) propsQuery = propsQuery.limit(opts.limit);
-  const { data: propuestas, error: pErr } = await propsQuery;
+  // Paginación (la usa el conector MCP: 100 por página). Se pide UNA fila más
+  // de las que se van a devolver para saber si hay otra página, sobre las
+  // filas CRUDAS — antes se miraba el largo post-filtro y una emitida dentro
+  // de las 100 apagaba la señal de "hay más" (2ª auditoría, 2026-09-06). La
+  // mesa y Emitir no pasan limit y siguen viendo todo el periodo.
+  const limite = opts?.limit && opts.limit > 0 ? opts.limit : null;
+  const desde = opts?.offset && opts.offset > 0 ? opts.offset : 0;
+  if (limite) propsQuery = propsQuery.range(desde, desde + limite);
+  const { data: propuestasCrudas, error: pErr } = await propsQuery;
+  const hayMas = limite != null && (propuestasCrudas?.length ?? 0) > limite;
+  const propuestas = limite ? (propuestasCrudas ?? []).slice(0, limite) : propuestasCrudas;
 
   if (pErr) throw new Error(pErr.message);
 
@@ -329,5 +336,6 @@ export async function getPendientesEmision(
     }
   }
 
-  return { items, totales, aprobadas_otros_tipos };
+  // `hayMas`: solo significa algo cuando se pidió con limit (conector MCP).
+  return { items, totales, aprobadas_otros_tipos, hayMas };
 }
