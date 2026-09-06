@@ -1,5 +1,6 @@
 "use client";
 
+import { mesDeFecha, pendingResaltar, resaltarElemento } from "./apuntar";
 import { useState, useMemo, useEffect, useRef, useId, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
@@ -227,6 +228,19 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   }, [empresaId, esFacturas]);
   // File-first: qué documentos están expandidos + qué popup de "por revisar" está abierta.
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
+  // Salto del chat del team a una tx: se abre su cartola y se resalta la fila.
+  useEffect(() => {
+    const intentar = () => {
+      const ref = pendingResaltar.ref;
+      if (!ref || ref.tipo !== "tx") return;
+      setExpandedDocs((prev) => { const n = new Set(prev); n.add(ref.docId ?? "__sueltas__"); return n; });
+      window.setTimeout(() => { if (resaltarElemento(ref.id)) pendingResaltar.ref = null; }, 160);
+    };
+    intentar();
+    window.addEventListener("massdte:resaltar", intentar);
+    window.addEventListener("mesa-updated", intentar);
+    return () => { window.removeEventListener("massdte:resaltar", intentar); window.removeEventListener("mesa-updated", intentar); };
+  }, []);
   // Última mirada del conglomerado (pedido fundador 2026-09-01): las juzgadas
   // (sin boleta) de cada cartola, cargadas on-demand al expandir, en un
   // desplegable tachado. Y "Devolver a Check": la cartola completa retrocede.
@@ -551,7 +565,9 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     // el header del conglomerado). Solo las sueltas conservan checkbox propio.
     const enCartola = Boolean(item.documento_id);
     return (
-      <div key={item.id} className={`em-item ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}>
+      <div key={item.id} className={`em-item ${isSelected ? "sel" : ""} ${isDisabled ? "dis" : ""}`}
+        data-apuntable="tx" data-apuntable-id={item.id} data-apuntable-doc={item.documento_id ?? undefined} data-apuntable-mes={mesDeFecha(item.fecha) ?? undefined}
+        data-apuntable-label={`${(item.receptor_nombre || item.descripcion || "Movimiento").slice(0, 60)} · ${formatShortDateEsCl(item.fecha)} · $${Math.round(item.monto_total).toLocaleString("es-CL")}`}>
         {enCartola ? (
           <div style={{ width: 16, flexShrink: 0 }} />
         ) : (

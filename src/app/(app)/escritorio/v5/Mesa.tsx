@@ -1,5 +1,7 @@
 "use client";
 
+import { mesDeFecha, pendingResaltar, resaltarElemento } from "./apuntar";
+import { useEffect } from "react";
 import Link from "next/link";
 import TabsV5 from "./TabsV5";
 import EmitirTabContent from "./EmitirTabContent";
@@ -43,6 +45,18 @@ export type MesaProps = {
 };
 
 export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo }: MesaProps) {
+  // Salto del chat del team a una boleta: se resalta en la pestaña Boletas.
+  useEffect(() => {
+    const intentar = () => {
+      const ref = pendingResaltar.ref;
+      if (!ref || ref.tipo !== "boleta") return;
+      window.setTimeout(() => { if (resaltarElemento(ref.id)) pendingResaltar.ref = null; }, 160);
+    };
+    intentar();
+    window.addEventListener("massdte:resaltar", intentar);
+    window.addEventListener("mesa-updated", intentar);
+    return () => { window.removeEventListener("massdte:resaltar", intentar); window.removeEventListener("mesa-updated", intentar); };
+  }, []);
   return (
     <TabsV5
       boletasLabel={mesa.mesaActiva === "factura" ? "Facturas" : "Boletas"}
@@ -75,6 +89,8 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                 const esAnulada = b.estado === "anulada";
                 return (
                   <div key={b.id} className={`bl-item ${esAnulada ? "an" : ""}`}
+                    data-apuntable="boleta" data-apuntable-id={b.id} data-apuntable-mes={mesDeFecha(b.fecha_emision) ?? undefined}
+                    data-apuntable-label={`Boleta #${b.folio} · ${b.receptor_razon_social ?? "sin receptor"} · $${Math.round(b.monto_total).toLocaleString("es-CL")}`}
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: esAnulada ? 0.5 : 1 }}>
                     <div className="ic" style={{ width: 28, height: 28, borderRadius: 6, background: b.es_unica ? "rgba(232,85,62,.07)" : "var(--bg-muted)", border: b.es_unica ? "1px dashed rgba(232,85,62,.5)" : "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: b.es_unica ? "var(--accent)" : "var(--text2)" }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>

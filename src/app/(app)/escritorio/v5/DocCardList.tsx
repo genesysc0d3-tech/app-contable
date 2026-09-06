@@ -254,7 +254,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
           const pct = hasProgress ? Math.round((loteActual / totalLotes) * 100) : 0;
 
           return (
-            <div key={doc.id} className="doc-card" style={isBoletaUnica ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
+            <div key={doc.id} className="doc-card" data-apuntable="documento" data-apuntable-id={doc.id} data-apuntable-label={doc.nombre_archivo} style={isBoletaUnica ? { border: "1px dashed rgba(232,85,62,.58)", background: "rgba(232,85,62,.045)" } : undefined}>
               <div className="dh" style={isBoletaUnica ? { padding: "6px 8px", gap: 5 } : undefined}>
                 {isBoletaUnica && <span style={{width:18,height:18,borderRadius:5,border:"1px dashed rgba(232,85,62,.72)",display:"grid",placeItems:"center",color:"var(--accent)",fontSize:9,fontWeight:900,flexShrink:0}}>B1</span>}
                 <span className={`dt ${lm[doc.estado] ?? "gn"}`} style={{background:st[doc.estado]??"var(--text2)",boxShadow:`0 0 5px color-mix(in srgb, ${st[doc.estado]??"var(--text2)"} 25%, transparent)`}} />

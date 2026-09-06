@@ -7,6 +7,7 @@ import GuardarailOrbe from "./GuardarailOrbe";
 import CalendarStrip, { type NavParams } from "./CalendarStrip";
 import type { CargarMesaResult, TeamEstado } from "./actions";
 import { MesaReloadContext, pendingOpenDoc } from "./mesa-reload";
+import { pendingResaltar, type ApuntableTipo } from "./apuntar";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
@@ -160,6 +161,19 @@ export default function MesaController({
       window.setTimeout(() => window.dispatchEvent(new Event("massdte:try-open")), 80);
     };
     window.addEventListener("massdte:open-doc", onOpenDoc);
+    // Salto del chat a una tx/boleta: navegar al mes (si hace falta), ir a
+    // la pestaña y dejar el resaltado pendiente para cuando la fila exista.
+    const onIrA = (e: Event) => {
+      const d = (e as CustomEvent).detail as { tipo?: ApuntableTipo; id?: string; docId?: string | null; month?: string } | undefined;
+      if (!d?.tipo || !d.id) return;
+      pendingResaltar.ref = { tipo: d.tipo, id: d.id, docId: d.docId ?? null };
+      window.dispatchEvent(new CustomEvent("switch-tab", { detail: d.tipo === "boleta" ? "boletas" : "emitir" }));
+      // Vista MES del mes del objeto: garantiza que la fila esté en la mesa.
+      const cur = `${mesa.calendar.y}-${mesa.calendar.m}`;
+      navigate({ view: "month", month: d.month ?? cur });
+      window.setTimeout(() => window.dispatchEvent(new Event("massdte:resaltar")), 120);
+    };
+    window.addEventListener("massdte:ir-a", onIrA);
     // SALTO del chat del team que cruzó de empresa: el cambio de empresa
     // remonta todo (router.refresh), así que el destino viaja por
     // sessionStorage y se consume acá, una sola vez, al montar.
@@ -167,11 +181,12 @@ export default function MesaController({
       const raw = sessionStorage.getItem("massdte:salto");
       if (raw) {
         sessionStorage.removeItem("massdte:salto");
-        const salto = JSON.parse(raw) as { documentoId?: string; month?: string };
-        if (salto.documentoId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: salto })), 120);
+        const salto = JSON.parse(raw) as { documentoId?: string; month?: string; tipo?: ApuntableTipo; id?: string; docId?: string | null };
+        if (salto.tipo && salto.tipo !== "documento" && salto.id) window.setTimeout(() => window.dispatchEvent(new CustomEvent("massdte:ir-a", { detail: salto })), 120);
+        else if (salto.documentoId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: salto })), 120);
       }
     } catch { /* sin salto pendiente */ }
-    return () => window.removeEventListener("massdte:open-doc", onOpenDoc);
+    return () => { window.removeEventListener("massdte:open-doc", onOpenDoc); window.removeEventListener("massdte:ir-a", onIrA); };
   }, [navigate, mesa]);
 
   // Tras subir algo (el uploader vive FUERA del provider → llega por evento): ir a

@@ -6,6 +6,7 @@ import type { GuardarailEmision } from "@/lib/intermediario/guardarail-emision";
 import type { Urgencia, EstadoCierre } from "@/lib/sii/estado-cierre";
 import { cambiarEmpresaActiva, type TeamEstado, type TeamMensaje, type TeamObjeto } from "./actions";
 import { ultimoDocAbierto } from "./mesa-reload";
+import { objetoDesdeElemento } from "./apuntar";
 import { useTeamChat } from "./useTeamChat";
 import { colorDeMiembro } from "./team-colores";
 
@@ -57,6 +58,9 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
   const posRef = useRef<(() => void) | null>(null);
   const [open, setOpen] = useState(false);
   const [modo, setModo] = useState<Modo>({ tipo: "avisos" });
+  // MODO APUNTAR (fundador 2026-09-06): la pantalla se congela y lo que
+  // toques (doc, tx, boleta) queda como referencia del mensaje.
+  const [apuntando, setApuntando] = useState<{ para: string; elegir: (o: TeamObjeto) => void } | null>(null);
   const st = useRef({ x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, raf: 0, dragging: false, moved: false, sx: 0, sy: 0, ox: 0, oy: 0, open: false, satelite: null as string | null });
   const hayAvisosRef = useRef(false);
 
@@ -180,6 +184,29 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
 
   useEffect(() => { st.current.open = open; }, [open]);
 
+  useEffect(() => {
+    if (!apuntando || !empresaId) return;
+    document.body.classList.add("ap-modo");
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      // El chat y el globito siguen usables; todo lo demás es "apuntable o nada".
+      if (bubbleRef.current?.contains(t) || orbRef.current?.contains(t)) return;
+      e.preventDefault(); e.stopPropagation();
+      const obj = objetoDesdeElemento(t);
+      if (!obj) return;
+      apuntando.elegir({ tipo: obj.tipo, id: obj.id, empresaId, label: obj.label, mes: obj.mes ?? mesActual ?? "", docId: obj.docId });
+      setApuntando(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setApuntando(null); };
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.body.classList.remove("ap-modo");
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [apuntando, empresaId, mesActual]);
+
   // La burbuja cambia de tamaño con el contenido (lobby, conversación): se
   // reposiciona tras cada render que la afecte, para que la cola no se descuadre.
   useEffect(() => {
@@ -216,14 +243,17 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
       sessionStorage.setItem("massdte:volver", JSON.stringify({ empresaId, month: mesActual, documentoId: ultimoDocAbierto.doc?.id ?? null, label: ultimoDocAbierto.doc?.label ?? "donde estabas" }));
     } catch { /* sin volver */ }
     setOpen(false); setModo({ tipo: "avisos" });
+    const salto = obj.tipo === "documento"
+      ? { documentoId: obj.id, month: obj.mes || undefined }
+      : { tipo: obj.tipo, id: obj.id, docId: obj.docId, month: obj.mes || undefined };
     if (cruza) {
       const r = await cambiarEmpresaActiva(obj.empresaId);
       if (!r.ok) { window.alert(r.detalle ?? "No se pudo cambiar de empresa."); return; }
-      try { sessionStorage.setItem("massdte:salto", JSON.stringify({ documentoId: obj.id, month: obj.mes || undefined })); } catch { /* noop */ }
+      try { sessionStorage.setItem("massdte:salto", JSON.stringify(salto)); } catch { /* noop */ }
       router.refresh();
       return;
     }
-    window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: { documentoId: obj.id, month: obj.mes || undefined } }));
+    window.dispatchEvent(new CustomEvent(obj.tipo === "documento" ? "massdte:open-doc" : "massdte:ir-a", { detail: salto }));
   }
 
   return (
@@ -294,8 +324,24 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
         .gr-apuntar span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .gr-send{ font-size:11.5px; font-weight:800; color:#fff; background:var(--accent); border:none; border-radius:9px; padding:7px 13px; cursor:pointer; font-family:inherit; }
         .gr-send:disabled{ opacity:.5; cursor:default; }
-        @media(prefers-reduced-motion:reduce){ .gr-orb,.gr-bubble,.gr-cta{ transition:opacity .15s ease; } .gr-anim svg.gr-danger,.gr-anim svg.gr-danger .gr-excl,.gr-sat-dot{ animation:none; } }
+        /* Modo apuntar: velo, cruz, y lo apuntable se ilumina al pasar. */
+        .ap-veil{ position:fixed; inset:0; z-index:58; background:rgba(8,9,12,.42); pointer-events:none; }
+        .ap-hint{ position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:62; padding:8px 14px; border-radius:999px; background:var(--surface); border:1px solid rgba(232,85,62,.45); color:var(--text); font-size:11.5px; font-weight:750; box-shadow:0 12px 34px -10px rgba(0,0,0,.6); white-space:nowrap; }
+        .ap-hint b{ color:var(--accent); }
+        body.ap-modo, body.ap-modo *{ cursor:crosshair !important; }
+        body.ap-modo [data-apuntable]{ position:relative; z-index:59; outline:1px dashed rgba(232,85,62,.55); outline-offset:2px; border-radius:8px; }
+        body.ap-modo [data-apuntable]:hover{ outline:2px solid var(--accent); box-shadow:0 0 0 6px rgba(232,85,62,.16); }
+        .ap-halo{ outline:2px solid var(--accent) !important; outline-offset:2px; border-radius:8px; animation:apHalo 2.5s ease-out both; }
+        @keyframes apHalo{ 0%{ box-shadow:0 0 0 14px rgba(232,85,62,.28) } 100%{ box-shadow:0 0 0 0 rgba(232,85,62,0) } }
+        @media(prefers-reduced-motion:reduce){ .gr-orb,.gr-bubble,.gr-cta{ transition:opacity .15s ease; } .gr-anim svg.gr-danger,.gr-anim svg.gr-danger .gr-excl,.gr-sat-dot{ animation:none; } .ap-halo{ animation:none; } }
       `}</style>
+
+      {apuntando && (
+        <>
+          <div className="ap-veil" aria-hidden />
+          <div className="ap-hint" role="status">Toca lo que quieres que vea <b>{apuntando.para}</b> · Esc para salir</div>
+        </>
+      )}
 
       <button
         ref={orbRef}
@@ -407,6 +453,7 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
             onVolver={() => setModo({ tipo: "lobby" })}
             onEnviar={(texto, objeto) => chat.enviar(modo.con, texto, objeto)}
             onIr={irA}
+            onApuntar={(elegir) => setApuntando({ para: miembro(modo.con)?.nombre?.split(" ")[0] ?? "tu compañero", elegir })}
           />
         )}
       </div>
@@ -434,13 +481,13 @@ function VolverChip({ onIr }: { onIr: (obj: TeamObjeto) => void }) {
   if (!volver?.empresaId || !volver.documentoId) return null;
   return (
     <button type="button" className="gr-obj" style={{ marginTop: 8 }}
-      onClick={() => { try { sessionStorage.removeItem("massdte:volver"); } catch { /* noop */ } setVolver(null); onIr({ tipo: "documento", id: volver.documentoId!, empresaId: volver.empresaId!, label: volver.label, mes: volver.month ?? "" }); }}>
+      onClick={() => { try { sessionStorage.removeItem("massdte:volver"); } catch { /* noop */ } setVolver(null); onIr({ tipo: "documento", id: volver.documentoId!, empresaId: volver.empresaId!, label: volver.label, mes: volver.month ?? "", docId: null }); }}>
       ← <span>Volver a {volver.label}</span>
     </button>
   );
 }
 
-function Conversacion({ con, color, yo, mensajes, onVolver, onEnviar, onIr }: {
+function Conversacion({ con, color, yo, mensajes, onVolver, onEnviar, onIr, onApuntar }: {
   con: { id: string; nombre: string; iniciales: string } | null;
   color: string;
   yo: string;
@@ -448,33 +495,25 @@ function Conversacion({ con, color, yo, mensajes, onVolver, onEnviar, onIr }: {
   onVolver: () => void;
   onEnviar: (texto: string, objeto: TeamObjeto | null) => Promise<{ ok: true } | { ok: false; error: string }>;
   onIr: (obj: TeamObjeto) => void;
+  /** Entra en modo apuntar; el callback recibe lo que se tocó. */
+  onApuntar: (elegir: (obj: TeamObjeto) => void) => void;
 }) {
   const [texto, setTexto] = useState("");
-  const [apuntar, setApuntar] = useState(false);
-  const [doc, setDoc] = useState(ultimoDocAbierto.doc);
+  const [ref, setRef] = useState<TeamObjeto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
-  // Si lo abierto desaparece, la referencia cae sola (derivado, no estado).
-  const apuntando = apuntar && Boolean(doc);
 
-  // Lo abierto en el visor cambia sin que el chat se entere: se escucha.
-  useEffect(() => {
-    const h = () => setDoc(ultimoDocAbierto.doc);
-    window.addEventListener("massdte:doc-abierto", h);
-    return () => window.removeEventListener("massdte:doc-abierto", h);
-  }, []);
   useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [mensajes.length]);
 
   async function enviar() {
     const t = texto.trim();
     if (!t || enviando) return;
     setEnviando(true); setError(null);
-    const objeto: TeamObjeto | null = apuntando && doc ? { tipo: "documento", id: doc.id, empresaId: doc.empresaId, label: doc.label, mes: doc.month } : null;
-    const r = await onEnviar(t, objeto);
+    const r = await onEnviar(t, ref);
     setEnviando(false);
     if (!r.ok) { setError(r.error); return; }
-    setTexto(""); setApuntar(false);
+    setTexto(""); setRef(null);
   }
 
   return (
@@ -502,12 +541,10 @@ function Conversacion({ con, color, yo, mensajes, onVolver, onEnviar, onIr }: {
         <textarea value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={`Mensaje para ${con?.nombre?.split(" ")[0] ?? "el team"}`} rows={2}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void enviar(); } }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          {doc ? (
-            <button type="button" className={`gr-apuntar${apuntando ? " on" : ""}`} onClick={() => setApuntar((v) => !v)} title={apuntando ? "Quitar la referencia" : "Adjuntar lo que tienes abierto en el Check"}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12 21.5a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.5 3.5 0 0 1 5 5l-9.2 9.2a1.5 1.5 0 0 1-2.1-2.1L15.5 8" /></svg>
-              <span>{apuntando ? "Apuntando: " : "Apuntar "}{doc.label}</span>
-            </button>
-          ) : <span style={{ fontSize: 10.5, color: "var(--text3)" }}>Abre algo en el Check para apuntarlo</span>}
+          <button type="button" className={`gr-apuntar${ref ? " on" : ""}`} onClick={() => (ref ? setRef(null) : onApuntar(setRef))} title={ref ? "Quitar la referencia" : "Apuntar algo de la pantalla (una cartola, un movimiento, una boleta)"}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.5 12 21.5a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.5 3.5 0 0 1 5 5l-9.2 9.2a1.5 1.5 0 0 1-2.1-2.1L15.5 8" /></svg>
+            <span>{ref ? `Apuntando: ${ref.label}` : "Apuntar algo"}</span>
+          </button>
           <button type="button" className="gr-send" disabled={!texto.trim() || enviando} onClick={() => void enviar()}>{enviando ? "…" : "Enviar"}</button>
         </div>
         {error && <div style={{ fontSize: 10.5, color: "var(--red)", lineHeight: 1.4 }}>{error}</div>}
