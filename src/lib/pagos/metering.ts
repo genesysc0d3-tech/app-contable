@@ -166,11 +166,36 @@ async function contarMasivas(sb: Sb, empresaIds: string[], desdeIso: string, has
   return count ?? 0;
 }
 
+/**
+ * Documentos masivos EN VUELO: jobs de la cuenta con propuesta (los que
+ * consumen cupo) que siguen `created`/`running`. La boleta real se inserta en
+ * `boletas_emitidas` minutos DESPUÉS de pasar el gate (login, captcha, RPA), y
+ * en ese hueco el uso del mes no la ve: dos personas de la misma cuenta
+ * pasaban el chequeo con el mismo último cupo (2026-09-06). Se toleran 30 min
+ * pasado `expires_at`: un candado recién expirado con la emisión todavía en
+ * curso sigue reservando; un job muerto de hace horas ya no.
+ */
+async function contarEnVuelo(sb: Sb, empresaIds: string[], ahora: Date): Promise<number> {
+  if (empresaIds.length === 0) return 0;
+  const gracia = new Date(ahora.getTime() - 30 * 60 * 1000).toISOString();
+  const { count, error } = await sb
+    .from("emision_jobs")
+    .select("id", { count: "exact", head: true })
+    .in("empresa_id", empresaIds)
+    .not("propuesta_id", "is", null)
+    .in("estado", ["created", "running"])
+    .gt("expires_at", gracia);
+  if (error) throw new Error(`No se pudo contar emisiones en vuelo: ${error.message}`);
+  return count ?? 0;
+}
+
 export interface EstadoCuota {
   plan: string | null;
   cuota: number;
   refills: number;
   uso: number;
+  /** Masivas en vuelo (job vivo, boleta aún no insertada): ya descontadas de `disponible`. */
+  enVuelo: number;
   disponible: number;
   trial: {
     activo: boolean;
@@ -190,7 +215,7 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
   const cuenta = await contextoCuentaPorEmpresa(sb, empresaId);
   const empresaIds = cuenta ? await empresasActivasDeCuenta(sb, cuenta.cuentaId) : [empresaId];
 
-  const [suscripcionRes, usoMes] = await Promise.all([
+  const [suscripcionRes, usoMes, enVuelo] = await Promise.all([
     cuenta
       ? sb
           .from("suscripciones")
@@ -207,6 +232,7 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
           .limit(1)
           .maybeSingle(),
     contarMasivas(sb, empresaIds, rango.desde, rango.hasta),
+    contarEnVuelo(sb, empresaIds, ahora),
   ]);
 
   const suscripcion = suscripcionRes.data ?? null;
@@ -231,7 +257,8 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
       cuota,
       refills,
       uso: usoMes,
-      disponible: Math.max(0, cuota + refills - usoMes),
+      enVuelo,
+      disponible: Math.max(0, cuota + refills - usoMes - enVuelo),
       trial: null,
       suscripcionActiva: true,
       suscripcionEstado: suscripcion?.estado ?? "activa_manual",
@@ -248,6 +275,7 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
       cuota: 0,
       refills: 0,
       uso: usoMes,
+      enVuelo,
       disponible: 0,
       trial: null,
       suscripcionActiva: false,
@@ -263,8 +291,10 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
   const trialDias = planTrialRes.data?.trial_dias ?? 3;
   const trialMax = planTrialRes.data?.trial_boletas ?? 100;
   const inicio = inicioTrial(empresaRes.data);
-  // El cupo del trial se mide desde su inicio (no por mes calendario).
-  const boletasUsadas = inicio ? await contarMasivas(sb, [empresaId], inicio) : 0;
+  // El cupo del trial se mide desde su inicio (no por mes calendario), y es de
+  // la CUENTA como el del plan: antes contaba `[empresaId]` y una cuenta con N
+  // empresas tenía N cupos de prueba (2026-09-06).
+  const boletasUsadas = inicio ? await contarMasivas(sb, empresaIds, inicio) : 0;
   const vigencia = trialVigente(inicio, ahora, trialDias, boletasUsadas, trialMax);
 
   return {
@@ -272,7 +302,8 @@ export async function estadoCuota(sb: Sb, empresaId: string, ahora: Date = new D
     cuota: 0,
     refills: 0,
     uso: usoMes,
-    disponible: vigencia.activo ? Math.max(0, trialMax - boletasUsadas) : 0,
+    enVuelo,
+    disponible: vigencia.activo ? Math.max(0, trialMax - boletasUsadas - enVuelo) : 0,
     trial: {
       activo: vigencia.activo,
       inicio,
