@@ -8,7 +8,9 @@
  *
  * REGLA DE CONTEO (la única que importa para cobrar):
  * Una boleta cuenta contra la cuota MASIVA cuando nace del pipeline de
- * cartolas, es decir `boletas_emitidas.propuesta_id IS NOT NULL`. Las
+ * cartolas, es decir `boletas_emitidas.propuesta_id IS NOT NULL` Y con el
+ * sello `computa_cupo = true` (la factura única digitada en la app también
+ * enlaza propuesta pero se sella en FALSE al emitir). Las
  * boletas únicas/directas (propuesta_id NULL) son ilimitadas y no
  * descuentan cupo. El uso del período son las masivas con `created_at`
  * dentro del mes calendario chileno vigente y `estado != 'anulada'`.
@@ -152,6 +154,10 @@ async function contarMasivas(sb: Sb, empresaIds: string[], desdeIso: string, has
     .select("id", { count: "exact", head: true })
     .in("empresa_id", empresaIds)
     .not("propuesta_id", "is", null)
+    // El sello manda (2026-09-06): la factura ÚNICA digitada en la app enlaza
+    // propuesta_id (lo necesita el doble folio) pero nace con computa_cupo =
+    // FALSE por trigger. Acá no se reimplementa la regla: se lee el sello.
+    .eq("computa_cupo", true)
     .neq("estado", "anulada")
     .gte("created_at", desdeIso);
   if (hastaIso) q = q.lt("created_at", hastaIso);

@@ -161,6 +161,7 @@ export type Database = {
         Row: {
           anulada_por_id: string | null
           caf_id: string | null
+          computa_cupo: boolean
           created_at: string
           detalles: Json
           emision_proveedor: string
@@ -199,6 +200,7 @@ export type Database = {
         Insert: {
           anulada_por_id?: string | null
           caf_id?: string | null
+          computa_cupo?: boolean
           created_at?: string
           detalles?: Json
           emision_proveedor?: string
@@ -237,6 +239,7 @@ export type Database = {
         Update: {
           anulada_por_id?: string | null
           caf_id?: string | null
+          computa_cupo?: boolean
           created_at?: string
           detalles?: Json
           emision_proveedor?: string
