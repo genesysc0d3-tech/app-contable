@@ -71,6 +71,33 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
       metadata: { origen: "mcp", conector_id: ctx.tokenId, motivo: freno.motivo, ...extra },
     });
   };
+  // OBSERVACIONES DEL ASISTENTE (2026-09-06): qué sugirió, sobre qué documento
+  // y por qué, en CUARENTENA. Se registran SOLO los ids que de verdad cambiaron
+  // de estado (el update devuelve las filas tocadas), no los pedidos. El
+  // resultado no se escribe: se calcula después mirando la mesa. Si el insert
+  // falla, la escritura ya hecha NO se deshace ni se reporta como error —
+  // aprender es secundario a operar; se traga y sigue.
+  const registrarObservaciones = async (accion: "dejar_en_emitir" | "devolver_a_revision", propuestaIds: string[], motivo: string) => {
+    if (propuestaIds.length === 0) return;
+    try {
+      // La tabla aún no está en database.types (se regenera tras aplicar la
+      // migración); cliente sin tipos SOLO para este insert.
+      const sinTipos = ctx.svc as unknown as { from: (t: string) => { insert: (rows: unknown[]) => PromiseLike<unknown> } };
+      await sinTipos.from("asistente_observaciones").insert(
+        propuestaIds.map((propuesta_id) => ({
+          empresa_id: ctx.empresaId,
+          usuario_id: ctx.usuarioId,
+          token_id: ctx.tokenId,
+          propuesta_id,
+          accion,
+          motivo: motivo.slice(0, 300),
+        })),
+      );
+    } catch {
+      /* aprender es secundario a operar */
+    }
+  };
+
   return {
     pendientes_emision: {
       def: {
@@ -183,7 +210,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
               maxItems: 50,
               description: "IDs de propuestas (los `id` de pendientes_emision) a dejar listas",
             },
-            motivo: { type: "string", description: "Por qué se dejan listos (queda registrado en la auditoría)" },
+            motivo: { type: "string", description: "Por qué se dejan listos (queda registrado junto a cada documento; el usuario lo puede ver)" },
           },
           required: ["propuesta_ids", "motivo"],
         },
@@ -209,15 +236,18 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         // Solo estados PRE-emisión suben a 'aprobado'. Lo emitido, rechazado o
         // descartado no se toca; NO se escribe cliente_id ni reglas de
         // aprendizaje (la IA externa no alimenta el sistema de reglas).
-        const { count, error } = await ctx.svc
+        const { data: tocadas, error } = await ctx.svc
           .from("propuestas_ia")
-          .update({ estado: "aprobado" }, { count: "exact" })
+          .update({ estado: "aprobado" })
           .in("id", ids)
           .eq("empresa_id", ctx.empresaId)
-          .in("estado", ["pendiente", "editado", "listo"]);
+          .in("estado", ["pendiente", "editado", "listo"])
+          .select("id");
         if (error) throw new Error("No se pudieron dejar listas las propuestas");
 
-        const listas = count ?? 0;
+        const idsTocados = (tocadas ?? []).map((r) => r.id);
+        const listas = idsTocados.length;
+        await registrarObservaciones("dejar_en_emitir", idsTocados, motivo);
         await recordOpsEvent({
           severity: listas >= 20 ? "warn" : "info",
           source: "mcp",
@@ -255,7 +285,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
               maxItems: 50,
               description: "IDs de propuestas (los `id` de pendientes_emision) a devolver al check",
             },
-            motivo: { type: "string", description: "Por qué se devuelven (queda registrado en la auditoría)" },
+            motivo: { type: "string", description: "Por qué se devuelven (queda registrado junto a cada documento; el usuario lo puede ver)" },
           },
           required: ["propuesta_ids", "motivo"],
         },
@@ -295,15 +325,18 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
 
         // Solo estados PRE-emisión "staged" vuelven al check. Lo emitido, lo
         // descartado y lo pendiente no se tocan (idempotente por construcción).
-        const { count, error } = await ctx.svc
+        const { data: tocadas, error } = await ctx.svc
           .from("propuestas_ia")
-          .update({ estado: "pendiente" }, { count: "exact" })
+          .update({ estado: "pendiente" })
           .in("id", ids)
           .eq("empresa_id", ctx.empresaId)
-          .in("estado", ["aprobado", "listo"]);
+          .in("estado", ["aprobado", "listo"])
+          .select("id");
         if (error) throw new Error("No se pudieron devolver los documentos");
 
-        const devueltas = count ?? 0;
+        const idsTocados = (tocadas ?? []).map((r) => r.id);
+        const devueltas = idsTocados.length;
+        await registrarObservaciones("devolver_a_revision", idsTocados, motivo);
         await recordOpsEvent({
           severity: devueltas >= 20 ? "warn" : "info",
           source: "mcp",
