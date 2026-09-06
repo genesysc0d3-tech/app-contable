@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { cambiarEmpresaActiva, crearEmpresaAdicional, type TeamEstado } from "./actions";
+import { cambiarEmpresaActiva, crearEmpresaAdicional, type Colaboracion, type TeamEstado } from "./actions";
 import TeamSection from "./TeamSection";
 
 export type EmpresaSelectorItem = {
@@ -27,6 +27,10 @@ export default function EmpresaBrand({
   mesa = "boleta",
   empresaRut = null,
   team = null,
+  colaboraciones = [],
+  enCuentaAjena = false,
+  cuentaActualNombre = "",
+  cuentaPropia = null,
 }: {
   nombre: string;
   logoUrl: string;
@@ -42,6 +46,13 @@ export default function EmpresaBrand({
   empresaRut?: string | null;
   /** Apartado Team (2026-09-06): gris en Start/Pro, activo en Business. */
   team?: TeamEstado | null;
+  /** "Colaboras en": teams ajenos donde soy miembro (siempre visible; gris si no hay). */
+  colaboraciones?: Colaboracion[];
+  /** Estoy parado en una cuenta ajena (colaborando). */
+  enCuentaAjena?: boolean;
+  cuentaActualNombre?: string;
+  /** Mi casa, para volver. */
+  cuentaPropia?: { empresaId: string; nombre: string } | null;
 }) {
   const router = useRouter();
   const [logoOk, setLogoOk] = useState(Boolean(logoUrl));
@@ -53,7 +64,7 @@ export default function EmpresaBrand({
   // Antes el menú abría solo con multiempresa. Ahora abre SIEMPRE: el
   // conmutador de mesa (boletas|facturas) vive acá, también para Start/Pro
   // (que en vez de lista de empresas muestra la suya con su RUT).
-  const puedeListarEmpresas = multiempresa && (empresas.length > 1 || puedeAgregar);
+  const puedeListarEmpresas = (multiempresa && (empresas.length > 1 || puedeAgregar)) || enCuentaAjena;
   const canSwitch = true;
 
   // Cambiar de mesa navega DE VERDAD (no replaceState): la mesa re-siembra
@@ -113,7 +124,9 @@ export default function EmpresaBrand({
 
   function switchEmpresa(empresaId: string) {
     const selected = empresas.find((empresa) => empresa.id === empresaId);
-    if (!selected || selected.activaActual || pending) {
+    // Un destino fuera de la lista actual es un team ajeno o mi casa: se
+    // cambia igual; el servidor valida cuenta + tick.
+    if (selected?.activaActual || pending) {
       setOpen(false);
       return;
     }
@@ -222,7 +235,14 @@ export default function EmpresaBrand({
             />
           ) : (<>
           {puedeListarEmpresas ? (<>
-          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Cambiar empresa · y mesa</div>
+          {enCuentaAjena && cuentaPropia && (
+            <button type="button" onClick={() => switchEmpresa(cuentaPropia.empresaId)} disabled={pending}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", marginBottom: 4, padding: "8px 8px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", fontSize: 11, fontWeight: 800, cursor: pending ? "wait" : "pointer", textAlign: "left" }}>
+              <span aria-hidden style={{ color: "var(--text2)" }}>←</span> Volver a tu cuenta
+              <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text3)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{cuentaPropia.nombre}</span>
+            </button>
+          )}
+          <div style={{ padding: "7px 8px 9px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{enCuentaAjena ? `Team de ${cuentaActualNombre || "otra cuenta"} · y mesa` : "Cambiar empresa · y mesa"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {empresas.map((empresa) => (
               <div
@@ -298,6 +318,31 @@ export default function EmpresaBrand({
           )}
           {error && <div style={{ margin: "8px 8px 2px", color: "var(--red)", fontSize: 9, lineHeight: 1.35 }}>{error}</div>}
           {team && <TeamSection team={team} />}
+          {/* "Colaboras en" (fundador 2026-09-06): siempre está; gris si nadie te invitó. */}
+          <div style={{ marginTop: 6, borderTop: "1px solid var(--border)" }}>
+            <div style={{ padding: "9px 8px 7px", fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".06em", opacity: colaboraciones.length ? 1 : 0.7 }}>Colaboras en</div>
+            {colaboraciones.length === 0 ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 8px 8px", opacity: 0.55 }}>
+                <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--bg-muted)", color: "var(--text3)", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>·</span>
+                <span style={{ fontSize: 10.5, color: "var(--text2)", lineHeight: 1.35 }}>No te han invitado a ningún team. Cuando alguien lo haga, entras a colaborar desde acá.</span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {colaboraciones.map((c) => (
+                  <button key={c.cuentaId} type="button" onClick={() => switchEmpresa(c.empresas[0].id)} disabled={pending}
+                    title={`Ir a colaborar en ${c.nombre}`}
+                    style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 9, width: "100%", minHeight: 40, padding: "6px 8px", borderRadius: 9, border: "1px solid transparent", background: "transparent", color: "var(--text)", cursor: pending ? "wait" : "pointer", textAlign: "left", font: "inherit" }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{c.nombre.slice(0, 2).toUpperCase()}</span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nombre}</span>
+                      <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.empresas.length === 1 ? c.empresas[0].nombre : `${c.empresas.length} empresas`}</span>
+                    </span>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: "var(--accent)" }}>Colaborar →</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           </>)}
         </div>
       )}

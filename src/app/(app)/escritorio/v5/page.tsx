@@ -144,6 +144,10 @@ export default async function V5Page({ searchParams }: {
   const empresasSelectorItems = empresasSelector.ok ? empresasSelector.empresas : [];
   const cuentaMultiempresa = empresasSelector.ok ? empresasSelector.multiempresa : false;
   const cuentaPuedeAgregar = empresasSelector.ok ? empresasSelector.puedeAgregar : false;
+  const colaboraciones = empresasSelector.ok ? empresasSelector.colaboraciones : [];
+  const enCuentaAjena = empresasSelector.ok ? empresasSelector.enCuentaAjena : false;
+  const cuentaActualNombre = empresasSelector.ok ? empresasSelector.cuentaActualNombre : "";
+  const cuentaPropia = empresasSelector.ok ? empresasSelector.cuentaPropia : null;
   // El tipo que ve la UI sale del CARRIL de la mesa abierta (2026-09-04), no del
   // general de la empresa: quien tiene boletas exentas y facturas afectas ve en
   // cada mesa su propia verdad. El RCV cuadra BOLETAS, así que mira ese carril.
@@ -445,7 +449,7 @@ export default async function V5Page({ searchParams }: {
           searchHistoryItems={searchHistoryItems}
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
-          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} team={team} /></span></div>}
+          brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} team={team} colaboraciones={colaboraciones} enCuentaAjena={enCuentaAjena} cuentaActualNombre={cuentaActualNombre} cuentaPropia={cuentaPropia} /></span></div>}
           actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
