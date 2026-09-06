@@ -13,13 +13,14 @@ import MedioPagoControl from "./MedioPagoControl";
 import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import VeredictoCard from "./VeredictoCard";
 import VeredictoCartola from "./VeredictoCartola";
+import AtribucionDoc from "./AtribucionDoc";
 // Perf: el editor bulk de cartolas sale del bundle inicial (solo existe dentro
 // del popup); se precarga en idle tras montar la mesa — abrir sigue instantáneo.
 const CartolaEditor = dynamic(() => import("./CartolaEditor"), { ssr: false });
 import { aprobarCartola } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
-import { useMesaReload, pendingOpenDoc } from "./mesa-reload";
+import { useMesaReload, pendingOpenDoc, ultimoDocAbierto } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
@@ -63,6 +64,16 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
 
   const docs = mesa.docsAgregados as DocRow[];
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
+
+  // El chat del team puede APUNTAR lo que está abierto en el visor: se deja
+  // acá (singleton) y se avisa para que el globito ofrezca "apuntar esto".
+  useEffect(() => {
+    ultimoDocAbierto.doc = selDoc
+      ? { id: selDoc.id, label: selDoc.nombre_archivo ?? "Documento", month: `${mesa.calendar.y}-${mesa.calendar.m}`, empresaId }
+      : null;
+    window.dispatchEvent(new Event("massdte:doc-abierto"));
+    return () => { ultimoDocAbierto.doc = null; };
+  }, [selDoc, mesa.calendar.y, mesa.calendar.m, empresaId]);
 
   // Documentos agrupados por FUENTE para el tablero de 3 paneles del Check
   // (Telegram / massDTE / boleta única). Misma clasificación que el `tipo` del visor.
@@ -289,6 +300,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       )}
       {/* ── VISOR (permanente, altura fija) ── */}
       <div style={{ flexShrink: 0, height: "clamp(172px, 24vh, 224px)", minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "thin", borderBottom: "1px solid var(--bg-muted)" }}>
+        {/* Microatribución del team: quién hizo qué con este documento (solo con equipo). */}
+        {selDoc && <AtribucionDoc key={selDoc.id} documentoId={selDoc.id} />}
         {!selDoc ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", color: "var(--text3)" }}>
             <div style={{ maxWidth: 250 }}>

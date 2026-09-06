@@ -37,6 +37,10 @@ export function buildVisibleEmissionLock(args: {
   businessMode: boolean;
   currentUserId: string;
   usuario?: EmissionLockUser | null;
+  /** Boletas que ese mismo usuario ya sacó en esta tanda (jobs completados
+   *  recientes). Un gris largo y mudo es un ticket de soporte: con dueño y
+   *  avance se entiende (Team Business fase 4, 2026-09-06). */
+  avance?: number | null;
 }): VisibleEmissionLock {
   const base = {
     job_id: args.lock.job_id,
@@ -55,9 +59,11 @@ export function buildVisibleEmissionLock(args: {
   }
 
   const nombre = cleanText(args.usuario?.nombre) ?? cleanText(args.usuario?.email) ?? "Otra persona";
+  const avance = typeof args.avance === "number" && args.avance > 0 ? args.avance : 0;
+  const tanda = avance > 0 ? ` · ${avance} boleta${avance === 1 ? " ya salio" : "s ya salieron"} en esta tanda` : "";
   return {
     ...base,
     usuario_nombre: nombre,
-    mensaje: `${nombre} esta emitiendo desde su computador. Puedes seguir revisando, pero la emision esta bloqueada hasta que termine.`,
+    mensaje: `${nombre} esta emitiendo desde su computador${tanda}. Puedes seguir revisando, pero la emision esta bloqueada hasta que termine.`,
   };
 }

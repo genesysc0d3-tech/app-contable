@@ -712,6 +712,49 @@ export type Database = {
           },
         ]
       }
+      cuenta_usuario_empresas: {
+        Row: {
+          created_at: string
+          cuenta_id: string
+          empresa_id: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          cuenta_id: string
+          empresa_id: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          cuenta_id?: string
+          empresa_id?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuenta_usuario_empresas_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuenta_usuario_empresas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuenta_usuario_empresas_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cuentas: {
         Row: {
           created_at: string
@@ -1263,6 +1306,7 @@ export type Database = {
           created_at: string
           email: string
           empresa_id: string
+          empresas_permitidas: string[] | null
           estado: string
           expires_at: string
           id: string
@@ -1276,6 +1320,7 @@ export type Database = {
           created_at?: string
           email: string
           empresa_id: string
+          empresas_permitidas?: string[] | null
           estado?: string
           expires_at?: string
           id?: string
@@ -1289,6 +1334,7 @@ export type Database = {
           created_at?: string
           email?: string
           empresa_id?: string
+          empresas_permitidas?: string[] | null
           estado?: string
           expires_at?: string
           id?: string
@@ -3260,6 +3306,59 @@ export type Database = {
           },
         ]
       }
+      team_mensajes: {
+        Row: {
+          created_at: string
+          cuenta_id: string
+          de_usuario_id: string | null
+          id: string
+          leido_at: string | null
+          objeto_empresa_id: string | null
+          objeto_id: string | null
+          objeto_label: string | null
+          objeto_mes: string | null
+          objeto_tipo: string | null
+          para_usuario_id: string | null
+          texto: string
+        }
+        Insert: {
+          created_at?: string
+          cuenta_id: string
+          de_usuario_id?: string | null
+          id?: string
+          leido_at?: string | null
+          objeto_empresa_id?: string | null
+          objeto_id?: string | null
+          objeto_label?: string | null
+          objeto_mes?: string | null
+          objeto_tipo?: string | null
+          para_usuario_id?: string | null
+          texto: string
+        }
+        Update: {
+          created_at?: string
+          cuenta_id?: string
+          de_usuario_id?: string | null
+          id?: string
+          leido_at?: string | null
+          objeto_empresa_id?: string | null
+          objeto_id?: string | null
+          objeto_label?: string | null
+          objeto_mes?: string | null
+          objeto_tipo?: string | null
+          para_usuario_id?: string | null
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_mensajes_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuarios: {
         Row: {
           created_at: string
@@ -3320,6 +3419,7 @@ export type Database = {
         Args: {
           p_email: string
           p_empresa_id: string
+          p_empresas_permitidas?: string[] | null
           p_expires_at: string
           p_invited_by: string
           p_rol: string
@@ -3331,6 +3431,19 @@ export type Database = {
           invitacion_id: string
           ok: boolean
         }[]
+      }
+      team_actualizar_ticks: {
+        Args: { p_by: string; p_cuenta_id: string; p_empresas: string[]; p_usuario_id: string }
+        Returns: { empresa_activa: string | null; error: string | null; ok: boolean }[]
+      }
+      team_es_titular: { Args: { p_cuenta_id: string; p_usuario_id: string }; Returns: boolean }
+      team_quitar_miembro: {
+        Args: { p_by: string; p_cuenta_id: string; p_usuario_id: string }
+        Returns: { error: string | null; ok: boolean; tokens_revocados: number }[]
+      }
+      team_revocar_invitacion: {
+        Args: { p_by: string; p_invitacion_id: string }
+        Returns: { error: string | null; ok: boolean }[]
       }
       cuenta_de_empresa: { Args: { p_empresa_id: string }; Returns: string }
       cuentas_del_usuario: { Args: never; Returns: string[] }
