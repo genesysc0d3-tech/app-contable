@@ -5,7 +5,7 @@ import RightColumnView from "./RightColumnView";
 import Mesa, { type MesaProps } from "./Mesa";
 import GuardarailOrbe from "./GuardarailOrbe";
 import CalendarStrip, { type NavParams } from "./CalendarStrip";
-import type { CargarMesaResult } from "./actions";
+import type { CargarMesaResult, TeamEstado } from "./actions";
 import { MesaReloadContext, pendingOpenDoc } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
@@ -49,8 +49,10 @@ function broadcastMesa(m: MesaDateDependent) {
 export default function MesaController({
   initialMesa, empresaId, empresaGiro, empresaRazon, empresaTipo, clientes,
   rcvContent, searchHistoryItems, empresaNombre, empresaLogoUrl,
-  brandSlot, actionsSlot, leftColumn,
+  brandSlot, actionsSlot, leftColumn, team = null,
 }: {
+  /** Team Business: el globito de avisos se vuelve también el chat del team. */
+  team?: TeamEstado | null;
   initialMesa: MesaDateDependent;
   empresaId: string;
   empresaGiro: string | null;
@@ -152,6 +154,17 @@ export default function MesaController({
       window.setTimeout(() => window.dispatchEvent(new Event("massdte:try-open")), 80);
     };
     window.addEventListener("massdte:open-doc", onOpenDoc);
+    // SALTO del chat del team que cruzó de empresa: el cambio de empresa
+    // remonta todo (router.refresh), así que el destino viaja por
+    // sessionStorage y se consume acá, una sola vez, al montar.
+    try {
+      const raw = sessionStorage.getItem("massdte:salto");
+      if (raw) {
+        sessionStorage.removeItem("massdte:salto");
+        const salto = JSON.parse(raw) as { documentoId?: string; month?: string };
+        if (salto.documentoId) window.setTimeout(() => window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: salto })), 120);
+      }
+    } catch { /* sin salto pendiente */ }
     return () => window.removeEventListener("massdte:open-doc", onOpenDoc);
   }, [navigate, mesa]);
 
@@ -290,7 +303,7 @@ export default function MesaController({
           }
         />
       </div>
-      <GuardarailOrbe guardarail={mesa.guardarail} />
+      <GuardarailOrbe guardarail={mesa.guardarail} team={team} empresaId={empresaId} mesActual={`${mesa.calendar.y}-${mesa.calendar.m}`} />
     </>
   );
 }

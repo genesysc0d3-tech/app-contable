@@ -3306,6 +3306,59 @@ export type Database = {
           },
         ]
       }
+      team_mensajes: {
+        Row: {
+          created_at: string
+          cuenta_id: string
+          de_usuario_id: string | null
+          id: string
+          leido_at: string | null
+          objeto_empresa_id: string | null
+          objeto_id: string | null
+          objeto_label: string | null
+          objeto_mes: string | null
+          objeto_tipo: string | null
+          para_usuario_id: string | null
+          texto: string
+        }
+        Insert: {
+          created_at?: string
+          cuenta_id: string
+          de_usuario_id?: string | null
+          id?: string
+          leido_at?: string | null
+          objeto_empresa_id?: string | null
+          objeto_id?: string | null
+          objeto_label?: string | null
+          objeto_mes?: string | null
+          objeto_tipo?: string | null
+          para_usuario_id?: string | null
+          texto: string
+        }
+        Update: {
+          created_at?: string
+          cuenta_id?: string
+          de_usuario_id?: string | null
+          id?: string
+          leido_at?: string | null
+          objeto_empresa_id?: string | null
+          objeto_id?: string | null
+          objeto_label?: string | null
+          objeto_mes?: string | null
+          objeto_tipo?: string | null
+          para_usuario_id?: string | null
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_mensajes_cuenta_id_fkey"
+            columns: ["cuenta_id"]
+            isOneToOne: false
+            referencedRelation: "cuentas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuarios: {
         Row: {
           created_at: string
