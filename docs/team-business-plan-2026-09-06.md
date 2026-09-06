@@ -52,3 +52,38 @@ persona", y ya. El chequeo va en el servidor al mandar.
 - Orbe: `GuardarailOrbe.tsx` montado en `MesaController` y desaparece con 0
   pendientes → el chat necesita vivir en `V5Root` y el orbe volverse contenedor.
 - `TabsV5` remonta el contenido con `key={tab-fecha}`; el estado del chat vive fuera.
+
+## Segunda tanda (firmada 2026-09-06 noche) — construir en dev, NO promover a main
+
+### A. "Colaboras en" (multi-cuenta)
+- Una persona puede tener su cuenta Y ser miembro de otras (`cuenta_usuarios`
+  ya lo permite: PK cuenta+usuario). Aceptar la invitación deja de rebotar si
+  ya tiene empresa: agrega membresía + ticks y NO le mueve `empresa_id`.
+- `listarEmpresasSelector` devuelve además `colaboraciones` (cuentas donde es
+  miembro no titular, con sus empresas con tick) y `cuentaPropia` (la empresa
+  principal de la cuenta donde es titular) para "← Volver a tu cuenta".
+- `cambiarEmpresaActiva` acepta destino en CUALQUIER cuenta donde sea miembro
+  activo: titular o tick, plan activo de ESA cuenta. Cruzar cuentas no exige
+  multiempresa (eso es para agregar empresas dentro de una cuenta).
+- Popup del botón de empresa: siempre dos apartados, "Team" (gris: viene con
+  Business) y "Colaboras en" (gris: "No te han invitado a ningún team").
+  Parado en una cuenta ajena: arriba "← Volver a tu cuenta", y la lista es
+  la del team.
+- Regla nº1 (migración `team_quitar_miembro` v2, NO aplicada en prod): al
+  quitar a alguien, si estaba parado en una empresa de esa cuenta se lo
+  devuelve a la empresa principal de su cuenta propia.
+- El MCP sigue siendo solo del titular (no cambia).
+
+### B. Modo apuntar (la fase Figma)
+- Objetivos apuntables marcados con `data-apuntable="documento|tx|boleta"`,
+  `data-apuntable-id`, `data-apuntable-label`, `data-apuntable-doc` (doc que
+  contiene la tx) — en cards de documentos, filas de tx de Emitir y del
+  editor de cartola, y boletas de la mesa.
+- El clip del chat entra en MODO APUNTAR: velo sobre la pantalla, cursor en
+  cruz, lo apuntable se ilumina al pasar, un toque lo elige (Esc sale). La
+  referencia queda en el compose con su nombre ("tx 12 sep · $45.900").
+- `team_mensajes.objeto_tipo` se amplía a tx/boleta (migración NO aplicada en
+  prod) + `objeto_doc_id`. El servidor valida que la tx/boleta exista en la
+  empresa y que el receptor tenga tick.
+- El salto del receptor abre el doc (o la pestaña Boletas) Y resalta la fila
+  (`massdte:resaltar` → scrollIntoView + halo 3 s).

@@ -547,9 +547,9 @@ async function aceptarInvitacionPor(buscar: { tokenHash: string } | { id: string
     .select("empresa_id, vetado, rol")
     .eq("id", user.id)
     .maybeSingle();
-  if (existing?.empresa_id && existing.empresa_id !== invitacion.empresa_id) {
-    return { error: "Este usuario ya pertenece a otra empresa. El selector multiempresa queda para la siguiente fase." };
-  }
+  // "Colaboras en" (2026-09-06): tener cuenta propia ya no impide unirse a un
+  // team ajeno. Se agrega la membresía + ticks y NO se le mueve la empresa
+  // activa: sigue parado en su casa y entra a colaborar desde el popup.
   if (existing?.vetado) return { error: "Esta cuenta está suspendida" };
 
   const cupoAceptacion = await verificarCupoAceptacion(sb, invitacion.empresa_id, user.id);
@@ -563,7 +563,7 @@ async function aceptarInvitacionPor(buscar: { tokenHash: string } | { id: string
   if (ticks.length === 0) return { error: "La invitación no tiene empresas asignadas. Pide una nueva." };
   const empresaInicial = ticks.includes(invitacion.empresa_id) ? invitacion.empresa_id : ticks[0];
 
-  if (existing?.empresa_id === invitacion.empresa_id) {
+  if (existing) {
     if (cupoAceptacion.cuentaId) {
       const { error: membershipError } = await sb.from("cuenta_usuarios").upsert({
         cuenta_id: cupoAceptacion.cuentaId,
@@ -574,7 +574,9 @@ async function aceptarInvitacionPor(buscar: { tokenHash: string } | { id: string
       if (membershipError) return { error: membershipError.message };
       const ticksError = await sembrarTicks(sb, cupoAceptacion.cuentaId, user.id, ticks);
       if (ticksError) return { error: ticksError };
-      if (empresaInicial !== existing.empresa_id) {
+      // Solo se lo mueve si NO tiene dónde estar parado (usuario sin empresa
+      // propia que ya existía en `usuarios`); con casa propia, se queda en casa.
+      if (!existing.empresa_id) {
         await sb.from("usuarios").update({ empresa_id: empresaInicial }).eq("id", user.id);
       }
     }
