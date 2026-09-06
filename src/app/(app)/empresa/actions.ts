@@ -380,6 +380,29 @@ export async function listFormatosCartola(): Promise<{ ok?: boolean; formatos?: 
   };
 }
 
+/** Empresas que recibe la persona al aceptar: las de la fila, o todas las activas de la cuenta si la fila no marcó ninguna. */
+async function ticksParaInvitacion(sb: Sb, cuentaId: string, permitidas: string[] | null): Promise<string[]> {
+  const { data: activas } = await sb
+    .from("cuenta_empresas")
+    .select("empresa_id, es_principal, created_at")
+    .eq("cuenta_id", cuentaId)
+    .eq("activa", true)
+    .order("es_principal", { ascending: false })
+    .order("created_at", { ascending: true });
+  const ids = (activas ?? []).map((row) => row.empresa_id);
+  if (!permitidas) return ids;
+  // Solo las que SIGUEN activas en la cuenta: una empresa migrada entre la
+  // invitación y la aceptación no se cuela.
+  return ids.filter((id) => permitidas.includes(id));
+}
+
+async function sembrarTicks(sb: Sb, cuentaId: string, usuarioId: string, empresas: string[]): Promise<string | null> {
+  const { error } = await sb
+    .from("cuenta_usuario_empresas")
+    .upsert(empresas.map((empresaId) => ({ cuenta_id: cuentaId, usuario_id: usuarioId, empresa_id: empresaId })), { onConflict: "cuenta_id,usuario_id,empresa_id" });
+  return error ? error.message : null;
+}
+
 export async function crearInvitacionEmpresa(formData: FormData): Promise<{ ok?: boolean; invitePath?: string; error?: string }> {
   const supportBlock = await blockSupportWrite();
   if (supportBlock) return supportBlock;
@@ -455,7 +478,7 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   const tokenHash = hashInviteToken(token);
   const { data: invitacion, error: invError } = await sb
     .from("empresa_invitaciones")
-    .select("id, empresa_id, email, rol, estado, expires_at")
+    .select("id, empresa_id, email, rol, estado, expires_at, empresas_permitidas")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -483,6 +506,14 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
   const cupoAceptacion = await verificarCupoAceptacion(sb, invitacion.empresa_id, user.id);
   if (!cupoAceptacion.ok) return { error: cupoAceptacion.error };
 
+  // Ticks del team (2026-09-06): se copian de la FILA de la invitación, jamás
+  // del request. NULL = todas las empresas activas de la cuenta al aceptar.
+  // Sin tick la base no deja ver nada (empresa_autorizada), así que la persona
+  // aterriza parada en una empresa que SÍ ve.
+  const ticks = await ticksParaInvitacion(sb, cupoAceptacion.cuentaId, invitacion.empresas_permitidas);
+  if (ticks.length === 0) return { error: "La invitación no tiene empresas asignadas. Pide una nueva." };
+  const empresaInicial = ticks.includes(invitacion.empresa_id) ? invitacion.empresa_id : ticks[0];
+
   if (existing?.empresa_id === invitacion.empresa_id) {
     if (cupoAceptacion.cuentaId) {
       const { error: membershipError } = await sb.from("cuenta_usuarios").upsert({
@@ -492,6 +523,11 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
         es_titular: false,
       }, { onConflict: "cuenta_id,usuario_id" });
       if (membershipError) return { error: membershipError.message };
+      const ticksError = await sembrarTicks(sb, cupoAceptacion.cuentaId, user.id, ticks);
+      if (ticksError) return { error: ticksError };
+      if (empresaInicial !== existing.empresa_id) {
+        await sb.from("usuarios").update({ empresa_id: empresaInicial }).eq("id", user.id);
+      }
     }
     await sb.from("empresa_invitaciones").update({
       estado: "aceptada",
@@ -518,7 +554,7 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
     id: user.id,
     email: user.email!,
     nombre,
-    empresa_id: invitacion.empresa_id,
+    empresa_id: empresaInicial,
     rol: invitacion.rol,
   });
   if (insertError) return { error: insertError.message };
@@ -533,6 +569,12 @@ export async function aceptarInvitacionEmpresa(token: string): Promise<{ error?:
     if (membershipError) {
       await sb.from("usuarios").delete().eq("id", user.id);
       return { error: membershipError.message };
+    }
+    const ticksError = await sembrarTicks(sb, cupoAceptacion.cuentaId, user.id, ticks);
+    if (ticksError) {
+      await sb.from("cuenta_usuarios").delete().eq("cuenta_id", cupoAceptacion.cuentaId).eq("usuario_id", user.id);
+      await sb.from("usuarios").delete().eq("id", user.id);
+      return { error: ticksError };
     }
   }
 

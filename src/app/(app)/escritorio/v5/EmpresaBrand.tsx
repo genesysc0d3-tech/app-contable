@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { cambiarEmpresaActiva, crearEmpresaAdicional } from "./actions";
+import { cambiarEmpresaActiva, crearEmpresaAdicional, type TeamEstado } from "./actions";
+import TeamSection from "./TeamSection";
 
 export type EmpresaSelectorItem = {
   id: string;
@@ -25,6 +26,7 @@ export default function EmpresaBrand({
   maxWidth = 260,
   mesa = "boleta",
   empresaRut = null,
+  team = null,
 }: {
   nombre: string;
   logoUrl: string;
@@ -38,6 +40,8 @@ export default function EmpresaBrand({
   mesa?: "boleta" | "factura";
   /** RUT de la empresa activa — la variante Start/Pro no lista empresas, muestra esto. */
   empresaRut?: string | null;
+  /** Apartado Team (2026-09-06): gris en Start/Pro, activo en Business. */
+  team?: TeamEstado | null;
 }) {
   const router = useRouter();
   const [logoOk, setLogoOk] = useState(Boolean(logoUrl));
@@ -293,6 +297,7 @@ export default function EmpresaBrand({
             </button>
           )}
           {error && <div style={{ margin: "8px 8px 2px", color: "var(--red)", fontSize: 9, lineHeight: 1.35 }}>{error}</div>}
+          {team && <TeamSection team={team} />}
           </>)}
         </div>
       )}
