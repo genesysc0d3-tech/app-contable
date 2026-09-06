@@ -18,6 +18,15 @@ AlphaCode SpA, RUT 78.448.088-7, Av. Apoquindo 6410 Of. 605, Las Condes, Santiag
 | ImprovMX | EE.UU./internacional | email en tránsito (no almacena) | correo entrante | PENDIENTE |
 | Google (Gmail) | EE.UU./internacional | buzón de soporte y de ejercicio de derechos | recepción | Términos de consumidor. PENDIENTE evaluar cuenta con DPA |
 | Telegram | internacional | imágenes de comprobantes | recepción | [verificar mecanismo] |
+
+## 2.bis Destinatarios elegidos por el cliente (no son encargados de AlphaCode)
+Solo existen si el usuario conecta su propio asistente de IA (conector MCP). AlphaCode no los contrata, no les transfiere por iniciativa propia y no puede exigirles cláusulas: el usuario elige el destinatario y acepta los términos de ese proveedor. Por eso no caben en la tabla de importadores.
+
+| Destinatario | País/región | Datos | Finalidad | Mecanismo |
+|---|---|---|---|---|
+| Anthropic (Claude) — solo si el usuario lo conecta | EE.UU. | pendientes de emisión seudonimizados (sin RUT, contacto, giro ni nombre de archivo de contrapartes; nombre acortado + etiqueta), razones de clasificación, confianza en baldes; motivo que el propio asistente escribe | copiloto de revisión del propio usuario (lee y ordena; no emite) | Consentimiento y elección del titular (activación expresa desde Empresa → Conector, OAuth PKCE, revocable de inmediato). El proveedor trata los datos bajo **su** contrato con el usuario |
+| OpenAI (ChatGPT) — ídem | EE.UU. | ídem | ídem | ídem |
+| Otro cliente MCP en la lista permitida — ídem | según proveedor | ídem | ídem | ídem |
 | Mercado Pago | Latam/internacional | datos de pago, email | cobro | **TRANSITORIO** — se reemplaza por Reveniu (en construcción). No se gestiona DPA con un proveedor que sale |
 | Telegram | internacional | imágenes de comprobantes que el usuario decide enviar | recepción opcional | **NO ofrece DPA** (servicio de consumo). Declarado en los T&C §5.1 y aceptado por el usuario. Canal OPCIONAL: la app funciona sin él |
 
