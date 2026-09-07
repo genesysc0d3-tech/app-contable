@@ -70,9 +70,21 @@ describe("3. cambiar de empresa cruzando cuentas", () => {
 describe("4. el popup", () => {
   const src = readFileSync(BRAND, "utf8");
   it("siempre muestra 'Colaboras en' (gris si nadie te invitó) y 'Volver a tu cuenta' en cuenta ajena", () => {
-    expect(src).toMatch(/No te han invitado a ningún team/);
+    const colab = readFileSync("src/app/(app)/escritorio/v5/ColaborasEn.tsx", "utf8");
+    expect(colab).toMatch(/No te han invitado a ningún team/);
+    expect(src).toMatch(/<ColaborasEn colaboraciones=\{colaboraciones\} pending=\{pending\} onIr=\{switchEmpresa\} \/>/);
     expect(src).toMatch(/\{enCuentaAjena && cuentaPropia && \([\s\S]*?Volver a tu cuenta/);
     expect(src).toMatch(/Team de \$\{cuentaActualNombre \|\| "otra cuenta"\}/);
+  });
+
+  it("vive TAMBIÉN en el wizard de configuración de empresa, como paso Team, con los MISMOS componentes (fundador 2026-09-07)", () => {
+    const wizard = readFileSync("src/app/(app)/escritorio/v5/EmpresaPopup.tsx", "utf8");
+    expect(wizard).toMatch(/title: "Team",\s*sub: "Quién trabaja contigo · Business"/);
+    expect(wizard).toMatch(/\{ key: "team", content: <TeamConfigPanel \/> \}/);
+    const panel = readFileSync("src/app/(app)/escritorio/v5/TeamConfigPanel.tsx", "utf8");
+    expect(panel).toMatch(/<TeamSection team=\{team\} \/>/);
+    expect(panel).toMatch(/<ColaborasEn colaboraciones=\{colab\.colaboraciones\}/);
+    expect(panel).toMatch(/Promise\.all\(\[estadoTeam\(\), listarEmpresasSelector\(\)\]\)/);
   });
 });
 
