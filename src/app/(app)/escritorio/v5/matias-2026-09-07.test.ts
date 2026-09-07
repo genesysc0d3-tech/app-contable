@@ -40,6 +40,7 @@ describe("1. el nombre sale del tipo, en un solo lugar", () => {
     expect(mesa).toMatch(/>\{etiquetaTipo\(b\.tipo_dte\)\}<\/span>/);
     expect(mesa).toMatch(/data-apuntable-label=\{`\$\{tituloDocumento\(b\.tipo_dte, b\.folio\)\}/);
     expect(mesa).not.toMatch(/`DTE \$\{b\.tipo_dte\}`/);
+    expect(mesa).toMatch(/`Aún no hay \$\{plural\}`/);
     const visor = leer(V5 + "BoletaVisor.tsx");
     expect(visor).toMatch(/\{tituloDocumento\(boleta\.tipo_dte, boleta\.folio\)\}/);
     expect(visor).toMatch(/33: \{ label: "Afecta · con IVA · 33"/);

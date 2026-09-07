@@ -15,8 +15,9 @@ import { esTipoExento, etiquetaTipo, tituloDocumento } from "@/lib/sii/nombre-do
 
 const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 
-function compactEmpty(kind: "subidos" | "boletas") {
+function compactEmpty(kind: "subidos" | "boletas", esFacturas = false) {
   const isSubidos = kind === "subidos";
+  const plural = esFacturas ? "facturas" : "boletas";
   return (
     <div className="r-scroll" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 320, padding: "42px 18px", textAlign: "center", color: "var(--text2)" }}>
       <style>{`@keyframes emptySonar{0%{transform:scale(.72);opacity:.45}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emptyDraw{0%{stroke-dashoffset:54;opacity:.28}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.48}}`}</style>
@@ -29,7 +30,7 @@ function compactEmpty(kind: "subidos" | "boletas") {
             <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#3B82F6" }}><path d="M29 15h30l12 12v54H29a6 6 0 0 1-6-6V21a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="4" /><path d="M59 16v13h13" stroke="currentColor" strokeWidth="4" /><path d="M35 45h26M35 56h20M35 67h27" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{ animation: "emptyDraw 2.8s ease-in-out infinite" }} /></svg>
           )}
         </div>
-        <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>{isSubidos ? "Nada por aquí" : "Aún no hay boletas"}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>{isSubidos ? "Nada por aquí" : `Aún no hay ${plural}`}</div>
         <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 270 }}>{isSubidos ? "Esta mesa no tiene documentos agregados todavía." : "Los documentos emitidos en esta mesa aparecerán aquí."}</div>
       </div>
     </div>
@@ -75,7 +76,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
       emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
       boletasContent={
         mesa.boletasCount === 0 ? (
-          compactEmpty("boletas")
+          compactEmpty("boletas", mesa.mesaActiva === "factura")
         ) : (
           <div className="r-scroll">
             <div className="sec">
