@@ -63,6 +63,8 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
   const [apuntando, setApuntando] = useState<{ para: string; elegir: (o: TeamObjeto) => void } | null>(null);
   const st = useRef({ x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, raf: 0, dragging: false, moved: false, sx: 0, sy: 0, ox: 0, oy: 0, open: false, satelite: null as string | null });
   const hayAvisosRef = useRef(false);
+  // En modo apuntar el click "afuera" es la elección, no un cierre.
+  const apuntandoRef = useRef(false);
 
   const buckets = guardarail?.resumen.buckets ?? [];
   const hero = buckets[0];
@@ -160,6 +162,7 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
     function cerrar() { setOpen(false); setModo({ tipo: "avisos" }); }
     const onResize = () => { s.tx = clampX(s.tx); s.ty = clampY(s.ty); s.x = clampX(s.x); s.y = clampY(s.y); render(); };
     const onDocDown = (e: PointerEvent) => {
+      if (apuntandoRef.current) return; // cazado en la prueba real: cerraba el chat al elegir
       if (orb!.contains(e.target as Node) || bubbleRef.current?.contains(e.target as Node)) return;
       cerrar();
     };
@@ -185,6 +188,7 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
   useEffect(() => { st.current.open = open; }, [open]);
 
   useEffect(() => {
+    apuntandoRef.current = Boolean(apuntando);
     if (!apuntando || !empresaId) return;
     document.body.classList.add("ap-modo");
     const onClick = (e: MouseEvent) => {
