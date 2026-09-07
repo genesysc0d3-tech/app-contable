@@ -23,8 +23,28 @@ type EmpresaSelectorRow = {
   logoUrl: string;
 };
 
+/** Un team ajeno donde colaboras (miembro no titular): sus empresas con tick. */
+export type Colaboracion = {
+  cuentaId: string;
+  nombre: string;
+  empresas: Array<{ id: string; nombre: string; rut: string | null }>;
+};
+
 type EmpresasSelectorResult =
-  | { ok: true; empresas: EmpresaSelectorRow[]; multiempresa: boolean; puedeAgregar: boolean }
+  | {
+      ok: true;
+      empresas: EmpresaSelectorRow[];
+      multiempresa: boolean;
+      puedeAgregar: boolean;
+      /** Teams ajenos donde colaboras (sin contar la cuenta donde estás parado). */
+      colaboraciones: Colaboracion[];
+      /** Estás parado en una cuenta que no es tuya (colaborando). */
+      enCuentaAjena: boolean;
+      /** Nombre de la cuenta donde estás parado (para "Team de X"). */
+      cuentaActualNombre: string;
+      /** Tu casa: la empresa principal de la cuenta donde eres titular (null si no tienes). */
+      cuentaPropia: { empresaId: string; nombre: string } | null;
+    }
   | { ok: false; error: string; detalle?: string };
 
 type CambiarEmpresaResult =
@@ -235,7 +255,9 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
     const esTitular = ctx.supportMode ? true : await esTitularDeCuenta(ctx.sb, acceso.cuentaId, ctx.userId);
     const ticks = esTitular ? null : await ticksDeUsuario(ctx.sb, acceso.cuentaId, ctx.userId);
     const ids = (membresias ?? []).map((row) => row.empresa_id).filter((id) => !ticks || ticks.has(id));
-    if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false, puedeAgregar: false };
+    const colaboracion = ctx.supportMode ? { colaboraciones: [] as Colaboracion[], cuentaPropia: null, cuentaActualNombre: "" } : await mapaDeCuentas(ctx.sb, ctx.userId, acceso.cuentaId);
+    const extra = { ...colaboracion, enCuentaAjena: !ctx.supportMode && !esTitular };
+    if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false, puedeAgregar: false, ...extra };
 
     const { data: empresas, error: empresasError } = await ctx.sb
       .from("empresas")
@@ -275,10 +297,51 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
       empresas: items,
       multiempresa,
       puedeAgregar,
+      ...extra,
     };
   } catch (error) {
     return { ok: false, error: "EMPRESAS_SELECTOR_FAILED", detalle: error instanceof Error ? error.message : undefined };
   }
+}
+
+/**
+ * "Colaboras en" (2026-09-06): todas las cuentas donde soy miembro activo.
+ * Las ajenas (no titular) con sus empresas con tick; y mi casa (la principal
+ * de la cuenta donde soy titular) para volver.
+ */
+async function mapaDeCuentas(sb: ReturnType<typeof getServiceClient>, userId: string, cuentaActualId: string): Promise<{ colaboraciones: Colaboracion[]; cuentaPropia: { empresaId: string; nombre: string } | null; cuentaActualNombre: string }> {
+  const { data: membresias } = await sb.from("cuenta_usuarios").select("cuenta_id, es_titular").eq("usuario_id", userId).eq("activo", true);
+  const cuentaIds = (membresias ?? []).map((m) => m.cuenta_id);
+  if (cuentaIds.length === 0) return { colaboraciones: [], cuentaPropia: null, cuentaActualNombre: "" };
+  const [{ data: cuentas }, { data: vinculos }, { data: ticks }] = await Promise.all([
+    sb.from("cuentas").select("id, nombre, owner_usuario_id").in("id", cuentaIds),
+    sb.from("cuenta_empresas").select("cuenta_id, empresa_id, es_principal, created_at").in("cuenta_id", cuentaIds).eq("activa", true).order("es_principal", { ascending: false }).order("created_at", { ascending: true }),
+    sb.from("cuenta_usuario_empresas").select("cuenta_id, empresa_id").eq("usuario_id", userId),
+  ]);
+  const empresaIds = Array.from(new Set((vinculos ?? []).map((v) => v.empresa_id)));
+  const { data: empresas } = empresaIds.length ? await sb.from("empresas").select("id, razon_social, rut").in("id", empresaIds) : { data: [] as Array<{ id: string; razon_social: string; rut: string | null }> };
+  const empresaById = new Map((empresas ?? []).map((e) => [e.id, e]));
+  const tickSet = new Set((ticks ?? []).map((t) => `${t.cuenta_id}:${t.empresa_id}`));
+  const titularDe = new Set((membresias ?? []).filter((m) => m.es_titular || (cuentas ?? []).some((c) => c.id === m.cuenta_id && c.owner_usuario_id === userId)).map((m) => m.cuenta_id));
+
+  let cuentaPropia: { empresaId: string; nombre: string } | null = null;
+  const colaboraciones: Colaboracion[] = [];
+  for (const c of cuentas ?? []) {
+    const vs = (vinculos ?? []).filter((v) => v.cuenta_id === c.id);
+    if (titularDe.has(c.id)) {
+      const principal = vs[0];
+      if (!cuentaPropia && principal && empresaById.get(principal.empresa_id)) {
+        cuentaPropia = { empresaId: principal.empresa_id, nombre: empresaById.get(principal.empresa_id)!.razon_social };
+      }
+      continue;
+    }
+    if (c.id === cuentaActualId) continue;
+    const propias = vs.filter((v) => tickSet.has(`${c.id}:${v.empresa_id}`)).map((v) => empresaById.get(v.empresa_id)).filter((e): e is NonNullable<typeof e> => Boolean(e));
+    if (propias.length === 0) continue;
+    colaboraciones.push({ cuentaId: c.id, nombre: c.nombre, empresas: propias.map((e) => ({ id: e.id, nombre: e.razon_social, rut: e.rut ?? null })) });
+  }
+  const cuentaActualNombre = (cuentas ?? []).find((c) => c.id === cuentaActualId)?.nombre ?? "";
+  return { colaboraciones, cuentaPropia, cuentaActualNombre };
 }
 
 export async function cambiarEmpresaActiva(empresaId: string): Promise<CambiarEmpresaResult> {
@@ -294,25 +357,36 @@ export async function cambiarEmpresaActiva(empresaId: string): Promise<CambiarEm
     if (!acceso.ok) return { ok: false, error: acceso.codigo };
     if (!acceso.planActivo) return { ok: false, error: "PLAN_INACTIVO" };
 
-    const multiempresa = await planPermiteMultiempresa(ctx.sb, acceso.plan);
-    if (!multiempresa) return { ok: false, error: "PLAN_SIN_MULTIEMPRESA" };
-
+    // "Colaboras en" (2026-09-06): el destino puede vivir en OTRA cuenta
+    // donde soy miembro activo. Se resuelve la cuenta del destino y se juzga
+    // contra ESA cuenta (membresía, plan, tick). Cruzar cuentas no exige
+    // multiempresa: eso es para tener varias empresas DENTRO de una cuenta.
     const { data: target, error: targetError } = await ctx.sb
       .from("cuenta_empresas")
-      .select("empresa_id, activa")
-      .eq("cuenta_id", acceso.cuentaId)
+      .select("cuenta_id, empresa_id, activa")
       .eq("empresa_id", targetEmpresaId)
       .maybeSingle();
 
     if (targetError) return { ok: false, error: "EMPRESA_TARGET_QUERY_FAILED", detalle: targetError.message };
     if (!target?.activa) return { ok: false, error: "EMPRESA_NO_DISPONIBLE" };
+    const cruzaCuenta = target.cuenta_id !== acceso.cuentaId;
+    if (cruzaCuenta && ctx.supportMode) return { ok: false, error: "EMPRESA_NO_DISPONIBLE" };
+
+    if (!cruzaCuenta) {
+      const multiempresa = await planPermiteMultiempresa(ctx.sb, acceso.plan);
+      if (!multiempresa) return { ok: false, error: "PLAN_SIN_MULTIEMPRESA" };
+    } else {
+      const accesoDestino = await validarAccesoCuenta(ctx.sb, ctx.userId, targetEmpresaId);
+      if (!accesoDestino.ok) return { ok: false, error: accesoDestino.codigo };
+      if (!accesoDestino.planActivo) return { ok: false, error: "PLAN_INACTIVO", detalle: "Ese team no tiene plan activo." };
+    }
 
     // Este endpoint REESCRIBE la empresa activa, que es la llave del RLS: sin
-    // tick (o sin ser titular) no se mueve a nadie ahí. Fail-closed.
+    // tick (o sin ser titular de ESA cuenta) no se mueve a nadie ahí. Fail-closed.
     if (!ctx.supportMode) {
-      const esTitular = await esTitularDeCuenta(ctx.sb, acceso.cuentaId, ctx.userId);
+      const esTitular = await esTitularDeCuenta(ctx.sb, target.cuenta_id, ctx.userId);
       if (!esTitular) {
-        const ticks = await ticksDeUsuario(ctx.sb, acceso.cuentaId, ctx.userId);
+        const ticks = await ticksDeUsuario(ctx.sb, target.cuenta_id, ctx.userId);
         if (!ticks.has(targetEmpresaId)) return { ok: false, error: "EMPRESA_SIN_TICK", detalle: "No tienes acceso a esa empresa." };
       }
     }
@@ -337,7 +411,7 @@ export async function cambiarEmpresaActiva(empresaId: string): Promise<CambiarEm
 
     await recordCuentaAudit({
       sb: ctx.sb,
-      cuentaId: acceso.cuentaId,
+      cuentaId: target.cuenta_id,
       empresaId: targetEmpresaId,
       usuarioId: ctx.userId,
       accion: "empresa_activa_cambiada",
@@ -1224,7 +1298,17 @@ export async function revocarInvitacionTeam(invitacionId: string): Promise<TeamA
 // compartir esto con esa persona". Se valida acá, con el service role, al
 // mandar: la referencia ni siquiera se guarda.
 
-export type TeamObjeto = { tipo: "documento"; id: string; empresaId: string; label: string; mes: string };
+export type TeamObjetoTipo = "documento" | "tx" | "boleta";
+export type TeamObjeto = {
+  tipo: TeamObjetoTipo;
+  id: string;
+  empresaId: string;
+  label: string;
+  /** Mes de calendario (0-indexed) donde vive el objeto; "" si no se sabe. */
+  mes: string;
+  /** Solo tx: el documento (cartola) que la contiene, para abrirla y resaltar la fila. */
+  docId: string | null;
+};
 export type TeamMensaje = {
   id: string;
   de: string | null;
@@ -1256,7 +1340,7 @@ export async function mensajesTeam(): Promise<TeamChatEstado> {
 
     const { data, error } = await ctx.sb
       .from("team_mensajes")
-      .select("id, de_usuario_id, para_usuario_id, texto, objeto_tipo, objeto_id, objeto_empresa_id, objeto_label, objeto_mes, leido_at, created_at")
+      .select("id, de_usuario_id, para_usuario_id, texto, objeto_tipo, objeto_id, objeto_empresa_id, objeto_label, objeto_mes, objeto_doc_id, leido_at, created_at")
       .eq("cuenta_id", acceso.cuentaId)
       .or(`de_usuario_id.eq.${ctx.userId},para_usuario_id.eq.${ctx.userId}`)
       .order("created_at", { ascending: false })
@@ -1268,8 +1352,8 @@ export async function mensajesTeam(): Promise<TeamChatEstado> {
       de: m.de_usuario_id,
       para: m.para_usuario_id,
       texto: m.texto,
-      objeto: m.objeto_tipo === "documento" && m.objeto_id && m.objeto_empresa_id
-        ? { tipo: "documento", id: m.objeto_id, empresaId: m.objeto_empresa_id, label: m.objeto_label ?? "Documento", mes: m.objeto_mes ?? "" }
+      objeto: (m.objeto_tipo === "documento" || m.objeto_tipo === "tx" || m.objeto_tipo === "boleta") && m.objeto_id && m.objeto_empresa_id
+        ? { tipo: m.objeto_tipo, id: m.objeto_id, empresaId: m.objeto_empresa_id, label: m.objeto_label ?? "Documento", mes: m.objeto_mes ?? "", docId: m.objeto_doc_id ?? null }
         : null,
       leidoAt: m.leido_at,
       createdAt: m.created_at,
@@ -1307,21 +1391,38 @@ export async function enviarMensajeTeam(input: { para: string; texto: string; ob
     if (input.objeto) {
       const objetoId = cleanId(input.objeto.id);
       const empresaId = cleanId(input.objeto.empresaId);
-      if (!objetoId || !empresaId || input.objeto.tipo !== "documento") return { ok: false, error: "El objeto apuntado no es válido." };
-      // La empresa del objeto es de esta cuenta, y el documento existe en ella.
-      const { data: doc } = await ctx.sb.from("documentos_subidos").select("id").eq("id", objetoId).eq("empresa_id", empresaId).maybeSingle();
-      if (!doc) return { ok: false, error: "Ese documento ya no está." };
+      const tipo = input.objeto.tipo;
+      if (!objetoId || !empresaId || !["documento", "tx", "boleta"].includes(tipo)) return { ok: false, error: "El objeto apuntado no es válido." };
+      // El objeto EXISTE en esa empresa (por tipo). El id lo puso el cliente:
+      // acá se comprueba contra la base antes de guardar nada.
+      let docId: string | null = null;
+      if (tipo === "documento") {
+        const { data: doc } = await ctx.sb.from("documentos_subidos").select("id").eq("id", objetoId).eq("empresa_id", empresaId).maybeSingle();
+        if (!doc) return { ok: false, error: "Ese documento ya no está." };
+      } else if (tipo === "tx") {
+        const { data: prop } = await ctx.sb.from("propuestas_ia").select("id").eq("id", objetoId).eq("empresa_id", empresaId).maybeSingle();
+        if (!prop) return { ok: false, error: "Ese movimiento ya no está." };
+        docId = cleanId(input.objeto.docId ?? "");
+        if (docId) {
+          const { data: doc } = await ctx.sb.from("documentos_subidos").select("id").eq("id", docId).eq("empresa_id", empresaId).maybeSingle();
+          if (!doc) docId = null;
+        }
+      } else {
+        const { data: bol } = await ctx.sb.from("boletas_emitidas").select("id").eq("id", objetoId).eq("empresa_id", empresaId).maybeSingle();
+        if (!bol) return { ok: false, error: "Esa boleta ya no está." };
+      }
       const { data: ce } = await ctx.sb.from("cuenta_empresas").select("empresa_id").eq("cuenta_id", acceso.cuentaId).eq("empresa_id", empresaId).eq("activa", true).maybeSingle();
       if (!ce) return { ok: false, error: "Esa empresa no es de tu cuenta." };
       // Quien manda lo ve; y quien recibe TAMBIÉN tiene que verlo (el tick).
       if (!(await puedeVerEmpresa(ctx.sb, acceso.cuentaId, ctx.userId, empresaId))) return { ok: false, error: "No tienes acceso a esa empresa." };
       if (!(await puedeVerEmpresa(ctx.sb, acceso.cuentaId, para, empresaId))) return { ok: false, error: "No puedes compartir esto con esa persona: no ve esa empresa." };
       objeto = {
-        tipo: "documento",
+        tipo,
         id: objetoId,
         empresaId,
         label: String(input.objeto.label ?? "Documento").trim().slice(0, 120) || "Documento",
         mes: /^\d{4}-\d{1,2}$/.test(String(input.objeto.mes ?? "")) ? String(input.objeto.mes) : "",
+        docId,
       };
     }
 
@@ -1337,6 +1438,7 @@ export async function enviarMensajeTeam(input: { para: string; texto: string; ob
         objeto_empresa_id: objeto?.empresaId ?? null,
         objeto_label: objeto?.label ?? null,
         objeto_mes: objeto?.mes || null,
+        objeto_doc_id: objeto?.docId ?? null,
       })
       .select("id, created_at")
       .single();

@@ -92,7 +92,8 @@ describe("todo camino que ESCRIBE la empresa activa valida el tick", () => {
     const update = fn.indexOf(".update({ empresa_id: targetEmpresaId })");
     expect(guard).toBeGreaterThan(-1);
     expect(update).toBeGreaterThan(guard);
-    expect(fn).toMatch(/esTitularDeCuenta\(ctx\.sb, acceso\.cuentaId, ctx\.userId\)/);
+    // Desde "Colaboras en" (2026-09-06) se juzga contra la cuenta del DESTINO.
+    expect(fn).toMatch(/esTitularDeCuenta\(ctx\.sb, target\.cuenta_id, ctx\.userId\)/);
     expect(fn).toMatch(/ticks\.has\(targetEmpresaId\)/);
   });
 
