@@ -128,8 +128,69 @@ function inviteErrorMessage(code: string | null | undefined): string {
   }
 }
 
+/**
+ * ¿Puede este usuario editar el emisor de `targetId` sin estar parado en ella?
+ * (fundador 2026-09-07: las empresas de la cuenta se configuran desde el paso
+ * Emisor del wizard, sin cambiar de mesa). Regla: la empresa destino cuelga de
+ * la MISMA cuenta que la activa y el usuario es titular de esa cuenta. Fail
+ * closed: cualquier duda = no.
+ */
+async function empresaDeMiCuentaComoTitular(
+  sb: SupabaseClient<Database>,
+  userId: string,
+  activaId: string,
+  targetId: string,
+): Promise<boolean> {
+  const [{ data: activa }, { data: target }] = await Promise.all([
+    sb.from("cuenta_empresas").select("cuenta_id").eq("empresa_id", activaId).eq("activa", true).maybeSingle(),
+    sb.from("cuenta_empresas").select("cuenta_id").eq("empresa_id", targetId).eq("activa", true).maybeSingle(),
+  ]);
+  if (!activa?.cuenta_id || !target?.cuenta_id || activa.cuenta_id !== target.cuenta_id) return false;
+  const [{ data: cuenta }, { data: membresia }] = await Promise.all([
+    sb.from("cuentas").select("owner_usuario_id").eq("id", target.cuenta_id).maybeSingle(),
+    sb.from("cuenta_usuarios").select("es_titular").eq("cuenta_id", target.cuenta_id).eq("usuario_id", userId).eq("activo", true).maybeSingle(),
+  ]);
+  return cuenta?.owner_usuario_id === userId || membresia?.es_titular === true;
+}
+
+/** Datos del emisor de OTRA empresa de mi cuenta (para editarla desde el wizard). */
+export async function datosEmisorDeEmpresa(empresaId: string): Promise<{ ok: true; datos: DatosEmisor; razon_social: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "No autenticado" };
+  const { data: usuario } = await supabase.from("usuarios").select("empresa_id").eq("id", user.id).single();
+  if (!usuario?.empresa_id) return { ok: false, error: "Usuario sin empresa" };
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { ok: false, error: "Backend mal configurado" };
+  const sb = createServiceClient<Database>(url, key);
+  if (empresaId !== usuario.empresa_id && !(await empresaDeMiCuentaComoTitular(sb, user.id, usuario.empresa_id, empresaId))) {
+    return { ok: false, error: "EMPRESA_NO_EDITABLE" };
+  }
+  const { data: e, error } = await sb
+    .from("empresas")
+    .select("rut, razon_social, giro, direccion, comuna, email_sii, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default, operacion_hint_default")
+    .eq("id", empresaId)
+    .maybeSingle();
+  if (error || !e) return { ok: false, error: error?.message ?? "NO_ENCONTRADA" };
+  return {
+    ok: true,
+    razon_social: e.razon_social,
+    datos: {
+      rut: e.rut, razon_social: e.razon_social, giro: e.giro, direccion: e.direccion, comuna: e.comuna, email_sii: e.email_sii,
+      tipo_contribuyente: e.tipo_contribuyente ?? "auto",
+      boletas_tipo_default: e.boletas_tipo_default ?? undefined,
+      facturas_tipo_default: e.facturas_tipo_default ?? undefined,
+      operacion_hint_default: e.operacion_hint_default ?? null,
+    },
+  };
+}
+
 export async function setDatosEmisor(
   datos: DatosEmisor,
+  /** Otra empresa de MI cuenta (wizard, paso Emisor). Ausente = la activa. */
+  empresaId?: string,
 ): Promise<{ ok?: boolean; error?: string }> {
   const supportBlock = await blockSupportWrite();
   if (supportBlock) return supportBlock;
@@ -147,6 +208,7 @@ export async function setDatosEmisor(
   if (!ROLES_GESTION_MIEMBROS.has(String(usuario.rol))) {
     return { error: "Solo owner/admin puede cambiar los datos fiscales del emisor" };
   }
+  const empresaObjetivo = empresaId ?? usuario.empresa_id;
 
   if (datos.rut && !validarRut(datos.rut)) {
     return { error: "RUT inválido (falla dígito verificador)" };
@@ -159,6 +221,9 @@ export async function setDatosEmisor(
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
+  if (empresaObjetivo !== usuario.empresa_id && !(await empresaDeMiCuentaComoTitular(sb, user.id, usuario.empresa_id, empresaObjetivo))) {
+    return { error: "Esa empresa no es de tu cuenta o no eres el titular" };
+  }
 
   const update: Record<string, string | null> = {};
   if (datos.rut !== undefined) update.rut = datos.rut ? cleanRut(datos.rut) : null;
@@ -187,7 +252,7 @@ export async function setDatosEmisor(
   const { error } = await sb
     .from("empresas")
     .update(update)
-    .eq("id", usuario.empresa_id);
+    .eq("id", empresaObjetivo);
 
   if (error) {
     // 23505 = índice único empresas_rut_unico (RUT normalizado ya registrado).

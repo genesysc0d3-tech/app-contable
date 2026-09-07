@@ -11,9 +11,14 @@ interface Props {
   variant?: "page" | "popup";
   /** C1: el popup lo consulta en goToStep/handleClose para auto-guardar de forma awaitable. */
   submitRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
+  /** OTRA empresa de mi cuenta (paso Emisor del wizard, fundador 2026-09-07):
+   *  se guarda en ella sin cambiar de mesa. El logo se sube desde su propia
+   *  mesa (la subida es de la empresa activa), así que acá no se muestra. */
+  empresaId?: string;
 }
 
-export default function EmisorForm({ inicial, variant = "page", submitRef }: Props) {
+export default function EmisorForm({ inicial, variant = "page", submitRef, empresaId }: Props) {
+  const otraEmpresa = Boolean(empresaId);
   const { toast } = useToast();
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -116,7 +121,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
 
     setPending(true);
     try {
-      const r = await setDatosEmisor(datos);
+      const r = await setDatosEmisor(datos, empresaId);
       if (r.error) { toast(r.error, "error"); return false; }
       ultimoGuardado.current = datos;
       toast("Datos del emisor guardados");
@@ -276,6 +281,11 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
             </div>
 
             {/* Drag & drop: soltar un archivo acá sube el logo (antes el browser navegaba a la imagen) */}
+            {otraEmpresa ? (
+              <div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: 150, fontSize: 10, lineHeight: 1.4, color: "var(--text3, #697080)", textAlign: "right", alignSelf: "center" }}>
+                El logo se sube desde la mesa de esta empresa.
+              </div>
+            ) : (
             <div
               style={{ position: "relative", marginLeft: "auto", flexShrink: 0 }}
               onDragOver={(e) => e.preventDefault()}
@@ -328,6 +338,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef }: Pro
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* FIELDS GRID */}
