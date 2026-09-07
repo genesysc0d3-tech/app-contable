@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { cambiarEmpresaActiva, estadoTeam, listarEmpresasSelector, type Colaboracion, type TeamEstado } from "./actions";
 import TeamSection from "./TeamSection";
 import ColaborasEn from "./ColaborasEn";
+import TeamComoFunciona from "./TeamComoFunciona";
 
 /**
  * Paso "Team" del wizard de configuración de empresa (fundador 2026-09-07):
@@ -40,7 +41,8 @@ export default function TeamConfigPanel() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 26, minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
       <div>
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.01em" }}>Team</h3>
         <p style={{ margin: "6px 0 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--text2)" }}>
@@ -49,7 +51,7 @@ export default function TeamConfigPanel() {
         </p>
       </div>
 
-      <div style={{ padding: "6px 8px 8px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", maxWidth: 420 }}>
+      <div style={{ padding: "6px 8px 8px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
         {colab?.enCuentaAjena && colab.cuentaPropia && (
           <button type="button" onClick={() => irA(colab.cuentaPropia!.empresaId)} disabled={pending}
             style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", marginBottom: 4, padding: "8px 8px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", fontSize: 11, fontWeight: 800, cursor: pending ? "wait" : "pointer", textAlign: "left" }}>
@@ -60,6 +62,16 @@ export default function TeamConfigPanel() {
         {team ? <TeamSection team={team} /> : <div style={{ padding: "10px 8px", fontSize: 10.5, color: "var(--text3)" }}>Cargando el team…</div>}
         {colab && <ColaborasEn colaboraciones={colab.colaboraciones} pending={pending} onIr={irA} />}
         {error && <div style={{ margin: "6px 8px 2px", color: "var(--red)", fontSize: 9.5, lineHeight: 1.35 }}>{error}</div>}
+      </div>
+      </div>
+
+      {/* Cómo funciona (fundador 2026-09-07): el globito animado + paso a paso, DEBAJO de la config, entero. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.01em" }}>Cómo funciona</h3>
+          <p style={{ margin: "6px 0 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--text2)" }}>Un solo globito para avisos y team. Nadie te saca de lo que estás haciendo.</p>
+        </div>
+        <TeamComoFunciona />
       </div>
     </div>
   );
