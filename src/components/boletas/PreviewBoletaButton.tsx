@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Eye, X } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import DescargarBoletaButton from "./DescargarBoletaButton";
+import { archivoPdf, esTipoExento, nombreDocumento } from "@/lib/sii/nombre-documento";
 
 interface BoletaData {
   folio: number;
@@ -25,8 +26,8 @@ interface BoletaData {
 
 const clp = (n: number) => `$${Math.round(n || 0).toLocaleString("es-CL")}`;
 const tipoLabel = (t: number) =>
-  t === 41 ? "Boleta exenta" : t === 39 ? "Boleta afecta" : t === 34 ? "Factura exenta" : t === 33 ? "Factura" : "DTE";
-const esExenta = (t: number) => t === 41 || t === 34;
+  t === 41 ? "Boleta exenta" : t === 39 ? "Boleta afecta" : t === 34 ? "Factura exenta" : t === 33 ? "Factura afecta" : "DTE";
+const esExenta = esTipoExento;
 const fmtFecha = (s: string) => {
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) { const [y, m, d] = s.split("-"); return `${d}-${m}-${y}`; }
   try { return new Date(s).toLocaleDateString("es-CL"); } catch { return s; }
@@ -53,7 +54,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
     try {
       const res = await fetch(`/api/intermediaria/boleta/${id}`, { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) { toast(j.error ?? "Error al cargar la boleta", "error"); return; }
+      if (!res.ok || !j.ok) { toast(j.error ?? "Error al cargar el documento", "error"); return; }
       setB(j.boleta as BoletaData);
       // La personalizada en paralelo, tolerante a fallo (mock viejo sin PDF
       // oficial, timbre no extraíble, etc. → preview de datos como siempre).
@@ -68,7 +69,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
       } catch { setPersUrl(null); }
       setOpen(true);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Error al cargar la boleta", "error");
+      toast(err instanceof Error ? err.message : "Error al cargar el documento", "error");
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
         disabled={loading}
         className="p-1.5 rounded-lg text-[var(--muted)] hover:text-[#E8553E] hover:bg-[var(--accent-light)] disabled:opacity-50 transition-colors"
         title="Vista previa"
-        aria-label="Vista previa de la boleta"
+        aria-label="Vista previa del documento"
       >
         <Eye size={14} weight="bold" className={loading ? "animate-pulse" : ""} />
       </button>
@@ -118,7 +119,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
             {/* Cuerpo: la PERSONALIZADA es la protagonista cuando existe */}
             {persUrl ? (
               <div style={{ padding: 12, background: "var(--bg-muted)" }}>
-                <iframe title="Boleta personalizada" src={`${persUrl}#toolbar=0&navpanes=0`} style={{ width: "100%", height: "min(58vh, 520px)", border: "none", borderRadius: 10, background: "#fff" }} />
+                <iframe title={`${nombreDocumento(b.tipo_dte)} personalizada`} src={`${persUrl}#toolbar=0&navpanes=0`} style={{ width: "100%", height: "min(58vh, 520px)", border: "none", borderRadius: 10, background: "#fff" }} />
               </div>
             ) : (
             <div style={{ padding: "16px" }}>
@@ -149,7 +150,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
               </div>
 
               <div style={{ marginTop: 10, fontSize: 9, color: "var(--text3)", textAlign: "center" }}>
-                Vista previa · datos de la boleta. El documento oficial está en el PDF.
+                Vista previa · datos de la {nombreDocumento(b.tipo_dte).toLowerCase()}. El documento oficial está en el PDF.
               </div>
             </div>
             )}
@@ -162,7 +163,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
                   onClick={() => {
                     const a = document.createElement("a");
                     a.href = persUrl;
-                    a.download = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
+                    a.download = archivoPdf(b.tipo_dte, b.folio);
                     document.body.appendChild(a); a.click(); a.remove();
                   }}
                   style={{ border: "none", cursor: "pointer", background: "var(--accent, #E8553E)", color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "8px 14px", borderRadius: 10 }}

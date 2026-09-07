@@ -445,7 +445,12 @@ export function ActivityButton() {
   );
 }
 
-export function HeaderActionsRow() {
+/**
+ * enCuentaAjena (fundador 2026-09-07): cuando estás "transportado" a la mesa
+ * de otro team, la configuración de empresa es del titular — el botón queda
+ * gris y no abre. Para volver a tu cuenta está el popup del logo.
+ */
+export function HeaderActionsRow({ enCuentaAjena = false, cuentaActualNombre = "" }: { enCuentaAjena?: boolean; cuentaActualNombre?: string } = {}) {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDark, setIsDark] = useState(true); // default de marca: oscuro
@@ -533,6 +538,8 @@ export function HeaderActionsRow() {
       .ha-btn{position:relative;width:38px;height:38px;border-radius:12px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--text2);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow);transition:all .2s;font-size:16px}
       .ha-btn:hover{border-color:rgba(232,85,62,.35);background:rgba(232,85,62,.08);box-shadow:0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
       .ha-btn:hover svg{filter:drop-shadow(0 0 8px rgba(232,85,62,.5));color:var(--accent);transition:filter .25s,color .25s}
+      .ha-btn:disabled:hover{border-color:var(--border);background:var(--surface);box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
+      .ha-btn:disabled:hover svg{filter:none;color:var(--text2)}
     `}</style>
     <div style={{display:"flex",flexDirection:"row",gap:8,alignItems:"center"}}>
       {dashboardOpen && (
@@ -558,8 +565,11 @@ export function HeaderActionsRow() {
           </span>
         )}
       </button>
-      <button onClick={() => window.dispatchEvent(new CustomEvent("toggle-empresa"))} className="ha-btn">
-        
+      <button onClick={() => { if (!enCuentaAjena) window.dispatchEvent(new CustomEvent("toggle-empresa")); }} className="ha-btn"
+        disabled={enCuentaAjena} aria-disabled={enCuentaAjena}
+        aria-label={enCuentaAjena ? `Configuración de empresa · la maneja el titular del team${cuentaActualNombre ? ` de ${cuentaActualNombre}` : ""}` : "Configuración de empresa"}
+        title={enCuentaAjena ? `Estás colaborando en el team${cuentaActualNombre ? ` de ${cuentaActualNombre}` : ""} · la configuración la maneja el titular` : "Configuración de empresa"}
+        style={enCuentaAjena ? { opacity: .38, cursor: "not-allowed", filter: "grayscale(1)", pointerEvents: "auto" } : undefined}>
         <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor"><path d="M240,204H228V96a20,20,0,0,0-20-20H172V32a20,20,0,0,0-28.45-18.12l-104,48.54A20.06,20.06,0,0,0,28,80.55V204H16a12,12,0,0,0,0,24H240a12,12,0,0,0,0-24ZM204,100V204H172V100ZM52,83.09,148,38.3V204H52ZM132,112v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm-40,0v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm0,52v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Zm40,0v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Z"/></svg>
       </button>
       <button onClick={toggleTheme} className="ha-btn" aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}>

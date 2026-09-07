@@ -11,6 +11,7 @@ import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import type { ClienteResumen } from "./revisar-shared";
 import type { MesaDateDependent } from "./mesa-data";
+import { esTipoExento, etiquetaTipo, tituloDocumento } from "@/lib/sii/nombre-documento";
 
 const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 
@@ -71,7 +72,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
           compactEmpty("subidos")
         )
       }
-      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
+      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
       boletasContent={
         mesa.boletasCount === 0 ? (
           compactEmpty("boletas")
@@ -90,7 +91,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                 return (
                   <div key={b.id} className={`bl-item ${esAnulada ? "an" : ""}`}
                     data-apuntable="boleta" data-apuntable-id={b.id} data-apuntable-mes={mesDeFecha(b.fecha_emision) ?? undefined}
-                    data-apuntable-label={`Boleta #${b.folio} · ${b.receptor_razon_social ?? "sin receptor"} · $${Math.round(b.monto_total).toLocaleString("es-CL")}`}
+                    data-apuntable-label={`${tituloDocumento(b.tipo_dte, b.folio)} · ${b.receptor_razon_social ?? "sin receptor"} · $${Math.round(b.monto_total).toLocaleString("es-CL")}`}
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: esAnulada ? 0.5 : 1 }}>
                     <div className="ic" style={{ width: 28, height: 28, borderRadius: 6, background: b.es_unica ? "rgba(232,85,62,.07)" : "var(--bg-muted)", border: b.es_unica ? "1px dashed rgba(232,85,62,.5)" : "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: b.es_unica ? "var(--accent)" : "var(--text2)" }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
@@ -98,9 +99,12 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                     <div className="inf" style={{ flex: 1, minWidth: 0 }}>
                       <div className="top" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--text)" }}>
                         <span className="fl" style={{ color: "var(--text)" }}>#{b.folio}</span>
-                        <span className={`bd ${b.tipo_dte === 39 ? "af" : b.tipo_dte === 41 ? "ex" : "an"}`}
-                          style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: b.tipo_dte === 39 ? "var(--accent-light)" : b.tipo_dte === 41 ? "rgba(59,130,246,.1)" : "var(--bg-muted)", color: b.tipo_dte === 39 ? "var(--accent)" : b.tipo_dte === 41 ? "var(--blue)" : "var(--text2)" }}
-                        >{b.tipo_dte === 39 ? "AFECTA" : b.tipo_dte === 41 ? "EXENTA" : `DTE ${b.tipo_dte}`}</span>
+                        {/* El sello sale del TIPO (Matías 2026-09-07): antes una factura 33 decía "DTE 33". */}
+                        {(() => { const af = b.tipo_dte === 39 || b.tipo_dte === 33; const ex = esTipoExento(b.tipo_dte); return (
+                        <span className={`bd ${af ? "af" : ex ? "ex" : "an"}`}
+                          style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: af ? "var(--accent-light)" : ex ? "rgba(59,130,246,.1)" : "var(--bg-muted)", color: af ? "var(--accent)" : ex ? "var(--blue)" : "var(--text2)" }}
+                        >{etiquetaTipo(b.tipo_dte)}</span>
+                        ); })()}
                         {b.es_unica && (
                           <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 800, border: "1px dashed rgba(232,85,62,.55)", background: "rgba(232,85,62,.06)", color: "var(--accent)" }}>ÚNICA</span>
                         )}

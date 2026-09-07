@@ -6,6 +6,8 @@
  * para documentos de proveedores legados evita mostrar timbres simulados como reales.
  */
 
+import { archivoPdf, esTipoExento } from "@/lib/sii/nombre-documento";
+
 export interface BoletaPDFData {
   folio: number;
   tipo_dte: number;
@@ -39,11 +41,14 @@ function fmt(n: number): string {
 export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const isExenta = b.tipo_dte === 41;
+  const isExenta = esTipoExento(b.tipo_dte);
+  const isFactura = b.tipo_dte === 33 || b.tipo_dte === 34;
   const isNC = b.tipo_dte === 61;
   const isBaseApi = b.emision_proveedor === "baseapi";
 
-  const titulo = isNC ? "NOTA DE CRÉDITO ELECTRÓNICA" : isExenta ? "BOLETA EXENTA ELECTRÓNICA" : "BOLETA ELECTRÓNICA";
+  const titulo = isNC ? "NOTA DE CRÉDITO ELECTRÓNICA"
+    : isFactura ? (isExenta ? "FACTURA NO AFECTA O EXENTA ELECTRÓNICA" : "FACTURA ELECTRÓNICA")
+    : isExenta ? "BOLETA EXENTA ELECTRÓNICA" : "BOLETA ELECTRÓNICA";
   const margin = 14;
   const pageWidth = 210;
   let y = margin;
@@ -189,6 +194,6 @@ export async function generarBoletaPDF(b: BoletaPDFData): Promise<void> {
     y,
   );
 
-  const filename = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
+  const filename = archivoPdf(b.tipo_dte, b.folio);
   doc.save(filename);
 }
