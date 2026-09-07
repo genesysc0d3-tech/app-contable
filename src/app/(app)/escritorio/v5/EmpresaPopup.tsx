@@ -6,6 +6,7 @@ import EmisorForm from "../../empresa/EmisorForm";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
 import ConectorMcpConfig from "../../empresa/ConectorMcpConfig";
+import TeamConfigPanel from "./TeamConfigPanel";
 import SoporteAccesoConfig from "../../empresa/SoporteAccesoConfig";
 import EmissionProviderConfig, { type EmissionProviderState } from "../../empresa/EmissionProviderConfig";
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
@@ -686,6 +687,13 @@ export default function EmpresaPopup({
                 sub: "Tu IA conectada · Opcional",
                 done: false,
               },
+              {
+                n: 9,
+                icon: "M9 8.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4ZM2.8 19c.5-3.3 3-5.2 6.2-5.2s5.7 1.9 6.2 5.2M17 12a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Zm-1.4 1.4c2.9-.3 5.1 1.3 5.6 4.3",
+                title: "Team",
+                sub: "Quién trabaja contigo · Business",
+                done: false,
+              },
             ].map((s, i) => (
               <button
                 key={i}
@@ -815,6 +823,7 @@ export default function EmpresaPopup({
                   { key: "facturacion", content: <FacturacionUsoPanel /> },
                   { key: "soporte", content: <SoporteAccesoConfig /> },
                   { key: "conector", content: <ConectorMcpConfig /> },
+                  { key: "team", content: <TeamConfigPanel /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
                     {s.content}
