@@ -80,7 +80,7 @@ describe("4. el popup", () => {
   it("vive TAMBIÉN en el wizard de configuración de empresa, como paso Team, con los MISMOS componentes (fundador 2026-09-07)", () => {
     const wizard = readFileSync("src/app/(app)/escritorio/v5/EmpresaPopup.tsx", "utf8");
     expect(wizard).toMatch(/title: "Team",\s*sub: "Quién trabaja contigo · Business"/);
-    expect(wizard).toMatch(/\{ key: "team", content: <TeamConfigPanel \/> \}/);
+    expect(wizard).toMatch(/\{ key: "team", content: <TeamConfigPanel semilla=\{semilla \?\? null\} \/> \}/);
     const panel = readFileSync("src/app/(app)/escritorio/v5/TeamConfigPanel.tsx", "utf8");
     expect(panel).toMatch(/<TeamSection team=\{team\} \/>/);
     expect(panel).toMatch(/<ColaborasEn colaboraciones=\{colab\.colaboraciones\}/);

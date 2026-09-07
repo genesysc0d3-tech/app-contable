@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, useState, useCallback, useRef, useEffect, type ErrorInfo, type ReactNode } from "react";
+import type { WizardSemilla } from "./TeamConfigPanel";
 import dynamic from "next/dynamic";
 
 // Perf: el wizard de empresa (5 pasos, ~850 líneas) sale del bundle inicial y se
@@ -40,7 +41,7 @@ class TabErrorBoundary extends Component<{ children: ReactNode; label: string },
 
 export default function V5Root({
   dashboardContent,
-  empresaInicial, empresaCafs, empresaId, empresaEmisionConfig, devMode = false,
+  empresaInicial, empresaCafs, empresaId, empresaEmisionConfig, devMode = false, wizardSemilla = null,
 }: {
   dashboardContent: React.ReactNode;
   empresaInicial: DatosEmisor;
@@ -48,6 +49,8 @@ export default function V5Root({
   empresaId: string;
   empresaEmisionConfig: EmissionProviderState;
   devMode?: boolean;
+  /** Team + selector de empresas ya cargados por la página: el wizard arranca sin fetch. */
+  wizardSemilla?: WizardSemilla | null;
 }) {
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const [helpStepsEnabled, setHelpStepsEnabled] = useState(true);
@@ -123,6 +126,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
           cafs={empresaCafs}
           empresaId={empresaId}
           emisionConfig={empresaEmisionConfig}
+          semilla={wizardSemilla}
           devMode={devMode}
           helpStepsEnabled={helpStepsEnabled}
           onHelpStepsChange={updateHelpSteps}

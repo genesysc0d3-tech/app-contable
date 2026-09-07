@@ -30,7 +30,7 @@ export type Colaboracion = {
   empresas: Array<{ id: string; nombre: string; rut: string | null }>;
 };
 
-type EmpresasSelectorResult =
+export type EmpresasSelectorResult =
   | {
       ok: true;
       empresas: EmpresaSelectorRow[];

@@ -4,6 +4,7 @@ import { useState } from "react";
 import EmisorForm from "@/app/(app)/empresa/EmisorForm";
 import { datosEmisorDeEmpresa, type DatosEmisor } from "@/app/(app)/empresa/actions";
 import EmpresasCuentaPanel from "./EmpresasCuentaPanel";
+import type { EmpresasSelectorResult } from "./actions";
 
 /**
  * Paso Emisor del wizard (fundador 2026-09-07): arriba el formulario del
@@ -12,12 +13,14 @@ import EmpresasCuentaPanel from "./EmpresasCuentaPanel";
  * empresa se guarda lo pendiente primero (el mismo auto-guardado awaitable
  * que usa el popup al cambiar de paso), y si la validación falla no se cambia.
  */
-export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFacturacion }: {
+export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFacturacion, semillaEmpresas = null }: {
   inicial: DatosEmisor;
   /** La empresa activa (la de la mesa). */
   empresaId: string;
   submitRef: React.MutableRefObject<(() => Promise<boolean>) | null>;
   onIrAFacturacion: () => void;
+  /** Selector ya cargado por la página: la lista aparece al tiro, sin fetch. */
+  semillaEmpresas?: EmpresasSelectorResult | null;
 }) {
   const [otra, setOtra] = useState<{ id: string; datos: DatosEmisor; nombre: string } | null>(null);
   const [cargando, setCargando] = useState<string | null>(null);
@@ -62,6 +65,7 @@ export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFactura
         onCreada={(id) => { setRefreshKey((k) => k + 1); void elegir(id); }}
         onIrAFacturacion={onIrAFacturacion}
         refreshKey={refreshKey}
+        semilla={semillaEmpresas}
       />
       {cargando && <div style={{ margin: "6px 2px 0", fontSize: 10, color: "var(--text3)" }}>Abriendo la empresa…</div>}
     </div>

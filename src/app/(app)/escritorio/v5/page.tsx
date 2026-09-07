@@ -532,6 +532,7 @@ export default async function V5Page({ searchParams }: {
       empresaCafs={(cafsData.data ?? []) as CAFRow[]}
       empresaId={empresaId}
       empresaEmisionConfig={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}
+      wizardSemilla={{ team, empresasSelector }}
       devMode={usuario.dev_mode === true}
     />
     </>

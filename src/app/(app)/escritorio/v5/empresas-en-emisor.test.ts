@@ -34,7 +34,7 @@ describe("1. guardar el emisor de OTRA empresa de mi cuenta: solo titular y mism
 describe("2. el paso Emisor del wizard", () => {
   it("usa EmisorStep: formulario + lista, y el cupo lleno va a Facturación y uso (paso 5)", () => {
     const popup = leer(V5 + "EmpresaPopup.tsx");
-    expect(popup).toMatch(/\{ key: "emisor", content: <EmisorStep inicial=\{inicial\} empresaId=\{empresaId\} submitRef=\{submitRef\} onIrAFacturacion=\{\(\) => \{ void goToStep\(5\); \}\} \/> \}/);
+    expect(popup).toMatch(/\{ key: "emisor", content: <EmisorStep inicial=\{inicial\} empresaId=\{empresaId\} submitRef=\{submitRef\} onIrAFacturacion=\{\(\) => \{ void goToStep\(5\); \}\} semillaEmpresas=\{semilla\?\.empresasSelector \?\? null\} \/> \}/);
     expect(popup).toMatch(/title: "Facturación y uso"/);
   });
 

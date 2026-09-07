@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listarEmpresasSelector, type EmpresaSelectorRow } from "./actions";
+import { listarEmpresasSelector, type EmpresaSelectorRow, type EmpresasSelectorResult } from "./actions";
 import AgregarEmpresaForm from "./AgregarEmpresaForm";
 import { formatRut } from "@/lib/rut";
 
@@ -25,26 +25,32 @@ type Estado =
       enCuentaAjena: boolean;
     };
 
-export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onIrAFacturacion, refreshKey = 0 }: {
+function estadoDe(r: EmpresasSelectorResult): Estado {
+  if (!r.ok) return { fase: "error" };
+  return { fase: "ok", empresas: r.empresas, multiempresa: r.multiempresa, puedeAgregar: r.puedeAgregar, cupo: r.cupoEmpresas, enCuentaAjena: r.enCuentaAjena };
+}
+
+export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onIrAFacturacion, refreshKey = 0, semilla = null }: {
   /** Empresa cuyo emisor se está editando (la activa si es null). */
   enEdicion: string | null;
   onElegir: (empresaId: string) => void;
   onCreada: (empresaId: string) => void;
   onIrAFacturacion: () => void;
   refreshKey?: number;
+  /** Selector ya cargado por la página (cero fetch al montar). */
+  semilla?: EmpresasSelectorResult | null;
 }) {
-  const [estado, setEstado] = useState<Estado>({ fase: "cargando" });
+  const [estado, setEstado] = useState<Estado>(() => (semilla ? estadoDe(semilla) : { fase: "cargando" }));
   const [agregando, setAgregando] = useState(false);
 
+  // Con semilla y sin mutaciones (refreshKey 0) no se pide nada al montar.
+  // Tras crear una empresa (refreshKey > 0) sí se relee del servidor.
   useEffect(() => {
+    if (semilla && refreshKey === 0) return;
     let vivo = true;
-    void listarEmpresasSelector().then((r) => {
-      if (!vivo) return;
-      if (!r.ok) { setEstado({ fase: "error" }); return; }
-      setEstado({ fase: "ok", empresas: r.empresas, multiempresa: r.multiempresa, puedeAgregar: r.puedeAgregar, cupo: r.cupoEmpresas, enCuentaAjena: r.enCuentaAjena });
-    });
+    void listarEmpresasSelector().then((r) => { if (vivo) setEstado(estadoDe(r)); });
     return () => { vivo = false; };
-  }, [refreshKey]);
+  }, [refreshKey, semilla]);
 
   const titulo = (
     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, padding: "0 2px 8px" }}>
