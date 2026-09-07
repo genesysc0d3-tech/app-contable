@@ -579,6 +579,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                       : "var(--text2)";
                     return (
                       <button key={doc.id} type="button" className={`agg-fr${selectedDocId === doc.id ? " sel" : ""}`} title={doc.nombre_archivo}
+                        data-apuntable="documento" data-apuntable-id={doc.id} data-apuntable-label={doc.nombre_archivo}
                         onClick={() => { if (onSelectDoc) { onSelectDoc(doc); return; } if (isBoletaTipo(doc.tipo)) window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" })); else setViewDocId(doc.id); }}>
                         <span className={`dot${pulse ? " pulse" : ""}`} style={hollow ? { border: `1.5px solid ${c}`, background: "transparent" } : { background: c }} />
                         {/* Cartola completamente decidida (fundador 2026-09-01): tachada +

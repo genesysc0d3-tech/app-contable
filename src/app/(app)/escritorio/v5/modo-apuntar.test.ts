@@ -17,7 +17,9 @@ const MIG = "supabase/migrations/20260907100000_team_mensajes_objetos.sql";
 
 describe("1. lo apuntable lleva sus datos", () => {
   it("cards de documentos, filas de tx en Emitir y boletas de la mesa", () => {
-    expect(readFileSync("src/app/(app)/escritorio/v5/DocCardList.tsx", "utf8")).toMatch(/data-apuntable="documento" data-apuntable-id=\{doc\.id\} data-apuntable-label=\{doc\.nombre_archivo\}/);
+    // las DOS formas de la lista (cards y el árbol del tablero del Check)
+    const cards = readFileSync("src/app/(app)/escritorio/v5/DocCardList.tsx", "utf8");
+    expect((cards.match(/data-apuntable="documento" data-apuntable-id=\{doc\.id\} data-apuntable-label=\{doc\.nombre_archivo\}/g) ?? []).length).toBe(2);
     const emitir = readFileSync("src/app/(app)/escritorio/v5/EmitirTabContent.tsx", "utf8");
     expect(emitir).toMatch(/data-apuntable="tx" data-apuntable-id=\{item\.id\} data-apuntable-doc=\{item\.documento_id \?\? undefined\} data-apuntable-mes=\{mesDeFecha\(item\.fecha\) \?\? undefined\}/);
     const mesa = readFileSync("src/app/(app)/escritorio/v5/Mesa.tsx", "utf8");
@@ -61,7 +63,9 @@ describe("2. el servidor comprueba el objeto por tipo y sigue exigiendo el tick 
 describe("3. el globito entra y sale del modo", () => {
   const orbe = readFileSync(ORBE, "utf8");
 
-  it("captura el click en fase de captura, respeta chat y globito, y Esc sale", () => {
+  it("captura el click en fase de captura, respeta chat y globito, y Esc sale; y el click afuera NO cierra el chat mientras apuntas (cazado en la prueba real)", () => {
+    expect(orbe).toMatch(/if \(apuntandoRef\.current\) return;/);
+    expect(orbe).toMatch(/apuntandoRef\.current = Boolean\(apuntando\);/);
     expect(orbe).toMatch(/document\.addEventListener\("click", onClick, true\)/);
     expect(orbe).toMatch(/if \(bubbleRef\.current\?\.contains\(t\) \|\| orbRef\.current\?\.contains\(t\)\) return;/);
     expect(orbe).toMatch(/if \(e\.key === "Escape"\) setApuntando\(null\)/);
