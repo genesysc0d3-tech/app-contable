@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { downloadFromR2 } from "@/lib/r2";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
+import { archivoPdf } from "@/lib/sii/nombre-documento";
 import { extraerTimbrePng } from "@/lib/pdf/timbre-extract";
 import { generarBoletaPersonalizada } from "@/lib/pdf/boleta-personalizada";
 import { generarFacturaPersonalizada } from "@/lib/pdf/factura-personalizada";
@@ -168,7 +169,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return new Response(new Uint8Array(pdfFactura), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="factura-${boleta.tipo_dte}-${boleta.folio}.pdf"`,
+        "Content-Disposition": `inline; filename="${archivoPdf(boleta.tipo_dte, boleta.folio)}"`,
         "Cache-Control": "private, max-age=60",
       },
     });
@@ -199,7 +200,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="boleta-${boleta.tipo_dte}-${boleta.folio}.pdf"`,
+      "Content-Disposition": `inline; filename="${archivoPdf(boleta.tipo_dte, boleta.folio)}"`,
       "Cache-Control": "private, max-age=60",
     },
   });

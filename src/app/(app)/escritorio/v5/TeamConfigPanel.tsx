@@ -2,7 +2,15 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { cambiarEmpresaActiva, estadoTeam, listarEmpresasSelector, type Colaboracion, type TeamEstado } from "./actions";
+import { cambiarEmpresaActiva, estadoTeam, listarEmpresasSelector, type Colaboracion, type EmpresasSelectorResult, type TeamEstado } from "./actions";
+
+/** Lo que la página ya cargó para el logo; el wizard lo reutiliza sin volver a pedirlo. */
+export type WizardSemilla = { team: TeamEstado; empresasSelector: EmpresasSelectorResult };
+
+type Colab = { colaboraciones: Colaboracion[]; enCuentaAjena: boolean; cuentaPropia: { empresaId: string; nombre: string } | null };
+function colabDe(s: EmpresasSelectorResult): Colab {
+  return s.ok ? { colaboraciones: s.colaboraciones, enCuentaAjena: s.enCuentaAjena, cuentaPropia: s.cuentaPropia } : { colaboraciones: [], enCuentaAjena: false, cuentaPropia: null };
+}
 import TeamSection from "./TeamSection";
 import ColaborasEn from "./ColaborasEn";
 import TeamComoFunciona from "./TeamComoFunciona";
@@ -14,22 +22,30 @@ import TeamComoFunciona from "./TeamComoFunciona";
  * mismo patrón que Facturación). Team gris fuera de Business; "Colaboras en"
  * activo en todos los planes.
  */
-export default function TeamConfigPanel() {
+export default function TeamConfigPanel({ semilla = null }: { semilla?: WizardSemilla | null }) {
   const router = useRouter();
-  const [team, setTeam] = useState<TeamEstado | null>(null);
-  const [colab, setColab] = useState<{ colaboraciones: Colaboracion[]; enCuentaAjena: boolean; cuentaPropia: { empresaId: string; nombre: string } | null } | null>(null);
+  const [team, setTeam] = useState<TeamEstado | null>(semilla?.team ?? null);
+  const [colab, setColab] = useState<Colab | null>(semilla ? colabDe(semilla.empresasSelector) : null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Con semilla no se pide nada al montar (fundador 2026-09-07: "se demora
+  // caleta"). Cuando la página se refresca (router.refresh tras invitar o
+  // quitar), llega una semilla nueva y se adopta — diferido para no hacer
+  // setState síncrono dentro del efecto.
   useEffect(() => {
+    if (semilla) {
+      const t = window.setTimeout(() => { setTeam(semilla.team); setColab(colabDe(semilla.empresasSelector)); }, 0);
+      return () => window.clearTimeout(t);
+    }
     let vivo = true;
     void Promise.all([estadoTeam(), listarEmpresasSelector()]).then(([t, s]) => {
       if (!vivo) return;
       setTeam(t);
-      setColab(s.ok ? { colaboraciones: s.colaboraciones, enCuentaAjena: s.enCuentaAjena, cuentaPropia: s.cuentaPropia } : { colaboraciones: [], enCuentaAjena: false, cuentaPropia: null });
+      setColab(colabDe(s));
     });
     return () => { vivo = false; };
-  }, []);
+  }, [semilla]);
 
   function irA(empresaId: string) {
     setError(null);

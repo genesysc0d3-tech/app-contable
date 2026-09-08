@@ -19,6 +19,8 @@ import { estadoEleccionEmpresa, estadoTeam, listarEmpresasSelector, listarEquipo
 import EleccionEmpresaModal from "./EleccionEmpresaModal";
 import { chileDateString } from "@/lib/chile-date";
 import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
+import { etiquetaTipo, tituloDocumento } from "@/lib/sii/nombre-documento";
+import { faltanDelEmisor } from "@/lib/sii/emisor-completo";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
@@ -170,8 +172,8 @@ export default async function V5Page({ searchParams }: {
     const fechaRegistro = bol.created_at ?? bol.fecha_emision;
     searchHistoryItems.push({
       id: "bol-" + bol.id,
-      label: "Boleta #" + bol.folio + " · " + (bol.receptor_razon_social ?? "—"),
-      subtitle: (bol.tipo_dte === 39 ? "AFECTA" : "EXENTA") + " · $" + Math.round(bol.monto_total).toLocaleString("es-CL"),
+      label: tituloDocumento(bol.tipo_dte, bol.folio) + " · " + (bol.receptor_razon_social ?? "—"),
+      subtitle: etiquetaTipo(bol.tipo_dte) + " · $" + Math.round(bol.monto_total).toLocaleString("es-CL"),
       type: "boleta", fecha: fechaRegistro, monto: bol.monto_total, data: searchData(bol),
     });
   }
@@ -443,6 +445,7 @@ export default async function V5Page({ searchParams }: {
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
           empresaRazon={usuario.empresas.razon_social}
+          emisorFaltan={faltanDelEmisor(usuario.empresas)}
           empresaTipo={mesaParam === "factura" ? tipoFacturas : tipoBoletas}
           clientes={clData.data ?? []}
           rcvContent={rcvContent}
@@ -450,7 +453,7 @@ export default async function V5Page({ searchParams }: {
           empresaNombre={usuario.empresas.razon_social}
           empresaLogoUrl={empresaLogoUrl}
           brandSlot={<div key="brand" style={{position:"absolute",left:0,top:0,height:38,width:137,display:"flex",alignItems:"center",justifyContent:"flex-start",minWidth:0,overflow:"visible",zIndex:"auto",pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center",minWidth:0}}><EmpresaBrand nombre={usuario.empresas.razon_social} logoUrl={empresaLogoUrl} empresas={empresasSelectorItems} multiempresa={cuentaMultiempresa} puedeAgregar={cuentaPuedeAgregar} size={38} maxWidth={137} mesa={mesaParam} empresaRut={usuario.empresas.rut} team={team} colaboraciones={colaboraciones} enCuentaAjena={enCuentaAjena} cuentaActualNombre={cuentaActualNombre} cuentaPropia={cuentaPropia} /></span></div>}
-          actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow /></span></div>}
+          actionsSlot={<div key="actions" style={{position:"absolute",right:0,top:0,height:38,width:178,display:"flex",justifyContent:"flex-end",minWidth:0,zIndex:2,pointerEvents:"none"}}><span style={{pointerEvents:"auto",display:"flex",alignItems:"center"}}><HeaderActionsRow enCuentaAjena={enCuentaAjena} cuentaActualNombre={cuentaActualNombre} /></span></div>}
           leftColumn={
           <div key="left" className="left-col" style={{display:"flex",flexDirection:"column",gap:10,overflow:"visible",minHeight:0,scrollbarWidth:"none",paddingLeft:8}}>
 
@@ -531,6 +534,7 @@ export default async function V5Page({ searchParams }: {
       empresaCafs={(cafsData.data ?? []) as CAFRow[]}
       empresaId={empresaId}
       empresaEmisionConfig={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}
+      wizardSemilla={{ team, empresasSelector }}
       devMode={usuario.dev_mode === true}
     />
     </>

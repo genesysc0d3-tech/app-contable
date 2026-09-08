@@ -5,6 +5,7 @@ import { DownloadSimple } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 import { generarBoletaPDF, type BoletaPDFData } from "@/lib/pdf/boleta-pdf";
 import { downloadBaseApiPdf, getBaseApiPdf } from "@/lib/pdf/baseapi-pdf";
+import { archivoPdf, nombreDocumento } from "@/lib/sii/nombre-documento";
 
 interface BoletaRaw {
   folio: number;
@@ -54,7 +55,7 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
       const res = await fetch(`/api/intermediaria/boleta/${id}`, { cache: "no-store" });
       const j = await res.json();
       if (!res.ok || !j.ok) {
-        toast(j.error ?? "Error al cargar la boleta", "error");
+        toast(j.error ?? "Error al cargar el documento", "error");
         return;
       }
       const b = j.boleta as BoletaRaw;
@@ -71,7 +72,7 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `boleta-${b.tipo_dte}-${b.folio}.pdf`;
+        a.download = archivoPdf(b.tipo_dte, b.folio);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -82,10 +83,10 @@ export default function DescargarBoletaButton({ id }: { id: string }) {
       if (b.emision_proveedor === "baseapi") {
         const pdf = getBaseApiPdf(b.proveedor_respuesta);
         if (!pdf) {
-          toast("Esta emision de proveedor legado no tiene PDF guardado.", "error");
+          toast(`Esta ${nombreDocumento(b.tipo_dte).toLowerCase()} de proveedor legado no tiene PDF guardado.`, "error");
           return;
         }
-        downloadBaseApiPdf(pdf, `boleta-proveedor-legado-${b.tipo_dte}-${b.folio}.pdf`);
+        downloadBaseApiPdf(pdf, archivoPdf(b.tipo_dte, b.folio, "proveedor legado"));
         return;
       }
 

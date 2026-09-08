@@ -11,11 +11,13 @@ import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import type { ClienteResumen } from "./revisar-shared";
 import type { MesaDateDependent } from "./mesa-data";
+import { esTipoExento, etiquetaTipo, tituloDocumento } from "@/lib/sii/nombre-documento";
 
 const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 
-function compactEmpty(kind: "subidos" | "boletas") {
+function compactEmpty(kind: "subidos" | "boletas", esFacturas = false) {
   const isSubidos = kind === "subidos";
+  const plural = esFacturas ? "facturas" : "boletas";
   return (
     <div className="r-scroll" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 320, padding: "42px 18px", textAlign: "center", color: "var(--text2)" }}>
       <style>{`@keyframes emptySonar{0%{transform:scale(.72);opacity:.45}70%,100%{transform:scale(1.22);opacity:0}}@keyframes emptyDraw{0%{stroke-dashoffset:54;opacity:.28}50%{opacity:1}100%{stroke-dashoffset:0;opacity:.48}}`}</style>
@@ -28,7 +30,7 @@ function compactEmpty(kind: "subidos" | "boletas") {
             <svg viewBox="0 0 96 96" fill="none" style={{ position: "absolute", inset: 0, color: "#3B82F6" }}><path d="M29 15h30l12 12v54H29a6 6 0 0 1-6-6V21a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="4" /><path d="M59 16v13h13" stroke="currentColor" strokeWidth="4" /><path d="M35 45h26M35 56h20M35 67h27" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="54" style={{ animation: "emptyDraw 2.8s ease-in-out infinite" }} /></svg>
           )}
         </div>
-        <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>{isSubidos ? "Nada por aquí" : "Aún no hay boletas"}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em" }}>{isSubidos ? "Nada por aquí" : `Aún no hay ${plural}`}</div>
         <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.45, maxWidth: 270 }}>{isSubidos ? "Esta mesa no tiene documentos agregados todavía." : "Los documentos emitidos en esta mesa aparecerán aquí."}</div>
       </div>
     </div>
@@ -42,9 +44,10 @@ export type MesaProps = {
   empresaGiro: string | null;
   empresaRazon: string;
   empresaTipo: string | null;
+  emisorFaltan?: string[];
 };
 
-export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo }: MesaProps) {
+export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo, emisorFaltan = [] }: MesaProps) {
   // Salto del chat del team a una boleta: se resalta en la pestaña Boletas.
   useEffect(() => {
     const intentar = () => {
@@ -71,10 +74,10 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
           compactEmpty("subidos")
         )
       }
-      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
+      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
       boletasContent={
         mesa.boletasCount === 0 ? (
-          compactEmpty("boletas")
+          compactEmpty("boletas", mesa.mesaActiva === "factura")
         ) : (
           <div className="r-scroll">
             <div className="sec">
@@ -90,7 +93,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                 return (
                   <div key={b.id} className={`bl-item ${esAnulada ? "an" : ""}`}
                     data-apuntable="boleta" data-apuntable-id={b.id} data-apuntable-mes={mesDeFecha(b.fecha_emision) ?? undefined}
-                    data-apuntable-label={`Boleta #${b.folio} · ${b.receptor_razon_social ?? "sin receptor"} · $${Math.round(b.monto_total).toLocaleString("es-CL")}`}
+                    data-apuntable-label={`${tituloDocumento(b.tipo_dte, b.folio)} · ${b.receptor_razon_social ?? "sin receptor"} · $${Math.round(b.monto_total).toLocaleString("es-CL")}`}
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: esAnulada ? 0.5 : 1 }}>
                     <div className="ic" style={{ width: 28, height: 28, borderRadius: 6, background: b.es_unica ? "rgba(232,85,62,.07)" : "var(--bg-muted)", border: b.es_unica ? "1px dashed rgba(232,85,62,.5)" : "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: b.es_unica ? "var(--accent)" : "var(--text2)" }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
@@ -98,9 +101,12 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                     <div className="inf" style={{ flex: 1, minWidth: 0 }}>
                       <div className="top" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--text)" }}>
                         <span className="fl" style={{ color: "var(--text)" }}>#{b.folio}</span>
-                        <span className={`bd ${b.tipo_dte === 39 ? "af" : b.tipo_dte === 41 ? "ex" : "an"}`}
-                          style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: b.tipo_dte === 39 ? "var(--accent-light)" : b.tipo_dte === 41 ? "rgba(59,130,246,.1)" : "var(--bg-muted)", color: b.tipo_dte === 39 ? "var(--accent)" : b.tipo_dte === 41 ? "var(--blue)" : "var(--text2)" }}
-                        >{b.tipo_dte === 39 ? "AFECTA" : b.tipo_dte === 41 ? "EXENTA" : `DTE ${b.tipo_dte}`}</span>
+                        {/* El sello sale del TIPO (Matías 2026-09-07): antes una factura 33 decía "DTE 33". */}
+                        {(() => { const af = b.tipo_dte === 39 || b.tipo_dte === 33; const ex = esTipoExento(b.tipo_dte); return (
+                        <span className={`bd ${af ? "af" : ex ? "ex" : "an"}`}
+                          style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 600, background: af ? "var(--accent-light)" : ex ? "rgba(59,130,246,.1)" : "var(--bg-muted)", color: af ? "var(--accent)" : ex ? "var(--blue)" : "var(--text2)" }}
+                        >{etiquetaTipo(b.tipo_dte)}</span>
+                        ); })()}
                         {b.es_unica && (
                           <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 8, fontWeight: 800, border: "1px dashed rgba(232,85,62,.55)", background: "rgba(232,85,62,.06)", color: "var(--accent)" }}>ÚNICA</span>
                         )}

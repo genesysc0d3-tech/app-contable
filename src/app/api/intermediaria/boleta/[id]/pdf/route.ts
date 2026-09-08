@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { downloadFromR2 } from "@/lib/r2";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
+import { archivoPdf } from "@/lib/sii/nombre-documento";
 
 function getPdfMeta(proveedorRespuesta: unknown): { storagePath: string | null; provider: string | null } {
   if (!proveedorRespuesta || typeof proveedorRespuesta !== "object") return { storagePath: null, provider: null };
@@ -34,7 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const headers = {
     "Content-Type": "application/pdf",
-    "Content-Disposition": `inline; filename="boleta-sii-${boleta.tipo_dte}-${boleta.folio}.pdf"`,
+    "Content-Disposition": `inline; filename="${archivoPdf(boleta.tipo_dte, boleta.folio)}"`,
     "Cache-Control": "private, max-age=60",
   };
 

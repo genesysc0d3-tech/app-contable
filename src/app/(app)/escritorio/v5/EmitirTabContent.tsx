@@ -10,6 +10,9 @@ import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import dynamic from "next/dynamic";
 import { type LoteItemInput } from "./EmitirLoteModal";
+import { AvisoExentaAfecto, AVISO_EXENTA_TX, avisoExentaDoc } from "./AvisoExentaAfecto";
+import { esTipoExento } from "@/lib/sii/nombre-documento";
+import { mensajeEmisorIncompleto, type CampoEmisor } from "@/lib/sii/emisor-completo";
 import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
 import { devolverCartola, ultimaMiradaCartola } from "../../revisar/actions";
@@ -167,8 +170,14 @@ function nextActionLabel(code: Item["motivo_code"]): string | null {
   return null;
 }
 
-export default function EmitirTabContent({ initial = null, empresaId, mesa = "boleta" }: { initial?: PendientesResponse | null; empresaId?: string; mesa?: "boleta" | "factura" }) {
+export default function EmitirTabContent({ initial = null, empresaId, mesa = "boleta", empresaTipo = null, emisorFaltan = [] }: { initial?: PendientesResponse | null; empresaId?: string; mesa?: "boleta" | "factura"; empresaTipo?: string | null; emisorFaltan?: string[] }) {
   const esFacturas = mesa === "factura";
+  // Aviso exenta-con-actividad-afecta (Matías 2026-09-07): el tipo del emisor
+  // llega YA resuelto por carril (tipoDelCarril en page.tsx). Solo "afecto"
+  // enciende el aviso; exento y auto no ven nada.
+  const emisorAfecto = empresaTipo === "afecto";
+  const tipoDe = (i: Item): number => i.tipo_sugerido ?? (esFacturas ? 33 : 39);
+  const avisaExenta = (i: Item): boolean => emisorAfecto && esTipoExento(tipoDe(i));
   // Criterio 7 de Matías: la forma de pago del lote es OBLIGATORIA y SIN
   // default — el usuario la elige expresamente en la revisión, el sistema no
   // presupone cómo se hizo la operación. Solo aplica a facturas.
@@ -420,10 +429,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   );
   const selectedTotal = selectedItems.reduce((s, i) => s + i.monto_total, 0);
   const selectedCount = selectedItems.length;
-  const selAfecta = selectedItems.filter((i) => {
-    const t = i.tipo_sugerido ?? (esFacturas ? 33 : 39);
-    return t === 39 || t === 33;
-  }).length;
+  const selAfecta = selectedItems.filter((i) => !esTipoExento(tipoDe(i))).length;
   const selExenta = selectedCount - selAfecta;
   // POSIBLES REPETIDAS (2026-08-27): un intento fallido deja la propuesta
   // aprobada; varios intentos dejan VARIAS por la misma venta. Emitirlas todas
@@ -578,7 +584,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
         )}
         <div className="inf" onClick={() => { if (item.balde === "bloqueadas" && item.documento_id) void devolverYCorregir(item); else if (item.balde !== "listas") goToCheck(item); else if (!enCartola && !isDisabled) toggleItem(item.id); }}
           style={((item.balde !== "listas" && item.documento_id) || (item.balde === "listas" && !enCartola && !isDisabled)) ? { cursor: "pointer" } : undefined}>
-          <div className="tt">{item.receptor_nombre || item.descripcion || "Sin nombre"}</div>
+          <div className="tt" style={avisaExenta(item) ? { display: "flex", alignItems: "center", gap: 5, minWidth: 0 } : undefined}>
+            <span style={avisaExenta(item) ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } : undefined}>{item.receptor_nombre || item.descripcion || "Sin nombre"}</span>
+            {avisaExenta(item) && <AvisoExentaAfecto texto={AVISO_EXENTA_TX} />}
+          </div>
           <div className="sub">
             {item.receptor_rut ?? "Sin RUT"} · {formatShortDateEsCl(item.fecha, true)}
           </div>
@@ -781,8 +790,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="9 6 15 12 9 18"/></svg>
                     </span>
                     {emitibles.length > 0 && (
-                      <div role="checkbox" aria-checked={docSel} aria-label={`Seleccionar la cartola completa (${emitibles.length} boletas)`}
-                        title={`Selecciona la cartola COMPLETA: sus ${emitibles.length} boletas por emitir. Acá no se emite a pedazos — si algo no te cuadra, devuélvela a Check.`}
+                      <div role="checkbox" aria-checked={docSel} aria-label={`Seleccionar la cartola completa (${emitibles.length} ${esFacturas ? "facturas" : "boletas"})`}
+                        title={`Selecciona la cartola COMPLETA: sus ${emitibles.length} ${esFacturas ? "facturas" : "boletas"} por emitir. Acá no se emite a pedazos — si algo no te cuadra, devuélvela a Check.`}
                         onClick={(e) => { e.stopPropagation(); toggleDocSelect(g.items); }}
                         style={{ width: 19, height: 19, borderRadius: 6, border: docSel ? "1.5px solid var(--accent)" : "1.5px solid var(--text2)", background: docSel ? "var(--accent)" : "var(--surface2)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, cursor: "pointer", flexShrink: 0, transition: "all .15s" }}>{docSel ? "✓" : ""}</div>
                     )}
@@ -790,7 +799,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 3v5h5"/><path d="M6 3h8l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/></svg>
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nombre}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{g.nombre}</span>
+                        {(() => { const nEx = emitibles.filter(avisaExenta).length; return nEx > 0 ? <AvisoExentaAfecto texto={avisoExentaDoc(nEx)} size={12} /> : null; })()}
+                      </div>
                       <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 1, display: "flex", gap: 8, alignItems: "center" }}>
                         <span>{listas} por emitir</span>
                         {g.docId && (juzgadasByDoc[g.docId]?.emitidas.length ?? 0) > 0 && (
@@ -909,6 +921,14 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 esc.style.borderColor = "var(--accent)";
                 esc.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent)";
                 window.setTimeout(() => { esc.style.borderColor = ""; esc.style.boxShadow = ""; }, 1600);
+                return;
+              }
+              // Emisor incompleto (fundador 2026-09-08): sin RUT/razón social/giro la
+              // extensión no anda. No se abre la confirmación: al wizard, paso Emisor,
+              // en la empresa de ESTA mesa (el wizard abre siempre en la activa).
+              if (emisorFaltan.length > 0) {
+                toast(mensajeEmisorIncompleto(emisorFaltan as CampoEmisor[]), "error");
+                window.dispatchEvent(new CustomEvent("abrir-empresa"));
                 return;
               }
               if (proveedorReal && !esFacturas) setLoteOpen(true); else setConfirmOpen(true);
@@ -1044,6 +1064,15 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                   {selAfecta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "rgba(232,85,62,.13)", padding: "4px 10px", borderRadius: 8 }}>{selAfecta} con IVA</span>}
                   {selExenta > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "rgba(91,156,246,.13)", padding: "4px 10px", borderRadius: 8 }}>{selExenta} sin IVA</span>}
                 </div>
+                {/* Disclaimer de Matías (2026-09-07): afecto que manda exentas =
+                    subdeclara débito fiscal y el RCV lo cruza. Se avisa, no se
+                    bloquea: hay ventas exentas legítimas fuera del giro. */}
+                {emisorAfecto && selExenta > 0 && (
+                  <div data-aviso="exenta-afecto" style={{ marginBottom: 10, padding: "9px 11px", background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.3)", borderRadius: 9, fontSize: 11.5, color: "var(--amber)", lineHeight: 1.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+                    <span><b>{selExenta === 1 ? "1 va exenta" : `${selExenta} van exentas`} y tu actividad es afecta.</b> Solo corresponde si estas ventas de verdad se escapan de tu giro. Si es un error, cancela y corrígelas en Check.</span>
+                  </div>
+                )}
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 12, color: "var(--text2)" }}>
                   Total <b style={{ color: "var(--text)" }}>{fmt(selectedTotal)}</b>
                 </div>
