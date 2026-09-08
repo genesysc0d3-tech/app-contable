@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EmisorStep from "./EmisorStep";
 import { precargarConectoresMcp } from "@/app/(app)/empresa/ConectorMcpConfig";
+import { precargarFacturacion } from "./FacturacionUsoPanel";
 import type { WizardSemilla } from "./TeamConfigPanel";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
@@ -63,7 +64,7 @@ export default function EmpresaPopup({
   // Precarga en segundo plano (1,5 s después de abrir, cuando el wizard ya
   // está quieto) de lo que el paso Conector MCP necesita: al entrar, instantáneo.
   useEffect(() => {
-    const t = window.setTimeout(() => { void precargarConectoresMcp(); }, 1500);
+    const t = window.setTimeout(() => { void precargarConectoresMcp(); void precargarFacturacion(); }, 1500);
     return () => window.clearTimeout(t);
   }, []);
   useEffect(() => { closeBtnRef.current?.focus(); }, []); // Foco inicial al cierre (diálogo)
@@ -860,7 +861,7 @@ export default function EmpresaPopup({
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                {step < 6 ? (
+                {step < 8 ? (
                   <button className="ep-footer-btn primary" onClick={() => { void goToStep(step + 1); }}>
                     Siguiente ›
                   </button>

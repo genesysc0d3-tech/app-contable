@@ -63,6 +63,17 @@ export default function EmpresaBrand({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const rootRef = useRef<HTMLSpanElement>(null);
+  // Sin logo la API responde 204 (sin cuerpo) y el <img> ni carga ni falla:
+  // se queda pintando el texto alt ("Logo de PAUL…", cazado en la cuenta de
+  // Paula 2026-09-08). Se pregunta con HEAD y, si no hay imagen, va el nombre.
+  useEffect(() => {
+    if (!logoUrl) return;
+    let vivo = true;
+    fetch(logoUrl, { method: "HEAD", credentials: "same-origin" })
+      .then((r) => { if (vivo && (r.status === 204 || r.status === 404)) setLogoOk(false); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [logoUrl]);
   // Antes el menú abría solo con multiempresa. Ahora abre SIEMPRE: el
   // conmutador de mesa (boletas|facturas) vive acá, también para Start/Pro
   // (que en vez de lista de empresas muestra la suya con su RUT).

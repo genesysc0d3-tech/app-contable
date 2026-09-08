@@ -83,7 +83,7 @@ export default function CAFPanel({ cafs, proveedor = "mock" }: { cafs: CAFRow[];
                 No tienes que solicitar CAF aquí.
               </div>
               <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5, color: "var(--text2, #8b92a3)" }}>
-                Cuando emites desde el portal SII, el SII entrega el número de folio y el PDF oficial. App Contable sólo guarda ese folio y respaldo al terminar.
+                Cuando emites desde el portal SII, el SII entrega el número de folio y el PDF oficial. MassDTE solo guarda ese folio y respaldo al terminar.
               </div>
             </div>
           </div>
@@ -105,7 +105,7 @@ export default function CAFPanel({ cafs, proveedor = "mock" }: { cafs: CAFRow[];
                 CAF gestionado desde la extensión.
               </div>
               <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5, color: "var(--text2, #8b92a3)" }}>
-                Tus certificados y CAF quedan cifrados en este equipo. Durante una emisión SimpleAPI se transmiten temporalmente a App Contable para firmar y enviar el DTE. No los almacenamos en nuestros servidores.
+                Tus certificados y CAF quedan cifrados en este equipo. Durante una emisión SimpleAPI se transmiten temporalmente a MassDTE para firmar y enviar el DTE. No los almacenamos en nuestros servidores.
               </div>
             </div>
           </div>
