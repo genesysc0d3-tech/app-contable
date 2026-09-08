@@ -2,7 +2,9 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import EmisorForm from "../../empresa/EmisorForm";
+import EmisorStep from "./EmisorStep";
+import { precargarConectoresMcp } from "@/app/(app)/empresa/ConectorMcpConfig";
+import type { WizardSemilla } from "./TeamConfigPanel";
 import CAFPanel, { type CAFRow } from "../../empresa/CAFPanel";
 import TelegramConfig from "../../empresa/TelegramConfig";
 import ConectorMcpConfig from "../../empresa/ConectorMcpConfig";
@@ -18,6 +20,7 @@ export default function EmpresaPopup({
   cafs,
   empresaId,
   emisionConfig,
+  semilla,
   devMode = false,
   helpStepsEnabled,
   onHelpStepsChange,
@@ -31,9 +34,17 @@ export default function EmpresaPopup({
   helpStepsEnabled?: boolean;
   onHelpStepsChange?: (enabled: boolean) => void;
   onClose: () => void;
+  /** Datos que la página ya trajo (team, empresas): el wizard arranca con ellos, sin fetch. */
+  semilla?: WizardSemilla | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
+  // PASOS PEREZOSOS (fundador 2026-09-07, "se demora caleta"): antes los 9
+  // pasos se montaban al abrir y disparaban ~7 server actions que Next corre
+  // EN FILA — MCP y Team esperaban detrás de Facturación. Ahora cada paso se
+  // monta la primera vez que lo visitas y queda montado (no pierdes lo
+  // escrito). Team y Empresas llegan como semilla desde la página: cero fetch.
+  const [visitados, setVisitados] = useState<Set<number>>(() => new Set([0]));
   // "Ver como cliente": apaga el modo dev SOLO en esta sesión del wizard (estado
   // local, no toca la cuenta ni la DB) — para verificar qué ve un cliente real.
   const [verComoCliente, setVerComoCliente] = useState(false);
@@ -49,6 +60,12 @@ export default function EmpresaPopup({
   });
 
   useEffect(() => { router.refresh(); }, [router]); // Refresh server data on mount
+  // Precarga en segundo plano (1,5 s después de abrir, cuando el wizard ya
+  // está quieto) de lo que el paso Conector MCP necesita: al entrar, instantáneo.
+  useEffect(() => {
+    const t = window.setTimeout(() => { void precargarConectoresMcp(); }, 1500);
+    return () => window.clearTimeout(t);
+  }, []);
   useEffect(() => { closeBtnRef.current?.focus(); }, []); // Foco inicial al cierre (diálogo)
 
   const handleClose = useCallback(async () => {
@@ -87,6 +104,7 @@ export default function EmpresaPopup({
         setEmisorGuardadoOk(true);
       }
     }
+    setVisitados((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
     setStep(i);
   }, [step]);
 
@@ -815,7 +833,7 @@ export default function EmpresaPopup({
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <EmisorForm inicial={inicial} variant="popup" submitRef={submitRef} /> },
+                  { key: "emisor", content: <EmisorStep inicial={inicial} empresaId={empresaId} submitRef={submitRef} onIrAFacturacion={() => { void goToStep(5); }} semillaEmpresas={semilla?.empresasSelector ?? null} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },
@@ -823,10 +841,10 @@ export default function EmpresaPopup({
                   { key: "facturacion", content: <FacturacionUsoPanel /> },
                   { key: "soporte", content: <SoporteAccesoConfig /> },
                   { key: "conector", content: <ConectorMcpConfig /> },
-                  { key: "team", content: <TeamConfigPanel /> },
+                  { key: "team", content: <TeamConfigPanel semilla={semilla ?? null} /> },
                 ].map((s, i) => (
                   <div key={s.key} ref={el => { sectionRefs.current[i] = el; }} style={{ display: i === step ? "block" : "none" }}>
-                    {s.content}
+                    {visitados.has(i) ? s.content : null}
                   </div>
                 ))}
               </div>

@@ -48,7 +48,7 @@ function broadcastMesa(m: MesaDateDependent) {
  * reciben como children RSC inertes — nunca se re-renderizan ni re-consultan.
  */
 export default function MesaController({
-  initialMesa, empresaId, empresaGiro, empresaRazon, empresaTipo, clientes,
+  initialMesa, empresaId, empresaGiro, empresaRazon, emisorFaltan = [], empresaTipo, clientes,
   rcvContent, searchHistoryItems, empresaNombre, empresaLogoUrl,
   brandSlot, actionsSlot, leftColumn, team = null,
 }: {
@@ -58,6 +58,8 @@ export default function MesaController({
   empresaId: string;
   empresaGiro: string | null;
   empresaRazon: string;
+  /** Campos del emisor que faltan (RUT/razón social/giro): con alguno, Emitir manda al wizard. */
+  emisorFaltan?: string[];
   empresaTipo: string | null;
   clientes: MesaProps["clientes"];
   rcvContent: ReactNode;
@@ -318,7 +320,7 @@ export default function MesaController({
           defaultContent={
             <MesaReloadContext.Provider value={reloadMesa}>
               <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, opacity: isPending ? 0.55 : 1, transition: "opacity .18s ease" }}>
-                <Mesa mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaRazon={empresaRazon} empresaTipo={empresaTipo} />
+                <Mesa mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaRazon={empresaRazon} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} />
               </div>
             </MesaReloadContext.Provider>
           }

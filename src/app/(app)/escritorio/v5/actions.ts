@@ -14,7 +14,7 @@ import { getUfClp, getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { mpConfigurado } from "@/lib/pagos/mercadopago";
 import { fetchMesaDateDependent, type MesaParams, type MesaDateDependent } from "./mesa-data";
 
-type EmpresaSelectorRow = {
+export type EmpresaSelectorRow = {
   id: string;
   nombre: string;
   rut: string | null;
@@ -30,12 +30,14 @@ export type Colaboracion = {
   empresas: Array<{ id: string; nombre: string; rut: string | null }>;
 };
 
-type EmpresasSelectorResult =
+export type EmpresasSelectorResult =
   | {
       ok: true;
       empresas: EmpresaSelectorRow[];
       multiempresa: boolean;
       puedeAgregar: boolean;
+      /** Cupo de empresas del plan (solo titular con multiempresa; null si no aplica). */
+      cupoEmpresas: { activas: number; incluidas: number } | null;
       /** Teams ajenos donde colaboras (sin contar la cuenta donde estás parado). */
       colaboraciones: Colaboracion[];
       /** Estás parado en una cuenta que no es tuya (colaborando). */
@@ -257,7 +259,7 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
     const ids = (membresias ?? []).map((row) => row.empresa_id).filter((id) => !ticks || ticks.has(id));
     const colaboracion = ctx.supportMode ? { colaboraciones: [] as Colaboracion[], cuentaPropia: null, cuentaActualNombre: "" } : await mapaDeCuentas(ctx.sb, ctx.userId, acceso.cuentaId);
     const extra = { ...colaboracion, enCuentaAjena: !ctx.supportMode && !esTitular };
-    if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false, puedeAgregar: false, ...extra };
+    if (ids.length === 0) return { ok: true, empresas: [], multiempresa: false, puedeAgregar: false, cupoEmpresas: null, ...extra };
 
     const { data: empresas, error: empresasError } = await ctx.sb
       .from("empresas")
@@ -287,9 +289,11 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
     // cupo libre. El server re-valida todo en crearEmpresaAdicional — esto es
     // solo visibilidad del botón.
     let puedeAgregar = false;
+    let cupoEmpresas: { activas: number; incluidas: number } | null = null;
     if (multiempresa && !ctx.supportMode && esTitular) {
       const cuenta = await contextoCuentaPorEmpresa(ctx.sb, ctx.empresaId);
       puedeAgregar = !!cuenta && cuenta.empresasActivas < cuenta.empresasIncluidas;
+      if (cuenta) cupoEmpresas = { activas: cuenta.empresasActivas, incluidas: cuenta.empresasIncluidas };
     }
 
     return {
@@ -297,6 +301,7 @@ export async function listarEmpresasSelector(): Promise<EmpresasSelectorResult> 
       empresas: items,
       multiempresa,
       puedeAgregar,
+      cupoEmpresas,
       ...extra,
     };
   } catch (error) {

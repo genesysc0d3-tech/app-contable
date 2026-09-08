@@ -38,6 +38,28 @@ const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
  * con la misma regla que el consentimiento y el servidor MCP. `null` = aún
  * cargando: no se pinta gris antes de saber.
  */
+/**
+ * Caché en memoria de la lista de conexiones (fundador 2026-09-07, "MCP se
+ * demora caleta"): el wizard la precarga en segundo plano al abrirse y el
+ * paso la muestra al tiro. Vive 60 s y se invalida al conectar/cortar.
+ */
+type ConectoresRes = Awaited<ReturnType<typeof listarConectoresMcp>>;
+let conectoresCache: { at: number; res: ConectoresRes } | null = null;
+let conectoresEnVuelo: Promise<ConectoresRes> | null = null;
+const CACHE_MS = 60_000;
+
+export function precargarConectoresMcp(): Promise<ConectoresRes> {
+  if (conectoresCache && Date.now() - conectoresCache.at < CACHE_MS) return Promise.resolve(conectoresCache.res);
+  if (!conectoresEnVuelo) {
+    conectoresEnVuelo = listarConectoresMcp().then((res) => {
+      if (res.ok) conectoresCache = { at: Date.now(), res };
+      conectoresEnVuelo = null;
+      return res;
+    });
+  }
+  return conectoresEnVuelo;
+}
+
 export default function ConectorMcpConfig() {
   const [conexiones, setConexiones] = useState<ConexionMcp[] | null>(null);
   const [planActivo, setPlanActivo] = useState<boolean | null>(null);
@@ -59,20 +81,21 @@ export default function ConectorMcpConfig() {
     window.open(destino, "_blank", "noopener");
   };
 
-  const cargar = () => {
-    void listarConectoresMcp().then((res) => {
+  const cargar = (fresco = false) => {
+    if (fresco) conectoresCache = null;
+    void precargarConectoresMcp().then((res) => {
       if (res.ok) { setConexiones(res.conexiones); setPlanActivo(res.planActivo); setEsTitular(res.esTitular); setError(null); }
       else setError("No se pudieron cargar las conexiones — reintenta.");
     });
   };
-  useEffect(cargar, []);
+  useEffect(() => { cargar(); }, []);
 
   const desconectar = (id: string) => {
     setCortando(id);
     startTransition(async () => {
       const res = await desconectarConectorMcp(id);
       setCortando(null);
-      if (res.ok) cargar();
+      if (res.ok) cargar(true);
       else setError("No se pudo desconectar — reintenta.");
     });
   };

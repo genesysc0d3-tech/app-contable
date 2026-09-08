@@ -1,6 +1,7 @@
 "use client";
 
 import { fmt, fmtShort } from "./revisar-shared";
+import { tituloDocumento } from "@/lib/sii/nombre-documento";
 
 const divider = { borderTop: "1px solid var(--border)", margin: "0.6em 0" } as const;
 const SIN_INFO = "Sin información";
@@ -30,6 +31,8 @@ const ESTADO_META: Record<string, { label: string; color: string; bg: string }> 
 };
 
 const TIPO_META: Record<number, { label: string; color: string }> = {
+  33: { label: "Afecta · con IVA · 33", color: "var(--accent)" },
+  34: { label: "Exenta · sin IVA · 34", color: "var(--blue)" },
   39: { label: "Afecta · con IVA · 39", color: "var(--accent)" },
   41: { label: "Exenta · sin IVA · 41", color: "var(--blue)" },
   61: { label: "Nota de crédito · 61", color: "#c084fc" },
@@ -49,7 +52,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
 }) {
   const estado = ESTADO_META[boleta.estado] ?? { label: boleta.estado || SIN_INFO, color: "var(--text2)", bg: "var(--bg-muted)" };
   const tipo = TIPO_META[boleta.tipo_dte] ?? { label: `DTE ${boleta.tipo_dte}`, color: "var(--text2)" };
-  const isAfecta = boleta.tipo_dte === 39;
+  const isAfecta = boleta.tipo_dte === 39 || boleta.tipo_dte === 33;
   const neto = boleta.monto_neto ?? (isAfecta ? Math.round(boleta.monto_total / 1.19) : boleta.monto_total);
   const iva = boleta.iva ?? (isAfecta ? boleta.monto_total - neto : 0);
   const receptor = boleta.receptor_razon_social?.trim() || (boleta.receptor_rut ? SIN_INFO : "Consumidor final");
@@ -60,7 +63,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
     <div style={{ display: "flex", flexDirection: "column", padding: "0.85em 18px", fontSize: "clamp(9px, 1.3vh, 12.5px)", height: "100%" }}>
       {/* HEADER */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, marginBottom: "0.5em" }}>
-        <span style={{ fontSize: "1.65em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em", lineHeight: 1 }}>Boleta #{boleta.folio}</span>
+        <span style={{ fontSize: "1.65em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.025em", lineHeight: 1 }}>{tituloDocumento(boleta.tipo_dte, boleta.folio)}</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.9em", fontWeight: 800, color: estado.color, background: estado.bg, padding: "0.32em 0.7em", borderRadius: 8 }}>
           <span style={{ width: "0.5em", height: "0.5em", borderRadius: "50%", background: estado.color }} />{estado.label}
         </span>
@@ -93,7 +96,7 @@ export default function BoletaVisor({ boleta, onClose, onVerEnBoletas }: {
           <span style={{ color: "var(--text3)" }}>·</span>
           {calendarIcon}
           <span>{fecha}</span>
-          <button onClick={onVerEnBoletas} style={{ marginLeft: "auto", fontSize: "0.82em", fontWeight: 700, color: "var(--accent)", background: "transparent", border: "none", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}>Ver en Boletas →</button>
+          <button onClick={onVerEnBoletas} style={{ marginLeft: "auto", fontSize: "0.82em", fontWeight: 700, color: "var(--accent)", background: "transparent", border: "none", cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}>Ver en {boleta.tipo_dte === 33 || boleta.tipo_dte === 34 ? "Facturas" : "Boletas"} →</button>
         </div>
       </div>
     </div>
