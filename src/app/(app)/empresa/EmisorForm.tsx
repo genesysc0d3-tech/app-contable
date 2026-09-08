@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useId, isValidElement, cloneElement, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
+import { crearEmpresaAdicional } from "@/app/(app)/escritorio/v5/actions";
 import { formatRut, validarRut, cleanRut } from "@/lib/sii/validation";
 import { useToast } from "@/components/Toast";
 
@@ -15,10 +16,41 @@ interface Props {
    *  se guarda en ella sin cambiar de mesa. El logo se sube desde su propia
    *  mesa (la subida es de la empresa activa), así que acá no se muestra. */
   empresaId?: string;
+  /** "crear" (fundador 2026-09-08): el MISMO formulario, vacío, para una
+   *  empresa nueva de la cuenta. Se crea al guardar (RUT verificado contra el
+   *  SII al salir del campo). Nada de formulario chico aparte. */
+  modo?: "editar" | "crear";
+  onCreada?: (empresaId: string) => void;
 }
 
-export default function EmisorForm({ inicial, variant = "page", submitRef, empresaId }: Props) {
-  const otraEmpresa = Boolean(empresaId);
+export default function EmisorForm({ inicial, variant = "page", submitRef, empresaId, modo = "editar", onCreada }: Props) {
+  const crear = modo === "crear";
+  // En otra empresa o en una nueva no se sube logo: la subida es de la activa.
+  const otraEmpresa = Boolean(empresaId) || crear;
+  // Verificación del RUT contra la nómina pública del SII (solo al crear):
+  // un typo con DV válido muestra OTRA empresa y se delata solo.
+  const [verif, setVerif] = useState<
+    | { estado: "idle" | "buscando" }
+    | { estado: "encontrada"; razon: string; terminoGiro: string | null }
+    | { estado: "no_encontrada" }
+  >({ estado: "idle" });
+  async function verificarRutSii(valor: string) {
+    const limpio = valor.replace(/[^0-9kK]/g, "");
+    const cuerpo = Number(limpio.slice(0, -1));
+    // Bajo ~50M es persona natural: no está en la nómina de jurídicas.
+    if (limpio.length < 7 || !Number.isFinite(cuerpo) || cuerpo < 50_000_000 || !validarRut(valor)) { setVerif({ estado: "idle" }); return; }
+    setVerif({ estado: "buscando" });
+    try {
+      const res = await fetch(`/api/empresa/verificar-rut?rut=${encodeURIComponent(valor)}`);
+      const data = await res.json();
+      if (data?.ok && data.encontrado) {
+        setVerif({ estado: "encontrada", razon: data.razon_social, terminoGiro: data.termino_giro ?? null });
+        setRazonSocial((prev) => prev.trim() || data.razon_social);
+      } else {
+        setVerif({ estado: "no_encontrada" });
+      }
+    } catch { setVerif({ estado: "no_encontrada" }); }
+  }
   const { toast } = useToast();
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -110,17 +142,34 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
       (datos.operacion_hint_default ?? null) === (prev.operacion_hint_default ?? null);
     if (opts?.soloSiCambio && sinCambios) return true;
 
-    const rutInvalido = !!rut && !validarRut(rut);
+    // Crear: si apretaste "+ Agregar" y no escribiste nada, cambiar de paso o
+    // cerrar no debe trabarte — no hay nada que crear todavía.
+    const vacioDeNueva = crear && !rut.trim() && !razonSocial.trim() && !giro.trim();
+    if (opts?.soloSiCambio && vacioDeNueva) return true;
+
+    const rutInvalido = (!!rut && !validarRut(rut)) || (crear && !rut.trim());
     const razonVacia = !razonSocial.trim();
     if (rutInvalido || razonVacia) {
       if (rutInvalido) setRutTouched(true);
       if (razonVacia) setRazonTouched(true);
-      toast(rutInvalido ? "RUT inválido" : "Razón social obligatoria", "error");
+      toast(rutInvalido ? (crear && !rut.trim() ? "El RUT de la empresa nueva es obligatorio" : "RUT inválido") : "Razón social obligatoria", "error");
       return false;
     }
 
     setPending(true);
     try {
+      if (crear) {
+        const creada = await crearEmpresaAdicional({ rut: datos.rut ?? "", razon_social: datos.razon_social, giro: datos.giro });
+        if (!creada.ok) { toast(creada.detalle ?? "No se pudo crear la empresa.", "error"); return false; }
+        // El resto de los datos (dirección, comuna, email, tipos) van a la recién creada.
+        const r2 = await setDatosEmisor(datos, creada.empresa_id);
+        if (r2.error) { toast(`Empresa creada, pero no se guardó el resto: ${r2.error}`, "error"); }
+        ultimoGuardado.current = datos;
+        toast("Empresa creada");
+        window.dispatchEvent(new CustomEvent("v5-popup-saved", { detail: { label: "Empresa creada" } }));
+        onCreada?.(creada.empresa_id);
+        return true;
+      }
       const r = await setDatosEmisor(datos, empresaId);
       if (r.error) { toast(r.error, "error"); return false; }
       ultimoGuardado.current = datos;
@@ -282,8 +331,8 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
 
             {/* Drag & drop: soltar un archivo acá sube el logo (antes el browser navegaba a la imagen) */}
             {otraEmpresa ? (
-              <div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: 150, fontSize: 10, lineHeight: 1.4, color: "var(--text3, #697080)", textAlign: "right", alignSelf: "center" }}>
-                El logo se sube desde la mesa de esta empresa.
+              <div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: 170, fontSize: 10, lineHeight: 1.4, color: "var(--text3, #697080)", textAlign: "right", alignSelf: "center" }}>
+                {crear ? "Se crea al guardar. El RUT queda fijo tras la primera boleta emitida." : "El logo se sube desde la mesa de esta empresa."}
               </div>
             ) : (
             <div
@@ -357,11 +406,22 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
                 type="text"
                 value={rut}
                 onChange={(e) => setRut(e.target.value)}
-                onBlur={() => { if (rut) setRut(formatRut(rut)); setRutTouched(true); }}
+                onBlur={() => { if (rut) setRut(formatRut(rut)); setRutTouched(true); if (crear && rut) void verificarRutSii(rut); }}
                 placeholder="12.345.678-9"
                 className={`ef-input${rutError ? " ef-input-error" : ""}`}
                 style={inputBase}
+                autoFocus={crear}
               />
+              {crear && verif.estado === "buscando" && <div style={{ marginTop: 4, fontSize: 10, color: "var(--text3)" }}>Buscando en el registro del SII…</div>}
+              {crear && verif.estado === "encontrada" && (
+                <div style={{ marginTop: 4, fontSize: 10.5, color: "var(--green)", lineHeight: 1.4 }}>
+                  ✓ {verif.razon}
+                  {verif.terminoGiro && <span style={{ display: "block", color: "var(--amber)" }}>⚠ Registra término de giro ({verif.terminoGiro}) ante el SII.</span>}
+                </div>
+              )}
+              {crear && verif.estado === "no_encontrada" && (
+                <div style={{ marginTop: 4, fontSize: 10, color: "var(--text2)", lineHeight: 1.4 }}>No aparece en el registro público del SII. Si la empresa es nueva es normal — revisa el RUT y sigue.</div>
+              )}
             </Field>
 
             <Field

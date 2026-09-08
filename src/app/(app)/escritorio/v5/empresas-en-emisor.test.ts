@@ -49,26 +49,41 @@ describe("2. el paso Emisor del wizard", () => {
   it("EmisorForm guarda en la empresa indicada y en otra empresa no ofrece subir logo (la subida es de la activa)", () => {
     const form = leer("src/app/(app)/empresa/EmisorForm.tsx");
     expect(form).toMatch(/const r = await setDatosEmisor\(datos, empresaId\);/);
-    expect(form).toMatch(/\{otraEmpresa \? \(\s*<div[^>]*>\s*El logo se sube desde la mesa de esta empresa\./);
+    expect(form).toMatch(/\{otraEmpresa \? \(\s*<div[^>]*>\s*\{crear \? "Se crea al guardar\. El RUT queda fijo tras la primera boleta emitida\." : "El logo se sube desde la mesa de esta empresa\."\}/);
   });
 });
 
 describe("3. la lista de empresas", () => {
   const panel = leer(V5 + "EmpresasCuentaPanel.tsx");
 
-  it("chips numerados ARRIBA del formulario (1, 2, 3…), con principal y 'en la mesa'; el mismo formulario de alta que el logo", () => {
+  it("chips numerados ARRIBA del formulario (1, 2, 3…), con principal y 'en la mesa'", () => {
     expect(panel).toMatch(/data-empresa-chip=\{e\.id\}/);
     expect(panel).toMatch(/\$\{e\.esPrincipal \? " · Principal" : ""\}\$\{e\.activaActual \? " · En la mesa" : ""\}/);
     const step = leer(V5 + "EmisorStep.tsx");
     expect(step.indexOf("<EmpresasCuentaPanel")).toBeLessThan(step.indexOf("<EmisorForm key={otra.id}"));
-    expect(panel).toMatch(/import AgregarEmpresaForm from "\.\/AgregarEmpresaForm";/);
+    // El logo conserva su formulario chico (ahí sí te lleva a la mesa nueva).
     expect(leer(V5 + "EmpresaBrand.tsx")).toMatch(/import AgregarEmpresaForm from "\.\/AgregarEmpresaForm";/);
-    expect(leer(V5 + "EmpresaBrand.tsx")).not.toMatch(/function AgregarEmpresaForm\(/);
+  });
+
+  it("'+ Agregar' abre el MISMO 'Datos del emisor' vacío (modo crear): RUT verificado contra el SII, se crea al guardar", () => {
+    expect(panel).not.toMatch(/AgregarEmpresaForm/);
+    expect(panel).toMatch(/<button type="button" onClick=\{onAgregar\} data-accion="agregar-empresa"/);
+    expect(panel).toMatch(/data-empresa-chip="nueva"/);
+    const step = leer(V5 + "EmisorStep.tsx");
+    expect(step).toMatch(/<EmisorForm key="nueva" inicial=\{vacio\} variant="popup" submitRef=\{submitRef\} modo="crear" onCreada=/);
+    const form = leer("src/app/(app)/empresa/EmisorForm.tsx");
+    expect(form).toMatch(/const creada = await crearEmpresaAdicional\(\{ rut: datos\.rut \?\? "", razon_social: datos\.razon_social, giro: datos\.giro \}\);/);
+    expect(form).toMatch(/const r2 = await setDatosEmisor\(datos, creada\.empresa_id\);/);
+    expect(form).toMatch(/if \(crear && rut\) void verificarRutSii\(rut\);/);
+    expect(form).toMatch(/setRazonSocial\(\(prev\) => prev\.trim\(\) \|\| data\.razon_social\)/);
+    // Apretar "+ Agregar" y no escribir nada no traba el wizard.
+    expect(form).toMatch(/const vacioDeNueva = crear && !rut\.trim\(\) && !razonSocial\.trim\(\) && !giro\.trim\(\);/);
+    expect(form).toMatch(/const rutInvalido = \(!!rut && !validarRut\(rut\)\) \|\| \(crear && !rut\.trim\(\)\);/);
   });
 
   it("agregar solo con cupo; cupo lleno → Facturación y uso; fuera de Business o en cuenta ajena NO se pinta nada", () => {
     expect(panel).toMatch(/if \(estado\.fase !== "ok" \|\| !estado\.multiempresa \|\| estado\.enCuentaAjena\) return null;/);
-    expect(panel).toMatch(/\{puedeAgregar && \(\s*<button type="button" onClick=\{\(\) => setAgregando\(\(v\) => !v\)\} data-accion="agregar-empresa"/);
+    expect(panel).toMatch(/\{puedeAgregar && \(nuevaActiva \? \(/);
     expect(panel).toMatch(/const cupoLleno = !puedeAgregar && !!cupo && cupo\.activas >= cupo\.incluidas;/);
     expect(panel).toMatch(/\{cupoLleno && \(\s*<button type="button" onClick=\{onIrAFacturacion\} data-accion="cupo-lleno"/);
     expect(panel).not.toMatch(/business-cta/);

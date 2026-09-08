@@ -58,8 +58,10 @@ export default function V5Root({
 
   useEffect(() => {
     const h = () => setEmpresaOpen(v => !v);
+    const abrir = () => setEmpresaOpen(true); // Emitir con emisor incompleto → wizard, paso Emisor
     window.addEventListener("toggle-empresa", h);
-    return () => window.removeEventListener("toggle-empresa", h);
+    window.addEventListener("abrir-empresa", abrir);
+    return () => { window.removeEventListener("toggle-empresa", h); window.removeEventListener("abrir-empresa", abrir); };
   }, []);
 
   useEffect(() => {

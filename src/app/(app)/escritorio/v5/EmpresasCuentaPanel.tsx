@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { listarEmpresasSelector, type EmpresaSelectorRow, type EmpresasSelectorResult } from "./actions";
-import AgregarEmpresaForm from "./AgregarEmpresaForm";
 import { formatRut } from "@/lib/rut";
 
 /**
@@ -32,18 +31,20 @@ function estadoDe(r: EmpresasSelectorResult): Estado {
 
 const corto = (s: string, n = 26) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
-export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onIrAFacturacion, refreshKey = 0, semilla = null }: {
+export default function EmpresasCuentaPanel({ enEdicion, nuevaActiva = false, onElegir, onAgregar, onIrAFacturacion, refreshKey = 0, semilla = null }: {
   /** Empresa cuyo emisor se está editando (la activa si es null). */
   enEdicion: string | null;
+  /** Hay una empresa nueva abierta en el formulario (chip "Nueva" seleccionado). */
+  nuevaActiva?: boolean;
   onElegir: (empresaId: string) => void;
-  onCreada: (empresaId: string) => void;
+  /** "+ Agregar": abre el MISMO formulario vacío (fundador 2026-09-08). */
+  onAgregar: () => void;
   onIrAFacturacion: () => void;
   refreshKey?: number;
   /** Selector ya cargado por la página (cero fetch al montar). */
   semilla?: EmpresasSelectorResult | null;
 }) {
   const [estado, setEstado] = useState<Estado>(() => (semilla ? estadoDe(semilla) : { fase: "cargando" }));
-  const [agregando, setAgregando] = useState(false);
 
   // Con semilla y sin mutaciones (refreshKey 0) no se pide nada al montar.
   // Tras crear una empresa (refreshKey > 0) sí se relee del servidor.
@@ -67,7 +68,7 @@ export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onI
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         <span style={{ fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".08em", marginRight: 4 }}>Tus empresas</span>
         {empresas.map((e, i) => {
-          const editando = enEdicion ? enEdicion === e.id : e.activaActual;
+          const editando = !nuevaActiva && (enEdicion ? enEdicion === e.id : e.activaActual);
           return (
             <button key={e.id} type="button" onClick={() => onElegir(e.id)} data-empresa-chip={e.id} aria-pressed={editando}
               title={`${e.nombre}${e.rut ? ` · ${formatRut(e.rut)}` : ""}${e.esPrincipal ? " · Principal" : ""}${e.activaActual ? " · En la mesa" : ""}${editando ? "" : " — configurar sin cambiar de mesa"}`}
@@ -79,13 +80,19 @@ export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onI
           );
         })}
 
-        {puedeAgregar && (
-          <button type="button" onClick={() => setAgregando((v) => !v)} data-accion="agregar-empresa" aria-expanded={agregando}
-            style={{ ...chipBase, border: "1px dashed var(--border)", background: agregando ? "var(--bg-muted)" : "transparent", color: "var(--text2)" }}>
+        {puedeAgregar && (nuevaActiva ? (
+          <span data-empresa-chip="nueva" aria-current="true"
+            style={{ ...chipBase, cursor: "default", border: "1px dashed rgba(232,85,62,.55)", background: "var(--accent-light)", color: "var(--text)" }}>
+            <span style={{ width: 22, height: 22, borderRadius: 7, display: "grid", placeItems: "center", background: "rgba(232,85,62,.18)", color: "var(--accent)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{empresas.length + 1}</span>
+            Nueva
+          </span>
+        ) : (
+          <button type="button" onClick={onAgregar} data-accion="agregar-empresa"
+            style={{ ...chipBase, border: "1px dashed var(--border)", background: "transparent", color: "var(--text2)" }}>
             <span style={{ width: 22, height: 22, borderRadius: 7, display: "grid", placeItems: "center", background: "var(--bg-muted)", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</span>
             Agregar
           </button>
-        )}
+        ))}
         {cupoLleno && (
           <button type="button" onClick={onIrAFacturacion} data-accion="cupo-lleno"
             title="Tu plan ya tiene todas sus empresas. Mira tu plan en Facturación y uso."
@@ -97,12 +104,6 @@ export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onI
         {cupo && <span style={{ marginLeft: "auto", fontSize: 9.5, fontWeight: 700, color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{cupo.activas} de {cupo.incluidas}</span>}
       </div>
 
-      {agregando && puedeAgregar && (
-        <div style={{ marginTop: 8, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
-          <AgregarEmpresaForm onListo={(id) => { setAgregando(false); onCreada(id); }} onCancelar={() => setAgregando(false)}
-            nota="Al crearla te quedas acá configurando sus datos; la mesa sigue en la empresa activa. El RUT queda fijo tras la primera boleta emitida." />
-        </div>
-      )}
     </div>
   );
 }

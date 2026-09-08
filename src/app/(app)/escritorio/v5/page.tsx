@@ -20,6 +20,7 @@ import EleccionEmpresaModal from "./EleccionEmpresaModal";
 import { chileDateString } from "@/lib/chile-date";
 import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import { etiquetaTipo, tituloDocumento } from "@/lib/sii/nombre-documento";
+import { faltanDelEmisor } from "@/lib/sii/emisor-completo";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
@@ -444,6 +445,7 @@ export default async function V5Page({ searchParams }: {
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
           empresaRazon={usuario.empresas.razon_social}
+          emisorFaltan={faltanDelEmisor(usuario.empresas)}
           empresaTipo={mesaParam === "factura" ? tipoFacturas : tipoBoletas}
           clientes={clData.data ?? []}
           rcvContent={rcvContent}

@@ -44,9 +44,10 @@ export type MesaProps = {
   empresaGiro: string | null;
   empresaRazon: string;
   empresaTipo: string | null;
+  emisorFaltan?: string[];
 };
 
-export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo }: MesaProps) {
+export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo, emisorFaltan = [] }: MesaProps) {
   // Salto del chat del team a una boleta: se resalta en la pestaña Boletas.
   useEffect(() => {
     const intentar = () => {
@@ -73,7 +74,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
           compactEmpty("subidos")
         )
       }
-      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
+      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
       boletasContent={
         mesa.boletasCount === 0 ? (
           compactEmpty("boletas", mesa.mesaActiva === "factura")

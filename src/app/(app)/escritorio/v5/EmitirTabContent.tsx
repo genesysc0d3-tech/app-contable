@@ -12,6 +12,7 @@ import dynamic from "next/dynamic";
 import { type LoteItemInput } from "./EmitirLoteModal";
 import { AvisoExentaAfecto, AVISO_EXENTA_TX, avisoExentaDoc } from "./AvisoExentaAfecto";
 import { esTipoExento } from "@/lib/sii/nombre-documento";
+import { mensajeEmisorIncompleto, type CampoEmisor } from "@/lib/sii/emisor-completo";
 import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
 import { devolverCartola, ultimaMiradaCartola } from "../../revisar/actions";
@@ -169,7 +170,7 @@ function nextActionLabel(code: Item["motivo_code"]): string | null {
   return null;
 }
 
-export default function EmitirTabContent({ initial = null, empresaId, mesa = "boleta", empresaTipo = null }: { initial?: PendientesResponse | null; empresaId?: string; mesa?: "boleta" | "factura"; empresaTipo?: string | null }) {
+export default function EmitirTabContent({ initial = null, empresaId, mesa = "boleta", empresaTipo = null, emisorFaltan = [] }: { initial?: PendientesResponse | null; empresaId?: string; mesa?: "boleta" | "factura"; empresaTipo?: string | null; emisorFaltan?: string[] }) {
   const esFacturas = mesa === "factura";
   // Aviso exenta-con-actividad-afecta (Matías 2026-09-07): el tipo del emisor
   // llega YA resuelto por carril (tipoDelCarril en page.tsx). Solo "afecto"
@@ -920,6 +921,14 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 esc.style.borderColor = "var(--accent)";
                 esc.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent)";
                 window.setTimeout(() => { esc.style.borderColor = ""; esc.style.boxShadow = ""; }, 1600);
+                return;
+              }
+              // Emisor incompleto (fundador 2026-09-08): sin RUT/razón social/giro la
+              // extensión no anda. No se abre la confirmación: al wizard, paso Emisor,
+              // en la empresa de ESTA mesa (el wizard abre siempre en la activa).
+              if (emisorFaltan.length > 0) {
+                toast(mensajeEmisorIncompleto(emisorFaltan as CampoEmisor[]), "error");
+                window.dispatchEvent(new CustomEvent("abrir-empresa"));
                 return;
               }
               if (proveedorReal && !esFacturas) setLoteOpen(true); else setConfirmOpen(true);
