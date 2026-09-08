@@ -6,12 +6,12 @@ import AgregarEmpresaForm from "./AgregarEmpresaForm";
 import { formatRut } from "@/lib/rut";
 
 /**
- * Empresas de la cuenta dentro del paso Emisor del wizard (fundador
- * 2026-09-07): Empresa 1, Empresa 2, Empresa 3… Tocar una abre SU emisor
- * para configurarla sin cambiar de mesa (la mesa se cambia en el logo).
- * "+ Agregar empresa" vive acá también — el mismo formulario que el popup
- * del logo. Con el cupo lleno, el botón lleva a Facturación y uso.
- * Fuera de Business queda gris.
+ * Selector de empresas ARRIBA del paso Emisor (fundador 2026-09-07, segunda
+ * vuelta: la lista debajo del formulario "quedaba rara"). Chips compactos —
+ * 1 MV Inversiones · 2 … · + Agregar · 1 de 3 — y el formulario de abajo es
+ * el de la empresa elegida. Es configuración, no cambia la mesa.
+ * Solo Business (multiempresa) y solo en tu propia cuenta: para el resto no
+ * se pinta nada, el paso queda como siempre.
  */
 type Estado =
   | { fase: "cargando" }
@@ -29,6 +29,8 @@ function estadoDe(r: EmpresasSelectorResult): Estado {
   if (!r.ok) return { fase: "error" };
   return { fase: "ok", empresas: r.empresas, multiempresa: r.multiempresa, puedeAgregar: r.puedeAgregar, cupo: r.cupoEmpresas, enCuentaAjena: r.enCuentaAjena };
 }
+
+const corto = (s: string, n = 26) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onIrAFacturacion, refreshKey = 0, semilla = null }: {
   /** Empresa cuyo emisor se está editando (la activa si es null). */
@@ -52,83 +54,55 @@ export default function EmpresasCuentaPanel({ enEdicion, onElegir, onCreada, onI
     return () => { vivo = false; };
   }, [refreshKey, semilla]);
 
-  const titulo = (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, padding: "0 2px 8px" }}>
-      <span style={{ fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".08em" }}>Empresas de tu cuenta</span>
-      {estado.fase === "ok" && estado.cupo && (
-        <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{estado.cupo.activas} de {estado.cupo.incluidas}</span>
-      )}
-    </div>
-  );
+  // Fuera de Business, o colaborando en un team ajeno: el paso es el de siempre.
+  if (estado.fase !== "ok" || !estado.multiempresa || estado.enCuentaAjena) return null;
 
-  if (estado.fase !== "ok") {
-    return (
-      <div data-panel="empresas-cuenta" style={{ marginTop: 14 }}>
-        {titulo}
-        <div style={{ padding: "10px 8px", fontSize: 10.5, color: "var(--text3)" }}>{estado.fase === "cargando" ? "Cargando tus empresas…" : "No se pudieron leer las empresas de la cuenta."}</div>
-      </div>
-    );
-  }
+  const { empresas, puedeAgregar, cupo } = estado;
+  const cupoLleno = !puedeAgregar && !!cupo && cupo.activas >= cupo.incluidas;
 
-  const { empresas, multiempresa, puedeAgregar, cupo, enCuentaAjena } = estado;
-  const cupoLleno = multiempresa && !puedeAgregar && !!cupo && cupo.activas >= cupo.incluidas;
+  const chipBase = { display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 10px 0 6px", borderRadius: 10, fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" as const, transition: "border-color .15s, background .15s" };
 
   return (
-    <div data-panel="empresas-cuenta" style={{ marginTop: 14 }}>
-      {titulo}
-      <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)", padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+    <div data-panel="empresas-cuenta" style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 9, fontWeight: 850, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".08em", marginRight: 4 }}>Tus empresas</span>
         {empresas.map((e, i) => {
           const editando = enEdicion ? enEdicion === e.id : e.activaActual;
           return (
-            <button key={e.id} type="button" onClick={() => onElegir(e.id)} data-empresa-row={e.id} aria-current={editando ? "true" : undefined}
-              title={editando ? "Estás configurando esta empresa" : `Configurar ${e.nombre} (sin cambiar de mesa)`}
-              style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 10, width: "100%", minHeight: 44, padding: "6px 8px", borderRadius: 9, border: editando ? "1px solid rgba(232,85,62,.45)" : "1px solid transparent", background: editando ? "var(--accent-light)" : "transparent", color: "var(--text)", cursor: editando ? "default" : "pointer", textAlign: "left", fontFamily: "inherit" }}>
-              <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--bg-muted)", color: editando ? "var(--accent)" : "var(--text2)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{i + 1}</span>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 11, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  <span style={{ color: "var(--text3)", fontWeight: 700 }}>Empresa {i + 1} · </span>{e.nombre}
-                </span>
-                <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {e.rut ? formatRut(e.rut) : "Sin RUT"}{e.esPrincipal ? " · Principal" : ""}{e.activaActual ? " · En la mesa" : ""}
-                </span>
-              </span>
-              <span style={{ fontSize: 9, fontWeight: 800, color: editando ? "var(--accent)" : "var(--text3)", whiteSpace: "nowrap" }}>{editando ? "Configurando" : "Configurar →"}</span>
+            <button key={e.id} type="button" onClick={() => onElegir(e.id)} data-empresa-chip={e.id} aria-pressed={editando}
+              title={`${e.nombre}${e.rut ? ` · ${formatRut(e.rut)}` : ""}${e.esPrincipal ? " · Principal" : ""}${e.activaActual ? " · En la mesa" : ""}${editando ? "" : " — configurar sin cambiar de mesa"}`}
+              style={{ ...chipBase, border: editando ? "1px solid rgba(232,85,62,.55)" : "1px solid var(--border)", background: editando ? "var(--accent-light)" : "var(--surface)", color: editando ? "var(--text)" : "var(--text2)", cursor: editando ? "default" : "pointer", maxWidth: 260 }}>
+              <span style={{ width: 22, height: 22, borderRadius: 7, display: "grid", placeItems: "center", background: editando ? "rgba(232,85,62,.18)" : "var(--bg-muted)", color: editando ? "var(--accent)" : "var(--text3)", fontSize: 10, fontWeight: 900, flexShrink: 0 }}>{i + 1}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{corto(e.nombre)}</span>
+              {e.activaActual && <span aria-label="En la mesa" title="En la mesa" style={{ width: 6, height: 6, borderRadius: 99, background: "var(--green)", flexShrink: 0 }} />}
             </button>
           );
         })}
 
-        {!enCuentaAjena && multiempresa && puedeAgregar && (agregando ? (
-          <div style={{ marginTop: 4, borderTop: "1px solid var(--border)" }}>
-            <AgregarEmpresaForm onListo={(id) => { setAgregando(false); onCreada(id); }} onCancelar={() => setAgregando(false)}
-              nota="Al crearla te quedas acá configurando sus datos; la mesa sigue en la empresa activa. El RUT queda fijo tras la primera boleta emitida." />
-          </div>
-        ) : (
-          <button type="button" onClick={() => setAgregando(true)} data-accion="agregar-empresa"
-            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", marginTop: 4, padding: "9px 8px", borderRadius: 9, border: "1px dashed var(--border)", background: "transparent", color: "var(--text2)", fontSize: 11, fontWeight: 800, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-            <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--bg-muted)", fontSize: 15, fontWeight: 700 }}>+</span>
-            Agregar empresa
+        {puedeAgregar && (
+          <button type="button" onClick={() => setAgregando((v) => !v)} data-accion="agregar-empresa" aria-expanded={agregando}
+            style={{ ...chipBase, border: "1px dashed var(--border)", background: agregando ? "var(--bg-muted)" : "transparent", color: "var(--text2)" }}>
+            <span style={{ width: 22, height: 22, borderRadius: 7, display: "grid", placeItems: "center", background: "var(--bg-muted)", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</span>
+            Agregar
           </button>
-        ))}
-
-        {!enCuentaAjena && cupoLleno && (
+        )}
+        {cupoLleno && (
           <button type="button" onClick={onIrAFacturacion} data-accion="cupo-lleno"
             title="Tu plan ya tiene todas sus empresas. Mira tu plan en Facturación y uso."
-            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", marginTop: 4, padding: "9px 8px", borderRadius: 9, border: "1px dashed var(--border)", background: "transparent", color: "var(--text3)", fontSize: 11, fontWeight: 800, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-            <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--bg-muted)", fontSize: 15, fontWeight: 700 }}>+</span>
-            <span style={{ flex: 1 }}>Agregar empresa <span style={{ color: "var(--text3)", fontWeight: 700 }}>· cupo lleno, {cupo!.activas} de {cupo!.incluidas}</span></span>
-            <span style={{ fontSize: 9, color: "var(--accent)" }}>Ver plan →</span>
+            style={{ ...chipBase, border: "1px dashed var(--border)", background: "transparent", color: "var(--text3)", opacity: .7 }}>
+            <span style={{ width: 22, height: 22, borderRadius: 7, display: "grid", placeItems: "center", background: "var(--bg-muted)", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</span>
+            Cupo lleno <span style={{ color: "var(--accent)", fontWeight: 800 }}>· Ver plan →</span>
           </button>
         )}
-
-        {!enCuentaAjena && !multiempresa && (
-          <button type="button" onClick={onIrAFacturacion} data-accion="business-cta"
-            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", marginTop: 4, padding: "9px 8px", borderRadius: 9, border: "1px dashed var(--border)", background: "transparent", color: "var(--text3)", fontSize: 11, fontWeight: 800, cursor: "pointer", textAlign: "left", fontFamily: "inherit", opacity: .6 }}>
-            <span style={{ width: 30, height: 30, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--bg-muted)", fontSize: 15, fontWeight: 700 }}>+</span>
-            <span style={{ flex: 1 }}>Agregar empresa <span style={{ fontWeight: 700 }}>· hasta 3 con Business</span></span>
-            <span style={{ fontSize: 9, color: "var(--accent)" }}>Ver plan →</span>
-          </button>
-        )}
+        {cupo && <span style={{ marginLeft: "auto", fontSize: 9.5, fontWeight: 700, color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{cupo.activas} de {cupo.incluidas}</span>}
       </div>
+
+      {agregando && puedeAgregar && (
+        <div style={{ marginTop: 8, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
+          <AgregarEmpresaForm onListo={(id) => { setAgregando(false); onCreada(id); }} onCancelar={() => setAgregando(false)}
+            nota="Al crearla te quedas acá configurando sus datos; la mesa sigue en la empresa activa. El RUT queda fijo tras la primera boleta emitida." />
+        </div>
+      )}
     </div>
   );
 }

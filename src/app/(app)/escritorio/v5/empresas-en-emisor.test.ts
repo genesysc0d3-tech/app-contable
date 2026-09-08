@@ -56,19 +56,22 @@ describe("2. el paso Emisor del wizard", () => {
 describe("3. la lista de empresas", () => {
   const panel = leer(V5 + "EmpresasCuentaPanel.tsx");
 
-  it("Empresa 1, 2, 3… con principal y 'en la mesa'; el mismo formulario de alta que el logo", () => {
-    expect(panel).toMatch(/Empresa \{i \+ 1\} · /);
-    expect(panel).toMatch(/\{e\.esPrincipal \? " · Principal" : ""\}\{e\.activaActual \? " · En la mesa" : ""\}/);
+  it("chips numerados ARRIBA del formulario (1, 2, 3…), con principal y 'en la mesa'; el mismo formulario de alta que el logo", () => {
+    expect(panel).toMatch(/data-empresa-chip=\{e\.id\}/);
+    expect(panel).toMatch(/\$\{e\.esPrincipal \? " · Principal" : ""\}\$\{e\.activaActual \? " · En la mesa" : ""\}/);
+    const step = leer(V5 + "EmisorStep.tsx");
+    expect(step.indexOf("<EmpresasCuentaPanel")).toBeLessThan(step.indexOf("<EmisorForm key={otra.id}"));
     expect(panel).toMatch(/import AgregarEmpresaForm from "\.\/AgregarEmpresaForm";/);
     expect(leer(V5 + "EmpresaBrand.tsx")).toMatch(/import AgregarEmpresaForm from "\.\/AgregarEmpresaForm";/);
     expect(leer(V5 + "EmpresaBrand.tsx")).not.toMatch(/function AgregarEmpresaForm\(/);
   });
 
-  it("agregar solo con cupo; cupo lleno → Facturación y uso; fuera de Business gris con CTA al plan", () => {
-    expect(panel).toMatch(/\{!enCuentaAjena && multiempresa && puedeAgregar && \(agregando \?/);
-    expect(panel).toMatch(/const cupoLleno = multiempresa && !puedeAgregar && !!cupo && cupo\.activas >= cupo\.incluidas;/);
-    expect(panel).toMatch(/\{!enCuentaAjena && cupoLleno && \(\s*<button type="button" onClick=\{onIrAFacturacion\} data-accion="cupo-lleno"/);
-    expect(panel).toMatch(/\{!enCuentaAjena && !multiempresa && \(\s*<button type="button" onClick=\{onIrAFacturacion\} data-accion="business-cta"/);
+  it("agregar solo con cupo; cupo lleno → Facturación y uso; fuera de Business o en cuenta ajena NO se pinta nada", () => {
+    expect(panel).toMatch(/if \(estado\.fase !== "ok" \|\| !estado\.multiempresa \|\| estado\.enCuentaAjena\) return null;/);
+    expect(panel).toMatch(/\{puedeAgregar && \(\s*<button type="button" onClick=\{\(\) => setAgregando\(\(v\) => !v\)\} data-accion="agregar-empresa"/);
+    expect(panel).toMatch(/const cupoLleno = !puedeAgregar && !!cupo && cupo\.activas >= cupo\.incluidas;/);
+    expect(panel).toMatch(/\{cupoLleno && \(\s*<button type="button" onClick=\{onIrAFacturacion\} data-accion="cupo-lleno"/);
+    expect(panel).not.toMatch(/business-cta/);
   });
 
   it("el selector expone el cupo (activas/incluidas) para el titular multiempresa", () => {

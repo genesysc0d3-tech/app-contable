@@ -44,21 +44,8 @@ export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFactura
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-      {otra && (
-        <div data-aviso="editando-otra" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(232,85,62,.35)", background: "var(--accent-light)", fontSize: 10.5, color: "var(--text)", lineHeight: 1.4 }}>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            Configurando <b>{otra.nombre}</b> · la mesa sigue en la empresa activa.
-          </span>
-          <button type="button" onClick={() => { void elegir(empresaId); }}
-            style={{ flexShrink: 0, border: "1px solid var(--border)", borderRadius: 8, padding: "5px 9px", background: "var(--surface)", color: "var(--text2)", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
-            ← Volver a la activa
-          </button>
-        </div>
-      )}
-      {otra
-        ? <EmisorForm key={otra.id} inicial={otra.datos} variant="popup" submitRef={submitRef} empresaId={otra.id} />
-        : <EmisorForm key={empresaId} inicial={inicial} variant="popup" submitRef={submitRef} />}
-      {error && <div style={{ margin: "8px 2px 0", color: "var(--red)", fontSize: 10, lineHeight: 1.4 }}>{error}</div>}
+      {/* Selector ARRIBA (segunda vuelta del fundador): eliges la empresa y el
+          formulario de abajo es el suyo. Solo Business; si no, no se pinta. */}
       <EmpresasCuentaPanel
         enEdicion={otra?.id ?? null}
         onElegir={(id) => { void elegir(id); }}
@@ -67,7 +54,20 @@ export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFactura
         refreshKey={refreshKey}
         semilla={semillaEmpresas}
       />
-      {cargando && <div style={{ margin: "6px 2px 0", fontSize: 10, color: "var(--text3)" }}>Abriendo la empresa…</div>}
+      {otra && (
+        <div data-aviso="editando-otra" style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px 10px", fontSize: 10.5, color: "var(--text2)", lineHeight: 1.4 }}>
+          <span style={{ flex: 1, minWidth: 0 }}>Configurando <b style={{ color: "var(--text)" }}>{otra.nombre}</b> · la mesa sigue en la empresa activa.</span>
+          <button type="button" onClick={() => { void elegir(empresaId); }}
+            style={{ flexShrink: 0, border: "none", background: "transparent", color: "var(--accent)", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+            ← Volver a la activa
+          </button>
+        </div>
+      )}
+      {cargando && <div style={{ margin: "0 2px 8px", fontSize: 10, color: "var(--text3)" }}>Abriendo la empresa…</div>}
+      {error && <div style={{ margin: "0 2px 8px", color: "var(--red)", fontSize: 10, lineHeight: 1.4 }}>{error}</div>}
+      {otra
+        ? <EmisorForm key={otra.id} inicial={otra.datos} variant="popup" submitRef={submitRef} empresaId={otra.id} />
+        : <EmisorForm key={empresaId} inicial={inicial} variant="popup" submitRef={submitRef} />}
     </div>
   );
 }
