@@ -915,20 +915,20 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
               // Con el paso 3 de la escalera pendiente (sin extensión o sin
               // bóveda), Emitir no abre un modal que va a rebotar con error:
               // lleva al paso y lo destaca (el muro se volvió escalera).
+              // Emisor incompleto (fundador 2026-09-08): sin RUT/razón social/giro la
+              // extensión no anda. Va ANTES de la escalera de la extensión: primero la empresa, después el motor. No se abre la confirmación: al wizard, paso Emisor,
+              // en la empresa de ESTA mesa (el wizard abre siempre en la activa).
+              if (emisorFaltan.length > 0) {
+                toast(mensajeEmisorIncompleto(emisorFaltan as CampoEmisor[]), "error");
+                window.dispatchEvent(new CustomEvent("abrir-empresa"));
+                return;
+              }
               const esc = document.getElementById("escalera-emision");
               if (esc && esc.dataset.listo === "0") {
                 esc.scrollIntoView({ behavior: "smooth", block: "center" });
                 esc.style.borderColor = "var(--accent)";
                 esc.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent)";
                 window.setTimeout(() => { esc.style.borderColor = ""; esc.style.boxShadow = ""; }, 1600);
-                return;
-              }
-              // Emisor incompleto (fundador 2026-09-08): sin RUT/razón social/giro la
-              // extensión no anda. No se abre la confirmación: al wizard, paso Emisor,
-              // en la empresa de ESTA mesa (el wizard abre siempre en la activa).
-              if (emisorFaltan.length > 0) {
-                toast(mensajeEmisorIncompleto(emisorFaltan as CampoEmisor[]), "error");
-                window.dispatchEvent(new CustomEvent("abrir-empresa"));
                 return;
               }
               if (proveedorReal && !esFacturas) setLoteOpen(true); else setConfirmOpen(true);
@@ -993,6 +993,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           totalOriginal={loteResume ? (loteResumeTotal ?? loteResume.length) : selectedItems.length}
           mesa={esFacturas ? "factura" : "boleta"}
           formaPagoPorItem={esFacturas ? formaPagoItems : null}
+          avisoExentas={emisorAfecto ? (loteResume ?? selectedItems).filter((i) => esTipoExento(i.tipo_sugerido ?? (esFacturas ? 33 : 39))).length : 0}
           onClose={() => { setLoteOpen(false); setLoteResume(null); setLoteResumeTotal(null); setLotePendiente(leerLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta")); }}
           onDone={() => { setSelected(new Set()); setLoteResume(null); setLoteResumeTotal(null); reload(); setLotePendiente(leerLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta")); }}
         />

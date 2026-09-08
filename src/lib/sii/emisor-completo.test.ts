@@ -39,6 +39,8 @@ describe("cableado: Emitir → wizard en la empresa de la mesa", () => {
     expect(bloque).toMatch(/toast\(mensajeEmisorIncompleto\(emisorFaltan as CampoEmisor\[\]\), "error"\);/);
     expect(bloque).toMatch(/window\.dispatchEvent\(new CustomEvent\("abrir-empresa"\)\);\s*return;/);
     expect(i).toBeLessThan(src.indexOf("if (proveedorReal && !esFacturas) setLoteOpen(true); else setConfirmOpen(true);"));
+    // Y ANTES de la escalera de la extensión: primero la empresa, después el motor.
+    expect(i).toBeLessThan(src.indexOf('document.getElementById("escalera-emision")'));
     // El wizard abre (no toggle) y arranca en el paso 0 = Emisor de la empresa activa.
     const root = readFileSync(V5 + "V5Root.tsx", "utf8");
     expect(root).toMatch(/window\.addEventListener\("abrir-empresa", abrir\)/);
