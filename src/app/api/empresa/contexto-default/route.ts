@@ -8,6 +8,8 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { cuentaIdDeEmpresa, esTitularDeCuenta } from "@/lib/entitlements";
 import { MAX_CONTEXTO_CHARS } from "@/lib/upload/process-upload-validation";
 
 export async function POST(request: Request) {
@@ -21,6 +23,17 @@ export async function POST(request: Request) {
     .eq("id", auth.user.id)
     .maybeSingle();
   if (!usuario?.empresa_id) return NextResponse.json({ error: "SIN_EMPRESA" }, { status: 400 });
+  // Solo el titular de la cuenta configura la empresa (fundador 2026-09-08). Fail closed.
+  {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) return NextResponse.json({ error: "BACKEND_MAL_CONFIGURADO" }, { status: 500 });
+    const svc = createServiceClient(url, key);
+    const cuentaId = await cuentaIdDeEmpresa(svc, usuario.empresa_id);
+    if (!cuentaId || !(await esTitularDeCuenta(svc, cuentaId, auth.user.id))) {
+      return NextResponse.json({ error: "SOLO_TITULAR" }, { status: 403 });
+    }
+  }
 
   let body: { contexto?: unknown };
   try {

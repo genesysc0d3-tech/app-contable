@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createSsrClient } from "@/lib/supabase/server";
+import { cuentaIdDeEmpresa, esTitularDeCuenta } from "@/lib/entitlements";
 
 // SVG excluido a propósito: puede llevar <script> y se sirve same-origin
 // desde /api/empresa/logo → XSS almacenado. Solo formatos raster.
@@ -23,6 +24,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Usuario sin empresa" }, { status: 400 });
   }
   const empresaId = usuario.empresa_id;
+  // Solo el titular de la cuenta configura la empresa (fundador 2026-09-08):
+  // el logo es identidad del emisor. Fail closed.
+  {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) return NextResponse.json({ error: "Backend mal configurado" }, { status: 500 });
+    const svc = createClient(url, key);
+    const cuentaId = await cuentaIdDeEmpresa(svc, empresaId);
+    if (!cuentaId || !(await esTitularDeCuenta(svc, cuentaId, user.id))) {
+      return NextResponse.json({ error: "Solo el titular de la cuenta cambia el logo de la empresa" }, { status: 403 });
+    }
+  }
 
   let formData: FormData;
   try {
