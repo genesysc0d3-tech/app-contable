@@ -43,7 +43,7 @@ describe("2. semilla desde la página", () => {
 
 describe("3. MCP precargado y cacheado", () => {
   it("el wizard precarga en segundo plano; el paso lee la caché; conectar/cortar la invalida", () => {
-    expect(leer(V5 + "EmpresaPopup.tsx")).toMatch(/window\.setTimeout\(\(\) => \{ void precargarConectoresMcp\(\); \}, 1500\)/);
+    expect(leer(V5 + "EmpresaPopup.tsx")).toMatch(/window\.setTimeout\(\(\) => \{ void precargarConectoresMcp\(\); void precargarFacturacion\(\); \}, 1500\)/);
     const mcp = leer("src/app/(app)/empresa/ConectorMcpConfig.tsx");
     expect(mcp).toMatch(/const CACHE_MS = 60_000;/);
     expect(mcp).toMatch(/if \(conectoresCache && Date\.now\(\) - conectoresCache\.at < CACHE_MS\) return Promise\.resolve\(conectoresCache\.res\);/);
