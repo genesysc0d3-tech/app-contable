@@ -7,7 +7,7 @@ import type { Database } from "@/lib/database.types";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { validarRut, cleanRut } from "@/lib/sii/validation";
-import { contextoCuentaPorEmpresa } from "@/lib/entitlements";
+import { contextoCuentaPorEmpresa, cuentaIdDeEmpresa, esTitularDeCuenta } from "@/lib/entitlements";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 
@@ -129,6 +129,20 @@ function inviteErrorMessage(code: string | null | undefined): string {
 }
 
 /**
+ * Guard de escritura de la configuración de empresa (fundador 2026-09-08):
+ * solo el TITULAR de la cuenta a la que pertenece la empresa la configura.
+ * `usuarios.rol` es global (un owner de SU cuenta sigue siendo "owner" cuando
+ * está transportado al team de otro), así que el rol no basta: el gris del
+ * botón era solo visual y por server action se podía escribir. Fail closed.
+ */
+async function soloTitular(sb: SupabaseClient<Database>, userId: string, empresaId: string): Promise<string | null> {
+  const cuentaId = await cuentaIdDeEmpresa(sb, empresaId);
+  if (!cuentaId) return "La empresa no tiene cuenta activa";
+  if (!(await esTitularDeCuenta(sb, cuentaId, userId))) return "Solo el titular de la cuenta cambia la configuración de la empresa";
+  return null;
+}
+
+/**
  * ¿Puede este usuario editar el emisor de `targetId` sin estar parado en ella?
  * (fundador 2026-09-07: las empresas de la cuenta se configuran desde el paso
  * Emisor del wizard, sin cambiar de mesa). Regla: la empresa destino cuelga de
@@ -221,6 +235,8 @@ export async function setDatosEmisor(
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
+  const veto = await soloTitular(sb, user.id, empresaObjetivo);
+  if (veto) return { error: veto };
   if (empresaObjetivo !== usuario.empresa_id && !(await empresaDeMiCuentaComoTitular(sb, user.id, usuario.empresa_id, empresaObjetivo))) {
     return { error: "Esa empresa no es de tu cuenta o no eres el titular" };
   }
@@ -297,6 +313,8 @@ export async function removeEmpresaLogo(): Promise<{ ok?: boolean; error?: strin
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
+  const veto = await soloTitular(sb, user.id, usuario.empresa_id);
+  if (veto) return { error: veto };
 
   const logoDir = `${usuario.empresa_id}/logos`;
   const { data: oldFiles } = await sb.storage.from("documentos").list(logoDir);
@@ -336,6 +354,8 @@ export async function setCertificadoSii(
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
+  const veto = await soloTitular(sb, user.id, usuario.empresa_id);
+  if (veto) return { error: veto };
 
   const { error } = await sb
     .from("empresas")
@@ -381,6 +401,8 @@ export async function setEmisionConfig(
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return { error: "Backend mal configurado" };
   const sb = createServiceClient<Database>(url, key);
+  const veto = await soloTitular(sb, user.id, usuario.empresa_id);
+  if (veto) return { error: veto };
 
   const { error } = await sb
     .from("empresas")

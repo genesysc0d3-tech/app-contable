@@ -76,6 +76,13 @@ describe("2. aviso exenta con actividad afecta (avisar, no bloquear)", () => {
     expect(emitir).toMatch(/disabled=\{esFacturas && selSinFormaPago\.length > 0\}/);
     expect(emitir).not.toMatch(/disabled=\{[^}]*emisorAfecto/);
   });
+
+  it("el carril REAL (EmitirLoteModal) también muestra el disclaimer — cazado en vivo 2026-09-08: el modal de confirmación solo era del carril de prueba", () => {
+    expect(emitir).toMatch(/avisoExentas=\{emisorAfecto \? \(loteResume \?\? selectedItems\)\.filter\(\(i\) => esTipoExento\(i\.tipo_sugerido \?\? \(esFacturas \? 33 : 39\)\)\)\.length : 0\}/);
+    const lote = leer(V5 + "EmitirLoteModal.tsx");
+    expect(lote).toMatch(/\{avisoExentas > 0 && \(\s*<div data-aviso="exenta-afecto"/);
+    expect(lote).toMatch(/<Idle [^>]*avisoExentas=\{avisoExentas\}/);
+  });
 });
 
 describe("3. cuenta ajena: configuración de empresa gris", () => {

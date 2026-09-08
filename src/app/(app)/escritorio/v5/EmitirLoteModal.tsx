@@ -41,7 +41,7 @@ const fmt = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 const ACCENT = "#E8553E";
 
 export default function EmitirLoteModal({
-  items, empresaId, empresaRut, totalOriginal, mesa = "boleta", formaPagoPorItem = null, onClose, onDone,
+  items, empresaId, empresaRut, totalOriginal, mesa = "boleta", formaPagoPorItem = null, avisoExentas = 0, onClose, onDone,
 }: {
   items: LoteItemInput[];
   empresaId: string;
@@ -55,6 +55,9 @@ export default function EmitirLoteModal({
   /** Facturas: forma de pago ELEGIDA POR FACTURA en la lista (id → contado|credito).
    *  Un lote real mezcla ambas; por eso es un mapa y no un valor único. */
   formaPagoPorItem?: Record<string, "contado" | "credito"> | null;
+  /** Cuántas van exentas con un emisor AFECTO (Matías 2026-09-07): el mismo
+   *  disclaimer que el carril de prueba, acá en el carril real. 0 = nada. */
+  avisoExentas?: number;
   onClose: () => void;
   onDone?: () => void;
 }) {
@@ -190,7 +193,7 @@ export default function EmitirLoteModal({
             style={{ position: "absolute", top: 15, right: 15, width: 26, height: 26, border: 0, background: "var(--bg-muted)", color: "var(--text2)", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>✕</button>
         )}
 
-        {!progreso && (modo === "idle" || modo === "verificando") && <Idle count={items.length} total={total} doc={doc} docs={docs} formaPago={esFacturas ? (formaPagoPorItem?.[items[0]?.id ?? ""] ?? null) : null} onConfirmar={confirmar} verificando={modo === "verificando"} error={error} />}
+        {!progreso && (modo === "idle" || modo === "verificando") && <Idle count={items.length} total={total} doc={doc} docs={docs} avisoExentas={avisoExentas} formaPago={esFacturas ? (formaPagoPorItem?.[items[0]?.id ?? ""] ?? null) : null} onConfirmar={confirmar} verificando={modo === "verificando"} error={error} />}
         {!progreso && modo === "legal" && <Legal onAceptar={aceptarLegal} onCancelar={() => setModo("idle")} error={error} />}
 
         {progreso && (fase === "emitiendo" || fase === "esperando" || fase === "pausada" || fase === "preparando") && (
@@ -213,7 +216,7 @@ const h1 = { fontSize: 22, fontWeight: 700, letterSpacing: "-.02em", lineHeight:
 const primaryBtn = { width: "100%", border: 0, borderRadius: 11, padding: 13, fontSize: 15, fontWeight: 700, cursor: "pointer", background: ACCENT, color: "#fff", marginTop: 16 };
 const ghostBtn = { border: "1px solid var(--border2, rgba(255,255,255,.10))", borderRadius: 10, padding: "11px 14px", background: "var(--bg-muted)", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer" };
 
-function Idle({ count, total, doc, docs, formaPago, onConfirmar, verificando, error }: { count: number; total: number; doc: string; docs: string; formaPago?: "contado" | "credito" | null; onConfirmar: () => void; verificando: boolean; error: string | null }) {
+function Idle({ count, total, doc, docs, formaPago, avisoExentas = 0, onConfirmar, verificando, error }: { count: number; total: number; doc: string; docs: string; formaPago?: "contado" | "credito" | null; avisoExentas?: number; onConfirmar: () => void; verificando: boolean; error: string | null }) {
   return (
     <>
       <div style={eyebrow}><span style={dot} />Emitir al SII</div>
@@ -221,7 +224,13 @@ function Idle({ count, total, doc, docs, formaPago, onConfirmar, verificando, er
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
         {fmt(total)} · revisadas y aprobadas por ti{formaPago ? ` · ${formaPago === "contado" ? "Contado" : "Crédito"}` : ""}
       </div>
-      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginTop: 16, padding: "11px 12px", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--text3)", lineHeight: 1.45 }}>
+      {avisoExentas > 0 && (
+        <div data-aviso="exenta-afecto" style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 16, padding: "10px 12px", background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.3)", borderRadius: 10, fontSize: 12, color: "var(--amber, #f59e0b)", lineHeight: 1.45 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+          <span><b>{avisoExentas === 1 ? "1 va exenta" : `${avisoExentas} van exentas`} y tu actividad es afecta.</b> Solo corresponde si estas ventas de verdad se escapan de tu giro. Si es un error, cierra y corrígelas en Check.</span>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginTop: avisoExentas > 0 ? 10 : 16, padding: "11px 12px", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, color: "var(--text3)", lineHeight: 1.45 }}>
         <span style={{ marginTop: 1 }}>🔒</span>
         <span>Emites con tus claves del SII: el contenido es <b style={{ color: "var(--text2)" }}>tu responsabilidad</b>. MassDTE automatiza el envío — no asesora ni valida montos.</span>
       </div>
