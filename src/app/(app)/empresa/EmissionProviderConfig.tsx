@@ -109,7 +109,7 @@ export default function EmissionProviderConfig({
 
   function openExtensionOptions() {
     if (extensionStatus !== "ready") {
-      toast("Instala o recarga la extensión App Contable Motor Local", "error");
+      toast("Instala o recarga la extensión MassDTE — Motor Local", "error");
       return;
     }
     window.postMessage({ source: "app-contable", type: "APP_CONTABLE_OPEN_EXTENSION_OPTIONS", protocol_version: 1 }, window.location.origin);
@@ -357,7 +357,7 @@ function LocalMotorPanel({
       <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 13, color: "var(--text, #e8eaf0)" }}>App Contable Motor Local</strong>
+            <strong style={{ fontSize: 13, color: "var(--text, #e8eaf0)" }}>MassDTE — Motor Local</strong>
             <span style={{ borderRadius: 999, border: "1px solid var(--border, rgba(255,255,255,.06))", background: labelBg, color: labelColor, padding: "4px 9px", fontSize: 10, fontWeight: 850 }}>
               {label}
             </span>

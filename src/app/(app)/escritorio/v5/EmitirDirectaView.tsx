@@ -551,6 +551,15 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     return () => { vivo = false; };
   }, []);
 
+  // Escape cierra el modal entero cuando no hay pre-vuelo ni autorización
+  // abiertos (cazado 2026-09-08: el modal se tragaba los clics de afuera).
+  useEffect(() => {
+    if (confirmOpen || legalPrompt || emitBusy) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose?.(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmOpen, legalPrompt, emitBusy, onClose]);
+
   // Escape cierra el pre-vuelo (nunca a mitad de una emisión).
   useEffect(() => {
     if (!confirmOpen) return;
@@ -1548,7 +1557,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                   </span>
                 <p style={{ fontSize: 9, color: "var(--text2)", marginTop: 2 }}>Cripto y divisas van como exenta; el comercio con IVA, como afecta.</p>
                 </div>
-                {hasEmpresaLock && (
+                {/* Regla de Matías (2026-09-07): el EXENTO no emite afecta — para eso
+                    primero declara la actividad en el SII; cambiar el switch acá no lo
+                    habilita. El afecto sí puede ir mixto (exenta con aviso). */}
+                {hasEmpresaLock && isExento && (
+                  <span title="Como contribuyente exento no puedes emitir afecta. Si de verdad tienes una operación afecta, primero declara esa actividad en el SII." style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text3)", fontSize: 9, fontWeight: 700, cursor: "help" }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M7 11V7a5 5 0 0110 0v4M5 11h14v10H5z" /></svg>
+                    Solo exenta
+                  </span>
+                )}
+                {hasEmpresaLock && !isExento && (
                   <button
                     onClick={() => setTipoDesbloqueado((v) => !v)}
                     style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 34, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)", background: tipoDesbloqueado ? "rgba(245,158,11,.1)" : "var(--surface)", color: tipoDesbloqueado ? "var(--amber)" : "var(--text2)", cursor: "pointer", fontSize: 9, fontWeight: 700 }}

@@ -10,6 +10,29 @@ import {
 } from "./actions";
 import UsageCountersPanel from "./UsageCountersPanel";
 
+/**
+ * Caché en memoria + precarga (fundador 2026-09-08, "se demora caleta"): el
+ * wizard la dispara en segundo plano al abrirse; al entrar al paso ya está.
+ * Vive 60 s; `cargar(true)` la salta (reintentar).
+ */
+type FactRes = Awaited<ReturnType<typeof obtenerFacturacion>>;
+type CuposRes = Awaited<ReturnType<typeof listarResumenCupos>>;
+let factCache: { at: number; fact: FactRes; res: CuposRes } | null = null;
+let factEnVuelo: Promise<[FactRes, CuposRes]> | null = null;
+const FACT_CACHE_MS = 60_000;
+
+export function precargarFacturacion(fresco = false): Promise<[FactRes, CuposRes]> {
+  if (!fresco && factCache && Date.now() - factCache.at < FACT_CACHE_MS) return Promise.resolve([factCache.fact, factCache.res]);
+  if (!factEnVuelo) {
+    factEnVuelo = Promise.all([obtenerFacturacion(), listarResumenCupos()]).then(([fact, res]) => {
+      if (fact.ok) factCache = { at: Date.now(), fact, res };
+      factEnVuelo = null;
+      return [fact, res] as [FactRes, CuposRes];
+    }).catch((e) => { factEnVuelo = null; throw e; });
+  }
+  return factEnVuelo;
+}
+
 function fmtClp(n: number | null | undefined): string {
   if (n == null) return "—";
   return `$${Math.round(n).toLocaleString("es-CL")}`;
@@ -107,8 +130,8 @@ export default function FacturacionUsoPanel() {
   // en el efecto dispara react-hooks/set-state-in-effect. El estado inicial ya
   // es "cargando", así que el efecto no necesita resetearlo.
   const cargar = useCallback(
-    () =>
-      Promise.all([obtenerFacturacion(), listarResumenCupos()])
+    (fresco = false) =>
+      precargarFacturacion(fresco)
         .then(([fact, res]) => {
           if (fact.ok) setData(fact.data);
           if (res.ok) setResumen(res.resumen);
@@ -128,7 +151,7 @@ export default function FacturacionUsoPanel() {
 
   const reintentar = () => {
     setEstado("cargando");
-    void cargar();
+    void cargar(true);
   };
 
   if (estado === "cargando") {

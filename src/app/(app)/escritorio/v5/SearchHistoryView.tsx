@@ -74,6 +74,12 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   procesando: { label: "Procesando", color: "var(--blue)", bg: "rgba(91,156,246,.12)" },
   procesado: { label: "Procesado", color: "var(--green)", bg: "rgba(34,197,94,.12)" },
   error: { label: "Error", color: "var(--red)", bg: "rgba(239,68,68,.12)" },
+  // Propuestas (cazado 2026-09-08: una aprobada salía "Por revisar").
+  aprobado: { label: "Aprobada", color: "var(--green)", bg: "rgba(34,197,94,.12)" },
+  editado: { label: "Editada", color: "var(--amber)", bg: "rgba(245,158,11,.12)" },
+  listo: { label: "Por revisar", color: "var(--blue)", bg: "rgba(91,156,246,.12)" },
+  pendiente: { label: "Por revisar", color: "var(--blue)", bg: "rgba(91,156,246,.12)" },
+  emitida: { label: "Emitida", color: "var(--green)", bg: "rgba(34,197,94,.12)" },
 };
 
 function fmtMoney(n?: number | null) {
