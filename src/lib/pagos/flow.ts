@@ -47,6 +47,9 @@ export type FlowError = { ok: false; error: string; detalle?: string; codigo?: n
 /** Flow: "This commerceOrder has been previously paid". La plata YA entró. */
 const CODIGO_ORDEN_YA_PAGADA = 1605;
 
+/** Qué se cobró: así lo etiqueta el historial de Facturación (antes todo caía como "suscripcion"). */
+export type TipoPago = "suscripcion" | "refill" | "persona_adicional";
+
 /** Estado de una orden en Flow (customer/charge y payment/getStatus). */
 export const FLOW_PAGO = { PENDIENTE: 1, PAGADA: 2, RECHAZADA: 3, ANULADA: 4 } as const;
 
@@ -136,13 +139,27 @@ async function flowFetch<T>(
   const query = new URLSearchParams(cuerpo).toString();
   const base = BASES[flowAmbiente()];
 
+  // Un timeout o corte de red se reintenta UNA vez, salvo en el cobro
+  // (customer/charge): ahí un reintento a ciegas podría cobrar dos veces si
+  // el primero sí pasó — Flow rebota la orden repetida, pero mejor no depender
+  // de eso. Visto en vivo 2026-09-09: el primer register tardó >15 s y el
+  // usuario recibió un 502; el segundo intento tardó 4 s.
+  const intentos = path === "/customer/charge" ? 1 : 2;
+  let res: Response;
   try {
-    const res = await fetch(metodo === "GET" ? `${base}${path}?${query}` : `${base}${path}`, {
-      method: metodo,
-      headers: metodo === "POST" ? { "Content-Type": "application/x-www-form-urlencoded" } : {},
-      body: metodo === "POST" ? query : undefined,
-      signal: AbortSignal.timeout(15_000),
-    });
+    for (let intento = 1; ; intento++) {
+      try {
+        res = await fetch(metodo === "GET" ? `${base}${path}?${query}` : `${base}${path}`, {
+          method: metodo,
+          headers: metodo === "POST" ? { "Content-Type": "application/x-www-form-urlencoded" } : {},
+          body: metodo === "POST" ? query : undefined,
+          signal: AbortSignal.timeout(15_000),
+        });
+        break;
+      } catch (err) {
+        if (intento >= intentos) throw err;
+      }
+    }
     const data = (await res.json().catch(() => null)) as (T & { message?: unknown; code?: unknown }) | null;
     if (!res.ok || data === null) {
       const detalle =
@@ -303,7 +320,7 @@ export async function tarjetaDeCuenta(
  */
 export async function cobrarCuenta(
   cuentaId: string,
-  args: { montoClp: number; concepto: string; orden: string },
+  args: { montoClp: number; concepto: string; orden: string; tipo: TipoPago },
 ): Promise<{ ok: true; pago: FlowPagoStatus } | FlowError> {
   if (!flowConfigurado()) return { ok: false, error: "FLOW_NO_CONFIGURADO" };
   if (!Number.isInteger(args.montoClp) || args.montoClp <= 0) {
@@ -337,7 +354,7 @@ export async function cobrarCuenta(
     cuenta_id: cuentaId,
     proveedor: "flow",
     proveedor_ref: String(res.data.flowOrder ?? args.orden),
-    tipo: "suscripcion",
+    tipo: args.tipo,
     monto_clp: args.montoClp,
     estado: res.data.status === FLOW_PAGO.PAGADA ? "aprobado" : res.data.status === FLOW_PAGO.RECHAZADA ? "rechazado" : "pendiente",
     raw: res.data as unknown as Json,
@@ -500,6 +517,7 @@ export async function crearSuscripcionFlow(
         const cobro = await cobrarCuenta(cuentaId, {
           montoClp: monto,
           concepto: `massDTE upgrade a ${plan.nombre} (prorrateado)`,
+          tipo: "suscripcion",
           // El plan nuevo en la orden la hace distinta de la del mes ya pagado;
           // repetir el MISMO upgrade en el período rebota en Flow (1605).
           orden: `md-up-${cuentaId.slice(0, 8)}-${plan.codigo}-${vivaFlow.periodo_hasta}`,
@@ -614,6 +632,7 @@ export async function activarSuscripcionFlow(
   const cobro = await cobrarCuenta(cuentaId, {
     montoClp,
     concepto: `massDTE ${plan.nombre}`,
+    tipo: "suscripcion",
     orden: ordenDeCobro(cuentaId, plan.codigo, periodo),
   });
   // COBRO_YA_PAGADO = este período ya se cobró (la plata entró en un intento
@@ -721,6 +740,7 @@ export async function comprarRefillFlow(
   const cobro = await cobrarCuenta(cuentaId, {
     montoClp,
     concepto: `massDTE extra +${plan.refill_boletas} boletas`,
+    tipo: "refill",
     orden,
   });
   // YA_PAGADO acá = el cobro de ESTE correlativo pasó pero su fila no se
@@ -782,6 +802,7 @@ export async function comprarPersonaAdicionalFlow(
   const cobro = await cobrarCuenta(cuentaId, {
     montoClp,
     concepto: `massDTE persona adicional (${plan.nombre})`,
+    tipo: "persona_adicional",
     orden: `md-pa-${cuentaId.slice(0, 8)}-${intent.id.slice(0, 8)}`,
   });
   if (!cobro.ok && cobro.error !== "COBRO_YA_PAGADO") {

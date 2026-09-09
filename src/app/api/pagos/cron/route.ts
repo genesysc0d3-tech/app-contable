@@ -146,6 +146,7 @@ export async function GET(request: Request) {
           const cobro = await cobrarCuenta(s.cuenta_id, {
             montoClp,
             concepto: `massDTE ${plan.nombre}`,
+            tipo: "suscripcion",
             orden: ordenDeCobro(s.cuenta_id, codigoACobrar, periodoActual()),
           });
 
