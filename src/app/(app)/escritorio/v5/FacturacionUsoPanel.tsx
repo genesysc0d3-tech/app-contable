@@ -70,6 +70,7 @@ const ESTADO_SUB: Record<string, { label: string; color: string }> = {
 
 const TIPO_PAGO: Record<string, string> = {
   plan: "Plan mensual",
+  suscripcion: "Plan mensual",
   refill: "Recarga de boletas",
   persona_adicional: "Persona adicional",
 };

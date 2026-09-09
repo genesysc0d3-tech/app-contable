@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { decidirReversaFlow, firmarFlow, flowAmbiente, flowConfigurado, ordenDeCobro, ordenDeRefill, prorratearUpgrade } from "./flow";
 
@@ -235,5 +236,38 @@ describe("decidirReversaFlow — un cobro que se dio vuelta apaga el plan, la du
     expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: "rechazado" })).toBe("sin_cambio");
     expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: "pendiente" })).toBe("sin_cambio");
     expect(decidirReversaFlow({ statusFlow: 4, estadoLocal: null })).toBe("sin_cambio");
+  });
+});
+
+// ── 2026-09-09: recorrido sandbox con Paula ──────────────────────────────────
+// Todo cobro caía en `pagos` como "suscripcion" (refill y persona adicional
+// incluidos) → el historial de Facturación los etiquetaba mal. Y el primer
+// customer/register tardó >15 s (502 al usuario); el segundo, 4 s.
+describe("censo 2026-09-09: tipo de pago por cobro + reintento en Flow", () => {
+  const src = readFileSync("src/lib/pagos/flow.ts", "utf8");
+  const cron = readFileSync("src/app/api/pagos/cron/route.ts", "utf8");
+
+  it("cobrarCuenta exige el tipo y lo escribe tal cual", () => {
+    expect(src).toMatch(/args: \{ montoClp: number; concepto: string; orden: string; tipo: TipoPago \}/);
+    expect(src).toMatch(/tipo: args\.tipo,\s*monto_clp: args\.montoClp/);
+    expect(src).not.toMatch(/tipo: "suscripcion",\s*monto_clp/);
+  });
+
+  it("cada cobro dice qué es: refill, persona adicional o suscripción (upgrade, alta y renovación)", () => {
+    expect(src).toMatch(/concepto: `massDTE extra \+\$\{plan\.refill_boletas\} boletas`,\s*tipo: "refill"/);
+    expect(src).toMatch(/concepto: `massDTE persona adicional \(\$\{plan\.nombre\}\)`,\s*tipo: "persona_adicional"/);
+    expect(src).toMatch(/concepto: `massDTE upgrade a \$\{plan\.nombre\} \(prorrateado\)`,\s*tipo: "suscripcion"/);
+    expect(src).toMatch(/concepto: `massDTE \$\{plan\.nombre\}`,\s*tipo: "suscripcion"/);
+    expect(cron).toMatch(/concepto: `massDTE \$\{plan\.nombre\}`,\s*tipo: "suscripcion"/);
+  });
+
+  it("reintenta una vez ante timeout, pero nunca el cobro", () => {
+    expect(src).toMatch(/const intentos = path === "\/customer\/charge" \? 1 : 2;/);
+    expect(src).toMatch(/if \(intento >= intentos\) throw err;/);
+  });
+
+  it("el historial etiqueta 'suscripcion' como plan mensual", () => {
+    const panel = readFileSync("src/app/(app)/escritorio/v5/FacturacionUsoPanel.tsx", "utf8");
+    expect(panel).toMatch(/suscripcion: "Plan mensual"/);
   });
 });
