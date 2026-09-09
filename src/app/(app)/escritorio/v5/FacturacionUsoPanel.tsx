@@ -197,7 +197,9 @@ export default function FacturacionUsoPanel() {
 
   const subEstado = data.suscripcion
     ? ESTADO_SUB[data.suscripcion.estado] ?? { label: data.suscripcion.estado, color: "var(--text2)" }
-    : null;
+    : data.asignadoManual
+      ? { label: "Activo · asignado manualmente", color: "var(--text2)" }
+      : null;
   const enTrial = Boolean(data.trial?.activo) && !data.suscripcion;
 
   return (
