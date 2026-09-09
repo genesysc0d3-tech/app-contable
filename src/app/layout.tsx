@@ -31,6 +31,8 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: { default: "MassDTE", template: "%s | MassDTE" },
   description: "De tu cartola bancaria a boletas electrónicas emitidas, en minutos. La IA clasifica, tú apruebas.",
+  // La app no se indexa: el SEO es de massdte.cl (2026-09-09).
+  robots: { index: false, follow: false },
   openGraph: {
     type: "website",
     locale: "es_CL",

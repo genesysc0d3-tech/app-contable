@@ -46,6 +46,6 @@ export const config = {
     // autenticación: Bearer en api/mcp, PKCE+rate-limit en api/oauth, y el
     // metadata .well-known es público por estándar. OJO: /oauth/autorizar
     // (la pantalla de consentimiento) NO va acá — esa SÍ exige sesión.
-    "/((?!_next/static|_next/image|favicon.ico|sw.js$|manifest.webmanifest$|shell$|api/sw-config$|legal(?:/.*)?$|instalar-extension$|descargas(?:/.*)?$|api/empresa/upload-logo|api/empresa/logo/|api/archivo/|api/sii-local/|api/extension/|api/telegram/|api/pagos/webhook|api/pagos/flow/|api/pagos/cron|api/ops/cron|api/document-processing/cron|api/document-processing/kick|api/audit/cron|api/mcp$|api/oauth/|\\.well-known/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt$|sw.js$|manifest.webmanifest$|shell$|api/sw-config$|legal(?:/.*)?$|instalar-extension$|descargas(?:/.*)?$|api/empresa/upload-logo|api/empresa/logo/|api/archivo/|api/sii-local/|api/extension/|api/telegram/|api/pagos/webhook|api/pagos/flow/|api/pagos/cron|api/ops/cron|api/document-processing/cron|api/document-processing/kick|api/audit/cron|api/mcp$|api/oauth/|\\.well-known/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
