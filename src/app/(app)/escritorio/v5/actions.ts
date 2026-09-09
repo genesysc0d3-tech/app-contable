@@ -818,6 +818,8 @@ export type FacturacionData = {
   uf: number;
   plan: { codigo: string; nombre: string; ufMensual: number; clpMensualConIva: number } | null;
   suscripcion: { estado: string; proximoCobro: string | null; ultimoCobroClp: number | null } | null;
+  /** Plan activo sin suscripción de pasarela: lo asignó soporte/el operador. */
+  asignadoManual?: boolean;
   trial: { activo: boolean; inicio: boolean; diasRestantes: number; boletasUsadas: number; boletasMax: number } | null;
   mpConfigurado: boolean;
   pagos: PagoHistorial[];
@@ -864,10 +866,15 @@ export async function obtenerFacturacion(): Promise<FacturacionResult> {
       }
     }
 
+    // La suscripción que se muestra es la del PLAN VIGENTE de la cuenta. Antes
+    // se tomaba la última fila y punto: AlphaCode (Business asignado a mano el
+    // 2026-09-06) mostraba "CANCELADA" por dos suscripciones Start de prueba
+    // de Flow (agosto). Si el plan vigente no tiene suscripción, es manual.
     const { data: subRow } = await ctx.sb
       .from("suscripciones")
-      .select("estado, periodo_hasta, clp_ultimo_cobro")
+      .select("estado, periodo_hasta, clp_ultimo_cobro, plan_codigo")
       .eq("cuenta_id", acceso.cuentaId)
+      .eq("plan_codigo", acceso.plan ?? "")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -887,6 +894,8 @@ export async function obtenerFacturacion(): Promise<FacturacionResult> {
         suscripcion: subRow
           ? { estado: subRow.estado, proximoCobro: subRow.periodo_hasta, ultimoCobroClp: subRow.clp_ultimo_cobro }
           : null,
+        /** Plan activo sin suscripción de pasarela: lo puso soporte/el operador. */
+        asignadoManual: Boolean(plan) && acceso.planActivo && !subRow,
         trial: cuota.trial
           ? {
               activo: cuota.trial.activo,

@@ -51,4 +51,13 @@ describe("recorrido 2026-09-08", () => {
     expect(fact).toMatch(/void cargar\(true\);/);
     expect(leer(V5 + "EmpresaPopup.tsx")).toMatch(/void precargarConectoresMcp\(\); void precargarFacturacion\(\); \}, 1500\)/);
   });
+
+  it("Facturación muestra la suscripción del PLAN VIGENTE; sin pasarela = 'asignado manualmente' (AlphaCode decía CANCELADA por subs Start de prueba)", () => {
+    const a = leer(V5 + "actions.ts");
+    const i = a.indexOf("export async function obtenerFacturacion");
+    const fn = a.slice(i, i + 5000);
+    expect(fn).toMatch(/\.from\("suscripciones"\)[\s\S]*?\.eq\("cuenta_id", acceso\.cuentaId\)\s*\.eq\("plan_codigo", acceso\.plan \?\? ""\)/);
+    expect(fn).toMatch(/asignadoManual: Boolean\(plan\) && acceso\.planActivo && !subRow,/);
+    expect(leer(V5 + "FacturacionUsoPanel.tsx")).toMatch(/\? \{ label: "Activo · asignado manualmente", color: "var\(--text2\)" \}/);
+  });
 });
