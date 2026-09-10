@@ -320,6 +320,27 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
 
             <div className="dz-ctx-cta"><b>{ctxTexto.length}</b> / {MAX_CONTEXTO} caracteres</div>
 
+            {/* Atajo: si el dueño escribe "factura" acá (mesa de Boletas), casi seguro
+                se equivocó de mesa. Se lo decimos AL TIRO, sin esperar al veredicto de
+                la IA post-proceso. No bloquea: es un aviso, puede seguir igual. */}
+            {/factura/i.test(ctxTexto) && (
+              <div className="dz-ctx-fact" role="status" style={{
+                display: "flex", alignItems: "flex-start", gap: 7, marginTop: 9,
+                padding: "9px 11px", borderRadius: 9,
+                background: "color-mix(in srgb, var(--amber) 12%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--amber) 35%, transparent)",
+                fontSize: 11.5, lineHeight: 1.4, color: "var(--amber)",
+              }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                  style={{ flexShrink: 0, marginTop: 1 }}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6M9 13h6M9 17h6" />
+                </svg>
+                <span><b>¿Son facturas?</b> Esta es la mesa de Boletas. Para emitir facturas, súbelas en la <b>Mesa de Facturas</b>.</span>
+              </div>
+            )}
+
             <div className="dz-ctx-priv">
               {/* SVG de trazo como el resto de los íconos de la app: el emoji de
                   candado lo pinta el sistema operativo y se ve de otro producto. */}
