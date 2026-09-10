@@ -276,6 +276,13 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             expiresAt: job.expiresAt,
           });
           msgType = "APP_CONTABLE_SII_BOLETA_JOB";
+          // DEBUG ensayo de boleta (perilla escondida, sin UI):
+          //   localStorage.setItem("massdte:boleta-ensayo", "1")
+          // El worker LLENA el formulario (incluida la glosa "Detalle") y se DETIENE
+          // antes de Emitir — no quema folio. Para inspeccionar el carril de boletas.
+          let boletaEnsayo = false;
+          try { boletaEnsayo = window.localStorage.getItem("massdte:boleta-ensayo") === "1"; } catch { /* sin storage */ }
+          if (boletaEnsayo) (payloadJob as { allow_final_emit?: boolean }).allow_final_emit = false;
         }
 
         // 3. enviar a la extensión y esperar el desenlace TERMINAL de este job

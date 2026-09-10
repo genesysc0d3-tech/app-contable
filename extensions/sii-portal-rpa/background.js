@@ -1110,7 +1110,7 @@ function captureWorkerResult(state) {
 //   true  = PESTAÑA: auditable paso a paso con herramientas (depuración).
 // En VENTANA para la 0.2.0: el cliente no debe poder escribir encima del RPA
 // mientras emite. El modo pestaña queda disponible para depurar el carril.
-const FACT_WORKER_EN_PESTANA = false;
+const FACT_WORKER_EN_PESTANA = false; // DEBUG: true = worker (boletas Y facturas) abre en pestaña mirable con MCP. En prod SIEMPRE false (ventana con candado anti-escritura).
 
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
@@ -1118,7 +1118,9 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
   const startUrl = job.kind === "factura" && job.start_url ? job.start_url : SII_START_URL;
   let workerWindowId = null;
   let workerTabId = null;
-  if (job.kind === "factura" && FACT_WORKER_EN_PESTANA) {
+  // DEBUG (FACT_WORKER_EN_PESTANA): abre el portal como PESTAÑA — boletas Y facturas —
+  // para inspeccionar con MCP. En prod esta perilla va en false (ventana con candado).
+  if (FACT_WORKER_EN_PESTANA) {
     const tab = await chrome.tabs.create({ url: startUrl, active: false });
     workerTabId = tab.id ?? null;
     // workerWindowId queda null A PROPÓSITO: es la ventana principal del
