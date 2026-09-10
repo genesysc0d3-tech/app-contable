@@ -1228,6 +1228,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     setLocalWorker({ jobId: job.job_id, status: "opening_sii", message: "Abriendo ventana segura SII..." });
     void heartbeatEmissionJob(job.job_id, "opening_sii");
 
+    // DEBUG ensayo de boleta: con localStorage massdte:boleta-ensayo="1" el worker
+    // LLENA el formulario (incluida la glosa) y se detiene ANTES de Emitir (sin folio).
+    let boletaEnsayo = false;
+    try { boletaEnsayo = window.localStorage.getItem("massdte:boleta-ensayo") === "1"; } catch { /* sin storage */ }
     window.postMessage({
       source: "app-contable",
       type: "APP_CONTABLE_SII_BOLETA_JOB",
@@ -1261,7 +1265,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         glosa: detalleNombre.trim().slice(0, 80),
         learn_only: false,
         auto_emit: true,
-        allow_final_emit: true,
+        allow_final_emit: !boletaEnsayo,
         payment_method: formaPago,
         confirmation_required: false,
         // Boleta única: al terminar, cerrar sesión SII + cerrar la ventana

@@ -9,6 +9,10 @@
   let autoCloseTimer = null;
   let capturedSharePdf = null; // PDF capturado vía COMPARTIR (hook MAIN world)
   let currentJobLogoutAfter = false; // boleta única → cerrar sesión SII al final
+  // CAJA NEGRA: la glosa ("Detalle") se pidió pero NO se pudo escribir. Best-effort
+  // no bloquea la emisión (la boleta es válida sin detalle), pero YA NO es silencioso:
+  // viaja en captureResult → sii_local_resultados.result.glosa_omitida para verlo en prod.
+  let glosaOmitida = false;
 
   // El hook en MAIN world (sii-notif-suppress.js) intercepta navigator.share y
   // nos manda el PDF de la boleta como base64. Lo guardamos para la captura.
@@ -645,18 +649,33 @@
       .find((el) => isVisibleEnabled(el) && pattern.test(controlText(el))) || null;
   }
 
-  // El campo de glosa ("Detalle") del modal SII no tiene placeholder/label/name;
-  // se identifica por su contenedor v-input, que muestra el contador "... / 80".
+  // El campo de glosa ("Detalle") del modal SII no tiene placeholder/label/name.
+  // ANCLA ROBUSTA (fix 2026-09-10, bug de la glosa muda de Bit En SpA): NO depende
+  // del texto frágil "detalle"+"/80" — ese match se ROMPE cuando el campo tiene
+  // valor (Vuetify flota el label "Detalle" y sale del innerText). En vez de eso:
+  // descartar los v-select (tipo/pago/sucursal) y los campos ajenos, y de lo que
+  // queda tomar el que tenga el contador "/ 80" o el label "detalle"; si tras
+  // filtrar queda UN solo input de texto libre, ese es la glosa (fallback estructural).
   function findGlosaInput() {
     const dialog = activeEmitDialog() || document;
-    return Array.from(dialog.querySelectorAll("input[type='text'], textarea"))
-      .find((el) => {
+    const candidatos = Array.from(dialog.querySelectorAll("input[type='text'], textarea"))
+      .filter((el) => {
         if (!isVisibleEnabled(el)) return false;
+        if (el.closest(".v-select") || el.closest(".v-autocomplete")) return false; // tipo/pago/sucursal
         const cont = el.closest(".v-input") || el.parentElement;
         const txt = normalizeSearchText(cont?.innerText || cont?.textContent || "");
-        return /detalle/.test(txt) && /\/\s*80/.test(txt)
-          && !/vendedor|monto|receptor|sucursal|boleta|pago|rut/.test(txt);
-      }) || null;
+        return !/vendedor|receptor|sucursal|monto|\brut\b|pago|boleta/i.test(txt); // flag i: normalizeSearchText devuelve MAYÚSCULAS
+      });
+    // ANCLA OBLIGATORIA: el campo glosa SIEMPRE muestra el contador "/ 80" (vacío "0 / 80"
+    // o lleno "N / 80") — fiable aun con valor. NO caer a "el único input de texto" como
+    // fallback: eso podía tomar el campo "Vendedor" cuando su label flota fuera del innerText
+    // (hallazgo adversarial 2026-09-10) y escribir la glosa en el campo equivocado de una
+    // boleta REAL. Sin ancla → null, y el loop de 8 reintentos espera a que el campo aparezca.
+    return candidatos.find((el) => {
+      const cont = el.closest(".v-input") || el.parentElement;
+      const txt = normalizeSearchText(cont?.innerText || cont?.textContent || "");
+      return /\/\s*80/.test(txt) || /detalle/i.test(txt); // /80 es la ancla fiable; detalle con flag i
+    }) || null;
   }
 
   // --- RUT canónico (espejo de modules/rut.js — el content-script NO importa ESM;
@@ -1044,6 +1063,9 @@
       // RUT del emisor ACTIVO del portal al momento de capturar: permite al server
       // detectar si la boleta salió bajo otra empresa que la registrada en la app.
       emisor_rut_activo: readActiveEmisorRut(),
+      // CAJA NEGRA: true = se pidió glosa ("Detalle") y el worker NO la pudo escribir
+      // (bug muda de Bit En SpA). Se consulta en sii_local_resultados.result->glosa_omitida.
+      glosa_omitida: glosaOmitida,
       tipo_dte: job?.tipo_dte ?? null,
       fecha_emision: job?.fecha_emision ?? null,
       estado: strongFolio ? "emitida_capturada" : folio ? "resultado_requiere_revision" : "resultado_no_detectado",
@@ -1133,6 +1155,7 @@
   }
 
   async function fillAndEmit(job) {
+    glosaOmitida = false; // reset por emisión (caja negra de la glosa)
     LB = resolverLibreto(job); // catálogo del portal para esta emisión (fallback = hardcode)
     const amount = String(Math.max(0, Math.round(Number(job?.totales?.monto_total ?? 0))));
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
@@ -1239,7 +1262,11 @@
           if (!glosaOk) glosaInput = check;
         }
       }
-      if (!glosaOk) await setDialogToggle(LB.toggles.detalle, false);
+      if (!glosaOk) {
+        // Ya NO es silencioso: se pidió glosa y no se pudo escribir → a la caja negra.
+        glosaOmitida = true;
+        await setDialogToggle(LB.toggles.detalle, false);
+      }
     }
 
     // Receptor OPCIONAL — espejo del formulario SII: RUT, Nombre, Dirección, E-mail,
