@@ -119,12 +119,28 @@ function escenaEmision({ conEmitir = true, tipoTexto = "Boleta afecta", pagoText
     emitir.onClick = () => { modalOpen = true; };
     scene.push(emitir);
   }
+  // Toggle "Detalle" (v-switch con checkbox) que revela el campo glosa.
+  const chkDetalle = el({ tag: "INPUT", sel: ["input[type='checkbox']", "input"], role: "chk_detalle" });
+  chkDetalle.click = () => { chkDetalle.checked = true; actions.push({ op: "click", role: "chk_detalle" }); };
+  const toggleDetalle = el({ tag: "DIV", sel: [".v-input--switch", ".v-input"], text: "Detalle", role: "toggle_detalle", children: [chkDetalle] });
+  // Campo glosa: sin placeholder/label/name; su contenedor v-input muestra "Detalle 0 / 80".
+  const glosaCont = el({ tag: "DIV", sel: [".v-input"], text: "Detalle 0 / 80" });
+  const glosaInput = el({ tag: "INPUT", sel: ["input[type='text']", "input"], role: "glosa_input" });
+  glosaInput.closest = (s) => (String(s).includes(".v-input") ? glosaCont : null);
+  // Campo "Vendedor" CON valor: su label "Vendedor" ya flotó fuera del innerText (queda
+  // solo el RUT), como en el bug real. NO debe ser candidato a glosa (no tiene contador).
+  const vendedorCont = el({ tag: "DIV", sel: [".v-input"], text: "19427394-0" });
+  const vendedorInput = el({ tag: "INPUT", sel: ["input[type='text']", "input"], role: "vendedor_input", value: "19427394-0" });
+  vendedorInput.closest = (s) => (String(s).includes(".v-input") ? vendedorCont : null);
   // el modal (aparece al abrir): trae los slots de tipo y pago ya mostrando el valor
   modalNode = el({
     tag: "DIV", sel: [".v-dialog.v-dialog--active"], text: "Emitir e-Boleta",
     children: [
       el({ tag: "DIV", sel: [".v-select__slot", ".v-input__slot"], text: tipoTexto, role: "slot_tipo" }),
       el({ tag: "DIV", sel: [".v-select__slot", ".v-input__slot"], text: pagoTexto, role: "slot_pago" }),
+      toggleDetalle,
+      glosaInput,
+      vendedorInput,
       el({ tag: "BUTTON", sel: ["button"], text: "EMITIR", role: "btn_emitir_final" }),
     ],
   });
@@ -164,6 +180,18 @@ describe("sintético del worker de boletas (corre el original que ya funciona)",
     // sí tecleó el dígito y abrió el modal con el primer EMITIR
     expect(a).toContainEqual({ op: "click", role: "digit_1" });
     expect(a).toContainEqual({ op: "click", role: "btn_emitir" });
+  });
+
+  it("escribe la glosa en el campo Detalle del modal (fix glosa muda 2026-09-10)", async () => {
+    // Regresión del bug de Bit En SpA: la app guardaba la glosa pero el worker no la
+    // escribía en el SII (findGlosaInput frágil) y salía en SILENCIO. Antes este camino
+    // NO se probaba (el job iba con glosa:""). Ahora: activa el toggle y escribe el campo.
+    escenaEmision();
+    const { actions: a } = await drive(jobBoleta({ glosa: "Ventas 01-09 al 07-09" }));
+    expect(a).toContainEqual({ op: "click", role: "chk_detalle" });
+    expect(a).toContainEqual({ op: "set", role: "glosa_input", value: "Ventas 01-09 al 07-09" });
+    // NUNCA escribir la glosa en el campo Vendedor (hallazgo adversarial 2026-09-10).
+    expect(a.some((x) => x.op === "set" && x.role === "vendedor_input")).toBe(false);
   });
 
   it("con libreto == sin libreto (pura mudanza)", async () => {
