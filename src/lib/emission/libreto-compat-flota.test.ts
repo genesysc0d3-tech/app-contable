@@ -28,7 +28,20 @@ const MODULOS = ["modules/sii-local.js", "modules/facturas-portal.js", "modules/
 interface Release { version: string; sha: string; valida: Array<"facturas" | "boletas"> }
 
 function gitShow(sha: string, ruta: string): string {
-  return execFileSync("git", ["show", `${sha}:extensions/sii-portal-rpa/${ruta}`], { cwd: REPO, encoding: "utf8" });
+  try {
+    return execFileSync("git", ["show", `${sha}:extensions/sii-portal-rpa/${ruta}`], { cwd: REPO, encoding: "utf8" });
+  } catch (error) {
+    // Falla típica en CI: `actions/checkout` clona superficial (fetch-depth: 1)
+    // y estos commits viejos no están. NO se convierte en skip a propósito: sin
+    // los validadores publicados no hay forma de saber si el libreto de hoy
+    // deja sin emitir a la flota que todavía corre la versión anterior.
+    const detalle = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `No pude sacar ${ruta} del commit ${sha} de la extensión ${sha}. ` +
+      `Si esto pasa en CI, al checkout le falta 'fetch-depth: 0' (historia completa). ` +
+      `Si pasa local, te falta hacer fetch de la historia vieja. Detalle: ${detalle}`,
+    );
+  }
 }
 
 async function cargarRelease(r: Release) {

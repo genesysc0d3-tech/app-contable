@@ -18,6 +18,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Historia COMPLETA: libreto-compat-flota.test.ts saca con `git show`
+          # los validadores de las versiones de la extensión ya publicadas
+          # (0.2.1/0.2.2/0.2.3) para probar que el libreto de hoy no deja sin
+          # emitir a la flota que aún no se actualiza. Con el clone superficial
+          # por defecto esos commits no existen en el runner y el test revienta.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
