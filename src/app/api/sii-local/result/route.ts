@@ -61,6 +61,16 @@ interface SiiLocalResultPayload {
     } | null;
     page?: { url?: string; title?: string; excerpt?: string };
     job?: { job_id?: string; empresa_id?: string };
+    /**
+     * CAJA NEGRA del worker (0.2.3+): true = se pidió la glosa «Detalle» (o el
+     * receptor) y el RPA NO la pudo escribir, pero la boleta igual salió. Antes
+     * esto solo vivía en sii_local_resultados.result (se borra a los 7 días e
+     * invisible en /dev): hubo 280 boletas reales sin la glosa pedida sin que
+     * nadie lo viera. Ahora genera ops_event warn (GLOSA_OMITIDA /
+     * RECEPTOR_OMITIDO) que /dev cuenta en 24 h.
+     */
+    glosa_omitida?: boolean | null;
+    receptor_omitido?: boolean | null;
   } | null;
 }
 
@@ -1142,6 +1152,16 @@ export async function POST(request: Request) {
     });
   }
 
+  // Glosa/receptor pedidos y NO escritos por el RPA (tanda 1, 2026-09-10): la
+  // boleta ya es REAL (folio guardado arriba), así que esto jamás bloquea; solo
+  // deja rastro visible en ops_events (antes se perdía en sii_local_resultados).
+  if (result?.glosa_omitida === true) {
+    // "Documento", no "Boleta": este camino lo recorren también las facturas 33/34.
+    await recordSiiLocalFailure(sb, job, "GLOSA_OMITIDA", "Documento emitido sin la glosa pedida", { folio, tipo_dte: tipoDte }, "warn");
+  }
+  if (result?.receptor_omitido === true) {
+    await recordSiiLocalFailure(sb, job, "RECEPTOR_OMITIDO", "Documento emitido sin el receptor pedido", { folio, tipo_dte: tipoDte }, "warn");
+  }
   await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
   if (pdfPendiente) {
     await recordSiiLocalFailure(sb, job, "PDF_PENDIENTE", "Boleta SII local persistida sin PDF adjunto", {

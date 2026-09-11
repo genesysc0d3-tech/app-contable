@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob, validateLibreto } from "./facturas-portal.js";
+import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob, validateLibreto, isDetectorSeguro } from "./facturas-portal.js";
 import { FACTURA_LIBRETO } from "../../../src/lib/emission/sii-libreto.ts";
 
 const START_URL = "https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi";
@@ -151,5 +151,66 @@ describe("validateLibreto — fail-closed del catálogo de nombres del portal", 
   it("falta un código de forma de pago se rechaza", () => {
     const l = clon(); delete l.codigos.forma_pago.credito;
     expect(validateLibreto(l)).toBe("LIBRETO_CODIGO_MISSING");
+  });
+});
+
+// ── Tanda 2 (red team 2026-09-10): un libreto bien formado que igual emitía
+//    una factura equivocada. El validador ahora muerde ANTES de abrir la ventana.
+describe("validateLibreto — tanda 2: forma de pago fija, campos únicos, regex seguros, esperas acotadas", () => {
+  const clon = () => JSON.parse(JSON.stringify(FACTURA_LIBRETO));
+
+  it("el libreto real de producción sigue pasando", () => {
+    expect(validateLibreto(FACTURA_LIBRETO)).toBe(null);
+  });
+  it("forma de pago contado:'3' (Sin costo) se rechaza", () => {
+    const l = clon(); l.codigos.forma_pago.contado = "3";
+    expect(validateLibreto(l)).toBe("LIBRETO_FORMA_PAGO_INVALIDA");
+  });
+  it("forma de pago permutada (contado:'2', credito:'1') se rechaza", () => {
+    const l = clon(); l.codigos.forma_pago = { contado: "2", credito: "1" };
+    expect(validateLibreto(l)).toBe("LIBRETO_FORMA_PAGO_INVALIDA");
+  });
+  it("dos roles al mismo control (contacto → EFXP_RZN_SOC_RECEP) se rechaza", () => {
+    const l = clon(); l.campos.contacto = "EFXP_RZN_SOC_RECEP";
+    expect(validateLibreto(l)).toBe("LIBRETO_CAMPO_DUPLICADO");
+  });
+  it("monto_total apuntando al precio (EFXP_PRC_01) se rechaza como duplicado", () => {
+    const l = clon(); l.campos.monto_total = "EFXP_PRC_01";
+    expect(validateLibreto(l)).toBe("LIBRETO_CAMPO_DUPLICADO");
+  });
+  it("espera como string ('8000') se rechaza; fuera de rango también", () => {
+    const l = clon(); l.esperas.razon_recep = "8000";
+    expect(validateLibreto(l)).toBe("LIBRETO_ESPERA_INVALIDA");
+    const l2 = clon(); l2.esperas.razon_recep = 10;
+    expect(validateLibreto(l2)).toBe("LIBRETO_ESPERA_INVALIDA");
+    const l3 = clon(); l3.esperas.total_portal = 60001;
+    expect(validateLibreto(l3)).toBe("LIBRETO_ESPERA_INVALIDA");
+    const l4 = clon(); delete l4.esperas; // opcionales: ausentes = fallback
+    expect(validateLibreto(l4)).toBe(null);
+  });
+  it("detector '.' (clasifica cualquier página) se rechaza", () => {
+    const l = clon(); l.detectores.exito_a = ".";
+    expect(validateLibreto(l)).toBe("LIBRETO_REGEX_INVALIDO");
+    const l2 = clon(); l2.detectores.exito_a = ".*.*"; // largo ≥4 pero matchea ""
+    expect(validateLibreto(l2)).toBe("LIBRETO_REGEX_INVALIDO");
+  });
+  it("cuantificador anidado (a+)+$ y backreference se rechazan", () => {
+    const l = clon(); l.detectores.login = "(a+)+$";
+    expect(validateLibreto(l)).toBe("LIBRETO_REGEX_INVALIDO");
+    const l2 = clon(); l2.detectores.login = "(\\s*)*clave";
+    expect(validateLibreto(l2)).toBe("LIBRETO_REGEX_INVALIDO");
+    const l3 = clon(); l3.detectores.login = "(clave)\\s+\\1";
+    expect(validateLibreto(l3)).toBe("LIBRETO_REGEX_INVALIDO");
+  });
+  it("regex que no compila o muy largo se rechaza; uno alternativo válido pasa", () => {
+    const l = clon(); l.detectores.firma = "certificado(";
+    expect(validateLibreto(l)).toBe("LIBRETO_REGEX_INVALIDO");
+    const l2 = clon(); l2.detectores.firma = "a".repeat(201);
+    expect(validateLibreto(l2)).toBe("LIBRETO_REGEX_INVALIDO");
+    const l3 = clon(); l3.detectores.firma = "firma\\s+electr[oó]nica";
+    expect(validateLibreto(l3)).toBe(null);
+  });
+  it("isDetectorSeguro acepta los 4 detectores reales", () => {
+    for (const src of Object.values(FACTURA_LIBRETO.detectores)) expect(isDetectorSeguro(src)).toBe(true);
   });
 });

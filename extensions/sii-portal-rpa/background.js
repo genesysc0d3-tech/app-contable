@@ -91,14 +91,73 @@ chrome.runtime.onInstalled.addListener((details) => {
   );
 });
 
-function statusMessage(jobId, status, message, recoverable = true) {
+// `extra` (opcional, tanda 2): campos ADITIVOS del status — hoy `code` y
+// `posible_cambio_sii` en los "error" pre-emit, para que la app distinga "cambió
+// el SII" de "error de cuenta" sin adivinar por el texto. Sin extra, byte-idéntico.
+function statusMessage(jobId, status, message, recoverable = true, extra = null) {
   return baseMessage({
     type: "APP_CONTABLE_SII_JOB_STATUS",
     job_id: jobId,
     status,
     message,
     recoverable,
+    ...(extra && typeof extra === "object" ? extra : {}),
   });
+}
+
+// ── Aviso de POSIBLE CAMBIO DEL SII (APP_CONTABLE_SII_CAMBIO_SII) ───────────
+// Un solo constructor para boletas y facturas. app-bridge lo reenvía a
+// /api/sii-local/cambio-sii (allowlist de campos) y el servidor lo valida.
+// Antes se armaba a mano con `source: EXT_SOURCE`, pero EXT_SOURCE NO estaba
+// importado en este archivo → ReferenceError y el aviso jamás salía (por eso
+// nunca hubo `posible_cambio_sii` en ops_events). baseMessage() pone el source.
+// Solo roles del libreto y códigos: jamás PII (el `mapa` ya viene saneado por
+// el worker y se acota a 2 KB acá igual).
+const CODE_RE = /^[A-Z0-9_]{3,40}$/;
+const MAPA_MAX_BYTES = 2048;
+
+function codeValido(code) {
+  return typeof code === "string" && CODE_RE.test(code) ? code : null;
+}
+
+function mapaAcotado(mapa) {
+  if (!mapa || typeof mapa !== "object" || Array.isArray(mapa)) return null;
+  try {
+    return JSON.stringify(mapa).length <= MAPA_MAX_BYTES ? mapa : null;
+  } catch {
+    return null;
+  }
+}
+
+// Facturas: los `error` del worker YA son códigos (SIN_BOTON_VALIDAR, …). Si no
+// viene `code` explícito y el error tiene forma de código, se reutiliza.
+function codigoDesdeError(error) {
+  return codeValido(error);
+}
+
+function cambioSiiMessage(state, portal, fields = {}) {
+  const msg = {
+    type: "APP_CONTABLE_SII_CAMBIO_SII",
+    job_id: state.jobId,
+    portal,
+    ancla: fields.ancla ?? null,
+    // false = error pre-emit SIN ancla (se registra, no cuenta para el umbral;
+    // eso lo decide el servidor por este flag). true = ancla estructural faltante.
+    posible_cambio_sii: fields.posible_cambio_sii === true,
+    error: typeof fields.error === "string" ? fields.error.slice(0, 60) : null,
+    page_kind: fields.page_kind ?? null,
+    libreto_version: state.job?.libreto?.libreto_version ?? null,
+    ext_version: chrome.runtime.getManifest().version,
+    // Alias del mismo dato con el nombre que usa el servidor (extension_version).
+    // `ext_version` se conserva: app-bridge lo lee y nada existente se renombra.
+    extension_version: chrome.runtime.getManifest().version,
+  };
+  const code = codeValido(fields.code);
+  if (code) msg.code = code;
+  if (typeof fields.paso === "string" && fields.paso.length > 0) msg.paso = fields.paso.slice(0, 40);
+  const mapa = mapaAcotado(fields.mapa);
+  if (mapa) msg.mapa = mapa;
+  return baseMessage(msg);
 }
 
 function resultMessage(jobId, result, message = "Resultado SII capturado.") {
@@ -465,17 +524,16 @@ function handleFactStepPush(state, res) {
   // post-firma cualquier fallo puede convivir con un folio vivo y manda
   // result_needs_review, no esta señal. Lleva solo el rol del ancla, jamás PII.
   if (res.posible_cambio_sii && !state.finalEmitClicked) {
-    sendToApp(state, {
-      source: EXT_SOURCE,
-      type: "APP_CONTABLE_SII_CAMBIO_SII",
-      job_id: state.jobId,
-      portal: "facturas",
+    sendToApp(state, cambioSiiMessage(state, "facturas", {
       ancla: res.ancla_faltante ?? null,
+      posible_cambio_sii: true,
       error: res.error ?? null,
       page_kind: res.kind ?? null,
-      libreto_version: state.job?.libreto?.libreto_version ?? null,
-      ext_version: chrome.runtime.getManifest().version,
-    });
+      // Tanda 2: el worker puede etiquetar el fallo con code/paso/mapa saneado.
+      code: res.code ?? codigoDesdeError(res.error),
+      paso: res.paso ?? null,
+      mapa: res.mapa ?? null,
+    }));
   }
   sendToApp(state, statusMessage(state.jobId, "fact_drive", `Portal: ${res.kind ?? "?"} → ${res.action ?? res.error ?? "?"}`, true));
   handleFactDriveResponse(state, res).catch((error) => {
@@ -494,7 +552,26 @@ async function handleFactDriveResponse(state, res) {
       return;
     }
     state.humanRequired = Boolean(res.human) || state.humanRequired;
-    sendToApp(state, statusMessage(state.jobId, "error", detalle, true));
+    const code = res.code ?? codigoDesdeError(res.error);
+    // Tanda 2 (BG3): los errores pre-firma SIN ancla también se registran en el
+    // servidor (posible_cambio_sii:false, no cuentan para el umbral). Los CON
+    // ancla ya salieron desde handleFactStepPush — acá no se duplican.
+    if (res.posible_cambio_sii !== true) {
+      sendToApp(state, cambioSiiMessage(state, "facturas", {
+        ancla: null,
+        posible_cambio_sii: false,
+        error: detalle,
+        page_kind: res.kind ?? null,
+        code,
+        paso: res.paso ?? null,
+      }));
+    }
+    // Tanda 2: `code` + `posible_cambio_sii` viajan en el status para que la
+    // app distinga "cambió el SII" de "error de cuenta" (no ofrezca saltar).
+    sendToApp(state, statusMessage(state.jobId, "error", detalle, true, {
+      code,
+      posible_cambio_sii: res.posible_cambio_sii === true,
+    }));
     return;
   }
 
@@ -569,6 +646,25 @@ async function handleFactDriveResponse(state, res) {
   // watchdog ya re-conduce sola la página actual, y re-navegar descartaba el
   // progreso del POST (fuente del titileo). "observando" = seguir mirando.
 
+  // B4 (tanda 3): "observando" PRE-firma (page_kind unknown, o conocida sin
+  // acción) se re-conduce cada 5 s, tope 6 intentos (mismo patrón que el poll
+  // post-firma). Sin esto, una página que no calza con ningún detector y no
+  // navega jamás volvía a llamar al worker, y su PAGINA_DESCONOCIDA (por
+  // tiempo, ≥20 s) nunca podía dispararse en prod. Nunca con finalEmitClicked
+  // (ese caso lo maneja el poll de firma de arriba).
+  if (res.action === "observando" && !state.finalEmitClicked) {
+    state.factObsPolls = (state.factObsPolls ?? 0) + 1;
+    if (state.factObsPolls <= 6) {
+      if (state.factObsTimer) clearTimeout(state.factObsTimer);
+      state.factObsTimer = setTimeout(() => {
+        state.factObsTimer = null;
+        if (activeJobs.has(state.jobId) && !state.finalEmitClicked) driveFacturaPage(state);
+      }, 5000);
+    }
+  } else if (res.action !== "observando") {
+    state.factObsPolls = 0;
+  }
+
   const mensajes = {
     empresa_seleccionada: "Empresa seleccionada en el portal de facturas…",
     validado: "Documento validado. Revisando la vista previa…",
@@ -636,6 +732,14 @@ function handleWorkerAction(message, sender, sendResponse) {
 
     state.filledDraft = false;
     state.submitted = false;
+    // B1 (tanda 3): un reintento explícito parte la vigilia "sin EMITIR" desde
+    // cero. Sin esto, tras PANTALLA_SIN_EMITIR el job quedaba con
+    // sinEmitirAvisado=true y el segundo intento jamás volvía a avisar (ni a
+    // cerrar): se quedaba pegado en "Página SII lista" para siempre.
+    detenerVigiliaSinEmitir(state);
+    state.sinEmitirAvisado = false;
+    state.sinEmitirDesde = null;
+    state.sinEmitirScans = 0;
     sendToApp(state, statusMessage(state.jobId, "retrying", "Reintentando deteccion de e-Boleta.", true));
     if (state.learnOnly) {
       // Aprendizaje: solo re-escanear (recargar le pisaría la navegación al usuario).
@@ -752,7 +856,7 @@ function scanWorkerPage(state, attempt = 1) {
       return;
     }
 
-    if (attempt < 8 && /Cargando Emisores|Cargando/i.test(excerpt)) {
+    if (attempt < 8 && regexCargando(state).test(excerpt)) {
       setTimeout(() => scanWorkerPage(state, attempt + 1), 1500);
       return;
     }
@@ -768,9 +872,21 @@ function scanWorkerPage(state, attempt = 1) {
       return;
     }
 
-    const hasEmitButton = Array.isArray(map.buttons) && map.buttons.some((button) => button?.text === "EMITIR");
-    const hasNumberPad = Array.isArray(map.buttons) && ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].every((digit) => map.buttons.some((button) => button?.text === digit));
+    // Tanda 2: el texto del botón sale del LIBRETO (antes "EMITIR" hardcodeado y
+    // `botones.emitir` era letra muerta acá). Misma normalización que el worker.
+    const textoEmitir = textoBotonEmitir(state);
+    const hasEmitButton = Array.isArray(map.buttons) && map.buttons.some((button) => normalizarTextoBoton(button?.text) === textoEmitir);
+    const hasNumberPad = Array.isArray(map.buttons) && ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].every((digit) => map.buttons.some((button) => normalizarTextoBoton(button?.text) === digit));
+    if (!state.submitted && !state.finalEmitClicked && !(hasEmitButton && hasNumberPad)) {
+      // Rama ELSE (tanda 2). Antes no existía: si e-Boleta cargaba SIN el botón
+      // EMITIR + pad, el job quedaba en "Página SII lista" para siempre, la app
+      // hacía timeout y ponía lápida revision_pendiente a un documento que
+      // NUNCA se emitió — y el servidor jamás se enteraba del posible cambio.
+      vigilarPantallaSinEmitir(state, { cargando: regexCargando(state).test(excerpt) });
+      return;
+    }
     if (!state.submitted && !state.finalEmitClicked && hasEmitButton && hasNumberPad) {
+      detenerVigiliaSinEmitir(state);
       state.filledDraft = true;
       state.submitted = true;
       sendToApp(state, statusMessage(
@@ -786,21 +902,23 @@ function scanWorkerPage(state, attempt = 1) {
       }), (emitResponse) => {
         if (chrome.runtime.lastError || !emitResponse?.ok) {
           const errorMessage = emitResponse?.error || chrome.runtime.lastError?.message || "No se pudo emitir en e-Boleta.";
-          // POSIBLE CAMBIO DEL SII: un ancla estructural del portal e-Boleta no
-          // apareció. Se reporta al /dev (mismo contrato que facturas), SOLO si
-          // NO se firmó — post-emit puede haber folio vivo. Aditivo.
-          if (emitResponse?.posible_cambio_sii && !state.finalEmitClicked && !emitResponse.final_emit_clicked) {
-            sendToApp(state, {
-              source: EXT_SOURCE,
-              type: "APP_CONTABLE_SII_CAMBIO_SII",
-              job_id: state.jobId,
-              portal: "boletas",
-              ancla: emitResponse.ancla_faltante ?? null,
-              error: emitResponse.error ?? null,
-              page_kind: null,
-              libreto_version: state.job?.libreto?.libreto_version ?? null,
-              ext_version: chrome.runtime.getManifest().version,
-            });
+          const preEmit = !state.finalEmitClicked && !emitResponse?.final_emit_clicked;
+          const esCambioSii = emitResponse?.posible_cambio_sii === true;
+          // Al servidor SOLO pre-emit (post-emit puede haber folio vivo y eso va
+          // por result_needs_review). Tanda 2: van TODOS los errores pre-emit —
+          // con ancla (posible_cambio_sii:true, cuenta para el umbral) y sin
+          // ancla (posible_cambio_sii:false, solo se registra: antes esos
+          // siiError nunca llegaban por este canal). Con code/paso/mapa saneados.
+          if (preEmit) {
+            sendToApp(state, cambioSiiMessage(state, "boletas", {
+              ancla: esCambioSii ? (emitResponse?.ancla_faltante ?? null) : null,
+              posible_cambio_sii: esCambioSii,
+              error: errorMessage,
+              page_kind: emitResponse?.page_kind ?? null,
+              code: emitResponse?.code ?? null,
+              paso: emitResponse?.paso ?? null,
+              mapa: emitResponse?.mapa ?? null,
+            }));
           }
           // Post-emit si: (a) el worker lo confirmó, o (b) el candado ya se armó por el
           // aviso inmediato (notifyFinalEmitClicked, apenas se cliqueó el EMITIR real).
@@ -820,11 +938,17 @@ function scanWorkerPage(state, attempt = 1) {
             return;
           }
           pauseWorker(state, errorMessage);
+          // Tanda 2: `code` + `posible_cambio_sii` en el status para que la app
+          // distinga "cambió el SII" de "error de cuenta". Campos aditivos.
           sendToApp(state, statusMessage(
             state.jobId,
             "error",
             errorMessage,
             true,
+            {
+              code: codeValido(emitResponse?.code),
+              posible_cambio_sii: esCambioSii,
+            },
           ));
           return;
         }
@@ -833,6 +957,118 @@ function scanWorkerPage(state, attempt = 1) {
       });
     }
   });
+}
+
+// ── Vigilia "pantalla sin EMITIR" (tanda 2, BG1) ────────────────────────────
+// e-Boleta cargó (no es login, no está "Cargando Emisores") pero el page-map no
+// trae el botón EMITIR + pad numérico. Puede ser una pantalla intermedia lenta
+// o que el SII cambió el portal. Se le da un plazo (SIN_EMITIR_TOPE_MS, re-
+// escaneando cada SIN_EMITIR_RESCAN_MS porque sin navegación no habría otro
+// onUpdated) y, vencido el plazo o el tope de scans, UNA vez por job: aviso
+// APP_CONTABLE_SII_CAMBIO_SII (ancla botones.emitir, PANTALLA_SIN_EMITIR) y
+// cierre del job con status "error" pre-emit (sin folio, la app puede reintentar).
+// Fuera de la vigilia: learn_only (nunca llega acá), login/autologin, humano
+// requerido (captcha/2FA: no es un cambio del SII), submitted/finalEmitClicked.
+// B3 (tanda 3): el reloj parte en el PRIMER scan sin EMITIR+pad que no sea login
+// ni "Cargando" (esos no cuentan: son la pantalla intermedia legítima), y los
+// scans se cuentan SOLO desde el timer propio de la vigilia — los de
+// tabs.onUpdated (reloads, redirecciones del portal) no suman, porque llegaban
+// de a ráfagas y vencían el tope en 2 segundos con una pantalla que aún cargaba.
+const SIN_EMITIR_TOPE_MS = 45_000;
+const SIN_EMITIR_RESCAN_MS = 5_000;
+const SIN_EMITIR_MAX_SCANS = 10;
+// Si "Cargando" no se va nunca, igual hay que cerrar: tras este tope de scans
+// cargando (desde el timer propio) el reloj parte de todas formas.
+const SIN_EMITIR_MAX_CARGANDO = 12;
+
+function normalizarTextoBoton(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+function textoBotonEmitir(state) {
+  const del = state?.job?.libreto?.botones?.emitir;
+  const texto = normalizarTextoBoton(typeof del === "string" ? del : "");
+  return texto || "EMITIR";
+}
+
+// Regex "Cargando Emisores" desde el libreto (emisor.cargando = source, flag i).
+// Fallback byte-idéntico a lo que había hardcodeado si falta o es inválido.
+function regexCargando(state) {
+  const src = state?.job?.libreto?.emisor?.cargando;
+  if (typeof src === "string" && src.trim()) {
+    try {
+      return new RegExp(src, "i");
+    } catch {
+      // libreto malformado → fallback
+    }
+  }
+  return /Cargando Emisores|Cargando/i;
+}
+
+function detenerVigiliaSinEmitir(state) {
+  if (state.sinEmitirTimer) clearTimeout(state.sinEmitirTimer);
+  state.sinEmitirTimer = null;
+  state.sinEmitirDesde = null;
+  state.sinEmitirScans = 0;
+  state.sinEmitirCargandoScans = 0;
+  state.sinEmitirScanPropio = false;
+}
+
+function vigilarPantallaSinEmitir(state, { cargando = false } = {}) {
+  if (!activeJobs.has(state.jobId)) return;
+  if (state.learnOnly || state.submitted || state.finalEmitClicked || state.awaitingResult) return;
+  if (state.humanRequired || state.autologinInFlight) return;
+  if (state.sinEmitirAvisado) return;
+
+  const ahora = Date.now();
+  // Solo el scan que disparó el timer propio cuenta (B3); onUpdated no suma.
+  const esScanPropio = state.sinEmitirScanPropio === true;
+  state.sinEmitirScanPropio = false;
+  if (cargando) {
+    if (esScanPropio) state.sinEmitirCargandoScans = (state.sinEmitirCargandoScans ?? 0) + 1;
+  }
+  const cargandoEterno = (state.sinEmitirCargandoScans ?? 0) >= SIN_EMITIR_MAX_CARGANDO;
+  if (!cargando || cargandoEterno) {
+    if (!state.sinEmitirDesde) state.sinEmitirDesde = ahora;
+    if (esScanPropio) state.sinEmitirScans = (state.sinEmitirScans ?? 0) + 1;
+  }
+  const vencido = state.sinEmitirDesde != null
+    && ((ahora - state.sinEmitirDesde) > SIN_EMITIR_TOPE_MS || state.sinEmitirScans >= SIN_EMITIR_MAX_SCANS);
+
+  if (!vencido) {
+    if (state.sinEmitirTimer) clearTimeout(state.sinEmitirTimer);
+    state.sinEmitirTimer = setTimeout(() => {
+      state.sinEmitirTimer = null;
+      if (!activeJobs.has(state.jobId)) return;
+      state.sinEmitirScanPropio = true;
+      scanWorkerPage(state);
+    }, SIN_EMITIR_RESCAN_MS);
+    return;
+  }
+
+  state.sinEmitirAvisado = true; // una vez por job
+  detenerVigiliaSinEmitir(state);
+  // B2 (tanda 3): cerrar la compuerta de emisión ANTES de avisar. Carrera real:
+  // la app recibe el status "error", manda JOB_CLOSE y da la boleta por fallida;
+  // si en ese intervalo llega un scan tardío (onUpdated, o el portal que por fin
+  // pintó EMITIR+pad), la rama de emisión veía submitted=false y EMITÍA una
+  // boleta que la app ya había descartado → boleta real huérfana. Con
+  // submitted=true ese scan no emite; solo "Reintentar" (B1) vuelve a abrirla.
+  state.submitted = true;
+  const code = "PANTALLA_SIN_EMITIR";
+  const errorMessage = `La pantalla de e-Boleta cargó sin el botón ${textoBotonEmitir(state)} ni el teclado numérico. No se emitió nada; puede que el SII haya cambiado su portal.`;
+  sendToApp(state, cambioSiiMessage(state, "boletas", {
+    ancla: "botones.emitir",
+    code,
+    posible_cambio_sii: true,
+    page_kind: "sin_emitir",
+    error: errorMessage,
+  }));
+  pauseWorker(state, errorMessage);
+  sendToApp(state, statusMessage(state.jobId, "error", errorMessage, true, {
+    code,
+    posible_cambio_sii: true,
+  }));
 }
 
 function isLoginPageMap(map) {

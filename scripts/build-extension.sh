@@ -33,6 +33,9 @@ mkdir -p "$STAGE" "$OUT_DIR"
     ! -name 'PUBLICAR.md' \
     ! -name '.DS_Store' \
     ! -name '*.test.js' \
+    ! -name 'EXTENSION_RELEASES.json' \
+    ! -path './fixtures/*' \
+    ! -path '*/fixtures/*' \
     -exec sh -c 'mkdir -p "$0/$(dirname "$1")" && cp "$1" "$0/$1"' "$STAGE" {} \; )
 
 # El manifest de producción pasa a ser el manifest.json del paquete.

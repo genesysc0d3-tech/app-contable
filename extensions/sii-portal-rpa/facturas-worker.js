@@ -142,6 +142,45 @@
   //    coreografía (orden, el RUT que se pone una vez, los 3 reintentos, POST
   //    vs AJAX) y la SEGURIDAD (match del emisor, candado, TOTAL_MISMATCH,
   //    evidencia del folio) son CÓDIGO, jamás datos del servidor.
+  // ── INVARIANTES EN CÓDIGO (C2 del red team 2026-09-10) ──────────────────
+  // C2 del red team: la compuerta no puede depender del dato que verifica.
+  // TOTAL_MISMATCH y TIPO_PORTAL_MISMATCH leen SIEMPRE estos nombres fijos,
+  // aunque el libreto traiga `campos.monto_total` / `campos.tipo_verif` (se
+  // siguen aceptando por compat, pero NO alimentan la compuerta). Con
+  // `monto_total:"EFXP_PRC_01"` la compuerta comparaba el precio que el propio
+  // worker acababa de escribir → pasaba siempre. Nunca más.
+  const CAMPO_TOTAL_FIJO = "EFXP_MNT_TOTAL";
+  const CAMPO_TIPO_FIJO = "PTDC_CODIGO";
+  // F1 (tanda 3) — M3 del red team: permutar DENTRO de la whitelist cruzaba datos
+  // con las compuertas verdes (rut_recep↔dv_recep, cantidad↔precio, razón social
+  // del receptor en la del emisor…): el total cuadraba, el tipo cuadraba, y la
+  // factura salía con el RUT y la razón social cambiados. Los campos CRÍTICOS se
+  // escriben y leen SIEMPRE por estos nombres fijos; el libreto los sigue
+  // aceptando (compat con el espejo TS) pero NO manda sobre ellos.
+  const CAMPOS_CRITICOS_FIJOS = Object.freeze({
+    rut_recep: "EFXP_RUT_RECEP",
+    dv_recep: "EFXP_DV_RECEP",
+    razon_soc_recep: "EFXP_RZN_SOC_RECEP",
+    razon_soc_emisor: "EFXP_RZN_SOC",
+    detalle_cantidad: "EFXP_QTY_01",
+    detalle_precio: "EFXP_PRC_01",
+    forma_pago: "EFXP_FMA_PAGO",
+    fecha_emision: "EFXP_FCH_EMIS",
+  });
+  // Forma de pago del portal: 1=Contado · 2=Crédito · 3=Sin costo (JAMÁS). Un
+  // libreto que traiga otro código (o los permute) no escribe nada: abort
+  // pre-Validar con FORMA_PAGO_INVALIDA.
+  const FORMA_PAGO_FIJA = { contado: "1", credito: "2" };
+  const PDF_LINK_HARD = 'a[href*="mipeDisplayPDF.cgi"]';
+  // Gracia pre-firma en página desconocida antes de avisar (F4). Es el único
+  // knob de espera que NO está en el espejo TS (opcional en el libreto, solo
+  // para poder acortarlo en el sintético); sin él, 20 s.
+  const UNKNOWN_GRACE_HARD = 20000;
+
+  // Una espera del libreto solo vale si es un ENTERO en [50, 60000] ms; un
+  // string ("8000") daba `Date.now() > "abc"` siempre false → cuelgue eterno.
+  const esperaOk = (v, hard) => (Number.isInteger(v) && v >= 50 && v <= 60000 ? v : hard);
+
   function resolverLibreto(job) {
     const L = job?.libreto ?? null;
     const c = L?.campos ?? {};
@@ -150,6 +189,9 @@
     const s = L?.selectores ?? {};
     const e = L?.esperas ?? {};
     const p = L?.codigos?.forma_pago ?? {};
+    // Un regex del libreto que no compila cae al hardcode. Lo demás (largo,
+    // anidamiento, que no matchee "" ni "x") lo rechaza validateLibreto ANTES
+    // de abrir la ventana; acá solo se resuelve.
     const re = (src, hard) => { try { return src ? new RegExp(src, "i") : hard; } catch { return hard; } };
     return {
       forms: {
@@ -165,10 +207,11 @@
       },
       campos: {
         emisor_select: c.emisor_select ?? "RUT_EMP",
-        tipo_verif: c.tipo_verif ?? "PTDC_CODIGO",
-        rut_recep: c.rut_recep ?? "EFXP_RUT_RECEP",
-        dv_recep: c.dv_recep ?? "EFXP_DV_RECEP",
-        razon_soc_recep: c.razon_soc_recep ?? "EFXP_RZN_SOC_RECEP",
+        tipo_verif: c.tipo_verif ?? "PTDC_CODIGO", // compat: NO alimenta la compuerta (CAMPO_TIPO_FIJO)
+        // Críticos: FIJOS en código (F1) — el libreto no manda acá.
+        rut_recep: CAMPOS_CRITICOS_FIJOS.rut_recep,
+        dv_recep: CAMPOS_CRITICOS_FIJOS.dv_recep,
+        razon_soc_recep: CAMPOS_CRITICOS_FIJOS.razon_soc_recep,
         dir_recep: c.dir_recep ?? "EFXP_DIR_RECEP",
         comuna_recep: c.comuna_recep ?? "EFXP_CMNA_RECEP",
         ciudad_recep: c.ciudad_recep ?? "EFXP_CIUDAD_RECEP",
@@ -176,33 +219,80 @@
         contacto: c.contacto ?? "EFXP_CONTACTO",
         comuna_origen: c.comuna_origen ?? "EFXP_CMNA_ORIGEN",
         ciudad_origen: c.ciudad_origen ?? "EFXP_CIUDAD_ORIGEN",
-        razon_soc_emisor: c.razon_soc_emisor ?? "EFXP_RZN_SOC",
+        razon_soc_emisor: CAMPOS_CRITICOS_FIJOS.razon_soc_emisor,
         giro_emisor: c.giro_emisor ?? "EFXP_GIRO_EMIS",
-        fecha_emision: c.fecha_emision ?? "EFXP_FCH_EMIS",
-        forma_pago: c.forma_pago ?? "EFXP_FMA_PAGO",
+        fecha_emision: CAMPOS_CRITICOS_FIJOS.fecha_emision,
+        forma_pago: CAMPOS_CRITICOS_FIJOS.forma_pago,
         detalle_nombre: c.detalle_nombre ?? "EFXP_NMB_01",
-        detalle_cantidad: c.detalle_cantidad ?? "EFXP_QTY_01",
-        detalle_precio: c.detalle_precio ?? "EFXP_PRC_01",
+        detalle_cantidad: CAMPOS_CRITICOS_FIJOS.detalle_cantidad,
+        detalle_precio: CAMPOS_CRITICOS_FIJOS.detalle_precio,
         glosa_checkbox: c.glosa_checkbox ?? "DESCRIP_01",
         glosa_textarea: c.glosa_textarea ?? "EFXP_DSC_ITEM_01",
+        // Compat: se aceptan (el espejo TS los trae) pero NO alimentan ninguna
+        // compuerta — ver CAMPO_TOTAL_FIJO / CAMPO_TIPO_FIJO.
         monto_total: c.monto_total ?? "EFXP_MNT_TOTAL",
         boton_validar: c.boton_validar ?? "Button_Update",
         boton_firmar: c.boton_firmar ?? "btnSign",
       },
       selectores: {
         submit_empresa: s.submit_empresa ?? 'button[type="submit"], input[type="submit"]',
-        pdf_link: s.pdf_link ?? 'a[href*="mipeDisplayPDF.cgi"]',
+        pdf_link: s.pdf_link ?? PDF_LINK_HARD,
       },
       codigos: { contado: p.contado ?? "1", credito: p.credito ?? "2" },
       esperas: {
-        submit_empresa_cinturon: e.submit_empresa_cinturon ?? 2500,
-        razon_recep: e.razon_recep ?? 8000,
-        respiro_post_recep: e.respiro_post_recep ?? 700,
-        reintento_override: e.reintento_override ?? 600,
-        glosa_textarea: e.glosa_textarea ?? 3000,
-        total_portal: e.total_portal ?? 6000,
+        submit_empresa_cinturon: esperaOk(e.submit_empresa_cinturon, 2500),
+        razon_recep: esperaOk(e.razon_recep, 8000),
+        respiro_post_recep: esperaOk(e.respiro_post_recep, 700),
+        reintento_override: esperaOk(e.reintento_override, 600),
+        glosa_textarea: esperaOk(e.glosa_textarea, 3000),
+        total_portal: esperaOk(e.total_portal, 6000),
+        pagina_desconocida: esperaOk(e.pagina_desconocida, UNKNOWN_GRACE_HARD),
       },
     };
+  }
+
+  // ── Mapa SANEADO de la página (viaja con cada aviso de posible cambio del
+  //    SII para que /dev vea QUÉ hay en la pantalla que no calzó): nombres de
+  //    forms, `name` de inputs y textos de botones. JAMÁS valores de campos;
+  //    los dígitos de 7+ seguidos (RUT, folio, teléfono, aun con puntos/guion)
+  //    y los correos se tachan. Acotado a 2 KB (el background lo vuelve a
+  //    acotar igual). Falla suave: null, nunca revienta el paso.
+  const MAPA_MAX_BYTES = 2000;
+  function textoSaneado(s, max = 40) {
+    let t = String(s ?? "").replace(/\s+/g, " ").trim();
+    if (!t) return "";
+    t = t.replace(/[^\s@]+@[^\s@]+/g, "@");
+    t = t.replace(/\d(?:[.\-\s]?\d){6,}/g, "#");
+    return t.slice(0, max);
+  }
+  function mapaSaneado() {
+    try {
+      const qsa = (sel) => { try { return [...(document.querySelectorAll?.(sel) ?? [])]; } catch { return []; } };
+      const attr = (el, k) => (typeof el?.getAttribute === "function" ? el.getAttribute(k) : null) ?? el?.[k] ?? "";
+      const forms = qsa("form").map((f) => textoSaneado(attr(f, "name") || attr(f, "id"))).filter(Boolean);
+      const inputs = qsa("input, select, textarea")
+        .map((el) => (String(attr(el, "type")).toLowerCase() === "password" ? "[password]" : textoSaneado(attr(el, "name"))))
+        .filter(Boolean);
+      const botones = qsa('button, input[type="submit"], input[type="button"]')
+        .map((b) => textoSaneado(`${b.value ?? ""} ${b.textContent ?? ""}`, 30))
+        .filter(Boolean);
+      const mapa = {
+        url: textoSaneado(String(location.href ?? "").split("?")[0], 80),
+        forms: [...new Set(forms)].slice(0, 10),
+        inputs: [...new Set(inputs)].slice(0, 40),
+        botones: [...new Set(botones)].slice(0, 15),
+      };
+      // Recorte hasta caber: primero inputs, luego botones, luego forms.
+      for (let guard = 0; guard < 80 && JSON.stringify(mapa).length > MAPA_MAX_BYTES; guard += 1) {
+        if (mapa.inputs.length) mapa.inputs.pop();
+        else if (mapa.botones.length) mapa.botones.pop();
+        else if (mapa.forms.length) mapa.forms.pop();
+        else break;
+      }
+      return mapa;
+    } catch {
+      return null;
+    }
   }
 
   // Señal de POSIBLE CAMBIO DEL SII: se adjunta a un resultado cuando falla un
@@ -210,8 +300,96 @@
   // debería existir y no está) — no un dato del cliente. Es aditiva: no cambia
   // ok/error/human/latches; si se quita, la conducta es byte-idéntica. Lleva
   // SOLO el rol del ancla del libreto (público), jamás RUT/nombre/monto.
-  function cambioSii(ancla) {
-    return { posible_cambio_sii: true, ancla_faltante: ancla };
+  // Tanda 2 (contrato con background.js, SOLO campos agregados): además de
+  // `ancla_faltante` (nombre viejo, se conserva) va `ancla` (mismo valor),
+  // `code`, `page_kind`, `paso` (≤40) y `mapa` saneado.
+  function cambioSii(ancla, extra = {}) {
+    const out = { posible_cambio_sii: true, ancla_faltante: ancla, ancla };
+    if (typeof extra.code === "string" && extra.code) out.code = extra.code.slice(0, 40);
+    if (typeof extra.page_kind === "string" && extra.page_kind) out.page_kind = extra.page_kind;
+    if (typeof extra.paso === "string" && extra.paso) out.paso = extra.paso.slice(0, 40);
+    const mapa = mapaSaneado();
+    if (mapa) out.mapa = mapa;
+    return out;
+  }
+
+  // ── F5: marca "glosa omitida" que sobrevive a la navegación Validar→preview→
+  //    firma→éxito (cada load mata este script). sessionStorage de sii.cl, solo
+  //    el job_id (sin datos del cliente); se borra al leerla en post-firma.
+  //    Falla suave: si el storage no existe (sintético) o revienta, nada cambia.
+  const GLOSA_OMITIDA_KEY = "massdte:fact-glosa-omitida";
+  function marcarGlosaOmitida(jobId) {
+    try { if (jobId) sessionStorage.setItem(GLOSA_OMITIDA_KEY, String(jobId)); } catch { /* sin storage */ }
+  }
+  function leerGlosaOmitida(jobId) {
+    try {
+      const v = sessionStorage.getItem(GLOSA_OMITIDA_KEY);
+      if (!v) return false;
+      if (v !== String(jobId)) return false;
+      sessionStorage.removeItem(GLOSA_OMITIDA_KEY);
+      return true;
+    } catch { return false; }
+  }
+  // F4 (tanda 3): al ARRANCAR el formulario del mismo job se borra la marca. Sin
+  // esto, un reintento que SÍ escribió la glosa heredaba el `true` del intento
+  // anterior y el resultado decía "glosa omitida" sobre una factura que la lleva.
+  function limpiarGlosaOmitida(jobId) {
+    try {
+      if (sessionStorage.getItem(GLOSA_OMITIDA_KEY) === String(jobId)) sessionStorage.removeItem(GLOSA_OMITIDA_KEY);
+    } catch { /* sin storage */ }
+  }
+
+  // Reloj inyectable SOLO para el sintético (window.__MASSDTE_TEST__.now); en
+  // prod es Date.now. Nada del libreto ni del job puede tocarlo.
+  const ahoraMs = () => {
+    try {
+      const h = typeof window !== "undefined" ? window.__MASSDTE_TEST__ : null;
+      if (h && typeof h.now === "function") return Number(h.now());
+    } catch { /* sin hooks */ }
+    return Date.now();
+  };
+
+  // ── F4: página desconocida como ANCLA. Pre-firma, si el pageKind sigue
+  //    `unknown` durante `esperas.pagina_desconocida` ms (20 s) desde el PRIMER
+  //    unknown, el worker avisa UNA vez por job (PAGINA_DESCONOCIDA con
+  //    page_kind:unknown + mapa) y devuelve error pre-emit, en vez de quedarse
+  //    "observando" hasta que la app le ponga lápida a un documento que nunca
+  //    se emitió. F3 (tanda 3): SOLO por tiempo (los "4 scans" vencían en 2 s
+  //    con una ráfaga de onUpdated) y el "desde" se persiste en sessionStorage
+  //    por job_id para sobrevivir a las navegaciones del portal (cada load mata
+  //    este script y antes reiniciaba el reloj: nunca llegaba a los 20 s).
+  //    Una pantalla conocida entre medio reinicia la cuenta (resetUnknown).
+  const UNKNOWN_KEY = "massdte:fact-unknown";
+  let unknownState = { jobId: null, desde: 0, avisado: false };
+  function leerUnknownPersistido(jobId) {
+    try {
+      const raw = sessionStorage.getItem(UNKNOWN_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (!p || p.job_id !== jobId || !Number.isFinite(p.desde)) return null;
+      return { desde: p.desde, avisado: p.avisado === true };
+    } catch { return null; }
+  }
+  function guardarUnknown(jobId, st) {
+    try { sessionStorage.setItem(UNKNOWN_KEY, JSON.stringify({ job_id: jobId, desde: st.desde, avisado: st.avisado })); } catch { /* sin storage */ }
+  }
+  function registrarUnknown(job, gracia) {
+    const jobId = String(job?.job_id ?? "");
+    const ahora = ahoraMs();
+    if (unknownState.jobId !== jobId) {
+      const prev = leerUnknownPersistido(jobId);
+      unknownState = { jobId, desde: prev?.desde ?? ahora, avisado: prev?.avisado ?? false };
+      guardarUnknown(jobId, unknownState);
+    }
+    if (unknownState.avisado) return false;
+    if (ahora - unknownState.desde < gracia) return false;
+    unknownState.avisado = true;
+    guardarUnknown(jobId, unknownState);
+    return true;
+  }
+  function resetUnknown() {
+    unknownState = { jobId: null, desde: 0, avisado: false };
+    try { sessionStorage.removeItem(UNKNOWN_KEY); } catch { /* sin storage */ }
   }
 
   // Montos del portal: "1.000" / "1000" → entero.
@@ -264,7 +442,7 @@
     const LB = resolverLibreto(job);
     const form = formEl(LB.forms.selector_empresa);
     const sel = campo(form, LB.campos.emisor_select);
-    if (!sel) return { ok: false, error: "SELECTOR_SIN_RUT_EMP", ...cambioSii("campos.emisor_select") };
+    if (!sel) return { ok: false, error: "SELECTOR_SIN_RUT_EMP", ...cambioSii("campos.emisor_select", { code: "SELECTOR_SIN_RUT_EMP", page_kind: "selector_empresa", paso: "selector_empresa:select" }) };
     // SEGURIDAD (no libreto): el match del emisor es CÓDIGO — el libreto solo
     // dice el NOMBRE del <select>, jamás afloja la comparación fail-closed.
     const objetivo = normalizeRutValue(job.emisor_rut);
@@ -276,7 +454,7 @@
     }
     setVal(sel, candidatos[0].value);
     const submit = form.querySelector(LB.selectores.submit_empresa);
-    if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT", ...cambioSii("selectores.submit_empresa") };
+    if (!clickEl(submit)) return { ok: false, error: "SELECTOR_SIN_SUBMIT", ...cambioSii("selectores.submit_empresa", { code: "SELECTOR_SIN_SUBMIT", page_kind: "selector_empresa", paso: "selector_empresa:submit" }) };
     // Cinturón (cazado en vivo 2026-08-27): el click sintético en Enviar puede
     // NO gatillar la navegación del CGI (la página quedó quieta con la empresa
     // elegida y el latch impedía reintentar). A los 2.5s forzamos el submit
@@ -292,28 +470,40 @@
   }
 
   // Campos cuyo vacío haría rebotar validaFacEx con alert() invisible.
+  // Devuelve las etiquetas que FALTAN (vacías). Aparte, `ausentesDe` separa el
+  // caso ESTRUCTURAL: el control ni siquiera existe en el form (ancla del
+  // libreto que desapareció = posible cambio del SII), distinto de "vacío".
+  const CAMPOS_FORMULARIO = [
+    ["razon_soc_emisor", "razón social del emisor"],
+    ["giro_emisor", "giro del emisor"],
+    ["comuna_origen", "comuna del emisor"],
+    ["ciudad_origen", "ciudad del emisor"],
+    ["rut_recep", "RUT del receptor"],
+    ["razon_soc_recep", "razón social del receptor"],
+    ["dir_recep", "dirección del receptor"],
+    ["comuna_recep", "comuna del receptor"],
+    ["ciudad_recep", "ciudad del receptor"],
+    ["giro_recep", "giro del receptor"],
+    ["detalle_nombre", "detalle"],
+    ["detalle_cantidad", "cantidad"],
+    ["detalle_precio", "precio"],
+  ];
   function preValidar(form, job) {
     const c = resolverLibreto(job).campos;
-    const cod = resolverLibreto(job).codigos;
     const faltas = [];
-    const exige = (name, etiqueta) => { if (!valorDe(form, name)) faltas.push(etiqueta); };
-    exige(c.razon_soc_emisor, "razón social del emisor");
-    exige(c.giro_emisor, "giro del emisor");
-    exige(c.comuna_origen, "comuna del emisor");
-    exige(c.ciudad_origen, "ciudad del emisor");
-    exige(c.rut_recep, "RUT del receptor");
-    exige(c.razon_soc_recep, "razón social del receptor");
-    exige(c.dir_recep, "dirección del receptor");
-    exige(c.comuna_recep, "comuna del receptor");
-    exige(c.ciudad_recep, "ciudad del receptor");
-    exige(c.giro_recep, "giro del receptor");
-    exige(c.detalle_nombre, "detalle");
-    exige(c.detalle_cantidad, "cantidad");
-    exige(c.detalle_precio, "precio");
+    for (const [rol, etiqueta] of CAMPOS_FORMULARIO) {
+      if (!valorDe(form, c[rol])) faltas.push(etiqueta);
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(valorDe(form, c.fecha_emision))) faltas.push("fecha de emisión");
+    // Forma de pago: contra los códigos FIJOS del portal, no los del libreto.
     const fma = valorDe(form, c.forma_pago);
-    if (fma !== cod.contado && fma !== cod.credito) faltas.push("forma de pago");
+    if (fma !== FORMA_PAGO_FIJA.contado && fma !== FORMA_PAGO_FIJA.credito) faltas.push("forma de pago");
     return faltas;
+  }
+  function ausentesDe(form, job) {
+    const c = resolverLibreto(job).campos;
+    const roles = [...CAMPOS_FORMULARIO.map(([rol]) => rol), "dv_recep", "fecha_emision", "forma_pago"];
+    return roles.filter((rol) => !campo(form, c[rol]));
   }
 
   async function stepFormulario(job) {
@@ -324,12 +514,34 @@
     const LB = resolverLibreto(job);
     const c = LB.campos;
     const f = () => formEl(LB.forms.formulario);
-    const codigo = valorDe(f(), c.tipo_verif);
+    limpiarGlosaOmitida(job.job_id); // F4 (tanda 3): la marca es de ESTE intento
+    // C2 del red team: la compuerta no puede depender del dato que verifica —
+    // el tipo se lee del nombre FIJO, no de `campos.tipo_verif` del libreto.
+    const codigo = valorDe(f(), CAMPO_TIPO_FIJO);
     if (codigo !== String(job.tipo_dte)) {
       // Campo AUSENTE (vacío) = ancla estructural desaparecida → posible cambio
       // del SII. Campo con OTRO valor = routing/dato, no estructura → sin señal.
-      const structural = codigo === "" ? cambioSii("campos.tipo_verif") : {};
+      const structural = codigo === "" ? cambioSii("campos.tipo_verif", { code: "TIPO_PORTAL_MISMATCH", page_kind: "formulario", paso: "formulario:tipo_verif" }) : {};
       return { ok: false, error: "TIPO_PORTAL_MISMATCH", detalle: `El formulario es tipo ${codigo} y el job pide ${job.tipo_dte}.`, ...structural };
+    }
+
+    // INVARIANTE EN CÓDIGO: el código de forma de pago que se va a escribir
+    // tiene que ser EXACTAMENTE el del portal para ese rol (1=Contado,
+    // 2=Crédito). Un libreto que traiga "3" (Sin costo) o los permute aborta
+    // acá, ANTES de escribir nada en el form (ni el RUT, que navega).
+    const rolPago = job.forma_pago === "credito" ? "credito" : "contado";
+    const codigoPago = LB.codigos[rolPago];
+    if (codigoPago !== FORMA_PAGO_FIJA[rolPago]) {
+      return { ok: false, error: "FORMA_PAGO_INVALIDA", detalle: `El código de forma de pago resuelto (${String(codigoPago)}) no es el del portal para ${rolPago} (${FORMA_PAGO_FIJA[rolPago]}). No se escribe nada.` };
+    }
+
+    // Anclas del formulario: si un control que SIEMPRE existe no está, es
+    // estructura (posible cambio del SII), no un dato del cliente. Se mira
+    // ANTES de escribir (el RUT del receptor puede navegar la página).
+    const ausentes = ausentesDe(f(), job);
+    if (ausentes.length > 0) {
+      const rol = ausentes[0];
+      return { ok: false, error: "FORMULARIO_SIN_CAMPO", detalle: `El formulario no tiene el control de ${rol} (${ausentes.length} ausente(s)).`, ...cambioSii(`campos.${rol}`, { code: "FORMULARIO_SIN_CAMPO", page_kind: "formulario", paso: `formulario:${rol}` }) };
     }
 
     // Receptor primero — MEDIDO EN VIVO 2026-08-27 (laboratorio con la página
@@ -362,6 +574,7 @@
     const r = job.receptor ?? {};
     const det = Array.isArray(job.detalles) ? job.detalles[0] : null;
     if (!det) return { ok: false, error: "DETALLE_MISSING" };
+    let glosaOmitida = false; // F5: la descripción larga no encontró textarea
 
     // Overrides idempotentes sobre el form FRESCO. Se aplican y se VERIFICAN;
     // si el portal re-pinta y pisa algo, la segunda/tercera vuelta lo repone.
@@ -380,8 +593,9 @@
       setVal(campo(f(), c.detalle_nombre), det.nombre);
       setVal(campo(f(), c.detalle_cantidad), det.cantidad ?? 1);
       setVal(campo(f(), c.detalle_precio), det.precio); // change → calculaRelacionadoFacEx
-      // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa).
-      setVal(campo(f(), c.forma_pago), job.forma_pago === "credito" ? LB.codigos.credito : LB.codigos.contado);
+      // Forma de pago: 1=Contado · 2=Crédito (3=Sin Costo JAMÁS se usa). El
+      // código ya se verificó arriba contra FORMA_PAGO_FIJA; se escribe el FIJO.
+      setVal(campo(f(), c.forma_pago), FORMA_PAGO_FIJA[rolPago]);
     };
 
     let faltas = [];
@@ -406,15 +620,28 @@
       const chk = campo(f(), c.glosa_checkbox);
       if (chk && !chk.checked) clickEl(chk); // dibujaTextArea inserta el textarea de glosa
       const area = await waitFor(() => campo(formEl(LB.forms.formulario), c.glosa_textarea), LB.esperas.glosa_textarea, 150);
-      if (area) setVal(area, det.descripcion);
+      if (area) {
+        setVal(area, det.descripcion);
+      } else {
+        // El textarea no apareció (dibujaTextArea no corrió o el SII lo
+        // renombró): la factura sale SIN la descripción larga. No se aborta
+        // (el documento sigue siendo correcto en montos y receptor), pero se
+        // marca para que el resultado post-firma lleve `glosa_omitida:true`
+        // y nadie crea que la glosa viajó. Persistido en sessionStorage porque
+        // Validar navega y este script muere con la página.
+        glosaOmitida = true;
+        marcarGlosaOmitida(job.job_id);
+      }
     }
 
     // Totales del portal vs el job (±$1 de redondeo) — ANTES de validar.
-    // SEGURIDAD (no libreto): el TOTAL_MISMATCH es CÓDIGO; el libreto solo dice
-    // el nombre del campo del total, no afloja la verificación cruzada.
+    // SEGURIDAD (no libreto): el TOTAL_MISMATCH es CÓDIGO. C2 del red team: la
+    // compuerta no puede depender del dato que verifica — se lee el campo FIJO
+    // del total (CAMPO_TOTAL_FIJO), NO `campos.monto_total` del libreto (que
+    // podía apuntar al precio recién escrito y pasar siempre).
     const totalEsperado = Number(job.totales?.monto_total);
     const totalPortal = await waitFor(() => {
-      const t = montoPortal(valorDe(formEl(LB.forms.formulario), c.monto_total));
+      const t = montoPortal(valorDe(formEl(LB.forms.formulario), CAMPO_TOTAL_FIJO));
       return t && t > 0 ? t : null;
     }, LB.esperas.total_portal, 250);
     if (!totalPortal || !Number.isFinite(totalEsperado) || Math.abs(totalPortal - totalEsperado) > 1) {
@@ -423,11 +650,11 @@
 
     // "Validar y visualizar" NO emite ni asigna folio (la vista previa dice
     // "Documento NO válido") — es seguro pre-candado.
-    if (job.learn_only === true) return { ok: true, action: "learn_stop_pre_validar" };
+    if (job.learn_only === true) return { ok: true, action: "learn_stop_pre_validar", ...(glosaOmitida ? { glosa_omitida: true } : {}) };
     if (!clickEl(campo(formEl(LB.forms.formulario), c.boton_validar))) {
-      return { ok: false, error: "SIN_BOTON_VALIDAR", ...cambioSii("campos.boton_validar") };
+      return { ok: false, error: "SIN_BOTON_VALIDAR", ...cambioSii("campos.boton_validar", { code: "SIN_BOTON_VALIDAR", page_kind: "formulario", paso: "formulario:validar" }) };
     }
-    return { ok: true, action: "validado" }; // la página navega al preview
+    return { ok: true, action: "validado", ...(glosaOmitida ? { glosa_omitida: true } : {}) }; // la página navega al preview
   }
 
   async function stepPreview(job) {
@@ -436,14 +663,15 @@
     const form = formEl(LB.forms.preview);
     // Verificación cruzada final sobre los hidden del preview (es el
     // documento EXACTO que se firmaría). SEGURIDAD (no libreto): el
-    // TOTAL_MISMATCH y el chequeo de tipo son CÓDIGO; el libreto solo nombra
-    // los campos que lee.
-    const totalPrev = montoPortal(valorDe(form, c.monto_total));
+    // TOTAL_MISMATCH y el chequeo de tipo son CÓDIGO. C2 del red team: la
+    // compuerta no puede depender del dato que verifica — nombres FIJOS, el
+    // libreto no elige qué campo se compara.
+    const totalPrev = montoPortal(valorDe(form, CAMPO_TOTAL_FIJO));
     const totalEsperado = Number(job.totales?.monto_total);
     if (totalPrev != null && Number.isFinite(totalEsperado) && Math.abs(totalPrev - totalEsperado) > 1) {
       return { ok: false, error: "TOTAL_MISMATCH", detalle: `La vista previa dice $${totalPrev} y el documento aprobado $${totalEsperado}.` };
     }
-    const codigo = valorDe(form, c.tipo_verif);
+    const codigo = valorDe(form, CAMPO_TIPO_FIJO);
     if (codigo && codigo !== String(job.tipo_dte)) {
       return { ok: false, error: "TIPO_PORTAL_MISMATCH" };
     }
@@ -466,7 +694,7 @@
 
     const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
     // btnSign no encontrado = ANTES de firmar (no hay folio en riesgo) → señal.
-    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar") };
+    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar", { code: "SIN_BOTON_FIRMAR", page_kind: "preview", paso: "preview:firmar" }) };
     return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 
@@ -522,14 +750,21 @@
   // viva para el resto de la captura). Falla suave: sin PDF el folio igual
   // se registra (pdf_pendiente, mismo contrato que boletas).
   async function capturarPdfFactura(job) {
-    const link = document.querySelector('a[href*="mipeDisplayPDF.cgi"]');
+    // F1: el selector viene del libreto (fallback PDF_LINK_HARD, byte-idéntico).
+    let link = null;
+    try { link = document.querySelector(resolverLibreto(job).selectores.pdf_link); } catch { link = null; }
     if (!link) return null;
     try {
       const resp = await fetch(link.getAttribute("href"), { credentials: "include" });
-      if (!resp.ok || !/pdf/i.test(resp.headers.get("content-type") ?? "")) return null;
+      // F2 (tanda 3): SOLO application/pdf y SOLO si los bytes parten con %PDF. Una
+      // página de error/login del SII (text/html) NO se guarda como el PDF de la
+      // factura; queda pdf:null (pdf_pendiente, mismo contrato que sin PDF).
+      const ct = String(resp.headers.get("content-type") ?? "").toLowerCase();
+      if (!resp.ok || !ct.startsWith("application/pdf")) return null;
       const buf = await resp.arrayBuffer();
       if (buf.byteLength < 1000 || buf.byteLength > 15 * 1024 * 1024) return null;
       const bytes = new Uint8Array(buf);
+      if (String.fromCharCode(...bytes.subarray(0, 4)) !== "%PDF") return null;
       let bin = "";
       for (let i = 0; i < bytes.length; i += 0x8000) {
         bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
@@ -588,6 +823,9 @@
         .slice(0, 6),
       page: { url: location.href, title: document.title, excerpt: excerpt() },
     };
+    // F5: si en el formulario la descripción larga no encontró textarea, el
+    // resultado lo dice (la marca sobrevivió a las navegaciones en sessionStorage).
+    if (leerGlosaOmitida(job.job_id)) result.glosa_omitida = true;
     return { ok: true, action: "captured", result };
   }
 
@@ -597,6 +835,7 @@
     // Deja respirar al DOM recién cargado (los CGIs inicializan con jQuery).
     await esperar(400);
     const kind = pageKind(job);
+    if (kind !== "unknown") resetUnknown(); // F4: "consecutivos" — una pantalla conocida reinicia la cuenta
     console.log("[FACT-worker] handleDrive kind:", kind, "url:", location.href.split("/").pop(), "done:", JSON.stringify(message.done ?? {}));
     try {
       // CANDADO MONÓTONO: con Firmar ya clickeado, ni el formulario ni la
@@ -622,6 +861,17 @@
       if (kind === "login") return { kind, ok: true, action: "needs_login" };
       if (kind === "firma") return { kind, ...stepFirmaNecesitaClave() };
       if (kind === "post_firma") return { kind, ...(await stepPostFirma(job)) };
+      // F4: `unknown` pre-firma no puede ser eterno. Post-Firmar (candado
+      // armado) se sigue observando: la pantalla "generando firma" y la de
+      // éxito pasan por acá y ahí un error sería peor que esperar.
+      if (message.final_emit_clicked !== true && registrarUnknown(job, resolverLibreto(job).esperas.pagina_desconocida)) {
+        return {
+          kind, ok: false, error: "PAGINA_DESCONOCIDA",
+          detalle: "La página del SII no calza con ninguna pantalla conocida del portal de facturas (ni formulario, ni vista previa, ni login). No se emitió nada.",
+          excerpt: excerpt(),
+          ...cambioSii("page_kind:unknown", { code: "PAGINA_DESCONOCIDA", page_kind: "unknown", paso: "observando:unknown" }),
+        };
+      }
       return { kind, ok: true, action: "observando", excerpt: excerpt() };
     } catch (error) {
       return { kind, ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) };

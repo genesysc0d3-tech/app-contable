@@ -33,7 +33,13 @@ export type DesenlaceItem =
   // revisar = POST-emit incierto: se cliqueó EMITIR pero no se pudo capturar/guardar
   // el folio (puede ser un folio REAL con la ventana abierta). FRENA el lote en seco:
   // seguir abriría otra ventana y arriesgaría perder/duplicar el folio.
-  | { estado: "revisar"; motivo: string; folio?: number | null };
+  | { estado: "revisar"; motivo: string; folio?: number | null }
+  // pausada_remota = el SERVER frenó la emisión (kill switch /api/emision/jobs
+  // 409 EMISION_PAUSADA) ANTES de abrir job alguno: no hay folio ni ventana. El
+  // ítem NO se consumió (no cuenta como procesado, queda pendiente para reanudar)
+  // y el lote se detiene en seco: seguir sería estrellar cada boleta contra la
+  // misma pausa. `motivo` es el copy humano que ya viene del server.
+  | { estado: "pausada_remota"; motivo: string };
 
 export type FaseLote =
   | "preparando"
@@ -42,7 +48,8 @@ export type FaseLote =
   | "pausada" // esperando decisión humana (error o tope)
   | "requiere_revision" // frenado por una boleta "a medias" que el humano debe resolver
   | "terminada"
-  | "detenida";
+  | "detenida"
+  | "pausada_remota"; // frenado por el server (kill switch): lo pendiente se conserva
 
 export type MotivoPausa = "error" | "tope";
 
@@ -59,6 +66,8 @@ export interface ProgresoLote {
   // Boleta "a medias" que frenó el lote: el modal la usa para ofrecer recuperar el
   // folio (propuestaId viene en item). folio = el que se alcanzó a leer, si alguno.
   revisionPendiente: { item: ItemLote; folio: number | null } | null;
+  /** Copy humano del server cuando el lote quedó en `pausada_remota`. */
+  pausaRemota: { motivo: string } | null;
   resultados: Array<{ item: ItemLote; desenlace: DesenlaceItem }>;
   folios: number[];
 }
@@ -114,6 +123,7 @@ export async function ejecutarLote(
     itemActual: null,
     subestado: null,
     revisionPendiente: null,
+    pausaRemota: null,
     resultados: [],
     folios: [],
   };
@@ -144,6 +154,18 @@ export async function ejecutarLote(
       p.subestado = sub;
       emitir();
     });
+
+    // Kill switch del server: este ítem NO se tocó (ni job, ni ventana, ni folio).
+    // No se cuenta como procesado —así slice(procesadas) lo conserva como
+    // pendiente— y el lote se detiene acá mismo, sin preguntar.
+    if (desenlace.estado === "pausada_remota") {
+      p.subestado = null;
+      p.itemActual = null;
+      p.pausaRemota = { motivo: desenlace.motivo };
+      p.fase = "pausada_remota";
+      emitir();
+      return p;
+    }
 
     p.resultados.push({ item, desenlace });
     p.procesadas += 1;

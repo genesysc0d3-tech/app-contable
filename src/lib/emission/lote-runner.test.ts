@@ -233,3 +233,21 @@ describe("ejecutarLote — progreso reportado", () => {
     expect(fases.has("terminada")).toBe(true);
   });
 });
+
+describe("pausada_remota — el server frenó la emisión (kill switch)", () => {
+  it("no consume el ítem, guarda el motivo, no pregunta y detiene en seco", async () => {
+    const items = [item("a"), item("b"), item("c")];
+    const { driver, log } = fakeDriver([emitida(100), { estado: "pausada_remota", motivo: "Pausamos boletas." }]);
+    let pausas = 0;
+    const p = await ejecutarLote(items, driver, { alPausar: async () => { pausas += 1; return "continuar"; } });
+    expect(p.fase).toBe("pausada_remota");
+    expect(p.pausaRemota).toEqual({ motivo: "Pausamos boletas." });
+    // "b" NO cuenta como procesada: slice(procesadas) la conserva como pendiente.
+    expect(p.procesadas).toBe(1);
+    expect(p.emitidas).toBe(1);
+    expect(p.fallidas).toBe(0);
+    expect(p.resultados.map((r) => r.item.propuestaId)).toEqual(["a"]);
+    expect(pausas).toBe(0);
+    expect(log.filter((l) => l.startsWith("emitir:"))).toEqual(["emitir:a", "emitir:b"]);
+  });
+});
