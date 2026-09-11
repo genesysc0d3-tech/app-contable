@@ -153,6 +153,11 @@ export function escenaEmision({
   sucursalSeleccion = /^elija/i.test(sucursalTexto) ? "" : sucursalTexto.replace(/^Sucursal\s+/, ""),
   glosaContTexto = "Detalle 0 / 80",
   conReceptor = false,
+  // Simula el label flotante REAL de Vuetify: el "RUT" del campo receptor vive solo en
+  // el label del contenedor (NO en un aria-label estable), y al escribir un valor el
+  // label FLOTA fuera del texto → controlText deja de contener "RUT". Es el DOM que cazó
+  // el falso RECEPTOR_RUT_NO_ACEPTADO en el ensayo 2026-09-11.
+  receptorRutLabelFlota = false,
   montoAlto = false,
 } = {}) {
   estado.scene = [];
@@ -194,8 +199,20 @@ export function escenaEmision({
     vendedorInput,
   ];
   if (conReceptor) {
+    const rutField = receptorRutLabelFlota
+      ? vTextField({ contTexto: "RUT receptor", role: "receptor_rut" }) // sin aria-label estable
+      : vTextField({ contTexto: "RUT receptor", role: "receptor_rut", attrs: { "aria-label": "RUT receptor" } });
+    if (receptorRutLabelFlota) {
+      // aria-label dinámico: presente con el campo vacío, AUSENTE cuando tiene valor
+      // (el label flotó). Réplica del comportamiento Vuetify observado en el portal.
+      rutField.getAttribute = (a) => {
+        if (a === "value") return rutField._value;
+        if (a === "aria-label") return rutField._value ? "" : "RUT receptor";
+        return rutField._attrs?.[a] ?? null;
+      };
+    }
     children.push(
-      vTextField({ contTexto: "RUT receptor", role: "receptor_rut", attrs: { "aria-label": "RUT receptor" } }),
+      rutField,
       vTextField({ contTexto: "Nombre receptor", role: "receptor_nombre", attrs: { "aria-label": "Nombre receptor" } }),
     );
   }

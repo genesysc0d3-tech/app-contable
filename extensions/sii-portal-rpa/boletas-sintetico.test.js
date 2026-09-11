@@ -312,6 +312,39 @@ describe("sintético del worker de boletas (corre el original que ya funciona)",
     expect(cap2.result.receptor_omitido).toBe(false);
     expect(cap2.result.glosa_omitida).toBe(false);
   });
+  it("REGRESIÓN falso positivo (ensayo 2026-09-11): el label del RUT flota al tener valor → NO aborta", async () => {
+    // BUG cazado en vivo: con el campo RUT cuyo "RUT" vive solo en el label (Vuetify lo
+    // flota fuera del texto al tener valor), la re-búsqueda con el guard `includes("RUT")`
+    // devolvía null y abortaba TODA boleta con receptor con un RECEPTOR_RUT_NO_ACEPTADO
+    // FALSO — incluso con un RUT real que el SII acepta. El worker ahora relee el mismo
+    // input que escribió, no lo re-busca. Este test MUERDE si se revierte el fix.
+    escenaEmision({ conReceptor: true, receptorRutLabelFlota: true });
+    const job = jobBoleta({ receptor: { rut: "19.427.394-0", razon_social: "Cliente Real" } });
+    const { res, actions: a } = await drive(job);
+    noFirmo(a); // el candado (allow_final_emit=false) frena antes del EMITIR final
+    expect(res.ok).toBe(true); // llegó hasta el final SIN abortar por el falso positivo
+    expect(res.code).not.toBe("RECEPTOR_RUT_NO_ACEPTADO");
+    expect(a).toContainEqual({ op: "set", role: "receptor_rut", value: "19.427.394-0" });
+  });
+  it("el freno real sigue: si el SII BORRA el RUT tras escribirlo → RECEPTOR_RUT_NO_ACEPTADO", async () => {
+    // La protección legítima NO se pierde: si el portal deja el campo distinto/vacío del
+    // valor pedido (rechazo real), el worker aborta antes del EMITIR final.
+    escenaEmision({ conReceptor: true });
+    const job = jobBoleta({ receptor: { rut: "12.345.678-5", razon_social: "Cliente" }, allow_final_emit: true });
+    const rutInput = estado.modalNode?._children?.find((n) => n.role === "receptor_rut");
+    if (rutInput) {
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(rutInput), "value").set;
+      Object.defineProperty(rutInput, "value", {
+        get() { return ""; }, // el portal lo dejó vacío (RUT no aceptado)
+        set(v) { setter.call(rutInput, v); },
+        configurable: true,
+      });
+    }
+    const { res, actions: a } = await drive(job);
+    noFirmo(a);
+    expect(res.code).toBe("RECEPTOR_RUT_NO_ACEPTADO");
+    expect(res.final_emit_clicked).toBe(false);
+  });
   it("monto alto: confirma SÍ (nunca NO) y sigue al modal", async () => {
     escenaEmision({ montoAlto: true });
     const { res, actions: a } = await drive(jobBoleta({ totales: { monto_total: 6000000 } }));
