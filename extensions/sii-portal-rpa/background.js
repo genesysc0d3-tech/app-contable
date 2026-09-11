@@ -447,9 +447,10 @@ function closeWorker(state) {
   if (state.learningTimer) clearTimeout(state.learningTimer);
   if (state.workerWindowId) {
     chrome.windows.remove(state.workerWindowId).catch(() => undefined);
-  } else if (state.workerTabId) {
-    // Modo pestaña (dev facturas): cerrar SOLO la pestaña del worker — el
-    // workerWindowId null es la ventana principal del usuario, intocable.
+  } else if (state.workerTabId && !state.workerTabReusada) {
+    // Modo pestaña (dev): cerrar SOLO la pestaña del worker — el workerWindowId
+    // null es la ventana principal del usuario, intocable. Si la pestaña fue
+    // REUTILIZADA (era del humano), NO se cierra: dejarla como estaba.
     chrome.tabs.remove(state.workerTabId).catch(() => undefined);
   }
   // Si un update quedó pendiente durante la emisión, este es el momento seguro.
@@ -1354,11 +1355,40 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
   const startUrl = job.kind === "factura" && job.start_url ? job.start_url : SII_START_URL;
   let workerWindowId = null;
   let workerTabId = null;
+  let workerTabReusada = false; // debug: la pestaña era del humano, NO cerrarla al terminar
   // DEBUG (FACT_WORKER_EN_PESTANA): abre el portal como PESTAÑA — boletas Y facturas —
   // para inspeccionar con MCP. En prod esta perilla va en false (ventana con candado).
   if (FACT_WORKER_EN_PESTANA) {
-    const tab = await chrome.tabs.create({ url: startUrl, active: false });
-    workerTabId = tab.id ?? null;
+    // DEBUG: si YA hay una pestaña abierta en el mismo host del portal, se
+    // reutiliza en vez de crear otra. Sirve para mirar el RPA con MCP: el
+    // humano (o Claude) abre la pestaña del SII donde la puede observar y el
+    // worker se engancha ahí. Sin esto, `tabs.create` abre una pestaña nueva
+    // fuera del grupo observable y el paso a paso no se ve. Solo corre en debug
+    // (flag true); en prod (false) el camino es chrome.windows.create de abajo.
+    // OJO (hallazgo adversarial): la pestaña reutilizada puede ser del humano
+    // (otra sesión del SII abierta a mano). Se MARCA reusada para NO cerrarla en
+    // closeWorker — cerrar una pestaña ajena con trabajo a medias sería un abuso
+    // del perfil compartido.
+    let reusada = null;
+    try {
+      const host = new URL(startUrl).host;
+      const abiertas = await chrome.tabs.query({ url: `*://${host}/*` });
+      reusada = abiertas.find((t) => typeof t.id === "number") ?? null;
+    } catch { reusada = null; }
+    if (reusada) {
+      try {
+        await chrome.tabs.update(reusada.id, { url: startUrl, active: false });
+        workerTabId = reusada.id;
+        workerTabReusada = true;
+      } catch {
+        // la pestaña se cerró entre el query y el update (race) → crear una nueva
+        const tab = await chrome.tabs.create({ url: startUrl, active: false });
+        workerTabId = tab.id ?? null;
+      }
+    } else {
+      const tab = await chrome.tabs.create({ url: startUrl, active: false });
+      workerTabId = tab.id ?? null;
+    }
     // workerWindowId queda null A PROPÓSITO: es la ventana principal del
     // usuario — closeWorker jamás debe cerrarla (solo cierra la pestaña).
   } else {
@@ -1386,6 +1416,7 @@ async function openWorkerWindow(job, appTabId, appOrigin) {
     appOrigin: appOrigin ?? null, // origen de la app para pedir WS (desbloqueo v2)
     workerWindowId,
     workerTabId,
+    workerTabReusada,
     createdAt: new Date().toISOString(),
     learnOnly: job.learn_only === true,
     learningScanCount: 0,

@@ -1527,11 +1527,23 @@
           }
           setControlValue(rutInputPre, String(r.rut));
           await new Promise((resolve) => setTimeout(resolve, 1800));
-          // El campo existe pero no quedó con el RUT del job (comparado canónico: el SII
-          // re-formatea con puntos/guion al validar) → es un DATO que el portal rechazó,
-          // no un cambio del SII: error sin ancla, no cuenta para el umbral.
-          const rutInput = findRutReceptorInput();
-          const escrito = rutInput ? (normalizeRut(rutInput.value) ?? normalizeText(rutInput.value)) : null;
+          // Se relee el .value del MISMO input que escribimos (rutInputPre), NO se re-busca
+          // con el guard "RUT". BUG cazado en el ensayo 2026-09-11: la re-búsqueda usaba
+          // findRutReceptorInput(), que exige controlText(input).includes("RUT"), y el "RUT"
+          // del campo vive en el label; en Vuetify el label FLOTA fuera del texto cuando el
+          // campo tiene valor (mismo patrón que rompía la glosa muda), así que la re-búsqueda
+          // devolvía null y abortaba TODA boleta con receptor —incluso con un RUT válido que
+          // el SII sí acepta— con un RECEPTOR_RUT_NO_ACEPTADO falso. El input NO se recrea al
+          // escribir; su .value refleja lo que el portal dejó tras el lookup, así que la
+          // protección real se mantiene: si el SII BORRA el RUT (vacío) o lo cambia, escrito
+          // != pedido y aborta como corresponde.
+          // Guarda barata contra el ÚNICO riesgo de leer la referencia vieja: que Vuetify
+          // haya DESMONTADO el nodo tras el lookup (hoy no pasa —el ensayo lo confirmó—,
+          // pero si algún día pasa, un nodo detached cachea el valor que ESCRIBIMOS y daría
+          // un falso negativo). Si está desconectado → tratar como no aceptado (fail-closed).
+          const escrito = rutInputPre.isConnected === false
+            ? null
+            : (normalizeRut(rutInputPre.value) ?? normalizeText(rutInputPre.value));
           const pedido = normalizeRut(r.rut) ?? normalizeText(r.rut);
           if (escrito !== pedido) {
             throw siiError("El SII no aceptó el RUT del receptor en el modal (quedó distinto a lo pedido). Revísalo en la app; no se presiono el EMITIR final.", { code: "RECEPTOR_RUT_NO_ACEPTADO", paso: "receptor" });
