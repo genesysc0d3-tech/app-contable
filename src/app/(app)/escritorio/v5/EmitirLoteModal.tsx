@@ -156,7 +156,9 @@ export default function EmitirLoteModal({
   const fase = progreso?.fase;
   // Fin VOLUNTARIO (terminó todo / el usuario detuvo): no hay nada que reanudar.
   const terminalLimpio = fase === "terminada" || fase === "detenida";
-  const terminal = terminalLimpio || fase === "requiere_revision";
+  // pausada_remota = el server frenó la emisión (kill switch): fin, pero NO
+  // limpio — lo pendiente se conserva para reanudar cuando se levante la pausa.
+  const terminal = terminalLimpio || fase === "requiere_revision" || fase === "pausada_remota";
   // Cerrar solo cuando no hay una emisión en vuelo (proteger el folio).
   const puedeCerrar = !corriendo || terminal;
 
@@ -171,7 +173,7 @@ export default function EmitirLoteModal({
     // en ambos, lo que falta (slice tras la ya-procesada) debe quedar reanudable.
     // Se corta sobre el SNAPSHOT congelado al iniciar (no el prop `items`, que el
     // Realtime encoge), para que slice(procesadas) no se corra ni pierda boletas.
-    if (corriendo || fase === "requiere_revision") {
+    if (corriendo || fase === "requiere_revision" || fase === "pausada_remota") {
       const base = itemsAlIniciarRef.current ?? items;
       const remainingIds = base.slice(progreso.procesadas).map((i) => i.id);
       guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? base.length }, mesa);
@@ -202,6 +204,7 @@ export default function EmitirLoteModal({
         {progreso && fase === "terminada" && <Terminada p={progreso} doc={doc} docs={docs} onCerrar={() => { onClose(); onDone?.(); }} />}
         {progreso && fase === "requiere_revision" && <Revision p={progreso} jobId={jobIdRevision} doc={doc} onCerrar={() => { onClose(); onDone?.(); }} />}
         {progreso && fase === "detenida" && <Detenida p={progreso} onCerrar={() => { onClose(); onDone?.(); }} />}
+        {progreso && fase === "pausada_remota" && <PausadaRemota p={progreso} docs={docs} onCerrar={() => { onClose(); onDone?.(); }} />}
 
         {pausa && <Pausa motivo={pausa.motivo} doc={doc} onSeguir={() => responderPausa("continuar")} onDetener={() => responderPausa("detener")} />}
       </div>
@@ -438,6 +441,23 @@ function Detenida({ p, onCerrar }: { p: import("@/lib/emission/lote-runner").Pro
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{p.emitidas} de {p.total} emitidas. El resto quedó intacto.</div>
       {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
       <button onClick={onCerrar} style={{ ...primaryBtn }}>Cerrar</button>
+    </>
+  );
+}
+
+// El SERVER pausó la emisión (kill switch de /api/emision/jobs, 409
+// EMISION_PAUSADA): no es culpa del cliente ni de una boleta. Se muestra el
+// copy humano que manda el server y un solo botón: no hay nada que decidir,
+// lo pendiente queda guardado y se reanuda cuando se levante la pausa.
+function PausadaRemota({ p, docs, onCerrar }: { p: import("@/lib/emission/lote-runner").ProgresoLote; docs: string; onCerrar: () => void }) {
+  return (
+    <>
+      <Badge bg="rgba(255,255,255,.05)">⏸</Badge>
+      <div style={h1}>Emisión en pausa</div>
+      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 8, lineHeight: 1.55 }}>{p.pausaRemota?.motivo ?? "Pausamos la emisión por un rato. Inténtalo de nuevo más tarde."}</div>
+      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de la pausa. El resto queda pendiente.</div>
+      {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
+      <button onClick={onCerrar} style={{ ...primaryBtn }}>Entendido</button>
     </>
   );
 }

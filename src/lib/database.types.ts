@@ -1194,6 +1194,42 @@ export type Database = {
           },
         ]
       }
+      emision_pausas: {
+        Row: {
+          activo: boolean
+          carril: string
+          creado_por: string | null
+          created_at: string | null
+          excepto_empresas: string[]
+          hasta: string
+          id: string
+          motivo_interno: string | null
+          origen: string
+        }
+        Insert: {
+          activo?: boolean
+          carril: string
+          creado_por?: string | null
+          created_at?: string | null
+          excepto_empresas?: string[]
+          hasta: string
+          id?: string
+          motivo_interno?: string | null
+          origen: string
+        }
+        Update: {
+          activo?: boolean
+          carril?: string
+          creado_por?: string | null
+          created_at?: string | null
+          excepto_empresas?: string[]
+          hasta?: string
+          id?: string
+          motivo_interno?: string | null
+          origen?: string
+        }
+        Relationships: []
+      }
       emission_authorizations: {
         Row: {
           accepted_at: string

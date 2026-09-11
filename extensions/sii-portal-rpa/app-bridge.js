@@ -171,6 +171,13 @@
           page_kind: message.page_kind ?? null,
           libreto_version: message.libreto_version ?? null,
           extension_version: message.ext_version ?? chrome.runtime.getManifest().version,
+          // Tanda 2 (aditivo): código estable, etapa del guion, foto saneada del
+          // portal y si es ancla estructural (true) o error pre-emit sin ancla
+          // (false, solo se registra). El servidor valida forma y tamaño.
+          code: message.code ?? null,
+          paso: message.paso ?? null,
+          mapa: message.mapa ?? null,
+          posible_cambio_sii: message.posible_cambio_sii === true,
         }),
       }).catch(() => undefined);
       return;

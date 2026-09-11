@@ -63,7 +63,7 @@ viven sus credenciales y qué se rompe si se cae. Última revisión: 2026-08-23.
 
 | Pieza | Qué hace | Dónde |
 |---|---|---|
-| **Extensión Chrome** | Motor local que emite por el portal del SII con la clave del usuario | Chrome Web Store (no listada), ID `klblpnnmbbmicpbnhlkfceiiijppobfe`. Credenciales de publicación en `.chromewebstore/` |
+| **Extensión Chrome** | Motor local que emite por el portal del SII con la clave del usuario | Chrome Web Store (no listada), ID `klblpnnmbbmicpbnhlkfceiiijppobfe`. Credenciales de publicación en `.chromewebstore/`. **Si el SII cambia el portal: `docs/runbook-rpa-sii-cambio.md`** (caja negra → dato/libreto vs motor/release → ensayo con MV → kill switch en /dev) |
 | **Bóveda cifrada** | Guarda la clave SII del cliente (llave partida) | env `EXTENSION_VAULT_WRAP_SECRET` |
 | **SimpleAPI** | Carril alternativo con certificado `.pfx` | configurable por empresa |
 | **Portal SII (AlphaCode)** | Facturas 33 manuales de la propia empresa | clave SII propia |

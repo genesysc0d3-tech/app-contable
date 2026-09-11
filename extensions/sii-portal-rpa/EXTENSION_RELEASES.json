@@ -1,0 +1,8 @@
+{
+  "_comentario": "Versiones de la extensión que están (o estuvieron) en la calle. libreto-compat-flota.test.ts saca de git los validadores de cada una y comprueba que ACEPTEN el libreto actual del server: si un cambio en sii-libreto.ts rompe una versión instalada, el test muerde antes del deploy. `sha` = commit del bump en manifest.json (git log -- extensions/sii-portal-rpa/manifest.json). `valida` = qué validadores existen en esa versión.",
+  "releases": [
+    { "version": "0.2.1", "sha": "479d6cc", "valida": ["facturas"], "publicada": "2026-08-30" },
+    { "version": "0.2.2", "sha": "fcd9d65", "valida": ["facturas", "boletas"], "publicada": "2026-09-04" },
+    { "version": "0.2.3", "sha": "0d924e6", "valida": ["facturas", "boletas"], "publicada": "2026-09-10" }
+  ]
+}

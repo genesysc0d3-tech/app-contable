@@ -79,3 +79,68 @@ describe("validateLibretoBoleta — fail-closed del libreto de e-Boleta", () => 
     expect(validateLibretoBoleta(l)).toBe("LIBRETO_BOTON_LISTA_INVALID");
   });
 });
+
+// Tanda 2: bloques opcionales + cinturones sobre datos que pueden emitir MAL.
+describe("validateLibretoBoleta — tanda 2 (bloques opcionales y cinturones)", () => {
+  const clon = () => JSON.parse(JSON.stringify(BOLETA_LIBRETO));
+  const BLOQUES_NUEVOS = {
+    glosa: {
+      candidatos: "input[type='text'], textarea",
+      excluir_dentro_de: ".v-select, .v-autocomplete",
+      ancla_contador: "\\/\\s*80",
+      ancla_label: "DETALLE",
+      excluir_texto: "VENDEDOR|RECEPTOR|SUCURSAL|MONTO|\\bRUT\\b|PAGO|BOLETA",
+    },
+    modal: { titulo: "EMITIR\\s+E-BOLETA" },
+    emisor: { cargando: "CARGANDO EMISORES" },
+    monto_alto: { texto: "DESEA CONTINUAR|ESTA A PUNTO DE EMITIR" },
+  };
+
+  it("el libreto real + los bloques nuevos pasa", () => {
+    expect(validateLibretoBoleta({ ...clon(), ...BLOQUES_NUEVOS })).toBe(null);
+  });
+  it("sin los bloques nuevos sigue pasando (opcionales)", () => {
+    const l = clon(); delete l.glosa; delete l.modal; delete l.emisor; delete l.monto_alto; delete l.esperas;
+    expect(validateLibretoBoleta(l)).toBe(null);
+  });
+  it("regex inválido → LIBRETO_REGEX_INVALIDO", () => {
+    expect(validateLibretoBoleta({ ...clon(), modal: { titulo: "Emitir(" } })).toBe("LIBRETO_REGEX_INVALIDO");
+    const l = clon(); l.receptor_campos.rut = "RUT(";
+    expect(validateLibretoBoleta(l)).toBe("LIBRETO_REGEX_INVALIDO");
+  });
+  it("cuantificadores anidados (ReDoS) y backreferences → LIBRETO_REGEX_INVALIDO", () => {
+    expect(validateLibretoBoleta({ ...clon(), glosa: { ancla_label: "(a+)+$" } })).toBe("LIBRETO_REGEX_INVALIDO");
+    expect(validateLibretoBoleta({ ...clon(), glosa: { ancla_label: "(a*)*" } })).toBe("LIBRETO_REGEX_INVALIDO");
+    expect(validateLibretoBoleta({ ...clon(), glosa: { ancla_label: "(a+)*" } })).toBe("LIBRETO_REGEX_INVALIDO");
+    expect(validateLibretoBoleta({ ...clon(), emisor: { cargando: "(a)\\1" } })).toBe("LIBRETO_REGEX_INVALIDO");
+    expect(validateLibretoBoleta({ ...clon(), monto_alto: { texto: "x".repeat(201) } })).toBe("LIBRETO_REGEX_INVALIDO");
+  });
+  it("selector de glosa fuera de la whitelist → LIBRETO_SELECTOR_NO_PERMITIDO", () => {
+    expect(validateLibretoBoleta({ ...clon(), glosa: { candidatos: "input[type='text'], iframe" } })).toBe("LIBRETO_SELECTOR_NO_PERMITIDO");
+    expect(validateLibretoBoleta({ ...clon(), glosa: { excluir_dentro_de: "[onclick]" } })).toBe("LIBRETO_SELECTOR_NO_PERMITIDO");
+  });
+  it("afecta/exenta cruzados o iguales → LIBRETO_TIPO_AMBIGUO", () => {
+    const l = clon(); l.slots.tipo_afecta = "Boleta exenta"; l.slots.tipo_exenta = "Boleta afecta";
+    expect(validateLibretoBoleta(l)).toBe("LIBRETO_TIPO_AMBIGUO");
+    const m = clon(); m.slots.tipo_exenta = m.slots.tipo_afecta;
+    expect(validateLibretoBoleta(m)).toBe("LIBRETO_TIPO_AMBIGUO");
+  });
+  it("limpiar_pad con dígito o con EMITIR → LIBRETO_PAD_NO_PERMITIDO", () => {
+    const l = clon(); l.botones.limpiar_pad = ["1"];
+    expect(validateLibretoBoleta(l)).toBe("LIBRETO_PAD_NO_PERMITIDO");
+    const m = clon(); m.botones.limpiar_pad = ["EMITIR"];
+    expect(validateLibretoBoleta(m)).toBe("LIBRETO_PAD_NO_PERMITIDO");
+  });
+  it("botones.emitir vetado (SI/NO/ACEPTAR/CANCELAR/dígitos) → LIBRETO_BOTON_NO_PERMITIDO", () => {
+    for (const bad of ["SI", "SÍ", "NO", "ACEPTAR", "CANCELAR", "7"]) {
+      const l = clon(); l.botones.emitir = bad;
+      expect(validateLibretoBoleta(l)).toBe("LIBRETO_BOTON_NO_PERMITIDO");
+    }
+  });
+  it("esperas fuera de [50, 60000] o no enteras → LIBRETO_ESPERA_INVALIDA", () => {
+    expect(validateLibretoBoleta({ ...clon(), esperas: { modal_emision: "abc" } })).toBe("LIBRETO_ESPERA_INVALIDA");
+    expect(validateLibretoBoleta({ ...clon(), esperas: { pad_post: 0 } })).toBe("LIBRETO_ESPERA_INVALIDA");
+    expect(validateLibretoBoleta({ ...clon(), esperas: { pad_post: 60001 } })).toBe("LIBRETO_ESPERA_INVALIDA");
+    expect(validateLibretoBoleta({ ...clon(), esperas: { pad_post: 250 } })).toBe(null);
+  });
+});

@@ -10,7 +10,9 @@ import { redirect } from "next/navigation";
 import { getDevOperatorContext, getDevOperatorDiagnostics } from "@/lib/dev/support-mode";
 import { collectOpsSnapshot, type OpsSnapshot } from "@/lib/ops/diagnostics";
 import { describeAncla } from "@/lib/emission/sii-libreto";
+import { historialPausas, pausasVivas } from "@/lib/ops/emision-pausas";
 import { C, DevNav, Section } from "../ui";
+import { PausaEmisionCard } from "./PausaEmisionCard";
 
 const CAMBIO_SII_EVENT = "sii_posible_cambio_portal";
 
@@ -118,6 +120,7 @@ function PortalSii({ findings }: { findings: OpsSnapshot["findings"] }) {
             <Row label="Ancla (selector)" value={ancla} />
             {typeof md.page_kind === "string" && md.page_kind ? <Row label="Dónde" value={`${md.portal ?? "?"} · ${md.page_kind}`} /> : null}
             {typeof md.extension_version === "string" && md.extension_version ? <Row label="Versión extensión" value={md.extension_version} /> : null}
+            {typeof md.code === "string" && md.code ? <Row label="Código del worker" value={`${md.code}${typeof md.paso === "string" && md.paso ? ` · paso ${md.paso}` : ""}`} /> : null}
             <div style={{ marginTop: 14, border: `1px solid ${color}33`, background: `${color}0b`, borderRadius: 10, padding: "12px 14px", fontSize: 13, lineHeight: 1.6 }}>
               {critico ? (
                 <>
@@ -132,6 +135,60 @@ function PortalSii({ findings }: { findings: OpsSnapshot["findings"] }) {
         );
       })}
     </>
+  );
+}
+
+/** "hace 3 h", "hace 2 d" — en cristiano y sin librerías. */
+function haceCuanto(iso: string | null): string {
+  if (!iso) return "nunca";
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 0) return "recién";
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `hace ${h} h`;
+  return `hace ${Math.round(h / 24)} d`;
+}
+
+function horaChile(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("es-CL", { timeZone: "America/Santiago" });
+}
+
+/**
+ * Bloque "Emisión por carril" (tanda 1, 2026-09-10): las tres respuestas que
+ * hay que tener en segundos cuando alguien dice "no me emite": ¿cuándo salió
+ * la última real?, ¿qué versión corre la flota? y ¿hubo boletas sin la glosa
+ * o el receptor pedidos hoy? Solo conteos, fechas y versiones: nada del cliente.
+ */
+function EmisionCarriles({ emision }: { emision: OpsSnapshot["emision"] }) {
+  const viejas = emision.flota.filter((f) => f.bajoMinima).reduce((acc, f) => acc + f.empresas, 0);
+  const omitidas = emision.glosaOmitida24h + emision.receptorOmitido24h;
+  return (
+    <Section
+      title="Emisión por carril"
+      tone={omitidas > 0 || viejas > 0 ? "warning" : "muted"}
+      hint="Última boleta y factura REALES que salieron por el RPA (sii_local), la versión de extensión que corre cada empresa vista en 30 días, y cuántas boletas salieron hoy sin la glosa o el receptor que se pidieron."
+    >
+      <Row label="Última boleta OK" value={`${horaChile(emision.ultimaOkBoletas)} · ${haceCuanto(emision.ultimaOkBoletas)}`} ok={emision.ultimaOkBoletas ? true : null} />
+      <Row label="Última factura OK" value={`${horaChile(emision.ultimaOkFacturas)} · ${haceCuanto(emision.ultimaOkFacturas)}`} ok={emision.ultimaOkFacturas ? true : null} />
+      <Row label="Glosa omitida 24h" value={String(emision.glosaOmitida24h)} ok={emision.glosaOmitida24h === 0} />
+      <Row label="Receptor omitido 24h" value={String(emision.receptorOmitido24h)} ok={emision.receptorOmitido24h === 0} />
+      <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <div style={{ fontSize: 11, color: C.text3, textTransform: "uppercase", letterSpacing: ".07em", fontWeight: 900 }}>
+          Flota por versión (mínima {emision.versionMinima})
+        </div>
+        {emision.flota.length === 0 ? (
+          <p style={{ margin: "8px 0 0", color: C.text2, fontSize: 12 }}>Ninguna empresa reportó versión en 30 días.</p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10, marginTop: 8 }}>
+            {emision.flota.map((f) => (
+              <Metric key={f.version} label={f.bajoMinima ? `${f.version} · bajo mínima` : f.version} value={f.empresas} tone={f.bajoMinima ? "warn" : "ok"} />
+            ))}
+          </div>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -239,6 +296,11 @@ export default async function DevDiagnosticoPage() {
   if (!data.authenticated) redirect("/auth/login?next=/dev/diagnostico");
   const operator = data.ok ? await getDevOperatorContext() : null;
   const opsSnapshot = operator?.ok ? await collectOpsSnapshot(operator.sb).catch(() => null) : null;
+  const [pausasVivasRes, pausasHistRes] = operator?.ok
+    ? await Promise.all([pausasVivas(operator.sb), historialPausas(operator.sb)])
+    : [null, null];
+  const pausaError = pausasVivasRes?.error ?? pausasHistRes?.error ?? null;
+  const hayPausa = (pausasVivasRes?.pausas.length ?? 0) > 0;
 
   return (
     <main
@@ -305,7 +367,17 @@ export default async function DevDiagnosticoPage() {
           {data.detalle && <Row label="Detalle" value="La consulta falló — el detalle está en los logs del servidor" ok={false} />}
         </Section>
 
+        {operator?.ok ? (
+          <Section
+            title="Pausa de emisión"
+            tone={hayPausa || pausaError ? "error" : "muted"}
+            hint="Freno remoto por carril: con una pausa viva, POST /api/emision/jobs contesta 409 a TODA la flota (única y lote, extensiones viejas incluidas) sin republicar nada. Lo que guarda folios reales nunca se bloquea. Activar = 4 h con motivo; vence sola. 'auto' = la puso cambio-sii al ver la misma ancla caída en varias empresas."
+          >
+            <PausaEmisionCard vivas={pausasVivasRes?.pausas ?? []} historial={pausasHistRes?.pausas ?? []} errorLectura={pausaError} />
+          </Section>
+        ) : null}
         {opsSnapshot ? <PortalSii findings={opsSnapshot.findings} /> : null}
+        {opsSnapshot ? <EmisionCarriles emision={opsSnapshot.emision} /> : null}
         <OpsHealth snapshot={opsSnapshot} />
       </div>
     </main>

@@ -25,6 +25,7 @@ App contable SaaS para Chile. IA procesa cartolas bancarias, clasifica movimient
   docs/legacy-escritorio-aprendizajes.md (git show cd6c456:ruta)
 - Migraciones en supabase/migrations/
 - Script limpieza: scripts/limpiar-test.sql
+- RPA falla o el SII cambió el portal → docs/runbook-rpa-sii-cambio.md (minutos, no horas)
 
 ## Contexto actual
 - PRODUCTO = /massdte (alias de src/app/(app)/escritorio/v5/) + stack de emisión:
