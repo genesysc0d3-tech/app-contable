@@ -181,6 +181,35 @@ Datos de prueba: login SII **19427394-0** → emisor en la barra gris **MV INVER
 la query de §1) — si la empresa activa es AlphaCode, `assertEmisorRut` aborta fail-closed y
 vas a creer que el bug es otro.
 
+### Trampas del ENSAYO EN VIVO que costaron horas (2026-09-11) — LEER PRIMERO
+- **El selector de empresa en la app es el LOGO** (clic en el logo arriba a la izquierda),
+  NO un dropdown aparte. El header muestra "AlphaCode" como MARCA del producto aunque la
+  empresa activa sea otra: **la verdad es `usuarios.empresa_id` en la base** (query de §1),
+  no lo que se ve en el header.
+- **eBoleta se entra con el RUT NATURAL** (persona, 19427394-0), y DENTRO se elige la
+  empresa JURÍDICA que administras (MV) como emisor en la barra gris. El **receptor** es
+  otra cosa (el cliente de la boleta).
+- **Para verlo con MCP (los ojos de Claude): Claude abre la pestaña de `eboleta.sii.cl`
+  en SU grupo MCP ANTES de disparar; el worker en modo pestaña la REUTILIZA** (bloque debug
+  en `background.js openWorkerWindow`: `chrome.tabs.query({url})` engancha la abierta en vez
+  de crear una nueva afuera del grupo). Requisito: `FACT_WORKER_EN_PESTANA = true` Y recargar
+  la extensión DESPUÉS de ese cambio (recargar antes no toma el flag).
+- **Confirmar el ensayo SIN ver la pestaña = la caja negra**: comparar el desenlace. Ej: un
+  freno con falso positivo fallaba en ~30 s con su `code`; con el fix, el job corre minutos
+  SIN ese `code`. `boletas_emitidas` en 0 es el candado.
+- **Job pegado tras un ensayo**: con `allow_final_emit=false` el job queda `running`; la app
+  avisa "emisión SII sin resolver" y ofrece **"cancelarla"** (link en el aviso) — cancelar
+  antes de re-disparar. El lock (`locked_until`) expira solo a los ~5 min.
+
+### ⚠️ PATRÓN RECURRENTE: el label flotante de Vuetify rompe los guards `controlText`
+Vuetify FLOTA el label fuera del innerText cuando el campo TIENE VALOR. Cualquier guard que
+haga `controlText(input).includes("...")` o busque un campo por su texto **DESPUÉS de
+escribirle** falla. Ya mordió DOS veces: la **glosa muda** (2026-06→09) y el **receptor**
+(`RECEPTOR_RUT_NO_ACEPTADO` falso, 2026-09-11, que abortaba TODA boleta con receptor). Regla:
+**nunca re-buscar un campo Vuetify por texto tras escribirle — guardar la referencia del
+elemento y releer `.value` de ESE elemento.** El fixture del test debe simular el flotado
+(label ausente con valor) o el bug pasa en verde.
+
 1. Rama: `git checkout dev && git pull && git checkout -b fix/sii-<ancla>`.
 2. Dev server limpio con la sesión del fundador (puerto **3000**; el 3001 rebota a prod):
    `rm -rf .next && npm run dev` (Turbopack sirve bundle rancio si no).
