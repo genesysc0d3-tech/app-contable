@@ -4,6 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { OpsSeverity } from "@/lib/ops/events";
 import { isR2Configured, r2ObjetoMasNuevo } from "@/lib/r2";
+// Ruta relativa a propósito: vitest no resuelve el alias "@/" y el test del
+// vigilante importa este módulo de verdad (solo mockea r2).
+import { compararVersiones, EXTENSION_VERSION_MINIMA } from "../extension";
 
 type Sb = SupabaseClient<Database>;
 
@@ -44,14 +47,118 @@ export type OpsSnapshot = {
   findings: OpsFinding[];
   latestEvents: OpsLatestEvent[];
   queryErrors: string[];
+  /**
+   * Diagnóstico de EMISIÓN por carril (tanda 1 RPA, 2026-09-10). Responde en
+   * segundos las tres preguntas de un cambio del SII: ¿cuándo fue la última
+   * boleta/factura real que salió bien?, ¿qué versión de extensión corre la
+   * flota? y ¿cuántas boletas salieron sin la glosa/receptor pedidos hoy?
+   */
+  emision: OpsEmisionDiagnostico;
+};
+
+export type OpsEmisionDiagnostico = {
+  /** ISO de la última boleta (39/41) REAL vía sii_local, o null si nunca. */
+  ultimaOkBoletas: string | null;
+  /** ISO de la última factura (33/34) REAL vía sii_local, o null si nunca. */
+  ultimaOkFacturas: string | null;
+  /** ops_events sii_local_result_warning con error GLOSA_OMITIDA en 24 h. */
+  glosaOmitida24h: number;
+  /** Ídem RECEPTOR_OMITIDO. */
+  receptorOmitido24h: number;
+  /** Flota: empresas vistas en ≤30 d agrupadas por versión de extensión. */
+  flota: Array<{ version: string; empresas: number; bajoMinima: boolean }>;
+  versionMinima: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STUCK_DOC_MS = 20 * 60 * 1000;
-// Posible cambio del portal del SII: ventana corta (un cambio real estalla
-// rápido) y umbral por EMPRESAS distintas — 1 = a vigilar, ≥3 = probable cambio.
-const CAMBIO_SII_WINDOW_MS = 6 * 60 * 60 * 1000;
-const CAMBIO_SII_UMBRAL = 3;
+// Posible cambio del portal del SII: umbral por EMPRESAS distintas — 1 = a
+// vigilar, ≥2 = probable cambio. Antes era 3 en 6 h y solo se evaluaba al leer
+// /dev o en el cron diario; con la beta chica (pocas empresas emitiendo por
+// día) 3 en 6 h no se alcanzaba nunca y el aviso llegaba al otro día. Ahora
+// 2 empresas en 24 h, y cambio-sii lo evalúa AL INSERTAR (auto-pausa +
+// alerta al tiro). Exportados para que ruta y panel usen el mismo número.
+export const CAMBIO_SII_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const CAMBIO_SII_UMBRAL = 2;
+// AUTO-KILL (cambio-sii/route.ts): ventana y umbral PROPIOS, más estrictos que
+// los del panel. El panel avisa con 2 empresas en 24 h (alguien mira y decide);
+// la pausa automática frena a la flota entera sin que nadie mire, así que pide
+// 3 empresas distintas en 2 h. Revisión adversarial 2026-09-10: con 2/24 h
+// dos cuentas viejas con sesión vencida bastaban para pausar producción.
+export const AUTO_PAUSA_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const AUTO_PAUSA_UMBRAL = 3;
+
+/** Fila mínima de ops_events que agrupa el panel (sii_local_posible_cambio_ancla). */
+export type CambioSiiRow = { empresa_id: string | null; metadata: unknown; created_at: string };
+
+/**
+ * Agrupa los avisos de "ancla no apareció" por ancla → findings del panel/cron.
+ *
+ * Quedan FUERA del finding "El portal del SII probablemente cambió" (F2, revisión
+ * adversarial 2026-09-10):
+ *   · `metadata.posible_cambio_sii === false`: el worker mismo dijo que NO fue
+ *     el portal (sesión vencida, permiso, etc.).
+ *   · ancla "otro": rol desconocido normalizado por el server; no es evidencia
+ *     de un cambio estructural.
+ * Esos se resumen aparte en UN finding warn `sii_errores_pre_emit` (para que se
+ * vean, pero sin subir el status global ni mandar Telegram).
+ */
+export function agruparCambioSii(rows: CambioSiiRow[], umbral = CAMBIO_SII_UMBRAL): OpsFinding[] {
+  const cambioPorAncla = new Map<string, { empresas: Set<string>; desde: string; meta: Record<string, unknown> }>();
+  const preEmit = { eventos: 0, empresas: new Set<string>(), anclas: new Set<string>() };
+  for (const row of rows) {
+    const meta = (row.metadata ?? {}) as Record<string, unknown>;
+    const ancla = typeof meta.ancla === "string" && meta.ancla.trim() ? meta.ancla : "otro";
+    if (meta.posible_cambio_sii === false || ancla === "otro") {
+      preEmit.eventos += 1;
+      preEmit.anclas.add(ancla);
+      if (row.empresa_id) preEmit.empresas.add(row.empresa_id);
+      continue;
+    }
+    const g = cambioPorAncla.get(ancla) ?? { empresas: new Set<string>(), desde: row.created_at, meta };
+    if (row.empresa_id) g.empresas.add(row.empresa_id);
+    if (row.created_at < g.desde) g.desde = row.created_at;
+    cambioPorAncla.set(ancla, g);
+  }
+
+  const findings: OpsFinding[] = [];
+  for (const [ancla, g] of cambioPorAncla) {
+    const n = g.empresas.size || 1;
+    const critico = n >= umbral;
+    const desde = new Date(g.desde).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", timeZone: "America/Santiago" });
+    findings.push({
+      severity: critico ? "critical" : "warn",
+      eventName: "sii_posible_cambio_portal",
+      // El ancla es HTML público del SII, no dato del cliente. El conteo, no la
+      // lista de empresas (esto sale al webhook/Telegram — ids fuera del texto).
+      summary: critico
+        ? `El portal del SII probablemente cambió: el ancla "${ancla}" falló en ${n} empresas distintas desde las ${desde}`
+        : `Posible cambio del portal SII a vigilar: el ancla "${ancla}" falló en 1 empresa desde las ${desde} (aún no es alarma)`,
+      metadata: {
+        ancla,
+        empresas_distintas: n,
+        desde: g.desde,
+        portal: g.meta.portal ?? null,
+        error: g.meta.error ?? null,
+        page_kind: g.meta.page_kind ?? null,
+        extension_version: g.meta.extension_version ?? null,
+        // Código del worker (tanda 2 de la extensión): dice QUÉ ancla y en qué
+        // paso, sin tener que abrir la consola del cliente.
+        code: g.meta.code ?? null,
+        paso: g.meta.paso ?? null,
+      },
+    });
+  }
+  if (preEmit.eventos > 0) {
+    findings.push({
+      severity: "warn",
+      eventName: "sii_errores_pre_emit",
+      summary: `Errores pre-emit que NO apuntan al portal: ${preEmit.eventos} aviso(s) en ${preEmit.empresas.size || 1} empresa(s) (sesión, permisos o ancla desconocida)`,
+      metadata: { eventos: preEmit.eventos, empresas_distintas: preEmit.empresas.size, anclas: [...preEmit.anclas].slice(0, 10) },
+    });
+  }
+  return findings;
+}
 
 function countFrom(result: { count: number | null; error: { message: string } | null }, label: string, errors: string[]) {
   if (result.error) {
@@ -163,6 +270,11 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     listasSinAprobarResult,
     aprobadasResult,
     cambioSiiResult,
+    ultimaBoletaResult,
+    ultimaFacturaResult,
+    glosaOmitidaResult,
+    receptorOmitidoResult,
+    flotaResult,
   ] = await Promise.all([
     sb
       .from("documentos_subidos")
@@ -236,6 +348,44 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
       .eq("event_name", "sii_local_posible_cambio_ancla")
       .gte("created_at", new Date(now.getTime() - CAMBIO_SII_WINDOW_MS).toISOString())
       .limit(2000),
+    // Última emisión OK por carril (solo el RPA sii_local, que es lo que un
+    // cambio del portal rompe). Una fila basta: max(created_at).
+    sb
+      .from("boletas_emitidas")
+      .select("created_at")
+      .eq("emision_proveedor", "sii_local")
+      .in("tipo_dte", [39, 41])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    sb
+      .from("boletas_emitidas")
+      .select("created_at")
+      .eq("emision_proveedor", "sii_local")
+      .in("tipo_dte", [33, 34])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // Boletas reales que salieron SIN la glosa/receptor pedidos (S3): el worker
+    // lo confiesa en el resultado y /result lo vuelve ops_event warn.
+    sb
+      .from("ops_events")
+      .select("id", { count: "exact", head: true })
+      .eq("event_name", "sii_local_result_warning")
+      .eq("metadata->>error", "GLOSA_OMITIDA")
+      .gte("created_at", since24h),
+    sb
+      .from("ops_events")
+      .select("id", { count: "exact", head: true })
+      .eq("event_name", "sii_local_result_warning")
+      .eq("metadata->>error", "RECEPTOR_OMITIDO")
+      .gte("created_at", since24h),
+    // Flota: qué versión de extensión corre cada empresa vista en ≤30 días.
+    sb
+      .from("empresas")
+      .select("ext_last_version")
+      .gte("ext_last_seen_at", new Date(now.getTime() - 30 * DAY_MS).toISOString())
+      .limit(5000),
   ]);
 
   const metrics = {
@@ -271,48 +421,42 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
   // clientes "por si acaso" es cómo terminan filtrándose.
 
   if (cambioSiiResult.error) queryErrors.push(`cambio_sii: ${cambioSiiResult.error.message}`);
+  if (ultimaBoletaResult.error) queryErrors.push(`ultima_boleta: ${ultimaBoletaResult.error.message}`);
+  if (ultimaFacturaResult.error) queryErrors.push(`ultima_factura: ${ultimaFacturaResult.error.message}`);
+  if (flotaResult.error) queryErrors.push(`flota: ${flotaResult.error.message}`);
 
-  // Posible cambio del portal del SII: por ancla, cuántas EMPRESAS distintas la
-  // pegaron y desde cuándo. 1 empresa = a vigilar (warn); ≥3 = probable cambio
-  // (critical → sube el status global y dispara Telegram vía sendAlert).
-  const cambioPorAncla = new Map<string, { empresas: Set<string>; desde: string; meta: Record<string, unknown> }>();
-  for (const row of cambioSiiResult.data ?? []) {
-    const meta = (row.metadata ?? {}) as Record<string, unknown>;
-    const ancla = typeof meta.ancla === "string" ? meta.ancla : "otro";
-    const g = cambioPorAncla.get(ancla) ?? { empresas: new Set<string>(), desde: row.created_at, meta };
-    if (row.empresa_id) g.empresas.add(row.empresa_id);
-    if (row.created_at < g.desde) g.desde = row.created_at;
-    cambioPorAncla.set(ancla, g);
+  const flotaPorVersion = new Map<string, number>();
+  for (const row of flotaResult.data ?? []) {
+    const v = (row.ext_last_version ?? "").trim() || "sin versión";
+    flotaPorVersion.set(v, (flotaPorVersion.get(v) ?? 0) + 1);
   }
+  const emision: OpsEmisionDiagnostico = {
+    ultimaOkBoletas: ultimaBoletaResult.data?.created_at ?? null,
+    ultimaOkFacturas: ultimaFacturaResult.data?.created_at ?? null,
+    glosaOmitida24h: countFrom(glosaOmitidaResult, "glosa_omitida", queryErrors),
+    receptorOmitido24h: countFrom(receptorOmitidoResult, "receptor_omitido", queryErrors),
+    flota: [...flotaPorVersion.entries()]
+      .map(([version, empresas]) => ({
+        version,
+        empresas,
+        // "sin versión" = bridge < 0.1.7 (no reporta) → también bajo la mínima.
+        bajoMinima: version === "sin versión" || compararVersiones(version, EXTENSION_VERSION_MINIMA) < 0,
+      }))
+      .sort((a, b) => compararVersiones(b.version === "sin versión" ? "0" : b.version, a.version === "sin versión" ? "0" : a.version)),
+    versionMinima: EXTENSION_VERSION_MINIMA,
+  };
 
   const findings: OpsFinding[] = [];
   // El vigilante de respaldos entra acá para reutilizar el mismo cron, la misma
   // autenticación y el mismo canal de alerta que el resto de operaciones.
   findings.push(...(await revisarRespaldos()));
 
-  for (const [ancla, g] of cambioPorAncla) {
-    const n = g.empresas.size || 1;
-    const critico = n >= CAMBIO_SII_UMBRAL;
-    const desde = new Date(g.desde).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", timeZone: "America/Santiago" });
-    findings.push({
-      severity: critico ? "critical" : "warn",
-      eventName: "sii_posible_cambio_portal",
-      // El ancla es HTML público del SII, no dato del cliente. El conteo, no la
-      // lista de empresas (esto sale al webhook/Telegram — ids fuera del texto).
-      summary: critico
-        ? `El portal del SII probablemente cambió: el ancla "${ancla}" falló en ${n} empresas distintas desde las ${desde}`
-        : `Posible cambio del portal SII a vigilar: el ancla "${ancla}" falló en 1 empresa desde las ${desde} (aún no es alarma)`,
-      metadata: {
-        ancla,
-        empresas_distintas: n,
-        desde: g.desde,
-        portal: g.meta.portal ?? null,
-        error: g.meta.error ?? null,
-        page_kind: g.meta.page_kind ?? null,
-        extension_version: g.meta.extension_version ?? null,
-      },
-    });
-  }
+  // Posible cambio del portal del SII: por ancla, cuántas EMPRESAS distintas la
+  // pegaron y desde cuándo. 1 empresa = a vigilar (warn); ≥CAMBIO_SII_UMBRAL =
+  // probable cambio (critical → sube el status global y dispara Telegram vía
+  // sendAlert). Lo que el worker descartó como "no fue el portal" y las anclas
+  // desconocidas van aparte (ver agruparCambioSii).
+  findings.push(...agruparCambioSii((cambioSiiResult.data ?? []) as CambioSiiRow[]));
   for (const [empresaId, listas] of empresasAtascadas) {
     findings.push({
       severity: "warn",
@@ -394,6 +538,7 @@ export async function collectOpsSnapshot(sb: Sb, now = new Date()): Promise<OpsS
     checkedAt,
     metrics,
     findings,
+    emision,
     // metadata llega como Json (puede ser string/number); el panel solo sabe leer
     // objetos, así que normalizamos lo demás a null.
     latestEvents: (latestEventsResult.data ?? []).map((e) => ({

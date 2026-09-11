@@ -141,7 +141,15 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     return () => window.removeEventListener("beforeunload", handler);
   }, [corriendo]);
 
-  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<{ jobId: string; expiresAt: string; emisorRut: string | null } | null> => {
+  // KILL SWITCH (tanda 1, 2026-09-10): el server puede contestar 409
+  // EMISION_PAUSADA con un `detalle` humano. Se distingue del resto de fallos
+  // porque NO es "esta boleta falló": es "no abras ninguna". El lote se detiene
+  // en seco conservando lo pendiente (ver pausada_remota en lote-runner).
+  type StartJob =
+    | { jobId: string; expiresAt: string; emisorRut: string | null }
+    | { pausada: true; detalle: string }
+    | null;
+  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<StartJob> => {
     try {
       const res = await fetch("/api/emision/jobs", {
         method: "POST",
@@ -155,6 +163,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         }),
       });
       const json = await res.json().catch(() => ({}));
+      if (res.status === 409 && json?.code === "EMISION_PAUSADA") {
+        return {
+          pausada: true,
+          detalle: typeof json.detalle === "string" && json.detalle.trim()
+            ? json.detalle
+            : "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Tus documentos quedan listos y no se pierde nada; inténtalo de nuevo más tarde.",
+        };
+      }
       if (!res.ok || !json.ok || !json.job_id || !json.expires_at) return null;
       // El server resuelve el emisor_rut autoritativo (empresa.rut de la DB) y lo
       // devuelve en expected_emisor_rut. Lo usamos como fuente de verdad para el
@@ -209,6 +225,9 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         // 1. lock + autorización (server) + enlace propuesta_id
         const job = await startJob(full.propuestaId, full.tipoDte);
         if (!job) return { estado: "fallida", motivo: "No se pudo iniciar (autorización, otra emisión en curso, o permiso)." };
+        // Server en pausa: sin job, sin ventana, sin folio. El runner conserva este
+        // ítem como pendiente y detiene el lote; el modal muestra el detalle.
+        if ("pausada" in job) return { estado: "pausada_remota", motivo: job.detalle };
 
         // 2. MISMO payload que la emisión única (fuente única) — desde la propuesta.
         //    Boleta (39/41) → e-Boleta; factura (33/34) → portal gratuito, con su

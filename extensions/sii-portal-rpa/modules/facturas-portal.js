@@ -138,5 +138,87 @@ export function validateLibreto(libreto) {
   }
   const fp = libreto.codigos?.forma_pago;
   if (!fp || !noVacio(fp.contado) || !noVacio(fp.credito)) return "LIBRETO_CODIGO_MISSING";
+
+  // ── Tanda 2 (red team 2026-09-10): un libreto BIEN FORMADO todavía podía
+  //    emitir una factura equivocada. Cierres, sin claves obligatorias nuevas:
+  // Forma de pago: los códigos del portal son FIJOS (1=Contado, 2=Crédito);
+  // "3" es "Sin costo" y una permutación 1↔2 emite con la forma equivocada.
+  if (fp.contado !== FORMA_PAGO_PORTAL.contado || fp.credito !== FORMA_PAGO_PORTAL.credito) return "LIBRETO_FORMA_PAGO_INVALIDA";
+  // Campos: dos roles apuntando al mismo control (`contacto:"EFXP_RZN_SOC_RECEP"`)
+  // = factura real con datos cruzados y las compuertas verdes.
+  const vistos = new Set();
+  for (const k of LIBRETO_CAMPOS) {
+    const name = libreto.campos[k];
+    if (vistos.has(name)) return "LIBRETO_CAMPO_DUPLICADO";
+    vistos.add(name);
+  }
+  // Detectores: regex que compilan, acotados, sin ReDoS ni backreferences, y
+  // que NO clasifican cualquier página ("." → todo es post_firma → folio fantasma).
+  for (const k of LIBRETO_DETECTORES) {
+    if (!isDetectorSeguro(libreto.detectores[k])) return "LIBRETO_REGEX_INVALIDO";
+  }
+  // F2 (tanda 3): selectores (opcionales) acotados. `pdf_link` solo puede ser un
+  // <a href*="algo.cgi"> (el worker hace fetch de ese href con las cookies del
+  // SII: un selector libre apuntaba a cualquier link y guardaba HTML como PDF);
+  // `submit_empresa` solo tokens de submit/button (nada de [onclick] ni iframes).
+  if (libreto.selectores != null) {
+    const s = libreto.selectores;
+    if (typeof s !== "object" || Array.isArray(s)) return "LIBRETO_SELECTOR_NO_PERMITIDO";
+    if (s.pdf_link != null && !PDF_LINK_RE.test(String(s.pdf_link))) return "LIBRETO_SELECTOR_NO_PERMITIDO";
+    if (s.submit_empresa != null) {
+      const toks = String(s.submit_empresa).split(",").map((t) => t.trim());
+      if (toks.length === 0 || !toks.every((t) => SUBMIT_TOKENS.has(t))) return "LIBRETO_SELECTOR_NO_PERMITIDO";
+    }
+  }
+  // Esperas (opcionales): si vienen, enteros en ms dentro de [50, 60000]. Un
+  // string ("8000") dejaba un waitFor sin límite real.
+  if (libreto.esperas != null) {
+    if (typeof libreto.esperas !== "object" || Array.isArray(libreto.esperas)) return "LIBRETO_ESPERA_INVALIDA";
+    for (const v of Object.values(libreto.esperas)) {
+      if (!Number.isInteger(v) || v < ESPERA_MIN_MS || v > ESPERA_MAX_MS) return "LIBRETO_ESPERA_INVALIDA";
+    }
+  }
   return null;
+}
+
+const FORMA_PAGO_PORTAL = Object.freeze({ contado: "1", credito: "2" });
+const PDF_LINK_RE = /^a\[href\*="[\w.\-]+\.cgi"\]$/;
+const SUBMIT_TOKENS = new Set(['button[type="submit"]', 'input[type="submit"]', "button"]);
+const ESPERA_MIN_MS = 50;
+const ESPERA_MAX_MS = 60000;
+const DETECTOR_MIN_LEN = 4;
+const DETECTOR_MAX_LEN = 200;
+
+/**
+ * Un detector de página del libreto es seguro si: es string de 4..200 chars,
+ * compila con "i", no trae backreferences (\1, \k<x>) ni cuantificadores
+ * anidados (`(a+)+`, `(\s*)*`, `(x{2,}){3}` — catastrophic backtracking sobre
+ * el innerText del portal), y NO matchea "" ni "x" (un detector que acepta
+ * cualquier texto clasifica cualquier página).
+ */
+export function isDetectorSeguro(src) {
+  if (typeof src !== "string") return false;
+  if (src.length < DETECTOR_MIN_LEN || src.length > DETECTOR_MAX_LEN) return false;
+  // Se quitan los escapes (`\\`, `\s`, `\(`) para razonar sobre la estructura.
+  const sinEscapes = src.replace(/\\./g, "");
+  if (/\\[1-9]/.test(src.replace(/\\\\/g, "")) || /\\k</.test(src)) return false;
+  // Cuantificador anidado: un grupo que CONTIENE un cuantificador y que a su
+  // vez está cuantificado. Se recorre con una pila de paréntesis.
+  const pila = [];
+  for (let i = 0; i < sinEscapes.length; i += 1) {
+    const ch = sinEscapes[i];
+    if (ch === "(") pila.push(i);
+    else if (ch === ")") {
+      const abre = pila.pop();
+      if (abre == null) return false; // desbalanceado: no compila igual
+      const cuantificado = /^[*+?{]/.test(sinEscapes.slice(i + 1, i + 2));
+      const interiorConCuantificador = /[*+{]/.test(sinEscapes.slice(abre + 1, i));
+      if (cuantificado && interiorConCuantificador) return false;
+    }
+  }
+  if (pila.length > 0) return false;
+  let re;
+  try { re = new RegExp(src, "i"); } catch { return false; }
+  if (re.test("") || re.test("x")) return false;
+  return true;
 }

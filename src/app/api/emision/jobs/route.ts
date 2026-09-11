@@ -15,6 +15,16 @@ import { validarRut } from "@/lib/sii/validation";
 import { guardTipoDteEmisor } from "@/lib/sii/tipo-dte-emisor-guard";
 import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import { verificarEmisionMasiva } from "@/lib/pagos/metering";
+import {
+  EVENTO_MARCA_ALERTA_PAUSA_QUERY,
+  PAUSA_QUERY_FAILED_ALERTA_MS,
+  carrilDeTipoDte,
+  copyEmisionPausada,
+  debeAlertarPausaQueryFailed,
+  gateDePausaAplica,
+  pausaActivaParaEmpresa,
+} from "@/lib/ops/emision-pausas";
+import { enviarAlertaCritica } from "@/lib/ops/alertas";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled" | "revision_pendiente";
@@ -109,6 +119,44 @@ async function serviceClientOrResponse() {
   return { ok: true as const, service: createServiceClient<Database>(url, key) };
 }
 
+/**
+ * Alerta crítica AL TIRO cuando la consulta del kill switch falla (F3). Dedupe
+ * simple: la marca es un ops_event `emision_pausa_query_failed_alertada`; si
+ * hay una de hace < 10 min, no se repite. Best-effort: jamás bloquea el 409.
+ */
+async function alertarPausaQueryFailed(sb: ServiceDb, carril: string, detalle: string) {
+  try {
+    const desde = new Date(Date.now() - PAUSA_QUERY_FAILED_ALERTA_MS).toISOString();
+    const { data: marca } = await sb
+      .from("ops_events")
+      .select("created_at")
+      .eq("event_name", EVENTO_MARCA_ALERTA_PAUSA_QUERY)
+      .gte("created_at", desde)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!debeAlertarPausaQueryFailed(marca?.created_at ?? null)) return;
+    const summary = `El kill switch de emisión (${carril}) no se pudo consultar y está frenando clientes fail-closed: ${detalle.slice(0, 120)}`;
+    const alerta = await enviarAlertaCritica({
+      status: "critical",
+      checkedAt: new Date().toISOString(),
+      findings: [{ severity: "critical", eventName: "emision_pausa_query_failed", summary }],
+    });
+    // La marca se escribe aunque ningún canal esté configurado: si no, cada
+    // POST reintentaría el envío (y con canales caídos, cada 10 min igual).
+    await recordOpsEvent({
+      sb,
+      severity: "info",
+      source: "emision",
+      eventName: EVENTO_MARCA_ALERTA_PAUSA_QUERY,
+      summary: alerta.enviada ? "Alerta enviada por fallo del kill switch" : "Alerta del kill switch NO entregada (sin canal o canal caído)",
+      metadata: { carril, enviada: alerta.enviada, errores: alerta.errores },
+    });
+  } catch {
+    /* best-effort: el 409 fail-closed ya salió igual */
+  }
+}
+
 export async function POST(request: Request) {
   const supportBlock = await getDevSupportWriteBlock();
   if (supportBlock) return NextResponse.json({ ok: false, error: "DEV_SUPPORT_READ_ONLY", detalle: supportBlock.error }, { status: 403 });
@@ -181,6 +229,45 @@ export async function POST(request: Request) {
   }
   if (providerForTipoDte(config, tipoDte) !== provider) {
     return NextResponse.json({ ok: false, error: "PROVIDER_NOT_ENABLED" }, { status: 409 });
+  }
+
+  // KILL SWITCH (tanda 1 RPA, 2026-09-10). Este POST es el ÚNICO embudo por el
+  // que pasa toda emisión (única y lote, boletas y facturas, ver
+  // useEmisionLote.startJob y EmitirDirectaView.startEmissionJob), así que una
+  // pausa acá frena a la flota entera —incluidas las extensiones viejas— sin
+  // republicar nada. Se evalúa ANTES del candado de cuenta para no dejar un
+  // lock huérfano. FAIL-CLOSED: si la consulta falla, también 409 (mejor que
+  // un cliente espere a que un lote entero se estrelle contra un portal que
+  // cambió). Lo que guarda folios reales (/result, reconcile, PATCH, DELETE)
+  // no pasa por acá y NUNCA se bloquea.
+  // SOLO al portal (F4, 2026-09-10): SimpleAPI emite por web service y no toca
+  // la página del SII; una pausa por "el portal cambió" no lo alcanza.
+  const carrilPausa = carrilDeTipoDte(tipoDte);
+  const pausa = gateDePausaAplica(provider)
+    ? await pausaActivaParaEmpresa(guard.service, { carril: carrilPausa, empresaId: guard.empresaId })
+    : ({ pausada: false } as const);
+  if (pausa.pausada) {
+    if (pausa.fallo) {
+      // La consulta del kill switch FALLÓ: estamos frenando a un cliente sin
+      // saber si hay pausa (fail-closed). Eso es crítico y se avisa AL TIRO,
+      // con dedupe: una alerta cada 10 min como máximo, marcada en ops_events.
+      await recordOpsEvent({
+        sb: guard.service,
+        severity: "critical",
+        source: "emision",
+        eventName: "emision_pausa_query_failed",
+        summary: "No se pudo consultar el kill switch de emisión: se frena fail-closed",
+        cuentaId: guard.cuentaId,
+        empresaId: guard.empresaId,
+        usuarioId: guard.userId,
+        metadata: { provider, tipo_dte: tipoDte, carril: carrilPausa, detalle: pausa.fallo },
+      });
+      await alertarPausaQueryFailed(guard.service, carrilPausa, pausa.fallo);
+    }
+    return NextResponse.json(
+      { ok: false, error: "EMISION_PAUSADA", code: "EMISION_PAUSADA", carril: carrilPausa, detalle: copyEmisionPausada(carrilPausa) },
+      { status: 409 },
+    );
   }
 
   const { data: empresa, error: empresaError } = await guard.service

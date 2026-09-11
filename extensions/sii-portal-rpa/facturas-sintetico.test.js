@@ -42,7 +42,7 @@ function field(name, { tag = "INPUT", value = "", options = null, checked = fals
 function form(name, fields) {
   const byName = new Map(fields.map((f) => [f.name, f]));
   return {
-    name, tagName: "FORM",
+    name, tagName: "FORM", _fields: fields,
     elements: { namedItem: (n) => byName.get(n) ?? null },
     querySelector: (sel) => (/submit/i.test(sel) ? byName.get("__submit__") ?? null : null),
     submit() { /* no navega en el sintético */ },
@@ -57,6 +57,16 @@ const fakeDocument = {
     if (m) return activeForms.get(m[1]) ?? null;
     if (/password/i.test(sel)) return activePwd ? { tagName: "INPUT" } : null;
     return null;
+  },
+  // Para el `mapa` saneado (tanda 2): forms, controles y botones de la página.
+  querySelectorAll: (sel) => {
+    const s = String(sel);
+    const forms = [...activeForms.values()];
+    const campos = forms.flatMap((f) => f._fields ?? []);
+    if (/^form$/i.test(s)) return forms;
+    if (/^input, select, textarea$/i.test(s)) return campos.filter((c) => c.tagName !== "BUTTON");
+    if (/^button/i.test(s)) return campos.filter((c) => c.tagName === "BUTTON");
+    return [];
   },
 };
 
@@ -324,5 +334,255 @@ describe("sintético del worker de facturas (corre el original que ya funciona)"
         expect(con.res.kind).toBe(caso.kind);
       }
     }, 15000);
+  });
+});
+
+// ── TANDA 2 (red team 2026-09-10) ─────────────────────────────────────────
+// (1) Cada ancla del libreto MUERDE: un valor distinto (válido para el
+// validador) cambia la conducta o falla con la ancla correcta. Si un `??` mal
+// escrito hiciera que el worker ignore el libreto, este test cae.
+// (2) Compuertas que no dependen del dato que verifican (C2).
+// (3) `unknown` pre-firma no es eterno (PAGINA_DESCONOCIDA con mapa saneado).
+import { validateLibreto } from "./modules/facturas-portal.js";
+
+const libretoCon = (path, value) => {
+  const l = JSON.parse(JSON.stringify(FACTURA_LIBRETO));
+  const [grupo, rol] = path.split(".");
+  l[grupo][rol] = value;
+  return l;
+};
+let seq = 100;
+const jobId = () => `job-t2-${seq += 1}`;
+
+describe("tanda 2 · cada ancla del libreto muerde", () => {
+  const casos = [
+    { ancla: "forms.preview", valor: "PreViewDTE_X", page: previewPage, antes: "paused_preview", espera: (r) => expect(r.kind).toBe("unknown") },
+    { ancla: "forms.formulario", valor: "VIEW_EFXP_X", page: formularioPage, antes: "validado", espera: (r) => expect(r.kind).toBe("unknown") },
+    { ancla: "forms.selector_empresa", valor: "fPrmEmpPOP_X", page: selectorEmpresaPage, antes: "empresa_seleccionada", espera: (r) => expect(r.kind).toBe("unknown") },
+    { ancla: "campos.emisor_select", valor: "EFXP_RUT_EMP_X", page: selectorEmpresaPage, antes: "empresa_seleccionada", espera: (r) => { expect(r.error).toBe("SELECTOR_SIN_RUT_EMP"); expect(r.ancla).toBe("campos.emisor_select"); } },
+    { ancla: "campos.boton_validar", valor: "EFXP_BTN_VALIDAR_X", page: formularioPage, antes: "validado", espera: (r) => { expect(r.error).toBe("SIN_BOTON_VALIDAR"); expect(r.ancla).toBe("campos.boton_validar"); } },
+  ];
+  // CAMPOS CRÍTICOS FIJOS EN CÓDIGO (F1 tanda 3 = M3 del red team). Estos roles
+  // NO deben poder cambiarse desde el libreto: permutarlos dentro de la whitelist
+  // `EFXP_*` producía una factura REAL con los datos cruzados (cantidad↔precio,
+  // razón social del receptor sobre la del emisor) y TODAS las compuertas verdes,
+  // porque `preValidar` y `TOTAL_MISMATCH` releían por los mismos nombres malos.
+  // Ahora el worker escribe/lee el nombre hardcodeado: sabotear el libreto NO
+  // cambia nada. Este test es el candado de eso — si algún día vuelve a "morder",
+  // es que el rol se volvió configurable y el hoyo se reabrió.
+  const rolesFijos = [
+    { ancla: "campos.rut_recep", valor: "EFXP_RUT_RECEP_X" },
+    { ancla: "campos.forma_pago", valor: "EFXP_FMA_PAGO_X" },
+    { ancla: "campos.detalle_cantidad", valor: "EFXP_QTY_XX" },
+    { ancla: "campos.razon_soc_recep", valor: "EFXP_RZN_SOC_RECEP_XX" },
+  ];
+
+  // La PERMUTA exacta del red team (cantidad↔precio, receptor sobre emisor) ni
+  // siquiera llega al worker: el validador la caza como campo duplicado.
+  it("permutar dos roles dentro de EFXP_* lo rechaza el validador", () => {
+    expect(validateLibreto(libretoCon("campos.detalle_cantidad", "EFXP_PRC_01"))).toBe("LIBRETO_CAMPO_DUPLICADO");
+    expect(validateLibreto(libretoCon("campos.razon_soc_recep", "EFXP_RZN_SOC"))).toBe("LIBRETO_CAMPO_DUPLICADO");
+  });
+
+  // Un selector de submit fuera de la whitelist tampoco llega al worker.
+  it("selectores.submit_empresa fuera de la whitelist lo rechaza el validador", () => {
+    expect(validateLibreto(libretoCon("selectores.submit_empresa", "button.no-existe"))).toBe("LIBRETO_SELECTOR_NO_PERMITIDO");
+    expect(validateLibreto(libretoCon("selectores.submit_empresa", "a"))).toBe("LIBRETO_SELECTOR_NO_PERMITIDO");
+  });
+  for (const caso of rolesFijos) {
+    it(`campo FIJO en código: ${caso.ancla} → ${caso.valor} NO cambia la conducta`, async () => {
+      const lib = libretoCon(caso.ancla, caso.valor);
+      expect(validateLibreto(lib)).toBe(null);
+      const base = await drive(jobFactura({ job_id: jobId() }), [formularioPage()]);
+      expect(base.res.action).toBe("validado");
+      const { res } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [formularioPage()]);
+      expect(res.action).toBe("validado"); // idéntico: el libreto no manda acá
+      expect(res.error).toBeUndefined();
+    }, 15000);
+  }
+
+  for (const caso of casos) {
+    it(`${caso.ancla} → ${caso.valor}`, async () => {
+      const lib = libretoCon(caso.ancla, caso.valor);
+      expect(validateLibreto(lib)).toBe(null); // valor válido: el que muerde es el worker
+      const base = await drive(jobFactura({ job_id: jobId() }), [caso.page()]);
+      expect(base.res.action).toBe(caso.antes);
+      const { res } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [caso.page()]);
+      expect(res.action).not.toBe(caso.antes);
+      caso.espera(res);
+      if (res.ancla) {
+        expect(res.posible_cambio_sii).toBe(true);
+        expect(res.ancla_faltante).toBe(res.ancla); // nombre viejo se conserva
+        expect(typeof res.paso).toBe("string");
+        expect(res.paso.length).toBeLessThanOrEqual(40);
+        expect(res.mapa).toBeTruthy();
+      }
+    }, 15000);
+  }
+
+  it("campos.boton_firmar → SIN_BOTON_FIRMAR con ancla, sin clickear btnSign", async () => {
+    const lib = libretoCon("campos.boton_firmar", "EFXP_BTN_SIGN_X");
+    expect(validateLibreto(lib)).toBe(null);
+    const { res, actions: a } = await drive(jobFactura({ job_id: jobId(), allow_final_emit: true, libreto: lib }), [previewPage()]);
+    expect(res.error).toBe("SIN_BOTON_FIRMAR");
+    expect(res.ancla).toBe("campos.boton_firmar");
+    expect(res.paso).toBe("preview:firmar");
+    expect(a.find((x) => x.name === "btnSign")).toBeUndefined();
+  });
+
+  it("detectores.login distinto → la página de login ya no se clasifica como login", async () => {
+    const lib = libretoCon("detectores.login", "clave\\s+secreta\\s+galactica");
+    expect(validateLibreto(lib)).toBe(null);
+    const texto = "Ingrese su RUT y Clave Tributaria para iniciar sesión";
+    const base = await drive(jobFactura({ job_id: jobId() }), [], { bodyText: texto, pwd: true });
+    expect(base.res.kind).toBe("login");
+    const { res } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [], { bodyText: texto, pwd: true });
+    expect(res.kind).not.toBe("login");
+  });
+
+  it("detectores.exito_a distinto → la página de éxito ya no es post_firma (no hay folio fantasma)", async () => {
+    const lib = libretoCon("detectores.exito_a", "ENVIADO\\s+FRACASADAMENTE");
+    expect(validateLibreto(lib)).toBe(null);
+    const texto = "DOCUMENTO TRIBUTARIO ELECTRÓNICO ENVIADO EXITOSAMENTE";
+    const base = await drive(jobFactura({ job_id: jobId() }), [], { bodyText: texto });
+    expect(base.res.kind).toBe("post_firma");
+    const { res } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [], { bodyText: texto });
+    expect(res.kind).not.toBe("post_firma");
+  });
+
+  // (2) Libreto distinto cambia la conducta aunque el nombre no pase el
+  // vocabulario del validador (defensa en profundidad: el worker no confía).
+  it("campos.boton_validar:'btnValidar' → SIN_BOTON_VALIDAR con paso y mapa", async () => {
+    const { res } = await drive(jobFactura({ job_id: jobId(), libreto: libretoCon("campos.boton_validar", "btnValidar") }), [formularioPage()]);
+    expect(res.error).toBe("SIN_BOTON_VALIDAR");
+    expect(res.ancla).toBe("campos.boton_validar");
+    expect(res.paso).toBe("formulario:validar");
+    expect(res.mapa.forms).toEqual(["VIEW_EFXP"]);
+    expect(res.mapa.inputs).toContain("EFXP_RUT_RECEP");
+  }, 15000);
+});
+
+describe("tanda 2 · compuertas en código (C2: no dependen del dato que verifican)", () => {
+  const paginaConTotalDistinto = () => {
+    const f = formularioPage();
+    f.elements.namedItem("EFXP_MNT_TOTAL")._value = "119000"; // el portal calculó IVA que el job no trae
+    return f;
+  };
+
+  it("monto_total:'EFXP_PRC_01' en el libreto NO afloja: TOTAL_MISMATCH igual salta", async () => {
+    const lib = libretoCon("campos.monto_total", "EFXP_PRC_01");
+    const { res, actions: a } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [paginaConTotalDistinto()]);
+    expect(res.error).toBe("TOTAL_MISMATCH");
+    expect(a.find((x) => x.name === "Button_Update")).toBeUndefined(); // no se validó
+  }, 15000);
+
+  it("sin libreto, el mismo descuadre también aborta (baseline de la compuerta)", async () => {
+    const { res } = await drive(jobFactura({ job_id: jobId() }), [paginaConTotalDistinto()]);
+    expect(res.error).toBe("TOTAL_MISMATCH");
+  }, 15000);
+
+  it("tipo_verif:'EFXP_CONTACTO' en el libreto NO afloja: el tipo se lee de PTDC_CODIGO", async () => {
+    const lib = libretoCon("campos.tipo_verif", "EFXP_CONTACTO");
+    const pagina33 = formularioPage();
+    pagina33.elements.namedItem("PTDC_CODIGO")._value = "33"; // el portal abrió una afecta, el job pide 34
+    pagina33.elements.namedItem("EFXP_CONTACTO")._value = "34";
+    const { res } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [pagina33]);
+    expect(res.error).toBe("TIPO_PORTAL_MISMATCH");
+  }, 15000);
+
+  it("forma de pago contado:'3' → FORMA_PAGO_INVALIDA antes de escribir nada", async () => {
+    const lib = JSON.parse(JSON.stringify(FACTURA_LIBRETO));
+    lib.codigos.forma_pago.contado = "3";
+    const { res, actions: a } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [formularioPage()]);
+    expect(res.error).toBe("FORMA_PAGO_INVALIDA");
+    expect(a).toEqual([]);
+  });
+
+  it("forma de pago permutada (contado:'2') → FORMA_PAGO_INVALIDA; jamás se escribe '2' por contado", async () => {
+    const lib = JSON.parse(JSON.stringify(FACTURA_LIBRETO));
+    lib.codigos.forma_pago = { contado: "2", credito: "1" };
+    const { res, actions: a } = await drive(jobFactura({ job_id: jobId(), libreto: lib }), [formularioPage()]);
+    expect(res.error).toBe("FORMA_PAGO_INVALIDA");
+    expect(a.find((x) => x.name === "EFXP_FMA_PAGO")).toBeUndefined();
+  });
+
+  it("glosa: sin textarea (esperas.glosa_textarea corta) → glosa_omitida:true y sigue validando", async () => {
+    const lib = JSON.parse(JSON.stringify(FACTURA_LIBRETO));
+    lib.esperas.glosa_textarea = 100;
+    const f = formularioPage(); // sin DESCRIP_01 ni EFXP_DSC_ITEM_01
+    const job = jobFactura({ job_id: jobId(), libreto: lib, detalles: [{ nombre: "Asesoría", cantidad: 1, precio: 100000, descripcion: "Glosa larga con más de cuarenta caracteres de detalle." }] });
+    const { res } = await drive(job, [f]);
+    expect(res.action).toBe("validado");
+    expect(res.glosa_omitida).toBe(true);
+  }, 15000);
+
+  it("glosa: con textarea NO se marca glosa_omitida", async () => {
+    const { res } = await drive(jobFactura({ job_id: jobId() }), [formularioPage()]);
+    expect(res.action).toBe("validado");
+    expect(res.glosa_omitida).toBeUndefined();
+  }, 15000);
+});
+
+describe("tanda 2 · page_kind:unknown como ancla", () => {
+  it("unknown pre-firma MÁS DE LA GRACIA → PAGINA_DESCONOCIDA una sola vez, sin clickear nada", async () => {
+    // F3 (tanda 3): el aviso se decide por TIEMPO, no por cantidad de scans. Un
+    // portal lento que rebota 4 veces en 6 s NO es un cambio del SII; una pantalla
+    // que no calza durante 20 s sí. Acá se acorta la gracia a 50 ms (mínimo que
+    // acepta el validador) para no dormir 20 s en el test.
+    const libCorto = libretoCon("esperas.pagina_desconocida", 50);
+    expect(validateLibreto(libCorto)).toBe(null);
+    const job = jobFactura({ job_id: jobId(), libreto: libCorto });
+    const opts = { bodyText: "Sistema en mantención. Vuelva a intentar más tarde. Contacto: soporte@sii.cl, RUT 12.345.678-9" };
+    // Dentro de la gracia: observa y NO avisa.
+    const r1 = await drive(job, [], opts);
+    expect(r1.res.kind).toBe("unknown");
+    expect(r1.res.action).toBe("observando");
+    await new Promise((resolve) => setTimeout(resolve, 80)); // se pasa la gracia
+    const { res, actions: a } = await drive(job, [], opts);
+    expect(res.error).toBe("PAGINA_DESCONOCIDA");
+    expect(res.ancla).toBe("page_kind:unknown");
+    expect(res.page_kind).toBe("unknown");
+    expect(res.code).toBe("PAGINA_DESCONOCIDA");
+    expect(res.posible_cambio_sii).toBe(true);
+    expect(res.paso).toBe("observando:unknown");
+    expect(a).toEqual([]);
+    // una vez por job: el scan siguiente vuelve a observar, no re-avisa
+    const r5 = await drive(job, [], opts);
+    expect(r5.res.action).toBe("observando");
+  });
+
+  it("con el candado armado (final_emit_clicked) NUNCA avisa: 'generando firma' pasa por unknown", async () => {
+    const job = jobFactura({ job_id: jobId() });
+    activeForms = new Map(); activeBodyText = "Generando firma electrónica, espere..."; activePwd = false;
+    for (let i = 0; i < 6; i += 1) {
+      actions = []; outgoing = [];
+      driveListener({ type: "APP_CONTABLE_SII_FACT_DRIVE", job, job_id: job.job_id, done: {}, final_emit_clicked: true }, {}, () => {});
+      let step = null;
+      for (let k = 0; k < 200 && !step; k += 1) { step = outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FACT_STEP"); if (!step) await new Promise((r) => setTimeout(r, 20)); }
+      expect(step.res.action).toBe("observando");
+    }
+  });
+
+  it("una pantalla conocida entre medio reinicia la cuenta", async () => {
+    const job = jobFactura({ job_id: jobId() });
+    const opts = { bodyText: "pantalla rara" };
+    await drive(job, [], opts); await drive(job, [], opts); await drive(job, [], opts);
+    await drive(job, [previewPage()]); // conocida
+    const { res } = await drive(job, [], opts);
+    expect(res.action).toBe("observando");
+  });
+
+  it("el mapa que viaja está SANEADO: sin valores de campos, sin RUT ni correos", async () => {
+    const job = jobFactura({ job_id: jobId(), libreto: libretoCon("campos.emisor_select", "EFXP_RUT_EMP_X") });
+    const { res } = await drive(job, [selectorEmpresaPage()]);
+    expect(res.error).toBe("SELECTOR_SIN_RUT_EMP");
+    const json = JSON.stringify(res.mapa);
+    expect(json.length).toBeLessThanOrEqual(2048);
+    expect(res.mapa.forms).toEqual(["fPrmEmpPOP"]);
+    expect(res.mapa.inputs).toContain("RUT_EMP");
+    expect(json).not.toContain(EMISOR);
+    expect(json).not.toContain("78448088");
+    expect(json).not.toContain("@");
+    expect(Object.keys(res.mapa).sort()).toEqual(["botones", "forms", "inputs", "url"]);
   });
 });

@@ -17,6 +17,7 @@ import { purgarCuentaCompleta, type PurgaResumen } from "@/lib/derechos/purga-cu
 import { clearDevSupportEmpresaCookie, getDevOperatorContext, getDevSupportMode, setDevSupportEmpresaCookie } from "@/lib/dev/support-mode";
 import { cuotaEmpresaMes, periodoActualChile, rangoMesActualChileUtc } from "./helpers";
 import { syncPlanActivo } from "@/lib/pagos/activacion";
+import { crearPausa, levantarPausas } from "@/lib/ops/emision-pausas";
 
 type ServiceClient = ReturnType<typeof createServiceClient<Database>>;
 
@@ -904,4 +905,74 @@ export async function purgarCuenta(
 
   revalidatePath("/dev/cuentas");
   return { ok: true, resumen };
+}
+
+// ── KILL SWITCH de emisión (tanda 1 RPA, 2026-09-10) ─────────────────────────
+// Freno remoto por carril: una fila viva en emision_pausas hace que
+// POST /api/emision/jobs conteste 409 EMISION_PAUSADA a TODA la flota (única y
+// lote, extensiones viejas incluidas) sin republicar nada. Lo que guarda folios
+// reales (/result, reconcile, heartbeat, cierre) nunca se bloquea.
+
+export type CarrilPausaInput = "boletas" | "facturas" | "todo";
+const CARRILES_PAUSA = new Set<CarrilPausaInput>(["boletas", "facturas", "todo"]);
+const PAUSA_MANUAL_MS = 4 * 60 * 60 * 1000;
+
+/** Activa una pausa MANUAL del carril por 4 h (vence sola). Queda en ops_events. */
+export async function activarPausaEmision(
+  carril: CarrilPausaInput,
+  motivo: string,
+): Promise<{ ok: true; id: string; hasta: string } | { error: string }> {
+  const operador = await getDevOperatorContext();
+  if (!operador.ok) return { error: "Solo operador Genesys" };
+  if (!CARRILES_PAUSA.has(carril)) return { error: "Carril inválido" };
+  const motivoLimpio = typeof motivo === "string" ? motivo.trim().slice(0, 300) : "";
+  if (!motivoLimpio) return { error: "Escribe el motivo (queda en el historial)" };
+
+  const hasta = new Date(Date.now() + PAUSA_MANUAL_MS);
+  const res = await crearPausa(operador.sb, {
+    carril,
+    hasta,
+    motivo: motivoLimpio,
+    origen: "manual",
+    creadoPor: operador.email,
+  });
+  if (!res.ok) return { error: res.error };
+
+  await recordOpsEvent({
+    sb: operador.sb,
+    severity: "critical",
+    source: "dev-support",
+    eventName: "emision_pausa_on",
+    summary: `Operador pausó la emisión (${carril}) hasta ${hasta.toISOString()}: ${motivoLimpio}`,
+    resourceType: "emision_pausa",
+    resourceId: res.id,
+    metadata: { carril, origen: "manual", hasta: hasta.toISOString(), operador: operador.email, motivo: motivoLimpio },
+  }).catch(() => {});
+
+  revalidatePath("/dev/diagnostico");
+  return { ok: true, id: res.id, hasta: hasta.toISOString() };
+}
+
+/** Levanta las pausas vivas del carril ('todo' = todas). Queda en ops_events. */
+export async function levantarPausaEmision(
+  carril: CarrilPausaInput,
+): Promise<{ ok: true; levantadas: number } | { error: string }> {
+  const operador = await getDevOperatorContext();
+  if (!operador.ok) return { error: "Solo operador Genesys" };
+  if (!CARRILES_PAUSA.has(carril)) return { error: "Carril inválido" };
+
+  const res = await levantarPausas(operador.sb, { carril });
+  if (!res.ok) return { error: res.error };
+
+  await recordOpsEvent({
+    sb: operador.sb,
+    severity: "info",
+    source: "dev-support",
+    eventName: "emision_pausa_off",
+    summary: `Operador levantó ${res.levantadas} pausa(s) de emisión (${carril})`,
+    metadata: { carril, levantadas: res.levantadas, operador: operador.email },
+  }).catch(() => {});
+
+  revalidatePath("/dev/diagnostico");
+  return { ok: true, levantadas: res.levantadas };
 }

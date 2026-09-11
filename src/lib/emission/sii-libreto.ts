@@ -1,5 +1,30 @@
 // LIBRETO del portal de facturas (33/34) como DATOS.
 //
+// ┌─ REGLAS DE COMPATIBILIDAD CON LA FLOTA (léelas antes de tocar este archivo) ─┐
+// │ La extensión instalada en el navegador de CADA cliente valida el libreto     │
+// │ fail-closed (modules/sii-local.js validateLibretoBoleta y                     │
+// │ modules/facturas-portal.js validateLibreto). Las versiones 0.2.1–0.2.3 están  │
+// │ en la calle y NO se pueden actualizar al tiro (Chrome Web Store demora días). │
+// │                                                                              │
+// │ 1. NUNCA subir `libreto_version` ni `BOLETA_LIBRETO_SCHEMA_VERSION`: una      │
+// │    versión desconocida → LIBRETO_SCHEMA_UNKNOWN → la flota entera rechaza el  │
+// │    job ANTES de abrir la ventana. Cero emisiones, no "emisiones raras".       │
+// │ 2. NUNCA quitar ni renombrar una clave existente de FACTURA_LIBRETO /         │
+// │    BOLETA_LIBRETO: el validador exige cada clave conocida no vacía            │
+// │    (LIBRETO_*_MISSING). Solo AGREGAR bloques/claves nuevas: la extensión      │
+// │    vieja las ignora y el worker nuevo las lee con fallback al hardcode.       │
+// │ 3. Los VALORES sí se pueden cambiar (para eso existe el libreto), pero los    │
+// │    selectores de boletas solo dentro de la whitelist de clases Vuetify del    │
+// │    validador (LIBRETO_SELECTOR_NO_PERMITIDO) y los `campos` de facturas solo  │
+// │    con el patrón permitido (LIBRETO_CAMPO_NO_PERMITIDO).                      │
+// │ 4. Todo dato nuevo tiene un INVARIANTE en código y un test que muerde         │
+// │    (sii-libreto.test.ts + libreto-compat-flota.test.ts contra las versiones   │
+// │    reales de la extensión, sacadas de git). Si el test falla, la flota falla. │
+// │ 5. Los regex viajan como SOURCE y el worker los compila con flag "i" sobre    │
+// │    texto normalizado (MAYÚSCULAS sin tildes, normalizeSearchText). Escríbelos │
+// │    en MAYÚSCULAS sin tildes y sin cuantificadores anidados (ReDoS).           │
+// └──────────────────────────────────────────────────────────────────────────────┘
+//
 // Extiende el precedente de `start_url` en factura-job-payload.ts: los nombres
 // de formulario/campo, los regex de detección de página, los códigos y las
 // esperas del portal del SII viajan EN EL JOB para poder arreglar un cambio del
@@ -146,6 +171,11 @@ export const FACTURA_LIBRETO: FacturaLibreto = {
 // ancla del portal", el panel /dev traduce el rol técnico (ej.
 // "campos.boton_validar") a una frase que se entiende sin mirar el código. Solo
 // describe el PUNTO del portal del SII (público), nunca datos del cliente.
+// F5 (2026-09-10): cubre TODOS los roles de FacturaLibreto.campos, porque el
+// worker avisa `campos.<rol>` para cualquier control ausente del formulario
+// (FORMULARIO_SIN_CAMPO). Un rol sin label caía a "otro" en el server y se
+// perdía la agrupación por ancla. sii-libreto.test.ts recorre el worker y
+// muerde si aparece un ancla nueva sin explicación.
 export const ANCLA_LABELS: Record<string, string> = {
   "forms.selector_empresa": "la pantalla donde eliges bajo qué empresa emites",
   "forms.formulario": "la página del formulario de la factura",
@@ -153,11 +183,57 @@ export const ANCLA_LABELS: Record<string, string> = {
   "campos.emisor_select": "el selector de empresa (dónde eliges tu RUT emisor)",
   "campos.tipo_verif": "el campo del tipo de documento (33 o 34)",
   "campos.rut_recep": "la casilla del RUT del receptor",
+  "campos.dv_recep": "la casilla del dígito verificador del receptor",
+  "campos.razon_soc_recep": "la casilla de la razón social del receptor",
+  "campos.dir_recep": "la casilla de la dirección del receptor",
+  "campos.comuna_recep": "la casilla de la comuna del receptor",
+  "campos.ciudad_recep": "la casilla de la ciudad del receptor",
+  "campos.giro_recep": "la casilla del giro del receptor",
+  "campos.contacto": "la casilla de contacto del receptor",
+  "campos.comuna_origen": "la casilla de la comuna de origen (emisor)",
+  "campos.ciudad_origen": "la casilla de la ciudad de origen (emisor)",
+  "campos.razon_soc_emisor": "la razón social del emisor (la llena el portal)",
+  "campos.giro_emisor": "el giro del emisor (lo llena el portal)",
+  "campos.fecha_emision": "la casilla de la fecha de emisión",
+  "campos.forma_pago": "el desplegable de la forma de pago (contado/crédito)",
+  "campos.detalle_nombre": "la casilla del nombre del ítem (detalle)",
+  "campos.detalle_cantidad": "la casilla de la cantidad del ítem (detalle)",
+  "campos.detalle_precio": "la casilla del precio del ítem (detalle)",
+  "campos.glosa_checkbox": "la casilla para activar la descripción del ítem (glosa)",
+  "campos.glosa_textarea": "el cuadro de texto de la descripción del ítem (glosa)",
+  "campos.monto_total": "el campo del monto total que calcula el portal",
   "campos.boton_validar": "el botón «Validar y visualizar» del formulario",
   "campos.boton_firmar": "el botón «Firmar» de la vista previa",
   "selectores.submit_empresa": "el botón para enviar la empresa elegida",
+  "selectores.pdf_link": "el enlace al PDF del documento emitido",
   "page_kind:unknown": "la página no calzó con ninguna pantalla conocida del portal",
 };
+
+/**
+ * Anclas que SÍ cuentan para el AUTO-KILL (cambio-sii/route.ts): las que
+ * SIEMPRE existen en el portal si el portal no cambió (el botón EMITIR, el
+ * modal, el form de la factura…). Un slot que no abre, un toggle, el pago, el
+ * receptor o la glosa fallan por mil razones propias de UNA cuenta (sucursal
+ * sin configurar, tipo no habilitado, datos del receptor) y NO son evidencia
+ * de un cambio del SII: se registran, pero jamás pausan la flota.
+ */
+export const ANCLAS_AUTO_KILL: ReadonlySet<string> = new Set([
+  // boletas (e-Boleta)
+  "botones.emitir",
+  "selectores.dialogo_activo",
+  "modal.titulo",
+  "selectores.emisor_select",
+  // facturas (Sistema de Facturación Gratuito)
+  "forms.preview",
+  "forms.formulario",
+  "forms.selector_empresa",
+  "campos.emisor_select",
+  "campos.boton_validar",
+  "campos.boton_firmar",
+  "selectores.submit_empresa",
+  // ambos
+  "page_kind:unknown",
+]);
 
 // ── BOLETAS: libreto del portal e-Boleta (Vuetify) ──────────────────────────
 // Mismo principio que FACTURA_LIBRETO: catálogo de nombres del portal como
@@ -213,6 +289,29 @@ export interface BoletaLibreto {
     glosa_escribe: number;
     pad_post: number;
   };
+  // ── Bloques ADITIVOS (tanda 1, 2026-09-10) ────────────────────────────────
+  // La extensión ≤0.2.3 los ignora (su validador solo mira las claves de
+  // arriba); el worker nuevo los lee vía resolverLibreto con fallback al
+  // literal. Regex = SOURCE, compilado con "i" sobre MAYÚSCULAS sin tildes.
+  /** Cómo hallar el campo de la glosa «Detalle» en el modal (bug de la glosa muda). */
+  glosa: {
+    /** Selector CSS de los candidatos (whitelist: input/textarea). */
+    candidatos: string;
+    /** Contenedores que descartan al candidato (tipo/pago/sucursal son v-select). */
+    excluir_dentro_de: string;
+    /** ANCLA OBLIGATORIA: el contador "N / 80" del campo glosa. */
+    ancla_contador: string;
+    /** Label del campo glosa. */
+    ancla_label: string;
+    /** Textos de contenedor que descartan al candidato (otros campos del modal). */
+    excluir_texto: string;
+  };
+  /** Título del modal de emisión (regex source). */
+  modal: { titulo: string };
+  /** Texto del estado "cargando" del selector de emisores (regex source). */
+  emisor: { cargando: string };
+  /** Texto del diálogo de confirmación por monto alto (regex source). */
+  monto_alto: { texto: string };
 }
 
 export const BOLETA_LIBRETO: BoletaLibreto = {
@@ -262,17 +361,41 @@ export const BOLETA_LIBRETO: BoletaLibreto = {
     glosa_escribe: 120, // :1165
     pad_post: 250, // :1100
   },
+  // ESPEJO EXACTO de resolverLibreto en sii-worker.js (bloques g/mo/em/ma):
+  // los regex se compilan con "i" sobre normalizeSearchText (MAYÚSCULAS sin
+  // tildes), así que en mayúsculas acá == literal del worker.
+  glosa: {
+    candidatos: "input[type='text'], textarea", // findGlosaInput
+    excluir_dentro_de: ".v-select, .v-autocomplete", // findGlosaInput
+    ancla_contador: "\\/\\s*80", // /\/\s*80/i
+    ancla_label: "DETALLE", // /detalle/i
+    excluir_texto: "VENDEDOR|RECEPTOR|SUCURSAL|MONTO|\\bRUT\\b|PAGO|BOLETA", // /vendedor|receptor|sucursal|monto|\brut\b|pago|boleta/i
+  },
+  modal: { titulo: "EMITIR\\s+E-BOLETA" }, // /Emitir\s+e-Boleta/i
+  // F6: SUPERCONJUNTO de los dos hardcodes: el worker de boletas usa
+  // /Cargando Emisores/i y el background (regexCargando) /Cargando Emisores|Cargando/i.
+  // El libreto debe cubrir al más amplio; si no, el background con libreto
+  // dejaba de ver el "Cargando" genérico que sí veía sin libreto.
+  emisor: { cargando: "CARGANDO EMISORES|CARGANDO" },
+  monto_alto: { texto: "DESEA CONTINUAR|ESTA A PUNTO DE EMITIR" }, // /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i
 };
 
 // Qué significa cada ancla de BOLETAS, en cristiano (para el panel /dev).
 export const ANCLA_LABELS_BOLETA: Record<string, string> = {
   "selectores.emisor_select": "el selector de empresa arriba (bajo qué RUT emites)",
   "selectores.dialogo_activo": "el modal «Emitir e-Boleta»",
+  "selectores.menu": "la lista desplegable (v-menu) que abre un selector del portal",
+  "selectores.opcion": "las opciones dentro de una lista desplegable del portal",
+  "selectores.slot": "los desplegables del modal (tipo / pago / sucursal)",
   "botones.emitir": "el botón EMITIR",
   "slots.tipo": "el desplegable del tipo de boleta (afecta o exenta)",
   "slots.metodo_pago": "el desplegable del método de pago",
   "toggles.detalle": "el interruptor «Detalle» (la glosa de la boleta)",
   "toggles.receptor": "el interruptor «Receptor»",
+  "glosa": "el campo de la glosa «Detalle» (contador / 80) dentro del modal",
+  "modal.titulo": "el título del modal «Emitir e-Boleta»",
+  "slots.sucursal": "el desplegable de la sucursal",
+  "receptor_campos.rut": "la casilla del RUT del receptor dentro del modal",
   "page_kind:unknown": "la pantalla no calzó con ninguna conocida de e-Boleta",
 };
 
@@ -283,4 +406,59 @@ export const ANCLA_LABELS_BOLETA: Record<string, string> = {
 export function describeAncla(rol: string | null | undefined): string {
   const k = String(rol ?? "").trim();
   return ANCLA_LABELS[k] ?? ANCLA_LABELS_BOLETA[k] ?? (k || "un punto del portal");
+}
+
+// ── Copy humano para códigos de emisión que llegan del server o de la extensión ──
+// El único sitio donde un código técnico se vuelve una frase para el cliente.
+// LIBRETO_*: la extensión instalada rechazó el libreto (schema desconocido,
+// clave faltante, selector fuera de la whitelist…). Para el cliente todo eso
+// significa lo mismo: su extensión está vieja respecto del server.
+export const COPY_LIBRETO_DESACTUALIZADO =
+  "Tu extensión necesita actualizarse para seguir emitiendo. Abre chrome://extensions y pulsa Actualizar, o avísanos.";
+
+/** Códigos que la extensión (0.2.1–0.2.3) puede devolver al rechazar un libreto. */
+export const CODIGOS_LIBRETO = [
+  "LIBRETO_INVALID",
+  "LIBRETO_SCHEMA_UNKNOWN",
+  "LIBRETO_PORTAL_INVALID",
+  "LIBRETO_FORMS_MISSING",
+  "LIBRETO_FORM_MISSING",
+  "LIBRETO_DETECTORES_MISSING",
+  "LIBRETO_DETECTOR_MISSING",
+  "LIBRETO_CAMPOS_MISSING",
+  "LIBRETO_CAMPO_MISSING",
+  "LIBRETO_CAMPO_NO_PERMITIDO",
+  "LIBRETO_CODIGO_MISSING",
+  "LIBRETO_SELECTORES_MISSING",
+  "LIBRETO_SELECTOR_NO_PERMITIDO",
+  "LIBRETO_SLOTS_MISSING",
+  "LIBRETO_SLOT_MISSING",
+  "LIBRETO_TOGGLES_MISSING",
+  "LIBRETO_TOGGLE_MISSING",
+  "LIBRETO_RECEPTOR_MISSING",
+  "LIBRETO_RECEPTOR_CAMPO_MISSING",
+  "LIBRETO_BOTON_MISSING",
+  "LIBRETO_BOTON_LISTA_INVALID",
+  "LIBRETO_BOTON_NO_PERMITIDO",
+  "LIBRETO_REGEX_INVALIDO",
+  "LIBRETO_TIPO_AMBIGUO",
+  "LIBRETO_PAD_NO_PERMITIDO",
+  "LIBRETO_ESPERA_INVALIDA",
+  "LIBRETO_FORMA_PAGO_INVALIDA",
+  "LIBRETO_CAMPO_DUPLICADO",
+] as const;
+
+/**
+ * Traduce un código de emisión a copy humano. Devuelve null si no hay copy
+ * específico (el caller cae a su mensaje genérico). `detalle` es el texto que
+ * ya viene humano desde el server (p. ej. EMISION_PAUSADA) y manda si existe.
+ */
+export function copyHumanoCodigoEmision(code: string | null | undefined, detalle?: string | null): string | null {
+  const c = String(code ?? "").trim();
+  if (detalle && detalle.trim()) return detalle.trim();
+  if (c.startsWith("LIBRETO_")) return COPY_LIBRETO_DESACTUALIZADO;
+  if (c === "EMISION_PAUSADA") {
+    return "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Tus documentos quedan listos y no se pierde nada; inténtalo de nuevo más tarde.";
+  }
+  return null;
 }

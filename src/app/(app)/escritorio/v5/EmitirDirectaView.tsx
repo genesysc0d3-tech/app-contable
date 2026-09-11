@@ -16,6 +16,7 @@ import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, mensajeExtensionDesa
 import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
+import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
 
 type TipoDte = 33 | 34 | 39 | 41;
 type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro" | "Contado" | "Crédito" | "";
@@ -653,9 +654,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       });
       const json = (await res.json()) as EmissionJobStartResponse;
       if (!res.ok || !json.ok || !json.job_id || !json.expires_at) {
+        // EMISION_PAUSADA (kill switch del server): `detalle` ya viene humano y
+        // manda sobre cualquier otro texto — no es un bloqueo de esta cuenta.
         const message = json.error === "EMISSION_AUTHORIZATION_REQUIRED"
           ? "Debes autorizar la emisión antes de continuar."
-          : json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
+          : json.error === "EMISION_PAUSADA"
+            ? (json.detalle ?? "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Inténtalo de nuevo más tarde.")
+            : json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
         if (json.error === "EMISION_BLOQUEADA") {
           setEmissionLock({
             ok: true,
@@ -1232,46 +1237,45 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     // LLENA el formulario (incluida la glosa) y se detiene ANTES de Emitir (sin folio).
     let boletaEnsayo = false;
     try { boletaEnsayo = window.localStorage.getItem("massdte:boleta-ensayo") === "1"; } catch { /* sin storage */ }
+    // FUENTE ÚNICA del payload (tanda 1, 2026-09-10): la boleta única armaba el
+    // job a mano y viajaba SIN `libreto` — o sea, con el hardcode de la
+    // extensión y sin poder arreglar un cambio del SII con un deploy. Ahora usa
+    // el mismo buildBoletaJob que el lote (useEmisionLote), con semántica
+    // idéntica a la de antes: mismos campos, mismos totales, glosa a 80,
+    // emisor autoritativo del server, logout al terminar y la perilla de ensayo.
+    const jobBoleta = buildBoletaJob({
+      empresaId: job.empresa_id ?? empresaId ?? "default",
+      // El worker verifica que el portal tenga seleccionado este emisor
+      // antes de emitir (cuentas SII multi-empresa).
+      emisorRut: job.expected_emisor_rut ?? empresaRut ?? undefined,
+      tipoDte: tipoDte === 41 ? 41 : 39,
+      monto: total,
+      fechaEmision: chileTodayString(),
+      receptor: {
+        rut: receptorRut,
+        razonSocial: receptorRazonSocial,
+        direccion: receptorDireccion,
+        comuna: receptorComuna,
+        email: receptorEmail,
+        telefono: receptorTelefono,
+      },
+      // Glosa que se imprime en la boleta del SII (campo Detalle, máx 80).
+      // En boleta única usamos el detalle que escribió el usuario.
+      detalle: detalleNombre,
+      medioPago: formaPago,
+      // Boleta única: al terminar, cerrar sesión SII + cerrar la ventana
+      // (no dejar la sesión abierta). En massdte por lote esto va en false.
+      logoutAfter: true,
+      jobId: job.job_id,
+      expiresAt: job.expires_at,
+    });
+    // La perilla de ensayo apaga el click final (el builder lo fija en true).
+    if (boletaEnsayo) (jobBoleta as { allow_final_emit: boolean }).allow_final_emit = false;
     window.postMessage({
       source: "app-contable",
       type: "APP_CONTABLE_SII_BOLETA_JOB",
       protocol_version: 1,
-      job: {
-        job_id: job.job_id,
-        expires_at: job.expires_at,
-        empresa_id: job.empresa_id ?? empresaId ?? "default",
-        // El worker verifica que el portal tenga seleccionado este emisor
-        // antes de emitir (cuentas SII multi-empresa).
-        emisor_rut: job.expected_emisor_rut ?? empresaRut ?? undefined,
-        tipo_dte: tipoDte,
-        fecha_emision: chileTodayString(),
-        receptor: {
-          rut: receptorRut.trim() || undefined,
-          razon_social: receptorRazonSocial.trim() || undefined,
-          direccion: receptorDireccion.trim() || undefined,
-          comuna: receptorComuna.trim() || undefined,
-          email: receptorEmail.trim() || undefined,
-          telefono: receptorTelefono.trim() || undefined,
-        },
-        detalles: [{ nombre: detalleNombre.trim().slice(0, 80), cantidad: 1, monto_total: total }],
-        totales: {
-          monto_total: total,
-          monto_neto: tipoDte === 39 ? Math.round(total / 1.19) : 0,
-          iva: tipoDte === 39 ? total - Math.round(total / 1.19) : 0,
-          monto_exento: tipoDte === 41 ? total : 0,
-        },
-        // Glosa que se imprime en la boleta del SII (campo Detalle, máx 80).
-        // En boleta única usamos el detalle que escribió el usuario.
-        glosa: detalleNombre.trim().slice(0, 80),
-        learn_only: false,
-        auto_emit: true,
-        allow_final_emit: !boletaEnsayo,
-        payment_method: formaPago,
-        confirmation_required: false,
-        // Boleta única: al terminar, cerrar sesión SII + cerrar la ventana
-        // (no dejar la sesión abierta). En massdte por lote esto va en false.
-        logout_after: true,
-      },
+      job: jobBoleta,
     }, window.location.origin);
   }
 

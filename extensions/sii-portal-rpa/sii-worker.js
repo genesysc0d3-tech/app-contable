@@ -479,6 +479,19 @@
   //    son CÓDIGO. `LB` vive a nivel de módulo y se reasigna al empezar fillAndEmit;
   //    su default (resolverLibreto(null)) devuelve EXACTAMENTE el hardcode, así que
   //    cualquier uso previo a un job es idéntico al de hoy.
+  // reI: compila un regex del libreto con flag "i" y cae al literal duro si no viene o
+  // no compila. Los textos del portal pasan por normalizeSearchText (MAYÚSCULAS sin
+  // acento), así que "i" NO cambia ningún match de hoy — pero evita el bug latente
+  // de la glosa muda (regex en minúscula contra texto en mayúscula) y un regex roto
+  // del servidor ya no revienta fillAndEmit a mitad de una boleta real.
+  function reI(src, hard) {
+    try { return src ? new RegExp(String(src), "i") : hard; } catch { return hard; }
+  }
+  // esperaOk: un timeout del libreto solo vale si es entero en [50, 60000] ms. Fuera
+  // de rango (o "abc") → el literal de siempre. Nunca un 0 que apure una boleta real.
+  function esperaOk(v, def) {
+    return Number.isInteger(v) && v >= 50 && v <= 60000 ? v : def;
+  }
   function resolverLibreto(job) {
     const L = job?.libreto ?? null;
     const s = L?.selectores ?? {};
@@ -487,6 +500,10 @@
     const t = L?.toggles ?? {};
     const rc = L?.receptor_campos ?? {};
     const e = L?.esperas ?? {};
+    const g = L?.glosa ?? {};
+    const mo = L?.modal ?? {};
+    const em = L?.emisor ?? {};
+    const ma = L?.monto_alto ?? {};
     return {
       selectores: {
         dialogo_activo: s.dialogo_activo ?? ".v-dialog.v-dialog--active",
@@ -513,32 +530,146 @@
         metodo_pago_default: sl.metodo_pago_default ?? "Efectivo",
       },
       toggles: { detalle: t.detalle ?? "Detalle", receptor: t.receptor ?? "Receptor" },
+      // Receptor: se compila ACÁ (una vez por emisión), con "i" y try/catch — antes se
+      // compilaba inline sin ninguna de las dos cosas. Los `hard` son los literales de
+      // siempre; contra controlText() (MAYÚSCULAS) el resultado es idéntico.
       receptor: {
-        rut: rc.rut ?? "RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\\s*CON\\s*DV",
-        nombre: rc.nombre ?? "NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE",
-        direccion: rc.direccion ?? "DIRECCION.*RECEPTOR|RECEPTOR.*DIRECCION",
-        email: rc.email ?? "(E-?MAIL|CORREO).*RECEPTOR|RECEPTOR.*(E-?MAIL|CORREO)",
-        telefono: rc.telefono ?? "(TELEFONO|FONO|CELULAR).*RECEPTOR|RECEPTOR.*(TELEFONO|FONO|CELULAR)",
+        rut: reI(rc.rut, /RUT.*RECEPTOR|RECEPTOR.*RUT|RUT\s*CON\s*DV/i),
+        nombre: reI(rc.nombre, /NOMBRE.*RECEPTOR|RECEPTOR.*NOMBRE/i),
+        direccion: reI(rc.direccion, /DIRECCION.*RECEPTOR|RECEPTOR.*DIRECCION/i),
+        email: reI(rc.email, /(E-?MAIL|CORREO).*RECEPTOR|RECEPTOR.*(E-?MAIL|CORREO)/i),
+        telefono: reI(rc.telefono, /(TELEFONO|FONO|CELULAR).*RECEPTOR|RECEPTOR.*(TELEFONO|FONO|CELULAR)/i),
       },
+      // Bloques OPCIONALES (tanda 2). Un servidor viejo no los manda → literal actual.
+      glosa: {
+        candidatos: g.candidatos ?? "input[type='text'], textarea",
+        excluir_dentro_de: g.excluir_dentro_de ?? ".v-select, .v-autocomplete",
+        ancla_contador: reI(g.ancla_contador, /\/\s*80/i),
+        // Los `hard` van en MAYÚSCULAS con el MISMO source que BOLETA_LIBRETO del servidor
+        // (con "i" da lo mismo; así el test de deriva compara source+flags exacto).
+        ancla_label: reI(g.ancla_label, /DETALLE/i),
+        excluir_texto: reI(g.excluir_texto, /VENDEDOR|RECEPTOR|SUCURSAL|MONTO|\bRUT\b|PAGO|BOLETA/i),
+      },
+      modal: { titulo: reI(mo.titulo, /EMITIR\s+E-BOLETA/i) },
+      emisor: { cargando: reI(em.cargando, /CARGANDO EMISORES/i) },
+      monto_alto: { texto: reI(ma.texto, /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i) },
+      // Las 7 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
+      // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
       esperas: {
-        modal_emision: e.modal_emision ?? 12000,
-        emisor_estable: e.emisor_estable ?? 6000,
-        emisores_listos: e.emisores_listos ?? 9000,
-        emit_habilitado: e.emit_habilitado ?? 12000,
+        modal_emision: esperaOk(e.modal_emision, 12000),
+        emisor_estable: esperaOk(e.emisor_estable, 6000),
+        emisores_listos: esperaOk(e.emisores_listos, 9000),
+        emit_habilitado: esperaOk(e.emit_habilitado, 12000),
+        glosa_aparece: esperaOk(e.glosa_aparece, 150),
+        glosa_escribe: esperaOk(e.glosa_escribe, 120),
+        pad_post: esperaOk(e.pad_post, 250),
       },
     };
   }
   let LB = resolverLibreto(null);
+  // Gancho SOLO para el sintético (boletas-sintetico.test.js): deja verificar que
+  // el hardcode y BOLETA_LIBRETO del servidor no diverjan. En el portal real
+  // window.__MASSDTE_TEST__ no existe y esto no hace nada.
+  if (window.__MASSDTE_TEST__) window.__MASSDTE_TEST__.resolverLibreto = resolverLibreto;
+
+  // CAJA NEGRA del receptor: true = el job traía datos del receptor (nombre/dirección/
+  // e-mail/teléfono) y alguno NO se pudo escribir. El RUT NO entra acá: si viene y no
+  // queda escrito se ABORTA pre-emit (RECEPTOR_NO_ESCRITO), porque sobre ~135 UF el
+  // SII exige identificar al receptor y una boleta real sin él es un error tributario.
+  let receptorOmitido = false;
+
+  // Mapa SANEADO del portal para el aviso de "posible cambio del SII": textos de
+  // labels/botones/toggles/slots/contadores (del modal si está abierto; si no, de la
+  // página), derivado de scanPage(). Sin RUT, sin corridas de ≥7 dígitos, sin e-mails,
+  // ≤2 KB. Es lo que el /dev necesita para ver QUÉ renombró el SII sin abrir la ventana.
+  function sanearTextoMapa(value) {
+    return stripRut(String(value || ""))
+      .replace(/\s+/g, " ").trim()
+      .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[EMAIL]")
+      .replace(/\d{7,}/g, "[N]")
+      .slice(0, 80);
+  }
+  function mapaPortal() {
+    try {
+      const dlg = activeEmitDialog();
+      const root = dlg || document;
+      const textos = (sel) => Array.from(root.querySelectorAll(sel))
+        .map((n) => sanearTextoMapa(n.innerText || n.textContent || n.getAttribute?.("value")))
+        .filter(Boolean);
+      const uniq = (arr, max) => Array.from(new Set(arr)).slice(0, max);
+      let scan = null;
+      try { scan = scanPage(); } catch { scan = null; }
+      const mapa = {
+        en_modal: Boolean(dlg),
+        titulo: sanearTextoMapa(scan?.title ?? document.title),
+        headings: uniq((scan?.headings ?? []).map(sanearTextoMapa).filter(Boolean), 10),
+        botones: uniq(textos("button, [role='button']"), 25),
+        labels: uniq((scan?.controls ?? []).map((c) => sanearTextoMapa(c.label || c.placeholder)).filter(Boolean), 25),
+        slots: uniq(textos(LB.selectores.slot), 15),
+        toggles: uniq(textos(LB.selectores.toggle_row), 15),
+        contadores: uniq(textos(".v-counter"), 10),
+      };
+      // Tope duro de 2 KB: se recortan las listas más largas hasta caber.
+      for (let guard = 0; guard < 12 && JSON.stringify(mapa).length > 2000; guard += 1) {
+        for (const k of ["toggles", "labels", "botones", "slots", "headings", "contadores"]) {
+          if (Array.isArray(mapa[k]) && mapa[k].length > 2) mapa[k] = mapa[k].slice(0, Math.ceil(mapa[k].length / 2));
+        }
+      }
+      return JSON.stringify(mapa).length <= 2048 ? mapa : null;
+    } catch {
+      return null;
+    }
+  }
 
   // Señal de POSIBLE CAMBIO DEL SII: se etiqueta un Error estructural (un ancla
   // del portal que SIEMPRE debería existir y no está) sin cambiar su texto ni el
   // manejo de excepciones. El handler lee estos tags aditivamente. Lleva SOLO el
   // rol del ancla del libreto (público), jamás datos del cliente.
+  // Tanda 2: además `paso` (en qué etapa del guion se cortó: emisor/monto/modal/sucursal/
+  // tipo/pago/glosa/receptor/emitir) y `mapa` (foto SANEADA del portal, ver mapaPortal)
+  // — solo cuando hay ancla, que es cuando el /dev necesita ver qué renombró el SII.
   function siiError(message, opts) {
     const e = new Error(message);
     if (opts?.code) e.code = opts.code;
-    if (opts?.ancla) { e.posibleCambioSii = true; e.anclaFaltante = opts.ancla; }
+    if (opts?.ancla) {
+      e.posibleCambioSii = true;
+      e.anclaFaltante = opts.ancla;
+      if (opts.paso) e.paso = String(opts.paso).slice(0, 40);
+      e.mapa = mapaPortal(); // nunca lanza: null si no se pudo armar
+    }
     return e;
+  }
+
+  // Último fallo de selectVuetifyOption, para que el caller pueda ATRIBUIR la ancla con
+  // precisión sin cambiar el flujo (la función sigue devolviendo false; nadie lanza acá):
+  // el slot se encontró y clickeó pero NUNCA se desplegó un menú → `selectores.menu`;
+  // se desplegó pero sin opciones → `selectores.opcion`. Si el slot ni existe → null
+  // (la ancla es la del slot, la pone quien llama).
+  let ultimoFalloSelect = null;
+  // Selección visible de un v-select: CÓDIGO cerrado, no libreto (igual que el RUT del
+  // emisor). Un slot Vuetify trae label + selección; leer el innerText completo mezclaba
+  // el label ("Tipo de boleta EXENTA o afecta") con lo elegido.
+  const SELECCION_VUETIFY = ".v-select__selection, .v-select__selections";
+  // Texto (normalizado) de lo SELECCIONADO dentro de un slot, o null si no hay nada
+  // visible seleccionado. W2 (tanda 3): SOLO la selección, jamás el label.
+  function slotSeleccion(slot) {
+    const partes = Array.from(slot.querySelectorAll(SELECCION_VUETIFY))
+      .map((n) => normalizeSearchText(n.innerText || n.textContent || ""))
+      .filter(Boolean);
+    const texto = partes.join(" ").trim();
+    return texto || null;
+  }
+  function slotPorTexto(slotText) {
+    const dialog = activeEmitDialog() || document;
+    return Array.from(dialog.querySelectorAll(LB.selectores.slot))
+      .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText))) || null;
+  }
+  // Selección actual del slot que contiene `slotText`; null si el slot no existe o no
+  // muestra selección. Sirve para la invariante afecta/exenta: se lee lo que el modal
+  // MUESTRA elegido, no lo que el libreto dijo que había que elegir.
+  function slotTextoActual(slotText) {
+    const slot = slotPorTexto(slotText);
+    return slot ? slotSeleccion(slot) : null;
   }
 
   async function selectVuetifyOption(slotText, optionText) {
@@ -548,18 +679,23 @@
     // la verificación debe leer el mismo nodo, no re-buscar por el placeholder.
     const slot = Array.from(dialog.querySelectorAll(LB.selectores.slot))
       .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText)));
+    ultimoFalloSelect = null;
     if (!slot) return false;
     const shows = () => normalizeSearchText(slot.innerText || slot.textContent).includes(normalizeSearchText(optionText));
     if (shows()) return true;
 
+    let vioMenu = false;
+    let vioOpciones = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await clickElement(slot);
       for (let i = 0; i < 16; i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 180));
         const menus = Array.from(document.querySelectorAll(LB.selectores.menu))
           .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+        if (menus.length) vioMenu = true;
         for (const menu of menus) {
           const items = Array.from(menu.querySelectorAll(LB.selectores.opcion));
+          if (items.length) vioOpciones = true;
           const opt = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === normalizeSearchText(optionText))
             || items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(normalizeSearchText(optionText)));
           if (opt) {
@@ -570,7 +706,11 @@
         }
       }
     }
-    return shows();
+    if (shows()) return true;
+    // Diagnóstico para la ancla (no cambia el retorno): ver ultimoFalloSelect.
+    if (!vioMenu) ultimoFalloSelect = { ancla: "selectores.menu" };
+    else if (!vioOpciones) ultimoFalloSelect = { ancla: "selectores.opcion" };
+    return false;
   }
 
   // Abre el v-select cuyo slot contiene `slotText` y elige la PRIMERA opción.
@@ -603,7 +743,8 @@
 
   function activeEmitDialog() {
     const dialogs = Array.from(document.querySelectorAll(LB.selectores.dialogo_activo));
-    return dialogs.find((dialog) => /Emitir\s+e-Boleta/i.test(dialog.innerText || dialog.textContent || "")) || null;
+    // Título del modal desde el libreto (LB.modal.titulo; fallback /Emitir\s+e-Boleta/i).
+    return dialogs.find((dialog) => LB.modal.titulo.test(dialog.innerText || dialog.textContent || "")) || null;
   }
 
   // Espera el modal "Emitir e-Boleta" tras el primer EMITIR. UN SOLO reloj cubre las
@@ -612,7 +753,7 @@
   // que abra; (b) en montos bajos el modal abre directo → lo devolvemos. Así la
   // espera de la alerta y la del modal NO se apilan en dos timeouts. 12s es holgado
   // para conexiones lentas (alerta + apertura del modal) sin ser absurdo.
-  async function waitForEmitDialog(timeoutMs = 12000) {
+  async function waitForEmitDialog(timeoutMs = LB.esperas.modal_emision) { // literal cableado: 12000
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const dialog = activeEmitDialog();
@@ -656,15 +797,20 @@
   // descartar los v-select (tipo/pago/sucursal) y los campos ajenos, y de lo que
   // queda tomar el que tenga el contador "/ 80" o el label "detalle"; si tras
   // filtrar queda UN solo input de texto libre, ese es la glosa (fallback estructural).
+  // Tanda 2: los textos/selectores salen de LB.glosa.* y LB.selectores.input_container
+  // (fallback = los literales de siempre; el validador de sii-local.js acota los
+  // selectores a una whitelist). La ESTRUCTURA de la búsqueda (excluir v-select, excluir
+  // por texto, exigir ancla, sin fallback a "único input") sigue siendo CÓDIGO.
   function findGlosaInput() {
     const dialog = activeEmitDialog() || document;
-    const candidatos = Array.from(dialog.querySelectorAll("input[type='text'], textarea"))
+    const excluirDentro = String(LB.glosa.excluir_dentro_de).split(",").map((s) => s.trim()).filter(Boolean);
+    const contenedorDe = (el) => el.closest(LB.selectores.input_container) || el.parentElement;
+    const candidatos = Array.from(dialog.querySelectorAll(LB.glosa.candidatos))
       .filter((el) => {
         if (!isVisibleEnabled(el)) return false;
-        if (el.closest(".v-select") || el.closest(".v-autocomplete")) return false; // tipo/pago/sucursal
-        const cont = el.closest(".v-input") || el.parentElement;
-        const txt = normalizeSearchText(cont?.innerText || cont?.textContent || "");
-        return !/vendedor|receptor|sucursal|monto|\brut\b|pago|boleta/i.test(txt); // flag i: normalizeSearchText devuelve MAYÚSCULAS
+        if (excluirDentro.some((sel) => el.closest(sel))) return false; // tipo/pago/sucursal (v-select)
+        const txt = normalizeSearchText(contenedorDe(el)?.innerText || contenedorDe(el)?.textContent || "");
+        return !LB.glosa.excluir_texto.test(txt); // flag i: normalizeSearchText devuelve MAYÚSCULAS
       });
     // ANCLA OBLIGATORIA: el campo glosa SIEMPRE muestra el contador "/ 80" (vacío "0 / 80"
     // o lleno "N / 80") — fiable aun con valor. NO caer a "el único input de texto" como
@@ -672,9 +818,8 @@
     // (hallazgo adversarial 2026-09-10) y escribir la glosa en el campo equivocado de una
     // boleta REAL. Sin ancla → null, y el loop de 8 reintentos espera a que el campo aparezca.
     return candidatos.find((el) => {
-      const cont = el.closest(".v-input") || el.parentElement;
-      const txt = normalizeSearchText(cont?.innerText || cont?.textContent || "");
-      return /\/\s*80/.test(txt) || /detalle/i.test(txt); // /80 es la ancla fiable; detalle con flag i
+      const txt = normalizeSearchText(contenedorDe(el)?.innerText || contenedorDe(el)?.textContent || "");
+      return LB.glosa.ancla_contador.test(txt) || LB.glosa.ancla_label.test(txt); // /80 es la ancla fiable; detalle con flag i
     }) || null;
   }
 
@@ -722,9 +867,16 @@
   // EXCLUYE cualquier selección que esté dentro de un menú desplegado (.v-menu__content):
   // con el dropdown abierto, leer la lista causaba el "salto" CONSTANZA↔MV que colgaba
   // la emisión en cuentas multi-empresa. Devuelve canónico o null.
+  // C1 del red team (tanda 2): el selector es CÓDIGO cerrado (".v-select__selections"),
+  // NO LB.selectores.emisor_selecciones — si viniera del libreto, un libreto malo podría
+  // apuntar a otro nodo con otro RUT y hacer pasar assertEmisorRut bajo la empresa
+  // equivocada. También se excluye lo que esté DENTRO del modal de emisión (un v-select
+  // del formulario con un RUT de receptor no es el emisor).
   function readActiveEmisorRut() {
-    for (const sel of document.querySelectorAll(LB.selectores.emisor_selecciones)) {
+    const dlg = activeEmitDialog();
+    for (const sel of document.querySelectorAll(".v-select__selections")) {
       if (sel.closest(".v-menu__content")) continue; // no leer la lista desplegada
+      if (dlg && typeof dlg.contains === "function" && dlg !== sel && dlg.contains(sel)) continue; // no leer dentro del modal
       const toks = extractRutTokens(sel.textContent || "");
       if (toks.length) return toks[0];
     }
@@ -735,7 +887,7 @@
   // el dropdown CERRADO. Cambiar de empresa re-renderiza el portal y el valor oscila unos
   // instantes; leer durante ese re-render era la causa del congelamiento. Acotado por
   // timeout → NUNCA cuelga (devuelve la última lectura como último recurso).
-  async function waitStableEmisorRut(timeoutMs = 6000) {
+  async function waitStableEmisorRut(timeoutMs = LB.esperas.emisor_estable) { // literal cableado: 6000
     const start = Date.now();
     let prev = null;
     let stable = 0;
@@ -753,11 +905,11 @@
   // ¿El portal está recargando la lista de empresas ("Cargando Emisores…")? Cambiar de
   // empresa dispara ese re-render; leer/actuar DURANTE él era la causa del cuelgue.
   function emisoresCargando() {
-    return /Cargando Emisores/i.test(document.body?.innerText || document.body?.textContent || "");
+    return LB.emisor.cargando.test(document.body?.innerText || document.body?.textContent || ""); // fallback /Cargando Emisores/i
   }
   // Espera a que el portal termine de cargar la empresa (sin "Cargando Emisores" y con un
   // emisor legible). Acotado por timeout: no cuelga.
-  async function waitEmisoresReady(timeoutMs = 9000) {
+  async function waitEmisoresReady(timeoutMs = LB.esperas.emisores_listos) { // literal cableado: 9000
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       if (!emisoresCargando() && readActiveEmisorRut()) return;
@@ -770,7 +922,7 @@
   async function selectEmisorOnce(objetivo, rutObjetivo) {
     const emisorSelect = Array.from(document.querySelectorAll(LB.selectores.emisor_select))
       .find((vs) => extractRutTokens(vs.querySelector(LB.selectores.emisor_selecciones)?.textContent || "").length > 0);
-    if (!emisorSelect) throw siiError("No encontré el selector de emisor en el portal. Selecciónalo a mano arriba y reintenta.", { code: "SELECTOR_EMISOR_AUSENTE", ancla: "selectores.emisor_select" });
+    if (!emisorSelect) throw siiError("No encontré el selector de emisor en el portal. Selecciónalo a mano arriba y reintenta.", { code: "SELECTOR_EMISOR_AUSENTE", ancla: "selectores.emisor_select", paso: "emisor" });
     await clickElement(emisorSelect.querySelector(".v-input__slot") || emisorSelect);
     let options = [];
     for (let i = 0; i < 24; i += 1) {
@@ -779,7 +931,7 @@
         .find((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
       if (menu) { options = Array.from(menu.querySelectorAll("[role='option'],.v-list-item")); if (options.length) break; }
     }
-    if (!options.length) throw siiError("No pude abrir la lista de empresas del portal. Selecciona la empresa a mano arriba y reintenta.", { code: "LISTA_EMPRESAS_NO_ABRE", ancla: "selectores.menu" });
+    if (!options.length) throw siiError("No pude abrir la lista de empresas del portal. Selecciona la empresa a mano arriba y reintenta.", { code: "LISTA_EMPRESAS_NO_ABRE", ancla: "selectores.menu", paso: "emisor" });
     const candidatos = options.filter((opt) => extractRutTokens(opt.textContent || "").includes(objetivo));
     if (candidatos.length === 0) {
       // NO se le puede decir "selecciónala a mano": no está en la lista, así que
@@ -858,7 +1010,7 @@
   // esto LANZABA si creía el botón deshabilitado → el robot NUNCA apretaba EMITIR con
   // receptor (bug). Si de verdad quedara deshabilitado, el click es no-op y el bucle
   // de confirmación de 16s lo detecta; nunca inventa un folio.
-  async function waitFinalEmitEnabled(timeoutMs = 12000) {
+  async function waitFinalEmitEnabled(timeoutMs = LB.esperas.emit_habilitado) { // literal cableado: 12000
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const dlg = activeEmitDialog();
@@ -879,7 +1031,7 @@
   async function clickFinalEmitInDialog(dialog) {
     const buttons = Array.from(dialog.querySelectorAll("button"));
     const finalEmit = buttons.reverse().find((button) => normalizeText(button.innerText || button.textContent || button.getAttribute("value")) === LB.botones.emitir);
-    if (!finalEmit) throw siiError("Boton final EMITIR no encontrado en el modal", { code: "SIN_BOTON_EMITIR_MODAL", ancla: "botones.emitir" });
+    if (!finalEmit) throw siiError("Boton final EMITIR no encontrado en el modal", { code: "SIN_BOTON_EMITIR_MODAL", ancla: "botones.emitir", paso: "emitir" });
     await clickElement(finalEmit);
     await new Promise((resolve) => setTimeout(resolve, 80));
   }
@@ -911,9 +1063,16 @@
   // matchea "NO". Si no hay alerta, no hace nada y devuelve false (best-effort).
   async function clickMontoAltoAlertIfPresent() {
     const bodyText = normalizeSearchText(document.body?.innerText || document.body?.textContent || "");
-    if (!/DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/.test(bodyText)) return false;
+    // Tanda 2: el TEXTO de la alerta viene del libreto (LB.monto_alto.texto); el BOTÓN
+    // es CÓDIGO: solo "SI" exacto, con denylist explícita — jamás NO/CANCELAR aunque un
+    // libreto o un cambio del portal los pusiera primero.
+    if (!LB.monto_alto.texto.test(bodyText)) return false;
+    const DENY = new Set(["NO", "CANCELAR"]);
     const si = Array.from(document.querySelectorAll("button, .v-btn, [role='button']"))
-      .find((b) => b.offsetParent !== null && normalizeSearchText(b.innerText || b.textContent) === "SI");
+      .find((b) => {
+        const t = normalizeSearchText(b.innerText || b.textContent);
+        return b.offsetParent !== null && !DENY.has(t) && t === "SI";
+      });
     if (!si) return false;
     await clickElement(si);
     return true;
@@ -1066,6 +1225,9 @@
       // CAJA NEGRA: true = se pidió glosa ("Detalle") y el worker NO la pudo escribir
       // (bug muda de Bit En SpA). Se consulta en sii_local_resultados.result->glosa_omitida.
       glosa_omitida: glosaOmitida,
+      // CAJA NEGRA: true = el job traía nombre/dirección/e-mail/teléfono del receptor y
+      // alguno NO quedó escrito (el RUT no entra: si falla, se aborta pre-emit).
+      receptor_omitido: receptorOmitido,
       tipo_dte: job?.tipo_dte ?? null,
       fecha_emision: job?.fecha_emision ?? null,
       estado: strongFolio ? "emitida_capturada" : folio ? "resultado_requiere_revision" : "resultado_no_detectado",
@@ -1156,10 +1318,11 @@
 
   async function fillAndEmit(job) {
     glosaOmitida = false; // reset por emisión (caja negra de la glosa)
+    receptorOmitido = false; // reset por emisión (caja negra del receptor)
     LB = resolverLibreto(job); // catálogo del portal para esta emisión (fallback = hardcode)
     const amount = String(Math.max(0, Math.round(Number(job?.totales?.monto_total ?? 0))));
     if (!amount || amount === "0") throw new Error("Monto invalido para e-Boleta");
-    if (!buttonByText(LB.botones.emitir)) throw siiError("Pantalla e-Boleta no lista", { code: "PANTALLA_NO_LISTA", ancla: "botones.emitir" });
+    if (!buttonByText(LB.botones.emitir)) throw siiError("Pantalla e-Boleta no lista", { code: "PANTALLA_NO_LISTA", ancla: "botones.emitir", paso: "monto" });
 
     // Cuentas multi-empresa: dejar seleccionada la EMPRESA correcta antes de nada.
     // Cambiar el emisor puede refrescar el portal para esa empresa, así que esperamos a
@@ -1168,7 +1331,7 @@
     for (let i = 0; i < 20 && !buttonByText(LB.botones.emitir); i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
-    if (!buttonByText(LB.botones.emitir)) throw siiError("La pantalla e-Boleta no volvió a estar lista tras seleccionar la empresa.", { code: "PANTALLA_NO_LISTA_POST_EMISOR", ancla: "botones.emitir" });
+    if (!buttonByText(LB.botones.emitir)) throw siiError("La pantalla e-Boleta no volvió a estar lista tras seleccionar la empresa.", { code: "PANTALLA_NO_LISTA_POST_EMISOR", ancla: "botones.emitir", paso: "emisor" });
     assertEmisorRut(job);
 
     renderOverlay("LOCKED_AUTOMATION", "Preparando e-Boleta. No escribas ni hagas click.");
@@ -1178,7 +1341,12 @@
     // reload pre-retry del librero (background.js), que deja la calculadora virgen;
     // sin ambas, un reintento tecleaba el monto ENCIMA del anterior y podía emitir
     // una boleta real por los dos montos pegados.
+    // Invariante en CÓDIGO (tanda 2): un "botón de borrado" JAMÁS es un dígito ni el
+    // EMITIR — un libreto con limpiar_pad:["1"] tecleaba un 1 de más y salía una boleta
+    // REAL por 10×. El validador ya lo rechaza; esto es el cinturón por si llegara igual.
     for (const clearText of LB.botones.limpiar_pad) {
+      const t = normalizeText(clearText);
+      if (/^\d+$/.test(t) || t === normalizeText(LB.botones.emitir)) continue;
       const clearBtn = buttonByText(clearText);
       if (clearBtn) {
         await clickElement(clearBtn);
@@ -1191,7 +1359,7 @@
       await clickButtonText(digit);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, LB.esperas.pad_post)); // literal cableado: 250
     renderOverlay("LOCKED_AUTOMATION", "Abriendo formulario de e-Boleta.");
     await clickButtonText(LB.botones.emitir);
     // waitForEmitDialog absorbe la alerta de monto alto (¿Desea continuar? → SÍ) en su
@@ -1199,15 +1367,45 @@
     // no aparece y abre directo. Un solo timeout, sin esperas apiladas.
     let dialog = await waitForEmitDialog();
     if (!dialog) {
-      throw siiError("El modal Emitir e-Boleta no se abrio; no se presiono el EMITIR final.", { code: "MODAL_NO_ABRE", ancla: "selectores.dialogo_activo" });
+      // Hay un diálogo activo pero NO dice "Emitir e-Boleta" → lo que cambió es el título
+      // (ancla modal.titulo); si no hay ninguno, el selector del diálogo.
+      const hayDialogo = document.querySelectorAll(LB.selectores.dialogo_activo).length > 0;
+      throw siiError("El modal Emitir e-Boleta no se abrio; no se presiono el EMITIR final.", { code: "MODAL_NO_ABRE", ancla: hayDialogo ? "modal.titulo" : "selectores.dialogo_activo", paso: "modal" });
+    }
+
+    // El modal tiene que traer slots (tipo/pago/sucursal). Cero slots = el selector del
+    // libreto no calza con el portal: se avisa por SU ancla y no por la del tipo.
+    // W1 (tanda 3): Vuetify pinta el modal ANTES que su contenido; evaluar al tiro
+    // daba SIN_SLOTS_MODAL falsos en máquinas lentas. Se sondea hasta ~3 s.
+    let slotsVistos = 0;
+    for (let i = 0; i < 20 && slotsVistos === 0; i += 1) {
+      const dlg = activeEmitDialog() || dialog;
+      slotsVistos = dlg.querySelectorAll(LB.selectores.slot).length;
+      if (slotsVistos === 0) await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    if (slotsVistos === 0) {
+      throw siiError("El modal Emitir e-Boleta no muestra ningún desplegable (tipo/pago/sucursal). No se presiono el EMITIR final.", { code: "SIN_SLOTS_MODAL", ancla: "selectores.slot", paso: "modal" });
     }
 
     // Sucursal: requerida. A veces auto-selecciona (una sola dirección) y a
     // veces queda en "Elija sucursal" por carrera de carga; si está vacía,
-    // elegir la primera disponible.
-    const dlgSucursal = activeEmitDialog();
-    if (dlgSucursal && /elija sucursal/i.test(dlgSucursal.innerText || dlgSucursal.textContent || "")) {
-      await selectFirstVuetifyOption(LB.slots.sucursal);
+    // elegir la primera disponible. Tanda 2: si el slot está vacío y NO se logró
+    // elegir ninguna opción → ABORTAR pre-emit (antes seguía mudo y el EMITIR final
+    // caía en un formulario inválido: 16 s de espera y "no confirmó").
+    // W6 (tanda 3): el libreto solo UBICA el slot; que esté vacío se decide en CÓDIGO
+    // (sin selección visible, o selección que empieza con "ELIJA"). Antes bastaba que
+    // el texto del modal contuviera "elija sucursal" para re-abrir el menú y clickear
+    // la primera opción — pisando una sucursal ya elegida por otra.
+    const slotSucursal = slotPorTexto(LB.slots.sucursal);
+    if (slotSucursal) {
+      const seleccion = slotSeleccion(slotSucursal);
+      const vacia = !seleccion || seleccion.startsWith("ELIJA");
+      if (vacia) {
+        const sucursalOk = await selectFirstVuetifyOption(LB.slots.sucursal);
+        if (!sucursalOk) {
+          throw siiError("La sucursal quedó sin seleccionar en el modal SII (campo requerido). Selecciónala manualmente y usa Capturar folio.", { code: "SUCURSAL_NO_SELECCIONADA", ancla: "slots.sucursal", paso: "sucursal" });
+        }
+      }
     }
 
     // Tipo de boleta: el select muestra el valor por defecto; lo abrimos por el
@@ -1222,7 +1420,20 @@
     const wantedType = job?.tipo_dte === 41 ? LB.slots.tipo_exenta : LB.slots.tipo_afecta;
     const tipoOk = await selectVuetifyOption(LB.slots.tipo, wantedType);
     if (!tipoOk) {
-      throw siiError(`No pude confirmar el tipo de boleta (${wantedType}) en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.`, { code: "TIPO_NO_CONFIRMADO", ancla: "slots.tipo" });
+      throw siiError(`No pude confirmar el tipo de boleta (${wantedType}) en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.`, { code: "TIPO_NO_CONFIRMADO", ancla: ultimoFalloSelect?.ancla ?? "slots.tipo", paso: "tipo" });
+    }
+    // Invariante en CÓDIGO (tanda 2): lo que el modal MUESTRA tiene que decir "EXENTA"
+    // si y solo si el job es 41. Un libreto con tipo_afecta/tipo_exenta permutados
+    // pasaba la confirmación de arriba (compara contra el MISMO texto que eligió) y
+    // sacaba una 41 como 39 real. El validador lo rechaza; esto muerde si llega igual.
+    // W2 (tanda 3): se lee SOLO la selección visible del slot (no el label). Sin
+    // selección visible no hay invariante que verificar → se aborta igual.
+    const tipoMostrado = slotTextoActual(LB.slots.tipo);
+    if (tipoMostrado == null) {
+      throw siiError("El modal SII no muestra ningún tipo de boleta seleccionado. No se presiono el EMITIR final.", { code: "TIPO_NO_CONFIRMADO", ancla: "slots.tipo", paso: "tipo" });
+    }
+    if (tipoMostrado.includes("EXENTA") !== (job?.tipo_dte === 41)) {
+      throw siiError(`El modal SII muestra "${tipoMostrado.slice(0, 40)}" pero el trabajo es tipo ${job?.tipo_dte}. No se presiono el EMITIR final.`, { code: "TIPO_NO_CONFIRMADO", ancla: "slots.tipo", paso: "tipo" });
     }
 
     // Método de pago: el SII NO registra la boleta sin él. Si no se logra
@@ -1231,7 +1442,7 @@
     const pagoOk = await selectVuetifyOption(LB.slots.metodo_pago, paymentMethod)
       || await selectVuetifyOption(LB.slots.metodo_pago_alt, paymentMethod);
     if (!pagoOk) {
-      throw siiError("No pude seleccionar el método de pago en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.", { code: "PAGO_NO_SELECCIONADO", ancla: "slots.metodo_pago" });
+      throw siiError("No pude seleccionar el método de pago en el modal SII (campo requerido). Selecciónalo manualmente y usa Capturar folio.", { code: "PAGO_NO_SELECCIONADO", ancla: ultimoFalloSelect?.ancla ?? "slots.metodo_pago", paso: "pago" });
     }
 
     // Glosa de la boleta (campo "Detalle" del SII, máx 80 caracteres): texto
@@ -1250,13 +1461,13 @@
         let glosaInput = null;
         for (let i = 0; i < 8 && !glosaInput; i += 1) {
           glosaInput = findGlosaInput();
-          if (!glosaInput) await new Promise((resolve) => setTimeout(resolve, 150));
+          if (!glosaInput) await new Promise((resolve) => setTimeout(resolve, LB.esperas.glosa_aparece)); // literal cableado: 150
         }
         // 2) Escribir SIN blur (el blur borraba el valor) y verificar RE-CONSULTANDO el
         //    input (Vuetify puede re-renderizar el nodo). Corta apenas queda escrito.
         for (let i = 0; i < 4 && !glosaOk && glosaInput; i += 1) {
           setControlValue(glosaInput, glosa, { blur: false });
-          await new Promise((resolve) => setTimeout(resolve, 120));
+          await new Promise((resolve) => setTimeout(resolve, LB.esperas.glosa_escribe)); // literal cableado: 120
           const check = findGlosaInput() || glosaInput;
           glosaOk = normalizeText(check.value) === normalizeText(glosa);
           if (!glosaOk) glosaInput = check;
@@ -1277,26 +1488,62 @@
     if (r.rut || r.razon_social || r.direccion || r.email || r.telefono) {
       renderOverlay("LOCKED_AUTOMATION", "Completando datos del receptor.");
       const toggled = await enableDialogToggle(LB.toggles.receptor);
+      // Tanda 2: con RUT en el job, el receptor NO es best-effort. Sobre ~135 UF el SII
+      // exige identificarlo (Res. 44/2025) y una boleta real sin receptor es un error
+      // tributario irreversible → si el toggle no aparece, ABORTAR pre-emit.
+      if (!toggled && r.rut) {
+        throw siiError("No encontré el interruptor Receptor en el modal SII y el trabajo trae RUT del receptor. No se presiono el EMITIR final.", { code: "RECEPTOR_NO_ESCRITO", ancla: "toggles.receptor", paso: "receptor" });
+      }
+      if (!toggled) receptorOmitido = true; // sin RUT: datos de contacto que no se pudieron poner
       if (toggled) {
         await new Promise((resolve) => setTimeout(resolve, 300));
+        // fill devuelve si el campo quedó ESCRITO (existe y muestra el valor). LB.receptor.*
+        // ya son RegExp compilados con "i" (resolverLibreto), no se recompilan acá.
         const fill = (pattern, value) => {
-          if (!value) return;
+          if (!value) return true; // no se pidió → no cuenta como omitido
           const input = findDialogControl(pattern);
-          if (input) setControlValue(input, String(value));
+          if (!input) return false;
+          setControlValue(input, String(value));
+          return normalizeText(input.value) === normalizeText(value);
         };
         // ORDEN CRÍTICO: el RUT PRIMERO. Al escribirlo, el SII hace un lookup async y,
         // si el RUT NO está registrado, muestra "No hay información registrada... indique
         // su nombre" y BORRA el campo Nombre. Por eso hay que esperar a que ese lookup
         // termine ANTES de escribir el nombre — si no, el lookup lo pisa y queda vacío,
         // y sin nombre el SII no habilita EMITIR (era el bug del cuelgue con receptor).
-        fill(new RegExp(LB.receptor.rut), r.rut);
-        if (r.rut) await new Promise((resolve) => setTimeout(resolve, 1800));
+        // W3 (tanda 3): compuerta en CÓDIGO antes de escribir — el control que el regex
+        // del libreto eligió tiene que hablar de "RUT" (id/name/label/placeholder). Si
+        // no, se trata como inexistente: un regex que matchea de más (p. ej. ".") caía
+        // en el primer input del modal y escribía el RUT del cliente en la GLOSA.
+        const findRutReceptorInput = () => {
+          const input = findDialogControl(LB.receptor.rut);
+          return input && controlText(input).includes("RUT") ? input : null;
+        };
+        if (r.rut) {
+          const rutInputPre = findRutReceptorInput();
+          // ANCLA PRE-EMIT: si el campo NO EXISTE, es estructura (posible cambio del SII).
+          if (!rutInputPre) {
+            throw siiError("El RUT del receptor no quedó escrito en el modal SII (campo renombrado o borrado por el portal). No se presiono el EMITIR final.", { code: "RECEPTOR_NO_ESCRITO", ancla: "receptor_campos.rut", paso: "receptor" });
+          }
+          setControlValue(rutInputPre, String(r.rut));
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+          // El campo existe pero no quedó con el RUT del job (comparado canónico: el SII
+          // re-formatea con puntos/guion al validar) → es un DATO que el portal rechazó,
+          // no un cambio del SII: error sin ancla, no cuenta para el umbral.
+          const rutInput = findRutReceptorInput();
+          const escrito = rutInput ? (normalizeRut(rutInput.value) ?? normalizeText(rutInput.value)) : null;
+          const pedido = normalizeRut(r.rut) ?? normalizeText(r.rut);
+          if (escrito !== pedido) {
+            throw siiError("El SII no aceptó el RUT del receptor en el modal (quedó distinto a lo pedido). Revísalo en la app; no se presiono el EMITIR final.", { code: "RECEPTOR_RUT_NO_ACEPTADO", paso: "receptor" });
+          }
+        }
         // Nombre DESPUÉS del lookup (para que no lo borre). El SII lo EXIGE cuando el RUT
         // no está registrado; la app ya obliga a ponerlo si hay RUT.
-        fill(new RegExp(LB.receptor.nombre), r.razon_social);
-        fill(new RegExp(LB.receptor.direccion), r.direccion);
-        fill(new RegExp(LB.receptor.email), r.email);
-        fill(new RegExp(LB.receptor.telefono), r.telefono);
+        const okNombre = fill(LB.receptor.nombre, r.razon_social);
+        const okDir = fill(LB.receptor.direccion, r.direccion);
+        const okEmail = fill(LB.receptor.email, r.email);
+        const okFono = fill(LB.receptor.telefono, r.telefono);
+        if (!(okNombre && okDir && okEmail && okFono)) receptorOmitido = true; // a la caja negra, no aborta
         await new Promise((resolve) => setTimeout(resolve, 400)); // asentar la validación
       }
     }
@@ -1312,7 +1559,7 @@
     // faltaba asentarse) o error claro (si un dato del receptor no pasa). PRE-emit.
     await waitFinalEmitEnabled();
     dialog = activeEmitDialog(); // re-capturar: el modal pudo re-renderizarse al validar
-    if (!dialog) throw siiError("Modal Emitir e-Boleta cerrado antes de emitir; no se presiono el EMITIR final.", { code: "MODAL_CERRADO_PRE_EMIT", ancla: "selectores.dialogo_activo" });
+    if (!dialog) throw siiError("Modal Emitir e-Boleta cerrado antes de emitir; no se presiono el EMITIR final.", { code: "MODAL_CERRADO_PRE_EMIT", ancla: "selectores.dialogo_activo", paso: "emitir" });
     assertEmisorNoCambio(job); // ÚLTIMA COMPUERTA: aborta si el emisor cambió (THROW aquí = ANTES de notifyFinalEmitClicked → job reintentable, sin folio, sin doble emisión)
     await clickFinalEmitInDialog(dialog);
     notifyFinalEmitClicked(); // arma el candado en el librero AL INSTANTE (no espera los 16s)
@@ -1426,6 +1673,9 @@
           code: error?.code ?? null,
           posible_cambio_sii: error?.posibleCambioSii === true,
           ancla_faltante: error?.anclaFaltante ?? null,
+          // Tanda 2: etapa del guion y foto saneada del portal (solo con ancla).
+          paso: error?.paso ?? null,
+          mapa: error?.mapa ?? null,
         }));
       return true;
     }

@@ -102,3 +102,63 @@ export function errorMetadata(error: unknown): Record<string, Json> {
   }
   return { error_message: sanitizeString(String(error)) };
 }
+
+/**
+ * Saneado del "mapa" de la página del portal del SII que manda el worker
+ * cuando tropieza con un ancla (cambio-sii, tanda 2 de la extensión). Es el
+ * MISMO criterio que page-map/route.ts (sanitizeMap), copiado acá porque un
+ * route.ts de Next no puede exportar helpers (el build rechaza exports que no
+ * sean del contrato de ruta). Solo textos del HTML público del SII —títulos,
+ * botones, labels— y aun así se enmascaran correos, RUT y claves por si el
+ * portal mostrara datos del cliente. Tope duro de 2 KB serializado.
+ */
+export const MAPA_PORTAL_MAX_BYTES = 2048;
+
+function redactMapaText(value: string) {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dkK]\b/g, "[rut]")
+    .replace(/\b(clave|password|token|cookie|authorization)\b\s*[:=]?\s*\S+/gi, "$1=[redacted]")
+    .slice(0, 240);
+}
+
+function safeMapaUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.slice(0, 240);
+  } catch {
+    return redactMapaText(value);
+  }
+}
+
+export function sanitizeMapaPortal(value: unknown, depth = 0, key = ""): unknown {
+  if (value === null || value === undefined) return null;
+  if (depth > 4) return "[truncated]";
+  if (typeof value === "string") {
+    if (/url|href|src/i.test(key)) return safeMapaUrl(value);
+    if (/clave|password|token|cookie|authorization|secret/i.test(key)) return "[redacted]";
+    return redactMapaText(value);
+  }
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 30).map((item) => sanitizeMapaPortal(item, depth + 1, key));
+  if (typeof value !== "object") return null;
+
+  const output: Record<string, unknown> = {};
+  for (const [entryKey, entryValue] of Object.entries(value).slice(0, 60)) {
+    if (/clave|password|token|cookie|authorization|secret/i.test(entryKey)) {
+      output[entryKey] = "[redacted]";
+      continue;
+    }
+    output[entryKey] = sanitizeMapaPortal(entryValue, depth + 1, entryKey);
+  }
+  if (depth === 0) {
+    // Tope: si aun saneado pesa más de 2 KB, no viaja (mejor sin mapa que con
+    // un blob que reviente ops_events o el panel).
+    try {
+      if (JSON.stringify(output).length > MAPA_PORTAL_MAX_BYTES) return { truncado: true };
+    } catch {
+      return null;
+    }
+  }
+  return output;
+}
