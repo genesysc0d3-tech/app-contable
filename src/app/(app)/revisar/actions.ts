@@ -6,7 +6,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
-import { aprenderReglaDesdeResolucion, type AprenderResultado } from "@/lib/ai/aprender-regla";
+import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
 
@@ -238,19 +238,21 @@ export async function cambiarTipoPropuestas(
   const tipoDte = mesa === "factura" ? (afecta ? 33 : 34) : (afecta ? 39 : 41);
 
   let cambiadas = 0;
+  const movIdsCambiados: string[] = [];
   for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
     const batch = propuestaIds.slice(i, i + BATCH_SIZE);
     // Se lee el total de CADA una: el reparto neto/IVA depende de su monto, así
-    // que no hay un UPDATE único que sirva para todo el lote.
+    // que no hay un UPDATE único que sirva para todo el lote. Traemos también el
+    // movimiento_id para poder aprender la regla de contraparte (abajo).
     const { data: filas, error: leerError } = await ctx.sb
       .from("propuestas_ia")
-      .select("id, total")
+      .select("id, total, movimiento_id")
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .in("estado", ["pendiente", "editado", "listo"]);
     if (leerError) return { error: leerError.message, count: cambiadas };
 
-    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null }>) {
+    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null }>) {
       const { neto, iva } = derivarMontosDte(Number(fila.total ?? 0), afecta);
       const { error, count } = await ctx.sb
         .from("propuestas_ia")
@@ -259,11 +261,48 @@ export async function cambiarTipoPropuestas(
         .eq("id", fila.id)
         .in("estado", ["pendiente", "editado", "listo"]);
       if (error) return { error: error.message, count: cambiadas };
+      if ((count ?? 0) > 0 && fila.movimiento_id) movIdsCambiados.push(fila.movimiento_id);
       cambiadas += count ?? 0;
     }
   }
 
   if (cambiadas === 0) return { error: "No se cambió ninguna (¿ya estaban emitidas o comprometidas a Emitir?)", count: 0 };
+
+  // Aprender-al-clasificar por el camino BULK (la "cartola de corrido" = el uso
+  // real del producto). Antes solo aprendía editarPropuesta (edición individual);
+  // por eso el aprendizaje llevaba 3 meses muerto (memoria project_aprender_al_
+  // clasificar §2026-09-11). Solo mesa boleta (39/41): la acuñación y el matcher
+  // hablan ese vocabulario, no factura 33/34. Se DEDUP por contraparte DENTRO de
+  // la acción: 50 P2P de "JUAN PEREZ" = 1 upsert + 1 propagación, no 50.
+  // Best-effort: un fallo acá NO revierte el cambio de tipo ya guardado.
+  if (mesa === "boleta" && movIdsCambiados.length > 0) {
+    try {
+      const { data: movs } = await ctx.sb
+        .from("movimientos_raw")
+        .select("descripcion, tipo_flujo, documento_id")
+        .in("id", movIdsCambiados);
+      const vistos = new Set<string>();
+      for (const m of (movs ?? []) as Array<{ descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }>) {
+        if (m.tipo_flujo !== "entrada" && m.tipo_flujo !== "salida") continue;
+        const extra = extraerPatronContraparte(m.descripcion);
+        if (!extra) continue; // ruido/genérica/evento bancario → no aprende
+        const clave = `${extra.patron}|${m.tipo_flujo}`;
+        if (vistos.has(clave)) continue; // ya acuñé esta contraparte en este lote
+        vistos.add(clave);
+        await aprenderReglaDesdeResolucion(ctx.sb, {
+          empresaId: ctx.empresaId,
+          userId: ctx.userId,
+          documentoId: m.documento_id,
+          descripcion: m.descripcion ?? "",
+          tipoFlujo: m.tipo_flujo,
+          tipoDte: tipoDte as 39 | 41,
+        });
+      }
+    } catch {
+      // el cambio de tipo ya quedó guardado; aprender es best-effort
+    }
+  }
+
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
@@ -382,9 +421,13 @@ export async function editarPropuesta(
   }
 
   // Snapshot previo para aprender-al-clasificar: si esta edición fija tipo_dte
-  // (39/41) sobre una propuesta que aún NO tenía decisión humana, guardamos la
-  // glosa/flujo/cartola para enseñar la regla después del update. Se lee ANTES
-  // porque el update sobreescribe el tipo_dte previo.
+  // (39/41), guardamos la glosa/flujo/cartola para enseñar la regla después del
+  // update. IMPORTANTE: NO se exige que el tipo_dte previo esté en null. El
+  // clasificador PRE-ESTAMPA tipo_dte al crear la propuesta (processor.ts), así
+  // que "previo null" casi nunca se cumple y por eso el aprendizaje llevaba
+  // 3 meses muerto. El discriminador correcto es el CANAL: esta server action
+  // solo la invoca un humano eligiendo el tipo; el auto-estampador nunca la
+  // llama. Entonces fijar 39/41 acá ES, por construcción, una decisión humana.
   let previo:
     | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null }
     | null = null;
@@ -395,7 +438,7 @@ export async function editarPropuesta(
       .eq("empresa_id", ctx.empresaId)
       .eq("id", propuestaId)
       .maybeSingle();
-    if (p && p.tipo_dte == null && p.movimiento_id) {
+    if (p && p.movimiento_id) {
       const { data: m } = await ctx.sb
         .from("movimientos_raw")
         .select("descripcion, tipo_flujo, documento_id")
@@ -430,9 +473,9 @@ export async function editarPropuesta(
   if (!count) return { error: "No se pudo editar — el estado de la propuesta no lo permite" };
 
   // Aprender-al-clasificar: solo si tipo_dte REALMENTE se persistió (no lo botó
-  // el fallback de arriba) y era la primera decisión humana (previo != null).
-  // Best-effort: aprenderReglaDesdeResolucion nunca lanza; un fallo acá no rompe
-  // la edición ya guardada.
+  // el fallback de arriba) y se pudo capturar la glosa/flujo del movimiento
+  // (previo != null). Best-effort: aprenderReglaDesdeResolucion nunca lanza; un
+  // fallo acá no rompe la edición ya guardada.
   const tipoDtePersistida = "tipo_dte" in update && (update.tipo_dte === 39 || update.tipo_dte === 41);
   let aprendizaje: AprenderResultado | null = null;
   if (previo && tipoDtePersistida) {

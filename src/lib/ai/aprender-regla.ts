@@ -44,6 +44,13 @@ const RUIDO = new Set<string>([
   // canales / medios
   "internet", "web", "online", "movil", "app", "banco", "bco", "cuenta", "cta",
   "electronica", "digital", "linea", "sucursal", "caja", "cajero",
+  // movimientos INTERNOS del banco (no son contraparte de venta): un sobregiro,
+  // un interés o una comisión no identifican a un cliente. Faltaban y por eso se
+  // acuñó la regla-basura "SOBREGIRO CTE → Exenta" (2026-09-01).
+  "cte", "sobregiro", "credito", "avance", "desembolso", "descubierto",
+  "cursado", "interes", "intereses", "comision", "comisiones", "mantencion",
+  "impuesto", "impuestos", "reajuste", "dividendo", "dividendos", "cuota",
+  "cuotas", "cheque", "cheques", "timbre", "timbres",
   // entidades genéricas (peligrosas como clave: matchean a cualquiera)
   "proveedor", "proveedores", "cliente", "clientes", "varios", "tercero",
   "terceros", "particular", "particulares", "sueldo", "sueldos", "remuneracion",
@@ -167,6 +174,12 @@ export async function aprenderReglaDesdeResolucion(
   try {
     const extra = extraerPatronContraparte(args.descripcion);
     if (!extra) return VACIO;
+    // Doble llave de calidad: NUNCA acuñar desde un movimiento que no es venta
+    // (préstamo, sueldo, aporte, cuenta propia, DAP, evento bancario). Hoy
+    // detectaNoBoletar solo corría en la propagación (:276); acá corta ANTES del
+    // insert para que ni siquiera se cree la regla. Junto al RUIDO ampliado, es
+    // la defensa en profundidad contra el bug del "SOBREGIRO CTE".
+    if (detectaNoBoletar(args.descripcion)) return { ...VACIO, patron: extra.patron };
     const { patron } = extra;
     // Se guarda como regex con límites de palabra (no substring plano): así
     // "MARIA" no se lleva "MARIANA". ruleMatches ya ejecuta el camino regex.
