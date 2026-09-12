@@ -68,6 +68,23 @@ describe("fetchOpenCodeStreaming — parser SSE del gateway OpenCode", () => {
     ).rejects.toThrow(/cortado por el gateway/);
   });
 
+  it("SIEMPRE manda x-opencode-session (default a prueba de olvidos)", async () => {
+    // El gateway devuelve 400 MissingSessionID sin este header (regresión 2026-09-11).
+    const spy = vi.fn(async () => sseResponse(['data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}\n']));
+    vi.stubGlobal("fetch", spy);
+    await fetchOpenCodeStreaming({ url: "http://x", apiKey: "k", body: {} });
+    const headers = ((spy.mock.calls[0] as unknown[])[1] as RequestInit).headers as Record<string, string>;
+    expect(headers["x-opencode-session"]).toBeTruthy();
+  });
+
+  it("respeta el x-opencode-session ESTABLE que pasa el caller (cache de prompt)", async () => {
+    const spy = vi.fn(async () => sseResponse(['data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}\n']));
+    vi.stubGlobal("fetch", spy);
+    await fetchOpenCodeStreaming({ url: "http://x", apiKey: "k", body: {}, extraHeaders: { "x-opencode-session": "sid-fijo-123" } });
+    const headers = ((spy.mock.calls[0] as unknown[])[1] as RequestInit).headers as Record<string, string>;
+    expect(headers["x-opencode-session"]).toBe("sid-fijo-123");
+  });
+
   it("manda stream:true y stream_options en el body", async () => {
     const spy = vi.fn(async () => sseResponse(['data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}\n']));
     vi.stubGlobal("fetch", spy);
