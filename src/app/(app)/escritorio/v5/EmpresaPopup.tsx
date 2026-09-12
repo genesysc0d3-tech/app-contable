@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { LogoMcp } from "./LogoMcp";
 import { useRouter } from "next/navigation";
 import EmisorStep from "./EmisorStep";
 import { precargarConectoresMcp } from "@/app/(app)/empresa/ConectorMcpConfig";
@@ -735,15 +736,24 @@ export default function EmpresaPopup({
                     s.n
                   )}
                 </div>
-                <svg className="ep-step-icon" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d={s.icon}
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                {s.n === 8 ? (
+                  // Conector MCP: el glifo OFICIAL de MCP (mismo LogoMcp de los
+                  // chips de la mesa), no el enchufe genérico. Hereda color/opacidad
+                  // de .ep-step-icon vía currentColor.
+                  <span className="ep-step-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <LogoMcp size={20} />
+                  </span>
+                ) : (
+                  <svg className="ep-step-icon" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d={s.icon}
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
                 <div>
                   <div className="ep-step-title">{s.title}</div>
                   <div className="ep-step-subtitle">{s.sub}</div>
