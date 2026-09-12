@@ -14,6 +14,7 @@ import {
 import { requirePaidModel } from "../model-guard";
 import { assertApprovedDataProcessor } from "../egress";
 import { fetchOpenCodeStreaming } from "../opencode-stream";
+import { randomUUID } from "node:crypto";
 
 const BASE_URL = "https://opencode.ai/zen/go/v1";
 
@@ -57,12 +58,17 @@ interface OpenCodeGoResponse {
 export class OpenCodeGoProvider implements AIProvider {
   private apiKey: string;
   private model: string;
+  // Session id ESTABLE por instancia: todos los chunks de una misma clasificación
+  // comparten id → OpenCode Go cachea el system prompt (más barato y rápido) y
+  // enruta consistente. Exigido por el gateway desde 2026-09-11 (ver opencode-stream).
+  private sessionId: string;
 
   constructor() {
     const apiKey = process.env.OPENCODE_GO_API_KEY;
     if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
     this.apiKey = apiKey;
     this.model = requirePaidModel(process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash", "opencodego");
+    this.sessionId = randomUUID();
     // Gate fail-closed (Ley 21.719): solo modelos en la allowlist de encargados
     // con retención cero pueden recibir datos personales.
     assertApprovedDataProcessor("opencodego", this.model);
@@ -77,6 +83,7 @@ export class OpenCodeGoProvider implements AIProvider {
     const data = await fetchOpenCodeStreaming({
       url: `${BASE_URL}/chat/completions`,
       apiKey: this.apiKey,
+      extraHeaders: { "x-opencode-session": this.sessionId },
       body: {
         // NO se fuerza response_format: json_object. Los modelos de razonamiento
         // (deepseek-v4-flash) revientan el upstream ("Upstream request failed") al

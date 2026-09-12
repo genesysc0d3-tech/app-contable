@@ -13,6 +13,8 @@
  * total: una generación sana larga nunca debe abortarse; una conexión muda sí.
  */
 
+import { randomUUID } from "node:crypto";
+
 export interface OpenCodeStreamResult {
   content: string;
   finish_reason: string | null;
@@ -48,6 +50,12 @@ export async function fetchOpenCodeStreaming(args: {
       headers: {
         Authorization: `Bearer ${args.apiKey}`,
         "Content-Type": "application/json",
+        // OpenCode Go exige un session id por conversación para poder enrutar y
+        // cachear el prompt; sin él responde 400 MissingSessionID (regresión
+        // 2026-09-11, rompió la clasificación IA de un cliente). Default generado
+        // a prueba de olvidos — el caller puede pasar uno ESTABLE en extraHeaders
+        // (gana cache de prompt entre chunks) y ese sobrescribe al default.
+        "x-opencode-session": randomUUID(),
         ...(args.extraHeaders ?? {}),
       },
       body: JSON.stringify({
