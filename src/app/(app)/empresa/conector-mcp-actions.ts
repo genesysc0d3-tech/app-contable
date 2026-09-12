@@ -27,7 +27,21 @@ type FilaConexion = {
   revoked_at: string | null;
   refresh_token_hash: string | null;
   expires_at: string | null;
+  oauth_clients?: { redirect_uris?: unknown } | { redirect_uris?: unknown }[] | null;
 };
+
+/**
+ * Nombre a mostrar del conector. Algunos clientes mandan un client_name basura por
+ * Dynamic Client Registration (Claude registra "ping"), así que preferimos derivar
+ * el asistente del redirect_uri (señal confiable, igual que /api/mcp/estado).
+ */
+function nombreAsistenteMcp(redirectUris: string[], nombreGuardado: string | null, origen: string | null): string {
+  if (redirectUris.some((u) => /^https:\/\/claude\.(ai|com)\//.test(u))) return "Claude";
+  if (redirectUris.some((u) => /^https:\/\/(chatgpt|openai)\.com\//.test(u))) return "ChatGPT";
+  const n = nombreGuardado?.trim();
+  if (n && n.toLowerCase() !== "ping") return n; // "ping" = basura de DCR, no un nombre
+  return origen === "oauth" ? "Conector" : "token manual";
+}
 
 function svcSinTipos(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,7 +62,7 @@ export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: Con
 
   const { data, error } = await svc
     .from("mcp_tokens")
-    .select("id, nombre, origen, created_at, last_used_at, revoked_at, refresh_token_hash, expires_at")
+    .select("id, nombre, origen, created_at, last_used_at, revoked_at, refresh_token_hash, expires_at, oauth_clients(redirect_uris)")
     .eq("usuario_id", user.id)
     .is("revoked_at", null)
     .order("created_at", { ascending: false })
@@ -60,13 +74,19 @@ export async function listarConectoresMcp(): Promise<{ ok: true; conexiones: Con
   // refresh). Un OAuth expirado sin refresh es basura muerta: no se lista.
   const conexiones = ((data ?? []) as FilaConexion[])
     .filter((f) => f.origen !== "oauth" || f.refresh_token_hash !== null)
-    .map((f) => ({
-      id: f.id,
-      nombre: f.nombre?.trim() || (f.origen === "oauth" ? "conector" : "token manual"),
-      origen: (f.origen === "oauth" ? "oauth" : "manual") as "oauth" | "manual",
-      creado: f.created_at,
-      ultimoUso: f.last_used_at,
-    }));
+    .map((f) => {
+      const cliente = (Array.isArray(f.oauth_clients) ? f.oauth_clients[0] : f.oauth_clients) as { redirect_uris?: unknown } | null;
+      const uris: string[] = Array.isArray(cliente?.redirect_uris)
+        ? cliente.redirect_uris.filter((u): u is string => typeof u === "string")
+        : [];
+      return {
+        id: f.id,
+        nombre: nombreAsistenteMcp(uris, f.nombre, f.origen),
+        origen: (f.origen === "oauth" ? "oauth" : "manual") as "oauth" | "manual",
+        creado: f.created_at,
+        ultimoUso: f.last_used_at,
+      };
+    });
   // ¿Tiene plan? El conector exige plan activo (lib/mcp/auth.ts); en trial el
   // panel se ve en gris y sin botones (fundador 2026-09-06). Se decide acá,
   // server-side, con la misma regla que usa el consentimiento.
