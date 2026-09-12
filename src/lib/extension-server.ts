@@ -47,10 +47,14 @@ export async function getVersionExtensionDisponible(): Promise<string> {
 
   try {
     const sb = createClient(url, key);
-    const { data } = await sb
+    const { data, error } = await sb
       .from("empresas")
       .select("id, ext_last_version, ext_last_seen_at")
       .not("ext_last_version", "is", null);
+    if (error) {
+      console.error("getVersionExtensionDisponible: query falló:", error.message);
+      return EXTENSION_VERSION_MINIMA; // no cachear un fallo; nunca sobre-anunciar
+    }
 
     const filas: FilaTelemetriaExtension[] = (data ?? []).map((e) => ({
       empresa_id: e.id as string,

@@ -124,4 +124,32 @@ describe("versión DISPONIBLE derivada de telemetría (no de la constante)", () 
     expect(hayVersionNuevaDeExtension("0.2.3", "0.2.3")).toBe(false);
     expect(hayVersionNuevaDeExtension("0.2.4", "0.2.3")).toBe(false); // instalada más nueva
   });
+
+  it("versión RANCIA no cuenta aunque tenga ≥2 reales (muerde el filtro de recencia)", () => {
+    const r = versionDisponibleDeExtension([
+      fila("realA", "0.2.3", RANCIO), // 2 reales en 0.2.3 pero VIEJAS
+      fila("realB", "0.2.3", RANCIO),
+      fila("realC", "0.2.1", RECIENTE),
+      fila("realD", "0.2.1", RECIENTE),
+    ], AHORA, OPTS);
+    expect(r).toBe("0.2.1"); // sin el filtro de recencia daría 0.2.3
+  });
+
+  it("versión > tope no cuenta aunque tenga ≥2 (muerde el filtro >tope del loop, separado del clamp)", () => {
+    const r = versionDisponibleDeExtension([
+      fila("realA", "0.2.5", RECIENTE), // 2 reales en 0.2.5 (> tope 0.2.4)
+      fila("realB", "0.2.5", RECIENTE),
+      fila("realC", "0.2.1", RECIENTE),
+      fila("realD", "0.2.1", RECIENTE),
+    ], AHORA, OPTS);
+    expect(r).toBe("0.2.1"); // sin el filtro del loop, el clamp daría 0.2.4, no 0.2.1
+  });
+
+  it("agrupa versiones equivalentes de formato distinto (0.2.1 y 0.2.1.0 = ≥2)", () => {
+    const r = versionDisponibleDeExtension([
+      fila("realA", "0.2.1", RECIENTE),
+      fila("realB", "0.2.1.0", RECIENTE), // misma versión, otro formato
+    ], AHORA, OPTS);
+    expect(r).toBe("0.2.1"); // sin canonicalizar, 2 buckets de 1 → caería al piso
+  });
 });

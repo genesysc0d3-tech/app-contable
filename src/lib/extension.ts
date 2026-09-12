@@ -89,6 +89,13 @@ export interface OpcionesVersionDisponible {
   nMinimo?: number;     // empresas REALES distintas para declarar una versión "viva" (default 2)
 }
 
+/** Quita segmentos cero finales para agrupar versiones equivalentes ("0.2.1.0" → "0.2.1"). */
+function canonicalizarVersion(v: string): string {
+  const partes = v.split(".").map((x) => parseInt(x, 10) || 0);
+  while (partes.length > 1 && partes[partes.length - 1] === 0) partes.pop();
+  return partes.join(".");
+}
+
 /**
  * Deriva qué versión de la extensión está DISPONIBLE (viva en la tienda) a partir
  * de la telemetría de la flota. Regla: una versión está viva ⇔ la corren `nMinimo`
@@ -119,8 +126,13 @@ export function versionDisponibleDeExtension(
     const t = Date.parse(f.seen_at);
     if (!Number.isFinite(t) || t < limite) continue;             // rancio
     if (compararVersiones(f.version, opts.tope) > 0) continue;    // > lo construido (dato sucio)
-    if (!porVersion.has(f.version)) porVersion.set(f.version, new Set());
-    porVersion.get(f.version)!.add(f.empresa_id);
+    // Canonicaliza antes de agrupar: "0.2.1" y "0.2.1.0" son la MISMA versión
+    // (compararVersiones rellena con 0), pero como strings distintos caerían en
+    // buckets separados y ninguno cruzaría el umbral → falso piso. Blinda formatos
+    // mixtos (si el manifest algún día migra a 4 partes).
+    const canon = canonicalizarVersion(f.version);
+    if (!porVersion.has(canon)) porVersion.set(canon, new Set());
+    porVersion.get(canon)!.add(f.empresa_id);
   }
 
   let mejor: string | null = null;
