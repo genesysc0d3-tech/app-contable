@@ -40,10 +40,19 @@ export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFactura
     setNueva(false);
     if (id === empresaId) { setOtra(null); return; }
     setCargando(id);
-    const r = await datosEmisorDeEmpresa(id);
-    setCargando(null);
-    if (!r.ok) { setError("No se pudo abrir esa empresa. Si el problema sigue, cámbiala desde el logo."); return; }
-    setOtra({ id, datos: r.datos, nombre: r.razon_social });
+    // try/finally OBLIGATORIO: si datosEmisorDeEmpresa LANZA (blip de red, error de
+    // auth, rechazo del server action), sin esto `cargando` quedaba pegado para
+    // siempre → "Abriendo la empresa…" eterno + todo click futuro bloqueado por el
+    // guard `if (cargando) return`. Ese era el "cargando mil años".
+    try {
+      const r = await datosEmisorDeEmpresa(id);
+      if (!r.ok) { setError("No se pudo abrir esa empresa. Si el problema sigue, cámbiala desde el logo."); return; }
+      setOtra({ id, datos: r.datos, nombre: r.razon_social });
+    } catch {
+      setError("No se pudo abrir esa empresa. Reintenta, o cámbiala desde el logo.");
+    } finally {
+      setCargando(null);
+    }
   }
 
   return (
