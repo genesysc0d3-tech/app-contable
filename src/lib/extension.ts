@@ -62,9 +62,89 @@ export function extensionDesactualizada(version: string | null | undefined): boo
  * hueco entre publicar y que Chrome propague el auto-update: el usuario ve que
  * existe algo nuevo en vez de enterarse cuando algo falla.
  */
-export function hayVersionNuevaDeExtension(version: string | null | undefined): boolean {
+export function hayVersionNuevaDeExtension(
+  version: string | null | undefined,
+  // La versión DISPONIBLE (viva en la tienda), no la constante construida. El
+  // default preserva callers sin migrar; el flujo real la inyecta (ver
+  // extension-server.ts + el context de v5). NUNCA usar EXTENSION_VERSION_ACTUAL
+  // como "disponible": esa es la que CONSTRUIMOS, y puede estar en revisión.
+  disponible: string = EXTENSION_VERSION_ACTUAL,
+): boolean {
   if (!version || !/^\d+(\.\d+)*$/.test(version)) return false;
-  return compararVersiones(version, EXTENSION_VERSION_ACTUAL) < 0;
+  return compararVersiones(version, disponible) < 0;
+}
+
+/** Una fila de telemetría de extensión (una empresa). */
+export interface FilaTelemetriaExtension {
+  empresa_id: string;
+  version: string | null;
+  seen_at: string | null; // ISO; ext_last_seen_at
+}
+
+export interface OpcionesVersionDisponible {
+  tope: string;   // EXTENSION_VERSION_ACTUAL — techo duro (lo construido)
+  minima: string; // EXTENSION_VERSION_MINIMA — piso; también el fallback si no hay señal
+  denylist: ReadonlySet<string>; // empresa_id internas/prueba a excluir
+  ventanaDias?: number; // recencia de ext_last_seen_at (default 30)
+  nMinimo?: number;     // empresas REALES distintas para declarar una versión "viva" (default 2)
+}
+
+/** Quita segmentos cero finales para agrupar versiones equivalentes ("0.2.1.0" → "0.2.1"). */
+function canonicalizarVersion(v: string): string {
+  const partes = v.split(".").map((x) => parseInt(x, 10) || 0);
+  while (partes.length > 1 && partes[partes.length - 1] === 0) partes.pop();
+  return partes.join(".");
+}
+
+/**
+ * Deriva qué versión de la extensión está DISPONIBLE (viva en la tienda) a partir
+ * de la telemetría de la flota. Regla: una versión está viva ⇔ la corren `nMinimo`
+ * empresas REALES distintas (no internas) y RECIENTES; se topea por lo construido
+ * (`tope`) y se pisa por `minima`. Sin señal → `minima` (NUNCA sobre-anuncia).
+ *
+ * Por qué así (bug 2026-09-12): el app anunciaba una versión por una constante
+ * hardcodeada (bumpeada al SUBIR), aunque estuviera en revisión. La telemetría es
+ * la única señal honesta: si un cliente real la corre, es que está viva. El umbral
+ * `nMinimo` + la denylist evitan que una instalación desempaquetada de prueba
+ * (p.ej. la del founder) haga de canario falso. Función PURA (recibe las filas),
+ * para testear con telemetría envenenada sin tocar la DB.
+ */
+export function versionDisponibleDeExtension(
+  filas: FilaTelemetriaExtension[],
+  ahora: Date,
+  opts: OpcionesVersionDisponible,
+): string {
+  const ventanaMs = (opts.ventanaDias ?? 30) * 24 * 60 * 60 * 1000;
+  const limite = ahora.getTime() - ventanaMs;
+  const nMinimo = opts.nMinimo ?? 2;
+
+  const porVersion = new Map<string, Set<string>>();
+  for (const f of filas) {
+    if (!f.version || !/^\d+(\.\d+)*$/.test(f.version)) continue; // formato inválido
+    if (opts.denylist.has(f.empresa_id)) continue;               // interna/prueba
+    if (!f.seen_at) continue;
+    const t = Date.parse(f.seen_at);
+    if (!Number.isFinite(t) || t < limite) continue;             // rancio
+    if (compararVersiones(f.version, opts.tope) > 0) continue;    // > lo construido (dato sucio)
+    // Canonicaliza antes de agrupar: "0.2.1" y "0.2.1.0" son la MISMA versión
+    // (compararVersiones rellena con 0), pero como strings distintos caerían en
+    // buckets separados y ninguno cruzaría el umbral → falso piso. Blinda formatos
+    // mixtos (si el manifest algún día migra a 4 partes).
+    const canon = canonicalizarVersion(f.version);
+    if (!porVersion.has(canon)) porVersion.set(canon, new Set());
+    porVersion.get(canon)!.add(f.empresa_id);
+  }
+
+  let mejor: string | null = null;
+  for (const [v, empresas] of porVersion) {
+    if (empresas.size < nMinimo) continue; // un solo canario no vale
+    if (mejor === null || compararVersiones(v, mejor) > 0) mejor = v;
+  }
+
+  if (mejor === null) return opts.minima; // sin señal viva: no anunciar nada nuevo
+  if (compararVersiones(mejor, opts.tope) > 0) mejor = opts.tope;   // clamp techo
+  if (compararVersiones(mejor, opts.minima) < 0) mejor = opts.minima; // clamp piso
+  return mejor;
 }
 
 /** Copy único para el bloqueo por versión (banner y toasts consistentes). */
