@@ -23,8 +23,7 @@ export default function EmpresaPopup({
   emisionConfig,
   semilla,
   devMode = false,
-  helpStepsEnabled,
-  onHelpStepsChange,
+  onOpenGuia,
   onClose,
 }: {
   inicial: DatosEmisor;
@@ -32,8 +31,8 @@ export default function EmpresaPopup({
   empresaId: string;
   emisionConfig: EmissionProviderState;
   devMode?: boolean;
-  helpStepsEnabled?: boolean;
-  onHelpStepsChange?: (enabled: boolean) => void;
+  /** Abre la guía del escritorio (popup con la playlist de animaciones). */
+  onOpenGuia?: () => void;
   onClose: () => void;
   /** Datos que la página ya trajo (team, empresas): el wizard arranca con ellos, sin fetch. */
   semilla?: WizardSemilla | null;
@@ -752,21 +751,21 @@ export default function EmpresaPopup({
               </button>
             ))}
 
+            {/* Guía del escritorio: reabre el popup con la playlist de animaciones. */}
             <div className="ep-help-box">
               <div className="ep-help-icon">?</div>
-              <div className="ep-help-title">Guías del escritorio</div>
+              <div className="ep-help-title">Guía del escritorio</div>
               <div className="ep-help-text">
-                Al cerrar esta ventana verás números guía sobre el escritorio para seguir el flujo.
+                Animaciones cortas del flujo: emitir, configurar, equipo. Míralas cuando quieras.
               </div>
               <button
                 type="button"
-                className={`ep-help-toggle${helpStepsEnabled ? " active" : ""}`}
-                aria-pressed={Boolean(helpStepsEnabled)}
-                onClick={() => onHelpStepsChange?.(!helpStepsEnabled)}
+                className="ep-help-toggle active"
+                onClick={() => onOpenGuia?.()}
               >
-                <span>{helpStepsEnabled ? "Quitar pasos" : "Mostrar pasos"}</span>
-                <span className="ep-help-switch" aria-hidden="true">
-                  <span className="ep-help-switch-dot" />
+                <span>Ver la guía</span>
+                <span className="ep-help-switch" aria-hidden="true" style={{ display: "grid", placeItems: "center" }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                 </span>
               </button>
             </div>
