@@ -14,7 +14,7 @@ import { LogoMcp } from "./LogoMcp";
 const FASE_MS = 3300;
 
 const PASOS = [
-  { t: "Enchufas tu IA", p: "Claude o ChatGPT, con el conector MCP. Un enlace, sin instalar nada." },
+  { t: "Enchufas tu IA", p: "Claude, ChatGPT o Gemini, con el conector MCP. Un enlace, sin instalar nada." },
   { t: "Revisa tus movimientos", p: "Mira la cartola y propone qué es qué. Es copiloto: nunca emite." },
   { t: "Apruebas con un clic", p: "Sus sugerencias quedan en cuarentena hasta que tú dices sí." },
 ];
@@ -44,7 +44,8 @@ export default function McpComoFunciona() {
         .mcpf-pill .dot{width:6px;height:6px;border-radius:999px;background:var(--text3);transition:.4s}
         .mcpf-stage[data-fase="1"] .mcpf-pill,.mcpf-stage[data-fase="2"] .mcpf-pill,.mcpf-stage[data-fase="3"] .mcpf-pill{color:var(--text);border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.08)}
         .mcpf-stage[data-fase="1"] .mcpf-pill .dot,.mcpf-stage[data-fase="2"] .mcpf-pill .dot,.mcpf-stage[data-fase="3"] .mcpf-pill .dot{background:var(--green)}
-        .mcpf-stage[data-fase="1"] .mcpf-pill:nth-child(2){transition-delay:.25s}
+        .mcpf-stage[data-fase="1"] .mcpf-pill:nth-child(2){transition-delay:.2s}
+        .mcpf-stage[data-fase="1"] .mcpf-pill:nth-child(3){transition-delay:.4s}
         /* burbuja de la IA */
         .mcpf-chat{margin-top:11px;display:flex;gap:8px;opacity:0;transform:translateY(6px);transition:.45s}
         .mcpf-stage[data-fase="2"] .mcpf-chat,.mcpf-stage[data-fase="3"] .mcpf-chat{opacity:1;transform:none}
@@ -83,6 +84,7 @@ export default function McpComoFunciona() {
           <span className="mcpf-pills">
             <span className="mcpf-pill"><span className="dot" />Claude</span>
             <span className="mcpf-pill"><span className="dot" />ChatGPT</span>
+            <span className="mcpf-pill"><span className="dot" />Gemini</span>
           </span>
         </div>
 
