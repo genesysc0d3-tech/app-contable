@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition, type CSSProperties } from "react";
 import { useToast } from "@/components/Toast";
 import { setEmisionConfig, type BoletasEmisionProveedor, type FacturasEmisionProveedor } from "./actions";
-import { EXTENSION_ZIP_DOWNLOAD_PROPS, EXTENSION_VERSION_ACTUAL, EXTENSION_STORE_URL, EXTENSION_NOMBRE } from "@/lib/extension";
+import { EXTENSION_ZIP_DOWNLOAD_PROPS, EXTENSION_VERSION_ACTUAL, EXTENSION_STORE_URL, EXTENSION_NOMBRE, compararVersiones } from "@/lib/extension";
+import { useVersionDisponible } from "../escritorio/v5/version-disponible-context";
 
 export interface EmissionProviderState {
   boletasProveedor: BoletasEmisionProveedor;
@@ -339,6 +340,9 @@ function LocalMotorPanel({
   onRefresh: () => void;
 }) {
   const [showInstall, setShowInstall] = useState(false);
+  // Versión VIVA en la tienda (derivada de telemetría, del context), NO la
+  // constante construida (que puede estar en revisión).
+  const disponible = useVersionDisponible();
   const ready = status === "ready";
   const missing = status === "missing";
   const vaultReady = Boolean(vault?.configured && vault.encrypted && vault.has_pfx && vault.has_caf);
@@ -427,7 +431,7 @@ function LocalMotorPanel({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginTop: 13 }}>
         <MotorStatusCard title="SII Local" status={ready ? "Activo" : "Pendiente"} detail="Boletas 39/41 vía Portal SII/e-Boleta local." active={ready} />
         <MotorStatusCard title="SimpleAPI" status={vaultReady ? "Bóveda lista" : "Bóveda pendiente"} detail={vaultDetail(vault)} active={vaultReady} />
-        <MotorStatusCard title="Versión" status={version ?? "-"} detail={`Última disponible: v${EXTENSION_VERSION_ACTUAL}${version && version !== EXTENSION_VERSION_ACTUAL ? " · reinstala para actualizar" : ""}`} active={ready} />
+        <MotorStatusCard title="Versión" status={version ?? "-"} detail={`Última disponible: v${disponible}${version && compararVersiones(version, disponible) < 0 ? " · reinstala para actualizar" : ""}`} active={ready} />
       </div>
     </section>
   );
