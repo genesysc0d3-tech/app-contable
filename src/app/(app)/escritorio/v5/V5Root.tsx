@@ -9,6 +9,7 @@ import dynamic from "next/dynamic";
 // sigue siendo instantánea porque el chunk ya está en cache cuando alguien clickea.
 const EmpresaPopup = dynamic(() => import("./EmpresaPopup"), { ssr: false });
 import { EmissionLockProvider, useEmissionLockStatus } from "./useEmissionLockStatus";
+import { VersionDisponibleProvider } from "./version-disponible-context";
 import type { DatosEmisor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 import type { EmissionProviderState } from "../../empresa/EmissionProviderConfig";
@@ -42,6 +43,7 @@ class TabErrorBoundary extends Component<{ children: ReactNode; label: string },
 export default function V5Root({
   dashboardContent,
   empresaInicial, empresaCafs, empresaId, empresaEmisionConfig, devMode = false, wizardSemilla = null,
+  versionDisponible,
 }: {
   dashboardContent: React.ReactNode;
   empresaInicial: DatosEmisor;
@@ -51,6 +53,8 @@ export default function V5Root({
   devMode?: boolean;
   /** Team + selector de empresas ya cargados por la página: el wizard arranca sin fetch. */
   wizardSemilla?: WizardSemilla | null;
+  /** Versión de la extensión VIVA en la tienda (derivada de telemetría en el server). */
+  versionDisponible: string;
 }) {
   const [empresaOpen, setEmpresaOpen] = useState(false);
   const [helpStepsEnabled, setHelpStepsEnabled] = useState(true);
@@ -99,6 +103,7 @@ export default function V5Root({
   }, []);
 
   return (
+    <VersionDisponibleProvider value={versionDisponible}>
     <EmissionLockProvider>
       <style>{`
 :root{--bg:#f5f0eb;--surface:#ffffff;--surface2:#faf7f3;--border:rgba(0,0,0,.08);--text:#1a1612;--text2:#6f6659;--text3:#8b8275;--accent:#E8553E;--accent-light:rgba(232,85,62,.08);--green:#16a34a;--amber:#d97706;--red:#dc2626;--blue:#2563eb;--lime:#4d7c0f;--bg-muted:rgba(0,0,0,.04);--shadow:rgba(0,0,0,.08);--header-bg:rgba(255,255,255,.2);--header-border:rgba(0,0,0,.04)}
@@ -137,6 +142,7 @@ body{background:var(--bg);color:var(--text);transition:background .4s,color .4s}
       )}
       <BusinessEmissionLockBanner />
     </EmissionLockProvider>
+    </VersionDisponibleProvider>
   );
 }
 

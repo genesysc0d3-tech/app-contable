@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, hayVersionNuevaDeExtension, mensajeExtensionDesactualizada } from "@/lib/extension";
+import { useVersionDisponible } from "./version-disponible-context";
 
 export type ExtensionStatus = "checking" | "ready" | "missing";
 
@@ -188,14 +189,20 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     };
   }, [postPing]);
 
+  // Versión DISPONIBLE (viva en la tienda) desde el context, NO la constante
+  // construida (que puede estar en revisión). El PING de arriba sigue usando
+  // EXTENSION_VERSION_ACTUAL a propósito: empujar a Google es inofensivo (solo
+  // sirve versiones aprobadas); solo el aviso VISUAL usa lo derivado.
+  const disponible = useVersionDisponible();
+
   return {
     status,
     version,
     hayBoveda,
     desactualizada: status === "ready" && extensionDesactualizada(version),
-    // Aviso suave: hay una versión publicada más nueva que la instalada.
-    hayVersionNueva: status === "ready" && hayVersionNuevaDeExtension(version),
-    versionPublicada: EXTENSION_VERSION_ACTUAL,
+    // Aviso suave: hay una versión VIVA más nueva que la instalada.
+    hayVersionNueva: status === "ready" && hayVersionNuevaDeExtension(version, disponible),
+    versionPublicada: disponible,
     recheck,
   };
 }

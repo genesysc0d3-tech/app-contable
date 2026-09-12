@@ -4,6 +4,7 @@ import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import V5Root from "./V5Root";
+import { getVersionExtensionDisponible } from "@/lib/extension-server";
 import MpVueltaToast from "./MpVueltaToast";
 import GlowWrap from "./GlowWrap";
 import MesaController from "./MesaController";
@@ -522,6 +523,8 @@ export default async function V5Page({ searchParams }: {
     </>
   );
 
+  const versionDisponible = await getVersionExtensionDisponible();
+
   return (
     <>
     <Suspense fallback={null}><MpVueltaToast /></Suspense>
@@ -536,6 +539,7 @@ export default async function V5Page({ searchParams }: {
       empresaEmisionConfig={{ boletasProveedor, facturasProveedor, baseapiSandbox: false }}
       wizardSemilla={{ team, empresasSelector }}
       devMode={usuario.dev_mode === true}
+      versionDisponible={versionDisponible}
     />
     </>
   );

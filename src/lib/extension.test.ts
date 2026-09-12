@@ -11,6 +11,9 @@ import {
   compararVersiones,
   extensionDesactualizada,
   mensajeExtensionDesactualizada,
+  hayVersionNuevaDeExtension,
+  versionDisponibleDeExtension,
+  type FilaTelemetriaExtension,
 } from "./extension";
 
 describe("extension installer download", () => {
@@ -66,5 +69,59 @@ describe("piso de versión de la extensión", () => {
     expect(msg).toContain("0.1.5");
     expect(msg).toContain(EXTENSION_VERSION_MINIMA);
     expect(msg).toContain("chrome://extensions");
+  });
+});
+
+describe("versión DISPONIBLE derivada de telemetría (no de la constante)", () => {
+  const AHORA = new Date("2026-09-12T00:00:00Z");
+  const RECIENTE = "2026-09-11T12:00:00Z";
+  const RANCIO = "2026-06-01T00:00:00Z"; // > 30 días antes de AHORA
+  const OPTS = {
+    tope: "0.2.4", minima: "0.1.8",
+    denylist: new Set(["interna1", "interna2"]),
+    ventanaDias: 30, nMinimo: 2,
+  };
+  const fila = (empresa_id: string, version: string, seen_at: string): FilaTelemetriaExtension =>
+    ({ empresa_id, version, seen_at });
+
+  it("filtra internas + rancio + dato>tope, y exige ≥2 empresas reales", () => {
+    const r = versionDisponibleDeExtension([
+      fila("interna1", "0.2.4", RECIENTE), // denylist → NO cuenta (aunque = tope)
+      fila("rancioX", "0.2.5", RANCIO),    // fuera de ventana → NO cuenta
+      fila("sucioX", "9.9.9", RECIENTE),   // > tope → NO cuenta
+      fila("realA", "0.2.1", RECIENTE),
+      fila("realB", "0.2.1", RECIENTE),
+    ], AHORA, OPTS);
+    expect(r).toBe("0.2.1");
+  });
+
+  it("EL BUG (2026-09-12): 2 internas en la versión nueva, reales en la vieja → NO se anuncia la nueva", () => {
+    const disponible = versionDisponibleDeExtension([
+      fila("interna1", "0.2.4", RECIENTE),
+      fila("interna2", "0.2.4", RECIENTE), // las 2 únicas en 0.2.4 son internas
+      fila("realA", "0.2.1", RECIENTE),
+      fila("realB", "0.2.1", RECIENTE),
+    ], AHORA, OPTS);
+    expect(disponible).toBe("0.2.1");
+    // un cliente en 0.2.3 NO debe ver nag hacia una versión que solo corren internas
+    expect(hayVersionNuevaDeExtension("0.2.3", disponible)).toBe(false);
+  });
+
+  it("un solo canario real NO voltea la flota (umbral ≥2)", () => {
+    const r = versionDisponibleDeExtension([
+      fila("realA", "0.2.4", RECIENTE), // 1 sola empresa real en 0.2.4
+      fila("realB", "0.2.1", RECIENTE),
+    ], AHORA, OPTS);
+    expect(r).toBe("0.1.8"); // sin ≥2 en ninguna versión "nueva" → piso, no anuncia
+  });
+
+  it("sin señal viva → devuelve el piso (nunca sobre-anuncia)", () => {
+    expect(versionDisponibleDeExtension([], AHORA, OPTS)).toBe("0.1.8");
+  });
+
+  it("hayVersionNuevaDeExtension usa el 'disponible' inyectado, no la constante", () => {
+    expect(hayVersionNuevaDeExtension("0.2.1", "0.2.3")).toBe(true);  // instalada < disponible
+    expect(hayVersionNuevaDeExtension("0.2.3", "0.2.3")).toBe(false);
+    expect(hayVersionNuevaDeExtension("0.2.4", "0.2.3")).toBe(false); // instalada más nueva
   });
 });
