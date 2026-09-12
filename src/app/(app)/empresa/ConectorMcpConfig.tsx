@@ -30,6 +30,10 @@ const MCP_URL = "https://app.massdte.cl/api/mcp";
 // /settings/connectors quedó como stub que solo dice "se movieron".
 const CLAUDE_CONNECTORS_URL = "https://claude.ai/new#settings/customize-connectors";
 const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
+// Gemini no expone conectores MCP en su app de consumidor todavía: se conecta
+// por Antigravity (el IDE agéntico de Google, motor Gemini 3, con panel de MCP
+// nativo). El botón lleva ahí; la misma dirección se pega en su panel.
+const ANTIGRAVITY_URL = "https://antigravity.google/download";
 
 /**
  * Sin plan (trial) el panel se ve pero en GRIS y sin botones de conectar:
@@ -105,7 +109,7 @@ export default function ConectorMcpConfig() {
       <div>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, letterSpacing: "-.02em" }}>Conector MCP</h3>
         <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--text2)", lineHeight: 1.55 }}>
-          Conecta tu asistente de IA (Claude, ChatGPT) para que te ayude a revisar: <b style={{ color: "var(--text)" }}>lee</b> tus pendientes y resúmenes
+          Conecta tu asistente de IA (Claude, ChatGPT o Gemini) para que te ayude a revisar: <b style={{ color: "var(--text)" }}>lee</b> tus pendientes y resúmenes
           y puede <b style={{ color: "var(--text)" }}>ordenar tu mesa</b> (dejar documentos listos en Emitir o devolverlos a revisión). Nunca emite
           documentos ni ve tu clave del SII — emitir es siempre un acto tuyo en la app. Lee un mes a la vez, en páginas de 100.
         </p>
@@ -146,6 +150,14 @@ export default function ConectorMcpConfig() {
             >
               Conectar tu ChatGPT
             </button>
+            <button
+              disabled={apagado}
+              onClick={() => void conectar(ANTIGRAVITY_URL)}
+              title="Gemini se conecta por Antigravity (el IDE de Google con panel de MCP)"
+              style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface)", color: "var(--text)", padding: "8px 14px", fontSize: 10.5, fontWeight: 850, cursor: "pointer" }}
+            >
+              Conectar tu Gemini
+            </button>
           </div>
         </div>
         <ol style={{ margin: 0, paddingLeft: 16, fontSize: 10.5, color: "var(--text2)", lineHeight: 1.7 }}>
@@ -153,6 +165,9 @@ export default function ConectorMcpConfig() {
           <li>Pega la dirección (ya queda copiada): <code style={{ fontSize: 10, color: "var(--text)", background: "var(--bg-muted)", padding: "1px 6px", borderRadius: 6 }}>{MCP_URL}</code></li>
           <li>Aprieta «Agregar» y autoriza con tu cuenta de massDTE. Listo.</li>
         </ol>
+        <p style={{ margin: 0, fontSize: 10, color: "var(--text3)", lineHeight: 1.5 }}>
+          ¿Usas <b style={{ color: "var(--text2)" }}>Gemini</b>? Se conecta por <b style={{ color: "var(--text2)" }}>Antigravity</b> (el IDE de Google con panel de MCP), pegando la misma dirección.
+        </p>
       </div>
 
       {error && (
