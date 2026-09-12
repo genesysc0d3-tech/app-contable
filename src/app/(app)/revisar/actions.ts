@@ -277,12 +277,22 @@ export async function cambiarTipoPropuestas(
   // Best-effort: un fallo acá NO revierte el cambio de tipo ya guardado.
   if (mesa === "boleta" && movIdsCambiados.length > 0) {
     try {
-      const { data: movs } = await ctx.sb
-        .from("movimientos_raw")
-        .select("descripcion, tipo_flujo, documento_id")
-        .in("id", movIdsCambiados);
+      // Trocear el read en BATCH_SIZE como el resto del archivo: un .in() con
+      // cientos de ids se pasa del límite de URL de PostgREST y volvería `null`
+      // en SILENCIO → el aprendizaje se autodesactivaría justo en la cartola de
+      // corrido grande (el caso que este fix busca resolver). + filtro empresa_id
+      // (defensa en profundidad: el service role bypassa RLS).
+      const movs: Array<{ descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }> = [];
+      for (let i = 0; i < movIdsCambiados.length; i += BATCH_SIZE) {
+        const { data } = await ctx.sb
+          .from("movimientos_raw")
+          .select("descripcion, tipo_flujo, documento_id")
+          .eq("empresa_id", ctx.empresaId)
+          .in("id", movIdsCambiados.slice(i, i + BATCH_SIZE));
+        if (data) movs.push(...(data as typeof movs));
+      }
       const vistos = new Set<string>();
-      for (const m of (movs ?? []) as Array<{ descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }>) {
+      for (const m of movs) {
         if (m.tipo_flujo !== "entrada" && m.tipo_flujo !== "salida") continue;
         const extra = extraerPatronContraparte(m.descripcion);
         if (!extra) continue; // ruido/genérica/evento bancario → no aprende
@@ -420,14 +430,16 @@ export async function editarPropuesta(
     update.monto_moneda_origen = campos.monto_moneda_origen === null ? null : numField(campos.monto_moneda_origen);
   }
 
-  // Snapshot previo para aprender-al-clasificar: si esta edición fija tipo_dte
-  // (39/41), guardamos la glosa/flujo/cartola para enseñar la regla después del
-  // update. IMPORTANTE: NO se exige que el tipo_dte previo esté en null. El
-  // clasificador PRE-ESTAMPA tipo_dte al crear la propuesta (processor.ts), así
-  // que "previo null" casi nunca se cumple y por eso el aprendizaje llevaba
-  // 3 meses muerto. El discriminador correcto es el CANAL: esta server action
-  // solo la invoca un humano eligiendo el tipo; el auto-estampador nunca la
-  // llama. Entonces fijar 39/41 acá ES, por construcción, una decisión humana.
+  // Snapshot previo para aprender-al-clasificar. Aprendemos solo cuando la
+  // decisión humana aporta SEÑAL (evitar el "eco" de amplificar una adivinanza
+  // que el humano solo dejó pasar):
+  //   (a) el LLM NO supo (tipo_dte previo null) → el humano lo resolvió, o
+  //   (b) el humano CAMBIÓ el tipo respecto del pre-estampado (corrigió al LLM).
+  // Si el humano solo confirma pasivamente lo que el clasificador ya estampó
+  // (mismo tipo), NO se acuña: sería convertir una adivinanza no-juzgada en una
+  // regla 0.95 que auto-clasifica el futuro. (El camino BULK cambiarTipoPropuestas
+  // sí es elección deliberada y acuña aparte.) Se lee ANTES porque el update
+  // sobreescribe el tipo_dte previo.
   let previo:
     | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null }
     | null = null;
@@ -438,7 +450,8 @@ export async function editarPropuesta(
       .eq("empresa_id", ctx.empresaId)
       .eq("id", propuestaId)
       .maybeSingle();
-    if (p && p.movimiento_id) {
+    const aportaSenal = p != null && (p.tipo_dte == null || p.tipo_dte !== campos.tipo_dte);
+    if (p && p.movimiento_id && aportaSenal) {
       const { data: m } = await ctx.sb
         .from("movimientos_raw")
         .select("descripcion, tipo_flujo, documento_id")
