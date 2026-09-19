@@ -25,6 +25,11 @@ const nextConfig: NextConfig = {
     return [
       { source: "/masscrypto", destination: `${zona}/masscrypto` },
       { source: "/masscrypto/:path*", destination: `${zona}/masscrypto/:path*` },
+      // Descubrimiento OAuth del conector MCP de massCrypto: los clientes MCP
+      // buscan el metadata en la RAÍZ del dominio con el path del issuer
+      // (RFC 8414 §3.1 / RFC 9728) → se sirve desde la zona.
+      { source: "/.well-known/oauth-authorization-server/masscrypto", destination: `${zona}/masscrypto/.well-known/oauth-authorization-server` },
+      { source: "/.well-known/oauth-protected-resource/masscrypto/:path*", destination: `${zona}/masscrypto/.well-known/oauth-protected-resource` },
     ];
   },
   async redirects() {
