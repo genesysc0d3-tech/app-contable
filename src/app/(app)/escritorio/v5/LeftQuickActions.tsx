@@ -453,26 +453,7 @@ export function ActivityButton() {
 export function HeaderActionsRow({ enCuentaAjena = false, cuentaActualNombre = "" }: { enCuentaAjena?: boolean; cuentaActualNombre?: string } = {}) {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isDark, setIsDark] = useState(true); // default de marca: oscuro
   const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // Sincroniza el ícono con la clase .dark real de <html> (la pone el script
-    // inline de ThemeInitializer antes del paint). rAF para no hacer setState
-    // síncrono dentro del effect (regla react-hooks/set-state-in-effect).
-    window.requestAnimationFrame(() => setIsDark(document.documentElement.classList.contains("dark")));
-  }, []);
-
-  function toggleTheme() {
-    const next = !document.documentElement.classList.contains("dark");
-    document.documentElement.classList.toggle("dark", next);
-    try {
-      window.localStorage.setItem("theme", next ? "dark" : "light");
-    } catch {
-      // Sin localStorage (modo privado) el tema igual cambia, solo no persiste.
-    }
-    setIsDark(next);
-  }
 
   useEffect(() => {
     return () => document.documentElement.classList.remove("v5-dashboard-fullscreen");
@@ -536,6 +517,8 @@ export function HeaderActionsRow({ enCuentaAjena = false, cuentaActualNombre = "
     <>
     <style>{`
       .ha-btn{position:relative;width:38px;height:38px;border-radius:12px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--text2);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow);transition:all .2s;font-size:16px}
+      .ha-app-logo{display:block;width:24px;height:14px;background:currentColor;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain}
+      .ha-app:hover .ha-app-logo{background:var(--accent)}
       .ha-btn:hover{border-color:rgba(232,85,62,.35);background:rgba(232,85,62,.08);box-shadow:0 0 22px rgba(232,85,62,.18),inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
       .ha-btn:hover svg{filter:drop-shadow(0 0 8px rgba(232,85,62,.5));color:var(--accent);transition:filter .25s,color .25s}
       .ha-btn:disabled:hover{border-color:var(--border);background:var(--surface);box-shadow:inset 0 1px 0 var(--border),0 8px 32px var(--shadow)}
@@ -572,13 +555,12 @@ export function HeaderActionsRow({ enCuentaAjena = false, cuentaActualNombre = "
         style={enCuentaAjena ? { opacity: .38, cursor: "not-allowed", filter: "grayscale(1)", pointerEvents: "auto" } : undefined}>
         <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor"><path d="M240,204H228V96a20,20,0,0,0-20-20H172V32a20,20,0,0,0-28.45-18.12l-104,48.54A20.06,20.06,0,0,0,28,80.55V204H16a12,12,0,0,0,0,24H240a12,12,0,0,0,0-24ZM204,100V204H172V100ZM52,83.09,148,38.3V204H52ZM132,112v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm-40,0v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm0,52v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Zm40,0v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Z"/></svg>
       </button>
-      <button onClick={toggleTheme} className="ha-btn" aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}>
-        {isDark ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        )}
-      </button>
+      {/* CONMUTADOR DE FAMILIA (fundador 2026-09-18): acá vivía claro/oscuro; ahora
+          cambia de app. Misma cuenta, misma sesión: massDTE ⇄ massCrypto. El logo se
+          pinta con currentColor (máscara) para verse en ambos temas. */}
+      <a href={`${process.env.NEXT_PUBLIC_MASSCRYPTO_URL ?? ""}/masscrypto`} className="ha-btn ha-app" aria-label="Ir a massCrypto" title="Ir a massCrypto">
+        <span className="ha-app-logo" style={{ WebkitMaskImage: "url(/logos/masscrypto.svg)", maskImage: "url(/logos/masscrypto.svg)" }} />
+      </a>
       <button onClick={() => { void signOut(); }} className="ha-btn" aria-label="Cerrar sesión" title="Cerrar sesión">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
       </button>
