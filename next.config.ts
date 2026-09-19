@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
   // Legal canónico: los documentos viven en el LANDING (decisión fundador —
   // junto a Confianza). Las rutas /legal/* de la app redirigen allá; los links
   // internos (consentimiento del registro, footers) siguen funcionando.
+  // ZONA massCrypto (multi-zones): app.massdte.cl/masscrypto/* se sirve desde el
+  // deploy de massCrypto (repo y Supabase propios). MASSCRYPTO_URL = URL del
+  // proyecto Vercel de massCrypto. Sin la variable no hay rewrite (dev local).
+  // La sesión de massDTE viaja en la cookie: massCrypto solo abre si massDTE está on.
+  async rewrites() {
+    const zona = process.env.MASSCRYPTO_URL;
+    if (!zona) return [];
+    return [
+      { source: "/masscrypto", destination: `${zona}/masscrypto` },
+      { source: "/masscrypto/:path*", destination: `${zona}/masscrypto/:path*` },
+    ];
+  },
   async redirects() {
     return [
       { source: "/legal", destination: "https://massdte.cl/confianza", permanent: true },
