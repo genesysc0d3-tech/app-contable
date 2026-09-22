@@ -6,6 +6,7 @@ import {
   debeRefrescarUltimoAcceso,
   diasSinAparecerRestantes,
   sesionVencidaPorInactividad,
+  ultimaVezVisto,
 } from "./inactividad-sesion";
 
 const HACE_DIAS = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
@@ -36,6 +37,36 @@ describe("cierre de sesión por inactividad", () => {
 
   it("el tope es de 7 días", () => {
     expect(INACTIVIDAD_MAXIMA_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+// Incidente 2026-09-22: 4 usuarios encerrados. Nada escribía ultimo_acceso al
+// INICIAR sesión → quien volvía tras 7+ días entraba por Google y el middleware
+// lo cerraba al instante, en cada intento, para siempre.
+describe("un login recién hecho nunca está vencido (last_sign_in_at)", () => {
+  it("ultimo_acceso hace 21 días + login hace 1 minuto → ADENTRO", () => {
+    expect(sesionVencidaPorInactividad(HACE_DIAS(21), Date.now(), HACE_MIN(1))).toBe(false);
+  });
+  it("ultimo_acceso hace 21 días + último login también viejo → a login", () => {
+    expect(sesionVencidaPorInactividad(HACE_DIAS(21), Date.now(), HACE_DIAS(20))).toBe(true);
+  });
+  it("sin ultimo_acceso pero con login viejo → manda el login (a login)", () => {
+    expect(sesionVencidaPorInactividad(null, Date.now(), HACE_DIAS(10))).toBe(true);
+  });
+  it("sin login informado → se comporta como antes", () => {
+    expect(sesionVencidaPorInactividad(HACE_DIAS(10), Date.now(), null)).toBe(true);
+    expect(sesionVencidaPorInactividad(HACE_DIAS(1), Date.now(), undefined)).toBe(false);
+  });
+  it("ultimaVezVisto = el más reciente de los dos", () => {
+    const viejo = HACE_DIAS(21), nuevo = HACE_MIN(1);
+    expect(ultimaVezVisto(viejo, nuevo)).toBe(Date.parse(nuevo));
+    expect(ultimaVezVisto(nuevo, viejo)).toBe(Date.parse(nuevo));
+    expect(ultimaVezVisto(null, null)).toBeNull();
+  });
+  it("el guard y el middleware le pasan last_sign_in_at (si no, el bug vuelve)", () => {
+    for (const ruta of ["src/lib/api/account-guard.ts", "src/lib/supabase/proxy.ts"]) {
+      expect(readFileSync(ruta, "utf8")).toMatch(/sesionVencidaPorInactividad\([^;]*user\.last_sign_in_at/);
+    }
   });
 });
 
