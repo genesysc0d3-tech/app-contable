@@ -55,10 +55,35 @@ const aMs = (valor: string | Date | null | undefined): number | null => {
 export function sesionVencidaPorInactividad(
   ultimoAcceso: string | Date | null | undefined,
   ahora: number = Date.now(),
+  ultimoLogin?: string | Date | null,
 ): boolean {
-  const visto = aMs(ultimoAcceso);
+  const visto = ultimaVezVisto(ultimoAcceso, ultimoLogin);
   if (visto == null) return false;
   return ahora - visto > INACTIVIDAD_MAXIMA_MS;
+}
+
+/**
+ * "Última vez visto" = lo más reciente entre `usuarios.ultimo_acceso` y el
+ * `last_sign_in_at` de la sesión de Supabase.
+ *
+ * BUG QUE CIERRA (2026-09-22, incidente real: 4 usuarios encerrados): nada
+ * escribía `ultimo_acceso` al INICIAR sesión. Quien volvía tras 7+ días entraba
+ * bien por Google, el middleware leía el `ultimo_acceso` viejo, hacía signOut y
+ * lo mandaba a login… y el siguiente intento repetía lo mismo, para siempre.
+ * Un login recién hecho es, por definición, actividad: si Supabase dice que se
+ * autenticó hace un minuto, la sesión no puede estar vencida por inactividad.
+ * Cubre Google, clave y magic link en un solo lugar, sin depender de que cada
+ * carril de login se acuerde de escribir la columna.
+ */
+export function ultimaVezVisto(
+  ultimoAcceso: string | Date | null | undefined,
+  ultimoLogin?: string | Date | null,
+): number | null {
+  const a = aMs(ultimoAcceso);
+  const b = aMs(ultimoLogin);
+  if (a == null) return b;
+  if (b == null) return a;
+  return Math.max(a, b);
 }
 
 /** ¿Toca escribir `ultimo_acceso`, o el último es lo bastante reciente? */
@@ -66,6 +91,9 @@ export function debeRefrescarUltimoAcceso(
   ultimoAcceso: string | Date | null | undefined,
   ahora: number = Date.now(),
 ): boolean {
+  // Mira SOLO la columna, a propósito: si el login fue recién pero la columna
+  // está vieja, hay que escribirla ahora mismo para que el próximo request no
+  // tenga que volver a rescatarse con last_sign_in_at.
   const visto = aMs(ultimoAcceso);
   if (visto == null) return true;
   return ahora - visto > REFRESCO_ULTIMO_ACCESO_MS;

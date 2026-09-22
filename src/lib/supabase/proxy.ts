@@ -53,7 +53,8 @@ export async function updateSession(request: NextRequest) {
       const { createClient: createServiceClient } = await import("@supabase/supabase-js");
       const sb = createServiceClient(sbUrl, sbKey);
       const { data: visto } = await sb.from("usuarios").select("ultimo_acceso").eq("id", user.id).maybeSingle();
-      if (sesionVencidaPorInactividad(visto?.ultimo_acceso)) {
+      // last_sign_in_at: un login recién hecho nunca está "vencido" (incidente 2026-09-22).
+      if (sesionVencidaPorInactividad(visto?.ultimo_acceso, Date.now(), user.last_sign_in_at)) {
         try { await supabase.auth.signOut(); } catch { /* igual se manda a login */ }
         const url = request.nextUrl.clone();
         url.pathname = "/auth/login";
