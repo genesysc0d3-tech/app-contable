@@ -54,7 +54,8 @@ export async function requireAccountApiAccess(options: {
     if (url0 && key0) {
       const sb0 = createServiceClient<Database>(url0, key0);
       const { data: visto } = await sb0.from("usuarios").select("ultimo_acceso").eq("id", user.id).maybeSingle();
-      if (sesionVencidaPorInactividad(visto?.ultimo_acceso)) {
+      // last_sign_in_at: un login recién hecho nunca está "vencido" (incidente 2026-09-22).
+      if (sesionVencidaPorInactividad(visto?.ultimo_acceso, Date.now(), user.last_sign_in_at)) {
         return {
           ok: false,
           response: NextResponse.json({ ok: false, error: "SESSION_EXPIRED" }, { status: 401 }),
