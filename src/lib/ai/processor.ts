@@ -20,6 +20,7 @@ import { notasPropuestasONull, rutPropuestoONull, sanearCampoIdentidad } from ".
 import {
   loadReglas,
   classifyWithRules,
+  reclasificarConReglas,
   incrementRuleUsage,
   type ClasificacionRegla,
 } from "./classifier";
@@ -932,6 +933,22 @@ export async function procesarDocumento(
         totalTokensInput += r.tokens_input;
         totalTokensOutput += r.tokens_output;
         modelo = r.modelo;
+      }
+      // Reglas sobre lo extraído (incidente 2026-09-23: BancoEstado → IA →
+      // "Abono por transferencia de X" clasificado factura afecta por el giro).
+      // Regla > IA, igual que en el carril con parser. Ver reclasificarConReglas.
+      if (allPropuestas.length > 0) {
+        if (reglas.length === 0) reglas = await loadReglas(empresaId);
+        const { propuestas: reclasificadas, reglaPorIndex } = reclasificarConReglas(allMovimientos, allPropuestas, reglas);
+        if (reglaPorIndex.size > 0) {
+          allPropuestas.length = 0;
+          for (const p of reclasificadas) {
+            const r = reglaPorIndex.get(p.movimiento_index);
+            allPropuestas.push(r
+              ? { ...p, __fuente: r.fuente, __regla_id: r.regla_id, __tipo_dte: r.tipo_dte }
+              : (p as EnrichedPropuesta));
+          }
+        }
       }
     }
 

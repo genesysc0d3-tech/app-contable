@@ -120,3 +120,44 @@ describe("detectHeuristic — detección estructural de layout", () => {
     expect(detectHeuristic(corta)).toBeNull();
   });
 });
+
+// Incidente 2026-09-23: cartolas BancoEstado con fechas "20260923" / "02/09".
+describe("BancoEstado: fechas yyyymmdd y dd/mm sin año SÍ parecen cartola", () => {
+  it("cartola con FECHA yyyymmdd + CARGOS/ABONOS → se detecta", () => {
+    const rows = [
+      ["ESTADO DE CUENTA"], [], ["FECHA", "DOCUMENTO", "CODIGO", "DESCRIPCION", "CARGOS", "ABONOS"],
+      ["20260923", "000000101", "", "TRANSFERENCIA DE A", "", 39300],
+      ["20260923", "000000102", "", "TRANSFERENCIA DE B", "", 50000],
+      ["20260922", "000000103", "", "PAGO SERVICIO", 12000, ""],
+      ["20260922", "000000104", "", "TRANSFERENCIA DE C", "", 70000],
+      ["20260921", "000000105", "", "COMISION", 1500, ""],
+      ["20260920", "000000106", "", "TRANSFERENCIA DE D", "", 80000],
+      ["20260920", "000000107", "", "TRANSFERENCIA DE E", "", 90000],
+      ["20260919", "000000108", "", "PAGO LUZ", 20000, ""],
+    ];
+    const cfg = detectHeuristic(rows);
+    expect(cfg).not.toBeNull();
+    expect(cfg!.columns.fecha).toBe(0);
+    expect(cfg!.columns.abono).toBe(5);
+    // DOCUMENTO es un correlativo, no el saldo
+    expect(cfg!.columns.saldo).toBe(-1);
+  });
+  it("hoja Movimientos con Fecha dd/mm (sin año) → se detecta", () => {
+    const rows = [
+      ["Fecha", "Sucursal", "N° Cuenta", "Alias", "N° Cartola", "N° Operación", "Descripción", "Depósitos / Abonos"],
+      ["02/09", "OFICINA", "00123456", "Cta", 113, "000111", "Transferencia de A", 39300],
+      ["03/09", "OFICINA", "00123456", "Cta", 113, "000112", "Transferencia de B", 50000],
+      ["03/09", "OFICINA", "00123456", "Cta", 113, "000113", "Transferencia de C", 70000],
+      ["04/09", "OFICINA", "00123456", "Cta", 113, "000114", "Transferencia de D", 32850],
+    ];
+    const cfg = detectHeuristic(rows);
+    expect(cfg).not.toBeNull();
+    expect(cfg!.columns.fecha).toBe(0);
+    // el monto es "Depósitos / Abonos", NO el N° de Operación (7 dígitos, crecientes)
+    expect(cfg!.columns.monto).toBe(7);
+  });
+  it("un N° de cuenta de 8 dígitos que no es fecha válida no se toma por fecha", () => {
+    const rows = [["99887766", "algo", 1000], ["99887766", "algo", 2000], ["99887766", "algo", 3000]];
+    expect(detectHeuristic(rows)).toBeNull();
+  });
+});

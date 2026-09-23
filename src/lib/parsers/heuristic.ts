@@ -28,7 +28,22 @@ function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
   if (!s) return false;
   if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
   // Date ya serializado a string (p.ej. "2026-08-08 00:00:00" o ISO)
-  return /^\d{4}-\d{2}-\d{2}[T ]/.test(s);
+  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(s)) return true;
+  // BancoEstado (incidente 2026-09-23): "20260923" en la cartola y "02/09" (sin
+  // año) en la hoja Movimientos. Sin esto la hoja no parecía cartola y caía a la
+  // IA, que inventaba la glosa y clasificaba por giro. Ventana de año acotada
+  // para no confundir un N° de cuenta de 8 dígitos con una fecha.
+  const m8 = s.match(/^(20\d{2})(\d{2})(\d{2})$/);
+  if (m8) {
+    const y = parseInt(m8[1], 10); const mm = parseInt(m8[2], 10); const dd = parseInt(m8[3], 10);
+    return y >= 2015 && y <= new Date().getFullYear() + 1 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
+  }
+  const mSinAnio = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (mSinAnio) {
+    const dd = parseInt(mSinAnio[1], 10); const mm = parseInt(mSinAnio[2], 10);
+    return dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12;
+  }
+  return false;
 }
 
 export function detectHeuristic(rows: Row[]): AdapterConfig | null {
@@ -190,7 +205,8 @@ function inferColumns(sample: Row[]): InferredCols | null {
         continue;
       }
       const n = parseChileanNumber(s);
-      if (n > 0 && /^[\d.,\- ]+$/.test(s)) {
+      // "20260923" es una fecha, no un monto (BancoEstado, 2026-09-23).
+      if (n > 0 && /^[\d.,\- ]+$/.test(s) && !cellEsFecha(cell)) {
         numbers++;
         numSum += n;
         if (n > numMax) numMax = n;
@@ -232,12 +248,12 @@ function inferColumns(sample: Row[]): InferredCols | null {
 
   // saldo: numeric column that looks monotonic AND has values in every row
   const saldoCol = numericCols
-    .filter((s) => s.isMonotonic && s.nonEmpty >= sample.length * 0.9)
+    .filter((s) => s.isMonotonic && s.nonEmpty >= sample.length * 0.9 && !esColumnaId(sample, s.idx))
     .sort((a, b) => b.nonEmpty - a.nonEmpty)[0];
 
   // cargo & abono: two numeric columns that are mutually exclusive (sum of nonEmpty per row = 1 most of the time)
   const candidateExclusive = numericCols.filter(
-    (s) => !saldoCol || s.idx !== saldoCol.idx
+    (s) => (!saldoCol || s.idx !== saldoCol.idx) && !esColumnaId(sample, s.idx)
   );
 
   // Find the pair (i,j) in candidateExclusive where rows with BOTH > 0 is minimal
@@ -463,6 +479,37 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
  * Defaults all rows to entrada (tipo_flujo). The user can change the default
  * by editing the adapter config later.
  */
+/**
+ * Columna de IDENTIFICADORES, no de plata: N° de operación / N° de documento.
+ * Incidente 2026-09-23 (BancoEstado, hoja Movimientos): "N° Operación" son
+ * strings de 7 dígitos, todos distintos y crecientes; con el puntaje "mayor
+ * promedio gana" le ganaban a "Depósitos / Abonos" y los montos de las boletas
+ * habrían sido números de operación. Criterio: ≥80% de las celdas son strings
+ * de puros dígitos, TODAS del mismo largo (≥6) y con un rango minúsculo frente
+ * a su magnitud (correlativos). Un monto real no cumple las tres a la vez.
+ */
+function esColumnaId(sample: Row[], col: number): boolean {
+  const vals: string[] = [];
+  let nonEmpty = 0;
+  for (const r of sample) {
+    const v = r[col];
+    if (v == null || String(v).trim() === "") continue;
+    nonEmpty++;
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) vals.push(v.trim());
+  }
+  if (nonEmpty < 3 || vals.length / nonEmpty < 0.8) return false;
+  const len = vals[0].length;
+  if (len < 6 || vals.some((v) => v.length !== len)) return false;
+  // Correlativos: números grandes casi iguales entre sí (1234567, 1234571, …).
+  // Los montos de una cartola se mueven en órdenes de magnitud; un rango menor
+  // al 10% del máximo no es plata, es un contador.
+  if (vals.some((v) => v.startsWith("0"))) return true; // un monto nunca va con cero a la izquierda
+  const nums = vals.map((v) => parseInt(v, 10));
+  const max = Math.max(...nums);
+  const min = Math.min(...nums);
+  return max > 0 && (max - min) / max < 0.1;
+}
+
 function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
   const ncols = Math.max(...sample.map((r) => r.length));
   if (ncols < 3) return null;
@@ -512,10 +559,23 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
   // Also excludes columns where values look like RUTs (have a dash + digit).
   const MIN_MONTO = 1000;
   const MAX_MONTO = 1_000_000_000; // 1 billón CLP
+  // Dos pasadas (BancoEstado 2026-09-23: "N° Operación" son strings de 7
+  // dígitos y "Depósitos / Abonos" celdas numéricas; el banco tipa la plata
+  // como número y los identificadores como texto): primero solo columnas cuyas
+  // celdas son NÚMEROS de verdad; si ninguna sirve, recién se admiten strings.
+  const esNumericaTipada = (col: number) => {
+    let n = 0; let t = 0;
+    for (const r of sample) { const v = r[col]; if (v == null || String(v).trim() === "") continue; t++; if (typeof v === "number") n++; }
+    return t > 0 && n / t >= 0.8;
+  };
   let montoCol = -1;
   let bestScore = 0;
+  for (const soloTipadas of [true, false]) {
+  if (montoCol >= 0) break;
   for (let col = 0; col < ncols; col++) {
     if (col === fechaCol || col === descCol) continue;
+    if (esColumnaId(sample, col)) continue;
+    if (soloTipadas && !esNumericaTipada(col)) continue;
     let inRangeCount = 0;
     let totalNumeric = 0;
     let looksLikeRut = 0;
@@ -547,6 +607,7 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
       bestScore = avg;
       montoCol = col;
     }
+  }
   }
   if (montoCol < 0) return null;
 
