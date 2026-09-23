@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { autoDrenajeSiHayAtascados } from "@/lib/document-processing/drain";
 import { cargarMesa } from "@/app/(app)/escritorio/v5/actions";
 
 // Carga de mesa por HTTP en vez de server action. Motivo (bug "mesa gris
@@ -16,6 +17,9 @@ export async function GET(req: NextRequest) {
     view: sp.get("view") ?? undefined,
     mesa: sp.get("mesa") ?? undefined,
   });
+  // Rescate de la cola de documentos (incidente 2026-09-23): si hay un job
+  // pegado, esta carga lo destraba. Corre después de responder; jamás retrasa la mesa.
+  if (res.ok) after(() => autoDrenajeSiHayAtascados().catch(() => {}));
   return NextResponse.json(res, {
     status: res.ok ? 200 : res.error === "NO_AUTH" ? 401 : 400,
     headers: { "cache-control": "no-store" },

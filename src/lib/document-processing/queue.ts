@@ -147,6 +147,26 @@ async function recoverStaleJobs(sb: Sb, now: Date, lockOwner: string) {
   for (const job of staleJobs ?? []) {
     const attempts = job.attempts + 1;
     const retryable = attempts < job.max_attempts;
+    // Incidente 2026-09-23: el vigilante daba el job por fallido pero NO tocaba
+    // el documento → la UI mostraba "procesando" para siempre (una cartola de
+    // MH Solutions quedó así 16 horas). Ahora el documento queda en error con
+    // un mensaje humano, igual que markJobFailedDefinitivo.
+    if (!retryable) {
+      await sb
+        .from("documentos_subidos")
+        .update({
+          estado: "error",
+          progreso_ia: safeJson({
+            estado: "error",
+            error: `El procesamiento se cortó ${attempts} veces sin terminar. Vuelve a subir la cartola; si se repite, avísanos.`,
+            definitivo: true,
+            attempts,
+            max_attempts: job.max_attempts,
+            recuperado_por_vigilante: true,
+          }),
+        })
+        .eq("id", job.documento_id);
+    }
     await sb
       .from("document_processing_jobs")
       .update({

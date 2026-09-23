@@ -7,7 +7,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("./queue", () => ({ processDocumentQueue: vi.fn(), msHastaProximoJobPendiente: vi.fn(async () => null) }));
 vi.mock("@/lib/ops/events", () => ({ recordOpsError: vi.fn() }));
 
-import { drainDocumentQueue, drainAndChain } from "./drain";
+import { drainDocumentQueue, drainAndChain, autoDrenajeSiHayAtascados, _resetAutoDrenaje } from "./drain";
 
 type QueueResult = {
   ok: boolean; recovered: number; claimed: number; completed: number;
@@ -120,5 +120,26 @@ describe("drainAndChain — la cadena no muere con backoffs futuros (incidente 2
     const processFn = vi.fn().mockResolvedValue(res({ claimed: 0 }));
     await drainAndChain({ lockOwner: "t", depth: 5, processFn, budgetMs: 1000, probeFn: async () => 0 });
     expect(kicks).toEqual([6]);
+  });
+});
+
+// Incidente 2026-09-23: 3 cartolas congeladas 80+ min porque nada re-disparaba
+// el drenaje. Cada carga de la mesa ahora puede rescatar la cola.
+describe("auto-drenaje al cargar la mesa", () => {
+  it("con un job atascado → dispara UN drenaje y no otro dentro del throttle", async () => {
+    _resetAutoDrenaje();
+    const drenar = vi.fn(async () => {});
+    const t0 = 1_000_000;
+    expect(await autoDrenajeSiHayAtascados({ now: t0, probeFn: async () => true, drenarFn: drenar })).toBe(true);
+    expect(await autoDrenajeSiHayAtascados({ now: t0 + 30_000, probeFn: async () => true, drenarFn: drenar })).toBe(false);
+    expect(await autoDrenajeSiHayAtascados({ now: t0 + 3 * 60_000, probeFn: async () => true, drenarFn: drenar })).toBe(true);
+    expect(drenar).toHaveBeenCalledTimes(2);
+    expect(drenar).toHaveBeenCalledWith("mesa-autodrenaje");
+  });
+  it("sin nada atascado → no toca la cola", async () => {
+    _resetAutoDrenaje();
+    const drenar = vi.fn(async () => {});
+    expect(await autoDrenajeSiHayAtascados({ now: 5_000_000, probeFn: async () => false, drenarFn: drenar })).toBe(false);
+    expect(drenar).not.toHaveBeenCalled();
   });
 });
