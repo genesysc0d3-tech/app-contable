@@ -35,7 +35,41 @@ export function parseJsonFromContent<T>(content: string): T {
   const start = t.indexOf("{");
   const end = t.lastIndexOf("}");
   if (start >= 0 && end > start) t = t.slice(start, end + 1);
-  return JSON.parse(t) as T;
+  try {
+    return JSON.parse(t) as T;
+  } catch (err) {
+    // Incidente 2026-09-23 (3 cartolas reales, 3 intentos cada una): deepseek
+    // devolvió DOS objetos pegados o prosa con llaves DESPUÉS del JSON →
+    // "Unexpected non-whitespace character after JSON". Recortar del primer "{"
+    // al ÚLTIMO "}" abarca la basura. Se toma el primer objeto balanceado
+    // (respetando strings) y se descarta el resto; si ni eso parsea, se lanza
+    // el error original para el retry del pipeline.
+    const primero = primerObjetoBalanceado(t);
+    if (primero != null && primero.length < t.length) return JSON.parse(primero) as T;
+    throw err;
+  }
+}
+
+function primerObjetoBalanceado(t: string): string | null {
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < t.length; i += 1) {
+    const c = t[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) return t.slice(0, i + 1);
+    }
+  }
+  return null;
 }
 
 interface OpenCodeGoMessage {
