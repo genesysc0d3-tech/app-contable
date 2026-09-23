@@ -553,7 +553,7 @@
       modal: { titulo: reI(mo.titulo, /EMITIR\s+E-BOLETA/i) },
       emisor: { cargando: reI(em.cargando, /CARGANDO EMISORES/i) },
       monto_alto: { texto: reI(ma.texto, /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i) },
-      // Las 7 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
+      // Las 8 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
       // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
       esperas: {
         modal_emision: esperaOk(e.modal_emision, 12000),
@@ -563,6 +563,7 @@
         glosa_aparece: esperaOk(e.glosa_aparece, 150),
         glosa_escribe: esperaOk(e.glosa_escribe, 120),
         pad_post: esperaOk(e.pad_post, 250),
+        menu_select: esperaOk(e.menu_select, 5000),
       },
     };
   }
@@ -686,9 +687,18 @@
 
     let vioMenu = false;
     let vioOpciones = false;
+    // Incidente 2026-09-23: 7 de 47 boletas abortaron TIPO_NO_CONFIRMADO en un
+    // laptop lento (Acer al 24% de batería) — el v-menu no apareció en los ~2,9 s
+    // por intento que había. Ahora cada intento espera LB.esperas.menu_select
+    // (5 s; ajustable desde el libreto sin release) y NO se vuelve a clickear el
+    // slot si ya brotó un menú tras el click (un segundo click lo cerraría).
+    const porIntento = LB.esperas.menu_select; // literal cableado: 5000
+    const cuentaMenus = () => document.querySelectorAll(LB.selectores.menu).length;
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      const menusAntes = cuentaMenus();
       await clickElement(slot);
-      for (let i = 0; i < 16; i += 1) {
+      const deadline = Date.now() + porIntento;
+      while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 180));
         const menus = Array.from(document.querySelectorAll(LB.selectores.menu))
           .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
@@ -705,6 +715,17 @@
           }
         }
       }
+      // Brotó un menú (aunque aún invisible por la transición): darle el resto del
+      // tiempo en vez de cerrarlo con otro click.
+      if (cuentaMenus() > menusAntes && attempt < 2) {
+        const extra = Date.now() + porIntento;
+        while (Date.now() < extra) {
+          await new Promise((resolve) => setTimeout(resolve, 180));
+          const vis = Array.from(document.querySelectorAll(LB.selectores.menu)).filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+          if (vis.length) { vioMenu = true; break; }
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
     }
     if (shows()) return true;
     // Diagnóstico para la ancla (no cambia el retorno): ver ultimoFalloSelect.

@@ -78,7 +78,7 @@ const esSelectorGlosaPermitido = (sel) =>
   sel.split(",").every((tok) => GLOSA_TOKENS.has(tok.trim()));
 const mayus = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toUpperCase();
 const BOTONES_VETADOS = new Set(["SI", "NO", "ACEPTAR", "CANCELAR"]);
-const LIB_ESPERAS = ["modal_emision", "emisor_estable", "emisores_listos", "emit_habilitado", "glosa_aparece", "glosa_escribe", "pad_post"];
+const LIB_ESPERAS = ["modal_emision", "emisor_estable", "emisores_listos", "emit_habilitado", "glosa_aparece", "glosa_escribe", "pad_post", "menu_select"];
 const esEsperaOk = (v) => Number.isInteger(v) && v >= 50 && v <= 60000;
 
 const BOLETA_LIBRETO_SCHEMA_VERSION = 1;
