@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  inferirAnioPista,
   applyAdapter,
   linesToPreExtracted,
   normalizeDate,
@@ -342,5 +343,37 @@ describe("applyAdapter — fechas como número serial de Excel", () => {
       cfg,
     );
     expect(lines).toHaveLength(0);
+  });
+});
+
+// Incidente 2026-09-23: dos cartolas BancoEstado no parecían cartola y cayeron a
+// la IA (que las clasificó afectas por el giro). Sus fechas: "20260923" y "02/09".
+describe("fechas BancoEstado: yyyymmdd y dd/mm sin año", () => {
+  it("20260923 → 2026-09-23; un número de 8 dígitos que no es fecha se deja tal cual", () => {
+    expect(normalizeDate("20260923", "unknown")).toBe("2026-09-23");
+    expect(normalizeDate("20261345", "unknown")).toBe("20261345");
+  });
+  it("dd/mm sin año → usa el año pista (de las fechas completas de la hoja)", () => {
+    expect(normalizeDate("02/09", "unknown", 2025)).toBe("2025-09-02");
+    expect(normalizeDate("3-9", "unknown", 2026)).toBe("2026-09-03");
+  });
+  it("dd/mm sin pista → año actual, y si queda en el futuro es el año anterior (cartola de dic subida en ene)", () => {
+    expect(normalizeDate("02/09", "unknown", null, new Date(2026, 8, 23))).toBe("2026-09-02");
+    expect(normalizeDate("28/12", "unknown", null, new Date(2027, 0, 5))).toBe("2026-12-28");
+  });
+  it("inferirAnioPista: toma el año más frecuente de las fechas completas (FECHA DESDE/HASTA)", () => {
+    expect(inferirAnioPista([["FECHA DESDE", "FECHA HASTA"], ["01/09/2025", "22/09/2025"], ["02/09", "x", 1000]])).toBe(2025);
+    expect(inferirAnioPista([["02/09", "x", 1000], ["03/09", "y", 2000]])).toBeNull();
+  });
+  it("applyAdapter: hoja Movimientos de BancoEstado (dd/mm, sin año en la hoja) sale con fecha ISO", () => {
+    const rows = [
+      ["Fecha", "Sucursal", "Descripción", "Depósitos / Abonos"],
+      ["02/09", "OFICINA", "Transferencia de X", 39300],
+      ["03/09", "OFICINA", "Transferencia de Y", 50000],
+    ];
+    const cfg = { layout: "transactions_log", skip_rows_before_data: 1, date_format: "unknown", columns: { fecha: 0, descripcion: 2, monto: 3, cargo: 3, abono: 3 } } as unknown as Parameters<typeof applyAdapter>[1];
+    const lines = applyAdapter(rows, cfg);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].fecha).toMatch(/^\d{4}-09-02$/);
   });
 });
