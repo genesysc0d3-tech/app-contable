@@ -356,16 +356,34 @@ describe("sintético del worker de boletas (corre el original que ya funciona)",
 
 // Incidente 2026-09-23: 7 de 47 boletas abortaron TIPO_NO_CONFIRMADO en un laptop
 // lento (Acer al 24% de batería): el v-menu del tipo no brotó en los ~10 s que había
-// (3 intentos × 16 × 180 ms). Con 0.2.4 este fixture FALLA; con menu_select = 5 s pasa.
+// (3 intentos × 16 × 180 ms). Cada test de acá FALLA con el worker 0.2.4 (verificado
+// swapeando el archivo) salvo los dos marcados "inverso"/"validador".
 describe("v-menu paciente (0.2.5): el select del tipo tarda en responder", () => {
-  it("el slot ignora clicks 11 s → igual elige 'Boleta exenta' (antes: TIPO_NO_CONFIRMADO)", async () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+  it("el slot ignora clicks 11 s → igual elige 'Boleta exenta' (0.2.4: TIPO_NO_CONFIRMADO)", async () => {
     escenaEmision({ slotTipoIgnoraClicksHasta: 11000 });
     const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41 }));
     expect(res.ok).toBe(true);
     expect(clicks(a)).toContain("opt_tipo:Boleta exenta");
     noFirmo(a);
   });
-  it("con menu_select corto (600 ms) el mismo laptop aborta fail-closed → la espera es la palanca", async () => {
+  it("el menú brota pero queda invisible 4 s; un segundo click lo cerraría → igual elige (0.2.4 re-clickeaba y lo cerraba)", async () => {
+    escenaEmision({ menuTipoTarda: 4000 });
+    const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41 }));
+    expect(res.ok).toBe(true);
+    expect(clicks(a)).toContain("opt_tipo:Boleta exenta");
+    // un solo click al slot del tipo: no lo cerró con otro
+    expect(clicks(a).filter((r) => r === "slot_tipo")).toHaveLength(1);
+    noFirmo(a);
+  });
+  it("la sucursal tampoco responde 4 s → igual la elige (0.2.4: SUCURSAL_NO_SELECCIONADA)", async () => {
+    escenaEmision({ sucursalTexto: "Elija sucursal", slotSucursalIgnoraClicksHasta: 4000 });
+    const { res, actions: a } = await drive(jobBoleta());
+    expect(res.ok).toBe(true);
+    expect(clicks(a)).toContain("opt_sucursal:Apoquindo 6410 Of 605");
+    noFirmo(a);
+  });
+  it("inverso: con menu_select corto (600 ms) el mismo laptop aborta fail-closed → la espera es la palanca", async () => {
     escenaEmision({ slotTipoIgnoraClicksHasta: 11000 });
     const lb = clonLibreto(); lb.esperas.menu_select = 600;
     const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41, libreto: lb }));
@@ -373,8 +391,13 @@ describe("v-menu paciente (0.2.5): el select del tipo tarda en responder", () =>
     expect(res.code).toBe("TIPO_NO_CONFIRMADO");
     noFirmo(a);
   });
-  it("menu_select fuera de rango → LIBRETO_ESPERA_INVALIDA (mismo validador que las otras esperas)", () => {
-    expect(validateLibretoBoleta({ ...clonLibreto(), esperas: { menu_select: 0 } })).toBe("LIBRETO_ESPERA_INVALIDA");
+  it("validador: menu_select 5000 ok; 0 o > 10000 → LIBRETO_ESPERA_INVALIDA (tope propio)", () => {
     expect(validateLibretoBoleta({ ...clonLibreto(), esperas: { menu_select: 5000 } })).toBeNull();
+    expect(validateLibretoBoleta({ ...clonLibreto(), esperas: { menu_select: 0 } })).toBe("LIBRETO_ESPERA_INVALIDA");
+    expect(validateLibretoBoleta({ ...clonLibreto(), esperas: { menu_select: 20000 } })).toBe("LIBRETO_ESPERA_INVALIDA");
+  });
+  it("el worker acota menu_select a 10 s aunque el libreto traiga más", () => {
+    expect(testHooks.resolverLibreto({ libreto: { ...clonLibreto(), esperas: { menu_select: 60000 } } }).esperas.menu_select).toBe(10000);
+    expect(testHooks.resolverLibreto(null).esperas.menu_select).toBe(5000);
   });
 });

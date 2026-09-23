@@ -161,6 +161,8 @@ export function validateLibretoBoleta(libreto) {
   if (e != null) {
     if (typeof e !== "object") return "LIBRETO_ESPERA_INVALIDA";
     for (const k of LIB_ESPERAS) if (e[k] != null && !esEsperaOk(e[k])) return "LIBRETO_ESPERA_INVALIDA";
+    // menu_select se multiplica por intentos y por selects (tipo, pago ×2, sucursal): tope 10 s.
+    if (e.menu_select != null && e.menu_select > 10000) return "LIBRETO_ESPERA_INVALIDA";
   }
   return null;
 }

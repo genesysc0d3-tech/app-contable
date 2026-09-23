@@ -99,10 +99,14 @@ export const VENDEDOR_RUT = "19427394-0";
 // .v-select__selections > .v-select__selection con lo ELEGIDO (vacío si no hay nada).
 // Al clickear el slot se despliega un .v-menu__content con las opciones; al clickear
 // una opción la selección pasa a mostrarla (mismo nodo, texto nuevo) y el menú se cierra.
-// ignoraClicksHasta: el slot no responde a clicks hasta que pasen esos ms desde que se
-// armó la escena (laptop lento: Vuetify todavía no enganchó sus handlers).
-function vSelect({ label, seleccion = "", opciones, roleSlot, roleOpcion, ignoraClicksHasta = 0 }) {
-  const t0 = Date.now();
+// Laptop lento (incidente 2026-09-23), dos formas de simularlo:
+//  - ignoraClicksHasta: el slot no responde a clicks hasta que pasen esos ms desde el
+//    PRIMER click (Vuetify todavía no enganchó sus handlers).
+//  - menuTarda: el menú brota al tiro pero queda invisible (offsetWidth 0, transición)
+//    durante esos ms.
+// Como en Vuetify, un segundo click en el slot con el menú abierto lo CIERRA.
+function vSelect({ label, seleccion = "", opciones, roleSlot, roleOpcion, ignoraClicksHasta = 0, menuTarda = 0 }) {
+  let primerClick = null;
   const selection = el({ tag: "DIV", sel: [".v-select__selection"], text: seleccion });
   const selections = el({ tag: "DIV", sel: [".v-select__selections"], children: [selection] });
   const slot = el({ tag: "DIV", sel: [".v-select__slot", ".v-input__slot"], text: label, role: roleSlot, children: [selections] });
@@ -113,8 +117,14 @@ function vSelect({ label, seleccion = "", opciones, roleSlot, roleOpcion, ignora
   });
   const menu = el({ tag: "DIV", sel: [".v-menu__content"], children: items });
   slot.onClick = () => {
-    if (ignoraClicksHasta > 0 && Date.now() < t0 + ignoraClicksHasta) return;
-    if (!estado.menus.includes(menu)) estado.menus.push(menu);
+    if (primerClick == null) primerClick = Date.now();
+    if (ignoraClicksHasta > 0 && Date.now() < primerClick + ignoraClicksHasta) return;
+    if (estado.menus.includes(menu)) { estado.menus = estado.menus.filter((m) => m !== menu); return; }
+    estado.menus.push(menu);
+    if (menuTarda > 0) {
+      menu.offsetWidth = 0; menu.offsetHeight = 0;
+      setTimeout(() => { menu.offsetWidth = 10; menu.offsetHeight = 10; }, menuTarda);
+    }
   };
   return slot;
 }
@@ -165,8 +175,11 @@ export function escenaEmision({
   // el falso RECEPTOR_RUT_NO_ACEPTADO en el ensayo 2026-09-11.
   receptorRutLabelFlota = false,
   montoAlto = false,
-  // Incidente 2026-09-23: el select del TIPO no responde durante N ms (laptop lento).
+  // Incidente 2026-09-23 (laptop lento): el select del TIPO no responde durante N ms,
+  // o su menú brota invisible N ms; la sucursal también puede no responder.
   slotTipoIgnoraClicksHasta = 0,
+  menuTipoTarda = 0,
+  slotSucursalIgnoraClicksHasta = 0,
 } = {}) {
   estado.scene = [];
   estado.menus = [];
@@ -198,8 +211,8 @@ export function escenaEmision({
   // solo el RUT), como en el bug real. NO debe ser candidato a glosa (no tiene contador).
   const vendedorInput = vTextField({ contTexto: VENDEDOR_RUT, role: "vendedor_input", value: VENDEDOR_RUT });
   const children = [
-    vSelect({ label: sucursalLabel, seleccion: sucursalSeleccion, opciones: sucursalOpciones, roleSlot: "slot_sucursal", roleOpcion: "opt_sucursal" }),
-    vSelect({ label: "Tipo de boleta", seleccion: tipoTexto, opciones: ["Boleta afecta", "Boleta exenta"], roleSlot: "slot_tipo", roleOpcion: "opt_tipo", ignoraClicksHasta: slotTipoIgnoraClicksHasta }),
+    vSelect({ label: sucursalLabel, seleccion: sucursalSeleccion, opciones: sucursalOpciones, roleSlot: "slot_sucursal", roleOpcion: "opt_sucursal", ignoraClicksHasta: slotSucursalIgnoraClicksHasta }),
+    vSelect({ label: "Tipo de boleta", seleccion: tipoTexto, opciones: ["Boleta afecta", "Boleta exenta"], roleSlot: "slot_tipo", roleOpcion: "opt_tipo", ignoraClicksHasta: slotTipoIgnoraClicksHasta, menuTarda: menuTipoTarda }),
     vSelect({ label: "Método de pago", seleccion: pagoTexto.replace(/^M[ée]todo de pago\s*/i, ""), opciones: ["Efectivo", "Tarjeta"], roleSlot: "slot_pago", roleOpcion: "opt_pago" }),
     toggleDetalle,
     toggleReceptor,

@@ -288,8 +288,9 @@ export interface BoletaLibreto {
     glosa_aparece: number;
     glosa_escribe: number;
     pad_post: number;
-    /** Por intento, esperando que brote el v-menu de un select del modal (tipo/pago).
-     *  Incidente 2026-09-23: 2,9 s no alcanzaban en un laptop lento. ≤0.2.4 lo ignora. */
+    /** Por intento, esperando que brote el v-menu de un select del modal (tipo, pago,
+     *  sucursal). Incidente 2026-09-23: 2,9 s no alcanzaban en un laptop lento. Tope en
+     *  la extensión: 10 s (se multiplica por intentos y selects). ≤0.2.4 lo ignora. */
     menu_select: number;
   };
   // ── Bloques ADITIVOS (tanda 1, 2026-09-10) ────────────────────────────────
