@@ -24,13 +24,66 @@ export function parseChileanNumber(v: unknown): number {
   return neg ? -n : n;
 }
 
+/**
+ * Año para fechas que vienen SIN año ("02/09"): BancoEstado exporta así la hoja
+ * "Movimientos" (el año solo está en la hoja "Resumen"). Se toma el año más
+ * frecuente entre las fechas completas que haya en la hoja (p. ej. "FECHA DESDE /
+ * HASTA" de la cabecera); si no hay ninguna, null → el caller usa el año actual.
+ */
+export function inferirAnioPista(rows: Row[]): number | null {
+  const conteo = new Map<number, number>();
+  const suma = (y: number) => { if (y >= 2000 && y <= 2100) conteo.set(y, (conteo.get(y) ?? 0) + 1); };
+  for (const r of rows) {
+    for (const cell of r ?? []) {
+      if (cell == null) continue;
+      const asDate = cell as unknown;
+      if (asDate instanceof Date) { if (!Number.isNaN(asDate.getTime())) suma(asDate.getFullYear()); continue; }
+      const t = String(cell).trim();
+      let m = t.match(/^\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})/);
+      if (m) { suma(parseInt(m[1], 10)); continue; }
+      m = t.match(/^(\d{4})[\/\-]\d{1,2}[\/\-]\d{1,2}/);
+      if (m) { suma(parseInt(m[1], 10)); continue; }
+      m = t.match(/^(20\d{2})(\d{2})(\d{2})$/);
+      if (m && parseInt(m[2], 10) >= 1 && parseInt(m[2], 10) <= 12 && parseInt(m[3], 10) >= 1 && parseInt(m[3], 10) <= 31) suma(parseInt(m[1], 10));
+    }
+  }
+  let mejor: number | null = null; let n = 0;
+  for (const [y, c] of conteo) if (c > n) { mejor = y; n = c; }
+  return mejor;
+}
+
 export function normalizeDate(
   v: unknown,
-  format: AdapterConfig["date_format"]
+  format: AdapterConfig["date_format"],
+  anioPista?: number | null,
+  ahora: Date = new Date(),
 ): string {
   if (v == null) return "";
   const s = String(v).trim();
   if (!s) return "";
+
+  // Incidente 2026-09-23 (2 cartolas BancoEstado cayeron a la IA y salieron
+  // AFECTAS): "20260923" (yyyymmdd) y "02/09" (sin año). Formatos del banco,
+  // no rarezas. Sin año: el de la pista (fechas completas de la hoja) o el
+  // actual; si eso deja la fecha en el futuro (cartola de dic subida en ene),
+  // es el año anterior.
+  const m8 = s.match(/^(20\d{2})(\d{2})(\d{2})$/);
+  if (m8) {
+    const mm = parseInt(m8[2], 10); const dd = parseInt(m8[3], 10);
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return `${m8[1]}-${m8[2]}-${m8[3]}`;
+  }
+  const mSinAnio = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (mSinAnio) {
+    const dd = parseInt(mSinAnio[1], 10); const mm = parseInt(mSinAnio[2], 10);
+    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
+      let y = anioPista ?? ahora.getFullYear();
+      if (anioPista == null) {
+        const candidata = new Date(y, mm - 1, dd).getTime();
+        if (candidata > ahora.getTime() + 7 * 86_400_000) y -= 1;
+      }
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
 
   if (format === "dd/mm/yyyy" || format === "dd-mm-yyyy" || format === "unknown") {
     const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
@@ -89,6 +142,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
   const { columns: c } = cfg;
   const layout = cfg.layout ?? "two_cols";
   const start = cfg.skip_rows_before_data;
+  const anioPista = inferirAnioPista(rows);
 
   for (let i = start; i < rows.length; i++) {
     const r = rows[i];
@@ -117,8 +171,13 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       fechaStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
     }
 
-    if (!isDate && !isSerial && !fechaStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/))
-      continue;
+    if (!isDate && !isSerial) {
+      // Se acepta lo que normalizeDate sepa convertir a ISO (incluye yyyymmdd y
+      // dd/mm sin año); lo demás no es un movimiento.
+      const iso = normalizeDate(fechaStr, cfg.date_format, anioPista);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+      fechaStr = iso;
+    }
 
     let tipo: ParsedLine["tipo"];
     let monto: number;

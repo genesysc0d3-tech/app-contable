@@ -257,3 +257,37 @@ export async function incrementRuleUsage(reglaIds: string[]): Promise<void> {
     /* non-blocking */
   }
 }
+
+/**
+ * Reglas SOBRE lo que extrajo la IA (carril texto/OCR, sin parser).
+ *
+ * Incidente 2026-09-23: dos cartolas BancoEstado cayeron al carril de
+ * extracción; DeepSeek escribió la glosa ("Abono por transferencia de X") y las
+ * clasificó FACTURA AFECTA por el giro de la empresa. Esa glosa calzaba con las
+ * reglas globales de transferencias, pero en ese carril las reglas nunca corrían.
+ * Misma precedencia que el carril con parser: regla > IA para el TIPO. El receptor
+ * lo pone la IA si lo identificó (en este carril ya leyó el documento entero; la
+ * regla solo recorta la glosa), si no, el de la regla.
+ */
+export function reclasificarConReglas(
+  movimientos: MovimientoExtraido[],
+  propuestas: PropuestaExtraida[],
+  reglas: ClasificacionRegla[],
+): { propuestas: PropuestaExtraida[]; reglaPorIndex: Map<number, { regla_id: string; fuente: "regla_usuario" | "regla_global"; tipo_dte: number | null }> } {
+  const reglaPorIndex = new Map<number, { regla_id: string; fuente: "regla_usuario" | "regla_global"; tipo_dte: number | null }>();
+  if (reglas.length === 0 || movimientos.length === 0) return { propuestas, reglaPorIndex };
+  const { clasificados } = classifyWithRules(movimientos, reglas);
+  if (clasificados.length === 0) return { propuestas, reglaPorIndex };
+  const porIndex = new Map(clasificados.map((c) => [c.movimiento_index, c]));
+  const out = propuestas.map((p) => {
+    const c = porIndex.get(p.movimiento_index);
+    if (!c) return p;
+    reglaPorIndex.set(p.movimiento_index, { regla_id: c.regla_id, fuente: c.fuente, tipo_dte: c.tipo_dte });
+    return {
+      ...c.propuesta,
+      receptor_nombre: p.receptor_nombre ?? c.propuesta.receptor_nombre ?? null,
+      receptor_rut: p.receptor_rut ?? c.propuesta.receptor_rut ?? null,
+    };
+  });
+  return { propuestas: out, reglaPorIndex };
+}

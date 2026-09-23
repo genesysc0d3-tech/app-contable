@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ruleMatches, classifyWithRules, type ClasificacionRegla } from "./classifier";
+import { ruleMatches, classifyWithRules, reclasificarConReglas, type ClasificacionRegla } from "./classifier";
 import type { MovimientoExtraido } from "./types";
 
 // Motor de reglas del sistema de aprendizaje (clasificacion_reglas). Funciones puras:
@@ -119,5 +119,24 @@ describe("classifyWithRules", () => {
     ]);
     // notas se imprime en el DTE sobre el umbral; el nombre del tercero no debe colarse ahí.
     expect(res.clasificados[0].propuesta.notas).toBeNull();
+  });
+});
+
+// Incidente 2026-09-23: carril de extracción (BancoEstado sin parser) — la IA
+// escribió "Abono por transferencia de X" y lo clasificó factura afecta por el giro.
+describe("reclasificarConReglas — reglas sobre lo extraído por la IA", () => {
+  const regla = { id: "g-115", empresa_id: null, nombre: "Transferencia recibida (P2P)", patron: "\\btransf(er(encia)?)?\\.?\\s+(de|desde|recibida)\\b", patron_tipo: "regex", tipo_flujo_match: "entrada", tipo_propuesto: "transferencia_p2p", prioridad: 115, confianza: 0.8, activa: true, tipo_dte: null, receptor_nombre_default: null, receptor_rut_default: null, veces_aplicada: 0, created_by: null, last_used_at: null, created_at: "" } as never;
+  const mov = (descripcion: string, tipo_flujo: "entrada" | "salida") => ({ fecha: "2026-09-01", descripcion, monto: 32850, tipo_flujo, origen: "otro" });
+  const propIA = (i: number, tipo: string) => ({ movimiento_index: i, tipo_propuesto: tipo, receptor_nombre: "Garcia Coronado", receptor_rut: null, monto_neto: 27605, iva: 5245, total: 32850, confianza: 0.9, notas: null, spread_compra: null, spread_venta: null, spread_ganancia: null }) as never;
+  it("la regla le gana a la IA y conserva el receptor que la IA identificó", () => {
+    const r = reclasificarConReglas([mov("Abono por transferencia de Garcia Coronado (Rut 1-9) - pago recibido", "entrada")], [propIA(0, "factura_afecta")], [regla]);
+    expect(r.propuestas[0].tipo_propuesto).toBe("transferencia_p2p");
+    expect(r.propuestas[0].receptor_nombre).toBe("Garcia Coronado");
+    expect(r.reglaPorIndex.get(0)?.fuente).toBe("regla_global");
+  });
+  it("sin calce de regla, la propuesta de la IA queda intacta", () => {
+    const r = reclasificarConReglas([mov("Pago de factura 221 asesoria", "entrada")], [propIA(0, "factura_afecta")], [regla]);
+    expect(r.propuestas[0].tipo_propuesto).toBe("factura_afecta");
+    expect(r.reglaPorIndex.size).toBe(0);
   });
 });
