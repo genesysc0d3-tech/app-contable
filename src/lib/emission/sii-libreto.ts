@@ -288,6 +288,10 @@ export interface BoletaLibreto {
     glosa_aparece: number;
     glosa_escribe: number;
     pad_post: number;
+    /** Por intento, esperando que brote el v-menu de un select del modal (tipo, pago,
+     *  sucursal). Incidente 2026-09-23: 2,9 s no alcanzaban en un laptop lento. Tope en
+     *  la extensión: 10 s (se multiplica por intentos y selects). ≤0.2.4 lo ignora. */
+    menu_select: number;
   };
   // ── Bloques ADITIVOS (tanda 1, 2026-09-10) ────────────────────────────────
   // La extensión ≤0.2.3 los ignora (su validador solo mira las claves de
@@ -360,6 +364,7 @@ export const BOLETA_LIBRETO: BoletaLibreto = {
     glosa_aparece: 150, // :1159
     glosa_escribe: 120, // :1165
     pad_post: 250, // :1100
+    menu_select: 5000, // selectVuetifyOption (0.2.5)
   },
   // ESPEJO EXACTO de resolverLibreto en sii-worker.js (bloques g/mo/em/ma):
   // los regex se compilan con "i" sobre normalizeSearchText (MAYÚSCULAS sin

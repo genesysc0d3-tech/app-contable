@@ -553,7 +553,7 @@
       modal: { titulo: reI(mo.titulo, /EMITIR\s+E-BOLETA/i) },
       emisor: { cargando: reI(em.cargando, /CARGANDO EMISORES/i) },
       monto_alto: { texto: reI(ma.texto, /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i) },
-      // Las 7 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
+      // Las 8 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
       // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
       esperas: {
         modal_emision: esperaOk(e.modal_emision, 12000),
@@ -563,6 +563,9 @@
         glosa_aparece: esperaOk(e.glosa_aparece, 150),
         glosa_escribe: esperaOk(e.glosa_escribe, 120),
         pad_post: esperaOk(e.pad_post, 250),
+        // Tope propio de 10 s: con 60 s × intentos el job (TTL 15 min) vencía con el
+        // formulario lleno y dejaba una lápida 'revisar' sin folio (adversarial 2026-09-23).
+        menu_select: Math.min(esperaOk(e.menu_select, 5000), 10000),
       },
     };
   }
@@ -684,20 +687,33 @@
     const shows = () => normalizeSearchText(slot.innerText || slot.textContent).includes(normalizeSearchText(optionText));
     if (shows()) return true;
 
+    // Incidente 2026-09-23: 7 de 47 boletas abortaron TIPO_NO_CONFIRMADO en un
+    // laptop lento (Acer al 24% de batería) — el v-menu no apareció en los ~2,9 s
+    // por intento que había. Ahora cada intento espera LB.esperas.menu_select
+    // (5 s por defecto, tope 10 s; ajustable desde el libreto sin release) y, si
+    // el menú ya brotó (visible o todavía en transición), NO se vuelve a clickear
+    // el slot: en Vuetify un segundo click lo cierra.
+    const porIntento = LB.esperas.menu_select; // literal cableado: 5000
+    const quiero = normalizeSearchText(optionText);
+    const opcionesDe = (menu) => Array.from(menu.querySelectorAll(LB.selectores.opcion));
+    const visibles = () => Array.from(document.querySelectorAll(LB.selectores.menu)).filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+    const cuentaMenus = () => document.querySelectorAll(LB.selectores.menu).length;
+    // ¿Hay un menú visible que trae NUESTRA opción? (uno ajeno —tooltip, otro
+    // select— no cuenta: contra ese sí hay que clickear el slot.)
+    const nuestroVisible = () => visibles().some((m) => opcionesDe(m).some((it) => normalizeSearchText(it.innerText || it.textContent).includes(quiero)));
     let vioMenu = false;
     let vioOpciones = false;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await clickElement(slot);
-      for (let i = 0; i < 16; i += 1) {
+    // Busca la opción en los menús visibles hasta `deadline`; true si quedó seleccionada.
+    const elegirHasta = async (deadline) => {
+      while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 180));
-        const menus = Array.from(document.querySelectorAll(LB.selectores.menu))
-          .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+        const menus = visibles();
         if (menus.length) vioMenu = true;
         for (const menu of menus) {
-          const items = Array.from(menu.querySelectorAll(LB.selectores.opcion));
+          const items = opcionesDe(menu);
           if (items.length) vioOpciones = true;
-          const opt = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === normalizeSearchText(optionText))
-            || items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(normalizeSearchText(optionText)));
+          const opt = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === quiero)
+            || items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(quiero));
           if (opt) {
             await clickElement(opt);
             await new Promise((resolve) => setTimeout(resolve, 250));
@@ -705,6 +721,18 @@
           }
         }
       }
+      return false;
+    };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const menusAntes = cuentaMenus();
+      if (!nuestroVisible()) await clickElement(slot);
+      if (await elegirHasta(Date.now() + porIntento)) return true;
+      // Brotó un menú tras el click pero sigue invisible (transición lenta):
+      // otro tanto de espera SIN re-clickear.
+      if (cuentaMenus() > menusAntes && visibles().length === 0) {
+        if (await elegirHasta(Date.now() + porIntento)) return true;
+      }
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 400));
     }
     if (shows()) return true;
     // Diagnóstico para la ancla (no cambia el retorno): ver ultimoFalloSelect.
@@ -716,21 +744,27 @@
   // Abre el v-select cuyo slot contiene `slotText` y elige la PRIMERA opción.
   // Para la sucursal: a veces no auto-selecciona (carrera al cargar emisores)
   // y es requerida; elegir la primera disponible desbloquea el EMITIR.
+  // 0.2.5: misma paciencia que selectVuetifyOption (menu_select por intento, 2
+  // intentos) — en el laptop lento del incidente habría abortado igual por la sucursal.
   async function selectFirstVuetifyOption(slotText) {
     const dialog = activeEmitDialog() || document;
     const slot = Array.from(dialog.querySelectorAll(LB.selectores.slot))
       .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText)));
     if (!slot) return false;
-    await clickElement(slot);
-    for (let i = 0; i < 16; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 180));
-      const menus = Array.from(document.querySelectorAll(LB.selectores.menu))
-        .filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
-      for (const menu of menus) {
-        const items = Array.from(menu.querySelectorAll(LB.selectores.opcion))
-          .filter((it) => isVisibleEnabled(it) && (it.innerText || it.textContent || "").trim());
-        if (items.length) { await clickElement(items[0]); await new Promise((resolve) => setTimeout(resolve, 250)); return true; }
+    const porIntento = LB.esperas.menu_select; // literal cableado: 5000
+    const visibles = () => Array.from(document.querySelectorAll(LB.selectores.menu)).filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (visibles().length === 0) await clickElement(slot);
+      const deadline = Date.now() + porIntento;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        for (const menu of visibles()) {
+          const items = Array.from(menu.querySelectorAll(LB.selectores.opcion))
+            .filter((it) => isVisibleEnabled(it) && (it.innerText || it.textContent || "").trim());
+          if (items.length) { await clickElement(items[0]); await new Promise((resolve) => setTimeout(resolve, 250)); return true; }
+        }
       }
+      if (attempt < 1) await new Promise((resolve) => setTimeout(resolve, 400));
     }
     return false;
   }
