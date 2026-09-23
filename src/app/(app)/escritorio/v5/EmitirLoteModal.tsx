@@ -346,7 +346,15 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
       <div style={h1}>Listo</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? `${doc} emitida` : `${docs} emitidas`} y guardadas.</div>
       {chips([{ l: "Folios", v: rango }, ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
-      {fallas.length > 0 && motivo && <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 8 }}>Última falla: {motivo}</div>}
+      {/* Feedback real 2026-09-23: "41 aprobadas, 40 emitidas, no encontré la que
+          falta". La saltada sigue aprobada y en Listas dentro de su cartola — hay
+          que DECIRLO, no dejar que la cuenten restando montos contra el SII. */}
+      {fallas.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 10, background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", textAlign: "left" }}>
+          <b>{fallas.length === 1 ? `1 ${doc} quedó sin emitir` : `${fallas.length} ${docs} quedaron sin emitir`}.</b> No se perdió: sigue en <b>Listas</b>, dentro de su cartola. Ábrela y emítela de nuevo.
+          {motivo && <div style={{ marginTop: 5, opacity: .85 }}>Motivo: {motivo}</div>}
+        </div>
+      )}
       <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Ver en el historial</button>
     </>
   );
