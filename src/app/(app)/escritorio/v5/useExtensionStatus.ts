@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EXTENSION_VERSION_ACTUAL, extensionDesactualizada, hayVersionNuevaDeExtension, mensajeExtensionDesactualizada } from "@/lib/extension";
 import { useVersionDisponible } from "./version-disponible-context";
+import { delayDePolling, estadoTrasSilencio, PING_TIMEOUT_MS } from "./extension-estado-reglas";
 
 export type ExtensionStatus = "checking" | "ready" | "missing";
 
@@ -92,6 +93,7 @@ export function verificarExtensionCompatible(
  */
 let ultimoConocido: { status: ExtensionStatus; version: string | null; hayBoveda: boolean | null } | null = null;
 
+
 export function useExtensionStatus(): { status: ExtensionStatus; version: string | null; hayBoveda: boolean | null; desactualizada: boolean; hayVersionNueva: boolean; versionPublicada: string; recheck: () => void } {
   const [status, setStatus] = useState<ExtensionStatus>(() => ultimoConocido?.status ?? "checking");
   const [version, setVersion] = useState<string | null>(() => ultimoConocido?.version ?? null);
@@ -101,6 +103,7 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
   const pingRef = useRef<{ nonce: string; timeoutId: number } | null>(null);
   // Espejo de `status` para leerlo dentro del intervalo de polling sin recrear el effect.
   const statusRef = useRef<ExtensionStatus>(ultimoConocido?.status ?? "checking");
+  const silenciosRef = useRef(0);
 
   // Solo postea el ping + arma el timeout (que puede pasar a "missing"). NO hace un
   // setState SÍNCRONO, así se puede invocar desde el effect de montaje sin violar
@@ -112,11 +115,16 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
       typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
     const timeoutId = window.setTimeout(
       () => setStatus((current) => {
-        if (current !== "checking") return current;
-        ultimoConocido = { status: "missing", version: null, hayBoveda: null };
-        return "missing";
+        silenciosRef.current += 1;
+        const next = estadoTrasSilencio(current, silenciosRef.current);
+        if (next === "missing" && current !== "missing") {
+          ultimoConocido = { status: "missing", version: null, hayBoveda: null };
+          setVersion(null);
+          setHayBoveda(null);
+        }
+        return next;
       }),
-      1200,
+      PING_TIMEOUT_MS,
     );
     pingRef.current = { nonce, timeoutId };
     window.postMessage(
@@ -151,6 +159,7 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
       if (data?.source !== "app-contable-extension") return;
       if (data.type === "APP_CONTABLE_EXTENSION_PONG" && pingRef.current && data.nonce === pingRef.current.nonce) {
         window.clearTimeout(pingRef.current.timeoutId);
+        silenciosRef.current = 0;
         const v = data.extension_version ?? null;
         const b = typeof data.has_vault === "boolean" ? data.has_vault : null;
         ultimoConocido = { status: "ready", version: v, hayBoveda: b };
@@ -169,16 +178,18 @@ export function useExtensionStatus(): { status: ExtensionStatus; version: string
     // (visibilitychange) se re-pregunta de inmediato — el momento típico post-install.
     let pollTimer: number | null = null;
     const pollStart = Date.now();
+    // Estando ready también se re-pregunta (cada POLL_READY_MS): la versión y el
+    // ✓ tienen que reflejar la extensión de VERDAD, no la de cuando se abrió la pestaña.
     function scheduleNextPing() {
-      const delay = Date.now() - pollStart < 60000 ? 2500 : 15000;
+      const delay = delayDePolling(statusRef.current, hayBovedaRef.current, Date.now() - pollStart);
       pollTimer = window.setTimeout(() => {
-        if (statusRef.current !== "ready" || hayBovedaRef.current === false) postPing();
+        postPing();
         scheduleNextPing();
       }, delay);
     }
     scheduleNextPing();
     const onVisible = () => {
-      if (document.visibilityState === "visible" && (statusRef.current !== "ready" || hayBovedaRef.current === false)) postPing();
+      if (document.visibilityState === "visible") postPing();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
