@@ -183,6 +183,16 @@ describe("decidirTipoDteAuto — asimetría de seguridad del 39 (fabrica IVA)", 
     expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
   });
 
+  // Incidente 2026-09-24: 415 transferencias P2P nacieron 39 en dos empresas 'auto'
+  // (giro "asesoría informática" + el default suave de la glosa). Con el worker del
+  // SII fallando a propósito (fail-closed) no salió ninguna como afecta.
+  it("39 BLOQUEADO: transferencia pelada + giro de servicios + emisor 'auto' → null (el default suave NO es evidencia)", () => {
+    const empresa = { giro: "ASESORÍA INFORMÁTICA", tipo_contribuyente: "auto", boletas_tipo_default: "auto" } as never;
+    for (const desc of ["0277446170 Transf. ESTEFFANY MEDINA", "Transf de SILVANA OTA", "Transferencia recibida de JUAN PEREZ"]) {
+      const c = clasificarBoleta({ descripcion: desc, monto: 117000, fecha: "2026-09-01", receptor_nombre: null }, empresa, undefined, null);
+      expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBeNull();
+    }
+  });
   it("39 OK: la glosa corrobora afecta (servicio) → 39", () => {
     const c = clasificarBoleta(mov("servicio de asesoría profesional"), empVentas);
     expect(decidirTipoDteAuto(c, { docHint: null, tipoContribuyente: "auto" })).toBe(39);

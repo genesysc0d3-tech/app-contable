@@ -16,6 +16,27 @@ const baseInput = (over: Partial<EmisionInput> = {}): EmisionInput => ({
 const empresaAfecta: EmisionCtx = { empresa: { giro: "Servicios", tipo_contribuyente: "afecto" } };
 const empresaExenta: EmisionCtx = { empresa: { giro: null, tipo_contribuyente: "exento" } };
 
+const empresaAuto: EmisionCtx = { empresa: { giro: "ASESORÍA INFORMÁTICA", tipo_contribuyente: "auto" } };
+
+// Incidente 2026-09-24: "las tenía todas exentas y en Emitir salen afectas". La
+// heurística (giro + default suave) decía 39 para P2P; la categoría manda.
+describe("evaluarEmision — la categoría exenta manda sobre la heurística", () => {
+  it("transferencia_p2p sin decisión humana, empresa auto con giro de servicios → 41 exenta", () => {
+    const v = evaluarEmision(baseInput({ descripcion: "0277446170 Transf. ESTEFFANY MEDINA", tipoPropuesto: "transferencia_p2p" }), empresaAuto);
+    expect(v.tipoDte).toBe(41);
+    expect(v.totales?.iva).toBe(0);
+    expect(v.advertencias.some((a) => a.code === "TIPO_ASUMIDO")).toBe(false);
+  });
+  it("la decisión humana guardada (39) sigue mandando aunque la categoría sea P2P", () => {
+    const v = evaluarEmision(baseInput({ descripcion: "Transf de X", tipoPropuesto: "transferencia_p2p", tipoDtePersistido: 39 }), empresaAuto);
+    expect(v.tipoDte).toBe(39);
+  });
+  it("sin categoría exenta se comporta como antes (afecta por heurística)", () => {
+    const v = evaluarEmision(baseInput({ tipoPropuesto: "boleta" }), empresaAfecta);
+    expect(v.tipoDte).toBe(39);
+  });
+});
+
 describe("evaluarEmision — motor de reglas", () => {
   it("venta afecta clara y aprobada → LISTAS, emitible, con IVA > 0", () => {
     const v = evaluarEmision(baseInput(), empresaAfecta);
