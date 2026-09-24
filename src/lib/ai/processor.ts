@@ -13,6 +13,7 @@ import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
+import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
@@ -1472,8 +1473,13 @@ export async function procesarDocumento(
               : decidirTipoDteAuto(clasifTipo, { docHint, tipoContribuyente: emp?.tipo_contribuyente });
           // Precedencia: la regla de usuario manda (si pasa el guardarraíl); si no,
           // el auto. El emisor exento se fuerza a 41 (nunca 39).
+          // Incidente 2026-09-24: una categoría EXENTA por naturaleza (P2P/cripto/forex/
+          // exenta) jamás nace 39, diga lo que diga el giro o el default suave de la
+          // glosa. El Check la muestra "EXE" por la categoría; Emitir leía el 39 grabado.
+          const exentoPorCategoria = esTipoPropuestoExento(tipoBase);
           const tipoDtePersist: 39 | 41 | null =
             !puedePersistirTipo ? null
+              : exentoPorCategoria ? 41
               : enriched.__tipo_dte === 39 || enriched.__tipo_dte === 41
                 ? (exentoFinal || empExento ? 41 : enriched.__tipo_dte)
                 : tipoDteAuto;

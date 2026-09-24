@@ -249,6 +249,7 @@ export async function getPendientesEmision(
         receptorNombre: receptor_nombre,
         medioPago: p.medio_pago ?? docArr?.medio_pago_comun ?? null,
         tipoDtePersistido: (() => { const t = tipoDteById.get(p.id); return t === 39 || t === 41 ? t : null; })(),
+        tipoPropuesto: p.tipo_propuesto,
         docHint,
         patron: {
           cantidad_mismo_dia_mismo_receptor: (patronDia.get(`${recId}|${fecha}`) ?? 1) - 1,

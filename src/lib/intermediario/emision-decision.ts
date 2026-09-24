@@ -20,6 +20,7 @@
 import { SUFIJO_SOCIETARIO } from "../ai/classifier";
 import { clasificarBoleta, type DocumentoHint, type EmpresaContext, type PatronContext } from "../sii/clasificador-tipo";
 import { validarBoleta } from "../sii/validation";
+import { esTipoPropuestoExento } from "../sii/tipos-propuesta";
 
 /** Confianza mínima del clasificador (afecta/exenta) para auto-marcar como listo. */
 export const CONFIANZA_TIPO_MIN = 0.8;
@@ -51,6 +52,9 @@ export type EmisionInput = {
    * Hoy llega null/undefined hasta que se implemente la persistencia.
    */
   tipoDtePersistido?: 39 | 41 | null;
+  /** tipo_propuesto de la propuesta: una categoría EXENTA por naturaleza
+   *  (P2P/cripto/forex/exenta) decide 41 antes que cualquier heurística. */
+  tipoPropuesto?: string | null;
   /** Confianza de que es ingreso boletable (0-1), si se conoce. */
   confianzaIngreso?: number;
   docHint?: DocumentoHint;
@@ -93,7 +97,12 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
   );
 
   // La decisión humana guardada (Paso P) manda sobre la heurística.
-  let tipoDte: 39 | 41 | null = input.tipoDtePersistido ?? clasif.tipo_dte;
+  // Incidente 2026-09-24: la heurística (giro "asesoría" + default suave de la glosa)
+  // decía 39 para transferencias P2P y Emitir las mostraba AFECTAS aunque el Check
+  // dijera EXE. La categoría exenta por naturaleza manda sobre la heurística; solo
+  // una decisión humana guardada (Paso P) puede contradecirla.
+  let tipoDte: 39 | 41 | null =
+    input.tipoDtePersistido ?? (esTipoPropuestoExento(input.tipoPropuesto) ? 41 : clasif.tipo_dte);
 
   const bloqueos: Marca[] = [];
   const advertencias: Marca[] = [];
