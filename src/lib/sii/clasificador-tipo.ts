@@ -400,7 +400,11 @@ export function decidirTipoDteAuto(
   if (clasif.tipo_dte !== 39) return null;
   // A partir de acá el candidato es un 39 (afecta): exigir evidencia.
   if (opts.tipoContribuyente === "afecto") return 39;
-  const glosaCorroboraAfecta = clasif.angulos.glosa.veredicto === "afecta";
+  // Incidente 2026-09-24 (415 filas P2P nacieron 39 en dos empresas 'auto'):
+  // angleGlosa termina con un "default suave" transferencia→afecta (peso 0,35).
+  // Esa etiqueta NO es evidencia: solo un keyword real (servicio/venta/comisión,
+  // peso ≥ 0,7) corrobora un 39.
+  const glosaCorroboraAfecta = clasif.angulos.glosa.veredicto === "afecta" && clasif.angulos.glosa.peso >= 0.7;
   const hintAfectaExplicito = opts.docHint === "servicios" || opts.docHint === "ventas";
   return glosaCorroboraAfecta || hintAfectaExplicito ? 39 : null;
 }
