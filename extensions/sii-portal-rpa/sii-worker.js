@@ -1279,11 +1279,23 @@
   }
 
   function captureResult(job) {
-    // pageTextTodo: el recibo puede estar en display:none (ventana tapada); ver arriba.
-    const text = pageTextTodo().slice(0, 2400);
-    const withoutRut = stripRut(text);
+    // 0.2.7 (adversarial): el folio se busca PRIMERO dentro del/los diálogos activos (el
+    // recibo vive ahí; textContent incluye lo oculto) y recién después en el body
+    // completo. Así un número de otro nodo oculto (lista de emisores, un recibo viejo)
+    // no le gana al folio real, y el recorte del body no lo deja afuera.
+    const textoDialogos = stripRut(Array.from(document.querySelectorAll(LB.selectores.dialogo_activo))
+      .map((d) => (d.textContent || "")).join(" ").replace(/\s+/g, " ").trim().slice(0, 4000));
+    const withoutRut = stripRut(pageTextTodo().slice(0, 6000));
     const links = artifactLinks();
-    const captured = captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut);
+    const enReportes = location.href.includes("/reportes");
+    let captured = (textoDialogos && captureExplicitFolio(textoDialogos))
+      || captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut);
+    // En /reportes la tabla trae TODAS las boletas del día: la primera fila puede ser
+    // OTRA boleta (LC tuvo 3 seguidas). Nunca "alta" desde ahí: el humano confirma con
+    // el folio sugerido (result_needs_review), y no se toca Compartir.
+    if (enReportes && captured && captured.confidence === "high") {
+      captured = { ...captured, confidence: "medium", evidence: { ...(captured.evidence || {}), degradado: "reportes_puede_ser_otra_boleta_del_dia" } };
+    }
     const folio = captured?.folio ?? null;
     const strongFolio = captured?.confidence === "high";
     return {
@@ -1310,7 +1322,7 @@
       page: {
         url: location.href,
         title: document.title,
-        excerpt: text,
+        excerpt: pageText().slice(0, 2400), // solo texto VISIBLE: el oculto trae razones sociales de otras empresas
       },
     };
   }

@@ -1329,10 +1329,15 @@ function captureWorkerResult(state) {
       // (la navegación cierra el puerto del content script), la página nueva ya tiene
       // el content script recién inyectado: se reintenta la captura UNA vez, en vez de
       // dar por perdida una boleta que sí salió (incidente LC 2026-09-25).
-      if (state.finalEmitClicked && !state.capturaReintentada) {
-        state.capturaReintentada = true;
+      // Hasta 3 intentos con espera creciente (4,5 / 6 / 8 s: el SII lento tarda en
+      // cargar /reportes y el content script entra en document_idle). Guard: si en
+      // ese rato el usuario cerró la ventana o canceló, el state ya no está en
+      // activeJobs y el timer no debe hablar por un job muerto.
+      state.capturaReintentos = (state.capturaReintentos || 0) + 1;
+      if (state.finalEmitClicked && state.capturaReintentos <= 3) {
+        const espera = [4500, 6000, 8000][state.capturaReintentos - 1];
         sendToApp(state, statusMessage(state.jobId, "capturing_result", "Buscando el folio en reportes del SII.", true));
-        setTimeout(() => captureWorkerResult(state), 4500);
+        setTimeout(() => { if (activeJobs.get(state.jobId) === state) captureWorkerResult(state); }, espera);
         return;
       }
       // Post-emit: NUNCA subir "error" (la app cerraría el job y perdería el folio ya
