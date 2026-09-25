@@ -21,6 +21,10 @@ const WORKER_SRC = readFileSync(process.env.MASSDTE_WORKER_SRC || join(__dirname
 
 // ── Arnés: monta el worker real y lo maneja como el background ──────────────
 let driveListener = null;
+// `location` del worker: en producción cada boleta abre una ventana NUEVA en /emitir; acá el
+// worker se monta una vez, así que cada job la resetea (si un test anterior navegó a
+// /reportes buscando folio, el siguiente no debe heredarlo).
+const location = { href: "https://eboleta.sii.cl/emitir/" };
 const testHooks = {}; // window.__MASSDTE_TEST__: el worker expone resolverLibreto acá
 
 function mountWorker() {
@@ -33,21 +37,21 @@ function mountWorker() {
       onMessage: { addListener: (h) => { driveListener = h; } },
     },
   };
-  const location = { href: "https://eboleta.sii.cl/" };
   const silent = { log() {}, warn() {}, error() {}, info() {} };
   class Evt { constructor(t) { this.type = t; } }
   new Function(
     "window", "chrome", "document", "location", "console",
     "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLSelectElement", "HTMLTextAreaElement",
-    "Node", "CSS", "Event", "MouseEvent", "FocusEvent", "KeyboardEvent",
+    "Node", "CSS", "Event", "MouseEvent", "FocusEvent", "KeyboardEvent", "HTMLAnchorElement",
     WORKER_SRC,
   )(win, chrome, fakeDocument, location, silent,
     FakeHTMLElement, FakeHTMLElement, FakeHTMLElement, FakeHTMLElement, FakeHTMLElement,
-    { ELEMENT_NODE: 1 }, { escape: (s) => s }, Evt, Evt, Evt, Evt);
+    { ELEMENT_NODE: 1 }, { escape: (s) => s }, Evt, Evt, Evt, Evt, FakeHTMLElement);
 }
 
 async function drive(job) {
   estado.actions = [];
+  location.href = "https://eboleta.sii.cl/emitir/";
   let res;
   driveListener(
     { source: "app-contable-extension", type: "APP_CONTABLE_SII_FILL_AND_EMIT", job_id: job.job_id, job },
@@ -457,5 +461,66 @@ describe("v-menu oculto (0.2.6): el menú brota activo pero nunca se ve", () => 
     expect(res.ok).toBe(false);
     expect(res.code).toBe("TIPO_NO_CONFIRMADO");
     noFirmo(a);
+  });
+});
+
+// Incidente 2026-09-25 (LC, 3 boletas "a medias"): tras el EMITIR final, el recibo con el
+// folio se dibuja dentro de un requestAnimationFrame; con la ventana tapada queda en
+// display:none, innerText lo ignora y la captura no veía el folio de una boleta YA
+// emitida. Estos tests FALLAN con el worker 0.2.6 (MASSDTE_WORKER_SRC) y pasan con 0.2.7.
+describe("captura del folio con el recibo oculto (0.2.7)", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+  it("recibo visible → folio con confianza alta (línea base)", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127 Imprimir Descargar", oculto: false };
+    const cap = await capturar(job);
+    expect(cap.ok).toBe(true);
+    expect(cap.result.folio).toBe(4127);
+    expect(cap.result.folio_confidence).toBe("high");
+  });
+  it("recibo en display:none (ventana tapada) → igual captura el folio 4127", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127 Imprimir Descargar", oculto: true };
+    const cap = await capturar(job);
+    expect(cap.ok).toBe(true);
+    expect(cap.result.folio).toBe(4127);
+    expect(cap.result.folio_confidence).toBe("high");
+  });
+  it("recibo oculto DENTRO del diálogo + PDF oculto → emitida_capturada (camino real de producción)", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127 Imprimir Descargar", oculto: true, enDialogo: true, links: ["https://sii.cl/boletas/folio4127_x.pdf"] };
+    const cap = await capturar(job);
+    expect(cap.result.folio).toBe(4127);
+    expect(cap.result.folio_confidence).toBe("high");
+    expect(cap.result.estado).toBe("emitida_capturada");
+  });
+  it("señuelo: texto oculto ANTES en el body con 'NÚMERO: 99' (recibo viejo / lista) → gana el 4127 del diálogo", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127", oculto: true, enDialogo: true, ruidoOculto: "x".repeat(3000) + " BOLETA ELECTRÓNICA NÚMERO: 99" };
+    const cap = await capturar(job);
+    expect(cap.result.folio).toBe(4127);
+  });
+  it("el excerpt que viaja al server es solo texto VISIBLE (sin razones sociales ocultas)", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127", oculto: true, ruidoOculto: "OTRA EMPRESA SPA 77.111.222-3" };
+    const cap = await capturar(job);
+    expect(cap.result.page.excerpt).not.toContain("OTRA EMPRESA");
+  });
+  it("sin recibo → sin folio (no inventa)", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    const cap = await capturar(job);
+    expect(cap.result.folio).toBeNull();
   });
 });

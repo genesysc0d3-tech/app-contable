@@ -14,6 +14,12 @@ export const estado = {
   menus: [],        // menús Vuetify desplegados (.v-menu__content) — viven en el body
   alertaAbierta: false, // alerta de monto alto (tapa el modal hasta apretar SÍ)
   alertaNodes: [],
+  // Recibo post-emit (0.2.7): texto que muestra el SII tras el EMITIR final. Con
+  // `oculto`, innerText NO lo trae (display:none, ventana tapada) pero textContent sí.
+  // `enDialogo`: el texto vive dentro del .v-dialog--active (como en el portal real);
+  // `links`: anchors del recibo (PDF); `ruidoOculto`: texto oculto que va ANTES en el
+  // body (lista de emisores, un recibo viejo) — un señuelo para la captura.
+  recibo: null, // { texto, oculto, enDialogo?, links?: [href], ruidoOculto? }
 };
 
 export class FakeHTMLElement {}
@@ -49,6 +55,7 @@ export function el({ tag = "DIV", sel = [], text = "", role = null, value = "", 
   Object.defineProperty(node, "parentNode", { value: null, configurable: true });
   Object.defineProperty(node, "textContent", { get() { return textoCompleto(); }, configurable: true });
   node.getAttribute = (a) => (a === "value" ? node._value : (node._attrs[a] ?? null));
+  if (attrs.href) node.href = attrs.href; // <a>: artifactLinks lee .href
   node.getBoundingClientRect = () => ({ width: 10, height: 10, top: 0, left: 0, right: 10, bottom: 10 });
   node.offsetWidth = 10; node.offsetHeight = 10; node.offsetParent = {};
   node.closest = () => null;
@@ -70,17 +77,30 @@ export function matchAll(nodes, selector) {
 }
 
 function allNodes() {
-  const out = [...estado.scene, ...estado.menus];
+  const out = [...estado.scene, ...estado.menus, ...nodosRecibo()];
   if (estado.alertaAbierta) out.push(...estado.alertaNodes);
   if (estado.modalOpen && estado.modalNode) out.push(estado.modalNode);
   return out;
 }
-function bodyText() {
-  return estado.alertaAbierta ? "Está a punto de emitir una boleta por $ 6.000.000 ¿Desea continuar?" : "";
+function bodyText(todo = false) {
+  // Siempre hay texto VISIBLE en el portal (barra, pad): innerText nunca es vacío, así
+  // que el fallback `innerText || textContent` del worker viejo no rescata lo oculto.
+  const base = estado.alertaAbierta ? "Está a punto de emitir una boleta por $ 6.000.000 ¿Desea continuar?" : "menu e-Boleta power_settings_new EMITIR";
+  const r = estado.recibo;
+  if (!r) return base;
+  const ruido = todo && r.ruidoOculto ? ` ${r.ruidoOculto}` : "";
+  if (todo || !r.oculto) return `${base}${ruido} ${r.texto}`.trim();
+  return base;
+}
+// Anchors del recibo (los del PDF) — viven en el document como cualquier nodo.
+function nodosRecibo() {
+  const r = estado.recibo;
+  if (!r || !Array.isArray(r.links)) return [];
+  return r.links.map((href) => el({ tag: "A", sel: ["a"], text: "Descargar", attrs: { href } }));
 }
 
 export const fakeDocument = {
-  body: { get innerText() { return bodyText(); }, get textContent() { return bodyText(); }, appendChild(c) { return c; }, removeChild() {}, style: {}, contains: () => false },
+  body: { get innerText() { return bodyText(false); }, get textContent() { return bodyText(true); }, appendChild(c) { return c; }, removeChild() {}, style: {}, contains: () => false },
   documentElement: { appendChild(c) { return c; }, removeChild() {}, style: {} },
   getElementsByTagName: () => [],
   createElement: () => el(),
@@ -214,6 +234,7 @@ export function escenaEmision({
 } = {}) {
   estado.scene = [];
   estado.menus = [];
+  estado.recibo = null;
   estado.alertaAbierta = false;
   estado.modalOpen = false;
   // Selector superior de empresa (emisor activo): .v-select > .v-select__selections.
@@ -282,5 +303,8 @@ export function escenaEmision({
   }
   children.push(el({ tag: "BUTTON", sel: ["button"], text: "EMITIR", role: "btn_emitir_final" }));
   estado.modalNode = el({ tag: "DIV", sel: [".v-dialog.v-dialog--active"], text: "Emitir e-Boleta", children });
+  // El recibo post-emit vive dentro del diálogo activo cuando `enDialogo` (portal real).
+  const m = estado.modalNode; const textoBase = () => [m._text, ...m._children.map((c) => c.innerText)].filter(Boolean).join("\n");
+  Object.defineProperty(m, "textContent", { get() { const r = estado.recibo; return r && r.enDialogo ? `${textoBase()}\n${r.texto}` : textoBase(); }, configurable: true });
   return estado.scene;
 }

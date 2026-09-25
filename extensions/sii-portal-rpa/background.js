@@ -1325,6 +1325,21 @@ function captureWorkerResult(state) {
   }), (captureResponse) => {
     if (chrome.runtime.lastError || !captureResponse?.ok) {
       const errorMessage = captureResponse?.error || chrome.runtime.lastError?.message || "No se pudo capturar el resultado SII.";
+      // 0.2.7: si el canal murió porque el worker NAVEGÓ a /reportes buscando el folio
+      // (la navegación cierra el puerto del content script), la página nueva ya tiene
+      // el content script recién inyectado: se reintenta la captura UNA vez, en vez de
+      // dar por perdida una boleta que sí salió (incidente LC 2026-09-25).
+      // Hasta 3 intentos con espera creciente (4,5 / 6 / 8 s: el SII lento tarda en
+      // cargar /reportes y el content script entra en document_idle). Guard: si en
+      // ese rato el usuario cerró la ventana o canceló, el state ya no está en
+      // activeJobs y el timer no debe hablar por un job muerto.
+      state.capturaReintentos = (state.capturaReintentos || 0) + 1;
+      if (state.finalEmitClicked && state.capturaReintentos <= 3) {
+        const espera = [4500, 6000, 8000][state.capturaReintentos - 1];
+        sendToApp(state, statusMessage(state.jobId, "capturing_result", "Buscando el folio en reportes del SII.", true));
+        setTimeout(() => { if (activeJobs.get(state.jobId) === state) captureWorkerResult(state); }, espera);
+        return;
+      }
       // Post-emit: NUNCA subir "error" (la app cerraría el job y perdería el folio ya
       // emitido). Pausar en un estado NO-cerrante para reintentar captura o ingresar
       // el folio a mano. El candado sigue impidiendo re-emitir.
@@ -1489,7 +1504,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED" && isAllowedSiiUrl(sender.url || "")) {
     const state = stateForWorkerTab(sender.tab?.id);
-    if (state) state.finalEmitClicked = true;
+    if (state) {
+      state.finalEmitClicked = true;
+      // 0.2.7: traer la ventana al frente en el instante del EMITIR real. Chrome no
+      // dispara requestAnimationFrame en ventanas tapadas y Vuetify dibuja el recibo
+      // (folio, Imprimir/Compartir) dentro de uno: con el popup atrás, el folio no se
+      // renderiza y la captura queda ciega (incidente LC 2026-09-25). El usuario ya
+      // no puede escribir ahí (candado de la ventana segura); solo la ve.
+      if (state.workerWindowId) chrome.windows.update(state.workerWindowId, { focused: true }).catch(() => undefined);
+      else if (state.workerTabId) chrome.tabs.update(state.workerTabId, { active: true }).catch(() => undefined);
+    }
     sendResponse?.({ ok: true });
     return false;
   }
