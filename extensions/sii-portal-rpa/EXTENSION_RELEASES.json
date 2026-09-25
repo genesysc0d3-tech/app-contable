@@ -53,6 +53,15 @@
         "boletas"
       ],
       "publicada": "2026-09-25"
+    },
+    {
+      "version": "0.2.7",
+      "sha": "d62b5b7",
+      "valida": [
+        "facturas",
+        "boletas"
+      ],
+      "publicada": "2026-09-25"
     }
   ]
 }
