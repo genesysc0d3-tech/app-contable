@@ -14,7 +14,10 @@ import { validateLibretoBoleta } from "./modules/sii-local.js";
 import { estado, fakeDocument, FakeHTMLElement, escenaEmision, EMISOR } from "./fixtures/eboleta-modal.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WORKER_SRC = readFileSync(join(__dirname, "sii-worker.js"), "utf8");
+// MASSDTE_WORKER_SRC=<ruta> corre la suite contra OTRO worker (p. ej. el de una release
+// anterior sacado con `git show <sha>:extensions/sii-portal-rpa/sii-worker.js > /tmp/w.js`):
+// así un test de conducta nueva se VE fallar con la versión vieja, no se cuenta.
+const WORKER_SRC = readFileSync(process.env.MASSDTE_WORKER_SRC || join(__dirname, "sii-worker.js"), "utf8");
 
 // ── Arnés: monta el worker real y lo maneja como el background ──────────────
 let driveListener = null;
@@ -367,7 +370,7 @@ describe("v-menu paciente (0.2.5): el select del tipo tarda en responder", () =>
     expect(clicks(a)).toContain("opt_tipo:Boleta exenta");
     noFirmo(a);
   });
-  it("el menú brota pero queda invisible 4 s; un segundo click lo cerraría → igual elige (0.2.4 re-clickeaba y lo cerraba)", async () => {
+  it("el menú brota pero queda invisible 4 s → igual elige con UN click al slot (0.2.4 lo re-clickeaba; desde 0.2.6 el item se elige activo, sin esperar a verlo)", async () => {
     escenaEmision({ menuTipoTarda: 4000 });
     const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41 }));
     expect(res.ok).toBe(true);
@@ -399,5 +402,60 @@ describe("v-menu paciente (0.2.5): el select del tipo tarda en responder", () =>
   it("el worker acota menu_select a 10 s aunque el libreto traiga más", () => {
     expect(testHooks.resolverLibreto({ libreto: { ...clonLibreto(), esperas: { menu_select: 60000 } } }).esperas.menu_select).toBe(10000);
     expect(testHooks.resolverLibreto(null).esperas.menu_select).toBe(5000);
+  });
+});
+
+// Incidente 2026-09-24 (verificado en el portal real con Chrome): con nuestros clicks
+// sintéticos el .v-menu__content brota con la clase `menuable__content__active` pero
+// queda en display:none — Vuetify lo muestra dentro de un requestAnimationFrame y
+// Chrome no dispara rAF en ventanas tapadas (el worker corre en un popup focused:false).
+// La 0.2.5 (paciencia) no arreglaba nada: 5/5 fallos en la clienta LC. Los 4 tests de
+// CONDUCTA de acá FALLAN con el worker 0.2.5 (MASSDTE_WORKER_SRC contra 81c2e2a) y pasan
+// con el 0.2.6, que elige la opción en el menú ACTIVO aunque no se vea; el 5º
+// (fail-closed) pasa con ambas: es la red de seguridad, no la conducta nueva.
+describe("v-menu oculto (0.2.6): el menú brota activo pero nunca se ve", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+  it("tipo: menú activo en display:none → igual elige 'Boleta exenta' con UN click al slot (0.2.5: TIPO_NO_CONFIRMADO)", async () => {
+    escenaEmision({ menuTipoOculto: true });
+    const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41 }));
+    expect(res.ok).toBe(true);
+    expect(clicks(a)).toContain("opt_tipo:Boleta exenta");
+    expect(clicks(a).filter((r) => r === "slot_tipo")).toHaveLength(1);
+    noFirmo(a);
+  });
+  it("sucursal y pago con el menú oculto → los elige igual (0.2.5: SUCURSAL_NO_SELECCIONADA)", async () => {
+    escenaEmision({ sucursalTexto: "Elija sucursal", menuSucursalOculto: true, pagoTexto: "Método de pago", menuPagoOculto: true });
+    const { res, actions: a } = await drive(jobBoleta());
+    expect(res.ok).toBe(true);
+    expect(clicks(a)).toContain("opt_sucursal:Apoquindo 6410 Of 605");
+    expect(clicks(a)).toContain("opt_pago:Efectivo");
+    noFirmo(a);
+  });
+  it("señuelo: otro select cerrado con 'Boleta exenta' en el body → NO se toca; se elige en el menú que abrimos", async () => {
+    escenaEmision({ menuTipoOculto: true, conSenueloTipo: true });
+    const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41 }));
+    expect(res.ok).toBe(true);
+    expect(clicks(a)).toContain("opt_tipo:Boleta exenta");
+    expect(clicks(a).some((r) => r.startsWith("opt_senuelo:"))).toBe(false);
+    noFirmo(a);
+  });
+  it("menú muerto con la clase activa pegada → abre el slot al tiro (1 click) y elige en el vivo; al muerto lo toca a lo más una vez", async () => {
+    escenaEmision({ menuTipoOculto: true, conMenuMuertoTipo: true });
+    const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41 }));
+    expect(res.ok).toBe(true);
+    expect(clicks(a)).toContain("opt_tipo:Boleta exenta");
+    expect(clicks(a).filter((r) => r === "slot_tipo")).toHaveLength(1);
+    // Antes del fix definitivo el worker esperaba 5 s clickeando 8 veces el muerto
+    // "porque ya había un menú activo con mi opción". Ahora abre el suyo de entrada.
+    expect(clicks(a).filter((r) => r.startsWith("opt_muerto:")).length).toBeLessThanOrEqual(1);
+    noFirmo(a);
+  });
+  it("fail-closed intacto: la opción pedida no existe en el menú oculto → TIPO_NO_CONFIRMADO, sin EMITIR final", async () => {
+    escenaEmision({ menuTipoOculto: true });
+    const lb = clonLibreto(); lb.slots.tipo_exenta = "Boleta inexistente";
+    const { res, actions: a } = await drive(jobBoleta({ tipo_dte: 41, libreto: lb }));
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("TIPO_NO_CONFIRMADO");
+    noFirmo(a);
   });
 });

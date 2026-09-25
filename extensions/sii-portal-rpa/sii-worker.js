@@ -611,6 +611,17 @@
         slots: uniq(textos(LB.selectores.slot), 15),
         toggles: uniq(textos(LB.selectores.toggle_row), 15),
         contadores: uniq(textos(".v-counter"), 10),
+        // Caja negra del v-menu (0.2.6): cuántos menús Vue tiene activos, si el
+        // activo se ve, y si la ventana del worker está tapada — la próxima vez
+        // que un select no confirme, esto dice si fue el menú o la ventana.
+        menus: (() => {
+          const act = Array.from(document.querySelectorAll(menuActivoSelector()));
+          return {
+            activos: act.length,
+            display: act[0] ? (window.getComputedStyle?.(act[0])?.display ?? "?") : null,
+            visibilidad: document.visibilityState ?? "?",
+          };
+        })(),
       };
       // Tope duro de 2 KB: se recortan las listas más largas hasta caber.
       for (let guard = 0; guard < 12 && JSON.stringify(mapa).length > 2000; guard += 1) {
@@ -653,6 +664,20 @@
   // emisor). Un slot Vuetify trae label + selección; leer el innerText completo mezclaba
   // el label ("Tipo de boleta EXENTA o afecta") con lo elegido.
   const SELECCION_VUETIFY = ".v-select__selection, .v-select__selections";
+  // El menú que Vue tiene ABIERTO en este momento (0.2.6). Incidente 2026-09-24: con
+  // nuestros clicks sintéticos el .v-menu__content nace con esta clase pero queda en
+  // display:none (Vuetify lo muestra dentro de un requestAnimationFrame, que Chrome no
+  // dispara en ventanas tapadas; el worker corre en un popup focused:false). Mirar
+  // "visible" (offsetWidth>0) era mirar el síntoma: la lista existe, los handlers de
+  // Vue escuchan, y el .v-list-item se puede clickear aunque no se vea. La clase es la
+  // única señal de CUÁL menú abrimos nosotros: en el body conviven los de sucursal,
+  // pago y emisor, cerrados pero vivos — clickear un item de uno ajeno cambia ESE campo.
+  // CÓDIGO, no libreto (como SELECCION_VUETIFY).
+  // Se compone sobre `selectores.menu` del libreto para que esa ancla siga mordiendo
+  // (si el SII renombra el contenedor, el libreto lo arregla sin release).
+  // Función, no constante: LB se resuelve por job (resolverLibreto en fillAndEmit).
+  const menuActivoSelector = () => String(LB.selectores.menu).split(",").map((t) => `${t.trim()}.menuable__content__active`).join(", ");
+  const itemDeshabilitado = (it) => it.classList?.contains?.("v-list-item--disabled") || it.getAttribute?.("aria-disabled") === "true";
   // Texto (normalizado) de lo SELECCIONADO dentro de un slot, o null si no hay nada
   // visible seleccionado. W2 (tanda 3): SOLO la selección, jamás el label.
   function slotSeleccion(slot) {
@@ -687,33 +712,34 @@
     const shows = () => normalizeSearchText(slot.innerText || slot.textContent).includes(normalizeSearchText(optionText));
     if (shows()) return true;
 
-    // Incidente 2026-09-23: 7 de 47 boletas abortaron TIPO_NO_CONFIRMADO en un
-    // laptop lento (Acer al 24% de batería) — el v-menu no apareció en los ~2,9 s
-    // por intento que había. Ahora cada intento espera LB.esperas.menu_select
-    // (5 s por defecto, tope 10 s; ajustable desde el libreto sin release) y, si
-    // el menú ya brotó (visible o todavía en transición), NO se vuelve a clickear
-    // el slot: en Vuetify un segundo click lo cierra.
+    // Incidente 2026-09-23: 7 de 47 boletas abortaron TIPO_NO_CONFIRMADO; la 0.2.5
+    // solo agregó paciencia (LB.esperas.menu_select: 5 s por intento, tope 10 s) y
+    // NO alcanzó: 5/5 fallos seguidos en otra clienta. Incidente 2026-09-24: el menú
+    // brota con la clase activa pero en display:none (ver menuActivoSelector). Ahora
+    // se elige la opción en el menú ACTIVO, se vea o no; la compuerta sigue siendo
+    // shows(): lo que el slot MUESTRA elegido. El slot se clickea en CADA intento: en
+    // Vuetify 2 VSelect.onClick pone isMenuActive=true (no alterna; el toggle vive solo
+    // en el ícono append-inner), así que re-clickear con el menú abierto es inocuo —
+    // la premisa 0.2.5 "un segundo click lo cierra" era falsa (verificado contra la
+    // fuente 2.7.2). Esperar sin abrir porque "ya hay un menú activo con mi opción"
+    // dejaba al worker 5 s clickeando un menú ajeno o muerto.
     const porIntento = LB.esperas.menu_select; // literal cableado: 5000
     const quiero = normalizeSearchText(optionText);
     const opcionesDe = (menu) => Array.from(menu.querySelectorAll(LB.selectores.opcion));
-    const visibles = () => Array.from(document.querySelectorAll(LB.selectores.menu)).filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
-    const cuentaMenus = () => document.querySelectorAll(LB.selectores.menu).length;
-    // ¿Hay un menú visible que trae NUESTRA opción? (uno ajeno —tooltip, otro
-    // select— no cuenta: contra ese sí hay que clickear el slot.)
-    const nuestroVisible = () => visibles().some((m) => opcionesDe(m).some((it) => normalizeSearchText(it.innerText || it.textContent).includes(quiero)));
-    let vioMenu = false;
+    const texto = (it) => normalizeSearchText(it.innerText || it.textContent);
+    const activos = () => Array.from(document.querySelectorAll(menuActivoSelector()));
+    let vioMenu = false; // hubo un menú ACTIVO (no "visible": ya no se mira geometría)
     let vioOpciones = false;
-    // Busca la opción en los menús visibles hasta `deadline`; true si quedó seleccionada.
+    // Busca la opción en los menús activos hasta `deadline`; true si quedó seleccionada.
     const elegirHasta = async (deadline) => {
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 180));
-        const menus = visibles();
+        const menus = activos();
         if (menus.length) vioMenu = true;
         for (const menu of menus) {
-          const items = opcionesDe(menu);
+          const items = opcionesDe(menu).filter((it) => !itemDeshabilitado(it));
           if (items.length) vioOpciones = true;
-          const opt = items.find((it) => normalizeSearchText(it.innerText || it.textContent) === quiero)
-            || items.find((it) => normalizeSearchText(it.innerText || it.textContent).includes(quiero));
+          const opt = items.find((it) => texto(it) === quiero) || items.find((it) => texto(it).includes(quiero));
           if (opt) {
             await clickElement(opt);
             await new Promise((resolve) => setTimeout(resolve, 250));
@@ -724,14 +750,8 @@
       return false;
     };
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const menusAntes = cuentaMenus();
-      if (!nuestroVisible()) await clickElement(slot);
+      await clickElement(slot);
       if (await elegirHasta(Date.now() + porIntento)) return true;
-      // Brotó un menú tras el click pero sigue invisible (transición lenta):
-      // otro tanto de espera SIN re-clickear.
-      if (cuentaMenus() > menusAntes && visibles().length === 0) {
-        if (await elegirHasta(Date.now() + porIntento)) return true;
-      }
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 400));
     }
     if (shows()) return true;
@@ -745,22 +765,23 @@
   // Para la sucursal: a veces no auto-selecciona (carrera al cargar emisores)
   // y es requerida; elegir la primera disponible desbloquea el EMITIR.
   // 0.2.5: misma paciencia que selectVuetifyOption (menu_select por intento, 2
-  // intentos) — en el laptop lento del incidente habría abortado igual por la sucursal.
+  // intentos). 0.2.6: mismo criterio — menú ACTIVO, no visible; item no deshabilitado
+  // (isVisibleEnabled mide geometría y con el menú en display:none daba cero items).
   async function selectFirstVuetifyOption(slotText) {
     const dialog = activeEmitDialog() || document;
     const slot = Array.from(dialog.querySelectorAll(LB.selectores.slot))
       .find((s) => normalizeSearchText(s.innerText || s.textContent).includes(normalizeSearchText(slotText)));
     if (!slot) return false;
     const porIntento = LB.esperas.menu_select; // literal cableado: 5000
-    const visibles = () => Array.from(document.querySelectorAll(LB.selectores.menu)).filter((m) => m.offsetWidth > 0 && m.offsetHeight > 0);
+    const activos = () => Array.from(document.querySelectorAll(menuActivoSelector()));
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (visibles().length === 0) await clickElement(slot);
+      if (activos().length === 0) await clickElement(slot);
       const deadline = Date.now() + porIntento;
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 180));
-        for (const menu of visibles()) {
+        for (const menu of activos()) {
           const items = Array.from(menu.querySelectorAll(LB.selectores.opcion))
-            .filter((it) => isVisibleEnabled(it) && (it.innerText || it.textContent || "").trim());
+            .filter((it) => !itemDeshabilitado(it) && (it.innerText || it.textContent || "").trim());
           if (items.length) { await clickElement(items[0]); await new Promise((resolve) => setTimeout(resolve, 250)); return true; }
         }
       }
@@ -885,6 +906,12 @@
   }
 
   // ¿Está abierto el dropdown de emisor (la lista desplegada en el body)?
+  // PENDIENTE (anotado 2026-09-24, no en 0.2.6): esto y selectEmisorOnce siguen
+  // mirando geometría (width > 0). Con la ventana tapada el menú del emisor queda en
+  // display:none igual que el del tipo → LISTA_EMPRESAS_NO_ABRE (ya pasó: Bit Em,
+  // 2026-08-19, dos veces, resuelto a mano). Se cambia al mismo criterio del tipo
+  // (menuActivoSelector) cuando el fixture tenga dropdown de emisor; hoy no lo tiene
+  // y cambiarlo sin test es disparar a ciegas.
   function emisorMenuOpen() {
     return Array.from(document.querySelectorAll(LB.selectores.menu))
       .some((m) => m.getBoundingClientRect().width > 0 && m.querySelector("[role='option'],.v-list-item"));
