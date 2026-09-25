@@ -459,3 +459,38 @@ describe("v-menu oculto (0.2.6): el menú brota activo pero nunca se ve", () => 
     noFirmo(a);
   });
 });
+
+// Incidente 2026-09-25 (LC, 3 boletas "a medias"): tras el EMITIR final, el recibo con el
+// folio se dibuja dentro de un requestAnimationFrame; con la ventana tapada queda en
+// display:none, innerText lo ignora y la captura no veía el folio de una boleta YA
+// emitida. Estos tests FALLAN con el worker 0.2.6 (MASSDTE_WORKER_SRC) y pasan con 0.2.7.
+describe("captura del folio con el recibo oculto (0.2.7)", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+  it("recibo visible → folio con confianza alta (línea base)", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127 Imprimir Descargar", oculto: false };
+    const cap = await capturar(job);
+    expect(cap.ok).toBe(true);
+    expect(cap.result.folio).toBe(4127);
+    expect(cap.result.folio_confidence).toBe("high");
+  });
+  it("recibo en display:none (ventana tapada) → igual captura el folio 4127", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    estado.recibo = { texto: "BOLETA ELECTRÓNICA NÚMERO: 4127 Imprimir Descargar", oculto: true };
+    const cap = await capturar(job);
+    expect(cap.ok).toBe(true);
+    expect(cap.result.folio).toBe(4127);
+    expect(cap.result.folio_confidence).toBe("high");
+  });
+  it("sin recibo → sin folio (no inventa)", async () => {
+    escenaEmision();
+    const job = jobBoleta({ tipo_dte: 41 });
+    await drive(job);
+    const cap = await capturar(job);
+    expect(cap.result.folio).toBeNull();
+  });
+});

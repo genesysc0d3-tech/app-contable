@@ -14,6 +14,9 @@ export const estado = {
   menus: [],        // menús Vuetify desplegados (.v-menu__content) — viven en el body
   alertaAbierta: false, // alerta de monto alto (tapa el modal hasta apretar SÍ)
   alertaNodes: [],
+  // Recibo post-emit (0.2.7): texto que muestra el SII tras el EMITIR final. Con
+  // `oculto`, innerText NO lo trae (display:none, ventana tapada) pero textContent sí.
+  recibo: null, // { texto, oculto }
 };
 
 export class FakeHTMLElement {}
@@ -75,12 +78,17 @@ function allNodes() {
   if (estado.modalOpen && estado.modalNode) out.push(estado.modalNode);
   return out;
 }
-function bodyText() {
-  return estado.alertaAbierta ? "Está a punto de emitir una boleta por $ 6.000.000 ¿Desea continuar?" : "";
+function bodyText(todo = false) {
+  // Siempre hay texto VISIBLE en el portal (barra, pad): innerText nunca es vacío, así
+  // que el fallback `innerText || textContent` del worker viejo no rescata lo oculto.
+  const base = estado.alertaAbierta ? "Está a punto de emitir una boleta por $ 6.000.000 ¿Desea continuar?" : "menu e-Boleta power_settings_new EMITIR";
+  const r = estado.recibo;
+  if (r && (todo || !r.oculto)) return `${base} ${r.texto}`.trim();
+  return base;
 }
 
 export const fakeDocument = {
-  body: { get innerText() { return bodyText(); }, get textContent() { return bodyText(); }, appendChild(c) { return c; }, removeChild() {}, style: {}, contains: () => false },
+  body: { get innerText() { return bodyText(false); }, get textContent() { return bodyText(true); }, appendChild(c) { return c; }, removeChild() {}, style: {}, contains: () => false },
   documentElement: { appendChild(c) { return c; }, removeChild() {}, style: {} },
   getElementsByTagName: () => [],
   createElement: () => el(),
@@ -214,6 +222,7 @@ export function escenaEmision({
 } = {}) {
   estado.scene = [];
   estado.menus = [];
+  estado.recibo = null;
   estado.alertaAbierta = false;
   estado.modalOpen = false;
   // Selector superior de empresa (emisor activo): .v-select > .v-select__selections.

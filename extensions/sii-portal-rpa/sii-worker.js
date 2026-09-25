@@ -199,6 +199,15 @@
   function pageText() {
     return (document.body?.innerText || document.body?.textContent || "").replace(/\s+/g, " ").trim();
   }
+  // Texto de la página INCLUYENDO lo que está en display:none (0.2.7). Incidente
+  // 2026-09-25 (LC, 3 boletas "a medias"): tras el EMITIR final, el recibo con el folio
+  // se dibuja dentro de un requestAnimationFrame; con la ventana del worker tapada
+  // queda oculto, innerText lo ignora, la captura no ve el folio, navega a /reportes y
+  // esa navegación mata el canal con la extensión → "no pude capturar" con la boleta
+  // YA emitida. textContent sí lo trae. Solo para la captura del folio.
+  function pageTextTodo() {
+    return (document.body?.textContent || "").replace(/\s+/g, " ").trim();
+  }
 
   function cssPath(element) {
     if (!element || element === document.body) return "body";
@@ -1270,7 +1279,8 @@
   }
 
   function captureResult(job) {
-    const text = pageText().slice(0, 2400);
+    // pageTextTodo: el recibo puede estar en display:none (ventana tapada); ver arriba.
+    const text = pageTextTodo().slice(0, 2400);
     const withoutRut = stripRut(text);
     const links = artifactLinks();
     const captured = captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut);
