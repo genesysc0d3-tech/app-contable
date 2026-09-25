@@ -88,6 +88,7 @@ export const fakeDocument = {
   addEventListener: () => {},
   removeEventListener: () => {},
   dispatchEvent: () => true, // closeEmisorDropdown manda un Escape al document
+  visibilityState: "visible", // la caja negra del v-menu lo registra
   querySelector: (s) => matchAll(allNodes(), s)[0] ?? null,
   querySelectorAll: (s) => matchAll(allNodes(), s),
 };
@@ -104,27 +105,48 @@ export const VENDEDOR_RUT = "19427394-0";
 //    PRIMER click (Vuetify todavía no enganchó sus handlers).
 //  - menuTarda: el menú brota al tiro pero queda invisible (offsetWidth 0, transición)
 //    durante esos ms.
-// Como en Vuetify, un segundo click en el slot con el menú abierto lo CIERRA.
-function vSelect({ label, seleccion = "", opciones, roleSlot, roleOpcion, ignoraClicksHasta = 0, menuTarda = 0 }) {
+//  - menuOculto (incidente 2026-09-24, verificado en el portal real): el menú brota con
+//    la clase `menuable__content__active` pero NUNCA se ve (display:none, offsetWidth 0).
+//    Vue igual escucha el click en sus .v-list-item: elegir uno cambia la selección.
+// Mientras está abierto, el menú lleva el token compuesto MENU_ACTIVO (la clase que Vue
+// pone al ÚNICO menú abierto); cerrado sigue existiendo en el body (`persistente`) pero sin
+// ese token. Un click a un item con el menú CERRADO no cambia nada: así el test castiga a
+// un worker que clickee un item de un menú que no abrió (ajeno o muerto).
+// OJO: en Vuetify 2 real un segundo click al slot NO cierra el menú (VSelect.onClick pone
+// isMenuActive=true; el toggle vive solo en el ícono append-inner — fuente 2.7.2). El
+// fixture lo sigue cerrando a propósito: castiga al worker que abre más de lo necesario
+// (los tests cuentan clicks al slot).
+// Límite del fixture: matchAll casa tokens exactos, así que el menú activo solo se
+// reconoce si el libreto trae `selectores.menu` === ".v-menu__content" a secas.
+export const MENU_ACTIVO = ".v-menu__content.menuable__content__active";
+function vSelect({ label, seleccion = "", opciones, roleSlot, roleOpcion, ignoraClicksHasta = 0, menuTarda = 0, menuOculto = false, persistente = false }) {
   let primerClick = null;
   const selection = el({ tag: "DIV", sel: [".v-select__selection"], text: seleccion });
   const selections = el({ tag: "DIV", sel: [".v-select__selections"], children: [selection] });
   const slot = el({ tag: "DIV", sel: [".v-select__slot", ".v-input__slot"], text: label, role: roleSlot, children: [selections] });
-  const items = opciones.map((o) => {
+  const menu = el({ tag: "DIV", sel: [".v-menu__content"], children: [] });
+  const abierto = () => menu._sel.includes(MENU_ACTIVO);
+  const cerrar = () => {
+    menu._sel = menu._sel.filter((s) => s !== MENU_ACTIVO);
+    menu.offsetWidth = 0; menu.offsetHeight = 0;
+    if (!persistente) estado.menus = estado.menus.filter((m) => m !== menu);
+  };
+  menu._children = opciones.map((o) => {
     const it = el({ tag: "DIV", sel: [".v-list-item", "[role='option']"], text: o, role: `${roleOpcion}:${o}` });
-    it.onClick = () => { selection._text = o; estado.menus = estado.menus.filter((m) => m !== menu); };
+    it.onClick = () => { if (!abierto()) return; selection._text = o; cerrar(); };
     return it;
   });
-  const menu = el({ tag: "DIV", sel: [".v-menu__content"], children: items });
+  cerrar();
+  if (persistente) estado.menus.push(menu);
   slot.onClick = () => {
     if (primerClick == null) primerClick = Date.now();
     if (ignoraClicksHasta > 0 && Date.now() < primerClick + ignoraClicksHasta) return;
-    if (estado.menus.includes(menu)) { estado.menus = estado.menus.filter((m) => m !== menu); return; }
-    estado.menus.push(menu);
-    if (menuTarda > 0) {
-      menu.offsetWidth = 0; menu.offsetHeight = 0;
-      setTimeout(() => { menu.offsetWidth = 10; menu.offsetHeight = 10; }, menuTarda);
-    }
+    if (abierto()) { cerrar(); return; }
+    menu._sel.push(MENU_ACTIVO);
+    if (!estado.menus.includes(menu)) estado.menus.push(menu);
+    if (menuOculto) return; // activo pero jamás visible
+    if (menuTarda > 0) setTimeout(() => { menu.offsetWidth = 10; menu.offsetHeight = 10; }, menuTarda);
+    else { menu.offsetWidth = 10; menu.offsetHeight = 10; }
   };
   return slot;
 }
@@ -180,6 +202,15 @@ export function escenaEmision({
   slotTipoIgnoraClicksHasta = 0,
   menuTipoTarda = 0,
   slotSucursalIgnoraClicksHasta = 0,
+  // Incidente 2026-09-24 (ventana tapada): el menú brota activo pero NUNCA se ve.
+  menuTipoOculto = false,
+  menuSucursalOculto = false,
+  menuPagoOculto = false,
+  // Señuelos: otro select VIVO con las mismas opciones (cerrado, en el modal) y un
+  // menú MUERTO que quedó con la clase activa en el body (nadie lo escucha). El
+  // worker no debe elegir en el señuelo, y el muerto no debe dejarlo pegado.
+  conSenueloTipo = false,
+  conMenuMuertoTipo = false,
 } = {}) {
   estado.scene = [];
   estado.menus = [];
@@ -211,9 +242,9 @@ export function escenaEmision({
   // solo el RUT), como en el bug real. NO debe ser candidato a glosa (no tiene contador).
   const vendedorInput = vTextField({ contTexto: VENDEDOR_RUT, role: "vendedor_input", value: VENDEDOR_RUT });
   const children = [
-    vSelect({ label: sucursalLabel, seleccion: sucursalSeleccion, opciones: sucursalOpciones, roleSlot: "slot_sucursal", roleOpcion: "opt_sucursal", ignoraClicksHasta: slotSucursalIgnoraClicksHasta }),
-    vSelect({ label: "Tipo de boleta", seleccion: tipoTexto, opciones: ["Boleta afecta", "Boleta exenta"], roleSlot: "slot_tipo", roleOpcion: "opt_tipo", ignoraClicksHasta: slotTipoIgnoraClicksHasta, menuTarda: menuTipoTarda }),
-    vSelect({ label: "Método de pago", seleccion: pagoTexto.replace(/^M[ée]todo de pago\s*/i, ""), opciones: ["Efectivo", "Tarjeta"], roleSlot: "slot_pago", roleOpcion: "opt_pago" }),
+    vSelect({ label: sucursalLabel, seleccion: sucursalSeleccion, opciones: sucursalOpciones, roleSlot: "slot_sucursal", roleOpcion: "opt_sucursal", ignoraClicksHasta: slotSucursalIgnoraClicksHasta, menuOculto: menuSucursalOculto }),
+    vSelect({ label: "Tipo de boleta", seleccion: tipoTexto, opciones: ["Boleta afecta", "Boleta exenta"], roleSlot: "slot_tipo", roleOpcion: "opt_tipo", ignoraClicksHasta: slotTipoIgnoraClicksHasta, menuTarda: menuTipoTarda, menuOculto: menuTipoOculto }),
+    vSelect({ label: "Método de pago", seleccion: pagoTexto.replace(/^M[ée]todo de pago\s*/i, ""), opciones: ["Efectivo", "Tarjeta"], roleSlot: "slot_pago", roleOpcion: "opt_pago", menuOculto: menuPagoOculto }),
     toggleDetalle,
     toggleReceptor,
     glosaInput,
@@ -236,6 +267,18 @@ export function escenaEmision({
       rutField,
       vTextField({ contTexto: "Nombre receptor", role: "receptor_nombre", attrs: { "aria-label": "Nombre receptor" } }),
     );
+  }
+  if (conSenueloTipo) {
+    // Select VIVO y cerrado con las mismas opciones; su menú persiste en el body
+    // (como en Vuetify). Ni el label ni la selección dicen "Boleta" — el señuelo es
+    // el MENÚ, no el slot. Clickear su item cambiaría ESTE campo, no el tipo.
+    children.push(vSelect({ label: "Copia impresa", seleccion: "Sin copia", opciones: ["Boleta afecta", "Boleta exenta"], roleSlot: "slot_senuelo", roleOpcion: "opt_senuelo", persistente: true }));
+  }
+  if (conMenuMuertoTipo) {
+    const items = ["Boleta afecta", "Boleta exenta"].map((o) => el({ tag: "DIV", sel: [".v-list-item", "[role='option']"], text: o, role: `opt_muerto:${o}` }));
+    const muerto = el({ tag: "DIV", sel: [".v-menu__content", MENU_ACTIVO], children: items });
+    muerto.offsetWidth = 0; muerto.offsetHeight = 0;
+    estado.menus.push(muerto);
   }
   children.push(el({ tag: "BUTTON", sel: ["button"], text: "EMITIR", role: "btn_emitir_final" }));
   estado.modalNode = el({ tag: "DIV", sel: [".v-dialog.v-dialog--active"], text: "Emitir e-Boleta", children });

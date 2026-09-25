@@ -197,6 +197,17 @@ vas a creer que el bug es otro.
 - **Confirmar el ensayo SIN ver la pestaña = la caja negra**: comparar el desenlace. Ej: un
   freno con falso positivo fallaba en ~30 s con su `code`; con el fix, el job corre minutos
   SIN ese `code`. `boletas_emitidas` en 0 es el candado.
+- **Tras recargar la extensión, RECARGAR también la pestaña del SII** (2026-09-24): Chrome no
+  inyecta el content script en pestañas que ya estaban abiertas; el job queda en
+  `sii_page_ready` sin latido y nadie responde. Y en modo pestaña el worker reutiliza la
+  PRIMERA pestaña `*://eboleta.sii.cl/*` de CUALQUIER ventana: cerrar las demás antes de
+  disparar, o se va a una que no ves.
+- **El ensayo termina en `failed` "port moved into back/forward cache"**: es esperable. Tras
+  PAUSED el background igual lanza la captura de folio (navega a Resumen de ventas) y la
+  navegación mata el puerto. No es una emisión: el candado es `Cantidad Emitida` en
+  `eboleta.sii.cl/reportes` con el emisor de prueba seleccionado.
+- **Portal de MV abre en "Boleta afecta" + "Elija método de pago" vacío**: todo ensayo de
+  boleta exenta ejercita los dos v-menus (tipo y pago). Verificado 2026-09-24.
 - **Job pegado tras un ensayo**: con `allow_final_emit=false` el job queda `running`; la app
   avisa "emisión SII sin resolver" y ofrece **"cancelarla"** (link en el aviso) — cancelar
   antes de re-disparar. El lock (`locked_until`) expira solo a los ~5 min.
