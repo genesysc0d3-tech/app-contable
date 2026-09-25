@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { mensajeValidacionZonas } from "./zonas-validacion";
 import { UploadSimple, CheckCircle } from "@phosphor-icons/react";
 import { useToast } from "@/components/Toast";
 
@@ -149,7 +150,8 @@ export default function CartolaMapperDragDrop({ onClose, onSaved, previewData }:
   }
 
   const assigned = Object.keys(zoneMap).filter(k => zoneMap[k] !== undefined).length;
-  const validationMsg = !zoneMap.fecha ? "Fecha es obligatoria" : !zoneMap.descripcion ? "Descripción / Glosa es obligatoria" : null;
+  // `=== undefined`, no `!`: la fecha suele ser la columna 0 y 0 es falsy (incidente LC 2026-09-25).
+  const validationMsg = mensajeValidacionZonas(zoneMap);
   const dataRows = preview ? preview.rows.slice(1, 6) : [];
 
   return (
