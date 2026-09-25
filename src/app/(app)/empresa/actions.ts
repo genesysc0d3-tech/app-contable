@@ -26,6 +26,9 @@ export interface DatosEmisor {
   /** Default de operación del contribuyente: semilla para auto-clasificar la 1ª
    *  cartola (p2p_cripto/forex_divisas/servicios/ventas/mixto). null = la IA decide. */
   operacion_hint_default?: string | null;
+  /** Sociedad de profesionales (SRL) acogida a 2ª categoría: sí emite boleta de
+   *  honorarios. Solo tiene sentido en Ltda./Limitada; default false. */
+  sociedad_profesionales?: boolean;
 }
 
 // Mismos valores que documentos_subidos.tipo_operacion_hint (DocumentoHint).
@@ -184,7 +187,7 @@ export async function datosEmisorDeEmpresa(empresaId: string): Promise<{ ok: tru
   }
   const { data: e, error } = await sb
     .from("empresas")
-    .select("rut, razon_social, giro, direccion, comuna, email_sii, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default, operacion_hint_default")
+    .select("rut, razon_social, giro, direccion, comuna, email_sii, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default, operacion_hint_default, sociedad_profesionales")
     .eq("id", empresaId)
     .maybeSingle();
   if (error || !e) return { ok: false, error: error?.message ?? "NO_ENCONTRADA" };
@@ -197,6 +200,7 @@ export async function datosEmisorDeEmpresa(empresaId: string): Promise<{ ok: tru
       boletas_tipo_default: e.boletas_tipo_default ?? undefined,
       facturas_tipo_default: e.facturas_tipo_default ?? undefined,
       operacion_hint_default: e.operacion_hint_default ?? null,
+      sociedad_profesionales: e.sociedad_profesionales === true,
     },
   };
 }
@@ -241,7 +245,7 @@ export async function setDatosEmisor(
     return { error: "Esa empresa no es de tu cuenta o no eres el titular" };
   }
 
-  const update: Record<string, string | null> = {};
+  const update: Record<string, string | boolean | null> = {};
   if (datos.rut !== undefined) update.rut = datos.rut ? cleanRut(datos.rut) : null;
   if (datos.razon_social !== undefined) update.razon_social = datos.razon_social?.trim() ?? null;
   if (datos.giro !== undefined) update.giro = datos.giro?.trim() || null;
@@ -249,6 +253,7 @@ export async function setDatosEmisor(
   if (datos.comuna !== undefined) update.comuna = datos.comuna?.trim() || null;
   if (datos.email_sii !== undefined) update.email_sii = datos.email_sii?.trim() || null;
   if (datos.tipo_contribuyente !== undefined) update.tipo_contribuyente = datos.tipo_contribuyente;
+  if (datos.sociedad_profesionales !== undefined) update.sociedad_profesionales = datos.sociedad_profesionales === true;
   // Allow-list explícita, igual que el resto: nada de spread del payload.
   const TIPOS_VALIDOS = new Set(["afecto", "exento", "auto"]);
   if (datos.boletas_tipo_default !== undefined && TIPOS_VALIDOS.has(datos.boletas_tipo_default)) {

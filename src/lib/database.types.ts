@@ -1430,6 +1430,7 @@ export type Database = {
           regimen_tributario: string | null
           region: string | null
           rut: string
+          sociedad_profesionales: boolean
           tiene_certificado_sii: boolean
           tipo_contribuyente: string
           trial_inicio: string | null
@@ -1461,6 +1462,7 @@ export type Database = {
           regimen_tributario?: string | null
           region?: string | null
           rut: string
+          sociedad_profesionales?: boolean
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
           trial_inicio?: string | null
@@ -1492,6 +1494,7 @@ export type Database = {
           regimen_tributario?: string | null
           region?: string | null
           rut?: string
+          sociedad_profesionales?: boolean
           tiene_certificado_sii?: boolean
           tipo_contribuyente?: string
           trial_inicio?: string | null

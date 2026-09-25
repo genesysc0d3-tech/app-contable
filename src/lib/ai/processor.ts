@@ -443,7 +443,7 @@ export async function procesarDocumento(
   // bien dirección y montos. Nunca va en el system prompt global (compartido).
   const { data: emp } = await supabase
     .from("empresas")
-    .select("razon_social, rut, giro, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default, operacion_hint_default")
+    .select("razon_social, rut, giro, tipo_contribuyente, sociedad_profesionales, boletas_tipo_default, facturas_tipo_default, operacion_hint_default")
     .eq("id", empresaId)
     .maybeSingle();
   const { data: identidades } = await supabase

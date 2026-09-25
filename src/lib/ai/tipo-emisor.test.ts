@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEmisor, esRutPersonaNatural } from "./tipo-emisor";
+import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEmisor, esRutPersonaNatural, esSociedadLimitada } from "./tipo-emisor";
 
 describe("normalizarTipoPorEmisor", () => {
   it("empresa exenta: boleta afecta -> exenta genérica", () => {
@@ -105,6 +105,19 @@ describe("normalizarHonorariosPorEmisor (BHE solo para personas naturales)", () 
     expect(normalizarHonorariosPorEmisor("boleta_honorarios", spaExenta, "asesoria", "regla_usuario")).toBe("boleta_honorarios");
     expect(normalizarHonorariosPorEmisor("boleta_honorarios", { tipo_contribuyente: "exento" }, "asesoria", "regla_global")).toBe("boleta_honorarios");
     expect(normalizarHonorariosPorEmisor("transferencia_p2p", spaExenta, "asesoria", "regla_global")).toBe("transferencia_p2p");
+  });
+  it("sociedad de profesionales (Ltda. en 2ª categoría, marcada por la empresa) → BHE se queda", () => {
+    const ltdaProf = { rut: "76.111.222-3", tipo_contribuyente: "exento", sociedad_profesionales: true };
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", ltdaProf, "PAGO ASESORIA PER_3", "regla_global")).toBe("boleta_honorarios");
+    // Sin la marca, la misma Ltda. es una venta.
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", { ...ltdaProf, sociedad_profesionales: false }, "PAGO ASESORIA PER_3", "regla_global")).toBe("boleta");
+  });
+  it("esSociedadLimitada: solo Ltda./Limitada muestran la pregunta", () => {
+    expect(esSociedadLimitada("Estudio Contable Pérez Ltda.")).toBe(true);
+    expect(esSociedadLimitada("ASESORIAS LEGALES LIMITADA")).toBe(true);
+    expect(esSociedadLimitada("MV INVERSIONES SPA")).toBe(false);
+    expect(esSociedadLimitada("Juan Pérez EIRL")).toBe(false);
+    expect(esSociedadLimitada("")).toBe(false);
   });
   it("esRutPersonaNatural: bajo 50 millones = natural; sociedades desde 50 millones", () => {
     expect(esRutPersonaNatural("19427394-0")).toBe(true);
