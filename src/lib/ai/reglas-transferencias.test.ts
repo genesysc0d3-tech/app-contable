@@ -24,6 +24,11 @@ const REGLAS_TRANSFERENCIA = [
   { nombre: "Abono por transferencia", patron: "\\babono\\s+(por\\s+tra?n?s?f|tercero)", tipo_flujo_match: "entrada", tipo_propuesto: "transferencia_p2p", prioridad: 116 },
   { nombre: "Transferencia enviada", patron: "\\btransf(er(encia)?)?\\.?\\s+(a|hacia|enviada)\\b", tipo_flujo_match: "salida", tipo_propuesto: "gasto_egreso", prioridad: 117 },
   { nombre: "Cargo por transferencia", patron: "\\bcargo\\s+por\\s+tra?n?s?f", tipo_flujo_match: "salida", tipo_propuesto: "gasto_egreso", prioridad: 118 },
+  // 2026-09-25 (migración 20260925120000_regla_transf_sin_preposicion.sql): la glosa
+  // Santander es "0263796357 Transf. NOMBRE" — sin "de". En una cartola real de 547 filas,
+  // 457 iban al modelo por esto; con la 119 quedan 13. Solo entradas; prioridad 119 = la
+  // última: caza lo que ninguna específica reconoció.
+  { nombre: "Transferencia recibida (sin preposición)", patron: "\\btransf(er(encia)?)?\\.?\\s+(?!(a|hacia|enviada|para)\\b)\\S", tipo_flujo_match: "entrada", tipo_propuesto: "transferencia_p2p", prioridad: 119 },
 ].map((r, i) => ({
   id: `t-${i}`, empresa_id: null, patron_tipo: "regex", confianza: 0.8, activa: true,
   tipo_dte: null, receptor_nombre_default: null, receptor_rut_default: null,
@@ -57,6 +62,10 @@ const CASOS: [string, "entrada" | "salida", string][] = [
   ["CARGO POR TRANSF DE FONDOS AUTOSERVICIO", "salida", "gasto_egreso"],
   ["TRANSFER A PROVEEDOR SINTETICO SP", "salida", "gasto_egreso"],
   ["Transferencia enviada a Proveedor Sintetico", "salida", "gasto_egreso"],
+  // Formato Santander real (N° operación + "Transf." + nombre, sin preposición) → regla 119.
+  ["0263796357 Transf. PERSONA SINTETICA UNO", "entrada", "transferencia_p2p"],
+  ["025951164K Transf. PERSONA SINTETICA DOS", "entrada", "transferencia_p2p"],
+  ["TRANSFERENCIA PERSONA SINTETICA TRES", "entrada", "transferencia_p2p"],
 ];
 
 describe("reglas de transferencias — cobertura de los patrones bancarios", () => {
@@ -78,6 +87,16 @@ describe("reglas de transferencias — cobertura de los patrones bancarios", () 
     const r = classifyWithRules([mov("TRANSFER DE FONDOS PROPIOS", "salida")], REGLAS_TRANSFERENCIA);
     // "TRANSFER DE" pero salida: la regla 1 (entrada) no aplica; ninguna otra matchea "de".
     expect(r.clasificados.every((c) => c.propuesta.tipo_propuesto !== "transferencia_p2p")).toBe(true);
+    // Y la 119 (sin preposición) tampoco se come una salida "Transf. NOMBRE".
+    const s = classifyWithRules([mov("0263796357 Transf. PERSONA SINTETICA", "salida")], REGLAS_TRANSFERENCIA);
+    expect(s.clasificados.every((c) => c.propuesta.tipo_propuesto !== "transferencia_p2p")).toBe(true);
+  });
+
+  it("la 119 no pisa las formas de salida en una entrada rara ('Transf. a', 'Transf. para')", () => {
+    for (const glosa of ["Transf. a PERSONA SINTETICA", "Transf. para PERSONA SINTETICA", "Transf. hacia PERSONA SINTETICA"]) {
+      const r = classifyWithRules([mov(glosa, "entrada")], REGLAS_TRANSFERENCIA);
+      expect(r.clasificados.every((c) => c.propuesta.tipo_propuesto !== "transferencia_p2p")).toBe(true);
+    }
   });
 
   it("las reglas específicas siguen ganando (prioridad ascendente)", () => {
@@ -97,10 +116,9 @@ describe("reglas de transferencias — cobertura de los patrones bancarios", () 
 
   it("los patrones del test y de la MIGRACIÓN son idénticos (sync 1:1)", async () => {
     const fs = await import("node:fs");
-    const sql = fs.readFileSync(
-      new URL("../../../supabase/migrations/20260814000000_reglas_transferencias.sql", import.meta.url),
-      "utf8",
-    );
+    const sql = ["20260814000000_reglas_transferencias.sql", "20260925120000_regla_transf_sin_preposicion.sql"]
+      .map((f) => fs.readFileSync(new URL(`../../../supabase/migrations/${f}`, import.meta.url), "utf8"))
+      .join("\n");
     for (const regla of REGLAS_TRANSFERENCIA as { patron: string }[]) {
       // El SQL guarda el patrón tal cual (standard_conforming_strings): debe
       // aparecer literal en el archivo. Si la migración cambia, esto revienta.
