@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { CADENCIA_VIVA_MS, proximaEsperaMs } from "./emission-lock-cadencia";
 
 export interface EmissionLockInfo {
   job_id?: string | null;
@@ -51,13 +52,12 @@ function useEmissionLockPolling(options: {
   intervalMs?: number;
 } = {}): EmissionLockSource {
   const enabled = options.enabled ?? true;
-  const intervalMs = options.intervalMs ?? 5000;
-  // Perf: cadencia adaptativa. Cuando el estado IMPORTA en vivo (cuenta Business
-  // con equipo, o hay un candado activo) se sondea al ritmo pedido (5s). En reposo
-  // (cuenta sola, sin emisión) se baja a 30s + refresh inmediato al volver el foco
-  // — que es exactamente el momento en que un candado de otra pestaña se vuelve
-  // visible para el usuario. Nadie pierde el aviso; solo desaparece el ruido.
-  const idleIntervalMs = Math.max(intervalMs, 30000);
+  const intervalMs = options.intervalMs ?? CADENCIA_VIVA_MS;
+  // Perf: cadencia adaptativa — reglas en emission-lock-cadencia.ts (incidente
+  // 2026-09-25: este sondeo se comía la CPU gratis de Vercel). Con candado activo
+  // se sondea al ritmo pedido (5 s); en reposo, 60 s; con la pestaña OCULTA, nada.
+  // Al volver visible / al foco se refresca al tiro — que es exactamente el momento
+  // en que un candado de otra pestaña se vuelve visible para el usuario.
   const [status, setStatus] = useState<EmissionLockStatusResponse | null>(null);
   const [loading, setLoading] = useState(enabled);
 
@@ -99,16 +99,17 @@ function useEmissionLockPolling(options: {
 
     let cancelled = false;
     let timer: number | null = null;
+    const oculta = () => typeof document !== "undefined" && document.visibilityState === "hidden";
 
     async function load() {
       if (cancelled) return;
-      let vivo = false;
+      let locked = false;
       try {
         const res = await fetch("/api/emision/jobs", { cache: "no-store" });
         const json = (await res.json()) as EmissionLockStatusResponse;
         const next = res.ok && json.ok ? json : null;
         aplicarStatus(next);
-        vivo = Boolean(next?.business_mode || next?.locked);
+        locked = Boolean(next?.locked);
       } catch {
         aplicarStatus(null);
       } finally {
@@ -116,23 +117,28 @@ function useEmissionLockPolling(options: {
       }
       if (cancelled) return;
       if (timer !== null) window.clearTimeout(timer); // colapsa cadenas si un focus se cruzó con un load en vuelo
-      timer = window.setTimeout(() => { void load(); }, vivo ? intervalMs : idleIntervalMs);
+      const espera = proximaEsperaMs({ locked, oculta: oculta(), intervalMs });
+      // null = pestaña oculta: se duerme; visibilitychange/focus la despiertan.
+      timer = espera === null ? null : window.setTimeout(() => { void load(); }, espera);
     }
 
     setLoading(true);
     void load();
-    const onFocus = () => {
+    const despertar = () => {
+      if (oculta()) return;
       if (timer !== null) window.clearTimeout(timer);
       void load();
     };
-    window.addEventListener("focus", onFocus);
+    window.addEventListener("focus", despertar);
+    document.addEventListener("visibilitychange", despertar);
 
     return () => {
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", despertar);
+      document.removeEventListener("visibilitychange", despertar);
     };
-  }, [enabled, intervalMs, idleIntervalMs, aplicarStatus]);
+  }, [enabled, intervalMs, aplicarStatus]);
 
   return useMemo(() => ({
     status,
@@ -176,7 +182,7 @@ function deriveEmissionLockState(source: EmissionLockSource, enabled: boolean, c
   };
 }
 
-export function EmissionLockProvider({ children, enabled = true, intervalMs = 5000 }: {
+export function EmissionLockProvider({ children, enabled = true, intervalMs = CADENCIA_VIVA_MS }: {
   children: ReactNode;
   enabled?: boolean;
   intervalMs?: number;
