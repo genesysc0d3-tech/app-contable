@@ -57,6 +57,12 @@ export function esRutPersonaNatural(rut: string | null | undefined): boolean {
 
 const GLOSA_DICE_FACTURA = /\bfact(ura)?\b|\bfact\./i;
 
+/** Ltda. / Limitada: la única forma jurídica que el SII admite como sociedad de
+ *  profesionales de 2ª categoría (la que sí emite BHE). SpA, EIRL y S.A. nunca. */
+export function esSociedadLimitada(razonSocial: string | null | undefined): boolean {
+  return /\b(ltda\.?|limitada)(?=[\s,.]|$)/i.test(razonSocial ?? "");
+}
+
 /**
  * Boleta de honorarios SOLO para personas naturales (2026-09-25).
  *
@@ -73,6 +79,7 @@ const GLOSA_DICE_FACTURA = /\bfact(ura)?\b|\bfact\./i;
  *  - no es `boleta_honorarios` → no toca.
  *  - regla de USUARIO (decisión humana recordada) → no toca.
  *  - sin RUT o RUT de persona natural → BHE, como siempre.
+ *  - `sociedad_profesionales` (SRL en 2ª categoría, lo marca la empresa) → BHE.
  *  - sociedad y la glosa dice "factura"/"fact." → `no_comercial`: es el cliente
  *    pagando una factura YA emitida; una boleta encima duplicaría el débito.
  *  - sociedad → `boleta` (venta afecta base); `normalizarTipoPorEmisor` la deja
@@ -80,13 +87,16 @@ const GLOSA_DICE_FACTURA = /\bfact(ura)?\b|\bfact\./i;
  */
 export function normalizarHonorariosPorEmisor(
   tipoBase: string,
-  empresa: (EmpresaTipos & { rut?: string | null }) | null | undefined,
+  empresa: (EmpresaTipos & { rut?: string | null; sociedad_profesionales?: boolean | null }) | null | undefined,
   glosa: string | null | undefined,
   fuente: string | null | undefined,
 ): string {
   if (tipoBase !== "boleta_honorarios") return tipoBase;
   if (fuente === "regla_usuario") return tipoBase;
   if (!empresa?.rut || esRutPersonaNatural(empresa.rut)) return tipoBase;
+  // Sociedad de profesionales (SRL) en 2ª categoría: la excepción del SII, marcada
+  // por la propia empresa en el formulario de emisor. Sí emite BHE.
+  if (empresa.sociedad_profesionales) return tipoBase;
   if (GLOSA_DICE_FACTURA.test(glosa ?? "")) return "no_comercial";
   return "boleta";
 }

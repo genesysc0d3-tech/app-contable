@@ -28,7 +28,7 @@ export default function EmisorStep({ inicial, empresaId, submitRef, onIrAFactura
   const [refreshKey, setRefreshKey] = useState(0);
   // "+ Agregar": el mismo formulario, vacío; se crea al guardar.
   const [nueva, setNueva] = useState(false);
-  const vacio: DatosEmisor = { rut: null, razon_social: "", giro: "", direccion: "", comuna: "", email_sii: "", tipo_contribuyente: "auto", operacion_hint_default: null };
+  const vacio: DatosEmisor = { rut: null, razon_social: "", giro: "", direccion: "", comuna: "", email_sii: "", tipo_contribuyente: "auto", operacion_hint_default: null, sociedad_profesionales: false };
 
   async function elegir(id: string) {
     if (cargando) return;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useId, isValidElement, cloneElement, type ReactElement } from "react";
+import { esSociedadLimitada } from "@/lib/ai/tipo-emisor";
 import { useRouter } from "next/navigation";
 import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
 import { crearEmpresaAdicional } from "@/app/(app)/escritorio/v5/actions";
@@ -84,6 +85,9 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
   );
   // "" = sin default (la IA decide). Semilla para auto-clasificar la 1ª cartola.
   const [operacionHint, setOperacionHint] = useState(inicial.operacion_hint_default ?? "");
+  // Sociedad de profesionales (SRL) en 2ª categoría: la única sociedad que emite
+  // boleta de honorarios. Solo se pregunta a las Ltda./Limitada (2026-09-25).
+  const [sociedadProfesionales, setSociedadProfesionales] = useState(inicial.sociedad_profesionales === true);
 
   // Errores inline: el RUT se valida recién al salir del campo (touched), no
   // por keystroke; razón social se marca cuando la validación del submit falla.
@@ -104,6 +108,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
     boletas_tipo_default: inicial.boletas_tipo_default ?? inicial.tipo_contribuyente ?? "auto",
     facturas_tipo_default: inicial.facturas_tipo_default ?? inicial.tipo_contribuyente ?? "auto",
     operacion_hint_default: inicial.operacion_hint_default ?? null,
+    sociedad_profesionales: inicial.sociedad_profesionales === true,
   });
 
   // Validación + guardado compartidos por el submit del form y por submitRef
@@ -126,6 +131,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
       boletas_tipo_default: boletasTipo,
       facturas_tipo_default: facturasTipo,
       operacion_hint_default: operacionHint || null,
+      sociedad_profesionales: esSociedadLimitada(razonSocial) && sociedadProfesionales,
     };
 
     // Dirty-check ANTES de validar: si nada cambió respecto del último guardado,
@@ -139,6 +145,7 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
       datos.comuna === prev.comuna &&
       datos.email_sii === prev.email_sii &&
       datos.tipo_contribuyente === prev.tipo_contribuyente &&
+      datos.sociedad_profesionales === prev.sociedad_profesionales &&
       (datos.operacion_hint_default ?? null) === (prev.operacion_hint_default ?? null);
     if (opts?.soloSiCambio && sinCambios) return true;
 
@@ -522,6 +529,30 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
           compact={compact}
         />
         <div style={{ height: compact ? 10 : 14 }} />
+        {esSociedadLimitada(razonSocial) && (
+          <label style={{
+            display: "flex", alignItems: "flex-start", gap: 10, marginBottom: compact ? 10 : 14, cursor: "pointer",
+            padding: compact ? "9px 10px" : "12px 12px", borderRadius: 12,
+            border: "1px solid var(--border, rgba(255,255,255,.06))",
+            background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
+          }}>
+            <input
+              type="checkbox"
+              checked={sociedadProfesionales}
+              onChange={(e) => setSociedadProfesionales(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              <span style={{ display: "block", fontSize: compact ? 12 : 13, fontWeight: 700, color: "var(--text, #e8eaf0)" }}>
+                Sociedad de profesionales acogida a 2ª categoría
+              </span>
+              <span style={{ display: "block", marginTop: 2, fontSize: 11, color: "var(--text2, #8b92a3)" }}>
+                Solo si tu Limitada emite <b>boletas de honorarios</b> (Art. 42 N°2). Si tributa en 1ª categoría,
+                déjalo apagado: tus asesorías salen como boleta o factura.
+              </span>
+            </span>
+          </label>
+        )}
         <TipoTributarioSelector
           etiqueta="Facturas"
           sufijo="DTE 33/34"
