@@ -246,7 +246,17 @@ export async function setDatosEmisor(
   }
 
   const update: Record<string, string | boolean | null> = {};
-  if (datos.rut !== undefined) update.rut = datos.rut ? cleanRut(datos.rut) : null;
+  // Incidente 2026-09-25 (LC/MH): el RUT guardado con puntos ("77.632.399-3") y el
+  // del formulario limpio ("776323993") son el MISMO RUT, pero el trigger de RUT
+  // inmutable comparaba texto → "cambió" → rechazaba TODO el guardado (dirección,
+  // exento…) en empresas con boletas emitidas. El trigger ahora compara
+  // normalizado; acá, además, un RUT que no cambió ni siquiera viaja en el UPDATE.
+  if (datos.rut !== undefined) {
+    const nuevo = datos.rut ? cleanRut(datos.rut) : null;
+    const { data: actual } = await sb.from("empresas").select("rut").eq("id", empresaObjetivo).maybeSingle();
+    const norm = (r: string | null | undefined) => (r ? cleanRut(r).toUpperCase() : null);
+    if (norm(actual?.rut) !== norm(nuevo)) update.rut = nuevo;
+  }
   if (datos.razon_social !== undefined) update.razon_social = datos.razon_social?.trim() ?? null;
   if (datos.giro !== undefined) update.giro = datos.giro?.trim() || null;
   if (datos.direccion !== undefined) update.direccion = datos.direccion?.trim() || null;
