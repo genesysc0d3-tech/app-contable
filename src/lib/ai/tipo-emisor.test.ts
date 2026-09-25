@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEmisor, esRutPersonaNatural } from "./tipo-emisor";
 
 describe("normalizarTipoPorEmisor", () => {
   it("empresa exenta: boleta afecta -> exenta genérica", () => {
@@ -77,5 +77,41 @@ describe("defaults por carril", () => {
     const soloGeneral = { tipo_contribuyente: "exento", boletas_tipo_default: null, facturas_tipo_default: null };
     expect(normalizarTipoPorEmisor("boleta", soloGeneral)).toBe("exenta");
     expect(normalizarTipoPorEmisor("factura", soloGeneral)).toBe("factura_exenta");
+  });
+});
+
+// 2026-09-25: "todo el drama era una regla mal implementada" — la regla global 91
+// mandaba cualquier entrada con "asesoría/honorarios" a boleta_honorarios sin mirar
+// si el contribuyente es persona natural. Una sociedad no emite BHE.
+describe("normalizarHonorariosPorEmisor (BHE solo para personas naturales)", () => {
+  const spaExenta = { rut: "77.155.156-4", tipo_contribuyente: "exento" };
+  const spaAfecta = { rut: "77.002.244-4", tipo_contribuyente: "afecto" };
+  const natural = { rut: "19.427.394-0", tipo_contribuyente: "exento" };
+  it("persona natural: la BHE se queda como está", () => {
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", natural, "PAGO ASESORIA PER_3", "regla_global")).toBe("boleta_honorarios");
+  });
+  it("sociedad: asesoría recibida es una VENTA → boleta (afecta base); la exenta la deja exenta el paso siguiente", () => {
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", spaAfecta, "TRANSF ASESORIA TRIBUTARIA PER_3", "regla_global")).toBe("boleta");
+    const base = normalizarHonorariosPorEmisor("boleta_honorarios", spaExenta, "TRANSF ASESORIA TRIBUTARIA PER_3", "regla_global");
+    expect(base).toBe("boleta");
+    expect(normalizarTipoPorEmisor(base, spaExenta)).toBe("exenta");
+    expect(normalizarTipoPorEmisor(normalizarHonorariosPorEmisor("boleta_honorarios", spaAfecta, "x asesoria", null), spaAfecta)).toBe("boleta");
+  });
+  it("sociedad y la glosa dice FACTURA → pago de una factura ya emitida: no_comercial (no duplicar el débito)", () => {
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", spaExenta, "PAGO FACTURA 221 ASESORIA PER_3", "regla_global")).toBe("no_comercial");
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", spaAfecta, "Pago fact. 88 consultoria", "ia_opencode")).toBe("no_comercial");
+  });
+  it("regla de USUARIO (decisión humana) no se toca, ni sin RUT, ni otros tipos", () => {
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", spaExenta, "asesoria", "regla_usuario")).toBe("boleta_honorarios");
+    expect(normalizarHonorariosPorEmisor("boleta_honorarios", { tipo_contribuyente: "exento" }, "asesoria", "regla_global")).toBe("boleta_honorarios");
+    expect(normalizarHonorariosPorEmisor("transferencia_p2p", spaExenta, "asesoria", "regla_global")).toBe("transferencia_p2p");
+  });
+  it("esRutPersonaNatural: bajo 50 millones = natural; sociedades desde 50 millones", () => {
+    expect(esRutPersonaNatural("19427394-0")).toBe(true);
+    expect(esRutPersonaNatural("18.662.087-9")).toBe(true);
+    expect(esRutPersonaNatural("77.155.156-4")).toBe(false);
+    expect(esRutPersonaNatural("50.000.000-7")).toBe(false);
+    expect(esRutPersonaNatural("")).toBe(false);
+    expect(esRutPersonaNatural(null)).toBe(false);
   });
 });

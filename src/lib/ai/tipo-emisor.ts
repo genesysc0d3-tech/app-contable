@@ -48,6 +48,49 @@ export function normalizarTipoPorEmisor(
   return AFECTO_A_EXENTO[tipoBase] ?? tipoBase;
 }
 
+/** RUT de persona natural: cuerpo bajo 50.000.000 (convención SII; las personas
+ *  jurídicas parten en 50 millones). Mismo criterio que los formularios de la app. */
+export function esRutPersonaNatural(rut: string | null | undefined): boolean {
+  const cuerpo = Number.parseInt(String(rut ?? "").replace(/[^0-9kK]/g, "").slice(0, -1), 10);
+  return Number.isFinite(cuerpo) && cuerpo > 0 && cuerpo < 50_000_000;
+}
+
+const GLOSA_DICE_FACTURA = /\bfact(ura)?\b|\bfact\./i;
+
+/**
+ * Boleta de honorarios SOLO para personas naturales (2026-09-25).
+ *
+ * La regla global 91 ("honorarios | servicios profesionales | consultoría |
+ * asesoría | prestación servicios" en entradas) mandaba a `boleta_honorarios`
+ * sin mirar quién es el contribuyente. Tributariamente la BHE documenta rentas
+ * del Art. 42 N°2 LIR: personas naturales (y sociedades de profesionales en 2ª
+ * categoría). Una SpA/Ltda/EIRL/SA NO puede emitir boleta de honorarios: su
+ * asesoría es venta de primera categoría → boleta/factura afecta (Ley 21.420)
+ * o exenta si la empresa lo es. Con la regla vieja, la app clasificaba el ingreso
+ * como BHE y lo dejaba SIN documento: ingreso sin emitir.
+ *
+ * Reglas (puras):
+ *  - no es `boleta_honorarios` → no toca.
+ *  - regla de USUARIO (decisión humana recordada) → no toca.
+ *  - sin RUT o RUT de persona natural → BHE, como siempre.
+ *  - sociedad y la glosa dice "factura"/"fact." → `no_comercial`: es el cliente
+ *    pagando una factura YA emitida; una boleta encima duplicaría el débito.
+ *  - sociedad → `boleta` (venta afecta base); `normalizarTipoPorEmisor` la deja
+ *    `exenta` si la empresa es exenta. El tipo_dte lo decide el cable de siempre.
+ */
+export function normalizarHonorariosPorEmisor(
+  tipoBase: string,
+  empresa: (EmpresaTipos & { rut?: string | null }) | null | undefined,
+  glosa: string | null | undefined,
+  fuente: string | null | undefined,
+): string {
+  if (tipoBase !== "boleta_honorarios") return tipoBase;
+  if (fuente === "regla_usuario") return tipoBase;
+  if (!empresa?.rut || esRutPersonaNatural(empresa.rut)) return tipoBase;
+  if (GLOSA_DICE_FACTURA.test(glosa ?? "")) return "no_comercial";
+  return "boleta";
+}
+
 /** ¿Esta propuesta es una venta que debe quedar EXENTA por ser la empresa exenta?
  *  (para forzar iva=0 y monto_neto=total de forma coherente con el tipo). */
 export function esVentaExentaEmisor(

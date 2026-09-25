@@ -11,7 +11,7 @@ import type {
 } from "./types";
 import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
-import { normalizarTipoPorEmisor, esVentaExentaEmisor } from "./tipo-emisor";
+import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEmisor } from "./tipo-emisor";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
@@ -1429,7 +1429,12 @@ export async function procesarDocumento(
           // la venta afecta (boleta/factura) a su equivalente exento (+ iva 0,
           // monto_neto = total). Punto único que corrige los 3 carriles (atajo template
           // + IA/OpenCode + reglas). No toca gasto/no_comercial ni los ya exentos.
-          const tipoBase = normTipo(p.tipo_propuesto);
+          // 2026-09-25: boleta de honorarios solo para personas naturales; una sociedad
+          // la recibe como venta (boleta/exenta) o, si la glosa dice "factura", como
+          // pago de una factura ya emitida (no_comercial). Ver tipo-emisor.ts.
+          const tipoBase = normalizarHonorariosPorEmisor(
+            normTipo(p.tipo_propuesto), emp ?? null, mov?.descripcion, enriched.__fuente ?? null,
+          );
           const tipoNorm = normalizarTipoPorEmisor(tipoBase, emp ?? null);
           const exentoFinal = esExento || esVentaExentaEmisor(tipoBase, emp ?? null);
           // ── Cable de auto-clasificación de tipo_dte ──────────────────────────
