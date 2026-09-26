@@ -104,6 +104,9 @@ export function clienteToken(seed: string | null | undefined): string {
 const PROCESADORES_APROBADOS = new Set<string>([
   "opencodego:deepseek-v4-flash",
   "opencodego:minimax-m3",
+  // Fireworks (2026-09-26): este SÍ con DPA público incorporado a los términos
+  // (fireworks.ai/dpa: no entrena, sin retención) + cláusulas estándar.
+  "fireworks:accounts/fireworks/models/deepseek-v4p1-flash",
 ]);
 
 /**
