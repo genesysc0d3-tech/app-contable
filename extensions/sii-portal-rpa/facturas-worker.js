@@ -657,6 +657,115 @@
     return { ok: true, action: "validado", ...(glosaOmitida ? { glosa_omitida: true } : {}) }; // la página navega al preview
   }
 
+  // ── CIERRE DEL CICLO DE FACTURAS (2026-09-26): "Ver documentos emitidos" ─────
+  // Página real (leída en vivo con MV): mipeAdminDocsEmi.cgi, filtros por GET sin
+  // captcha (RUT_RECP sin DV, FEC_DESDE/FEC_HASTA YYYY-MM-DD), tabla Receptor ·
+  // Razón Social · Documento · Folio · Fecha (sin hora) · Monto · Estado, más nueva
+  // primero, 100 por página; "Empresa: 77.155.156-4" en la cabecera. Se consulta
+  // con fetch same-origin (cookies de la sesión) SIN navegar: el formulario/preview
+  // y la página post-firma siguen vivos.
+  const EMITIDOS_CGI = "/cgi-bin/Portal001/mipeAdminDocsEmi.cgi";
+  function textoPlanoHtml(fragmento) {
+    return String(fragmento || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&#?\w+;/g, " ")
+      .replace(/\s+/g, " ").trim();
+  }
+  // PURA (testeable): HTML de la página → { empresaRut, filas } | null si no hay tabla.
+  function parsearEmitidosHtml(html) {
+    const h = String(html || "");
+    const emp = textoPlanoHtml(h).match(/Empresa:\s*([\d.]{7,12}-?[\dkK])/i);
+    const tablas = h.match(/<table[\s\S]*?<\/table>/gi) || [];
+    for (const t of tablas) {
+      const trs = t.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+      if (trs.length === 0) continue;
+      const celdas = (tr) => (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) || []).map(textoPlanoHtml);
+      const headers = celdas(trs[0]).map((x) => x.toUpperCase());
+      const idx = {
+        receptor: headers.findIndex((x) => /^RECEPTOR/.test(x)),
+        documento: headers.findIndex((x) => /^DOCUMENTO/.test(x)),
+        folio: headers.findIndex((x) => /^FOLIO/.test(x)),
+        fecha: headers.findIndex((x) => /^FECHA/.test(x)),
+        monto: headers.findIndex((x) => /^MONTO/.test(x)),
+        estado: headers.findIndex((x) => /^ESTADO/.test(x)),
+      };
+      if (idx.folio < 0 || idx.monto < 0 || idx.receptor < 0) continue;
+      const filas = [];
+      for (const tr of trs.slice(1)) {
+        const c = celdas(tr);
+        const rawFolio = String(c[idx.folio] || "").replace(/[.\s]/g, "");
+        if (!/^\d{1,10}$/.test(rawFolio)) continue;
+        const rawMonto = String(c[idx.monto] || "").replace(/[^\d]/g, "");
+        filas.push({
+          folio: Number(rawFolio),
+          receptor: normalizeRutValue(c[idx.receptor]) || null,
+          documento: String(c[idx.documento] || "").toUpperCase(),
+          fecha: (String(c[idx.fecha] || "").match(/\d{4}-\d{2}-\d{2}/) || [null])[0],
+          monto: rawMonto ? Number(rawMonto) : null,
+          estado: String(c[idx.estado] || ""),
+        });
+      }
+      return { empresaRut: emp ? normalizeRutValue(emp[1]) : null, filas };
+    }
+    return null;
+  }
+  async function consultarEmitidos(job) {
+    const partes = splitRutCuerpoDv(job?.receptor?.rut);
+    const fecha = String(job?.fecha_emision || "").slice(0, 10);
+    if (!partes || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null;
+    const qs = `RUT_RECP=${encodeURIComponent(partes.cuerpo)}&FOLIO=&RZN_SOC=&FEC_DESDE=${fecha}&FEC_HASTA=${fecha}&TPO_DOC=&ESTADO=&ORDEN=&NUM_PAG=1`;
+    try {
+      const resp = await globalThis.fetch(`${EMITIDOS_CGI}?${qs}`, { credentials: "include" });
+      if (!resp || !resp.ok) return null;
+      return parsearEmitidosHtml(await resp.text());
+    } catch {
+      return null;
+    }
+  }
+  // Snapshot PRE-Firmar: los folios que YA existían para este receptor+fecha. Post-firma
+  // solo cuenta lo NUEVO (diff) — así una factura del mismo monto emitida antes (a mano o
+  // por otro intento) nunca se confunde con la de este job.
+  const SNAP_KEY = "massdte_fact_snapshot";
+  function guardarSnapshot(jobId, folios) {
+    try { if (typeof sessionStorage !== "undefined") sessionStorage.setItem(`${SNAP_KEY}:${jobId || ""}`, JSON.stringify(folios)); } catch { /* respaldo: viaja al librero */ }
+  }
+  function leerSnapshot(jobId, respaldo) {
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        const v = JSON.parse(sessionStorage.getItem(`${SNAP_KEY}:${jobId || ""}`) || "null");
+        if (Array.isArray(v)) return v;
+      }
+    } catch { /* sigue con el respaldo */ }
+    return Array.isArray(respaldo) ? respaldo : null;
+  }
+  function esTipoDeFactura(documento, tipoDte) {
+    const d = String(documento || "").toUpperCase();
+    if (!/FACTURA/.test(d) || /COMPRA|CREDITO|DEBITO|GUIA|LIQUIDACION/.test(d)) return false;
+    const exenta = /EXENTA|NO AFECTA/.test(d);
+    return Number(tipoDte) === 34 ? exenta : !exenta;
+  }
+  // PURA: calce de la factura del job en la consulta. UNA fila nueva (no estaba en el
+  // snapshot, no registrada hoy) del mismo receptor, fecha, tipo y monto → high. Sin
+  // snapshot, emisor distinto o 2+ candidatas → medium (a medias).
+  function calzarFactura(consulta, job, snapshot) {
+    if (!consulta || !Array.isArray(consulta.filas)) return null;
+    const receptor = normalizeRutValue(job?.receptor?.rut);
+    const fecha = String(job?.fecha_emision || "").slice(0, 10);
+    const monto = Math.round(Number(job?.totales?.monto_total ?? 0));
+    const previos = new Set((snapshot || []).map(Number));
+    const conocidos = new Set((Array.isArray(job?.folios_hoy) ? job.folios_hoy : []).map(Number));
+    const emisorMismatch = Boolean(consulta.empresaRut && job?.emisor_rut && consulta.empresaRut !== normalizeRutValue(job.emisor_rut));
+    const candidatas = consulta.filas.filter((f) => f.receptor === receptor && f.fecha === fecha && f.monto === monto
+      && esTipoDeFactura(f.documento, job?.tipo_dte) && !previos.has(f.folio) && !conocidos.has(f.folio));
+    const base = { candidatas: candidatas.length, monto, fecha, snapshot: Array.isArray(snapshot), emisor_mismatch: emisorMismatch };
+    if (candidatas.length === 0) return { folio: null, confidence: "none", evidence: { source: "emitidos_sin_candidatas", ...base } };
+    const sugerido = candidatas[0].folio;
+    if (emisorMismatch) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "emisor_distinto", ...base } };
+    if (!Array.isArray(snapshot)) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "sin_snapshot", ...base } };
+    if (candidatas.length > 1) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "varias", ...base } };
+    return { folio: sugerido, confidence: "high", evidence: { source: "emitidos_calce_unico", ...base } };
+  }
+
   async function stepPreview(job) {
     const LB = resolverLibreto(job);
     const c = LB.campos;
@@ -680,6 +789,13 @@
       return { ok: true, action: "paused_preview", human: true };
     }
 
+    // SNAPSHOT de "Documentos emitidos" para este receptor+fecha (antes de que exista
+    // el folio de este job). Best-effort: sin snapshot la búsqueda post-firma nunca
+    // cierra sola (queda a medias), pero Firmar no se bloquea.
+    const consultaPrevia = await consultarEmitidos(job);
+    const snapshotEmitidos = consultaPrevia ? consultaPrevia.filas.map((f) => f.folio) : null;
+    if (snapshotEmitidos) guardarSnapshot(job.job_id, snapshotEmitidos);
+
     // CANDADO ANTES DE FIRMAR: desde este click puede quemarse folio. El
     // background arma finalEmitClicked al instante; ninguna ruta de error
     // posterior re-emite ni cierra el job.
@@ -695,7 +811,7 @@
     const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
     // btnSign no encontrado = ANTES de firmar (no hay folio en riesgo) → señal.
     if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar", { code: "SIN_BOTON_FIRMAR", page_kind: "preview", paso: "preview:firmar" }) };
-    return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
+    return { ok: true, action: "firmar_click", snapshot_emitidos: snapshotEmitidos }; // navega a mipeGenXMLFirma
   }
 
   // Pantalla de la clave del certificado (post-Firmar). Solo pedir la clave si
@@ -780,6 +896,69 @@
     } catch {
       return null;
     }
+  }
+
+  function construirResultadoFactura(job, { folio, confidence, evidence, emisorActivo, pdf, links, page }) {
+    return {
+      emisor_rut_activo: emisorActivo ?? null,
+      folio: folio ?? null,
+      folio_confidence: confidence,
+      pdf: pdf ?? null,
+      folio_evidence: evidence ?? null,
+      tipo_dte: job.tipo_dte,
+      fecha_emision: job.fecha_emision ?? null,
+      estado: "emitido",
+      monto_total: job.totales?.monto_total ?? null,
+      forma_pago: job.forma_pago === "credito" ? "Crédito" : "Contado",
+      receptor: {
+        rut: job.receptor?.rut ?? null,
+        razon_social: job.receptor?.razon_social ?? null,
+        giro: job.receptor?.giro ?? null,
+        direccion: job.receptor?.direccion ?? null,
+        comuna: job.receptor?.comuna ?? null,
+      },
+      detalles: (job.detalles ?? []).map((d) => ({ nombre: d.nombre, cantidad: d.cantidad ?? 1, monto_total: job.totales?.monto_total ?? null })),
+      totales: job.totales ?? null,
+      artifact_links: links ?? [],
+      page: page ?? { url: location.href, title: document.title, excerpt: excerpt() },
+    };
+  }
+
+  // BÚSQUEDA POST-FIRMA (el librero la pide cuando la captura de la pantalla falló):
+  // hasta 4 consultas (~2 s entre cada una); el calce único tiene que REPETIRSE en dos
+  // consultas seguidas antes de devolver "high".
+  async function buscarFolioEnEmitidos(job, snapshotRespaldo) {
+    const snapshot = leerSnapshot(job.job_id, snapshotRespaldo);
+    let anterior = null; let ultimo = null; let leida = false;
+    for (let i = 0; i < 4; i += 1) {
+      if (i > 0) await esperar(2000);
+      const consulta = await consultarEmitidos(job);
+      if (!consulta) continue;
+      leida = true;
+      const calce = calzarFactura(consulta, job, snapshot);
+      ultimo = { calce, empresaRut: consulta.empresaRut };
+      if (calce.confidence === "high") {
+        if (anterior === calce.folio) break;
+        anterior = calce.folio;
+        continue;
+      }
+      anterior = null;
+      if (calce.confidence === "medium") break; // ambiguo no se arregla esperando
+    }
+    let calce = ultimo?.calce ?? null;
+    if (calce && calce.confidence === "high" && anterior !== calce.folio) {
+      calce = { ...calce, confidence: "medium", evidence: { ...calce.evidence, source: "emitidos_ambiguo", motivo: "calce_no_estable" } };
+    }
+    const result = construirResultadoFactura(job, {
+      folio: calce?.confidence === "none" ? null : calce?.folio ?? null,
+      confidence: calce?.confidence ?? "none",
+      evidence: calce?.evidence ?? null,
+      emisorActivo: ultimo?.empresaRut ?? null,
+      links: [],
+      page: { url: `https://www1.sii.cl${EMITIDOS_CGI}`, title: "Documentos emitidos", excerpt: "" },
+    });
+    result.emitidos_leido = leida;
+    return result;
   }
 
   async function stepPostFirma(job) {
@@ -920,6 +1099,13 @@
         .then((res) => pushStep(message.job_id ?? message.job?.job_id ?? null, res))
         .catch((error) => pushStep(message.job_id ?? null, { ok: false, error: "FACT_WORKER_ERROR", detalle: error instanceof Error ? error.message : String(error) }))
         .finally(() => { clearInterval(keepalive); driveEnCurso = false; });
+      return false;
+    }
+    if (message?.type === "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO") {
+      sendResponse({ ok: true, accepted: true });
+      buscarFolioEnEmitidos(message.job || {}, message.snapshot_emitidos)
+        .then((result) => pushStep(message.job_id ?? null, { ok: true, action: "folio_buscado", kind: "emitidos", result }))
+        .catch((error) => pushStep(message.job_id ?? null, { ok: true, action: "folio_buscado", kind: "emitidos", result: null, detalle: error instanceof Error ? error.message : String(error) }));
       return false;
     }
     if (message?.type === "APP_CONTABLE_SII_FACT_SIGN") {

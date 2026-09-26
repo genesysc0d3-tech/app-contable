@@ -542,14 +542,62 @@ function handleFactStepPush(state, res) {
   });
 }
 
+// ── CIERRE DEL CICLO DE FACTURAS (2026-09-26) ─────────────────────────────────
+// Post-Firmar, cuando la pantalla no dejó leer el folio (o el portal rebotó, o la
+// firma no avanzó), antes de rendirse con "a medias" se busca la factura en
+// "Documentos emitidos" (receptor + fecha + monto + tipo, solo folios NUEVOS
+// respecto del snapshot tomado antes de Firmar). Una sola vez por job.
+function rescatarFolioFactura(state, motivo) {
+  if (state.factRescateHecho) {
+    sendToApp(state, statusMessage(state.jobId, "result_needs_review", motivo, true));
+    return;
+  }
+  state.factRescateHecho = true;
+  state.factRescateMotivo = motivo;
+  sendToApp(state, statusMessage(state.jobId, "capturing_result", "Buscando la factura en Documentos emitidos del SII…", true));
+  if (state.factRescateTimer) clearTimeout(state.factRescateTimer);
+  // Si el worker no contesta (página muerta, sesión caída), a medias con el motivo.
+  state.factRescateTimer = setTimeout(() => {
+    state.factRescateTimer = null;
+    if (activeJobs.get(state.jobId) === state && !state.factRescateRespondido) {
+      state.factRescateRespondido = true;
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", motivo, true));
+    }
+  }, 30000);
+  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+    type: "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO",
+    job_id: state.jobId,
+    job: state.job,
+    snapshot_emitidos: Array.isArray(state.factSnapshot) ? state.factSnapshot : null,
+  }), () => { void chrome.runtime.lastError; });
+}
+
+function handleFolioBuscadoFactura(state, res) {
+  if (state.factRescateRespondido) return;
+  state.factRescateRespondido = true;
+  if (state.factRescateTimer) { clearTimeout(state.factRescateTimer); state.factRescateTimer = null; }
+  const motivo = state.factRescateMotivo || "No pude confirmar la factura. No la re-emitas: verifica el folio en el portal.";
+  const result = res?.result ?? null;
+  if (result && (hasStrongFolioEvidence(result) || result.folio)) {
+    // Fuerte → se registra (guards del server). Ambiguo → queda a medias CON rastro
+    // (folio sugerido en sii_local_resultados para "Recuperar"/A medias).
+    state.awaitingResult = false;
+    handleCapturedResult(state, result);
+    return;
+  }
+  const extra = result?.emitidos_leido ? " Busqué en Documentos emitidos del SII y no aparece una factura nueva de este receptor por ese monto." : "";
+  sendToApp(state, statusMessage(state.jobId, "result_needs_review", `${motivo}${extra}`, true));
+}
+
 async function handleFactDriveResponse(state, res) {
   if (!activeJobs.has(state.jobId)) return;
 
   if (res.ok === false) {
     const detalle = res.detalle ? `${res.error}: ${res.detalle}` : String(res.error ?? "FACT_ERROR");
     if (state.finalEmitClicked) {
-      // Post-Firmar NADA cierra el job ni re-emite: posible folio real vivo.
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`, true));
+      // Post-Firmar NADA cierra el job ni re-emite: posible folio real vivo. Antes de
+      // dejarla a medias, la app la busca sola en Documentos emitidos.
+      rescatarFolioFactura(state, `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`);
       return;
     }
     state.humanRequired = Boolean(res.human) || state.humanRequired;
@@ -600,9 +648,24 @@ async function handleFactDriveResponse(state, res) {
   }
 
   if (res.action === "captured" && res.result) {
+    // La pantalla post-firma no dejó leer el folio con evidencia → buscarlo en
+    // Documentos emitidos antes de dejarla a medias.
+    if (state.kind === "factura" && !hasStrongFolioEvidence(res.result)) {
+      rescatarFolioFactura(state, "La factura se firmó, pero no pude leer el folio en la pantalla del SII. No la re-emitas.");
+      return;
+    }
     state.awaitingResult = false;
     handleCapturedResult(state, res.result);
     return;
+  }
+
+  if (res.action === "folio_buscado") {
+    handleFolioBuscadoFactura(state, res);
+    return;
+  }
+
+  if (res.action === "firmar_click" && Array.isArray(res.snapshot_emitidos)) {
+    state.factSnapshot = res.snapshot_emitidos; // respaldo del sessionStorage del worker
   }
 
   // Login real del SII: el worker de FACTURAS lo detecta y lo pide (el motor
@@ -639,7 +702,7 @@ async function handleFactDriveResponse(state, res) {
       sendToApp(state, statusMessage(state.jobId, "fact_sign_poll", `Post-firma (${state.factSignPolls}/20): ${String(res.excerpt ?? res.detalle ?? "sin texto").slice(0, 400)}`, true));
       return;
     }
-    sendToApp(state, statusMessage(state.jobId, "result_needs_review", "La firma no avanzó tras varios intentos. Revisa la ventana del SII: si viste un folio, la factura se emitió — no la re-emitas.", true));
+    rescatarFolioFactura(state, "La firma no avanzó tras varios intentos. Revisa la ventana del SII: si viste un folio, la factura se emitió — no la re-emitas.");
     return;
   }
 

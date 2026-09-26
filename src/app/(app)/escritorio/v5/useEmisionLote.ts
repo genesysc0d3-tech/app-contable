@@ -280,6 +280,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
               learnOnly: ensayo,
               jobId: job.jobId,
               expiresAt: job.expiresAt,
+              foliosHoy: job.foliosHoy,
             });
           } catch (e) {
             // Fail-closed del builder (receptor incompleto, sin forma de pago…):
