@@ -91,3 +91,10 @@ describe("estimateWaitMs — hint de duración", () => {
     expect(estimateWaitMs(20, CFG).expectedMs).toBeGreaterThan(estimateWaitMs(10, CFG).expectedMs);
   });
 });
+
+describe("sin pausa por tanda (fundador + Matías 2026-09-26)", () => {
+  it("el perfil por defecto no tiene tope finito: el lote no pide clics cada N boletas", async () => {
+    const { CADENCIA_DEFAULT } = await import("./cadencia");
+    expect(Number.isFinite(CADENCIA_DEFAULT.sessionCap)).toBe(false);
+  });
+});

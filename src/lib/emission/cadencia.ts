@@ -25,8 +25,11 @@ export interface CadenciaConfig {
   longPauseMaxMs: number;
   /**
    * Tope de boletas emitidas por corrida. Al alcanzarlo el orquestador PAUSA y
-   * pide gesto humano para seguir — no es un límite duro del SII (que no
-   * publicamos), es un freno conservador para no dibujar una ráfaga sospechosa.
+   * pide gesto humano para seguir. Era un freno conservador (40) para no dibujar
+   * una ráfaga sospechosa; DESACTIVADO por decisión del fundador y Matías
+   * (2026-09-26, LC en la boleta 81 de 164): "la app debe autogestionarse y hacer
+   * lo masivo sin pedir clics". El ritmo humano lo ponen el jitter y las pausas
+   * largas aleatorias, no un tope. Sigue configurable (los tests lo usan).
    */
   sessionCap: number;
 }
@@ -41,7 +44,7 @@ export const CADENCIA_DEFAULT: CadenciaConfig = {
   longPauseChance: 0.12, // ~1 de cada 8
   longPauseMinMs: 12_000,
   longPauseMaxMs: 45_000, // pausa larga ∈ [12 s, 45 s]
-  sessionCap: 40,
+  sessionCap: Number.POSITIVE_INFINITY, // sin pausa por tanda (fundador + Matías 2026-09-26)
 };
 
 /**
