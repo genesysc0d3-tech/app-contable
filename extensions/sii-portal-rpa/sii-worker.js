@@ -592,10 +592,10 @@
       // 0.2.8: tabla del Resumen de ventas (/reportes) para el calce determinista.
       reportes: {
         header_folio: reI(rp.header_folio, /N(?:RO|°|º)?\.?\s*FOLIO|^FOLIO$/i),
-        header_fecha: reI(rp.header_fecha, /FECHA/i),
-        header_hora: reI(rp.header_hora, /HORA/i),
+        header_fecha: reI(rp.header_fecha, /^FECHA/i),
+        header_hora: reI(rp.header_hora, /^HORA/i),
         header_monto: reI(rp.header_monto, /MONTO\s*TOTAL|^TOTAL$|^MONTO$/i),
-        header_tipo: reI(rp.header_tipo, /TIPO/i),
+        header_tipo: reI(rp.header_tipo, /^TIPO/i),
         ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
         ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
         menu_item: reI(rp.menu_item, /RESUMEN DE VENTAS/i),
