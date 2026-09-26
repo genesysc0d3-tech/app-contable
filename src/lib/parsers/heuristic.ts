@@ -1,5 +1,6 @@
 import type { AdapterConfig, Row } from "./types";
 import { parseChileanNumber } from "./apply";
+import { cuadreSaldo } from "./saldo-cuadre";
 
 /**
  * Universal heuristic detector: finds the transaction block by STRUCTURE,
@@ -20,7 +21,7 @@ import { parseChileanNumber } from "./apply";
  * de una planilla casera) era invisible para todos los detectores y caía a
  * la capa legacy → IA (bug cazado con la planilla M&E 2026-08-22).
  */
-function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
+export function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
   if (cell == null) return false;
   if (cell instanceof Date) return !Number.isNaN(cell.getTime());
   if (typeof cell === "number") return cell >= 36526 && cell <= 73050;
@@ -61,7 +62,7 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
   if (sample.length < 3) return null;
 
   // Step 3: try layout detection (two_cols first, then single_col)
-  const twoColsCfg = inferColumns(sample);
+  const twoColsCfg = inferColumns(sample, txStart > 0 ? rows[txStart - 1] : undefined);
   if (twoColsCfg) {
     const firstFecha = String(sample[0][twoColsCfg.fecha] ?? "");
     return {
@@ -159,7 +160,7 @@ interface InferredCols {
   tipo_flujo_col?: number;
 }
 
-function inferColumns(sample: Row[]): InferredCols | null {
+function inferColumns(sample: Row[], header?: Row): InferredCols | null {
   const ncols = Math.max(...sample.map((r) => r.length));
   if (ncols < 3) return null;
 
@@ -235,10 +236,23 @@ function inferColumns(sample: Row[]): InferredCols | null {
   const fechaCol = [...stats].sort((a, b) => b.dateRatio - a.dateRatio)[0];
   if (!fechaCol || fechaCol.dateRatio < 0.8) return null;
 
-  // descripcion: column with highest avgTextLen (ties broken by nonEmpty)
-  const descCol = [...stats]
-    .filter((s) => s.idx !== fechaCol.idx && s.avgTextLen > 0)
-    .sort((a, b) => b.avgTextLen - a.avgTextLen || b.nonEmpty - a.nonEmpty)[0];
+  // descripcion: el encabezado manda si dice glosa/descripción/detalle/concepto;
+  // si no, la columna de texto más larga que NO sea un código. Antes era "la más
+  // larga" a secas y en la cartola BCI "Detallado" ganó "Código de transacción"
+  // (un hash de 60 caracteres sin espacios) sobre "Glosa detalle": las 491 filas
+  // de LC llegaron sin glosa, ninguna regla calzó y todas fueron a la IA
+  // (incidente 2026-09-26).
+  const textoCols = stats.filter((s) => s.idx !== fechaCol.idx && s.avgTextLen > 0);
+  const porEncabezado = textoCols.find((s) => /glosa|descripci|detalle|concepto/i.test(celdaEncabezado(header, s.idx)));
+  const descCol =
+    porEncabezado ??
+    [...textoCols]
+      .sort(
+        (a, b) =>
+          Number(esTextoCodigo(sample, a.idx)) - Number(esTextoCodigo(sample, b.idx)) ||
+          b.avgTextLen - a.avgTextLen ||
+          b.nonEmpty - a.nonEmpty,
+      )[0];
   if (!descCol) return null;
 
   // Numeric columns (for cargo/abono/saldo/ndoc selection)
@@ -288,11 +302,23 @@ function inferColumns(sample: Row[]): InferredCols | null {
 
   if (!bestPair) return null;
 
-  // Assign cargo vs abono: in Chilean cartolas the convention is that cargos
-  // (salidas) appear FIRST (left) and abonos (entradas) appear SECOND (right).
-  // We preserve order to match Banco de Chile convention.
-  const cargoCol = Math.min(bestPair.a, bestPair.b);
-  const abonoCol = Math.max(bestPair.a, bestPair.b);
+  // cargo vs abono. La posición NO basta: Banco de Chile pone el cargo a la
+  // izquierda, BCI "Movimientos Detallado" pone "Ingreso (+)" antes que
+  // "Egreso (-)" — con la convención fija, las ventas de LC entraron como gastos
+  // (incidente 2026-09-26). Orden de evidencia: (1) el saldo corrido, que es
+  // aritmética y no se equivoca; (2) el nombre del encabezado; (3) la convención
+  // izquierda = cargo, solo si no hay nada más.
+  const izq = Math.min(bestPair.a, bestPair.b);
+  const der = Math.max(bestPair.a, bestPair.b);
+  let cargoCol = izq;
+  let abonoCol = der;
+  const porSaldo = saldoCol ? orientarPorSaldo(sample, izq, der, saldoCol.idx) : null;
+  const porNombre = orientarPorEncabezado(header, izq, der);
+  const orientacion = porSaldo ?? porNombre;
+  if (orientacion) {
+    cargoCol = orientacion.cargo;
+    abonoCol = orientacion.abono;
+  }
 
   // n_documento: numeric column that's not cargo/abono/saldo, typically has
   // long integer values (like transaction IDs). We allow -1 if not found.
@@ -488,6 +514,64 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
  * de puros dígitos, TODAS del mismo largo (≥6) y con un rango minúsculo frente
  * a su magnitud (correlativos). Un monto real no cumple las tres a la vez.
  */
+function celdaEncabezado(header: Row | undefined, col: number): string {
+  const v = header?.[col];
+  return v == null ? "" : String(v).trim();
+}
+
+/**
+ * ¿La columna es un CÓDIGO y no una glosa? Texto de una sola "palabra" larga
+ * (sin espacios) en casi todas las filas: hashes, IDs de transacción, folios
+ * alfanuméricos. Una glosa real trae palabras separadas por espacios.
+ */
+function esTextoCodigo(sample: Row[], col: number): boolean {
+  let texto = 0;
+  let codigo = 0;
+  for (const r of sample) {
+    const v = r[col];
+    if (v == null) continue;
+    const t = String(v).trim();
+    if (!t) continue;
+    texto++;
+    if (!/\s/.test(t) && t.length >= 12) codigo++;
+  }
+  return texto >= 3 && codigo / texto >= 0.8;
+}
+
+/**
+ * Orientación por saldo corrido: la asignación que cuadra (≤20% de filas
+ * fallidas, con al menos 5 revisadas) gana. Si las dos cuadran igual de mal o
+ * de bien, no decide (null) y se pasa a la siguiente evidencia.
+ */
+function orientarPorSaldo(
+  sample: Row[],
+  izq: number,
+  der: number,
+  saldo: number,
+): { cargo: number; abono: number } | null {
+  const ratio = (x: { revisadas: number; fallidas: number }) => (x.revisadas >= 5 ? x.fallidas / x.revisadas : 1);
+  const normal = ratio(cuadreSaldo(sample, izq, der, saldo));
+  const invertida = ratio(cuadreSaldo(sample, der, izq, saldo));
+  if (normal <= 0.2 && normal < invertida) return { cargo: izq, abono: der };
+  if (invertida <= 0.2 && invertida < normal) return { cargo: der, abono: izq };
+  return null;
+}
+
+/** Orientación por nombre de encabezado: "Ingreso (+)" / "Abono" / "Haber" vs "Egreso (-)" / "Cargo" / "Debe". */
+function orientarPorEncabezado(
+  header: Row | undefined,
+  izq: number,
+  der: number,
+): { cargo: number; abono: number } | null {
+  const ES_ABONO = /abono|ingreso|haber|dep[oó]sito|cr[eé]dito|\(\s*\+\s*\)/i;
+  const ES_CARGO = /cargo|egreso|debe|giro|d[eé]bito|\(\s*-\s*\)/i;
+  const hi = celdaEncabezado(header, izq);
+  const hd = celdaEncabezado(header, der);
+  if (ES_ABONO.test(hi) && ES_CARGO.test(hd) && !ES_CARGO.test(hi) && !ES_ABONO.test(hd)) return { cargo: der, abono: izq };
+  if (ES_CARGO.test(hi) && ES_ABONO.test(hd) && !ES_ABONO.test(hi) && !ES_CARGO.test(hd)) return { cargo: izq, abono: der };
+  return null;
+}
+
 function esColumnaId(sample: Row[], col: number): boolean {
   const vals: string[] = [];
   let nonEmpty = 0;
