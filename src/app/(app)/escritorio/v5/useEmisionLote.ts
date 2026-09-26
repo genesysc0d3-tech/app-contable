@@ -44,8 +44,12 @@ type ExtMsg = {
   job_id?: string | null;
   status?: string;
   message?: string;
-  /** Falla pre-emit: true si el worker ya había llegado al modal de emisión. */
-  submitted?: boolean;
+  /** Falla pre-emit con el canal muerto tras mandar la emisión (pudo emitir). */
+  emision_incierta?: boolean;
+  /** Status de un job de VERIFICACIÓN (solo lee /reportes). */
+  verificacion?: boolean;
+  /** Verificación: tabla leída 3 veces y la boleta no está → no salió de verdad. */
+  verificado_sin_folio?: boolean;
   result?: {
     folio?: number | string;
     folio_confidence?: string;
@@ -58,6 +62,8 @@ interface Waiter {
   reportar: (s: string) => void;
   resolve: (d: DesenlaceItem) => void;
   done: boolean;
+  /** Job de verificación: cualquier cierre que no sea "verificado_sin_folio" es "revisar". */
+  verify?: boolean;
 }
 
 const origin = () => window.location.origin;
@@ -113,7 +119,13 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           return;
         }
         if (st === "error" || st === "cancelled" || st === "closed") {
-          w.resolve({ estado: "fallida", motivo: data.message ?? "No se pudo emitir esta boleta.", llegoAlModal: data.submitted === true });
+          // VERIFICACIÓN: solo "tabla leída 3 veces y no está" es fallida de verdad;
+          // cerrar la ventana, no poder abrir /reportes, red caída → a medias (lápida).
+          if (w.verify && data.verificado_sin_folio !== true) {
+            w.resolve({ estado: "revisar", motivo: data.message ?? "No pude verificar en el SII si esta boleta salió. Quedó a medias.", folio: null });
+            return;
+          }
+          w.resolve({ estado: "fallida", motivo: data.message ?? "No se pudo emitir esta boleta.", emisionIncierta: data.emision_incierta === true });
           return;
         }
         // Post-emit incierto: hay un folio posible con la ventana abierta → frena.
@@ -310,7 +322,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
 
         // 3. enviar a la extensión y esperar el desenlace TERMINAL de este job
         const intentoDesdeMs = Date.now();
-        const esperarDesenlace = (jobId: string, expiresAt: string, tipo: string, payload: object) => new Promise<DesenlaceItem>((resolve) => {
+        const esperarDesenlace = (jobId: string, tipo: string, payload: object, timeoutMs: number) => new Promise<DesenlaceItem>((resolve) => {
           let settled = false;
           const finish = (d: DesenlaceItem) => {
             if (settled) return;
@@ -320,11 +332,10 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             if (w && w.jobId === jobId) w.done = true;
             resolve(d);
           };
-          waiterRef.current = { jobId, reportar, done: false, resolve: finish };
-          const to = setTimeout(
-            () => finish({ estado: "revisar", motivo: "La verificación no confirmó a tiempo. Revísala en la ventana SII antes de seguir." }),
-            Math.max(30_000, Date.parse(expiresAt) - Date.now() + 5_000),
-          );
+          waiterRef.current = { jobId, reportar, done: false, resolve: finish, verify: true };
+          // Timeout propio y corto (adversarial #9): un login manual pendiente no congela
+          // el lote 15 min; a medias y sigue.
+          const to = setTimeout(() => finish({ estado: "revisar", motivo: "La verificación no confirmó a tiempo. Quedó a medias: confirma su folio en Emitir → A medias." }), timeoutMs);
           window.postMessage({ source: "app-contable", type: tipo, protocol_version: 1, job: payload }, origin());
         });
         const desenlace = await new Promise<DesenlaceItem>((resolve) => {
@@ -362,7 +373,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         // del intento. Única candidata → emitida (registrada con todos los guards);
         // folio posible pero ambiguo → "a medias" (lápida, visible en Emitir);
         // nada → fallida de verdad (re-emitible). Sin clics de nadie.
-        if (desenlace.estado === "fallida" && desenlace.llegoAlModal && !esFactura) {
+        if (desenlace.estado === "fallida" && desenlace.emisionIncierta && !esFactura) {
           const intentoHastaMs = Date.now();
           reportar("Verificando en el Resumen de ventas del SII si la boleta salió…");
           await closeJob(job.jobId, "failed", desenlace.motivo);
@@ -384,7 +395,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
               verifyOnly: true,
               verifyWindow: { desde_ms: intentoDesdeMs, hasta_ms: intentoHastaMs },
             });
-            const v = await esperarDesenlace(vjob.jobId, vjob.expiresAt, "APP_CONTABLE_SII_BOLETA_JOB", payloadVerify);
+            const v = await esperarDesenlace(vjob.jobId, "APP_CONTABLE_SII_BOLETA_JOB", payloadVerify, 180_000);
             waiterRef.current = null;
             window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: vjob.jobId }, origin());
             if (v.estado === "revisar") setJobIdRevision(vjob.jobId);
@@ -392,7 +403,11 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             if (v.estado === "fallida") return { estado: "fallida", motivo: `${desenlace.motivo} Verifiqué en el SII: no salió, se puede reintentar.` };
             return v;
           }
-          return desenlace; // no se pudo verificar (sin job): queda como fallida, igual que antes
+          // No se pudo abrir el job de verificación (candado, cuota, kill switch): con
+          // la emisión incierta NO se deja re-emitible → lápida (a medias, visible).
+          await closeJob(job.jobId, "revision_pendiente", `${desenlace.motivo} No pude verificar en el SII.`);
+          setJobIdRevision(job.jobId);
+          return { estado: "revisar", motivo: "No pude verificar en el SII si esta boleta salió. Quedó a medias: confirma su folio en Emitir → A medias.", folio: null };
         }
 
         // 5. sellar el job según el desenlace:

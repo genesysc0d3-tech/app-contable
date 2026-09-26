@@ -853,7 +853,10 @@ function scanWorkerPage(state, attempt = 1) {
     const excerpt = String(map.body_excerpt || "");
     // Autologin de BOLETAS: post-emit jamás tipear credenciales (la password
     // visible podría ser otra).
-    if (!state.finalEmitClicked && isLoginPageMap(map)) {
+    // (verificación ya parada en /reportes: esa pantalla puede contener "RUT" y parecer
+    // login para la heurística — adversarial #7 — no se tipea nada ahí)
+    const verifyEnReportes = state.job?.verify_only === true && String(map.url || "").includes("/reportes");
+    if (!state.finalEmitClicked && !verifyEnReportes && isLoginPageMap(map)) {
       attemptSiiAutologin(state, map);
       return;
     }
@@ -956,8 +959,11 @@ function scanWorkerPage(state, attempt = 1) {
             {
               code: codeValido(emitResponse?.code),
               posible_cambio_sii: esCambioSii,
-              // 0.2.8: la app verifica en /reportes si el worker ya había llegado al modal.
-              submitted: state.submitted === true,
+              // 0.2.8: emisión INCIERTA = el puerto murió sin respuesta del worker después
+              // de mandar FILL_AND_EMIT (pudo apretar EMITIR y no alcanzar a avisar). Un
+              // error que el worker LANZÓ (emisor cambió, modal cerrado, pad) es pre-emit
+              // seguro y NO se verifica (adversarial #1).
+              emision_incierta: state.submitted === true && Boolean(chrome.runtime.lastError) && !emitResponse,
             },
           ));
           return;
@@ -1330,15 +1336,21 @@ function attemptSiiAutologinInFrames(state, credentials, previousError) {
 //   (la app la da por no emitida: re-emitible). Si /reportes no se puede leer → "error"
 //   también (advisory: nunca bloquea el lote).
 function verificarEnReportes(state, map) {
+  if (state.verifyTerminal) return; // ya se contestó algo terminal: nada más habla por este job
   const url = String(map?.url || "");
   if (!url.includes("/reportes")) {
-    // Tras el autologin el SII manda a /emitir: una sola navegación a /reportes.
-    if (state.verifyNavegado) {
-      sendToApp(state, statusMessage(state.jobId, "error", "No pude abrir el Resumen de ventas del SII para verificar.", true, { verificacion: true }));
+    // Tras el autologin el SII manda a /emitir (a veces por varias páginas intermedias,
+    // adversarial #6): se navega a /reportes y se toleran hasta 4 scans fuera de ahí.
+    state.verifyScansFuera = (state.verifyScansFuera || 0) + 1;
+    if (state.verifyScansFuera > 4) {
+      state.verifyTerminal = true;
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "No pude abrir el Resumen de ventas del SII para verificar esta boleta. Quedó a medias: confirma su folio en Emitir → A medias.", true, { verificacion: true }));
       return;
     }
-    state.verifyNavegado = true;
-    chrome.tabs.update(state.workerTabId, { url: SII_REPORTES_URL }).catch(() => undefined);
+    if (!state.verifyNavegado || state.verifyScansFuera % 2 === 0) {
+      state.verifyNavegado = true;
+      chrome.tabs.update(state.workerTabId, { url: SII_REPORTES_URL }).catch(() => undefined);
+    }
     return;
   }
   if (state.verifyEnCurso) return;
@@ -1354,20 +1366,37 @@ function verificarEnReportes(state, map) {
     ctx: { final_emit_at: Number.isFinite(hasta) ? hasta : null, ventana_antes_min: antesMin, ventana_despues_min: 6 },
   }), (captureResponse) => {
     if (chrome.runtime.lastError || !captureResponse?.ok) {
-      state.verifyEnCurso = false;
-      sendToApp(state, statusMessage(state.jobId, "error", "No pude leer el Resumen de ventas del SII para verificar esta boleta.", true, { verificacion: true }));
+      // No se pudo leer: NUNCA "no salió" (adversarial #2/#4). A medias, visible.
+      state.verifyTerminal = true;
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "No pude leer el Resumen de ventas del SII para verificar esta boleta. Quedó a medias: confirma su folio en Emitir → A medias.", true, { verificacion: true }));
       return;
     }
     const result = captureResponse.result;
-    if (hasStrongFolioEvidence(result)) {
+    if (hasStrongFolioEvidence(result) || result?.folio) {
+      // Fuerte → se registra (guards del server). Ambiguo → handleCapturedResult deja
+      // el rastro (captureDebug → sii_local_resultados) + result_needs_review, así
+      // "Recuperar el folio" y la pestaña A medias tienen con qué trabajar (adv. #5).
+      state.verifyTerminal = true;
       handleCapturedResult(state, result);
       return;
     }
-    if (result?.folio) {
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", `Verifiqué en el SII: hay una boleta que podría ser esta (folio ${result.folio}), pero no es la única del mismo monto. Quedó a medias para que confirmes el folio.`, true));
+    if (result?.reportes_tabla_leida === true) {
+      // Tabla leída y 0 candidatas: la fila puede estar por aparecer (rezago del SII).
+      // Hasta 2 recargas separadas ~10 s antes de concluir (adversarial #3).
+      state.verifyReloads = (state.verifyReloads || 0) + 1;
+      if (state.verifyReloads <= 2) {
+        state.verifyEnCurso = false;
+        sendToApp(state, statusMessage(state.jobId, "capturing_result", `Aún no aparece en el Resumen de ventas; vuelvo a mirar (${state.verifyReloads}/2).`, true));
+        setTimeout(() => { if (activeJobs.get(state.jobId) === state && !state.verifyTerminal) chrome.tabs.reload(state.workerTabId).catch(() => undefined); }, 10000);
+        return;
+      }
+      state.verifyTerminal = true;
+      sendToApp(state, statusMessage(state.jobId, "error", "Verifiqué el Resumen de ventas del SII (3 lecturas): esta boleta no salió. Se puede reintentar.", true, { verificacion: true, verificado_sin_folio: true }));
       return;
     }
-    sendToApp(state, statusMessage(state.jobId, "error", "Verifiqué en el Resumen de ventas del SII: esta boleta no salió. Se puede reintentar.", true, { verificacion: true }));
+    // Sin tabla legible: no verificable → a medias.
+    state.verifyTerminal = true;
+    sendToApp(state, statusMessage(state.jobId, "result_needs_review", "El Resumen de ventas del SII no se dejó leer. Esta boleta quedó a medias: confirma su folio en Emitir → A medias.", true, { verificacion: true }));
   });
 }
 

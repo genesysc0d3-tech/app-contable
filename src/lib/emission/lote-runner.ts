@@ -31,10 +31,10 @@ export type DesenlaceItem =
   // puede saltar y seguir. (La extensión nunca reporta error/cancelado post-emit.)
   | {
       estado: "fallida"; motivo: string;
-      /** El worker llegó al modal de emisión antes de fallar (pudo haber apretado
-       *  EMITIR sin alcanzar a avisar): el driver VERIFICA en /reportes antes de dar
-       *  la boleta por no emitida (cuadre por evento, 2026-09-26). */
-      llegoAlModal?: boolean;
+      /** Emisión INCIERTA: el canal con el worker murió sin respuesta después de
+       *  mandarle la emisión (pudo apretar EMITIR y no alcanzar a avisar). El driver
+       *  VERIFICA en /reportes antes de dar la boleta por no emitida (2026-09-26). */
+      emisionIncierta?: boolean;
     }
   // revisar = POST-emit incierto: se cliqueó EMITIR pero no se pudo capturar/guardar
   // el folio (puede ser un folio REAL con la ventana abierta). FRENA el lote en seco:

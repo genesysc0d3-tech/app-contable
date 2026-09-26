@@ -69,7 +69,8 @@ export interface BoletaJob {
   libreto: BoletaLibreto;
   learn_only: false;
   auto_emit: true;
-  allow_final_emit: true;
+  /** false solo en verify_only (jamás emite). */
+  allow_final_emit: boolean;
   payment_method?: string;
   confirmation_required: false;
   logout_after: boolean;
@@ -123,7 +124,7 @@ export function buildBoletaJob(input: BoletaJobInput): BoletaJob {
   if (input.verifyOnly && input.verifyWindow) {
     job.verify_only = true;
     job.verify_window = { desde_ms: Math.round(input.verifyWindow.desde_ms), hasta_ms: Math.round(input.verifyWindow.hasta_ms) };
-    job.allow_final_emit = false as unknown as true; // jamás emite: solo lee /reportes
+    job.allow_final_emit = false; // jamás emite: solo lee /reportes
   }
   return job;
 }

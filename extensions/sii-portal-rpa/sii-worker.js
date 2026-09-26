@@ -1486,6 +1486,9 @@
       // 0.2.8 (adversarial #1): en /reportes los <a> son de OTRAS filas (PDF de otra boleta);
       // nunca viajan como respaldo del folio calzado.
       artifact_links: enReportes ? [] : links,
+      // Verificación: la app distingue "leí la tabla y no está" de "no pude leer".
+      reportes_tabla_leida: Boolean(tablaReportes),
+      reportes_calce: calce ? { source: calce.evidence?.source ?? null, candidatas: calce.evidence?.candidatas ?? null } : null,
       page: {
         url: location.href,
         title: document.title,
