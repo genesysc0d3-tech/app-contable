@@ -1,4 +1,5 @@
 import type { AdapterConfig, Row } from "./types";
+import { encabezadoBancario, normalizarTitulo, RE_ENTRADA, RE_SALDO, RE_SALIDA } from "./encabezados";
 
 /**
  * Legacy named-header detector: inspects the first ~50 rows looking for a
@@ -22,6 +23,10 @@ export function detectPlantillaBoletas(rows: Row[]): AdapterConfig | null {
     const glosaIdx = norm.findIndex((c) => c === "glosa");
     const montoIdx = norm.findIndex((c) => c === "monto");
     if (fechaIdx < 0 || glosaIdx < 0 || montoIdx < 0) continue;
+    // Un banco que exporta Fecha|Glosa|Monto|Saldo (o con Cargo/Abono) NO es
+    // nuestra plantilla: la plantilla marca TODAS las filas como entrada, y en
+    // una cartola eso convierte los egresos en boletas (revisión 2026-09-26).
+    if (encabezadoBancario(r)) continue;
     const tipoIdx = norm.findIndex((c) => c.startsWith("tipo"));
     const rutRecIdx = norm.findIndex((c) => c.startsWith("rut receptor"));
     const nomRecIdx = norm.findIndex((c) => c.startsWith("nombre receptor"));
@@ -64,7 +69,7 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
     const glosaIdx = norm.findIndex((c) => c === "glosa");
     const montoIdx = norm.findIndex((c) => c === "monto");
 
-    if (fechaIdx >= 0 && glosaIdx >= 0 && montoIdx >= 0) {
+    if (fechaIdx >= 0 && glosaIdx >= 0 && montoIdx >= 0 && !encabezadoBancario(r)) {
       // Columnas OPCIONALES de la plantilla extendida (2026-09-02): el cliente
       // puede clasificar tipo/receptor/medio de pago fila a fila. Se detectan
       // por prefijo del header ("Tipo (opcional)", "RUT receptor (opcional…)").
@@ -95,18 +100,18 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
 
     // Bank cartola format: Fecha + Descripción + Cargo + Abono
     const descIdx = norm.findIndex((c) => c.includes("descripci"));
-    const cargoIdx = norm.findIndex(
-      (c) => c.includes("cargo") || c.includes("cheques") || c.includes("débito") || c.includes("debito") || c.includes("egreso")
-    );
-    const abonoIdx = norm.findIndex(
-      (c) => c.includes("abono") || c.includes("depósit") || c.includes("deposit") || c.includes("crédito") || c.includes("credito") || c.includes("ingreso")
-    );
-    const ndocIdx = norm.findIndex(
-      (c) => c.includes("documento") || c === "n° documento" || c === "n documento"
-    );
-    const saldoIdx = norm.findIndex((c) => c.includes("saldo"));
+    // Vocabulario único (encabezados.ts). Un título que calza con salida Y entrada
+    // ("CARGO/ABONO" de Santander) es una columna de TIPO, no de monto: con
+    // includes() calzaba como cargo y abono a la vez, en el mismo índice.
+    const t = r.map(normalizarTitulo);
+    const esSalida = (c: string) => RE_SALIDA.test(c) && !RE_ENTRADA.test(c);
+    const esEntrada = (c: string) => RE_ENTRADA.test(c) && !RE_SALIDA.test(c);
+    const cargoIdx = t.findIndex(esSalida);
+    const abonoIdx = t.findIndex(esEntrada);
+    const ndocIdx = t.findIndex((c) => /^(n[°ºo.]?\s*)?(de\s+)?documento\b|\bn[°ºo.]?\s*(de\s+)?doc(umento)?\b/.test(c) && !/\btipo\b/.test(c));
+    const saldoIdx = t.findIndex((c) => RE_SALDO.test(c) && !/\b(inicial|anterior|final)\b/.test(c));
 
-    if (fechaIdx >= 0 && descIdx >= 0 && cargoIdx >= 0 && abonoIdx >= 0) {
+    if (fechaIdx >= 0 && descIdx >= 0 && cargoIdx >= 0 && abonoIdx >= 0 && cargoIdx !== abonoIdx) {
       return {
         header_row: i,
         skip_rows_before_data: i + 1,

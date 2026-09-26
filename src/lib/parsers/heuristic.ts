@@ -1,6 +1,7 @@
 import type { AdapterConfig, Row } from "./types";
 import { parseChileanNumber } from "./apply";
 import { cuadreSaldo } from "./saldo-cuadre";
+import { encabezadoConSaldo, encabezadoConSalidas, normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
 
 /**
  * Universal heuristic detector: finds the transaction block by STRUCTURE,
@@ -90,6 +91,14 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
 
   // Last resort: transactions_log layout (1 monto col, no tipo flag, no
   // saldo). Common in manual sales spreadsheets and exchange P2P exports.
+  // "Todo entrada" solo si ningún título habla de plata que sale NI de saldo:
+  // una cartola con cargos leída así convierte egresos en boletas, y con saldo
+  // la heurística llegó a tomar el SALDO como monto (planilla "BOLETAS BIT EM",
+  // 2026-09-11). Las cartolas editadas con SOLO abonos (BCI "Abono EXENTAS",
+  // BICE "ABONOS", BancoEstado "Depósitos / Abonos") no traen ni una ni otro y
+  // siguen pasando. Si no, cae a la IA con alarma.
+  const titulos = txStart > 0 ? rows[txStart - 1] : undefined;
+  if (encabezadoConSalidas(titulos) || encabezadoConSaldo(titulos)) return null;
   const txLogCfg = inferTransactionsLogLayout(sample);
   if (txLogCfg) {
     const firstFecha = String(sample[0][txLogCfg.fecha] ?? "");
@@ -557,18 +566,18 @@ function orientarPorSaldo(
   return null;
 }
 
-/** Orientación por nombre de encabezado: "Ingreso (+)" / "Abono" / "Haber" vs "Egreso (-)" / "Cargo" / "Debe". */
+/** Orientación por nombre de encabezado (vocabulario único de encabezados.ts). */
 function orientarPorEncabezado(
   header: Row | undefined,
   izq: number,
   der: number,
 ): { cargo: number; abono: number } | null {
-  const ES_ABONO = /abono|ingreso|haber|dep[oó]sito|cr[eé]dito|\(\s*\+\s*\)/i;
-  const ES_CARGO = /cargo|egreso|debe|giro|d[eé]bito|\(\s*-\s*\)/i;
-  const hi = celdaEncabezado(header, izq);
-  const hd = celdaEncabezado(header, der);
-  if (ES_ABONO.test(hi) && ES_CARGO.test(hd) && !ES_CARGO.test(hi) && !ES_ABONO.test(hd)) return { cargo: der, abono: izq };
-  if (ES_CARGO.test(hi) && ES_ABONO.test(hd) && !ES_ABONO.test(hi) && !ES_CARGO.test(hd)) return { cargo: izq, abono: der };
+  const hi = normalizarTitulo(celdaEncabezado(header, izq));
+  const hd = normalizarTitulo(celdaEncabezado(header, der));
+  const sal = (t: string) => RE_SALIDA.test(t) && !RE_ENTRADA.test(t);
+  const ent = (t: string) => RE_ENTRADA.test(t) && !RE_SALIDA.test(t);
+  if (ent(hi) && sal(hd)) return { cargo: der, abono: izq };
+  if (sal(hi) && ent(hd)) return { cargo: izq, abono: der };
   return null;
 }
 

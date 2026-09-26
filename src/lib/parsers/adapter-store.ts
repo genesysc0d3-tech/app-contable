@@ -70,10 +70,13 @@ export async function getAdapterByFingerprint(
   try {
     const sb = getServiceClient();
     if (!sb) return null;
+    // Solo globales + los propios de ESTA empresa: los formatos privados de otras
+    // empresas nunca se leen (ni pueden tapar al global con el limit).
     const { data, error } = await sb
       .from("parser_adapters")
       .select("*")
       .eq("fingerprint", fingerprint)
+      .or(empresaId ? `creado_por_empresa_id.is.null,creado_por_empresa_id.eq.${empresaId}` : "creado_por_empresa_id.is.null")
       .order("confianza", { ascending: false })
       .limit(20);
     if (error || !data?.length) return null;
@@ -99,18 +102,20 @@ export async function upsertManualAdapter(args: {
   try {
     const sb = getServiceClient();
     if (!sb) return null;
+    // Se busca SOLO el adapter PROPIO de la empresa. Un global u otro ajeno jamás
+    // se sobrescribe (anti-poison, auditoría #2/#12), pero tampoco BLOQUEA: antes
+    // se devolvía el global y la corrección manual no se guardaba, así que una
+    // empresa no podía arreglar un formato global mal leído (2026-09-26). El
+    // propio gana en selectAdapterForEmpresa.
     const existing = await sb
       .from("parser_adapters")
       .select("id, creado_por_empresa_id")
       .eq("fingerprint", args.fingerprint)
+      .eq("creado_por_empresa_id", args.empresaId)
+      .limit(1)
       .maybeSingle();
 
     if (existing.data?.id) {
-      // Un adapter de OTRA empresa (o heurístico/global, dueño null) NO se sobrescribe
-      // — se conserva el compartido. Solo el dueño puede editar el suyo (auditoría #2/#12).
-      if (existing.data.creado_por_empresa_id !== args.empresaId) {
-        return existing.data.id as string;
-      }
       await sb
         .from("parser_adapters")
         .update({
@@ -154,6 +159,8 @@ export async function saveAdapter(args: {
   tipo_doc?: string;
   source: AdapterRow["source"];
   config: AdapterConfig;
+  /** Dueño. null = global (solo plantilla propia o formato verificado por saldo). */
+  empresaId?: string | null;
 }): Promise<string | null> {
   try {
     const sb = getServiceClient();
@@ -161,6 +168,7 @@ export async function saveAdapter(args: {
     const { data, error } = await sb
       .from("parser_adapters")
       .insert({
+        creado_por_empresa_id: args.empresaId ?? null,
         fingerprint: args.fingerprint,
         nombre: args.nombre ?? null,
         tipo_doc: args.tipo_doc ?? "cartola_bancaria",
@@ -175,7 +183,7 @@ export async function saveAdapter(args: {
       .single();
     if (error) {
       // Unique conflict: another worker just created it — fetch existing id
-      const existing = await getAdapterByFingerprint(args.fingerprint);
+      const existing = await getAdapterByFingerprint(args.fingerprint, args.empresaId ?? undefined);
       return existing?.id ?? null;
     }
     return data?.id ?? null;
