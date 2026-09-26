@@ -119,4 +119,4 @@ curl -sS "$BASE/chromewebstore/v1.1/items/$EXTENSION_ID?projection=DRAFT" \
   -H "Authorization: Bearer $ACCESS_TOKEN" -H "$HDR_VER" | jq -c 'del(.publicKey)' 2>/dev/null || true
 
 echo "✅ v$VERSION enviada. Google la revisa y la publica sola (no listada); los usuarios se auto-actualizan."
-echo "   Recuerda commitear el bump (manifests + core.js + extension.ts + public/descargas/*.zip)."
+echo "   Recuerda: commitear el bump (manifests + core.js + extension.ts) y, cuando Google la apruebe, la entrada en EXTENSION_RELEASES.json."

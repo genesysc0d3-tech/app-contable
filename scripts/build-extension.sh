@@ -48,11 +48,8 @@ rm -f "$ZIP"
 ( cd "$STAGE" && zip -rq "$ZIP" . -x '*.DS_Store' -x 'node_modules/*' -x '*/node_modules/*' )
 
 # Copia servible por la app (público, CDN de Vercel) → botón "Descargar" en /instalar-extension.
-mkdir -p "$ROOT/public/descargas"
-cp "$ZIP" "$ROOT/public/descargas/massdte-motor-local.zip"
 
 echo "✅ Paquete listo: $ZIP"
-echo "   Copia pública: public/descargas/massdte-motor-local.zip"
 echo "   Versión: $VERSION"
 echo "   Súbelo en https://chrome.google.com/webstore/devconsole (visibilidad: No listada)."
 echo "   Después setea NEXT_PUBLIC_EXTENSION_STORE_URL en Vercel con la URL de la ficha."

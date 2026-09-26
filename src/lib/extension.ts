@@ -13,8 +13,8 @@ export const EXTENSION_STORE_URL = (process.env.NEXT_PUBLIC_EXTENSION_STORE_URL 
 export const EXTENSION_NOMBRE = "MassDTE — Motor Local";
 
 /**
- * Última versión del paquete que sirve `/descargas/massdte-motor-local.zip` (la que
- * "funciona"). MANTENER EN SYNC con `extensions/sii-portal-rpa/manifest.prod.json` y
+ * Última versión publicada en la Chrome Web Store (la que "funciona"; la extensión
+ * se instala SOLO desde la tienda). MANTENER EN SYNC con `extensions/sii-portal-rpa/manifest.prod.json` y
  * `modules/core.js` (el test lo verifica). Se muestra en la UI de instalación para que
  * el usuario sepa cuál es la vigente y pueda comparar con la que tiene detectada.
  */
@@ -153,10 +153,4 @@ export function mensajeExtensionDesactualizada(version: string | null | undefine
   return `${detectada} y esta app necesita la ${EXTENSION_VERSION_MINIMA} o superior. Chrome la actualiza solo dentro de unas horas — o al tiro: abre chrome://extensions y aprieta «Actualizar».`;
 }
 
-/** ZIP público usado por la instalación manual durante la beta. */
-export const EXTENSION_ZIP_URL = "/descargas/massdte-motor-local.zip";
-export const EXTENSION_ZIP_FILENAME = "massdte-motor-local.zip";
-export const EXTENSION_ZIP_DOWNLOAD_PROPS = {
-  href: EXTENSION_ZIP_URL,
-  download: EXTENSION_ZIP_FILENAME,
-} as const;
+
