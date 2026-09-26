@@ -744,6 +744,14 @@ describe("cierre del ciclo de facturas: snapshot antes de Validar", () => {
     }
   }, 30000);
 
+  it("sin botón Firmar: error pre-firma, SIN armar el candado (no hubo click ni folio)", async () => {
+    const sinBoton = form("PreViewDTE", [field("EFXP_MNT_TOTAL", { value: "100000" }), field("PTDC_CODIGO", { value: "34" })]);
+    const { res } = await drive(jobFactura({ allow_final_emit: true }), [sinBoton], { bodyText: "Documento NO válido Firmar" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("SIN_BOTON_FIRMAR");
+    expect(outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED")).toBeUndefined();
+  }, 30000);
+
   it("un job vencido no llega a Firmar", async () => {
     const { res } = await drive(jobFactura({ allow_final_emit: true, expires_at: "2020-01-01T00:00:00Z" }), [previewPage()], { bodyText: "Documento NO válido Firmar" });
     expect(res.ok).toBe(false);
@@ -789,7 +797,9 @@ describe("cierre del ciclo de facturas: correcciones del adversario", () => {
 
   it("#8 tabla de resultados ANIDADA en una tabla de layout → igual se lee", async () => {
     const interna = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
-    const anidada = interna.replace(/<table class="tabla">/, '<table class="layout"><tr><td><table class="tabla">').replace(/<\/table><\/body>/, "</table></td></tr></table></body>");
+    // Celda extra ANTES de la tabla interna: con el parser viejo los índices de columna
+    // quedaban corridos en uno y el calce fallaba.
+    const anidada = interna.replace(/<table class="tabla">/, '<table class="layout"><tr><td>menú lateral</td><td><table class="tabla">').replace(/<\/table><\/body>/, "</table></td></tr></table></body>");
     const res = await buscarFolio(jobEmitida(), [anidada], []);
     expect(res.result.folio).toBe(971);
     expect(res.result.folio_confidence).toBe("high");

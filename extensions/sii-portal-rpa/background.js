@@ -550,7 +550,14 @@ function handleFactStepPush(state, res) {
 function rescatarFolioFactura(state, motivo, { soloSugerir = false, captura = null } = {}) {
   // En vuelo: otro disparo (onUpdated extra, rebote repetido) NO manda un terminal
   // que frene el lote antes de tiempo (adversarial #2).
-  if (state.factRescateEnVuelo) return;
+  if (state.factRescateEnVuelo) {
+    // 2ª pasada #2: si lo que está en vuelo era solo-sugerencia y ahora llega algo que
+    // SÍ puede cerrar (la página de éxito sin folio legible), se encola: se corre al
+    // terminar la búsqueda en vuelo si esa no fue concluyente. La captura no se pierde.
+    if (!soloSugerir && state.factRescateSoloSugerir) state.factRescatePendiente = { motivo, captura };
+    if (captura && !state.factRescateCaptura) state.factRescateCaptura = captura;
+    return;
+  }
   // Una búsqueda "que puede cerrar" por job; las de solo sugerencia (rebote, sin clave)
   // no la gastan (#14), con tope total de 3.
   state.factRescates = (state.factRescates || 0) + 1;
@@ -560,8 +567,9 @@ function rescatarFolioFactura(state, motivo, { soloSugerir = false, captura = nu
   }
   if (!soloSugerir) state.factRescateHecho = true;
   state.factRescateEnVuelo = true;
+  state.factRescateSoloSugerir = soloSugerir;
   state.factRescateMotivo = motivo;
-  state.factRescateCaptura = captura; // lo que dejó la página post-firma (PDF, excerpt)
+  state.factRescateCaptura = captura ?? state.factRescateCaptura ?? null; // página post-firma (PDF, excerpt)
   sendToApp(state, statusMessage(state.jobId, "capturing_result", "Buscando la factura en Documentos emitidos del SII…", true));
   if (state.factRescateTimer) clearTimeout(state.factRescateTimer);
   // Si el worker no contesta (página muerta, sesión caída), a medias con el motivo.
@@ -587,7 +595,21 @@ function handleFolioBuscadoFactura(state, res) {
   if (state.factRescateTimer) { clearTimeout(state.factRescateTimer); state.factRescateTimer = null; }
   const motivo = state.factRescateMotivo || "No pude confirmar la factura. No la re-emitas: verifica el folio en el portal.";
   const captura = state.factRescateCaptura || null;
-  const result = res?.result ?? null;
+  let result = res?.result ?? null;
+  // 2ª pasada #3: si la página post-firma leyó un folio (aunque débil) y la búsqueda
+  // devuelve OTRO, no se confía en ninguno: medium, y sin pegarle el PDF de la página.
+  const contradice = Boolean(captura?.folio && result?.folio && Number(captura.folio) !== Number(result.folio));
+  if (contradice) {
+    result = { ...result, folio_confidence: "medium", folio_evidence: { ...(result.folio_evidence || {}), source: "emitidos_ambiguo", motivo: "contradice_pagina", folio_pagina: captura.folio } };
+  }
+  // Búsqueda en vuelo no concluyente + quedó encolada una que SÍ puede cerrar → correrla.
+  const pendiente = state.factRescatePendiente;
+  if (pendiente && !(result && hasStrongFolioEvidence(result))) {
+    state.factRescatePendiente = null;
+    rescatarFolioFactura(state, pendiente.motivo, { captura: pendiente.captura });
+    return;
+  }
+  state.factRescatePendiente = null;
   if (result && (hasStrongFolioEvidence(result) || result.folio)) {
     // Fuerte → se registra (guards del server). Ambiguo → a medias CON rastro. En ambos
     // casos se conserva el PDF / marcas de la página post-firma, que son de ESTA
@@ -595,7 +617,7 @@ function handleFolioBuscadoFactura(state, res) {
     state.awaitingResult = false;
     handleCapturedResult(state, {
       ...result,
-      pdf: result.pdf ?? captura?.pdf ?? null,
+      pdf: result.pdf ?? (contradice ? null : captura?.pdf) ?? null,
       ...(captura?.glosa_omitida ? { glosa_omitida: true } : {}),
     });
     return;
@@ -619,7 +641,7 @@ async function handleFactDriveResponse(state, res) {
       // dejarla a medias, la app la busca sola en Documentos emitidos.
       // Rebote a una pantalla previa / sin campo o botón de la clave: la factura puede
       // NO existir → la búsqueda solo sugiere, nunca cierra sola (#4/#14).
-      const soloSugerir = /POST_FIRMA_REBOTO|FIRMA_SIN_CAMPO_CLAVE|FIRMA_SIN_BOTON/.test(detalle);
+      const soloSugerir = /POST_FIRMA_REBOTO|FIRMA_SIN_CAMPO_CLAVE|FIRMA_SIN_BOTON|FIRMA_CLICK_FALLIDO|SIN_BOTON_FIRMAR/.test(detalle);
       rescatarFolioFactura(state, `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`, { soloSugerir });
       return;
     }

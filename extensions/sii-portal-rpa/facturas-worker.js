@@ -741,7 +741,10 @@
   // la cabecera confirma la empresa del job (#3); si no, null (nunca cierra sola).
   async function tomarSnapshotEmitidos(job) {
     const consulta = await consultarEmitidos(job);
-    if (!consulta || !consulta.empresaRut || consulta.empresaRut !== normalizeRutValue(job?.emisor_rut)) return null;
+    if (!consulta || !consulta.empresaRut || consulta.empresaRut !== normalizeRutValue(job?.emisor_rut)) {
+      try { if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(`${SNAP_KEY}:${job?.job_id || ""}`); } catch { /* nada */ }
+      return null;
+    }
     const folios = consulta.filas.filter((f) => esTipoDeFactura(f.documento, job?.tipo_dte)).map((f) => f.folio);
     guardarSnapshot(job.job_id, folios);
     return folios;
@@ -823,6 +826,12 @@
       return { ok: false, error: "JOB_EXPIRED", detalle: "El trabajo venció antes de firmar. No se emitió nada." };
     }
 
+    // El botón se busca ANTES de armar el candado: sin botón no hubo click ni folio,
+    // es un error pre-firma común (adversarial 2ª pasada #1: con el candado armado,
+    // SIN_BOTON_FIRMAR disparaba una búsqueda que podía "cerrar" con una factura ajena).
+    const btnFirmar = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
+    if (!btnFirmar) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar", { code: "SIN_BOTON_FIRMAR", page_kind: "preview", paso: "preview:firmar" }) };
+
     // CANDADO ANTES DE FIRMAR: desde este click puede quemarse folio. El
     // background arma finalEmitClicked al instante; ninguna ruta de error
     // posterior re-emite ni cierra el job.
@@ -835,9 +844,10 @@
       } catch { resolve(); }
     });
 
-    const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
-    // btnSign no encontrado = ANTES de firmar (no hay folio en riesgo) → señal.
-    if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar", { code: "SIN_BOTON_FIRMAR", page_kind: "preview", paso: "preview:firmar" }) };
+    const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar) ?? btnFirmar;
+    // El click falló con el candado ya armado: puede o no haber salido → a medias,
+    // y la búsqueda solo sugiere (el background lo trata como FIRMA_CLICK_FALLIDO).
+    if (!clickEl(btn)) return { ok: false, error: "FIRMA_CLICK_FALLIDO", detalle: "No pude hacer click en Firmar." };
     return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 
