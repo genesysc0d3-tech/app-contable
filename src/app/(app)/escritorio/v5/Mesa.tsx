@@ -74,7 +74,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
           compactEmpty("subidos")
         )
       }
-      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos }} />}
+      emitirContent={<EmitirTabContent empresaId={empresaId} mesa={mesa.mesaActiva} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} initial={{ ok: true, items: mesa.pendientes.items, totales: mesa.pendientes.totales, aprobadas_otros_tipos: mesa.pendientes.aprobadas_otros_tipos, a_medias: mesa.pendientes.a_medias }} />}
       boletasContent={
         mesa.boletasCount === 0 ? (
           compactEmpty("boletas", mesa.mesaActiva === "factura")
