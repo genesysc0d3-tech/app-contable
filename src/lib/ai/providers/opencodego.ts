@@ -89,23 +89,53 @@ interface OpenCodeGoResponse {
   model: string;
 }
 
+/**
+ * Configuración de un endpoint compatible con la API de OpenAI (chat/completions
+ * con streaming). OpenCode Go y Fireworks hablan el mismo protocolo: cambia la
+ * URL, la key, el modelo, el precio y algún parámetro propio (reasoning_effort).
+ */
+export interface ConfigEndpointIA {
+  /** Nombre del procesador en la allowlist de egress (Ley 21.719). */
+  proveedor: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  costoInputPorMillon: number;
+  costoOutputPorMillon: number;
+  /** Parámetros extra del body (p.ej. reasoning_effort en Fireworks). */
+  extraBody?: Record<string, unknown>;
+}
+
 export class OpenCodeGoProvider implements AIProvider {
-  private apiKey: string;
-  private model: string;
+  protected apiKey: string;
+  protected model: string;
+  protected cfg: ConfigEndpointIA;
   // Session id ESTABLE por instancia: todos los chunks de una misma clasificación
   // comparten id → OpenCode Go cachea el system prompt (más barato y rápido) y
   // enruta consistente. Exigido por el gateway desde 2026-09-11 (ver opencode-stream).
   private sessionId: string;
 
-  constructor() {
-    const apiKey = process.env.OPENCODE_GO_API_KEY;
-    if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
-    this.apiKey = apiKey;
-    this.model = requirePaidModel(process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash", "opencodego");
+  constructor(cfg?: ConfigEndpointIA) {
+    if (cfg) {
+      this.cfg = cfg;
+    } else {
+      const apiKey = process.env.OPENCODE_GO_API_KEY;
+      if (!apiKey) throw new Error("OPENCODE_GO_API_KEY no configurada");
+      this.cfg = {
+        proveedor: "opencodego",
+        baseUrl: BASE_URL,
+        apiKey,
+        model: requirePaidModel(process.env.OPENCODE_GO_MODEL || "deepseek-v4-flash", "opencodego"),
+        costoInputPorMillon: COST_PER_MILLION_INPUT,
+        costoOutputPorMillon: COST_PER_MILLION_OUTPUT,
+      };
+    }
+    this.apiKey = this.cfg.apiKey;
+    this.model = this.cfg.model;
     this.sessionId = randomUUID();
     // Gate fail-closed (Ley 21.719): solo modelos en la allowlist de encargados
     // con retención cero pueden recibir datos personales.
-    assertApprovedDataProcessor("opencodego", this.model);
+    assertApprovedDataProcessor(this.cfg.proveedor, this.model);
   }
 
   private async fetchChat(
@@ -115,7 +145,7 @@ export class OpenCodeGoProvider implements AIProvider {
     // los ~80s (regresión 2026-08-19) y nuestros lotes generan por minutos.
     // Detalle completo en opencode-stream.ts. El timeout es por inactividad.
     const data = await fetchOpenCodeStreaming({
-      url: `${BASE_URL}/chat/completions`,
+      url: `${this.cfg.baseUrl}/chat/completions`,
       apiKey: this.apiKey,
       extraHeaders: { "x-opencode-session": this.sessionId },
       body: {
@@ -131,6 +161,7 @@ export class OpenCodeGoProvider implements AIProvider {
         // cuenta contra el output. Sin techo alto, el JSON de respuesta se trunca y el
         // parseo falla. Damos aire para razonamiento + respuesta.
         max_tokens: 16000,
+        ...(this.cfg.extraBody ?? {}),
       },
     });
 
@@ -234,8 +265,8 @@ export class OpenCodeGoProvider implements AIProvider {
 
   getCost(tokensInput: number, tokensOutput: number): number {
     return (
-      (tokensInput / 1_000_000) * COST_PER_MILLION_INPUT +
-      (tokensOutput / 1_000_000) * COST_PER_MILLION_OUTPUT
+      (tokensInput / 1_000_000) * this.cfg.costoInputPorMillon +
+      (tokensOutput / 1_000_000) * this.cfg.costoOutputPorMillon
     );
   }
 }
