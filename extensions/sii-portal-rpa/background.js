@@ -1024,7 +1024,9 @@ function scanWorkerPage(state, attempt = 1) {
         job_id: state.jobId,
         job: state.job,
       }), (emitResponse) => {
-        if (chrome.runtime.lastError || !emitResponse?.ok) {
+        // M2: capturado en la PRIMERA línea (lastError solo vale síncrono en el callback).
+        const puertoMuerto = Boolean(chrome.runtime.lastError);
+        if (puertoMuerto || !emitResponse?.ok) {
           const errorMessage = emitResponse?.error || chrome.runtime.lastError?.message || "No se pudo emitir en e-Boleta.";
           const preEmit = !state.finalEmitClicked && !emitResponse?.final_emit_clicked;
           const esCambioSii = emitResponse?.posible_cambio_sii === true;
@@ -1076,7 +1078,7 @@ function scanWorkerPage(state, attempt = 1) {
               // de mandar FILL_AND_EMIT (pudo apretar EMITIR y no alcanzar a avisar). Un
               // error que el worker LANZÓ (emisor cambió, modal cerrado, pad) es pre-emit
               // seguro y NO se verifica (adversarial #1).
-              emision_incierta: state.submitted === true && Boolean(chrome.runtime.lastError) && !emitResponse,
+              emision_incierta: state.submitted === true && puertoMuerto && !emitResponse,
             },
           ));
           return;
@@ -1479,8 +1481,9 @@ function verificarEnReportes(state) {
       return;
     }
     state.verifyTerminal = true;
-    if (result?.reportes_tabla_leida === true) {
-      // Tabla leída (con refresco a mitad de las lecturas) y 0 candidatas: no salió.
+    if (result?.reportes_tabla_completa === true) {
+      // Tabla COMPLETA (pie "1-N de N", sin "Cargando…"), con 2 refrescos, y 0
+      // candidatas: no salió. Incompleta/cargando → a medias abajo (B1).
       sendToApp(state, statusMessage(state.jobId, "error", "Verifiqué el Resumen de ventas del SII: esta boleta no salió. Se puede reintentar.", true, { verificacion: true, verificado_sin_folio: true }));
       return;
     }

@@ -165,10 +165,18 @@ describe("librero · verificación por evento de boletas (verificarEnReportes)",
     expect(terminales()).toHaveLength(0);
   });
 
-  it("tabla leída y 0 candidatas → 'no salió' con verificado_sin_folio (la app la deja re-emitible)", () => {
+  it("tabla COMPLETA y 0 candidatas → 'no salió' con verificado_sin_folio (la app la deja re-emitible)", () => {
     fx.verificarEnReportes(estadoV());
-    responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true } });
+    responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true, reportes_tabla_completa: true } });
     expect(terminales().at(-1)).toMatchObject({ status: "error", verificado_sin_folio: true });
+  });
+
+  it("B1: tabla leída pero INCOMPLETA (paginada / cargando) y 0 candidatas → a medias, nunca 'no salió'", () => {
+    fx.verificarEnReportes(estadoV());
+    responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true, reportes_tabla_completa: false } });
+    const t = terminales().at(-1);
+    expect(t.status).toBe("result_needs_review");
+    expect(t.verificado_sin_folio).toBeUndefined();
   });
 
   it("sin tabla legible → a medias (NUNCA 'no salió' sin haber leído)", () => {
@@ -188,7 +196,7 @@ describe("librero · verificación por evento de boletas (verificarEnReportes)",
   it("después de un terminal, un nuevo disparo no habla por el job", () => {
     const s = estadoV();
     fx.verificarEnReportes(s);
-    responder({ ok: true, result: { folio: null, reportes_tabla_leida: true } });
+    responder({ ok: true, result: { folio: null, reportes_tabla_leida: true, reportes_tabla_completa: true } });
     const n = tabsMsgs.length;
     fx.verificarEnReportes(s);
     expect(tabsMsgs.length).toBe(n);

@@ -404,8 +404,9 @@ async function calceReportesVetado(
   args: { empresaId: string; tipoDte: number; montoTotal: number; fechaEmision: string; jobId: string | null },
 ): Promise<boolean> {
   try {
-    const desde = `${args.fechaEmision}T00:00:00-03:00`;
-    const { data: lapidas } = await sb
+    // -04:00 (invierno) cubre también el horario de verano: una hora de más solo sobre-veta.
+    const desde = `${args.fechaEmision}T00:00:00-04:00`;
+    const { data: lapidas, error: errLapidas } = await sb
       .from("emision_jobs")
       .select("job_id, propuesta_id")
       .eq("empresa_id", args.empresaId)
@@ -413,12 +414,15 @@ async function calceReportesVetado(
       .gte("created_at", desde)
       .not("propuesta_id", "is", null)
       .limit(50);
+    // M1: Supabase devuelve {error} sin lanzar → fail-closed explícito.
+    if (errLapidas) return true;
     const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id);
     if (otras.length === 0) return false;
-    const { data: props } = await sb
+    const { data: props, error: errProps } = await sb
       .from("propuestas_ia")
       .select("id, total, tipo_dte")
       .in("id", otras.map((j) => j.propuesta_id as string));
+    if (errProps) return true;
     return (props ?? []).some((p) => Math.round(Number(p.total)) === args.montoTotal && (p.tipo_dte == null || p.tipo_dte === args.tipoDte));
   } catch {
     return true;

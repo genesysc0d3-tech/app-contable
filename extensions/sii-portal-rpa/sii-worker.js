@@ -1387,7 +1387,19 @@
           tipo: idx.tipo >= 0 ? normalizeText(cells[idx.tipo]) : null,
         });
       }
-      return { filas, tieneHora: idx.hora >= 0 || filas.some((f) => f.hora) };
+      // COMPLETITUD (auditoría pre-publicación B1): la tabla está paginada y la boleta
+      // más nueva va AL FINAL; "no está" solo vale si se vio el total. Pie real:
+      // ".v-data-footer__pagination" = "1-N de T" (o "–" sin datos). Una fila
+      // "Cargando…" o sin pie legible = incompleta.
+      const textoTabla = normalizeText(table.innerText || table.textContent || "");
+      const cargando = /CARGANDO/.test(textoTabla);
+      const sinDatos = /NO HEMOS ENCONTRADO DATOS|NO HAY DATOS/.test(textoTabla);
+      const pie = document.querySelector(".v-data-footer__pagination");
+      const pieTxt = String(pie ? (pie.innerText || pie.textContent || "") : "");
+      const mPie = pieTxt.match(/(\d+)\s*[-–]\s*(\d+)\s*de\s*(\d+)/i);
+      const total = mPie ? Number(mPie[3]) : (sinDatos && pie ? 0 : null);
+      const completa = !cargando && total != null && filas.length === total;
+      return { filas, tieneHora: idx.hora >= 0 || filas.some((f) => f.hora), completa, total };
     }
     return null;
   }
@@ -1397,7 +1409,10 @@
   // "high". Sin ancla "último folio + 1": en un lote con montos iguales le pondría a la
   // boleta B el folio de la A que quedó a medias (adversarial 0.2.8, F2).
   function calzarFolioEnReportes(tabla, job, ctx) {
-    if (!tabla || !Array.isArray(tabla.filas) || tabla.filas.length === 0) return null;
+    if (!tabla || !Array.isArray(tabla.filas)) return null;
+    // Tabla vacía o cargando: sin candidatas (el llamador decide si es "no salió" según
+    // la completitud; nunca se sugiere una fila).
+    if (tabla.filas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", candidatas: 0, completa: tabla.completa === true } };
     const montoJob = Math.round(Number(job?.totales?.monto_total ?? 0));
     const fechaJob = String(job?.fecha_emision || "").slice(0, 10) || null;
     const conocidos = new Set((Array.isArray(job?.folios_hoy) ? job.folios_hoy : []).map(Number));
@@ -1412,6 +1427,9 @@
     const horaEmit = finalEmitAt ? horaChile(finalEmitAt) : null;
     const medium = (motivo, extra = {}) => ({ folio: sugerido, confidence: "medium", evidence: { source: "reportes_ambiguo", motivo, ...base, ...extra } });
     if (emisorMismatch) return medium("emisor_distinto");
+    // Con la tabla incompleta, la candidata "única" visible puede no ser la nuestra: la
+    // propia suele estar en la página que no se ve (orden ascendente). Nunca cierra sola.
+    if (tabla.completa !== true) return medium("tabla_incompleta", { total: tabla.total ?? null });
     if (!horaEmit || !tabla.tieneHora) return medium(!horaEmit ? "sin_hora_emitir" : "sin_hora_en_tabla");
     const mEmit = minutosDeHora(horaEmit);
     // Verificación (cuadre por evento): el librero manda la ventana del intento fallido.
@@ -1535,6 +1553,8 @@
       artifact_links: enReportes ? [] : links,
       // Verificación: la app distingue "leí la tabla y no está" de "no pude leer".
       reportes_tabla_leida: Boolean(tablaReportes),
+      // "No salió" en la verificación exige haber visto la tabla COMPLETA (B1).
+      reportes_tabla_completa: Boolean(tablaReportes && tablaReportes.completa === true),
       reportes_calce: calce ? { source: calce.evidence?.source ?? null, candidatas: calce.evidence?.candidatas ?? null } : null,
       page: {
         url: location.href,
@@ -1978,7 +1998,7 @@
       if (reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) ultimoReporte = reportResult;
       // Sin candidatas y tabla leída: a mitad de camino se refresca la tabla (la fila
       // recién emitida puede tardar en aparecer) — sin recargar la página.
-      if (attempt === 4 && reportResult.reportes_tabla_leida && !reportResult.folio) refrescarReportes();
+      if ((attempt === 3 || attempt === 7) && reportResult.reportes_tabla_leida && !reportResult.folio) refrescarReportes();
     }
     // Se acabaron las lecturas con un "high" sin confirmar: se degrada a medium.
     if (ultimoReporte && ultimoReporte.folio_confidence === "high") {

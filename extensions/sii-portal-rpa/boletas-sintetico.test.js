@@ -548,9 +548,14 @@ function tablaReportes(filas, { headers = ["Fecha", "Hora", "Nro Folio", "Tipo",
   }));
   return el({ tag: "TABLE", sel: ["table"], children: [...th, ...trs] });
 }
-function escenaReportes(filas, opts) {
+// Pie real del v-data-table: "1-N de T" (o "–" sin datos).
+function pieReportes(n, total = n) {
+  return el({ tag: "DIV", sel: [".v-data-footer__pagination"], text: total === 0 ? "–" : `1-${n} de ${total}` });
+}
+function escenaReportes(filas, opts = {}) {
   escenaEmision();
   estado.scene.push(tablaReportes(filas, opts));
+  estado.scene.push(pieReportes(filas.length, opts.total ?? filas.length));
   location.href = "https://eboleta.sii.cl/reportes";
 }
 async function capturarEnReportes(job, ctx = { final_emit_at: EMIT_AT }) {
@@ -687,6 +692,7 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     item.onClick = () => {
       location.href = "https://eboleta.sii.cl/reportes";
       estado.scene.push(tablaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }]));
+      estado.scene.push(pieReportes(1));
     };
     estado.scene.push(item);
     location.href = "https://eboleta.sii.cl/emitir/";
@@ -704,6 +710,7 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     item.onClick = () => {
       location.href = "https://eboleta.sii.cl/reportes";
       estado.scene.push(tablaReportes([{ fecha: "25/09/2026", hora: "15:08", folio: 1241, monto: "$ 196.000" }]));
+      estado.scene.push(pieReportes(1));
     };
     estado.scene.push(item);
     location.href = "https://eboleta.sii.cl/emitir/";
@@ -714,6 +721,38 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     expect(res.result.folio).toBe(1241);
     expect(res.result.folio_confidence).toBe("high");
     expect(estado.actions.find((a) => a.role === "btn_emitir_final")).toBeUndefined();
+  });
+
+  it("B1: tabla PAGINADA (10 de 73 visibles) → la candidata única visible nunca cierra sola", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }], { total: 73 });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("tabla_incompleta");
+    expect(res.result.reportes_tabla_completa).toBe(false);
+  });
+
+  it("B1: tabla 'Cargando…' → incompleta (la verificación no puede decir 'no salió')", async () => {
+    escenaEmision();
+    estado.scene.push(tablaReportes([]));
+    estado.scene.push(el({ tag: "TR", sel: ["tbody tr"], text: "Cargando..." }));
+    estado.scene[estado.scene.length - 2]._children.push(el({ tag: "TR", sel: ["tbody tr"], children: [el({ tag: "TD", sel: ["td"], text: "Cargando..." })] }));
+    location.href = "https://eboleta.sii.cl/reportes";
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_tabla_leida).toBe(true);
+    expect(res.result.reportes_tabla_completa).toBe(false);
+  });
+
+  it("B1: tabla vacía con pie '–' (No hemos encontrado datos) → completa con 0 filas", async () => {
+    escenaEmision();
+    const t = tablaReportes([]);
+    t._children.push(el({ tag: "TR", sel: ["tbody tr"], children: [el({ tag: "TD", sel: ["td"], text: "No hemos encontrado datos..." })] }));
+    estado.scene.push(t);
+    estado.scene.push(pieReportes(0, 0));
+    location.href = "https://eboleta.sii.cl/reportes";
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_tabla_completa).toBe(true);
   });
 
   it("emisor activo distinto al del job → medium (emisor_distinto)", async () => {
