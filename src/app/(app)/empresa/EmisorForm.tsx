@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useId, isValidElement, cloneElement, type ReactElement } from "react";
 import { esSociedadLimitada } from "@/lib/ai/tipo-emisor";
+import { emisorSinCambios } from "./emisor-sin-cambios";
 import { useRouter } from "next/navigation";
 import { setDatosEmisor, removeEmpresaLogo, type DatosEmisor } from "./actions";
 import { crearEmpresaAdicional } from "@/app/(app)/escritorio/v5/actions";
@@ -137,16 +138,9 @@ export default function EmisorForm({ inicial, variant = "page", submitRef, empre
     // Dirty-check ANTES de validar: si nada cambió respecto del último guardado,
     // navegar no debe castigar con toasts/pulsos/escrituras redundantes.
     const prev = ultimoGuardado.current;
-    const sinCambios =
-      datos.rut === prev.rut &&
-      datos.razon_social === prev.razon_social &&
-      datos.giro === prev.giro &&
-      datos.direccion === prev.direccion &&
-      datos.comuna === prev.comuna &&
-      datos.email_sii === prev.email_sii &&
-      datos.tipo_contribuyente === prev.tipo_contribuyente &&
-      datos.sociedad_profesionales === prev.sociedad_profesionales &&
-      (datos.operacion_hint_default ?? null) === (prev.operacion_hint_default ?? null);
+    // Lista COMPLETA de campos (incidente LC 2026-09-25: faltaban los tipos por
+    // carril → Boletas→Exento + "Listo" no guardaba nada).
+    const sinCambios = emisorSinCambios(datos, prev);
     if (opts?.soloSiCambio && sinCambios) return true;
 
     // Crear: si apretaste "+ Agregar" y no escribiste nada, cambiar de paso o
