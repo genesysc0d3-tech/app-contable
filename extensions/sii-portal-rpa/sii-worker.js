@@ -1411,7 +1411,10 @@
     if (emisorMismatch) return medium("emisor_distinto");
     if (!horaEmit || !tabla.tieneHora) return medium(!horaEmit ? "sin_hora_emitir" : "sin_hora_en_tabla");
     const mEmit = minutosDeHora(horaEmit);
-    const antes = LB.reportes.ventana_antes_min; const despues = LB.reportes.ventana_despues_min;
+    // Verificación (cuadre por evento): el librero manda la ventana del intento fallido.
+    const clampMin = (v, max, def) => (Number.isInteger(v) && v >= 0 && v <= max ? v : def);
+    const antes = clampMin(ctx?.ventana_antes_min, 30, LB.reportes.ventana_antes_min);
+    const despues = clampMin(ctx?.ventana_despues_min, 10, LB.reportes.ventana_despues_min);
     const enVentana = candidatas.filter((f) => {
       const m = minutosDeHora(f.hora);
       if (m == null) return false;

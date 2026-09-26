@@ -29,7 +29,13 @@ export type DesenlaceItem =
   | { estado: "emitida"; folio: number; boletaId?: string | null }
   // fallida = PRE-emit y seguro: no se llegó a cliquear EMITIR, no hay folio. Se
   // puede saltar y seguir. (La extensión nunca reporta error/cancelado post-emit.)
-  | { estado: "fallida"; motivo: string }
+  | {
+      estado: "fallida"; motivo: string;
+      /** El worker llegó al modal de emisión antes de fallar (pudo haber apretado
+       *  EMITIR sin alcanzar a avisar): el driver VERIFICA en /reportes antes de dar
+       *  la boleta por no emitida (cuadre por evento, 2026-09-26). */
+      llegoAlModal?: boolean;
+    }
   // revisar = POST-emit incierto: se cliqueó EMITIR pero no se pudo capturar/guardar
   // el folio (puede ser un folio REAL con la ventana abierta). FRENA el lote en seco:
   // seguir abriría otra ventana y arriesgaría perder/duplicar el folio.

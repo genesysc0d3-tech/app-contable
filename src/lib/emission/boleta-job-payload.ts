@@ -42,6 +42,10 @@ export interface BoletaJobInput {
   /** Folios ya registrados hoy (empresa+tipo), del server: el worker los excluye al
    *  calzar el folio en /reportes (0.2.8). */
   foliosHoy?: number[];
+  /** VERIFICACIÓN (sin emitir): el worker abre /reportes y calza el folio por monto +
+   *  fecha + ventana horaria del intento fallido. Nunca toca la calculadora. */
+  verifyOnly?: boolean;
+  verifyWindow?: { desde_ms: number; hasta_ms: number };
 }
 
 export interface BoletaJob {
@@ -72,6 +76,8 @@ export interface BoletaJob {
   job_id?: string;
   expires_at?: string;
   folios_hoy?: number[];
+  verify_only?: true;
+  verify_window?: { desde_ms: number; hasta_ms: number };
 }
 
 function clean(value: string | null | undefined): string | undefined {
@@ -114,5 +120,10 @@ export function buildBoletaJob(input: BoletaJobInput): BoletaJob {
   if (input.jobId) job.job_id = input.jobId;
   if (input.expiresAt) job.expires_at = input.expiresAt;
   if (Array.isArray(input.foliosHoy)) job.folios_hoy = input.foliosHoy.filter((n) => Number.isInteger(n) && n > 0);
+  if (input.verifyOnly && input.verifyWindow) {
+    job.verify_only = true;
+    job.verify_window = { desde_ms: Math.round(input.verifyWindow.desde_ms), hasta_ms: Math.round(input.verifyWindow.hasta_ms) };
+    job.allow_final_emit = false as unknown as true; // jamás emite: solo lee /reportes
+  }
   return job;
 }

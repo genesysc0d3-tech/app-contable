@@ -44,6 +44,8 @@ type ExtMsg = {
   job_id?: string | null;
   status?: string;
   message?: string;
+  /** Falla pre-emit: true si el worker ya había llegado al modal de emisión. */
+  submitted?: boolean;
   result?: {
     folio?: number | string;
     folio_confidence?: string;
@@ -111,7 +113,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           return;
         }
         if (st === "error" || st === "cancelled" || st === "closed") {
-          w.resolve({ estado: "fallida", motivo: data.message ?? "No se pudo emitir esta boleta." });
+          w.resolve({ estado: "fallida", motivo: data.message ?? "No se pudo emitir esta boleta.", llegoAlModal: data.submitted === true });
           return;
         }
         // Post-emit incierto: hay un folio posible con la ventana abierta → frena.
@@ -149,7 +151,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     | { jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
     | { pausada: true; detalle: string }
     | null;
-  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<StartJob> => {
+  const startJob = useCallback(async (propuestaId: string, tipoDte: number, origin: "emision_lote" | "verificacion_lote" = "emision_lote"): Promise<StartJob> => {
     try {
       const res = await fetch("/api/emision/jobs", {
         method: "POST",
@@ -157,7 +159,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         body: JSON.stringify({
           provider: "sii_local",
           tipo_dte: tipoDte,
-          origin: "emision_lote",
+          origin,
           expected_emisor_rut: empresaRut ?? null,
           propuesta_id: propuestaId,
         }),
@@ -307,6 +309,24 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         }
 
         // 3. enviar a la extensión y esperar el desenlace TERMINAL de este job
+        const intentoDesdeMs = Date.now();
+        const esperarDesenlace = (jobId: string, expiresAt: string, tipo: string, payload: object) => new Promise<DesenlaceItem>((resolve) => {
+          let settled = false;
+          const finish = (d: DesenlaceItem) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(to);
+            const w = waiterRef.current;
+            if (w && w.jobId === jobId) w.done = true;
+            resolve(d);
+          };
+          waiterRef.current = { jobId, reportar, done: false, resolve: finish };
+          const to = setTimeout(
+            () => finish({ estado: "revisar", motivo: "La verificación no confirmó a tiempo. Revísala en la ventana SII antes de seguir." }),
+            Math.max(30_000, Date.parse(expiresAt) - Date.now() + 5_000),
+          );
+          window.postMessage({ source: "app-contable", type: tipo, protocol_version: 1, job: payload }, origin());
+        });
         const desenlace = await new Promise<DesenlaceItem>((resolve) => {
           let settled = false;
           const finish = (d: DesenlaceItem) => {
@@ -333,6 +353,47 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
 
         // 4. cerrar la ventana del job (post-persist la extensión ya la libera; pre-emit, cierre normal)
         window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: job.jobId }, origin());
+
+        // 4b. CUADRE POR EVENTO (2026-09-26): la boleta falló DESPUÉS de llegar al modal.
+        // Pudo apretar EMITIR y morir antes de avisar (navegación del SII, puerto
+        // cerrado): habría un folio real que nadie ve y la propuesta quedaría
+        // re-emitible → doble folio. Antes de darla por no emitida, un job de
+        // VERIFICACIÓN abre /reportes y calza por monto + fecha + la ventana horaria
+        // del intento. Única candidata → emitida (registrada con todos los guards);
+        // folio posible pero ambiguo → "a medias" (lápida, visible en Emitir);
+        // nada → fallida de verdad (re-emitible). Sin clics de nadie.
+        if (desenlace.estado === "fallida" && desenlace.llegoAlModal && !esFactura) {
+          const intentoHastaMs = Date.now();
+          reportar("Verificando en el Resumen de ventas del SII si la boleta salió…");
+          await closeJob(job.jobId, "failed", desenlace.motivo);
+          const vjob = await startJob(item.propuestaId, full.tipoDte, "verificacion_lote");
+          if (vjob && !("pausada" in vjob)) {
+            const payloadVerify = buildBoletaJob({
+              empresaId,
+              emisorRut: vjob.emisorRut ?? empresaRut ?? undefined,
+              foliosHoy: vjob.foliosHoy,
+              tipoDte: full.tipoDte as 39 | 41,
+              monto: full.monto,
+              fechaEmision: full.fechaEmision,
+              receptor: {},
+              detalle: full.detalle,
+              medioPago: full.medioPago,
+              logoutAfter: false,
+              jobId: vjob.jobId,
+              expiresAt: vjob.expiresAt,
+              verifyOnly: true,
+              verifyWindow: { desde_ms: intentoDesdeMs, hasta_ms: intentoHastaMs },
+            });
+            const v = await esperarDesenlace(vjob.jobId, vjob.expiresAt, "APP_CONTABLE_SII_BOLETA_JOB", payloadVerify);
+            waiterRef.current = null;
+            window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: vjob.jobId }, origin());
+            if (v.estado === "revisar") setJobIdRevision(vjob.jobId);
+            if (v.estado !== "emitida") await closeJob(vjob.jobId, v.estado === "revisar" ? "revision_pendiente" : "failed", "motivo" in v ? v.motivo : undefined);
+            if (v.estado === "fallida") return { estado: "fallida", motivo: `${desenlace.motivo} Verifiqué en el SII: no salió, se puede reintentar.` };
+            return v;
+          }
+          return desenlace; // no se pudo verificar (sin job): queda como fallida, igual que antes
+        }
 
         // 5. sellar el job según el desenlace:
         //  - emitida  → el server ya soltó el lock en /result (no tocar).

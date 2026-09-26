@@ -2,6 +2,7 @@
 
 import { EXTENSION_VERSION, baseMessage, isAllowedAppUrl, versionBajoObjetivo } from "./modules/core.js";
 import { SII_CAPABILITIES, SII_START_URL, isAllowedSiiUrl, validateSiiBoletaJob } from "./modules/sii-local.js";
+const SII_REPORTES_URL = "https://eboleta.sii.cl/reportes";
 import { FACT_AUTO_EMIT_READY, FACT_CAPABILITIES, validateSiiFacturaJob, validateLibreto } from "./modules/facturas-portal.js";
 import { SII_VAULT_CAPABILITIES, getUnlockedSiiCredentials, handleSiiVaultMessage, rememberAppOrigin, siiVaultStatus, wipeLocalVault } from "./modules/sii-vault.js";
 import { SIMPLEAPI_CAPABILITIES, emitSimpleApiDteFromVault, generateSimpleApiDteFromVault, handleSimpleApiVaultMessage, postSimpleApiMultipartProxy } from "./modules/simpleapi-vault.js";
@@ -862,6 +863,12 @@ function scanWorkerPage(state, attempt = 1) {
       return;
     }
 
+    // VERIFICACIÓN (0.2.8): el job solo lee /reportes; jamás llega a FILL_AND_EMIT.
+    if (state.job?.verify_only === true) {
+      verificarEnReportes(state, map);
+      return;
+    }
+
     if (state.learnOnly) {
       sendToApp(state, statusMessage(
         state.jobId,
@@ -949,6 +956,8 @@ function scanWorkerPage(state, attempt = 1) {
             {
               code: codeValido(emitResponse?.code),
               posible_cambio_sii: esCambioSii,
+              // 0.2.8: la app verifica en /reportes si el worker ya había llegado al modal.
+              submitted: state.submitted === true,
             },
           ));
           return;
@@ -1311,6 +1320,57 @@ function attemptSiiAutologinInFrames(state, credentials, previousError) {
   });
 }
 
+// ── VERIFICACIÓN en /reportes (cuadre por evento, 2026-09-26) ────────────────
+// La app la pide tras una boleta que falló DESPUÉS de llegar al modal (pudo apretar
+// EMITIR y morir antes de avisar). Este job NO emite: navega a /reportes y pide al
+// worker el calce (monto + fecha + ventana horaria del intento). Desenlaces:
+//   folio con evidencia fuerte → handleCapturedResult (se registra con los guards del
+//   server) → la app la ve "emitida";  folio posible pero ambiguo → result_needs_review
+//   (la app pone lápida: a medias, visible en Emitir);  nada → "error" con mensaje claro
+//   (la app la da por no emitida: re-emitible). Si /reportes no se puede leer → "error"
+//   también (advisory: nunca bloquea el lote).
+function verificarEnReportes(state, map) {
+  const url = String(map?.url || "");
+  if (!url.includes("/reportes")) {
+    // Tras el autologin el SII manda a /emitir: una sola navegación a /reportes.
+    if (state.verifyNavegado) {
+      sendToApp(state, statusMessage(state.jobId, "error", "No pude abrir el Resumen de ventas del SII para verificar.", true, { verificacion: true }));
+      return;
+    }
+    state.verifyNavegado = true;
+    chrome.tabs.update(state.workerTabId, { url: SII_REPORTES_URL }).catch(() => undefined);
+    return;
+  }
+  if (state.verifyEnCurso) return;
+  state.verifyEnCurso = true;
+  const w = state.job?.verify_window || {};
+  const desde = Number(w.desde_ms); const hasta = Number(w.hasta_ms);
+  const antesMin = Number.isFinite(desde) && Number.isFinite(hasta) && hasta > desde ? Math.min(30, Math.ceil((hasta - desde) / 60000) + 2) : null;
+  sendToApp(state, statusMessage(state.jobId, "capturing_result", "Verificando en el Resumen de ventas del SII.", true));
+  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+    type: "APP_CONTABLE_SII_CAPTURE_RESULT",
+    job_id: state.jobId,
+    job: state.job,
+    ctx: { final_emit_at: Number.isFinite(hasta) ? hasta : null, ventana_antes_min: antesMin, ventana_despues_min: 6 },
+  }), (captureResponse) => {
+    if (chrome.runtime.lastError || !captureResponse?.ok) {
+      state.verifyEnCurso = false;
+      sendToApp(state, statusMessage(state.jobId, "error", "No pude leer el Resumen de ventas del SII para verificar esta boleta.", true, { verificacion: true }));
+      return;
+    }
+    const result = captureResponse.result;
+    if (hasStrongFolioEvidence(result)) {
+      handleCapturedResult(state, result);
+      return;
+    }
+    if (result?.folio) {
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", `Verifiqué en el SII: hay una boleta que podría ser esta (folio ${result.folio}), pero no es la única del mismo monto. Quedó a medias para que confirmes el folio.`, true));
+      return;
+    }
+    sendToApp(state, statusMessage(state.jobId, "error", "Verifiqué en el Resumen de ventas del SII: esta boleta no salió. Se puede reintentar.", true, { verificacion: true }));
+  });
+}
+
 function captureWorkerResult(state) {
   sendToApp(state, statusMessage(
     state.jobId,
@@ -1369,7 +1429,8 @@ const FACT_WORKER_EN_PESTANA = false; // DEBUG: true = worker (boletas Y factura
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
   // https). Boletas siguen en la constante de e-Boleta.
-  const startUrl = job.kind === "factura" && job.start_url ? job.start_url : SII_START_URL;
+  // Verificación (0.2.8, cuadre por evento): el job no emite, solo lee /reportes.
+  const startUrl = job.kind === "factura" && job.start_url ? job.start_url : job.verify_only === true ? SII_REPORTES_URL : SII_START_URL;
   let workerWindowId = null;
   let workerTabId = null;
   let workerTabReusada = false; // debug: la pestaña era del humano, NO cerrarla al terminar

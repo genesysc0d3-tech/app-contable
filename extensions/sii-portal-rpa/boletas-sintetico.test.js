@@ -661,6 +661,13 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     expect(String(res.result.folio_evidence?.source ?? "")).not.toMatch(/^reportes_(calce|ambiguo|sin)/);
   });
 
+  it("verificación: la ventana del intento fallido viaja en ctx (fila 20 min antes del cierre → calza)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:08", folio: 1241, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ verify_only: true, allow_final_emit: false }), { final_emit_at: EMIT_AT, ventana_antes_min: 25, ventana_despues_min: 6 });
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
   it("emisor activo distinto al del job → medium (emisor_distinto)", async () => {
     // La escena trae el selector de emisor del portal con EMISOR activo; el job viene
     // por OTRA empresa → el calce no cierra solo.
