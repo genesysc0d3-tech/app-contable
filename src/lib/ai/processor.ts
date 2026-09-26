@@ -216,7 +216,7 @@ async function processChunkWithRetry(
  * movimientos in ChunkResult echo the input (never modified) so the
  * downstream code works unchanged.
  */
-async function classifyChunkWithRetry(
+export async function classifyChunkWithRetry(
   chunkIndex: number,
   chunkMovs: MovimientoExtraido[],
   systemPrompt: string
@@ -338,6 +338,34 @@ async function classifyChunkWithRetry(
         await new Promise((r) => setTimeout(r, 1000 * attempt));
       }
     }
+  }
+
+  // Truncado → partir el trozo en dos y clasificar cada mitad. El modelo de
+  // razonamiento gasta la mayor parte de max_tokens en PENSAR, y cuánto piensa
+  // varía por llamada: en la cartola BCI de LC (2026-09-26) un trozo de 15 gastó
+  // 11.018 de 16.000 y otro se pasó → "RESPUESTA_TRUNCADA" botaba la cartola
+  // ENTERA y la clienta tenía que reprocesar a mano. Con la mitad de filas cabe
+  // de sobra; recursivo hasta 1 fila (una fila sola truncada sí es error real).
+  if ((lastError as Error & { truncado?: boolean } | null)?.truncado && chunkMovs.length > 1) {
+    const mitad = Math.ceil(chunkMovs.length / 2);
+    console.warn(`[classify] chunk ${chunkIndex} truncado con ${chunkMovs.length} movs → se parte en ${mitad} + ${chunkMovs.length - mitad}`);
+    const [a, b] = await Promise.all([
+      classifyChunkWithRetry(chunkIndex, chunkMovs.slice(0, mitad), systemPrompt),
+      classifyChunkWithRetry(chunkIndex, chunkMovs.slice(mitad), systemPrompt),
+    ]);
+    return {
+      index: chunkIndex,
+      movimientos: [...a.movimientos, ...b.movimientos],
+      propuestas: [
+        ...a.propuestas,
+        ...b.propuestas.map((p) => ({ ...p, movimiento_index: p.movimiento_index + mitad })),
+      ],
+      tokens_input: a.tokens_input + b.tokens_input,
+      tokens_output: a.tokens_output + b.tokens_output,
+      modelo: a.modelo,
+      finish_reason: b.finish_reason ?? a.finish_reason ?? null,
+      raw_response_length: (a.raw_response_length ?? 0) + (b.raw_response_length ?? 0),
+    };
   }
 
   throw lastError;
