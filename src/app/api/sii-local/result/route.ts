@@ -745,7 +745,13 @@ export async function POST(request: Request) {
     result = recovered.result as SiiLocalResultPayload["result"];
     effectiveJobId = recovered.job_id;
   }
-  const pdfInfo = extractSiiPdfInfo(result);
+  const pdfInfoCrudo = extractSiiPdfInfo(result);
+  // 0.2.8 (adversarial #1): un folio leído de la URL de un PDF solo es evidencia si NO
+  // viene de /reportes (ahí los links son de otras filas) y coincide con el folio
+  // capturado. Cubre también las 0.2.7 en flota, que mandan links de /reportes.
+  const folioCapturado = positiveInt(result?.folio);
+  const pdfDesdeReportes = String(result?.page?.url || "").includes("/reportes");
+  const pdfInfo = pdfInfoCrudo && !pdfDesdeReportes && (!folioCapturado || pdfInfoCrudo.folio === folioCapturado) ? pdfInfoCrudo : null;
   const folio = positiveInt(result?.folio) ?? pdfInfo?.folio ?? null;
   const tipoDte =
     result?.tipo_dte === 39 || result?.tipo_dte === 41 || result?.tipo_dte === 33 || result?.tipo_dte === 34
@@ -968,7 +974,10 @@ export async function POST(request: Request) {
     // Ambos propuesta_id no nulos: boleta única, reconciliación y el folio B de un
     // doble folio (propuesta_id NULL) siguen pasando por la rama normal.
     const folioAjeno = Boolean(existing.propuesta_id && job.propuesta_id && existing.propuesta_id !== job.propuesta_id);
-    if (folioAjeno || emisorMismatch) {
+    // Re-entrega del PROPIO folio (misma propuesta): nunca se sella lápida por el
+    // emisor (adversarial #7) — la boleta ya es de esta propuesta.
+    const mismaBoleta = Boolean(existing.propuesta_id && existing.propuesta_id === job.propuesta_id);
+    if (folioAjeno || (emisorMismatch && !mismaBoleta)) {
       await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "rejected", error: folioAjeno ? "FOLIO_DE_OTRO_DOCUMENTO" : "EMISOR_CRUZADO", result });
       await recordOpsEvent({
         sb, severity: "warn", source: "sii-local", eventName: folioAjeno ? "sii_local_folio_de_otro_documento" : "sii_local_emisor_cruzado_existing",

@@ -542,7 +542,8 @@ export async function POST(request: Request) {
         .eq("empresa_id", guard.empresaId)
         .eq("tipo_dte", tipoDte)
         .eq("fecha_emision", hoyChile)
-        .neq("estado", "anulada")
+        // Anuladas INCLUIDAS: siguen en /reportes con su monto y también deben excluirse.
+        .order("folio", { ascending: false })
         .limit(500);
       foliosHoy = (hoy ?? []).map((b) => Number(b.folio)).filter((n) => Number.isInteger(n) && n > 0);
     } catch { /* best-effort */ }

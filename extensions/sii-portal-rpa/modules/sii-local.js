@@ -153,7 +153,7 @@ export function validateLibretoBoleta(libreto) {
     const err = regexOpcional(g, ["ancla_contador", "ancla_label", "excluir_texto"]);
     if (err) return err;
   }
-  for (const [bloque, keys] of [["modal", ["titulo"]], ["emisor", ["cargando"]], ["monto_alto", ["texto"]]]) {
+  for (const [bloque, keys] of [["modal", ["titulo"]], ["emisor", ["cargando"]], ["monto_alto", ["texto"]], ["reportes", ["header_folio", "header_fecha", "header_hora", "header_monto", "header_tipo"]]]) {
     const err = regexOpcional(libreto[bloque], keys);
     if (err) return err;
   }

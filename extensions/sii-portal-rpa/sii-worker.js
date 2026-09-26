@@ -514,6 +514,11 @@
   // acento), así que "i" NO cambia ningún match de hoy — pero evita el bug latente
   // de la glosa muda (regex en minúscula contra texto en mayúscula) y un regex roto
   // del servidor ya no revienta fillAndEmit a mitad de una boleta real.
+  // Ventana del calce en /reportes: entero 0..10 min; cualquier otra cosa = default
+  // (un libreto con 1440 aceptaría cualquier fila del día — adversarial #6).
+  function minutosLibreto(v, def) {
+    return Number.isInteger(v) && v >= 0 && v <= 10 ? v : def;
+  }
   function reI(src, hard) {
     try { return src ? new RegExp(String(src), "i") : hard; } catch { return hard; }
   }
@@ -591,8 +596,8 @@
         header_hora: reI(rp.header_hora, /HORA/i),
         header_monto: reI(rp.header_monto, /MONTO\s*TOTAL|^TOTAL$|^MONTO$/i),
         header_tipo: reI(rp.header_tipo, /TIPO/i),
-        ventana_antes_min: Number.isFinite(Number(rp.ventana_antes_min)) ? Number(rp.ventana_antes_min) : 2,
-        ventana_despues_min: Number.isFinite(Number(rp.ventana_despues_min)) ? Number(rp.ventana_despues_min) : 6,
+        ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
+        ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
       },
       // Las 8 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
       // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
@@ -1359,14 +1364,21 @@
       const filas = [];
       for (const row of rows) {
         const cells = Array.from(row.querySelectorAll("td, th")).map((c) => String(c.innerText || c.textContent || ""));
-        const folio = parseFolio(stripRut(cells[idx.folio] || ""));
+        // Folio: la celda puede venir "1.241" (miles) — se quitan puntos/espacios ANTES
+        // de leer el número (adversarial #3: parseFolio leía "241").
+        const rawFolio = stripRut(cells[idx.folio] || "").replace(/[.\s]/g, "");
+        const folio = /^\d{1,10}$/.test(rawFolio) ? Number(rawFolio) : null;
         if (!folio) continue;
         const celdaFecha = idx.fecha >= 0 ? cells[idx.fecha] : "";
+        const fecha = parseFechaIso(celdaFecha);
         // La hora puede venir en su columna o dentro de la de fecha ("25/09/2026 15:27").
         const hora = parseHoraHHMM(idx.hora >= 0 ? cells[idx.hora] : celdaFecha);
         filas.push({
           folio,
-          fecha: parseFechaIso(celdaFecha),
+          fecha,
+          // Columna de fecha presente pero ilegible → la fila NO cuenta como "de hoy"
+          // (adversarial #4): antes pasaba como del día.
+          fechaIlegible: idx.fecha >= 0 && !fecha,
           hora,
           monto: parseMontoClp(cells[idx.monto]),
           tipo: idx.tipo >= 0 ? normalizeText(cells[idx.tipo]) : null,
@@ -1389,7 +1401,7 @@
     const emisorActivo = readActiveEmisorRut();
     const emisorJob = job?.emisor_rut ? normalizeRut(job.emisor_rut) : null;
     const emisorMismatch = Boolean(emisorActivo && emisorJob && normalizeRut(emisorActivo) !== emisorJob);
-    const candidatas = tabla.filas.filter((f) => f.monto === montoJob && (!f.fecha || !fechaJob || f.fecha === fechaJob) && !conocidos.has(f.folio));
+    const candidatas = tabla.filas.filter((f) => f.monto === montoJob && !f.fechaIlegible && (!f.fecha || !fechaJob || f.fecha === fechaJob) && !conocidos.has(f.folio));
     const base = { candidatas: candidatas.length, monto: montoJob, fecha: fechaJob, emisor_mismatch: emisorMismatch };
     const sugerido = candidatas[0]?.folio ?? null;
     if (candidatas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", ...base } };
@@ -1433,8 +1445,11 @@
     // 0.2.8: en /reportes el CALCE va primero (adversarial F5: un link PDF o un texto
     // "Folio" de otra fila ganaba y cortocircuitaba). Solo si no hay tabla legible se
     // cae a la cadena vieja, que en /reportes nunca pasa de "medium".
-    const calce = enReportes ? calzarFolioEnReportes(parseReportesTabla(), job, ctx) : null;
-    let captured = (calce && calce.confidence !== "none") ? calce
+    const tablaReportes = enReportes ? parseReportesTabla() : null;
+    const calce = tablaReportes ? calzarFolioEnReportes(tablaReportes, job, ctx) : null;
+    // Con tabla legible el calce MANDA aunque sea "none" (0 candidatas → sin folio
+    // sugerido; adversarial #8: la cadena vieja sugería la primera fila, de otra boleta).
+    let captured = calce ? (calce.confidence === "none" ? null : calce)
       : ((textoDialogos && captureExplicitFolio(textoDialogos))
         || captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut));
     // En /reportes la tabla trae TODAS las boletas del día: la primera fila puede ser
@@ -1465,7 +1480,9 @@
       receptor: job?.receptor ?? null,
       detalles: Array.isArray(job?.detalles) ? job.detalles : [],
       totales: job?.totales ?? null,
-      artifact_links: links,
+      // 0.2.8 (adversarial #1): en /reportes los <a> son de OTRAS filas (PDF de otra boleta);
+      // nunca viajan como respaldo del folio calzado.
+      artifact_links: enReportes ? [] : links,
       page: {
         url: location.href,
         title: document.title,
@@ -1842,8 +1859,12 @@
   }
 
   async function captureResultWhenReady(job, ctx) {
-    // 0.2.8: si este content script nació YA en /reportes (el anterior navegó y murió;
-    // el librero reintentó la captura), no hay recibo que esperar: directo al calce.
+    // 0.2.8: el content script que corre en /reportes es NUEVO (el que emitió murió al
+    // navegar) y nace con el libreto por defecto; el del job trae los headers de la
+    // tabla calibrados desde el server (adversarial #2).
+    if (job?.libreto) LB = resolverLibreto(job);
+    // Si este content script nació YA en /reportes (el librero reintentó la captura),
+    // no hay recibo que esperar: directo al calce.
     const yaEnReportes = location.href.includes("/reportes");
     for (let attempt = 0; attempt < (yaEnReportes ? 0 : 20); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1200 : 1500));
@@ -1877,15 +1898,30 @@
     // primer calce ÚNICO; si la tabla está pero el calce es ambiguo, se sigue intentando
     // (la fila propia puede estar por llegar) y al final se devuelve el "medium".
     let ultimoReporte = null;
+    let calceEstable = null; // folio "high" de la lectura anterior (adversarial #5)
     for (let attempt = 0; attempt < 10; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 && yaEnReportes ? 600 : 1500));
       const reportResult = captureResult(job, ctx);
       if (hasStrongFolioResult(reportResult)) {
-        reportResult.estado = "emitida_capturada_reportes";
-        renderOverlay("DONE", `Boleta emitida. Folio ${reportResult.folio} confirmado en reportes.`);
-        return reportResult; // sin tryCaptureSharePdf: en /reportes no hay "Compartir" del recibo
+        // El calce único tiene que REPETIRSE en dos lecturas seguidas (≥1,5 s): si la fila
+        // propia aún no aparecía y la única candidata era otra boleta del mismo monto,
+        // la segunda lectura la ve llegar y el calce deja de ser único.
+        if (calceEstable === reportResult.folio) {
+          reportResult.estado = "emitida_capturada_reportes";
+          renderOverlay("DONE", `Boleta emitida. Folio ${reportResult.folio} confirmado en reportes.`);
+          return reportResult; // sin tryCaptureSharePdf: en /reportes no hay "Compartir" del recibo
+        }
+        calceEstable = reportResult.folio;
+        ultimoReporte = reportResult;
+        continue;
       }
+      calceEstable = null;
       if (reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) ultimoReporte = reportResult;
+    }
+    // Se acabaron las lecturas con un "high" sin confirmar: se degrada a medium.
+    if (ultimoReporte && ultimoReporte.folio_confidence === "high") {
+      ultimoReporte.folio_confidence = "medium";
+      ultimoReporte.folio_evidence = { ...(ultimoReporte.folio_evidence || {}), source: "reportes_ambiguo", motivo: "calce_no_estable" };
     }
     if (ultimoReporte) {
       ultimoReporte.estado = ultimoReporte.folio ? "resultado_requiere_revision" : "reportes_sin_folio_detectado";

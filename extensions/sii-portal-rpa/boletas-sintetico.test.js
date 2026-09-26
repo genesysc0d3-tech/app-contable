@@ -629,13 +629,36 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     const res = await capturarEnReportes(jobReportes());
     expect(res.result.folio).toBe(1241);
     expect(res.result.folio_confidence).toBe("high");
+    // Y el link PDF de la otra fila NO viaja como respaldo (adversarial #1).
+    expect(res.result.artifact_links).toEqual([]);
   });
 
-  it("tabla sin encabezado de folio → cae a la cadena vieja: primera fila y medium", async () => {
+  it("folio con separador de miles ('1.241') se lee entero, no '241' (adversarial #3)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: "1.241", monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("fecha ilegible en su columna → la fila no cuenta como de hoy (adversarial #4)", async () => {
+    escenaReportes([{ fecha: "25-09-26", hora: "15:28", folio: 1241, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).not.toBe("high");
+    expect(res.result.folio).toBeNull();
+  });
+
+  it("0 candidatas con tabla legible → sin folio sugerido (no la primera fila)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1240, monto: "$ 15.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+  });
+
+  it("tabla sin encabezado de folio → cae a la cadena vieja (fuente no es reportes_*)", async () => {
     escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }], { headers: ["Fecha", "Hora", "Documento", "Monto Total", "Acciones"] });
     estado.recibo = { texto: "Nro Folio Acciones 1240 Descargar", oculto: false };
     const res = await capturarEnReportes(jobReportes());
     expect(res.result.folio_confidence).not.toBe("high");
+    expect(String(res.result.folio_evidence?.source ?? "")).not.toMatch(/^reportes_(calce|ambiguo|sin)/);
   });
 
   it("emisor activo distinto al del job → medium (emisor_distinto)", async () => {
