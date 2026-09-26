@@ -542,14 +542,107 @@ function handleFactStepPush(state, res) {
   });
 }
 
+// ── CIERRE DEL CICLO DE FACTURAS (2026-09-26) ─────────────────────────────────
+// Post-Firmar, cuando la pantalla no dejó leer el folio (o el portal rebotó, o la
+// firma no avanzó), antes de rendirse con "a medias" se busca la factura en
+// "Documentos emitidos" (receptor + fecha + monto + tipo, solo folios NUEVOS
+// respecto del snapshot tomado antes de Firmar). Una sola vez por job.
+function rescatarFolioFactura(state, motivo, { soloSugerir = false, captura = null } = {}) {
+  // En vuelo: otro disparo (onUpdated extra, rebote repetido) NO manda un terminal
+  // que frene el lote antes de tiempo (adversarial #2).
+  if (state.factRescateEnVuelo) {
+    // 2ª pasada #2: si lo que está en vuelo era solo-sugerencia y ahora llega algo que
+    // SÍ puede cerrar (la página de éxito sin folio legible), se encola: se corre al
+    // terminar la búsqueda en vuelo si esa no fue concluyente. La captura no se pierde.
+    if (!soloSugerir && state.factRescateSoloSugerir) state.factRescatePendiente = { motivo, captura };
+    if (captura && !state.factRescateCaptura) state.factRescateCaptura = captura;
+    return;
+  }
+  // Una búsqueda "que puede cerrar" por job; las de solo sugerencia (rebote, sin clave)
+  // no la gastan (#14), con tope total de 3.
+  state.factRescates = (state.factRescates || 0) + 1;
+  if ((!soloSugerir && state.factRescateHecho) || state.factRescates > 3) {
+    sendToApp(state, statusMessage(state.jobId, "result_needs_review", motivo, true));
+    return;
+  }
+  if (!soloSugerir) state.factRescateHecho = true;
+  state.factRescateEnVuelo = true;
+  state.factRescateSoloSugerir = soloSugerir;
+  state.factRescateMotivo = motivo;
+  state.factRescateCaptura = captura ?? state.factRescateCaptura ?? null; // página post-firma (PDF, excerpt)
+  sendToApp(state, statusMessage(state.jobId, "capturing_result", "Buscando la factura en Documentos emitidos del SII…", true));
+  if (state.factRescateTimer) clearTimeout(state.factRescateTimer);
+  // Si el worker no contesta (página muerta, sesión caída), a medias con el motivo.
+  state.factRescateTimer = setTimeout(() => {
+    state.factRescateTimer = null;
+    if (activeJobs.get(state.jobId) === state && state.factRescateEnVuelo) {
+      state.factRescateEnVuelo = false;
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", motivo, true));
+    }
+  }, 45000);
+  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+    type: "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO",
+    job_id: state.jobId,
+    job: state.job,
+    snapshot_emitidos: Array.isArray(state.factSnapshot) ? state.factSnapshot : null,
+    solo_sugerir: soloSugerir,
+  }), () => { void chrome.runtime.lastError; });
+}
+
+function handleFolioBuscadoFactura(state, res) {
+  if (!state.factRescateEnVuelo) return; // llegó tarde (ganó el timer): ya se contestó
+  state.factRescateEnVuelo = false;
+  if (state.factRescateTimer) { clearTimeout(state.factRescateTimer); state.factRescateTimer = null; }
+  const motivo = state.factRescateMotivo || "No pude confirmar la factura. No la re-emitas: verifica el folio en el portal.";
+  const captura = state.factRescateCaptura || null;
+  let result = res?.result ?? null;
+  // 2ª pasada #3: si la página post-firma leyó un folio (aunque débil) y la búsqueda
+  // devuelve OTRO, no se confía en ninguno: medium, y sin pegarle el PDF de la página.
+  const contradice = Boolean(captura?.folio && result?.folio && Number(captura.folio) !== Number(result.folio));
+  if (contradice) {
+    result = { ...result, folio_confidence: "medium", folio_evidence: { ...(result.folio_evidence || {}), source: "emitidos_ambiguo", motivo: "contradice_pagina", folio_pagina: captura.folio } };
+  }
+  // Búsqueda en vuelo no concluyente + quedó encolada una que SÍ puede cerrar → correrla.
+  const pendiente = state.factRescatePendiente;
+  if (pendiente && !(result && hasStrongFolioEvidence(result))) {
+    state.factRescatePendiente = null;
+    rescatarFolioFactura(state, pendiente.motivo, { captura: pendiente.captura });
+    return;
+  }
+  state.factRescatePendiente = null;
+  if (result && (hasStrongFolioEvidence(result) || result.folio)) {
+    // Fuerte → se registra (guards del server). Ambiguo → a medias CON rastro. En ambos
+    // casos se conserva el PDF / marcas de la página post-firma, que son de ESTA
+    // factura (#5).
+    state.awaitingResult = false;
+    handleCapturedResult(state, {
+      ...result,
+      pdf: result.pdf ?? (contradice ? null : captura?.pdf) ?? null,
+      ...(captura?.glosa_omitida ? { glosa_omitida: true } : {}),
+    });
+    return;
+  }
+  const extra = result?.emitidos_leido ? " Busqué en Documentos emitidos del SII y no aparece una factura nueva de este receptor por ese monto." : "";
+  if (captura) {
+    // Rastro de la página post-firma (excerpt, links) como antes del rescate (#5).
+    sendToApp(state, captureDebugMessage(state.jobId, captura, `${motivo}${extra}`));
+    pauseWorker(state, `${motivo}${extra}`);
+  }
+  sendToApp(state, statusMessage(state.jobId, "result_needs_review", `${motivo}${extra}`, true));
+}
+
 async function handleFactDriveResponse(state, res) {
   if (!activeJobs.has(state.jobId)) return;
 
   if (res.ok === false) {
     const detalle = res.detalle ? `${res.error}: ${res.detalle}` : String(res.error ?? "FACT_ERROR");
     if (state.finalEmitClicked) {
-      // Post-Firmar NADA cierra el job ni re-emite: posible folio real vivo.
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`, true));
+      // Post-Firmar NADA cierra el job ni re-emite: posible folio real vivo. Antes de
+      // dejarla a medias, la app la busca sola en Documentos emitidos.
+      // Rebote a una pantalla previa / sin campo o botón de la clave: la factura puede
+      // NO existir → la búsqueda solo sugiere, nunca cierra sola (#4/#14).
+      const soloSugerir = /POST_FIRMA_REBOTO|FIRMA_SIN_CAMPO_CLAVE|FIRMA_SIN_BOTON|FIRMA_CLICK_FALLIDO|SIN_BOTON_FIRMAR/.test(detalle);
+      rescatarFolioFactura(state, `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`, { soloSugerir });
       return;
     }
     state.humanRequired = Boolean(res.human) || state.humanRequired;
@@ -581,7 +674,9 @@ async function handleFactDriveResponse(state, res) {
     // firma reaparece tras haberla enviado, la clave es mala — jamás
     // reintentar solo (el SII puede bloquear el certificado).
     if (state.certPasswordSent) {
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "CERT_PASSWORD_INVALID: la clave del certificado parece incorrecta. Corrígela en Opciones de la extensión y verifica en el portal si la factura alcanzó a emitirse — no la re-emitas.", true));
+      // La heurística "la pantalla de clave reapareció" puede ser un falso positivo con
+      // la factura ya emitida: se busca, pero solo como sugerencia (#15).
+      rescatarFolioFactura(state, "CERT_PASSWORD_INVALID: la clave del certificado parece incorrecta. Corrígela en Opciones de la extensión y verifica en el portal si la factura alcanzó a emitirse — no la re-emitas.", { soloSugerir: true });
       return;
     }
     const creds = await getUnlockedSiiCredentials(state.appOrigin);
@@ -600,9 +695,24 @@ async function handleFactDriveResponse(state, res) {
   }
 
   if (res.action === "captured" && res.result) {
+    // La pantalla post-firma no dejó leer el folio con evidencia → buscarlo en
+    // Documentos emitidos antes de dejarla a medias.
+    if (state.kind === "factura" && !hasStrongFolioEvidence(res.result)) {
+      rescatarFolioFactura(state, "La factura se firmó, pero no pude leer el folio en la pantalla del SII. No la re-emitas.", { captura: res.result });
+      return;
+    }
     state.awaitingResult = false;
     handleCapturedResult(state, res.result);
     return;
+  }
+
+  if (res.action === "folio_buscado") {
+    handleFolioBuscadoFactura(state, res);
+    return;
+  }
+
+  if (res.action === "validado" && Array.isArray(res.snapshot_emitidos)) {
+    state.factSnapshot = res.snapshot_emitidos; // respaldo del sessionStorage del worker
   }
 
   // Login real del SII: el worker de FACTURAS lo detecta y lo pide (el motor
@@ -639,7 +749,7 @@ async function handleFactDriveResponse(state, res) {
       sendToApp(state, statusMessage(state.jobId, "fact_sign_poll", `Post-firma (${state.factSignPolls}/20): ${String(res.excerpt ?? res.detalle ?? "sin texto").slice(0, 400)}`, true));
       return;
     }
-    sendToApp(state, statusMessage(state.jobId, "result_needs_review", "La firma no avanzó tras varios intentos. Revisa la ventana del SII: si viste un folio, la factura se emitió — no la re-emitas.", true));
+    rescatarFolioFactura(state, "La firma no avanzó tras varios intentos. Revisa la ventana del SII: si viste un folio, la factura se emitió — no la re-emitas.");
     return;
   }
 
@@ -852,13 +962,26 @@ function scanWorkerPage(state, attempt = 1) {
     const excerpt = String(map.body_excerpt || "");
     // Autologin de BOLETAS: post-emit jamás tipear credenciales (la password
     // visible podría ser otra).
-    if (!state.finalEmitClicked && isLoginPageMap(map)) {
+    // (verificación ya parada en /reportes: esa pantalla puede contener "RUT" y parecer
+    // login para la heurística — adversarial #7 — no se tipea nada ahí)
+    const verifyEnReportes = state.job?.verify_only === true && String(map.url || "").includes("/reportes");
+    if (!state.finalEmitClicked && !verifyEnReportes && isLoginPageMap(map)) {
       attemptSiiAutologin(state, map);
       return;
     }
 
     if (attempt < 8 && regexCargando(state).test(excerpt)) {
       setTimeout(() => scanWorkerPage(state, attempt + 1), 1500);
+      return;
+    }
+
+    // VERIFICACIÓN (0.2.8): el job solo lee el Resumen; jamás llega a FILL_AND_EMIT.
+    // Se dispara cuando e-Boleta ya cargó (EMITIR + pad, o ya en /reportes).
+    if (state.job?.verify_only === true) {
+      const textoEmitirV = textoBotonEmitir(state);
+      const cargoEboleta = String(map.url || "").includes("/reportes")
+        || (Array.isArray(map.buttons) && map.buttons.some((b) => normalizarTextoBoton(b?.text) === textoEmitirV));
+      if (cargoEboleta) verificarEnReportes(state);
       return;
     }
 
@@ -901,7 +1024,9 @@ function scanWorkerPage(state, attempt = 1) {
         job_id: state.jobId,
         job: state.job,
       }), (emitResponse) => {
-        if (chrome.runtime.lastError || !emitResponse?.ok) {
+        // M2: capturado en la PRIMERA línea (lastError solo vale síncrono en el callback).
+        const puertoMuerto = Boolean(chrome.runtime.lastError);
+        if (puertoMuerto || !emitResponse?.ok) {
           const errorMessage = emitResponse?.error || chrome.runtime.lastError?.message || "No se pudo emitir en e-Boleta.";
           const preEmit = !state.finalEmitClicked && !emitResponse?.final_emit_clicked;
           const esCambioSii = emitResponse?.posible_cambio_sii === true;
@@ -949,6 +1074,11 @@ function scanWorkerPage(state, attempt = 1) {
             {
               code: codeValido(emitResponse?.code),
               posible_cambio_sii: esCambioSii,
+              // 0.2.8: emisión INCIERTA = el puerto murió sin respuesta del worker después
+              // de mandar FILL_AND_EMIT (pudo apretar EMITIR y no alcanzar a avisar). Un
+              // error que el worker LANZÓ (emisor cambió, modal cerrado, pad) es pre-emit
+              // seguro y NO se verifica (adversarial #1).
+              emision_incierta: state.submitted === true && puertoMuerto && !emitResponse,
             },
           ));
           return;
@@ -1311,6 +1441,57 @@ function attemptSiiAutologinInFrames(state, credentials, previousError) {
   });
 }
 
+// ── VERIFICACIÓN en /reportes (cuadre por evento, 2026-09-26) ────────────────
+// La app la pide tras una boleta que falló DESPUÉS de llegar al modal (pudo apretar
+// EMITIR y morir antes de avisar). Este job NO emite: navega a /reportes y pide al
+// worker el calce (monto + fecha + ventana horaria del intento). Desenlaces:
+//   folio con evidencia fuerte → handleCapturedResult (se registra con los guards del
+//   server) → la app la ve "emitida";  folio posible pero ambiguo → result_needs_review
+//   (la app pone lápida: a medias, visible en Emitir);  nada → "error" con mensaje claro
+//   (la app la da por no emitida: re-emitible). Si /reportes no se puede leer → "error"
+//   también (advisory: nunca bloquea el lote).
+function verificarEnReportes(state) {
+  if (state.verifyTerminal || state.verifyEnCurso) return;
+  state.verifyEnCurso = true;
+  const w = state.job?.verify_window || {};
+  const desde = Number(w.desde_ms); const hasta = Number(w.hasta_ms);
+  const antesMin = Number.isFinite(desde) && Number.isFinite(hasta) && hasta > desde ? Math.min(30, Math.ceil((hasta - desde) / 60000) + 2) : null;
+  sendToApp(state, statusMessage(state.jobId, "capturing_result", "Verificando en el Resumen de ventas del SII.", true));
+  // El worker asegura el emisor, va al Resumen POR EL MENÚ (sin carga dura) y calza;
+  // refresca la tabla él mismo si la fila aún no aparece. Un solo mensaje.
+  chrome.tabs.sendMessage(state.workerTabId, baseMessage({
+    type: "APP_CONTABLE_SII_VERIFICAR_REPORTES",
+    job_id: state.jobId,
+    job: state.job,
+    ctx: { final_emit_at: Number.isFinite(hasta) ? hasta : null, ventana_antes_min: antesMin, ventana_despues_min: 6 },
+  }), (captureResponse) => {
+    if (chrome.runtime.lastError || !captureResponse?.ok) {
+      // No se pudo leer: NUNCA "no salió" (adversarial #2/#4). A medias, visible.
+      state.verifyTerminal = true;
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "No pude leer el Resumen de ventas del SII para verificar esta boleta. Quedó a medias: confirma su folio en Emitir → A medias.", true, { verificacion: true }));
+      return;
+    }
+    const result = captureResponse.result;
+    if (hasStrongFolioEvidence(result) || result?.folio) {
+      // Fuerte → se registra (guards del server). Ambiguo → handleCapturedResult deja
+      // el rastro (captureDebug → sii_local_resultados) + result_needs_review, así
+      // "Recuperar el folio" y la pestaña A medias tienen con qué trabajar (adv. #5).
+      state.verifyTerminal = true;
+      handleCapturedResult(state, result);
+      return;
+    }
+    state.verifyTerminal = true;
+    if (result?.reportes_tabla_completa === true) {
+      // Tabla COMPLETA (pie "1-N de N", sin "Cargando…"), con 2 refrescos, y 0
+      // candidatas: no salió. Incompleta/cargando → a medias abajo (B1).
+      sendToApp(state, statusMessage(state.jobId, "error", "Verifiqué el Resumen de ventas del SII: esta boleta no salió. Se puede reintentar.", true, { verificacion: true, verificado_sin_folio: true }));
+      return;
+    }
+    // Sin tabla legible: no verificable → a medias.
+    sendToApp(state, statusMessage(state.jobId, "result_needs_review", "El Resumen de ventas del SII no se dejó leer. Esta boleta quedó a medias: confirma su folio en Emitir → A medias.", true, { verificacion: true }));
+  });
+}
+
 function captureWorkerResult(state) {
   sendToApp(state, statusMessage(
     state.jobId,
@@ -1322,6 +1503,8 @@ function captureWorkerResult(state) {
     type: "APP_CONTABLE_SII_CAPTURE_RESULT",
     job_id: state.jobId,
     job: state.job,
+    // 0.2.8: respaldo de la hora del EMITIR (el worker prefiere su sessionStorage).
+    ctx: { final_emit_at: state.finalEmitAt ?? null },
   }), (captureResponse) => {
     if (chrome.runtime.lastError || !captureResponse?.ok) {
       const errorMessage = captureResponse?.error || chrome.runtime.lastError?.message || "No se pudo capturar el resultado SII.";
@@ -1367,6 +1550,8 @@ const FACT_WORKER_EN_PESTANA = false; // DEBUG: true = worker (boletas Y factura
 async function openWorkerWindow(job, appTabId, appOrigin) {
   // Facturas: la URL de arranque viaja EN el job (validada: solo sii.cl por
   // https). Boletas siguen en la constante de e-Boleta.
+  // (Verificación: arranca en /emitir como cualquier job; el worker va al Resumen por
+  // el menú. Una carga dura de /reportes redirige a /emitir y resetea el emisor.)
   const startUrl = job.kind === "factura" && job.start_url ? job.start_url : SII_START_URL;
   let workerWindowId = null;
   let workerTabId = null;
@@ -1506,6 +1691,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const state = stateForWorkerTab(sender.tab?.id);
     if (state) {
       state.finalEmitClicked = true;
+      state.finalEmitAt = state.finalEmitAt || Date.now(); // 0.2.8: ancla de la ventana horaria del calce
       // 0.2.7: traer la ventana al frente en el instante del EMITIR real. Chrome no
       // dispara requestAnimationFrame en ventanas tapadas y Vuetify dibuja el recibo
       // (folio, Imprimir/Compartir) dentro de uno: con el popup atrás, el folio no se
@@ -1594,7 +1780,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clearPendingResult(message.job_id);
       const state = activeJobs.get(message.job_id);
       if (state) state.resultPersisted = true;
-    } else if (message.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO"].includes(message.error)) {
+    } else if (message.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO", "FOLIO_DE_OTRO_DOCUMENTO", "EMISOR_CRUZADO"].includes(message.error)) {
+      // FOLIO_DE_OTRO_DOCUMENTO / EMISOR_CRUZADO (0.2.8): el server dejó la boleta "a
+      // medias" a propósito; reintentar el mismo payload solo volvería a chocar (y, por
+      // la red de seguridad, podría levantar la lápida). El humano confirma en la app.
       // Rechazo PERMANENTE de la cuenta: reintentar jamás va a funcionar.
       // (FORBIDDEN no limpia: el resultado es de otra sesión y su dueño lo
       // reintenta desde la suya; el filtro por empresa evita el spam acá.)
