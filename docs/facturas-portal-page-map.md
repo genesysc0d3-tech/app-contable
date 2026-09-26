@@ -116,3 +116,27 @@ fundador mirando.
   (futuro: podría acelerar el masivo, no se usa por ahora).
 - Nada quedó guardado: no se usó "Guardar Borrador" y el preview no asigna
   folio; se salió con Corregir/navegación.
+
+## 6. "Ver documentos emitidos" — el equivalente de /reportes para facturas (leído 2026-09-26, MV, solo lectura)
+
+Fuente oficial: [Ver documentos emitidos (SII)](https://www.sii.cl/destacados/factura_electronica/guias_ayuda/documentos_emitidos.html)
+· menú *Historial de DTE y respuesta a documentos recibidos*.
+
+| Qué | Valor real |
+|---|---|
+| Entrada (maneja selección de empresa sola) | `mipeLaunchPage.cgi?OPCION=2&TIPO=4` → `mipeSelEmpresa.cgi` → **`mipeAdminDocsEmi.cgi`** |
+| Login | El de `zeusr.sii.cl` (Clave Tributaria); la sesión de e-Boleta NO sirve |
+| Tabla | 2ª `<table>` de la página: `Ver · Receptor · Razón Social · Documento · Folio · Fecha · Monto · Estado` |
+| Formato | Receptor `78448088-7` · Documento `Factura Exenta Electronica` · Folio `966` · **Fecha `2026-08-27` (SIN hora)** · Monto `103` (sin $ ni puntos) · Estado `Documento Emitido` |
+| Orden y paginación | Más nuevo primero; **100 filas por página**; pie "1-8 de 8" |
+| **Filtros por GET (sin captcha, probado)** | `RUT_RECP` (sin DV) · `FOLIO` · `RZN_SOC` · `FEC_DESDE`/`FEC_HASTA` (`YYYY-MM-DD`) · `TPO_DOC` · `ESTADO` · `ORDEN` · `NUM_PAG`. El form `FormNameAdmEmi` trae un campo `recaptcha-response`, pero la consulta por URL respondió sin él. |
+
+Cuadre en vivo contra la app: el SII muestra 961–968 para MV el 2026-08-27; la app tiene 961–963 y 965–968
+(964 = emisión MANUAL de reconocimiento, fuera de la app, no registrada a propósito). Coincide 1:1 en folio y monto.
+
+**Consecuencia de diseño (cierre del ciclo para facturas, NO construido):** el calce de una factura es
+**`RUT_RECP` + `FEC_DESDE=FEC_HASTA=fecha` + monto exacto + tipo**, pedido por URL (una sola carga, sin
+paginar ni leer la tabla entera). Es más fuerte que el de boletas: la factura siempre identifica al receptor.
+Como la fecha no trae hora, el desempate de dos facturas del mismo monto al mismo receptor el mismo día sería
+por `folios_hoy` (excluir los ya registrados); si aun así quedan 2+, "a medias". Hoy no hace falta: la captura
+de facturas lee el folio de la pantalla del DTE firmado y no falla desde el 2026-09-03.
