@@ -598,6 +598,8 @@
         header_tipo: reI(rp.header_tipo, /TIPO/i),
         ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
         ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
+        menu_item: reI(rp.menu_item, /RESUMEN DE VENTAS/i),
+        filas_por_pagina: Number.isInteger(rp.filas_por_pagina) && rp.filas_por_pagina >= 10 && rp.filas_por_pagina <= 250 ? rp.filas_por_pagina : 250,
       },
       // Las 8 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
       // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
@@ -1350,7 +1352,8 @@
     if (!location.href.includes("/reportes")) return null;
     const R = LB.reportes;
     for (const table of Array.from(document.querySelectorAll("table"))) {
-      const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")).map((c) => normalizeText(c.innerText || c.textContent));
+      // El header real trae el ícono de orden pegado ("Totalarrow_upward"): se quita.
+      const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")).map((c) => normalizeText(String(c.innerText || c.textContent || "").replace(/arrow_\w+/gi, " ")).trim());
       const idx = {
         folio: headers.findIndex((h) => R.header_folio.test(h)),
         fecha: headers.findIndex((h) => R.header_fecha.test(h)),
@@ -1426,6 +1429,50 @@
       return { folio: f.folio, confidence: "high", evidence: { source: "reportes_calce_unico", hora_fila: f.hora, hora_emitir: horaEmit, ...base, en_ventana: 1 } };
     }
     return medium(enVentana.length === 0 ? "ninguna_en_ventana" : "varias_en_ventana", { en_ventana: enVentana.length, hora_emitir: horaEmit });
+  }
+
+  // ── Navegar al Resumen de ventas POR EL MENÚ (SPA), nunca con location.href ──
+  // Verificado 2026-09-26 (MV): una carga dura de /reportes redirige a /emitir y
+  // RESETEA el emisor al primero de la lista (el 0.2.7 caía ahí y por eso "no veía"
+  // la tabla). El ítem del drawer existe en el DOM aunque el drawer esté cerrado y
+  // responde al click; la navegación es client-side: este content script SIGUE VIVO
+  // (se acabó "la navegación mata el canal") y el emisor se conserva.
+  async function irAResumenVentasSpa() {
+    if (location.href.includes("/reportes")) return true;
+    const item = Array.from(document.querySelectorAll(".v-navigation-drawer .v-list-item, .v-list-item"))
+      .find((li) => LB.reportes.menu_item.test(normalizeText(li.textContent || "")));
+    if (!item) return false;
+    try { item.click(); } catch { return false; }
+    for (let i = 0; i < 16; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (location.href.includes("/reportes") && parseReportesTabla()) return true;
+    }
+    return location.href.includes("/reportes");
+  }
+  // Tabla paginada a 10 con el folio más NUEVO al final: se pide el máximo de filas por
+  // página (v-select del pie; opciones reales 5…250). Best-effort: si no se logra, el
+  // calce igual corre sobre lo visible (y el veto/ambigüedad protegen).
+  async function ampliarFilasReportes() {
+    const slot = document.querySelector(".v-data-footer .v-select__slot, .v-data-footer__select .v-select__slot");
+    if (!slot) return false;
+    try { slot.click(); } catch { return false; }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const objetivo = String(LB.reportes.filas_por_pagina);
+    const opciones = Array.from(document.querySelectorAll(`${LB.selectores.menu}.menuable__content__active ${LB.selectores.opcion}, .menuable__content__active .v-list-item`));
+    const numericas = opciones.map((o) => ({ o, n: Number(String(o.textContent || "").trim()) })).filter((x) => Number.isInteger(x.n));
+    const elegida = numericas.find((x) => String(x.n) === objetivo) || numericas.sort((a, b) => b.n - a.n)[0];
+    if (!elegida) { try { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); } catch { /* nada */ } return false; }
+    try { elegida.o.click(); } catch { return false; }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return true;
+  }
+  // Botón "refresh" del Resumen (arriba del título): vuelve a pedir las filas sin
+  // recargar la página (sin reset del emisor).
+  function refrescarReportes() {
+    const icono = Array.from(document.querySelectorAll("button, .v-icon")).find((b) => /^refresh$/i.test(String(b.textContent || "").trim()));
+    const btn = icono && icono.closest ? (icono.closest("button") || icono) : icono;
+    if (!btn) return false;
+    try { btn.click(); return true; } catch { return false; }
   }
 
   function hasStrongFolioResult(result) {
@@ -1896,9 +1943,15 @@
 
     renderOverlay("LOCKED_AUTOMATION", "No encontre folio en la pantalla actual. Revisando reportes SII.");
     if (!location.href.includes("/reportes")) {
-      location.href = "https://eboleta.sii.cl/reportes";
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      // Por el MENÚ (SPA): sin carga dura, sin reset del emisor, sin matar este script.
+      const llego = await irAResumenVentasSpa();
+      if (!llego) {
+        const sinReportes = captureResult(job, ctx);
+        renderOverlay("PAUSED", "No pude abrir el Resumen de ventas del SII. Revisa la pantalla SII y reintenta captura.");
+        return sinReportes;
+      }
     }
+    await ampliarFilasReportes();
 
     // 0.2.8: hasta 10 lecturas (la fila recién emitida tarda en aparecer). Se sale al
     // primer calce ÚNICO; si la tabla está pero el calce es ambiguo, se sigue intentando
@@ -1923,6 +1976,9 @@
       }
       calceEstable = null;
       if (reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) ultimoReporte = reportResult;
+      // Sin candidatas y tabla leída: a mitad de camino se refresca la tabla (la fila
+      // recién emitida puede tardar en aparecer) — sin recargar la página.
+      if (attempt === 4 && reportResult.reportes_tabla_leida && !reportResult.folio) refrescarReportes();
     }
     // Se acabaron las lecturas con un "high" sin confirmar: se degrada a medium.
     if (ultimoReporte && ultimoReporte.folio_confidence === "high") {
@@ -1978,6 +2034,22 @@
           renderOverlay("HUMAN_REQUIRED", error instanceof Error ? error.message : String(error));
           sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
         });
+      return true;
+    }
+    if (message.type === "APP_CONTABLE_SII_VERIFICAR_REPORTES") {
+      // Verificación (cuadre por evento): NUNCA toca la calculadora ni EMITIR.
+      (async () => {
+        const job = message.job || {};
+        LB = resolverLibreto(job);
+        renderOverlay("LOCKED_AUTOMATION", "Verificando en el Resumen de ventas del SII.");
+        await selectEmisorByRut(job.emisor_rut);
+        assertEmisorRut(job);
+        const llego = await irAResumenVentasSpa();
+        if (!llego) throw new Error("No pude abrir el Resumen de ventas del SII.");
+        return captureResultWhenReady(job, message.ctx || null);
+      })()
+        .then((result) => sendResponse({ ok: true, result }))
+        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
       return true;
     }
     if (message.type === "APP_CONTABLE_SII_CAPTURE_RESULT") {

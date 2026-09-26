@@ -668,6 +668,54 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     expect(res.result.folio_confidence).toBe("high");
   });
 
+  it("tabla REAL del SII (2026-09-26): headers con 'arrow_upward', sin columna Hora, hora dentro de Fecha", async () => {
+    escenaReportes(
+      [{ fecha: "25/09/2026 15:28:07", folio: 1241, monto: "$ 196.000" }],
+      { headers: ["Nro Folioarrow_upward", "Boletaarrow_upward", "Netoarrow_upward", "IVAarrow_upward", "Totalarrow_upward", "Tipoarrow_upward", "Vendedorarrow_upward", "Sucursalarrow_upward", "Estadoarrow_upward", "Fechaarrow_upward", "Acciones"] },
+    );
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.folio_evidence.hora_fila).toBe("15:28");
+  });
+
+  it("post-emit sin recibo: va al Resumen POR EL MENÚ (sin location.href duro), el script sigue vivo y calza", async () => {
+    escenaEmision();
+    estado.recibo = null;
+    // Ítem del drawer como en el portal real: existe en el DOM con el drawer cerrado.
+    const item = el({ tag: "DIV", sel: [".v-list-item"], text: "view_listResumen de ventas diarias" });
+    item.onClick = () => {
+      location.href = "https://eboleta.sii.cl/reportes";
+      estado.scene.push(tablaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }]));
+    };
+    estado.scene.push(item);
+    location.href = "https://eboleta.sii.cl/emitir/";
+    const res = await capturarEnReportes(jobReportes());
+    expect(location.href).toContain("/reportes");
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.estado).toBe("emitida_capturada_reportes");
+  });
+
+  it("verificación (mensaje propio): asegura el emisor, navega por el menú y calza sin emitir", async () => {
+    escenaEmision();
+    estado.recibo = null;
+    const item = el({ tag: "DIV", sel: [".v-list-item"], text: "view_listResumen de ventas diarias" });
+    item.onClick = () => {
+      location.href = "https://eboleta.sii.cl/reportes";
+      estado.scene.push(tablaReportes([{ fecha: "25/09/2026", hora: "15:08", folio: 1241, monto: "$ 196.000" }]));
+    };
+    estado.scene.push(item);
+    location.href = "https://eboleta.sii.cl/emitir/";
+    let res;
+    driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_VERIFICAR_REPORTES", job_id: "v1", job: jobReportes({ job_id: "v1", verify_only: true, allow_final_emit: false }), ctx: { final_emit_at: EMIT_AT, ventana_antes_min: 25, ventana_despues_min: 6 } }, {}, (r) => { res = r; });
+    await vi.runAllTimersAsync();
+    expect(res.ok).toBe(true);
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(estado.actions.find((a) => a.role === "btn_emitir_final")).toBeUndefined();
+  });
+
   it("emisor activo distinto al del job → medium (emisor_distinto)", async () => {
     // La escena trae el selector de emisor del portal con EMISOR activo; el job viene
     // por OTRA empresa → el calce no cierra solo.
