@@ -133,5 +133,31 @@ alternativo que sí ofrezca ambos, como plan de contingencia.
 responsable de datos de AlphaCode SpA.
 **Fecha:** 2026-08-23. **Próxima revisión:** 2027-02-23, o ante cualquier condición de reversión.
 
+## Actualización 2026-09-26 — proveedor alternativo con DPA: Fireworks AI
+
+Cumple el punto (ii) de las gestiones en paralelo. **Fireworks AI** (Fireworks.ai, Inc., EE.UU.):
+
+- **Contrato de tratamiento:** DPA público (`fireworks.ai/dpa`, v3.2) que se incorpora a
+  los términos al contratar como empresa. Fireworks actúa como **encargado** (processor) y
+  AlphaCode SpA como **responsable** (Art. 15 bis). Cláusula 4.3(f): prohíbe usar los datos
+  para entrenar o ajustar modelos. Cláusula 4.5: no retiene prompts ni respuestas más allá
+  de la solicitud.
+- **Retención:** cero por defecto para modelos abiertos (documentación "Zero Data
+  Retention"); solo registra metadatos (conteo de tokens). No se usa la Response API (que
+  guarda 30 días con `store=true`).
+- **Transferencia internacional (Art. 27 b / 28):** el DPA incorpora las Cláusulas
+  Contractuales Estándar de la UE (Decisión 2021/914). Se consideran **garantías adecuadas**
+  en el sentido del art. 28 (principios y derechos similares o mayores que la ley chilena).
+  Las cláusulas modelo chilenas son un puerto seguro opcional, no un requisito: se aplica la
+  misma vara que a Vercel, Supabase y Cloudflare R2, que también procesan fuera de Chile.
+- **Modelo:** `accounts/fireworks/models/deepseek-v4p1-flash` (serverless), en la allowlist
+  técnica de `src/lib/ai/egress.ts`. Se mantiene la seudonimización previa al envío.
+- **Evaluación de calidad:** banco de pruebas (flujo atomizado) J1 18/18, J4 17/19, cartola
+  larga 60/60; con los prompts de producción, montos y dirección 44/44 sobre documentos
+  **sintéticos** (ningún dato real salió en las pruebas).
+- **Estado:** construido detrás de `AI_PROVIDER=fireworks`; la activación en producción es
+  decisión del responsable. Con eso, OpenCode Go (sin DPA) deja de recibir datos antes del
+  2026-12-01. Pendiente: el OCR de imágenes (`ocr.ts`) sigue en OpenCode Go (minimax-m3).
+
 ---
 *Borrador generado con compliance-cl (pack ley-21719). No constituye asesoría legal.*
