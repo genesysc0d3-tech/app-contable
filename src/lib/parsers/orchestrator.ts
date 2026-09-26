@@ -10,7 +10,7 @@ import { detectHeuristic } from "./heuristic";
 import { detectByNames, detectPlantillaBoletas } from "./named";
 import { esPlantillaFacturas } from "../facturas/plantilla";
 import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
-import { validate } from "./validator";
+import { formatoVerificadoPorSaldo, validate } from "./validator";
 import {
   getAdapterByFingerprint,
   saveAdapter,
@@ -86,6 +86,7 @@ export async function parseExcelWithOrchestrator(
           source: "named",
           nombre: `Plantilla massDTE (${sheetName})`,
           config: plantillaCfg,
+          empresaId: null, // nuestra propia plantilla: global
         });
         const orchResult: OrchestratorResult = {
           content: result.content,
@@ -161,12 +162,12 @@ export async function parseExcelWithOrchestrator(
     if (heuristicCfg) {
       const result = tryApply(rows, heuristicCfg, sheetName, fallas, "heuristica");
       if (result) {
-        const adapterId = await saveAdapter({
+        const adapterId = await guardarFormatoDerivado(rows, {
           fingerprint,
           source: "heuristic",
           nombre: `Heurística (${sheetName})`,
           config: heuristicCfg,
-        });
+        }, opts);
         const orchResult: OrchestratorResult = {
           content: result.content,
           capa_usada: 2,
@@ -200,12 +201,12 @@ export async function parseExcelWithOrchestrator(
     if (namedCfg) {
       const result = tryApply(rows, namedCfg, sheetName, fallas, "nombres");
       if (result) {
-        const adapterId = await saveAdapter({
+        const adapterId = await guardarFormatoDerivado(rows, {
           fingerprint,
           source: "named",
           nombre: `Nombres (${sheetName})`,
           config: namedCfg,
-        });
+        }, opts);
         const orchResult: OrchestratorResult = {
           content: result.content,
           capa_usada: 3,
@@ -317,6 +318,41 @@ function tryApply(
     warnings: validation.warnings,
     preExtracted: linesToPreExtracted(lines),
   };
+}
+
+/**
+ * FORMATO NUEVO = PROVISORIO (revisión adversarial 2026-09-26). Un mapeo
+ * derivado (heurística o nombres) solo se comparte con TODAS las empresas si el
+ * saldo corrido lo confirma; si no, queda privado de la empresa que lo subió
+ * (así un error como el de BCI Detallado de LC no se contagia) y deja un aviso
+ * para revisarlo. La plantilla de nuestro propio template sí es global.
+ */
+async function guardarFormatoDerivado(
+  rows: Row[],
+  args: { fingerprint: string; source: "heuristic" | "named"; nombre: string; config: AdapterConfig },
+  opts: { documento_id?: string; empresa_id?: string } | undefined,
+): Promise<string | null> {
+  const compartible = args.config.plantilla === true || formatoVerificadoPorSaldo(rows, args.config);
+  if (!compartible && !opts?.empresa_id) return null; // sin dueño no se guarda una adivinanza
+  const id = await saveAdapter({ ...args, empresaId: compartible ? null : opts!.empresa_id! });
+  if (!compartible) {
+    try {
+      const { recordOpsEvent } = await import("../ops/events");
+      await recordOpsEvent({
+        severity: "info",
+        source: "upload",
+        eventName: "parser_formato_nuevo",
+        summary: "Formato de planilla nuevo sin confirmar por saldo: queda privado de la empresa (revisar)",
+        empresaId: opts?.empresa_id ?? null,
+        resourceType: "documento_subido",
+        resourceId: opts?.documento_id ?? null,
+        metadata: { fuente: args.source, layout: args.config.layout ?? "two_cols", adapter_id: id },
+      });
+    } catch {
+      /* el aviso nunca rompe la subida */
+    }
+  }
+  return id;
 }
 
 async function alarmaCapa4(args: {

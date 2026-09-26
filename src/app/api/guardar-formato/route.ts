@@ -55,16 +55,18 @@ export async function POST(request: Request) {
   // Anti-poison cross-tenant (auditoría #2): first-owner-wins. Si ya hay un adapter
   // para este fingerprint que NO es de esta empresa (o es heurístico/global, dueño
   // null), NO se sobrescribe — se conserva el compartido. Solo el dueño edita el suyo.
+  // Solo se busca el PROPIO: un global/ajeno no se toca, pero tampoco impide que
+  // esta empresa guarde su corrección (2026-09-26: antes respondía "compartido"
+  // sin guardar nada y un global mal leído no se podía arreglar).
   const { data: existing } = await sb
     .from("parser_adapters")
     .select("id, creado_por_empresa_id")
     .eq("fingerprint", body.fingerprint)
+    .eq("creado_por_empresa_id", usuario.empresa_id)
+    .limit(1)
     .maybeSingle();
 
   if (existing?.id) {
-    if (existing.creado_por_empresa_id !== usuario.empresa_id) {
-      return NextResponse.json({ ok: true, fingerprint: body.fingerprint, compartido: true });
-    }
     const { error: updErr } = await sb
       .from("parser_adapters")
       .update({ source: "manual", nombre: body.nombre || "Formato manual", config, confianza: 1.0 })

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
+import { applyAdapter } from "@/lib/parsers/apply";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { descargarDocumento } from "@/lib/storage";
 
@@ -68,14 +69,21 @@ export async function POST(request: Request) {
   try { fileBuf = await descargarDocumento(provider, documento.storage_path, bajar); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
   const ab = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
-  const workbook = XLSX.read(ab, { type: "array" });
-  const firstSheet = workbook.SheetNames.find((n) => {
-    const rows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" });
-    return rows.length > 0;
-  });
-  if (!firstSheet) return NextResponse.json({ error: "Excel vacío" }, { status: 422 });
-
-  const rows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[firstSheet], { header: 1, defval: "" });
+  // Mismas opciones de lectura que el orquestador (cellDates) para que la huella
+  // calce, y la hoja = la primera donde ESTE mapeo produce movimientos: en
+  // BancoEstado (hojas Resumen + Movimientos) la "primera no vacía" era el
+  // Resumen y el manual quedaba guardado con la huella de la hoja equivocada.
+  const workbook = XLSX.read(ab, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
+  const hojas = workbook.SheetNames
+    .map((n) => ({ n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" }) }))
+    .filter((h) => h.rows.length > 0);
+  if (!hojas.length) return NextResponse.json({ error: "Excel vacío" }, { status: 422 });
+  const produce = (h: { rows: Row[] }) => {
+    try { return applyAdapter(h.rows, config).length > 0; } catch { return false; }
+  };
+  const hoja = hojas.find(produce) ?? hojas[0];
+  const firstSheet = hoja.n;
+  const rows = hoja.rows;
   const fingerprint = computeFingerprint(rows);
 
   const adapterId = await upsertManualAdapter({

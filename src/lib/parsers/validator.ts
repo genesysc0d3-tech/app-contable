@@ -187,3 +187,21 @@ function checkSaldoMonotonia(rows: Row[], cfg: AdapterConfig): string | null {
   }
   return null;
 }
+
+/**
+ * ¿El saldo corrido CONFIRMA este mapeo? (≥10 filas revisadas y ≤20% fallidas).
+ * Es la condición para compartir un formato derivado con otras empresas: sin
+ * saldo (o con pocas filas) el mapeo es una adivinanza y queda privado de la
+ * empresa que lo subió (revisión adversarial 2026-09-26).
+ */
+export function formatoVerificadoPorSaldo(rows: Row[], cfg: AdapterConfig): boolean {
+  const c = cfg.columns;
+  if (c.saldo < 0 || (cfg.layout ?? "two_cols") !== "two_cols") return false;
+  const filas: Row[] = [];
+  for (let i = cfg.skip_rows_before_data; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && cellEsFecha(r[c.fecha] as never)) filas.push(r);
+  }
+  const { revisadas, fallidas } = cuadreSaldo(filas, c.cargo, c.abono, c.saldo);
+  return revisadas >= 10 && fallidas / revisadas <= 0.2;
+}

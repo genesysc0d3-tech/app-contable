@@ -9,10 +9,11 @@ import * as XLSX from "xlsx";
 // Security, Falabella.
 
 const logs: Array<Record<string, unknown>> = [];
+const guardados: Array<Record<string, unknown>> = [];
 const ops: Array<Record<string, unknown>> = [];
 vi.mock("./adapter-store", () => ({
   getAdapterByFingerprint: async () => null,
-  saveAdapter: async () => "adapter-test",
+  saveAdapter: async (a: Record<string, unknown>) => { guardados.push(a); return "adapter-test"; },
   incrementAdapterSuccess: async () => {},
   decrementAdapterConfianza: async () => {},
   logParserEvent: async (e: Record<string, unknown>) => { logs.push(e); },
@@ -21,7 +22,7 @@ vi.mock("../ops/events", () => ({
   recordOpsEvent: async (e: Record<string, unknown>) => { ops.push(e); },
 }));
 
-beforeEach(() => { logs.length = 0; ops.length = 0; });
+beforeEach(() => { logs.length = 0; ops.length = 0; guardados.length = 0; });
 
 type Celda = string | number | Date | null;
 function libro(hojas: Record<string, Celda[][]>): ArrayBuffer {
@@ -123,5 +124,36 @@ describe("guardas de la revisión adversarial (2026-09-26)", () => {
     const log4 = logs.find((l) => l.capa_usada === 4)!;
     expect((log4.validator_failed_checks as string[]).length).toBeGreaterThan(0);
     expect(ops.some((o) => o.eventName === "parser_cayo_a_ia" && o.empresaId === "emp-test")).toBe(true);
+  });
+});
+
+describe("formato nuevo = provisorio", () => {
+  it("sin saldo que lo confirme, el formato queda PRIVADO de la empresa y deja aviso", async () => {
+    const filas: Celda[][] = Array.from({ length: 15 }, (_, i) => [dia(1 + i), dia(1 + i), `Transferencia recibida de Cliente ${i}`, null, 12_000 + i]);
+    await parsear({ "Hoja 1": [["Mis Movimientos"], ["Fecha Transacción", "Fecha Contable", "Descripción", "Egreso (-)", "Ingreso (+)"], ...filas] });
+    expect(guardados).toHaveLength(1);
+    expect(guardados[0].empresaId).toBe("emp-test");
+    expect(ops.some((o) => o.eventName === "parser_formato_nuevo")).toBe(true);
+  });
+
+  it("con el saldo cuadrando en ≥10 filas, el formato se comparte (global)", async () => {
+    let saldo = 1_000_000;
+    const asc: Celda[][] = Array.from({ length: 20 }, (_, i) => {
+      const egreso = i % 6 === 2; const m = 10_000 + i * 700;
+      saldo += egreso ? -m : m;
+      return [dia(1 + (i % 25)), `D5D76EB61DB98F697D346006F73B22F26229444E|${9010716960000 + i}`, `Transferencia recibida de Cliente ${i}`, egreso ? null : m, egreso ? m : null, saldo];
+    });
+    await parsear({ "Hoja 1": [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse()] });
+    expect(guardados).toHaveLength(1);
+    expect(guardados[0].empresaId).toBeNull();
+  });
+});
+
+describe("vocabulario único de títulos", () => {
+  it("'CARGO/ABONO' (columna de tipo de Santander) no calza como cargo Y abono a la vez", async () => {
+    const { detectByNames } = await import("./named");
+    const rows = [["Fecha", "Descripción", "CARGO/ABONO", "Monto", "Saldo"], ["01/09/2026", "Pago", "C", 1000, 5000]];
+    const cfg = detectByNames(rows as never);
+    if (cfg) expect(cfg.columns.cargo).not.toBe(cfg.columns.abono);
   });
 });
