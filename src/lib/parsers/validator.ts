@@ -1,5 +1,6 @@
 import type { ParsedLine, Row, AdapterConfig, ValidationResult } from "./types";
-import { parseChileanNumber } from "./apply";
+import { cellEsFecha } from "./heuristic";
+import { cuadreSaldo } from "./saldo-cuadre";
 
 const MIN_ROWS = 1;
 const MAX_ROWS = 5000;
@@ -167,44 +168,22 @@ function checkSaldoMonotonia(rows: Row[], cfg: AdapterConfig): string | null {
   const { columns: c, skip_rows_before_data } = cfg;
   if (c.saldo < 0) return null;
 
-  let prevSaldo: number | null = null;
-  let checked = 0;
-  let failed = 0;
-
+  // Filas de datos = las que tienen fecha. cellEsFecha acepta Date nativo y
+  // serial de Excel: antes se exigía TEXTO dd/mm/yyyy y, con fechas reales de
+  // Excel (cellDates:true), el check se saltaba TODAS las filas y aprobaba
+  // cualquier mapeo — así pasó la cartola BCI de LC con ingreso y egreso
+  // invertidos (2026-09-26). El orden (ASC/DESC) lo resuelve cuadreSaldo.
+  const filas: Row[] = [];
   for (let i = skip_rows_before_data; i < rows.length; i++) {
     const r = rows[i];
-    if (!r) continue;
-
-    const fechaRaw = r[c.fecha];
-    if (
-      !fechaRaw ||
-      !String(fechaRaw).match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/)
-    )
-      continue;
-
-    const cargo = parseChileanNumber(r[c.cargo]);
-    const abono = parseChileanNumber(r[c.abono]);
-    const saldo = parseChileanNumber(r[c.saldo]);
-
-    if (!cargo && !abono) continue;
-    if (!saldo) continue;
-
-    if (prevSaldo !== null) {
-      const expected = prevSaldo + abono - cargo;
-      const diff = Math.abs(saldo - expected);
-      // Tolerate 1% relative error or 100 CLP absolute
-      const tolerance = Math.max(100, Math.abs(expected) * 0.01);
-      checked++;
-      if (diff > tolerance) failed++;
-    }
-
-    prevSaldo = saldo;
+    if (r && cellEsFecha(r[c.fecha] as never)) filas.push(r);
   }
+  const { revisadas, fallidas } = cuadreSaldo(filas, c.cargo, c.abono, c.saldo);
 
-  if (checked < 10) return null; // too few samples to judge
-  const failRatio = failed / checked;
+  if (revisadas < 10) return null; // too few samples to judge
+  const failRatio = fallidas / revisadas;
   if (failRatio > 0.2) {
-    return `check_6_saldo_monotonia: ${failed}/${checked} rows failed running-balance equation (${(failRatio * 100).toFixed(0)}%)`;
+    return `check_6_saldo_monotonia: ${fallidas}/${revisadas} rows failed running-balance equation (${(failRatio * 100).toFixed(0)}%)`;
   }
   return null;
 }
