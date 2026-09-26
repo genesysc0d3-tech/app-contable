@@ -127,6 +127,7 @@ interface EmissionJobStartResponse {
   locked_until?: string;
   empresa_id?: string;
   expected_emisor_rut?: string | null;
+  folios_hoy?: number[] | null;
   business_mode?: boolean;
   reserved_folio?: number | null;
   reserved_tipo_dte?: number | null;
@@ -1248,6 +1249,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       // El worker verifica que el portal tenga seleccionado este emisor
       // antes de emitir (cuentas SII multi-empresa).
       emisorRut: job.expected_emisor_rut ?? empresaRut ?? undefined,
+      foliosHoy: Array.isArray(job.folios_hoy) ? job.folios_hoy : undefined,
       tipoDte: tipoDte === 41 ? 41 : 39,
       monto: total,
       fechaEmision: chileTodayString(),

@@ -39,6 +39,9 @@ export interface BoletaJobInput {
   logoutAfter: boolean;
   jobId?: string;
   expiresAt?: string;
+  /** Folios ya registrados hoy (empresa+tipo), del server: el worker los excluye al
+   *  calzar el folio en /reportes (0.2.8). */
+  foliosHoy?: number[];
 }
 
 export interface BoletaJob {
@@ -68,6 +71,7 @@ export interface BoletaJob {
   logout_after: boolean;
   job_id?: string;
   expires_at?: string;
+  folios_hoy?: number[];
 }
 
 function clean(value: string | null | undefined): string | undefined {
@@ -109,5 +113,6 @@ export function buildBoletaJob(input: BoletaJobInput): BoletaJob {
   };
   if (input.jobId) job.job_id = input.jobId;
   if (input.expiresAt) job.expires_at = input.expiresAt;
+  if (Array.isArray(input.foliosHoy)) job.folios_hoy = input.foliosHoy.filter((n) => Number.isInteger(n) && n > 0);
   return job;
 }

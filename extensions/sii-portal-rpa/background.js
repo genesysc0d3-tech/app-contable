@@ -1322,6 +1322,8 @@ function captureWorkerResult(state) {
     type: "APP_CONTABLE_SII_CAPTURE_RESULT",
     job_id: state.jobId,
     job: state.job,
+    // 0.2.8: respaldo de la hora del EMITIR (el worker prefiere su sessionStorage).
+    ctx: { final_emit_at: state.finalEmitAt ?? null },
   }), (captureResponse) => {
     if (chrome.runtime.lastError || !captureResponse?.ok) {
       const errorMessage = captureResponse?.error || chrome.runtime.lastError?.message || "No se pudo capturar el resultado SII.";
@@ -1506,6 +1508,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const state = stateForWorkerTab(sender.tab?.id);
     if (state) {
       state.finalEmitClicked = true;
+      state.finalEmitAt = state.finalEmitAt || Date.now(); // 0.2.8: ancla de la ventana horaria del calce
       // 0.2.7: traer la ventana al frente en el instante del EMITIR real. Chrome no
       // dispara requestAnimationFrame en ventanas tapadas y Vuetify dibuja el recibo
       // (folio, Imprimir/Compartir) dentro de uno: con el popup atrás, el folio no se
@@ -1594,7 +1597,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clearPendingResult(message.job_id);
       const state = activeJobs.get(message.job_id);
       if (state) state.resultPersisted = true;
-    } else if (message.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO"].includes(message.error)) {
+    } else if (message.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO", "FOLIO_DE_OTRO_DOCUMENTO", "EMISOR_CRUZADO"].includes(message.error)) {
+      // FOLIO_DE_OTRO_DOCUMENTO / EMISOR_CRUZADO (0.2.8): el server dejó la boleta "a
+      // medias" a propósito; reintentar el mismo payload solo volvería a chocar (y, por
+      // la red de seguridad, podría levantar la lápida). El humano confirma en la app.
       // Rechazo PERMANENTE de la cuenta: reintentar jamás va a funcionar.
       // (FORBIDDEN no limpia: el resultado es de otra sesión y su dueño lo
       // reintenta desde la suya; el filtro por empresa evita el spam acá.)

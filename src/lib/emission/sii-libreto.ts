@@ -316,6 +316,21 @@ export interface BoletaLibreto {
   emisor: { cargando: string };
   /** Texto del diálogo de confirmación por monto alto (regex source). */
   monto_alto: { texto: string };
+  /**
+   * Tabla del Resumen de ventas (`/reportes`) para el calce determinista del folio
+   * (0.2.8): encabezados por regex (la tabla se lee por HEADER, no por posición),
+   * formato de hora y ventana en minutos alrededor del EMITIR real. Sin columna
+   * de hora reconocible el worker NUNCA cierra solo (queda "a medias").
+   */
+  reportes: {
+    header_folio: string;
+    header_fecha: string;
+    header_hora: string;
+    header_monto: string;
+    header_tipo: string;
+    ventana_antes_min: number;
+    ventana_despues_min: number;
+  };
 }
 
 export const BOLETA_LIBRETO: BoletaLibreto = {
@@ -382,7 +397,16 @@ export const BOLETA_LIBRETO: BoletaLibreto = {
   // El libreto debe cubrir al más amplio; si no, el background con libreto
   // dejaba de ver el "Cargando" genérico que sí veía sin libreto.
   emisor: { cargando: "CARGANDO EMISORES|CARGANDO" },
-  monto_alto: { texto: "DESEA CONTINUAR|ESTA A PUNTO DE EMITIR" }, // /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i
+  monto_alto: { texto: "DESEA CONTINUAR|ESTA A PUNTO DE EMITIR" },
+  reportes: {
+    header_folio: "N(?:RO|°|º)?\\.?\\s*FOLIO|^FOLIO$",
+    header_fecha: "FECHA",
+    header_hora: "HORA",
+    header_monto: "MONTO\\s*TOTAL|^TOTAL$|^MONTO$",
+    header_tipo: "TIPO",
+    ventana_antes_min: 2,
+    ventana_despues_min: 6,
+  }, // /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i
 };
 
 // Qué significa cada ancla de BOLETAS, en cristiano (para el panel /dev).

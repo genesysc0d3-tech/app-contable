@@ -124,7 +124,28 @@
   // Aviso INMEDIATO al librero de que el EMITIR real ya se cliqueó, sin esperar la
   // confirmación de 16s. Arma el candado anti-doble-emisión al instante y protege el
   // folio aunque el content script muera después (puerto cerrado). Fire-and-forget.
+  // 0.2.8: la HORA del EMITIR real, guardada en sessionStorage de la pestaña (sobrevive
+  // la navegación a /reportes, que mata este content script). Es la ancla de la ventana
+  // horaria del calce del folio: sin ella el worker nunca cierra solo.
+  const FINAL_EMIT_AT_KEY = "massdte_final_emit_at";
+  function recordFinalEmitAt() {
+    try {
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(`${FINAL_EMIT_AT_KEY}:${currentJobId || ""}`, String(Date.now()));
+    } catch { /* sin storage: el librero manda su propia hora como respaldo */ }
+  }
+  function readFinalEmitAt(jobId, ctx) {
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        const v = Number(sessionStorage.getItem(`${FINAL_EMIT_AT_KEY}:${jobId || ""}`));
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+    } catch { /* sigue con el respaldo */ }
+    const r = Number(ctx?.final_emit_at);
+    return Number.isFinite(r) && r > 0 ? r : null;
+  }
+
   function notifyFinalEmitClicked() {
+    recordFinalEmitAt();
     try {
       chrome.runtime.sendMessage({
         source: EXT_SOURCE,
@@ -513,6 +534,7 @@
     const mo = L?.modal ?? {};
     const em = L?.emisor ?? {};
     const ma = L?.monto_alto ?? {};
+    const rp = L?.reportes ?? {};
     return {
       selectores: {
         dialogo_activo: s.dialogo_activo ?? ".v-dialog.v-dialog--active",
@@ -562,6 +584,16 @@
       modal: { titulo: reI(mo.titulo, /EMITIR\s+E-BOLETA/i) },
       emisor: { cargando: reI(em.cargando, /CARGANDO EMISORES/i) },
       monto_alto: { texto: reI(ma.texto, /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i) },
+      // 0.2.8: tabla del Resumen de ventas (/reportes) para el calce determinista.
+      reportes: {
+        header_folio: reI(rp.header_folio, /N(?:RO|°|º)?\.?\s*FOLIO|^FOLIO$/i),
+        header_fecha: reI(rp.header_fecha, /FECHA/i),
+        header_hora: reI(rp.header_hora, /HORA/i),
+        header_monto: reI(rp.header_monto, /MONTO\s*TOTAL|^TOTAL$|^MONTO$/i),
+        header_tipo: reI(rp.header_tipo, /TIPO/i),
+        ventana_antes_min: Number.isFinite(Number(rp.ventana_antes_min)) ? Number(rp.ventana_antes_min) : 2,
+        ventana_despues_min: Number.isFinite(Number(rp.ventana_despues_min)) ? Number(rp.ventana_despues_min) : 6,
+      },
       // Las 8 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
       // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
       esperas: {
@@ -1274,11 +1306,121 @@
     };
   }
 
-  function hasStrongFolioResult(result) {
-    return Boolean(result?.folio && result.folio_confidence === "high" && hasPdfArtifact(result));
+  // ── 0.2.8: CIERRE DEL CICLO en /reportes (calce determinista, nunca "la primera fila") ──
+  // La tabla se lee por ENCABEZADOS (regex del libreto), no por posición. Filas:
+  // {folio, fecha:"YYYY-MM-DD"|null, hora:"HH:MM"|null, monto:int|null}.
+  function parseMontoClp(value) {
+    const t = String(value || "").replace(/[^\d,.-]/g, "");
+    if (!t) return null;
+    // "196.000" / "196000" / "196.000,00" → 196000
+    const sinDecimales = t.includes(",") ? t.split(",")[0] : t;
+    const n = Number(sinDecimales.replace(/\./g, ""));
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+  function parseFechaIso(value) {
+    const t = String(value || "");
+    const dmy = t.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+    const ymd = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    return ymd ? `${ymd[1]}-${ymd[2]}-${ymd[3]}` : null;
+  }
+  function parseHoraHHMM(value) {
+    const m = String(value || "").match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+    if (!m) return null;
+    const h = Number(m[1]); const mi = Number(m[2]);
+    return h >= 0 && h < 24 && mi >= 0 && mi < 60 ? `${String(h).padStart(2, "0")}:${m[2]}` : null;
+  }
+  function minutosDeHora(hhmm) {
+    const m = String(hhmm || "").match(/^(\d{2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+  function horaChile(ms) {
+    try {
+      const parts = new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(ms));
+      const h = parts.find((p) => p.type === "hour")?.value; const mi = parts.find((p) => p.type === "minute")?.value;
+      return h != null && mi != null ? `${String(Number(h) % 24).padStart(2, "0")}:${mi}` : null;
+    } catch { return null; }
+  }
+  function parseReportesTabla() {
+    if (!location.href.includes("/reportes")) return null;
+    const R = LB.reportes;
+    for (const table of Array.from(document.querySelectorAll("table"))) {
+      const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")).map((c) => normalizeText(c.innerText || c.textContent));
+      const idx = {
+        folio: headers.findIndex((h) => R.header_folio.test(h)),
+        fecha: headers.findIndex((h) => R.header_fecha.test(h)),
+        hora: headers.findIndex((h) => R.header_hora.test(h)),
+        monto: headers.findIndex((h) => R.header_monto.test(h)),
+        tipo: headers.findIndex((h) => R.header_tipo.test(h)),
+      };
+      if (idx.folio < 0 || idx.monto < 0) continue;
+      const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
+      const rows = bodyRows.length > 0 ? bodyRows : Array.from(table.querySelectorAll("tr")).slice(1);
+      const filas = [];
+      for (const row of rows) {
+        const cells = Array.from(row.querySelectorAll("td, th")).map((c) => String(c.innerText || c.textContent || ""));
+        const folio = parseFolio(stripRut(cells[idx.folio] || ""));
+        if (!folio) continue;
+        const celdaFecha = idx.fecha >= 0 ? cells[idx.fecha] : "";
+        // La hora puede venir en su columna o dentro de la de fecha ("25/09/2026 15:27").
+        const hora = parseHoraHHMM(idx.hora >= 0 ? cells[idx.hora] : celdaFecha);
+        filas.push({
+          folio,
+          fecha: parseFechaIso(celdaFecha),
+          hora,
+          monto: parseMontoClp(cells[idx.monto]),
+          tipo: idx.tipo >= 0 ? normalizeText(cells[idx.tipo]) : null,
+        });
+      }
+      return { filas, tieneHora: idx.hora >= 0 || filas.some((f) => f.hora) };
+    }
+    return null;
+  }
+  // Calce PURO: monto exacto + fecha del job + folio no registrado hoy + ventana horaria
+  // alrededor del EMITIR real. UNA candidata en ventana → "high" (cierra sola). Cero o
+  // varias → "medium" (a medias, el humano confirma). Sin hora (tabla o EMITIR) → nunca
+  // "high". Sin ancla "último folio + 1": en un lote con montos iguales le pondría a la
+  // boleta B el folio de la A que quedó a medias (adversarial 0.2.8, F2).
+  function calzarFolioEnReportes(tabla, job, ctx) {
+    if (!tabla || !Array.isArray(tabla.filas) || tabla.filas.length === 0) return null;
+    const montoJob = Math.round(Number(job?.totales?.monto_total ?? 0));
+    const fechaJob = String(job?.fecha_emision || "").slice(0, 10) || null;
+    const conocidos = new Set((Array.isArray(job?.folios_hoy) ? job.folios_hoy : []).map(Number));
+    const emisorActivo = readActiveEmisorRut();
+    const emisorJob = job?.emisor_rut ? normalizeRut(job.emisor_rut) : null;
+    const emisorMismatch = Boolean(emisorActivo && emisorJob && normalizeRut(emisorActivo) !== emisorJob);
+    const candidatas = tabla.filas.filter((f) => f.monto === montoJob && (!f.fecha || !fechaJob || f.fecha === fechaJob) && !conocidos.has(f.folio));
+    const base = { candidatas: candidatas.length, monto: montoJob, fecha: fechaJob, emisor_mismatch: emisorMismatch };
+    const sugerido = candidatas[0]?.folio ?? null;
+    if (candidatas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", ...base } };
+    const finalEmitAt = readFinalEmitAt(job?.job_id, ctx);
+    const horaEmit = finalEmitAt ? horaChile(finalEmitAt) : null;
+    const medium = (motivo, extra = {}) => ({ folio: sugerido, confidence: "medium", evidence: { source: "reportes_ambiguo", motivo, ...base, ...extra } });
+    if (emisorMismatch) return medium("emisor_distinto");
+    if (!horaEmit || !tabla.tieneHora) return medium(!horaEmit ? "sin_hora_emitir" : "sin_hora_en_tabla");
+    const mEmit = minutosDeHora(horaEmit);
+    const antes = LB.reportes.ventana_antes_min; const despues = LB.reportes.ventana_despues_min;
+    const enVentana = candidatas.filter((f) => {
+      const m = minutosDeHora(f.hora);
+      if (m == null) return false;
+      let d = m - mEmit; if (d > 720) d -= 1440; if (d < -720) d += 1440; // cruce de medianoche
+      return d >= -antes && d <= despues;
+    });
+    if (enVentana.length === 1) {
+      const f = enVentana[0];
+      return { folio: f.folio, confidence: "high", evidence: { source: "reportes_calce_unico", hora_fila: f.hora, hora_emitir: horaEmit, ...base, en_ventana: 1 } };
+    }
+    return medium(enVentana.length === 0 ? "ninguna_en_ventana" : "varias_en_ventana", { en_ventana: enVentana.length, hora_emitir: horaEmit });
   }
 
-  function captureResult(job) {
+  function hasStrongFolioResult(result) {
+    if (!result?.folio || result.folio_confidence !== "high") return false;
+    // 0.2.8: el calce único en /reportes es evidencia fuerte sin PDF (ahí no hay recibo).
+    if (result.folio_evidence?.source === "reportes_calce_unico") return true;
+    return hasPdfArtifact(result);
+  }
+
+  function captureResult(job, ctx) {
     // 0.2.7 (adversarial): el folio se busca PRIMERO dentro del/los diálogos activos (el
     // recibo vive ahí; textContent incluye lo oculto) y recién después en el body
     // completo. Así un número de otro nodo oculto (lista de emisores, un recibo viejo)
@@ -1288,12 +1430,17 @@
     const withoutRut = stripRut(pageTextTodo().slice(0, 6000));
     const links = artifactLinks();
     const enReportes = location.href.includes("/reportes");
-    let captured = (textoDialogos && captureExplicitFolio(textoDialogos))
-      || captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut);
+    // 0.2.8: en /reportes el CALCE va primero (adversarial F5: un link PDF o un texto
+    // "Folio" de otra fila ganaba y cortocircuitaba). Solo si no hay tabla legible se
+    // cae a la cadena vieja, que en /reportes nunca pasa de "medium".
+    const calce = enReportes ? calzarFolioEnReportes(parseReportesTabla(), job, ctx) : null;
+    let captured = (calce && calce.confidence !== "none") ? calce
+      : ((textoDialogos && captureExplicitFolio(textoDialogos))
+        || captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut));
     // En /reportes la tabla trae TODAS las boletas del día: la primera fila puede ser
-    // OTRA boleta (LC tuvo 3 seguidas). Nunca "alta" desde ahí: el humano confirma con
-    // el folio sugerido (result_needs_review), y no se toca Compartir.
-    if (enReportes && captured && captured.confidence === "high") {
+    // OTRA boleta (LC tuvo 3 seguidas). Nunca "alta" desde ahí SALVO el calce único
+    // (monto + fecha + hora, una sola candidata); el resto lo confirma el humano.
+    if (enReportes && captured && captured.confidence === "high" && captured.evidence?.source !== "reportes_calce_unico") {
       captured = { ...captured, confidence: "medium", evidence: { ...(captured.evidence || {}), degradado: "reportes_puede_ser_otra_boleta_del_dia" } };
     }
     const folio = captured?.folio ?? null;
@@ -1694,10 +1841,13 @@
     }
   }
 
-  async function captureResultWhenReady(job) {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+  async function captureResultWhenReady(job, ctx) {
+    // 0.2.8: si este content script nació YA en /reportes (el anterior navegó y murió;
+    // el librero reintentó la captura), no hay recibo que esperar: directo al calce.
+    const yaEnReportes = location.href.includes("/reportes");
+    for (let attempt = 0; attempt < (yaEnReportes ? 0 : 20); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1200 : 1500));
-      const result = captureResult(job);
+      const result = captureResult(job, ctx);
       if (hasStrongFolioResult(result)) {
         // Folio fuerte + estamos en el recibo → capturar el PDF oficial vía
         // COMPARTIR (primario). Si no se logra, el background cae a DESCARGAR.
@@ -1711,8 +1861,8 @@
       }
     }
 
-    const lastScreenResult = captureResult(job);
-    if (lastScreenResult.folio || /Descargar|Imprimir|Compartir|Folio|Boleta emitida|Emitida/i.test(lastScreenResult.page.excerpt)) {
+    const lastScreenResult = yaEnReportes ? null : captureResult(job, ctx);
+    if (lastScreenResult && (lastScreenResult.folio || /Descargar|Imprimir|Compartir|Folio|Boleta emitida|Emitida/i.test(lastScreenResult.page.excerpt))) {
       renderOverlay("PAUSED", "SII parece haber respondido, pero no pude confirmar el folio automaticamente. Usa Capturar folio si lo ves en pantalla.");
       return lastScreenResult;
     }
@@ -1723,22 +1873,27 @@
       await new Promise((resolve) => setTimeout(resolve, 3500));
     }
 
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const reportResult = captureResult(job);
-      if (hasStrongFolioResult(reportResult) || reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) {
-        reportResult.estado = hasStrongFolioResult(reportResult) ? "emitida_capturada_reportes" : reportResult.folio ? "resultado_requiere_revision" : "reportes_sin_folio_detectado";
-        renderOverlay(
-          hasStrongFolioResult(reportResult) ? "DONE" : "PAUSED",
-          hasStrongFolioResult(reportResult)
-            ? `Boleta encontrada en reportes. Folio ${reportResult.folio}.`
-            : "Revise reportes SII, pero no pude confirmar el folio automaticamente.",
-        );
-        return reportResult;
+    // 0.2.8: hasta 10 lecturas (la fila recién emitida tarda en aparecer). Se sale al
+    // primer calce ÚNICO; si la tabla está pero el calce es ambiguo, se sigue intentando
+    // (la fila propia puede estar por llegar) y al final se devuelve el "medium".
+    let ultimoReporte = null;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 && yaEnReportes ? 600 : 1500));
+      const reportResult = captureResult(job, ctx);
+      if (hasStrongFolioResult(reportResult)) {
+        reportResult.estado = "emitida_capturada_reportes";
+        renderOverlay("DONE", `Boleta emitida. Folio ${reportResult.folio} confirmado en reportes.`);
+        return reportResult; // sin tryCaptureSharePdf: en /reportes no hay "Compartir" del recibo
       }
+      if (reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) ultimoReporte = reportResult;
+    }
+    if (ultimoReporte) {
+      ultimoReporte.estado = ultimoReporte.folio ? "resultado_requiere_revision" : "reportes_sin_folio_detectado";
+      renderOverlay("PAUSED", "Revise reportes SII, pero no pude confirmar el folio automaticamente.");
+      return ultimoReporte;
     }
 
-    const result = captureResult(job);
+    const result = captureResult(job, ctx);
     renderOverlay("PAUSED", "No pude detectar folio ni respaldo despues de emitir. Revisa la pantalla SII y reintenta captura.");
     return result;
   }
@@ -1784,7 +1939,7 @@
       return true;
     }
     if (message.type === "APP_CONTABLE_SII_CAPTURE_RESULT") {
-      captureResultWhenReady(message.job)
+      captureResultWhenReady(message.job, message.ctx || null)
         .then((result) => sendResponse({ ok: true, result }))
         .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
       return true;

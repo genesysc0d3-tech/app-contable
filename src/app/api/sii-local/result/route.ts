@@ -392,6 +392,44 @@ async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) 
   }
 }
 
+// 0.2.8 (cierre del ciclo, adversarial F3): un folio "alto" que salió del calce único
+// en /reportes (monto + fecha + hora) NO se acepta si HOY esta empresa tiene otra boleta
+// del mismo tipo y monto "a medias" (lápida revision_pendiente sin boleta): la fila
+// única que el worker vio puede ser ESA boleta y no la recién emitida (LC tuvo 3
+// seguidas de $300.000). En ese caso el resultado se trata como evidencia débil →
+// lápida, y el humano confirma con el folio sugerido. Best-effort: si la consulta
+// falla, se veta (fail-closed: prefiere "a medias" a un folio cruzado).
+async function calceReportesVetado(
+  sb: ServiceDb,
+  args: { empresaId: string; tipoDte: number; montoTotal: number; fechaEmision: string; jobId: string | null },
+): Promise<boolean> {
+  try {
+    const desde = `${args.fechaEmision}T00:00:00-03:00`;
+    const { data: lapidas } = await sb
+      .from("emision_jobs")
+      .select("job_id, propuesta_id")
+      .eq("empresa_id", args.empresaId)
+      .eq("estado", "revision_pendiente")
+      .gte("created_at", desde)
+      .not("propuesta_id", "is", null)
+      .limit(50);
+    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id);
+    if (otras.length === 0) return false;
+    const { data: props } = await sb
+      .from("propuestas_ia")
+      .select("id, total, tipo_dte")
+      .in("id", otras.map((j) => j.propuesta_id as string));
+    return (props ?? []).some((p) => Math.round(Number(p.total)) === args.montoTotal && (p.tipo_dte == null || p.tipo_dte === args.tipoDte));
+  } catch {
+    return true;
+  }
+}
+
+function esCalceReportes(result: SiiLocalResultPayload["result"] | null | undefined): boolean {
+  const ev = result?.folio_evidence as { source?: string } | null | undefined;
+  return ev?.source === "reportes_calce_unico";
+}
+
 async function backfillFolioSinJobVivo(
   sb: ServiceDb,
   args: {
@@ -431,10 +469,21 @@ async function backfillFolioSinJobVivo(
   // sin filtrar estado — para no chocar con la constraint ni "registrar" un folio
   // nuevo apuntando a una boleta anulada (coincide con el camino vivo).
   const { data: existing } = await sb
-    .from("boletas_emitidas").select("id")
+    .from("boletas_emitidas").select("id, propuesta_id")
     .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio)
     .maybeSingle();
-  if (existing) { await liftRevisionTombstone(sb, args.propuestaId); return { ok: true, boletaId: existing.id, already: true }; }
+  if (existing) {
+    // FOLIO DE OTRO DOCUMENTO (adversarial 0.2.8, F1): si el folio ya es de OTRA
+    // propuesta, este resultado es un cruce (p. ej. /reportes mostró la boleta
+    // anterior). Antes se respondía "already" y se LEVANTABA la lápida de esta
+    // propuesta → quedaba re-emitible → doble folio. Ahora: ni se levanta ni se
+    // registra; la lápida sigue y el humano confirma el folio real.
+    if (existing.propuesta_id && args.propuestaId && existing.propuesta_id !== args.propuestaId) {
+      return { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO" };
+    }
+    await liftRevisionTombstone(sb, args.propuestaId);
+    return { ok: true, boletaId: existing.id, already: true };
+  }
 
   const totals = totalsFor(args.tipoDte, args.montoTotal, args.totales);
   const backfillRow = {
@@ -497,9 +546,15 @@ async function backfillFolioSinJobVivo(
   if (error || !boleta) {
     // Carrera: otra request insertó el mismo folio entremedio → tratar como already.
     const { data: raced } = await sb
-      .from("boletas_emitidas").select("id")
+      .from("boletas_emitidas").select("id, propuesta_id")
       .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio).maybeSingle();
-    if (raced) { await liftRevisionTombstone(sb, args.propuestaId); return { ok: true, boletaId: raced.id, already: true }; }
+    if (raced) {
+      if (raced.propuesta_id && args.propuestaId && raced.propuesta_id !== args.propuestaId) {
+        return { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO" };
+      }
+      await liftRevisionTombstone(sb, args.propuestaId);
+      return { ok: true, boletaId: raced.id, already: true };
+    }
     // Doble folio para la MISMA propuesta (choque con idx_boletas_propuesta_unica_
     // vigente, NO con el folio): registrar el folio B DESACOPLADO (propuesta_id
     // null) para que no quede invisible + alerta ops crítica. Mismo patrón que el
@@ -718,7 +773,9 @@ export async function POST(request: Request) {
     // revertir). Ahora la respaldamos igual (idempotente). Esto también hace que los
     // botones "Recuperar folio/PDF" funcionen aunque el job ya esté cerrado.
     const jobCerrado = jobGate.job;
-    const evidenciaFuerte = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
+    const vetoCalceCerrado = Boolean(jobCerrado && esCalceReportes(result) && tipoDte && montoTotal && fechaEmision)
+      && await calceReportesVetado(sb, { empresaId: jobCerrado!.empresa_id, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: effectiveJobId });
+    const evidenciaFuerte = (result?.folio_confidence === "high" && !vetoCalceCerrado) || Boolean(pdfInfo?.folio);
     // La red aplica a TODA falla del gate que venga con `job` adjunto (cerrado,
     // expirado, empresa desactivada por downgrade, plan vencido): la ownership
     // ya fue verificada en requireEmisionJob y la boleta en el SII es un hecho.
@@ -759,6 +816,18 @@ export async function POST(request: Request) {
         });
         return NextResponse.json({ ok: true, boleta_id: respaldo.boletaId ?? null, folio, already_exists: Boolean(respaldo.already), recuperado: true });
       }
+      if (respaldo.error === "FOLIO_DE_OTRO_DOCUMENTO") {
+        // Cruce detectado en la red de seguridad: NO se guarda como resultado
+        // reutilizable (recover_latest lo volvería a intentar) y la extensión debe
+        // dejar de reintentarlo (error permanente en su stash).
+        await recordOpsEvent({
+          sb, severity: "warn", source: "sii-local", eventName: "sii_local_folio_de_otro_documento",
+          summary: "Folio capturado pertenece a otra propuesta (job cerrado): no se registra ni se levanta la lápida",
+          usuarioId: user.id, resourceType: "emision_job", resourceId: effectiveJobId,
+          metadata: { folio, tipo_dte: tipoDte, propuesta_id: jobCerrado?.propuesta_id ?? null, origen: (result?.folio_evidence as { source?: string } | null)?.source ?? null },
+        });
+        return NextResponse.json({ ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO", detalle: "Ese folio ya pertenece a otra boleta. La de este intento sigue a medias: confirma su folio en Emitir → A medias." }, { status: 409 });
+      }
       // Si el backfill falló (p.ej. empresa sin datos fiscales), caemos al stash de
       // abajo para no perder el rastro del folio.
     }
@@ -797,7 +866,17 @@ export async function POST(request: Request) {
   // Evidencia fuerte = el SII entregó folio con confianza alta (o folio en la
   // URL del PDF). Es el ÚNICO requisito para registrar la boleta: el folio es
   // la prueba de emisión. El PDF se adjunta aparte (puede quedar pendiente).
-  const hasStrongEvidence = result?.folio_confidence === "high" || Boolean(pdfInfo?.folio);
+  const vetoCalce = Boolean(esCalceReportes(result) && tipoDte && montoTotal && fechaEmision)
+    && await calceReportesVetado(sb, { empresaId, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: job.job_id });
+  const hasStrongEvidence = (result?.folio_confidence === "high" && !vetoCalce) || Boolean(pdfInfo?.folio);
+  if (vetoCalce) {
+    await recordOpsEvent({
+      sb, severity: "warn", source: "sii-local", eventName: "sii_local_calce_reportes_vetado",
+      summary: "Calce único en /reportes vetado: hoy hay otra boleta a medias del mismo monto",
+      usuarioId: user.id, empresaId, resourceType: "emision_job", resourceId: effectiveJobId,
+      metadata: { folio, tipo_dte: tipoDte, monto_total: montoTotal },
+    });
+  }
   if (!folio || !tipoDte || !montoTotal || !fechaEmision || !hasStrongEvidence) {
     await rememberResult(sb, {
       user_id: user.id,
@@ -855,13 +934,57 @@ export async function POST(request: Request) {
 
   const { data: existing } = await sb
     .from("boletas_emitidas")
-    .select("id, folio, estado, proveedor_respuesta")
+    .select("id, folio, estado, proveedor_respuesta, propuesta_id")
     .eq("empresa_id", empresaId)
     .eq("tipo_dte", tipoDte)
     .eq("folio", folio)
     .maybeSingle();
 
+  // Emisor cruzado se evalúa ANTES de la rama `existing` (adversarial 0.2.8, F8): un
+  // folio capturado bajo OTRO RUT que coincide numéricamente con uno de esta empresa
+  // no puede darse por "ya registrado".
+  const emisorActivo = cleanText(result?.emisor_rut_activo);
+  const emisorMismatch = Boolean(emisorActivo && empresa.rut && cleanRut(emisorActivo) !== cleanRut(empresa.rut));
+  if (emisorMismatch) {
+    await recordOpsEvent({
+      sb,
+      severity: "error",
+      source: "sii-local",
+      eventName: "sii_local_emisor_mismatch",
+      summary: "Boleta emitida en el SII bajo un emisor distinto al registrado en la app",
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: effectiveJobId,
+      metadata: { folio, tipo_dte: tipoDte, emisor_activo: emisorActivo, emisor_registrado: empresa.rut },
+    });
+  }
+
   if (existing) {
+    // FOLIO DE OTRO DOCUMENTO (adversarial 0.2.8, F1): el folio ya es de OTRA
+    // propuesta → este intento capturó la boleta equivocada (p. ej. la fila de otra
+    // boleta en /reportes). Antes: "already_exists" + job 'completed' → la propuesta
+    // de este job quedaba sin boleta y RE-EMITIBLE → doble folio. Ahora: lápida
+    // (bloquea re-emitir) + 409; el humano confirma el folio real en "A medias".
+    // Ambos propuesta_id no nulos: boleta única, reconciliación y el folio B de un
+    // doble folio (propuesta_id NULL) siguen pasando por la rama normal.
+    const folioAjeno = Boolean(existing.propuesta_id && job.propuesta_id && existing.propuesta_id !== job.propuesta_id);
+    if (folioAjeno || emisorMismatch) {
+      await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "rejected", error: folioAjeno ? "FOLIO_DE_OTRO_DOCUMENTO" : "EMISOR_CRUZADO", result });
+      await recordOpsEvent({
+        sb, severity: "warn", source: "sii-local", eventName: folioAjeno ? "sii_local_folio_de_otro_documento" : "sii_local_emisor_cruzado_existing",
+        summary: folioAjeno ? "Folio capturado pertenece a otra propuesta: no se cierra el job" : "Folio ya registrado, pero el portal tenía otro emisor activo: no se cierra el job",
+        usuarioId: user.id, empresaId, resourceType: "emision_job", resourceId: effectiveJobId,
+        metadata: { folio, tipo_dte: tipoDte, propuesta_job: job.propuesta_id ?? null, propuesta_boleta: existing.propuesta_id ?? null, emisor_activo: emisorActivo ?? null, origen: (result?.folio_evidence as { source?: string } | null)?.source ?? null },
+      });
+      await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "revision_pendiente" });
+      return NextResponse.json({
+        ok: false,
+        error: folioAjeno ? "FOLIO_DE_OTRO_DOCUMENTO" : "EMISOR_CRUZADO",
+        detalle: folioAjeno
+          ? "Ese folio ya pertenece a otra boleta. Esta quedó a medias: confirma su folio en Emitir → A medias."
+          : "El portal tenía otra empresa seleccionada. Esta boleta quedó a medias: revisa en el SII bajo qué RUT salió.",
+      }, { status: 409 });
+    }
     const pdfUpload = await uploadResultPdf(sb, { empresaId, tipoDte, folio, result, pdfInfo });
     if (pdfUpload.storagePath) {
       const previousResponse = existing.proveedor_respuesta && typeof existing.proveedor_respuesta === "object"
@@ -912,25 +1035,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
   }
 
-  // Emisor cruzado: si el portal tenía activa OTRA empresa al capturar, la boleta
-  // salió en el SII bajo un RUT distinto al que registramos acá. Se registra igual
-  // (la boleta real existe) pero con marca visible + alerta ops — antes los libros
-  // divergían en silencio y nadie se enteraba.
-  const emisorActivo = cleanText(result?.emisor_rut_activo);
-  const emisorMismatch = Boolean(emisorActivo && empresa.rut && cleanRut(emisorActivo) !== cleanRut(empresa.rut));
-  if (emisorMismatch) {
-    await recordOpsEvent({
-      sb,
-      severity: "error",
-      source: "sii-local",
-      eventName: "sii_local_emisor_mismatch",
-      summary: "Boleta emitida en el SII bajo un emisor distinto al registrado en la app",
-      usuarioId: user.id,
-      resourceType: "emision_job",
-      resourceId: effectiveJobId,
-      metadata: { folio, tipo_dte: tipoDte, emisor_activo: emisorActivo, emisor_registrado: empresa.rut },
-    });
-  }
+  // (Emisor cruzado: evaluado arriba, antes de la rama `existing`.) Se registra igual
+  // con marca visible + alerta ops — antes los libros divergían en silencio.
 
   const totals = totalsFor(tipoDte, montoTotal, result?.totales ?? null);
   const receptor = result?.receptor ?? null;

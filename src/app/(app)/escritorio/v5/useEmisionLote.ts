@@ -146,7 +146,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
   // porque NO es "esta boleta falló": es "no abras ninguna". El lote se detiene
   // en seco conservando lo pendiente (ver pausada_remota en lote-runner).
   type StartJob =
-    | { jobId: string; expiresAt: string; emisorRut: string | null }
+    | { jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
     | { pausada: true; detalle: string }
     | null;
   const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<StartJob> => {
@@ -181,6 +181,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         jobId: json.job_id as string,
         expiresAt: json.expires_at as string,
         emisorRut: (json.expected_emisor_rut ?? null) as string | null,
+        foliosHoy: Array.isArray(json.folios_hoy) ? (json.folios_hoy as number[]) : [],
       };
     } catch {
       return null;
@@ -277,6 +278,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           payloadJob = buildBoletaJob({
             empresaId,
             emisorRut: job.emisorRut ?? empresaRut ?? undefined,
+            foliosHoy: job.foliosHoy,
             tipoDte: full.tipoDte as 39 | 41,
             monto: full.monto,
             fechaEmision: full.fechaEmision,
