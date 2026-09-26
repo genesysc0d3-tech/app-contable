@@ -651,10 +651,15 @@
     // "Validar y visualizar" NO emite ni asigna folio (la vista previa dice
     // "Documento NO válido") — es seguro pre-candado.
     if (job.learn_only === true) return { ok: true, action: "learn_stop_pre_validar", ...(glosaOmitida ? { glosa_omitida: true } : {}) };
+    // SNAPSHOT de "Documentos emitidos" para este receptor+fecha+tipo ANTES de Validar
+    // (adversarial #7: acá no se intercala un GET entre la vista previa y Firmar). Solo
+    // cuenta si la cabecera confirma la empresa del job (#3). Best-effort: sin snapshot
+    // la búsqueda post-firma nunca cierra sola (a medias), pero nada se bloquea.
+    const snapshotEmitidos = await tomarSnapshotEmitidos(job);
     if (!clickEl(campo(formEl(LB.forms.formulario), c.boton_validar))) {
       return { ok: false, error: "SIN_BOTON_VALIDAR", ...cambioSii("campos.boton_validar", { code: "SIN_BOTON_VALIDAR", page_kind: "formulario", paso: "formulario:validar" }) };
     }
-    return { ok: true, action: "validado", ...(glosaOmitida ? { glosa_omitida: true } : {}) }; // la página navega al preview
+    return { ok: true, action: "validado", snapshot_emitidos: snapshotEmitidos, ...(glosaOmitida ? { glosa_omitida: true } : {}) }; // la página navega al preview
   }
 
   // ── CIERRE DEL CICLO DE FACTURAS (2026-09-26): "Ver documentos emitidos" ─────
@@ -672,55 +677,74 @@
       .replace(/\s+/g, " ").trim();
   }
   // PURA (testeable): HTML de la página → { empresaRut, filas } | null si no hay tabla.
+  // Se recorre por FILAS del documento entero (no por bloques <table>): la tabla de
+  // resultados puede venir anidada en una de layout (adversarial #8). La fila de
+  // encabezado es la que trae Receptor + Folio + Monto; las de datos son las que la
+  // siguen y traen un folio numérico.
   function parsearEmitidosHtml(html) {
     const h = String(html || "");
     const emp = textoPlanoHtml(h).match(/Empresa:\s*([\d.]{7,12}-?[\dkK])/i);
-    const tablas = h.match(/<table[\s\S]*?<\/table>/gi) || [];
-    for (const t of tablas) {
-      const trs = t.match(/<tr[\s\S]*?<\/tr>/gi) || [];
-      if (trs.length === 0) continue;
-      const celdas = (tr) => (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/gi) || []).map(textoPlanoHtml);
-      const headers = celdas(trs[0]).map((x) => x.toUpperCase());
-      const idx = {
-        receptor: headers.findIndex((x) => /^RECEPTOR/.test(x)),
-        documento: headers.findIndex((x) => /^DOCUMENTO/.test(x)),
-        folio: headers.findIndex((x) => /^FOLIO/.test(x)),
-        fecha: headers.findIndex((x) => /^FECHA/.test(x)),
-        monto: headers.findIndex((x) => /^MONTO/.test(x)),
-        estado: headers.findIndex((x) => /^ESTADO/.test(x)),
-      };
-      if (idx.folio < 0 || idx.monto < 0 || idx.receptor < 0) continue;
-      const filas = [];
-      for (const tr of trs.slice(1)) {
-        const c = celdas(tr);
-        const rawFolio = String(c[idx.folio] || "").replace(/[.\s]/g, "");
-        if (!/^\d{1,10}$/.test(rawFolio)) continue;
-        const rawMonto = String(c[idx.monto] || "").replace(/[^\d]/g, "");
-        filas.push({
-          folio: Number(rawFolio),
-          receptor: normalizeRutValue(c[idx.receptor]) || null,
-          documento: String(c[idx.documento] || "").toUpperCase(),
-          fecha: (String(c[idx.fecha] || "").match(/\d{4}-\d{2}-\d{2}/) || [null])[0],
-          monto: rawMonto ? Number(rawMonto) : null,
-          estado: String(c[idx.estado] || ""),
-        });
+    // Fila MÁS INTERNA (una <tr> que no contiene otra <tr>): con una tabla de layout
+    // alrededor, la fila de afuera no se come el encabezado de la de adentro.
+    const trs = h.match(/<tr\b(?:(?!<tr\b)[\s\S])*?<\/tr>/gi) || [];
+    const celdas = (tr) => (tr.match(/<t[dh][^>]*>[\s\S]*?(?=<t[dh][\s>]|<\/tr>)/gi) || []).map(textoPlanoHtml);
+    let idx = null; const filas = [];
+    for (const tr of trs) {
+      const c = celdas(tr);
+      if (!idx) {
+        const up = c.map((x) => x.toUpperCase());
+        const cand = {
+          receptor: up.findIndex((x) => /^RECEPTOR/.test(x)),
+          documento: up.findIndex((x) => /^DOCUMENTO/.test(x)),
+          folio: up.findIndex((x) => /^FOLIO/.test(x)),
+          fecha: up.findIndex((x) => /^FECHA/.test(x)),
+          monto: up.findIndex((x) => /^MONTO/.test(x)),
+          estado: up.findIndex((x) => /^ESTADO/.test(x)),
+        };
+        if (cand.folio >= 0 && cand.monto >= 0 && cand.receptor >= 0) idx = cand;
+        continue;
       }
-      return { empresaRut: emp ? normalizeRutValue(emp[1]) : null, filas };
+      const rawFolio = String(c[idx.folio] || "").replace(/[.\s]/g, "");
+      if (!/^\d{1,10}$/.test(rawFolio)) continue;
+      const rawMonto = String(c[idx.monto] || "").replace(/[^\d]/g, "");
+      filas.push({
+        folio: Number(rawFolio),
+        receptor: normalizeRutValue(c[idx.receptor]) || null,
+        documento: String(c[idx.documento] || "").toUpperCase(),
+        fecha: (String(c[idx.fecha] || "").match(/\d{4}-\d{2}-\d{2}/) || [null])[0],
+        monto: rawMonto ? Number(rawMonto) : null,
+        estado: String(c[idx.estado] || ""),
+      });
     }
-    return null;
+    if (!idx) return null;
+    return { empresaRut: emp ? normalizeRutValue(emp[1]) : null, filas };
   }
   async function consultarEmitidos(job) {
     const partes = splitRutCuerpoDv(job?.receptor?.rut);
     const fecha = String(job?.fecha_emision || "").slice(0, 10);
     if (!partes || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null;
     const qs = `RUT_RECP=${encodeURIComponent(partes.cuerpo)}&FOLIO=&RZN_SOC=&FEC_DESDE=${fecha}&FEC_HASTA=${fecha}&TPO_DOC=&ESTADO=&ORDEN=&NUM_PAG=1`;
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const t = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
     try {
-      const resp = await globalThis.fetch(`${EMITIDOS_CGI}?${qs}`, { credentials: "include" });
+      const resp = await globalThis.fetch(`${EMITIDOS_CGI}?${qs}`, { credentials: "include", ...(ctrl ? { signal: ctrl.signal } : {}) });
       if (!resp || !resp.ok) return null;
       return parsearEmitidosHtml(await resp.text());
     } catch {
       return null;
+    } finally {
+      if (t) clearTimeout(t);
     }
+  }
+  // Snapshot = claves "tipo|folio" de las facturas DEL MISMO TIPO que ya existen para
+  // este receptor+fecha (#9: los rangos de folio son independientes por tipo). Solo si
+  // la cabecera confirma la empresa del job (#3); si no, null (nunca cierra sola).
+  async function tomarSnapshotEmitidos(job) {
+    const consulta = await consultarEmitidos(job);
+    if (!consulta || !consulta.empresaRut || consulta.empresaRut !== normalizeRutValue(job?.emisor_rut)) return null;
+    const folios = consulta.filas.filter((f) => esTipoDeFactura(f.documento, job?.tipo_dte)).map((f) => f.folio);
+    guardarSnapshot(job.job_id, folios);
+    return folios;
   }
   // Snapshot PRE-Firmar: los folios que YA existían para este receptor+fecha. Post-firma
   // solo cuenta lo NUEVO (diff) — así una factura del mismo monto emitida antes (a mano o
@@ -747,23 +771,28 @@
   // PURA: calce de la factura del job en la consulta. UNA fila nueva (no estaba en el
   // snapshot, no registrada hoy) del mismo receptor, fecha, tipo y monto → high. Sin
   // snapshot, emisor distinto o 2+ candidatas → medium (a medias).
-  function calzarFactura(consulta, job, snapshot) {
+  function calzarFactura(consulta, job, snapshot, opts = {}) {
     if (!consulta || !Array.isArray(consulta.filas)) return null;
     const receptor = normalizeRutValue(job?.receptor?.rut);
     const fecha = String(job?.fecha_emision || "").slice(0, 10);
     const monto = Math.round(Number(job?.totales?.monto_total ?? 0));
     const previos = new Set((snapshot || []).map(Number));
     const conocidos = new Set((Array.isArray(job?.folios_hoy) ? job.folios_hoy : []).map(Number));
-    const emisorMismatch = Boolean(consulta.empresaRut && job?.emisor_rut && consulta.empresaRut !== normalizeRutValue(job.emisor_rut));
-    const candidatas = consulta.filas.filter((f) => f.receptor === receptor && f.fecha === fecha && f.monto === monto
+    // Empresa de la cabecera: tiene que estar Y ser la del job para cerrar solo (#3).
+    const emisorMismatch = !consulta.empresaRut || !job?.emisor_rut || consulta.empresaRut !== normalizeRutValue(job.emisor_rut);
+    const candidatas = consulta.filas.filter((f) => f.receptor === receptor && f.fecha === fecha && f.monto != null && Math.abs(f.monto - monto) <= 1
       && esTipoDeFactura(f.documento, job?.tipo_dte) && !previos.has(f.folio) && !conocidos.has(f.folio));
     const base = { candidatas: candidatas.length, monto, fecha, snapshot: Array.isArray(snapshot), emisor_mismatch: emisorMismatch };
     if (candidatas.length === 0) return { folio: null, confidence: "none", evidence: { source: "emitidos_sin_candidatas", ...base } };
     const sugerido = candidatas[0].folio;
-    if (emisorMismatch) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "emisor_distinto", ...base } };
+    if (emisorMismatch) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: consulta.empresaRut ? "emisor_distinto" : "emisor_desconocido", ...base } };
+    // Rutas donde la factura puede NO haberse emitido (el portal rebotó a una pantalla
+    // previa, faltó el campo/botón de la clave): una fila nueva podría ser de OTRA
+    // persona emitiendo en el portal → nunca cierra sola (#4).
+    if (opts.soloSugerir) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "emision_no_confirmada", ...base } };
     if (!Array.isArray(snapshot)) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "sin_snapshot", ...base } };
     if (candidatas.length > 1) return { folio: sugerido, confidence: "medium", evidence: { source: "emitidos_ambiguo", motivo: "varias", ...base } };
-    return { folio: sugerido, confidence: "high", evidence: { source: "emitidos_calce_unico", ...base } };
+    return { folio: sugerido, confidence: "high", evidence: { source: "emitidos_calce_unico", estado: candidatas[0].estado || null, ...base } };
   }
 
   async function stepPreview(job) {
@@ -789,12 +818,10 @@
       return { ok: true, action: "paused_preview", human: true };
     }
 
-    // SNAPSHOT de "Documentos emitidos" para este receptor+fecha (antes de que exista
-    // el folio de este job). Best-effort: sin snapshot la búsqueda post-firma nunca
-    // cierra sola (queda a medias), pero Firmar no se bloquea.
-    const consultaPrevia = await consultarEmitidos(job);
-    const snapshotEmitidos = consultaPrevia ? consultaPrevia.filas.map((f) => f.folio) : null;
-    if (snapshotEmitidos) guardarSnapshot(job.job_id, snapshotEmitidos);
+    // #6: un job vencido no firma (el server ya soltó su candado).
+    if (job.expires_at && Date.parse(job.expires_at) <= Date.now()) {
+      return { ok: false, error: "JOB_EXPIRED", detalle: "El trabajo venció antes de firmar. No se emitió nada." };
+    }
 
     // CANDADO ANTES DE FIRMAR: desde este click puede quemarse folio. El
     // background arma finalEmitClicked al instante; ninguna ruta de error
@@ -811,7 +838,7 @@
     const btn = campo(form, c.boton_firmar) ?? document.getElementById(c.boton_firmar);
     // btnSign no encontrado = ANTES de firmar (no hay folio en riesgo) → señal.
     if (!clickEl(btn)) return { ok: false, error: "SIN_BOTON_FIRMAR", ...cambioSii("campos.boton_firmar", { code: "SIN_BOTON_FIRMAR", page_kind: "preview", paso: "preview:firmar" }) };
-    return { ok: true, action: "firmar_click", snapshot_emitidos: snapshotEmitidos }; // navega a mipeGenXMLFirma
+    return { ok: true, action: "firmar_click" }; // navega a mipeGenXMLFirma
   }
 
   // Pantalla de la clave del certificado (post-Firmar). Solo pedir la clave si
@@ -927,18 +954,18 @@
   // BÚSQUEDA POST-FIRMA (el librero la pide cuando la captura de la pantalla falló):
   // hasta 4 consultas (~2 s entre cada una); el calce único tiene que REPETIRSE en dos
   // consultas seguidas antes de devolver "high".
-  async function buscarFolioEnEmitidos(job, snapshotRespaldo) {
+  async function buscarFolioEnEmitidos(job, snapshotRespaldo, opts = {}) {
     const snapshot = leerSnapshot(job.job_id, snapshotRespaldo);
-    let anterior = null; let ultimo = null; let leida = false;
+    let anterior = null; let ultimo = null; let leida = false; let confirmado = false;
     for (let i = 0; i < 4; i += 1) {
       if (i > 0) await esperar(2000);
       const consulta = await consultarEmitidos(job);
       if (!consulta) continue;
       leida = true;
-      const calce = calzarFactura(consulta, job, snapshot);
+      const calce = calzarFactura(consulta, job, snapshot, opts);
       ultimo = { calce, empresaRut: consulta.empresaRut };
       if (calce.confidence === "high") {
-        if (anterior === calce.folio) break;
+        if (anterior === calce.folio) { confirmado = true; break; }
         anterior = calce.folio;
         continue;
       }
@@ -946,7 +973,8 @@
       if (calce.confidence === "medium") break; // ambiguo no se arregla esperando
     }
     let calce = ultimo?.calce ?? null;
-    if (calce && calce.confidence === "high" && anterior !== calce.folio) {
+    // "high" solo si la MISMA candidata se vio en dos consultas seguidas (#1).
+    if (calce && calce.confidence === "high" && !confirmado) {
       calce = { ...calce, confidence: "medium", evidence: { ...calce.evidence, source: "emitidos_ambiguo", motivo: "calce_no_estable" } };
     }
     const result = construirResultadoFactura(job, {
@@ -1103,9 +1131,12 @@
     }
     if (message?.type === "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO") {
       sendResponse({ ok: true, accepted: true });
-      buscarFolioEnEmitidos(message.job || {}, message.snapshot_emitidos)
+      pingBackground();
+      const keepalive = setInterval(pingBackground, 10000);
+      buscarFolioEnEmitidos(message.job || {}, message.snapshot_emitidos, { soloSugerir: message.solo_sugerir === true })
         .then((result) => pushStep(message.job_id ?? null, { ok: true, action: "folio_buscado", kind: "emitidos", result }))
-        .catch((error) => pushStep(message.job_id ?? null, { ok: true, action: "folio_buscado", kind: "emitidos", result: null, detalle: error instanceof Error ? error.message : String(error) }));
+        .catch((error) => pushStep(message.job_id ?? null, { ok: true, action: "folio_buscado", kind: "emitidos", result: null, detalle: error instanceof Error ? error.message : String(error) }))
+        .finally(() => clearInterval(keepalive));
       return false;
     }
     if (message?.type === "APP_CONTABLE_SII_FACT_SIGN") {

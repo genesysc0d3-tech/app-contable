@@ -665,7 +665,7 @@ describe("cierre del ciclo de facturas: búsqueda en Documentos emitidos", () =>
   it("otro tipo (factura afecta cuando el job es exenta), otro monto u otra fecha no calzan", async () => {
     const html = emitidosHtml([
       { receptor: RECEPTOR_SIN_PUNTOS, folio: 973, fecha: "2026-08-30", monto: "100000", doc: "Factura Electronica" },
-      { receptor: RECEPTOR_SIN_PUNTOS, folio: 974, fecha: "2026-08-30", monto: "100001" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 974, fecha: "2026-08-30", monto: "100005" },
       { receptor: RECEPTOR_SIN_PUNTOS, folio: 975, fecha: "2026-08-29", monto: "100000" },
     ]);
     const res = await buscarFolio(jobEmitida(), [html], []);
@@ -704,28 +704,101 @@ describe("cierre del ciclo de facturas: búsqueda en Documentos emitidos", () =>
   }, 20000);
 });
 
-describe("cierre del ciclo de facturas: snapshot antes de Firmar", () => {
-  it("el preview consulta Documentos emitidos y manda los folios previos junto al firmar_click", async () => {
+describe("cierre del ciclo de facturas: snapshot antes de Validar", () => {
+  it("el formulario consulta Documentos emitidos (solo el MISMO tipo) y manda los folios previos con el 'validado'", async () => {
     const antes = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: true, text: async () => emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" }]) });
+    globalThis.fetch = async () => ({ ok: true, text: async () => emitidosHtml([
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 55, fecha: "2026-08-30", monto: "100000", doc: "Factura Electronica" },
+    ]) });
     try {
-      const { res } = await drive(jobFactura({ allow_final_emit: true }), [previewPage()], { bodyText: "Documento NO válido Firmar" });
-      expect(res.action).toBe("firmar_click");
+      const { res } = await drive(jobFactura({ allow_final_emit: true }), [formularioPage()]);
+      expect(res.action).toBe("validado");
       expect(res.snapshot_emitidos).toEqual([970]);
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 30000);
+
+  it("si la cabecera NO confirma la empresa del job, no hay snapshot (la búsqueda nunca cerrará sola)", async () => {
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, text: async () => emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" }], { empresa: "76.000.000-6" }) });
+    try {
+      const { res } = await drive(jobFactura({ allow_final_emit: true }), [formularioPage()]);
+      expect(res.action).toBe("validado");
+      expect(res.snapshot_emitidos).toBeNull();
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 30000);
+
+  it("si la consulta previa falla, Validar NO se bloquea", async () => {
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error("red caída"); };
+    try {
+      const { res } = await drive(jobFactura({ allow_final_emit: true }), [formularioPage()]);
+      expect(res.action).toBe("validado");
+      expect(res.snapshot_emitidos).toBeNull();
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 30000);
+
+  it("un job vencido no llega a Firmar", async () => {
+    const { res } = await drive(jobFactura({ allow_final_emit: true, expires_at: "2020-01-01T00:00:00Z" }), [previewPage()], { bodyText: "Documento NO válido Firmar" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("JOB_EXPIRED");
+    expect(outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED")).toBeUndefined();
+  }, 30000);
+});
+
+describe("cierre del ciclo de facturas: correcciones del adversario", () => {
+  it("#1 la candidata que aparece recién en la 4ª consulta NO es high (una sola observación)", async () => {
+    const vacia = emitidosHtml([]);
+    const con = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const res = await buscarFolio(jobEmitida(), [vacia, vacia, vacia, con], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("calce_no_estable");
+  }, 30000);
+
+  it("#3 cabecera sin 'Empresa:' → medium (emisor_desconocido), nunca high", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]).replace(/Empresa: [^<]+/, "");
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("emisor_desconocido");
+  }, 20000);
+
+  it("#4 búsqueda de solo-sugerencia (rebote/sin clave) nunca cierra sola", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, text: async () => html });
+    outgoing = [];
+    try {
+      const job = jobEmitida();
+      driveListener({ type: "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO", job, job_id: job.job_id, snapshot_emitidos: [], solo_sugerir: true }, {}, () => {});
+      let res = null;
+      for (let i = 0; i < 400 && !res; i += 1) { res = outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FACT_STEP")?.res ?? null; if (!res) await new Promise((r) => setTimeout(r, 20)); }
+      expect(res.result.folio).toBe(971);
+      expect(res.result.folio_confidence).toBe("medium");
+      expect(res.result.folio_evidence.motivo).toBe("emision_no_confirmada");
     } finally {
       globalThis.fetch = antes;
     }
   }, 20000);
 
-  it("si la consulta previa falla, Firmar NO se bloquea (snapshot null → la búsqueda nunca cierra sola)", async () => {
-    const antes = globalThis.fetch;
-    globalThis.fetch = async () => { throw new Error("red caída"); };
-    try {
-      const { res } = await drive(jobFactura({ allow_final_emit: true }), [previewPage()], { bodyText: "Documento NO válido Firmar" });
-      expect(res.action).toBe("firmar_click");
-      expect(res.snapshot_emitidos).toBeNull();
-    } finally {
-      globalThis.fetch = antes;
-    }
+  it("#8 tabla de resultados ANIDADA en una tabla de layout → igual se lee", async () => {
+    const interna = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const anidada = interna.replace(/<table class="tabla">/, '<table class="layout"><tr><td><table class="tabla">').replace(/<\/table><\/body>/, "</table></td></tr></table></body>");
+    const res = await buscarFolio(jobEmitida(), [anidada], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("high");
+  }, 20000);
+
+  it("#10 monto con diferencia de $1 por redondeo del SII igual calza", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100001" }]);
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("high");
   }, 20000);
 });

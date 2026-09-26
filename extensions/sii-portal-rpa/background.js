@@ -547,45 +547,65 @@ function handleFactStepPush(state, res) {
 // firma no avanzó), antes de rendirse con "a medias" se busca la factura en
 // "Documentos emitidos" (receptor + fecha + monto + tipo, solo folios NUEVOS
 // respecto del snapshot tomado antes de Firmar). Una sola vez por job.
-function rescatarFolioFactura(state, motivo) {
-  if (state.factRescateHecho) {
+function rescatarFolioFactura(state, motivo, { soloSugerir = false, captura = null } = {}) {
+  // En vuelo: otro disparo (onUpdated extra, rebote repetido) NO manda un terminal
+  // que frene el lote antes de tiempo (adversarial #2).
+  if (state.factRescateEnVuelo) return;
+  // Una búsqueda "que puede cerrar" por job; las de solo sugerencia (rebote, sin clave)
+  // no la gastan (#14), con tope total de 3.
+  state.factRescates = (state.factRescates || 0) + 1;
+  if ((!soloSugerir && state.factRescateHecho) || state.factRescates > 3) {
     sendToApp(state, statusMessage(state.jobId, "result_needs_review", motivo, true));
     return;
   }
-  state.factRescateHecho = true;
+  if (!soloSugerir) state.factRescateHecho = true;
+  state.factRescateEnVuelo = true;
   state.factRescateMotivo = motivo;
+  state.factRescateCaptura = captura; // lo que dejó la página post-firma (PDF, excerpt)
   sendToApp(state, statusMessage(state.jobId, "capturing_result", "Buscando la factura en Documentos emitidos del SII…", true));
   if (state.factRescateTimer) clearTimeout(state.factRescateTimer);
   // Si el worker no contesta (página muerta, sesión caída), a medias con el motivo.
   state.factRescateTimer = setTimeout(() => {
     state.factRescateTimer = null;
-    if (activeJobs.get(state.jobId) === state && !state.factRescateRespondido) {
-      state.factRescateRespondido = true;
+    if (activeJobs.get(state.jobId) === state && state.factRescateEnVuelo) {
+      state.factRescateEnVuelo = false;
       sendToApp(state, statusMessage(state.jobId, "result_needs_review", motivo, true));
     }
-  }, 30000);
+  }, 45000);
   chrome.tabs.sendMessage(state.workerTabId, baseMessage({
     type: "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO",
     job_id: state.jobId,
     job: state.job,
     snapshot_emitidos: Array.isArray(state.factSnapshot) ? state.factSnapshot : null,
+    solo_sugerir: soloSugerir,
   }), () => { void chrome.runtime.lastError; });
 }
 
 function handleFolioBuscadoFactura(state, res) {
-  if (state.factRescateRespondido) return;
-  state.factRescateRespondido = true;
+  if (!state.factRescateEnVuelo) return; // llegó tarde (ganó el timer): ya se contestó
+  state.factRescateEnVuelo = false;
   if (state.factRescateTimer) { clearTimeout(state.factRescateTimer); state.factRescateTimer = null; }
   const motivo = state.factRescateMotivo || "No pude confirmar la factura. No la re-emitas: verifica el folio en el portal.";
+  const captura = state.factRescateCaptura || null;
   const result = res?.result ?? null;
   if (result && (hasStrongFolioEvidence(result) || result.folio)) {
-    // Fuerte → se registra (guards del server). Ambiguo → queda a medias CON rastro
-    // (folio sugerido en sii_local_resultados para "Recuperar"/A medias).
+    // Fuerte → se registra (guards del server). Ambiguo → a medias CON rastro. En ambos
+    // casos se conserva el PDF / marcas de la página post-firma, que son de ESTA
+    // factura (#5).
     state.awaitingResult = false;
-    handleCapturedResult(state, result);
+    handleCapturedResult(state, {
+      ...result,
+      pdf: result.pdf ?? captura?.pdf ?? null,
+      ...(captura?.glosa_omitida ? { glosa_omitida: true } : {}),
+    });
     return;
   }
   const extra = result?.emitidos_leido ? " Busqué en Documentos emitidos del SII y no aparece una factura nueva de este receptor por ese monto." : "";
+  if (captura) {
+    // Rastro de la página post-firma (excerpt, links) como antes del rescate (#5).
+    sendToApp(state, captureDebugMessage(state.jobId, captura, `${motivo}${extra}`));
+    pauseWorker(state, `${motivo}${extra}`);
+  }
   sendToApp(state, statusMessage(state.jobId, "result_needs_review", `${motivo}${extra}`, true));
 }
 
@@ -597,7 +617,10 @@ async function handleFactDriveResponse(state, res) {
     if (state.finalEmitClicked) {
       // Post-Firmar NADA cierra el job ni re-emite: posible folio real vivo. Antes de
       // dejarla a medias, la app la busca sola en Documentos emitidos.
-      rescatarFolioFactura(state, `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`);
+      // Rebote a una pantalla previa / sin campo o botón de la clave: la factura puede
+      // NO existir → la búsqueda solo sugiere, nunca cierra sola (#4/#14).
+      const soloSugerir = /POST_FIRMA_REBOTO|FIRMA_SIN_CAMPO_CLAVE|FIRMA_SIN_BOTON/.test(detalle);
+      rescatarFolioFactura(state, `No pude confirmar la factura (${detalle}). No la re-emitas: verifica el folio en el portal.`, { soloSugerir });
       return;
     }
     state.humanRequired = Boolean(res.human) || state.humanRequired;
@@ -629,7 +652,9 @@ async function handleFactDriveResponse(state, res) {
     // firma reaparece tras haberla enviado, la clave es mala — jamás
     // reintentar solo (el SII puede bloquear el certificado).
     if (state.certPasswordSent) {
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "CERT_PASSWORD_INVALID: la clave del certificado parece incorrecta. Corrígela en Opciones de la extensión y verifica en el portal si la factura alcanzó a emitirse — no la re-emitas.", true));
+      // La heurística "la pantalla de clave reapareció" puede ser un falso positivo con
+      // la factura ya emitida: se busca, pero solo como sugerencia (#15).
+      rescatarFolioFactura(state, "CERT_PASSWORD_INVALID: la clave del certificado parece incorrecta. Corrígela en Opciones de la extensión y verifica en el portal si la factura alcanzó a emitirse — no la re-emitas.", { soloSugerir: true });
       return;
     }
     const creds = await getUnlockedSiiCredentials(state.appOrigin);
@@ -651,7 +676,7 @@ async function handleFactDriveResponse(state, res) {
     // La pantalla post-firma no dejó leer el folio con evidencia → buscarlo en
     // Documentos emitidos antes de dejarla a medias.
     if (state.kind === "factura" && !hasStrongFolioEvidence(res.result)) {
-      rescatarFolioFactura(state, "La factura se firmó, pero no pude leer el folio en la pantalla del SII. No la re-emitas.");
+      rescatarFolioFactura(state, "La factura se firmó, pero no pude leer el folio en la pantalla del SII. No la re-emitas.", { captura: res.result });
       return;
     }
     state.awaitingResult = false;
@@ -664,7 +689,7 @@ async function handleFactDriveResponse(state, res) {
     return;
   }
 
-  if (res.action === "firmar_click" && Array.isArray(res.snapshot_emitidos)) {
+  if (res.action === "validado" && Array.isArray(res.snapshot_emitidos)) {
     state.factSnapshot = res.snapshot_emitidos; // respaldo del sessionStorage del worker
   }
 
