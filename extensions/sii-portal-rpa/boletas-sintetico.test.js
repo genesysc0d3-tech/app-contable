@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { BOLETA_LIBRETO } from "../../src/lib/emission/sii-libreto.ts";
 import { validateLibretoBoleta } from "./modules/sii-local.js";
-import { estado, fakeDocument, FakeHTMLElement, escenaEmision, EMISOR } from "./fixtures/eboleta-modal.js";
+import { estado, fakeDocument, FakeHTMLElement, escenaEmision, EMISOR, el } from "./fixtures/eboleta-modal.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // MASSDTE_WORKER_SRC=<ruta> corre la suite contra OTRO worker (p. ej. el de una release
@@ -522,5 +522,245 @@ describe("captura del folio con el recibo oculto (0.2.7)", () => {
     await drive(job);
     const cap = await capturar(job);
     expect(cap.result.folio).toBeNull();
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 0.2.8 — CIERRE DEL CICLO: calce determinista del folio en /reportes.
+// Fundador 2026-09-26: "una app que emite y te pide ir al SII a buscar el folio no
+// te quitó el trabajo". Con la tabla del Resumen de ventas, el worker calza por
+// monto exacto + fecha + ventana horaria desde el EMITIR; UNA candidata → cierra
+// solo ("high"); cero/varias/sin hora → "medium" (a medias, lo de siempre).
+// Estos tests FALLAN con el worker 0.2.7 (MASSDTE_WORKER_SRC): ahí /reportes
+// siempre degrada a medium y toma la primera fila.
+// ─────────────────────────────────────────────────────────────────────────────
+const EMIT_AT = Date.parse("2026-09-25T18:27:00Z"); // 15:27 Chile (UTC-3)
+function tablaReportes(filas, { headers = ["Fecha", "Hora", "Nro Folio", "Tipo", "Monto Total", "Acciones"] } = {}) {
+  const th = headers.map((h) => el({ tag: "TH", sel: ["thead th"], text: h }));
+  const trs = filas.map((f) => el({
+    tag: "TR", sel: ["tbody tr"],
+    children: headers.map((h) => {
+      const v = /FECHA/i.test(h) ? f.fecha : /HORA/i.test(h) ? f.hora : /FOLIO/i.test(h) ? String(f.folio)
+        : /TIPO/i.test(h) ? (f.tipo ?? "Boleta exenta") : /MONTO|TOTAL/i.test(h) ? f.monto : "Descargar";
+      return el({ tag: "TD", sel: ["td"], text: String(v ?? "") });
+    }),
+  }));
+  return el({ tag: "TABLE", sel: ["table"], children: [...th, ...trs] });
+}
+// Pie real del v-data-table: "1-N de T" (o "–" sin datos).
+function pieReportes(n, total = n) {
+  return el({ tag: "DIV", sel: [".v-data-footer__pagination"], text: total === 0 ? "–" : `1-${n} de ${total}` });
+}
+function escenaReportes(filas, opts = {}) {
+  escenaEmision();
+  estado.scene.push(tablaReportes(filas, opts));
+  estado.scene.push(pieReportes(filas.length, opts.total ?? filas.length));
+  location.href = "https://eboleta.sii.cl/reportes";
+}
+async function capturarEnReportes(job, ctx = { final_emit_at: EMIT_AT }) {
+  let res;
+  driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_CAPTURE_RESULT", job_id: job.job_id, job, ctx }, {}, (r) => { res = r; });
+  await vi.runAllTimersAsync();
+  return res;
+}
+const jobReportes = (over = {}) => jobBoleta({ job_id: "r1", tipo_dte: 41, totales: { monto_total: 196000 }, fecha_emision: "2026-09-25", folios_hoy: [], allow_final_emit: true, ...over });
+
+describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
+  beforeAll(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(EMIT_AT + 60_000)); });
+
+  it("UNA candidata por monto + fecha + hora en ventana → high con el folio correcto (no la primera fila)", async () => {
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:20", folio: 1240, monto: "$ 15.000" },
+      { fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" },
+      { fecha: "25/09/2026", hora: "15:33", folio: 1242, monto: "$ 100.000" },
+    ]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.ok).toBe(true);
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.folio_evidence.source).toBe("reportes_calce_unico");
+    expect(res.result.estado).toBe("emitida_capturada_reportes");
+  });
+
+  it("dos filas del mismo monto en ventana → medium (a medias), nunca adivina", async () => {
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:26", folio: 1241, monto: "$ 196.000" },
+      { fecha: "25/09/2026", hora: "15:29", folio: 1242, monto: "$ 196.000" },
+    ]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.source).toBe("reportes_ambiguo");
+    expect(res.result.folio_evidence.motivo).toBe("varias_en_ventana");
+  });
+
+  it("tabla sin columna de hora → nunca high aunque el monto sea único", async () => {
+    escenaReportes([{ fecha: "25/09/2026", folio: 1241, monto: "$ 196.000" }], { headers: ["Fecha", "Nro Folio", "Monto Total", "Acciones"] });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("sin_hora_en_tabla");
+  });
+
+  it("sin hora del EMITIR (ni sessionStorage ni ctx) → medium", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes(), null);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("sin_hora_emitir");
+  });
+
+  it("un folio ya registrado hoy (folios_hoy del server) se excluye del calce", async () => {
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:26", folio: 1241, monto: "$ 196.000" },
+      { fecha: "25/09/2026", hora: "15:29", folio: 1242, monto: "$ 196.000" },
+    ]);
+    const res = await capturarEnReportes(jobReportes({ folios_hoy: [1241] }));
+    expect(res.result.folio).toBe(1242);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("fuera de la ventana horaria → medium (la fila es de otra boleta del mismo monto)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "14:10", folio: 1230, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("ninguna_en_ventana");
+  });
+
+  it("F5: un link PDF y un texto 'Folio' de OTRA fila no le ganan al calce", async () => {
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:20", folio: 1240, monto: "$ 15.000" },
+      { fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" },
+    ]);
+    estado.recibo = { texto: "Nro Folio 1240 Acciones Descargar", oculto: false, links: ["https://s3.sii.cl/boletas/folio1240_x.pdf"] };
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    // Y el link PDF de la otra fila NO viaja como respaldo (adversarial #1).
+    expect(res.result.artifact_links).toEqual([]);
+  });
+
+  it("folio con separador de miles ('1.241') se lee entero, no '241' (adversarial #3)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: "1.241", monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("fecha ilegible en su columna → la fila no cuenta como de hoy (adversarial #4)", async () => {
+    escenaReportes([{ fecha: "25-09-26", hora: "15:28", folio: 1241, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).not.toBe("high");
+    expect(res.result.folio).toBeNull();
+  });
+
+  it("0 candidatas con tabla legible → sin folio sugerido (no la primera fila)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1240, monto: "$ 15.000" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+  });
+
+  it("tabla sin encabezado de folio → cae a la cadena vieja (fuente no es reportes_*)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }], { headers: ["Fecha", "Hora", "Documento", "Monto Total", "Acciones"] });
+    estado.recibo = { texto: "Nro Folio Acciones 1240 Descargar", oculto: false };
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).not.toBe("high");
+    expect(String(res.result.folio_evidence?.source ?? "")).not.toMatch(/^reportes_(calce|ambiguo|sin)/);
+  });
+
+  it("verificación: la ventana del intento fallido viaja en ctx (fila 20 min antes del cierre → calza)", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:08", folio: 1241, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ verify_only: true, allow_final_emit: false }), { final_emit_at: EMIT_AT, ventana_antes_min: 25, ventana_despues_min: 6 });
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("tabla REAL del SII (2026-09-26): headers con 'arrow_upward', sin columna Hora, hora dentro de Fecha", async () => {
+    escenaReportes(
+      [{ fecha: "25/09/2026 15:28:07", folio: 1241, monto: "$ 196.000" }],
+      { headers: ["Nro Folioarrow_upward", "Boletaarrow_upward", "Netoarrow_upward", "IVAarrow_upward", "Totalarrow_upward", "Tipoarrow_upward", "Vendedorarrow_upward", "Sucursalarrow_upward", "Estadoarrow_upward", "Fechaarrow_upward", "Acciones"] },
+    );
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.folio_evidence.hora_fila).toBe("15:28");
+  });
+
+  it("post-emit sin recibo: va al Resumen POR EL MENÚ (sin location.href duro), el script sigue vivo y calza", async () => {
+    escenaEmision();
+    estado.recibo = null;
+    // Ítem del drawer como en el portal real: existe en el DOM con el drawer cerrado.
+    const item = el({ tag: "DIV", sel: [".v-list-item"], text: "view_listResumen de ventas diarias" });
+    item.onClick = () => {
+      location.href = "https://eboleta.sii.cl/reportes";
+      estado.scene.push(tablaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }]));
+      estado.scene.push(pieReportes(1));
+    };
+    estado.scene.push(item);
+    location.href = "https://eboleta.sii.cl/emitir/";
+    const res = await capturarEnReportes(jobReportes());
+    expect(location.href).toContain("/reportes");
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.estado).toBe("emitida_capturada_reportes");
+  });
+
+  it("verificación (mensaje propio): asegura el emisor, navega por el menú y calza sin emitir", async () => {
+    escenaEmision();
+    estado.recibo = null;
+    const item = el({ tag: "DIV", sel: [".v-list-item"], text: "view_listResumen de ventas diarias" });
+    item.onClick = () => {
+      location.href = "https://eboleta.sii.cl/reportes";
+      estado.scene.push(tablaReportes([{ fecha: "25/09/2026", hora: "15:08", folio: 1241, monto: "$ 196.000" }]));
+      estado.scene.push(pieReportes(1));
+    };
+    estado.scene.push(item);
+    location.href = "https://eboleta.sii.cl/emitir/";
+    let res;
+    driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_VERIFICAR_REPORTES", job_id: "v1", job: jobReportes({ job_id: "v1", verify_only: true, allow_final_emit: false }), ctx: { final_emit_at: EMIT_AT, ventana_antes_min: 25, ventana_despues_min: 6 } }, {}, (r) => { res = r; });
+    await vi.runAllTimersAsync();
+    expect(res.ok).toBe(true);
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(estado.actions.find((a) => a.role === "btn_emitir_final")).toBeUndefined();
+  });
+
+  it("B1: tabla PAGINADA (10 de 73 visibles) → la candidata única visible nunca cierra sola", async () => {
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }], { total: 73 });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("tabla_incompleta");
+    expect(res.result.reportes_tabla_completa).toBe(false);
+  });
+
+  it("B1: tabla 'Cargando…' → incompleta (la verificación no puede decir 'no salió')", async () => {
+    escenaEmision();
+    estado.scene.push(tablaReportes([]));
+    estado.scene.push(el({ tag: "TR", sel: ["tbody tr"], text: "Cargando..." }));
+    estado.scene[estado.scene.length - 2]._children.push(el({ tag: "TR", sel: ["tbody tr"], children: [el({ tag: "TD", sel: ["td"], text: "Cargando..." })] }));
+    location.href = "https://eboleta.sii.cl/reportes";
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_tabla_leida).toBe(true);
+    expect(res.result.reportes_tabla_completa).toBe(false);
+  });
+
+  it("B1: tabla vacía con pie '–' (No hemos encontrado datos) → completa con 0 filas", async () => {
+    escenaEmision();
+    const t = tablaReportes([]);
+    t._children.push(el({ tag: "TR", sel: ["tbody tr"], children: [el({ tag: "TD", sel: ["td"], text: "No hemos encontrado datos..." })] }));
+    estado.scene.push(t);
+    estado.scene.push(pieReportes(0, 0));
+    location.href = "https://eboleta.sii.cl/reportes";
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_tabla_completa).toBe(true);
+  });
+
+  it("emisor activo distinto al del job → medium (emisor_distinto)", async () => {
+    // La escena trae el selector de emisor del portal con EMISOR activo; el job viene
+    // por OTRA empresa → el calce no cierra solo.
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ emisor_rut: "76.000.000-6" }));
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("emisor_distinto");
   });
 });

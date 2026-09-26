@@ -70,6 +70,9 @@ export interface FacturaJobInput {
   learnOnly?: boolean;
   jobId?: string;
   expiresAt?: string;
+  /** Folios ya registrados hoy (empresa+tipo), del server: la búsqueda post-firma en
+   *  "Documentos emitidos" los excluye (2026-09-26). */
+  foliosHoy?: number[];
 }
 
 export interface FacturaJob {
@@ -115,6 +118,7 @@ export interface FacturaJob {
   logout_after: boolean;
   job_id?: string;
   expires_at?: string;
+  folios_hoy?: number[];
 }
 
 function clean(value: string | null | undefined): string | undefined {
@@ -196,5 +200,6 @@ export function buildFacturaJob(input: FacturaJobInput): FacturaJob {
   };
   if (input.jobId) job.job_id = input.jobId;
   if (input.expiresAt) job.expires_at = input.expiresAt;
+  if (Array.isArray(input.foliosHoy)) job.folios_hoy = input.foliosHoy.filter((n) => Number.isInteger(n) && n > 0);
   return job;
 }

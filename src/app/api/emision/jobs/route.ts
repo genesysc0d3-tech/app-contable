@@ -526,6 +526,29 @@ export async function POST(request: Request) {
     reservedFolio = reserva.folio;
   }
 
+  // Folios que ESTA empresa ya tiene registrados hoy para este tipo (0.2.8, cierre
+  // del ciclo): la extensión los excluye al calzar el folio en /reportes, así una
+  // boleta anterior del mismo monto nunca se "encuentra" como si fuera la nueva. La
+  // fuente es el server (boletas_emitidas), no la sesión de la extensión, que se
+  // vacía entre boletas. Best-effort: sin la lista el worker simplemente no cierra
+  // solo (queda "a medias"), nunca cruza un folio.
+  let foliosHoy: number[] = [];
+  if (provider === "sii_local") {
+    try {
+      const hoyChile = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const { data: hoy } = await guard.service
+        .from("boletas_emitidas")
+        .select("folio")
+        .eq("empresa_id", guard.empresaId)
+        .eq("tipo_dte", tipoDte)
+        .eq("fecha_emision", hoyChile)
+        // Anuladas INCLUIDAS: siguen en /reportes con su monto y también deben excluirse.
+        .order("folio", { ascending: false })
+        .limit(500);
+      foliosHoy = (hoy ?? []).map((b) => Number(b.folio)).filter((n) => Number.isInteger(n) && n > 0);
+    } catch { /* best-effort */ }
+  }
+
   return NextResponse.json({
     ok: true,
     job_id: lock.jobId,
@@ -535,6 +558,7 @@ export async function POST(request: Request) {
     empresa_id: guard.empresaId,
     provider,
     expected_emisor_rut: expectedEmisorRut,
+    folios_hoy: foliosHoy,
     business_mode: businessMode,
     reserved_folio: reservedFolio,
     reserved_tipo_dte: provider === "simpleapi" ? tipoDte : null,

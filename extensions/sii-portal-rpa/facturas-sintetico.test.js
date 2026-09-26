@@ -586,3 +586,229 @@ describe("tanda 2 · page_kind:unknown como ancla", () => {
     expect(Object.keys(res.mapa).sort()).toEqual(["botones", "forms", "inputs", "url"]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CIERRE DEL CICLO DE FACTURAS (2026-09-26): "Documentos emitidos" del SII.
+// HTML modelado sobre la página REAL leída en vivo con MV (mipeAdminDocsEmi.cgi):
+// cabecera "Empresa: 77.155.156-4", 2ª tabla Ver · Receptor · Razón Social ·
+// Documento · Folio · Fecha · Monto · Estado, fecha sin hora, monto sin $.
+// ─────────────────────────────────────────────────────────────────────────────
+function emitidosHtml(filas, { empresa = EMISOR } = {}) {
+  const tr = (f) => `<tr><td><a href="#"><img></a></td><td>${f.receptor}</td><td>${f.razon ?? "MV SPA"}</td><td>${f.doc ?? "Factura Exenta Electronica"}</td><td>${f.folio}</td><td>${f.fecha}</td><td>${f.monto}</td><td>Documento Emitido</td></tr>`;
+  return `<html><body><div>Empresa: ${empresa}</div><table><tr><td>menu</td></tr></table>
+<table class="tabla"><tr><th>Ver</th><th>Receptor</th><th>Razón Social</th><th>Documento</th><th>Folio</th><th>Fecha</th><th>Monto</th><th>Estado</th></tr>
+${filas.map(tr).join("\n")}</table></body></html>`;
+}
+const RECEPTOR_SIN_PUNTOS = "77155156-4";
+async function buscarFolio(job, respuestas, snapshot) {
+  const cola = [...respuestas];
+  const antes = globalThis.fetch;
+  globalThis.fetch = async () => {
+    const html = cola.length > 1 ? cola.shift() : cola[0];
+    return { ok: html != null, text: async () => html ?? "" };
+  };
+  outgoing = [];
+  try {
+    driveListener({ type: "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO", job, job_id: job.job_id, snapshot_emitidos: snapshot }, {}, () => {});
+    for (let i = 0; i < 600; i += 1) {
+      const step = outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FACT_STEP");
+      if (step) return step.res;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error("no llegó folio_buscado");
+  } finally {
+    globalThis.fetch = antes;
+  }
+}
+const jobEmitida = (over = {}) => jobFactura({ job_id: `job-busca-${Math.random()}`, allow_final_emit: true, ...over });
+
+describe("cierre del ciclo de facturas: búsqueda en Documentos emitidos", () => {
+  it("UNA factura NUEVA (fuera del snapshot) del receptor/fecha/monto/tipo → high, estable en 2 consultas", async () => {
+    const html = emitidosHtml([
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" },
+    ]);
+    const res = await buscarFolio(jobEmitida(), [html], [970]);
+    expect(res.action).toBe("folio_buscado");
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.folio_evidence.source).toBe("emitidos_calce_unico");
+    expect(res.result.emitidos_leido).toBe(true);
+  }, 20000);
+
+  it("la factura anterior del mismo monto (ya estaba antes de Firmar) nunca se toma", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" }]);
+    const res = await buscarFolio(jobEmitida(), [html], [970]);
+    expect(res.result.folio).toBeNull();
+    expect(res.result.folio_confidence).toBe("none");
+    expect(res.result.emitidos_leido).toBe(true);
+  }, 20000);
+
+  it("sin snapshot (no se pudo tomar antes de Firmar) → nunca high, solo sugerido", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const res = await buscarFolio(jobEmitida(), [html], null);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("sin_snapshot");
+  }, 20000);
+
+  it("dos facturas nuevas iguales → medium (a medias), no adivina", async () => {
+    const html = emitidosHtml([
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 972, fecha: "2026-08-30", monto: "100000" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" },
+    ]);
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("varias");
+  }, 20000);
+
+  it("otro tipo (factura afecta cuando el job es exenta), otro monto u otra fecha no calzan", async () => {
+    const html = emitidosHtml([
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 973, fecha: "2026-08-30", monto: "100000", doc: "Factura Electronica" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 974, fecha: "2026-08-30", monto: "100005" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 975, fecha: "2026-08-29", monto: "100000" },
+    ]);
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio).toBeNull();
+  }, 20000);
+
+  it("la página muestra OTRA empresa en la cabecera → medium (emisor_distinto)", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }], { empresa: "76.000.000-6" });
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("emisor_distinto");
+  }, 20000);
+
+  it("la fila aparece recién en la 2ª consulta → espera y la confirma en la 3ª", async () => {
+    const vacia = emitidosHtml([]);
+    const con = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const res = await buscarFolio(jobEmitida(), [vacia, con, con], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("high");
+  }, 20000);
+
+  it("sin tabla (sesión caída / login) → emitidos_leido false, sin folio", async () => {
+    const res = await buscarFolio(jobEmitida(), ["<html><body>Autenticación</body></html>"], []);
+    expect(res.result.folio).toBeNull();
+    expect(res.result.emitidos_leido).toBe(false);
+  }, 20000);
+
+  it("un folio ya registrado hoy (folios_hoy del server) se excluye", async () => {
+    const html = emitidosHtml([
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 972, fecha: "2026-08-30", monto: "100000" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" },
+    ]);
+    const res = await buscarFolio(jobEmitida({ folios_hoy: [971] }), [html], []);
+    expect(res.result.folio).toBe(972);
+    expect(res.result.folio_confidence).toBe("high");
+  }, 20000);
+});
+
+describe("cierre del ciclo de facturas: snapshot antes de Validar", () => {
+  it("el formulario consulta Documentos emitidos (solo el MISMO tipo) y manda los folios previos con el 'validado'", async () => {
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, text: async () => emitidosHtml([
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" },
+      { receptor: RECEPTOR_SIN_PUNTOS, folio: 55, fecha: "2026-08-30", monto: "100000", doc: "Factura Electronica" },
+    ]) });
+    try {
+      const { res } = await drive(jobFactura({ allow_final_emit: true }), [formularioPage()]);
+      expect(res.action).toBe("validado");
+      expect(res.snapshot_emitidos).toEqual([970]);
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 30000);
+
+  it("si la cabecera NO confirma la empresa del job, no hay snapshot (la búsqueda nunca cerrará sola)", async () => {
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, text: async () => emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 970, fecha: "2026-08-30", monto: "100000" }], { empresa: "76.000.000-6" }) });
+    try {
+      const { res } = await drive(jobFactura({ allow_final_emit: true }), [formularioPage()]);
+      expect(res.action).toBe("validado");
+      expect(res.snapshot_emitidos).toBeNull();
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 30000);
+
+  it("si la consulta previa falla, Validar NO se bloquea", async () => {
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error("red caída"); };
+    try {
+      const { res } = await drive(jobFactura({ allow_final_emit: true }), [formularioPage()]);
+      expect(res.action).toBe("validado");
+      expect(res.snapshot_emitidos).toBeNull();
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 30000);
+
+  it("sin botón Firmar: error pre-firma, SIN armar el candado (no hubo click ni folio)", async () => {
+    const sinBoton = form("PreViewDTE", [field("EFXP_MNT_TOTAL", { value: "100000" }), field("PTDC_CODIGO", { value: "34" })]);
+    const { res } = await drive(jobFactura({ allow_final_emit: true }), [sinBoton], { bodyText: "Documento NO válido Firmar" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("SIN_BOTON_FIRMAR");
+    expect(outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED")).toBeUndefined();
+  }, 30000);
+
+  it("un job vencido no llega a Firmar", async () => {
+    const { res } = await drive(jobFactura({ allow_final_emit: true, expires_at: "2020-01-01T00:00:00Z" }), [previewPage()], { bodyText: "Documento NO válido Firmar" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("JOB_EXPIRED");
+    expect(outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FINAL_EMIT_CLICKED")).toBeUndefined();
+  }, 30000);
+});
+
+describe("cierre del ciclo de facturas: correcciones del adversario", () => {
+  it("#1 la candidata que aparece recién en la 4ª consulta NO es high (una sola observación)", async () => {
+    const vacia = emitidosHtml([]);
+    const con = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const res = await buscarFolio(jobEmitida(), [vacia, vacia, vacia, con], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("calce_no_estable");
+  }, 30000);
+
+  it("#3 cabecera sin 'Empresa:' → medium (emisor_desconocido), nunca high", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]).replace(/Empresa: [^<]+/, "");
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("emisor_desconocido");
+  }, 20000);
+
+  it("#4 búsqueda de solo-sugerencia (rebote/sin clave) nunca cierra sola", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    const antes = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, text: async () => html });
+    outgoing = [];
+    try {
+      const job = jobEmitida();
+      driveListener({ type: "APP_CONTABLE_SII_FACT_BUSCAR_FOLIO", job, job_id: job.job_id, snapshot_emitidos: [], solo_sugerir: true }, {}, () => {});
+      let res = null;
+      for (let i = 0; i < 400 && !res; i += 1) { res = outgoing.find((m) => m?.type === "APP_CONTABLE_SII_FACT_STEP")?.res ?? null; if (!res) await new Promise((r) => setTimeout(r, 20)); }
+      expect(res.result.folio).toBe(971);
+      expect(res.result.folio_confidence).toBe("medium");
+      expect(res.result.folio_evidence.motivo).toBe("emision_no_confirmada");
+    } finally {
+      globalThis.fetch = antes;
+    }
+  }, 20000);
+
+  it("#8 tabla de resultados ANIDADA en una tabla de layout → igual se lee", async () => {
+    const interna = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100000" }]);
+    // Celda extra ANTES de la tabla interna: con el parser viejo los índices de columna
+    // quedaban corridos en uno y el calce fallaba.
+    const anidada = interna.replace(/<table class="tabla">/, '<table class="layout"><tr><td>menú lateral</td><td><table class="tabla">').replace(/<\/table><\/body>/, "</table></td></tr></table></body>");
+    const res = await buscarFolio(jobEmitida(), [anidada], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("high");
+  }, 20000);
+
+  it("#10 monto con diferencia de $1 por redondeo del SII igual calza", async () => {
+    const html = emitidosHtml([{ receptor: RECEPTOR_SIN_PUNTOS, folio: 971, fecha: "2026-08-30", monto: "100001" }]);
+    const res = await buscarFolio(jobEmitida(), [html], []);
+    expect(res.result.folio).toBe(971);
+    expect(res.result.folio_confidence).toBe("high");
+  }, 20000);
+});

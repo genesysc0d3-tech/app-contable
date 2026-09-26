@@ -124,7 +124,28 @@
   // Aviso INMEDIATO al librero de que el EMITIR real ya se cliqueó, sin esperar la
   // confirmación de 16s. Arma el candado anti-doble-emisión al instante y protege el
   // folio aunque el content script muera después (puerto cerrado). Fire-and-forget.
+  // 0.2.8: la HORA del EMITIR real, guardada en sessionStorage de la pestaña (sobrevive
+  // la navegación a /reportes, que mata este content script). Es la ancla de la ventana
+  // horaria del calce del folio: sin ella el worker nunca cierra solo.
+  const FINAL_EMIT_AT_KEY = "massdte_final_emit_at";
+  function recordFinalEmitAt() {
+    try {
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(`${FINAL_EMIT_AT_KEY}:${currentJobId || ""}`, String(Date.now()));
+    } catch { /* sin storage: el librero manda su propia hora como respaldo */ }
+  }
+  function readFinalEmitAt(jobId, ctx) {
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        const v = Number(sessionStorage.getItem(`${FINAL_EMIT_AT_KEY}:${jobId || ""}`));
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+    } catch { /* sigue con el respaldo */ }
+    const r = Number(ctx?.final_emit_at);
+    return Number.isFinite(r) && r > 0 ? r : null;
+  }
+
   function notifyFinalEmitClicked() {
+    recordFinalEmitAt();
     try {
       chrome.runtime.sendMessage({
         source: EXT_SOURCE,
@@ -493,6 +514,11 @@
   // acento), así que "i" NO cambia ningún match de hoy — pero evita el bug latente
   // de la glosa muda (regex en minúscula contra texto en mayúscula) y un regex roto
   // del servidor ya no revienta fillAndEmit a mitad de una boleta real.
+  // Ventana del calce en /reportes: entero 0..10 min; cualquier otra cosa = default
+  // (un libreto con 1440 aceptaría cualquier fila del día — adversarial #6).
+  function minutosLibreto(v, def) {
+    return Number.isInteger(v) && v >= 0 && v <= 10 ? v : def;
+  }
   function reI(src, hard) {
     try { return src ? new RegExp(String(src), "i") : hard; } catch { return hard; }
   }
@@ -513,6 +539,7 @@
     const mo = L?.modal ?? {};
     const em = L?.emisor ?? {};
     const ma = L?.monto_alto ?? {};
+    const rp = L?.reportes ?? {};
     return {
       selectores: {
         dialogo_activo: s.dialogo_activo ?? ".v-dialog.v-dialog--active",
@@ -562,6 +589,18 @@
       modal: { titulo: reI(mo.titulo, /EMITIR\s+E-BOLETA/i) },
       emisor: { cargando: reI(em.cargando, /CARGANDO EMISORES/i) },
       monto_alto: { texto: reI(ma.texto, /DESEA CONTINUAR|ESTA A PUNTO DE EMITIR/i) },
+      // 0.2.8: tabla del Resumen de ventas (/reportes) para el calce determinista.
+      reportes: {
+        header_folio: reI(rp.header_folio, /N(?:RO|°|º)?\.?\s*FOLIO|^FOLIO$/i),
+        header_fecha: reI(rp.header_fecha, /^FECHA/i),
+        header_hora: reI(rp.header_hora, /^HORA/i),
+        header_monto: reI(rp.header_monto, /MONTO\s*TOTAL|^TOTAL$|^MONTO$/i),
+        header_tipo: reI(rp.header_tipo, /^TIPO/i),
+        ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
+        ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
+        menu_item: reI(rp.menu_item, /RESUMEN DE VENTAS/i),
+        filas_por_pagina: Number.isInteger(rp.filas_por_pagina) && rp.filas_por_pagina >= 10 && rp.filas_por_pagina <= 250 ? rp.filas_por_pagina : 250,
+      },
       // Las 8 esperas quedan CABLEADAS donde hoy vivía el literal (ver cada sitio);
       // esperaOk garantiza que un libreto raro nunca deje un timeout en 0 ni infinito.
       esperas: {
@@ -1274,11 +1313,194 @@
     };
   }
 
-  function hasStrongFolioResult(result) {
-    return Boolean(result?.folio && result.folio_confidence === "high" && hasPdfArtifact(result));
+  // ── 0.2.8: CIERRE DEL CICLO en /reportes (calce determinista, nunca "la primera fila") ──
+  // La tabla se lee por ENCABEZADOS (regex del libreto), no por posición. Filas:
+  // {folio, fecha:"YYYY-MM-DD"|null, hora:"HH:MM"|null, monto:int|null}.
+  function parseMontoClp(value) {
+    const t = String(value || "").replace(/[^\d,.-]/g, "");
+    if (!t) return null;
+    // "196.000" / "196000" / "196.000,00" → 196000
+    const sinDecimales = t.includes(",") ? t.split(",")[0] : t;
+    const n = Number(sinDecimales.replace(/\./g, ""));
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+  function parseFechaIso(value) {
+    const t = String(value || "");
+    const dmy = t.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+    const ymd = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    return ymd ? `${ymd[1]}-${ymd[2]}-${ymd[3]}` : null;
+  }
+  function parseHoraHHMM(value) {
+    const m = String(value || "").match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+    if (!m) return null;
+    const h = Number(m[1]); const mi = Number(m[2]);
+    return h >= 0 && h < 24 && mi >= 0 && mi < 60 ? `${String(h).padStart(2, "0")}:${m[2]}` : null;
+  }
+  function minutosDeHora(hhmm) {
+    const m = String(hhmm || "").match(/^(\d{2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+  function horaChile(ms) {
+    try {
+      const parts = new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(ms));
+      const h = parts.find((p) => p.type === "hour")?.value; const mi = parts.find((p) => p.type === "minute")?.value;
+      return h != null && mi != null ? `${String(Number(h) % 24).padStart(2, "0")}:${mi}` : null;
+    } catch { return null; }
+  }
+  function parseReportesTabla() {
+    if (!location.href.includes("/reportes")) return null;
+    const R = LB.reportes;
+    for (const table of Array.from(document.querySelectorAll("table"))) {
+      // El header real trae el ícono de orden pegado ("Totalarrow_upward"): se quita.
+      const headers = Array.from(table.querySelectorAll("thead th, tr:first-child th, tr:first-child td")).map((c) => normalizeText(String(c.innerText || c.textContent || "").replace(/arrow_\w+/gi, " ")).trim());
+      const idx = {
+        folio: headers.findIndex((h) => R.header_folio.test(h)),
+        fecha: headers.findIndex((h) => R.header_fecha.test(h)),
+        hora: headers.findIndex((h) => R.header_hora.test(h)),
+        monto: headers.findIndex((h) => R.header_monto.test(h)),
+        tipo: headers.findIndex((h) => R.header_tipo.test(h)),
+      };
+      if (idx.folio < 0 || idx.monto < 0) continue;
+      const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
+      const rows = bodyRows.length > 0 ? bodyRows : Array.from(table.querySelectorAll("tr")).slice(1);
+      const filas = [];
+      for (const row of rows) {
+        const cells = Array.from(row.querySelectorAll("td, th")).map((c) => String(c.innerText || c.textContent || ""));
+        // Folio: la celda puede venir "1.241" (miles) — se quitan puntos/espacios ANTES
+        // de leer el número (adversarial #3: parseFolio leía "241").
+        const rawFolio = stripRut(cells[idx.folio] || "").replace(/[.\s]/g, "");
+        const folio = /^\d{1,10}$/.test(rawFolio) ? Number(rawFolio) : null;
+        if (!folio) continue;
+        const celdaFecha = idx.fecha >= 0 ? cells[idx.fecha] : "";
+        const fecha = parseFechaIso(celdaFecha);
+        // La hora puede venir en su columna o dentro de la de fecha ("25/09/2026 15:27").
+        const hora = parseHoraHHMM(idx.hora >= 0 ? cells[idx.hora] : celdaFecha);
+        filas.push({
+          folio,
+          fecha,
+          // Columna de fecha presente pero ilegible → la fila NO cuenta como "de hoy"
+          // (adversarial #4): antes pasaba como del día.
+          fechaIlegible: idx.fecha >= 0 && !fecha,
+          hora,
+          monto: parseMontoClp(cells[idx.monto]),
+          tipo: idx.tipo >= 0 ? normalizeText(cells[idx.tipo]) : null,
+        });
+      }
+      // COMPLETITUD (auditoría pre-publicación B1): la tabla está paginada y la boleta
+      // más nueva va AL FINAL; "no está" solo vale si se vio el total. Pie real:
+      // ".v-data-footer__pagination" = "1-N de T" (o "–" sin datos). Una fila
+      // "Cargando…" o sin pie legible = incompleta.
+      const textoTabla = normalizeText(table.innerText || table.textContent || "");
+      const cargando = /CARGANDO/.test(textoTabla);
+      const sinDatos = /NO HEMOS ENCONTRADO DATOS|NO HAY DATOS/.test(textoTabla);
+      const pie = document.querySelector(".v-data-footer__pagination");
+      const pieTxt = String(pie ? (pie.innerText || pie.textContent || "") : "");
+      const mPie = pieTxt.match(/(\d+)\s*[-–]\s*(\d+)\s*de\s*(\d+)/i);
+      const total = mPie ? Number(mPie[3]) : (sinDatos && pie ? 0 : null);
+      const completa = !cargando && total != null && filas.length === total;
+      return { filas, tieneHora: idx.hora >= 0 || filas.some((f) => f.hora), completa, total };
+    }
+    return null;
+  }
+  // Calce PURO: monto exacto + fecha del job + folio no registrado hoy + ventana horaria
+  // alrededor del EMITIR real. UNA candidata en ventana → "high" (cierra sola). Cero o
+  // varias → "medium" (a medias, el humano confirma). Sin hora (tabla o EMITIR) → nunca
+  // "high". Sin ancla "último folio + 1": en un lote con montos iguales le pondría a la
+  // boleta B el folio de la A que quedó a medias (adversarial 0.2.8, F2).
+  function calzarFolioEnReportes(tabla, job, ctx) {
+    if (!tabla || !Array.isArray(tabla.filas)) return null;
+    // Tabla vacía o cargando: sin candidatas (el llamador decide si es "no salió" según
+    // la completitud; nunca se sugiere una fila).
+    if (tabla.filas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", candidatas: 0, completa: tabla.completa === true } };
+    const montoJob = Math.round(Number(job?.totales?.monto_total ?? 0));
+    const fechaJob = String(job?.fecha_emision || "").slice(0, 10) || null;
+    const conocidos = new Set((Array.isArray(job?.folios_hoy) ? job.folios_hoy : []).map(Number));
+    const emisorActivo = readActiveEmisorRut();
+    const emisorJob = job?.emisor_rut ? normalizeRut(job.emisor_rut) : null;
+    const emisorMismatch = Boolean(emisorActivo && emisorJob && normalizeRut(emisorActivo) !== emisorJob);
+    const candidatas = tabla.filas.filter((f) => f.monto === montoJob && !f.fechaIlegible && (!f.fecha || !fechaJob || f.fecha === fechaJob) && !conocidos.has(f.folio));
+    const base = { candidatas: candidatas.length, monto: montoJob, fecha: fechaJob, emisor_mismatch: emisorMismatch };
+    const sugerido = candidatas[0]?.folio ?? null;
+    if (candidatas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", ...base } };
+    const finalEmitAt = readFinalEmitAt(job?.job_id, ctx);
+    const horaEmit = finalEmitAt ? horaChile(finalEmitAt) : null;
+    const medium = (motivo, extra = {}) => ({ folio: sugerido, confidence: "medium", evidence: { source: "reportes_ambiguo", motivo, ...base, ...extra } });
+    if (emisorMismatch) return medium("emisor_distinto");
+    // Con la tabla incompleta, la candidata "única" visible puede no ser la nuestra: la
+    // propia suele estar en la página que no se ve (orden ascendente). Nunca cierra sola.
+    if (tabla.completa !== true) return medium("tabla_incompleta", { total: tabla.total ?? null });
+    if (!horaEmit || !tabla.tieneHora) return medium(!horaEmit ? "sin_hora_emitir" : "sin_hora_en_tabla");
+    const mEmit = minutosDeHora(horaEmit);
+    // Verificación (cuadre por evento): el librero manda la ventana del intento fallido.
+    const clampMin = (v, max, def) => (Number.isInteger(v) && v >= 0 && v <= max ? v : def);
+    const antes = clampMin(ctx?.ventana_antes_min, 30, LB.reportes.ventana_antes_min);
+    const despues = clampMin(ctx?.ventana_despues_min, 10, LB.reportes.ventana_despues_min);
+    const enVentana = candidatas.filter((f) => {
+      const m = minutosDeHora(f.hora);
+      if (m == null) return false;
+      let d = m - mEmit; if (d > 720) d -= 1440; if (d < -720) d += 1440; // cruce de medianoche
+      return d >= -antes && d <= despues;
+    });
+    if (enVentana.length === 1) {
+      const f = enVentana[0];
+      return { folio: f.folio, confidence: "high", evidence: { source: "reportes_calce_unico", hora_fila: f.hora, hora_emitir: horaEmit, ...base, en_ventana: 1 } };
+    }
+    return medium(enVentana.length === 0 ? "ninguna_en_ventana" : "varias_en_ventana", { en_ventana: enVentana.length, hora_emitir: horaEmit });
   }
 
-  function captureResult(job) {
+  // ── Navegar al Resumen de ventas POR EL MENÚ (SPA), nunca con location.href ──
+  // Verificado 2026-09-26 (MV): una carga dura de /reportes redirige a /emitir y
+  // RESETEA el emisor al primero de la lista (el 0.2.7 caía ahí y por eso "no veía"
+  // la tabla). El ítem del drawer existe en el DOM aunque el drawer esté cerrado y
+  // responde al click; la navegación es client-side: este content script SIGUE VIVO
+  // (se acabó "la navegación mata el canal") y el emisor se conserva.
+  async function irAResumenVentasSpa() {
+    if (location.href.includes("/reportes")) return true;
+    const item = Array.from(document.querySelectorAll(".v-navigation-drawer .v-list-item, .v-list-item"))
+      .find((li) => LB.reportes.menu_item.test(normalizeText(li.textContent || "")));
+    if (!item) return false;
+    try { item.click(); } catch { return false; }
+    for (let i = 0; i < 16; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (location.href.includes("/reportes") && parseReportesTabla()) return true;
+    }
+    return location.href.includes("/reportes");
+  }
+  // Tabla paginada a 10 con el folio más NUEVO al final: se pide el máximo de filas por
+  // página (v-select del pie; opciones reales 5…250). Best-effort: si no se logra, el
+  // calce igual corre sobre lo visible (y el veto/ambigüedad protegen).
+  async function ampliarFilasReportes() {
+    const slot = document.querySelector(".v-data-footer .v-select__slot, .v-data-footer__select .v-select__slot");
+    if (!slot) return false;
+    try { slot.click(); } catch { return false; }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const objetivo = String(LB.reportes.filas_por_pagina);
+    const opciones = Array.from(document.querySelectorAll(`${LB.selectores.menu}.menuable__content__active ${LB.selectores.opcion}, .menuable__content__active .v-list-item`));
+    const numericas = opciones.map((o) => ({ o, n: Number(String(o.textContent || "").trim()) })).filter((x) => Number.isInteger(x.n));
+    const elegida = numericas.find((x) => String(x.n) === objetivo) || numericas.sort((a, b) => b.n - a.n)[0];
+    if (!elegida) { try { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); } catch { /* nada */ } return false; }
+    try { elegida.o.click(); } catch { return false; }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return true;
+  }
+  // Botón "refresh" del Resumen (arriba del título): vuelve a pedir las filas sin
+  // recargar la página (sin reset del emisor).
+  function refrescarReportes() {
+    const icono = Array.from(document.querySelectorAll("button, .v-icon")).find((b) => /^refresh$/i.test(String(b.textContent || "").trim()));
+    const btn = icono && icono.closest ? (icono.closest("button") || icono) : icono;
+    if (!btn) return false;
+    try { btn.click(); return true; } catch { return false; }
+  }
+
+  function hasStrongFolioResult(result) {
+    if (!result?.folio || result.folio_confidence !== "high") return false;
+    // 0.2.8: el calce único en /reportes es evidencia fuerte sin PDF (ahí no hay recibo).
+    if (result.folio_evidence?.source === "reportes_calce_unico") return true;
+    return hasPdfArtifact(result);
+  }
+
+  function captureResult(job, ctx) {
     // 0.2.7 (adversarial): el folio se busca PRIMERO dentro del/los diálogos activos (el
     // recibo vive ahí; textContent incluye lo oculto) y recién después en el body
     // completo. Así un número de otro nodo oculto (lista de emisores, un recibo viejo)
@@ -1288,12 +1510,20 @@
     const withoutRut = stripRut(pageTextTodo().slice(0, 6000));
     const links = artifactLinks();
     const enReportes = location.href.includes("/reportes");
-    let captured = (textoDialogos && captureExplicitFolio(textoDialogos))
-      || captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut);
+    // 0.2.8: en /reportes el CALCE va primero (adversarial F5: un link PDF o un texto
+    // "Folio" de otra fila ganaba y cortocircuitaba). Solo si no hay tabla legible se
+    // cae a la cadena vieja, que en /reportes nunca pasa de "medium".
+    const tablaReportes = enReportes ? parseReportesTabla() : null;
+    const calce = tablaReportes ? calzarFolioEnReportes(tablaReportes, job, ctx) : null;
+    // Con tabla legible el calce MANDA aunque sea "none" (0 candidatas → sin folio
+    // sugerido; adversarial #8: la cadena vieja sugería la primera fila, de otra boleta).
+    let captured = calce ? (calce.confidence === "none" ? null : calce)
+      : ((textoDialogos && captureExplicitFolio(textoDialogos))
+        || captureExplicitFolio(withoutRut) || capturePdfArtifactFolio(links) || captureReportTableFolio() || captureReportTextFolio(withoutRut));
     // En /reportes la tabla trae TODAS las boletas del día: la primera fila puede ser
-    // OTRA boleta (LC tuvo 3 seguidas). Nunca "alta" desde ahí: el humano confirma con
-    // el folio sugerido (result_needs_review), y no se toca Compartir.
-    if (enReportes && captured && captured.confidence === "high") {
+    // OTRA boleta (LC tuvo 3 seguidas). Nunca "alta" desde ahí SALVO el calce único
+    // (monto + fecha + hora, una sola candidata); el resto lo confirma el humano.
+    if (enReportes && captured && captured.confidence === "high" && captured.evidence?.source !== "reportes_calce_unico") {
       captured = { ...captured, confidence: "medium", evidence: { ...(captured.evidence || {}), degradado: "reportes_puede_ser_otra_boleta_del_dia" } };
     }
     const folio = captured?.folio ?? null;
@@ -1318,7 +1548,14 @@
       receptor: job?.receptor ?? null,
       detalles: Array.isArray(job?.detalles) ? job.detalles : [],
       totales: job?.totales ?? null,
-      artifact_links: links,
+      // 0.2.8 (adversarial #1): en /reportes los <a> son de OTRAS filas (PDF de otra boleta);
+      // nunca viajan como respaldo del folio calzado.
+      artifact_links: enReportes ? [] : links,
+      // Verificación: la app distingue "leí la tabla y no está" de "no pude leer".
+      reportes_tabla_leida: Boolean(tablaReportes),
+      // "No salió" en la verificación exige haber visto la tabla COMPLETA (B1).
+      reportes_tabla_completa: Boolean(tablaReportes && tablaReportes.completa === true),
+      reportes_calce: calce ? { source: calce.evidence?.source ?? null, candidatas: calce.evidence?.candidatas ?? null } : null,
       page: {
         url: location.href,
         title: document.title,
@@ -1694,10 +1931,17 @@
     }
   }
 
-  async function captureResultWhenReady(job) {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+  async function captureResultWhenReady(job, ctx) {
+    // 0.2.8: el content script que corre en /reportes es NUEVO (el que emitió murió al
+    // navegar) y nace con el libreto por defecto; el del job trae los headers de la
+    // tabla calibrados desde el server (adversarial #2).
+    if (job?.libreto) LB = resolverLibreto(job);
+    // Si este content script nació YA en /reportes (el librero reintentó la captura),
+    // no hay recibo que esperar: directo al calce.
+    const yaEnReportes = location.href.includes("/reportes");
+    for (let attempt = 0; attempt < (yaEnReportes ? 0 : 20); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1200 : 1500));
-      const result = captureResult(job);
+      const result = captureResult(job, ctx);
       if (hasStrongFolioResult(result)) {
         // Folio fuerte + estamos en el recibo → capturar el PDF oficial vía
         // COMPARTIR (primario). Si no se logra, el background cae a DESCARGAR.
@@ -1711,34 +1955,63 @@
       }
     }
 
-    const lastScreenResult = captureResult(job);
-    if (lastScreenResult.folio || /Descargar|Imprimir|Compartir|Folio|Boleta emitida|Emitida/i.test(lastScreenResult.page.excerpt)) {
+    const lastScreenResult = yaEnReportes ? null : captureResult(job, ctx);
+    if (lastScreenResult && (lastScreenResult.folio || /Descargar|Imprimir|Compartir|Folio|Boleta emitida|Emitida/i.test(lastScreenResult.page.excerpt))) {
       renderOverlay("PAUSED", "SII parece haber respondido, pero no pude confirmar el folio automaticamente. Usa Capturar folio si lo ves en pantalla.");
       return lastScreenResult;
     }
 
     renderOverlay("LOCKED_AUTOMATION", "No encontre folio en la pantalla actual. Revisando reportes SII.");
     if (!location.href.includes("/reportes")) {
-      location.href = "https://eboleta.sii.cl/reportes";
-      await new Promise((resolve) => setTimeout(resolve, 3500));
-    }
-
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const reportResult = captureResult(job);
-      if (hasStrongFolioResult(reportResult) || reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) {
-        reportResult.estado = hasStrongFolioResult(reportResult) ? "emitida_capturada_reportes" : reportResult.folio ? "resultado_requiere_revision" : "reportes_sin_folio_detectado";
-        renderOverlay(
-          hasStrongFolioResult(reportResult) ? "DONE" : "PAUSED",
-          hasStrongFolioResult(reportResult)
-            ? `Boleta encontrada en reportes. Folio ${reportResult.folio}.`
-            : "Revise reportes SII, pero no pude confirmar el folio automaticamente.",
-        );
-        return reportResult;
+      // Por el MENÚ (SPA): sin carga dura, sin reset del emisor, sin matar este script.
+      const llego = await irAResumenVentasSpa();
+      if (!llego) {
+        const sinReportes = captureResult(job, ctx);
+        renderOverlay("PAUSED", "No pude abrir el Resumen de ventas del SII. Revisa la pantalla SII y reintenta captura.");
+        return sinReportes;
       }
     }
+    await ampliarFilasReportes();
 
-    const result = captureResult(job);
+    // 0.2.8: hasta 10 lecturas (la fila recién emitida tarda en aparecer). Se sale al
+    // primer calce ÚNICO; si la tabla está pero el calce es ambiguo, se sigue intentando
+    // (la fila propia puede estar por llegar) y al final se devuelve el "medium".
+    let ultimoReporte = null;
+    let calceEstable = null; // folio "high" de la lectura anterior (adversarial #5)
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 && yaEnReportes ? 600 : 1500));
+      const reportResult = captureResult(job, ctx);
+      if (hasStrongFolioResult(reportResult)) {
+        // El calce único tiene que REPETIRSE en dos lecturas seguidas (≥1,5 s): si la fila
+        // propia aún no aparecía y la única candidata era otra boleta del mismo monto,
+        // la segunda lectura la ve llegar y el calce deja de ser único.
+        if (calceEstable === reportResult.folio) {
+          reportResult.estado = "emitida_capturada_reportes";
+          renderOverlay("DONE", `Boleta emitida. Folio ${reportResult.folio} confirmado en reportes.`);
+          return reportResult; // sin tryCaptureSharePdf: en /reportes no hay "Compartir" del recibo
+        }
+        calceEstable = reportResult.folio;
+        ultimoReporte = reportResult;
+        continue;
+      }
+      calceEstable = null;
+      if (reportResult.folio || /Nro Folio|Acciones|EXPORTAR|Descargar/i.test(reportResult.page.excerpt)) ultimoReporte = reportResult;
+      // Sin candidatas y tabla leída: a mitad de camino se refresca la tabla (la fila
+      // recién emitida puede tardar en aparecer) — sin recargar la página.
+      if ((attempt === 3 || attempt === 7) && reportResult.reportes_tabla_leida && !reportResult.folio) refrescarReportes();
+    }
+    // Se acabaron las lecturas con un "high" sin confirmar: se degrada a medium.
+    if (ultimoReporte && ultimoReporte.folio_confidence === "high") {
+      ultimoReporte.folio_confidence = "medium";
+      ultimoReporte.folio_evidence = { ...(ultimoReporte.folio_evidence || {}), source: "reportes_ambiguo", motivo: "calce_no_estable" };
+    }
+    if (ultimoReporte) {
+      ultimoReporte.estado = ultimoReporte.folio ? "resultado_requiere_revision" : "reportes_sin_folio_detectado";
+      renderOverlay("PAUSED", "Revise reportes SII, pero no pude confirmar el folio automaticamente.");
+      return ultimoReporte;
+    }
+
+    const result = captureResult(job, ctx);
     renderOverlay("PAUSED", "No pude detectar folio ni respaldo despues de emitir. Revisa la pantalla SII y reintenta captura.");
     return result;
   }
@@ -1783,8 +2056,24 @@
         });
       return true;
     }
+    if (message.type === "APP_CONTABLE_SII_VERIFICAR_REPORTES") {
+      // Verificación (cuadre por evento): NUNCA toca la calculadora ni EMITIR.
+      (async () => {
+        const job = message.job || {};
+        LB = resolverLibreto(job);
+        renderOverlay("LOCKED_AUTOMATION", "Verificando en el Resumen de ventas del SII.");
+        await selectEmisorByRut(job.emisor_rut);
+        assertEmisorRut(job);
+        const llego = await irAResumenVentasSpa();
+        if (!llego) throw new Error("No pude abrir el Resumen de ventas del SII.");
+        return captureResultWhenReady(job, message.ctx || null);
+      })()
+        .then((result) => sendResponse({ ok: true, result }))
+        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return true;
+    }
     if (message.type === "APP_CONTABLE_SII_CAPTURE_RESULT") {
-      captureResultWhenReady(message.job)
+      captureResultWhenReady(message.job, message.ctx || null)
         .then((result) => sendResponse({ ok: true, result }))
         .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
       return true;
