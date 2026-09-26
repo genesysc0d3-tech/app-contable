@@ -15,6 +15,8 @@ import { esTipoExento } from "@/lib/sii/nombre-documento";
 import { mensajeEmisorIncompleto, type CampoEmisor } from "@/lib/sii/emisor-completo";
 import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
+import { registrarFolioAMano } from "@/lib/emission/recover-latest";
+import type { ItemAMedias } from "@/lib/intermediario/a-medias";
 import { devolverCartola, ultimaMiradaCartola } from "../../revisar/actions";
 
 // Perf: el modal de emisión en lote sale del bundle inicial; se precarga en idle
@@ -61,6 +63,8 @@ interface PendientesResponse {
     listas_emitir: number;
     por_revisar: number;
     bloqueadas: number;
+    /** Boletas que el SII emitió pero sin folio registrado (lápida revision_pendiente). */
+    a_medias?: number;
     monto_total: number;
     monto_listo: number;
     // Proveedor de boletas de la empresa (viaja en totales — Mesa.tsx arma este
@@ -70,6 +74,9 @@ interface PendientesResponse {
     facturas_proveedor?: "mock" | "sii_local" | "simpleapi" | null;
   };
   aprobadas_otros_tipos?: Record<string, number>;
+  /** Pestaña "A medias": emitidas en el SII sin folio en la app. Empresa-wide
+   *  (no depende del calendario): el cliente tiene que poder encontrarlas. */
+  a_medias?: ItemAMedias[];
 }
 
 function fmt(n: number): string {
@@ -200,7 +207,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // periodo y es reactivo a la navegación del calendario. Refrescar = reloadMesa.
   const data = initial;
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas">(() => {
+  const [statusFilter, setStatusFilter] = useState<"listas" | "por_revisar" | "bloqueadas" | "todas" | "a_medias">(() => {
     // Filtro inicial: mostrar SIEMPRE algo. Con 0 listas el default caía en
     // "Listas" (vacío) aunque hubiera bloqueadas — el usuario veía una pestaña
     // "trabada" sin sus documentos (cazado por el fundador 2026-09-01: aprobó 2
@@ -208,6 +215,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     if (!initial || initial.totales.listas_emitir > 0) return "listas";
     if ((initial.totales.por_revisar ?? 0) > 0) return "por_revisar";
     if ((initial.totales.bloqueadas ?? 0) > 0) return "bloqueadas";
+    if ((initial.a_medias?.length ?? 0) > 0) return "a_medias";
     return "listas";
   });
   const [typeFilter, setTypeFilter] = useState<"todos" | "afecta" | "exenta" | "mixta">("todos");
@@ -367,6 +375,27 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const porRevisarCount = data?.totales.por_revisar ?? 0;
   const bloqueadasCount = data?.totales.bloqueadas ?? 0;
   const totalCount = data?.totales.total_pendientes ?? 0;
+  const aMedias = data?.a_medias ?? [];
+  // Folio tecleado por boleta a medias + cuál se está guardando.
+  const [folioAMedias, setFolioAMedias] = useState<Record<string, string>>({});
+  const [guardandoFolio, setGuardandoFolio] = useState<string | null>(null);
+  const guardarFolioAMedias = useCallback(async (it: ItemAMedias) => {
+    const n = Number((folioAMedias[it.id] ?? "").trim());
+    if (!Number.isInteger(n) || n <= 0) { toast("Escribe el número de folio que muestra el SII.", "error"); return; }
+    setGuardandoFolio(it.id);
+    try {
+      const r = await registrarFolioAMano(it.job_id, n);
+      if (r.estado === "recuperado") {
+        toast(r.already ? `Esa boleta ya estaba registrada con el folio ${r.folio ?? n}.` : `Folio ${r.folio ?? n} registrado. La boleta ya está en Boletas.`, "success");
+        setFolioAMedias((prev) => { const c = { ...prev }; delete c[it.id]; return c; });
+        reload();
+      } else {
+        toast(r.estado === "error" ? r.mensaje : "No se pudo registrar el folio.", "error");
+      }
+    } finally {
+      setGuardandoFolio(null);
+    }
+  }, [folioAMedias, reload, toast]);
 
   // El endpoint de lote solo emite con proveedor mock: con sii_local/simpleapi cada
   // ítem fallaría después de confirmar. Se avisa antes y se bloquea el CTA.
@@ -458,7 +487,9 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     return <EmitirEmpty loading />;
   }
 
-  if (totalCount === 0) {
+  // Con boletas a medias NO hay retorno temprano: la pestaña "A medias" tiene
+  // que verse aunque la cola del período esté vacía (LC 2026-09-25).
+  if (totalCount === 0 && aMedias.length === 0) {
     return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} />;
   }
 
@@ -747,6 +778,13 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <button className={`pl ${statusFilter === "por_revisar" ? "act" : "ina"}`} onClick={() => setStatusFilter("por_revisar")}>Por revisar ({porRevisarCount})</button>
           <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
           <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
+          {aMedias.length > 0 && (
+            <button className={`pl ${statusFilter === "a_medias" ? "act" : "ina"}`} title="El SII las emitió pero la app no alcanzó a leer el folio"
+              onClick={() => setStatusFilter("a_medias")}
+              style={{ color: "var(--amber, #f59e0b)", borderColor: statusFilter === "a_medias" ? "color-mix(in srgb, var(--amber, #f59e0b) 45%, transparent)" : undefined }}>
+              ⚠ A medias ({aMedias.length})
+            </button>
+          )}
           <span style={{fontSize:10,color:"var(--text3)",margin:"0 4px"}}>|</span>
           <button className={`pl ${typeFilter === "todos" ? "act" : "ina"}`} onClick={() => setTypeFilter("todos")}>Todos</button>
           <button className={`pl ${typeFilter === "afecta" ? "act" : "ina"}`} onClick={() => setTypeFilter("afecta")}>Afecta</button>
@@ -769,8 +807,37 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           </div>
         </div>
 
-        {/* Items — agrupados por DOCUMENTO (file-first): ves el archivo, expandís al detalle. */}
-        {itemsList.length === 0 ? (
+        {/* Boletas a medias: el SII las emitió, la app no leyó el folio. Antes solo
+            se veían en el modal del lote mientras estaba abierto (LC 2026-09-25:
+            "¿cuáles 2 dieron error?"). Acá viven hasta que se registre el folio. */}
+        {statusFilter === "a_medias" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            <div style={{ padding: "10px 13px", borderRadius: 10, background: "color-mix(in srgb, var(--amber, #f59e0b) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 28%, transparent)", fontSize: 11.5, lineHeight: 1.45, color: "var(--text)" }}>
+              Estas boletas <b>sí salieron en el SII</b>, pero la app no alcanzó a leer el folio. <b>No las vuelvas a emitir.</b> Búscalas en el SII (Resumen de ventas) por monto y hora, escribe el folio y guárdalo: pasan a Boletas.
+            </div>
+            {aMedias.map((it) => (
+              <div key={it.id} className="em-item" style={{ alignItems: "center" }}>
+                <div style={{ width: 16, flexShrink: 0 }} />
+                <div className="inf">
+                  <div className="tt">{it.receptor_nombre || it.descripcion || "Sin nombre"}</div>
+                  <div className="sub">
+                    {formatShortDateEsCl(it.fecha, true)}{it.documento_nombre ? ` · ${it.documento_nombre}` : ""} · quedó a medias el {formatShortDateEsCl(it.lapida_at.slice(0, 10))}
+                  </div>
+                </div>
+                <div className="mo">{fmt(it.monto_total)}</div>
+                <form onSubmit={(e) => { e.preventDefault(); void guardarFolioAMedias(it); }} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                  <input inputMode="numeric" pattern="[0-9]*" placeholder="Folio SII" aria-label="Folio SII"
+                    value={folioAMedias[it.id] ?? ""} onChange={(e) => setFolioAMedias((prev) => ({ ...prev, [it.id]: e.target.value.replace(/\D/g, "") }))}
+                    style={{ width: 92, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 12, padding: "0 9px", fontVariantNumeric: "tabular-nums" }} />
+                  <button type="submit" disabled={guardandoFolio === it.id || !(folioAMedias[it.id] ?? "").trim()}
+                    style={{ height: 28, fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 8, padding: "0 11px", cursor: "pointer", opacity: guardandoFolio === it.id || !(folioAMedias[it.id] ?? "").trim() ? 0.5 : 1 }}>
+                    {guardandoFolio === it.id ? "Guardando…" : "Guardar folio"}
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        ) : itemsList.length === 0 ? (
           <EmitirEmpty />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>

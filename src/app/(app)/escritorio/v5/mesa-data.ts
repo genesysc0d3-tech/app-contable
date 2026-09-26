@@ -255,8 +255,9 @@ export async function fetchMesaDateDependent(
     console.error("[mesa] getPendientesEmision falló — la cola de Emitir queda vacía", e);
     return {
       items: [] as Awaited<ReturnType<typeof getPendientesEmision>>["items"],
-      totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, monto_total: 0, monto_listo: 0 },
+      totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, a_medias: 0, monto_total: 0, monto_listo: 0 },
       aprobadas_otros_tipos: {} as Record<string, number>,
+      a_medias: [] as Awaited<ReturnType<typeof getPendientesEmision>>["a_medias"],
     };
   });
 
