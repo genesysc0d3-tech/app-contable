@@ -3,6 +3,7 @@ import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
 import { evaluarEmision } from "@/lib/intermediario/emision-decision";
 import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
+import { construirAMedias, type ItemAMedias, type JobLapida, type PropuestaAMedias } from "@/lib/intermediario/a-medias";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 export type EmpresaCtx = {
@@ -105,19 +106,46 @@ export async function getPendientesEmision(
   // registrar). NO tienen fila en boletas_emitidas todavía, así que sin este Set
   // reaparecerían como "listas" y el usuario las re-emitiría → doble folio. Se
   // excluyen hasta recuperar el folio (que sube el job a 'completed' y crea la boleta).
+  //
+  // Se consultan a nivel EMPRESA (sin rango ni paginación): una boleta a medias es
+  // rara y urgente, y el cliente tiene que poder encontrarla aunque el calendario
+  // esté en otro día (incidente LC 2026-09-25: "¿cuáles 2 dieron error?" — eran
+  // invisibles fuera del modal del lote). De acá sale también la pestaña "A medias".
   let enRevision = new Set<string>();
-  if (propIds.length > 0) {
-    try {
-      const { data: revJobs } = await supabase
-        .from("emision_jobs")
-        .select("propuesta_id")
+  let a_medias: ItemAMedias[] = [];
+  try {
+    const { data: revJobs } = await supabase
+      .from("emision_jobs")
+      .select("job_id, propuesta_id, created_at")
+      .eq("empresa_id", empresaId)
+      .eq("estado", "revision_pendiente")
+      .not("propuesta_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(60);
+    const jobs = (revJobs ?? []) as JobLapida[];
+    enRevision = new Set(jobs.map((j) => j.propuesta_id).filter((id): id is string => typeof id === "string"));
+    if (enRevision.size > 0) {
+      const { data: revProps } = await supabase
+        .from("propuestas_ia")
+        .select("id, total, tipo_dte, receptor_nombre, mesa, movimientos_raw(fecha, descripcion, documentos_subidos(nombre_archivo))")
         .eq("empresa_id", empresaId)
-        .eq("estado", "revision_pendiente")
-        .in("propuesta_id", propIds);
-      enRevision = new Set((revJobs ?? []).map((j) => j.propuesta_id).filter((id): id is string => typeof id === "string"));
-    } catch {
-      /* columna/estado aún no migrado — degrada sin romper */
+        .eq("mesa", mesaActiva)
+        .in("id", Array.from(enRevision));
+      const props: PropuestaAMedias[] = (revProps ?? []).map((p) => {
+        const mov = (Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw) as
+          { fecha: string | null; descripcion: string | null; documentos_subidos?: { nombre_archivo: string } | { nombre_archivo: string }[] | null } | null;
+        const doc = mov?.documentos_subidos;
+        const docOne = Array.isArray(doc) ? doc[0] : doc;
+        return {
+          id: p.id, total: p.total, tipo_dte: (p as { tipo_dte?: number | null }).tipo_dte ?? null,
+          receptor_nombre: p.receptor_nombre ?? null,
+          fecha: mov?.fecha ?? null, descripcion: mov?.descripcion ?? null, documento_nombre: docOne?.nombre_archivo ?? null,
+        };
+      });
+      a_medias = construirAMedias(jobs, props);
     }
+  } catch {
+    /* columna/estado aún no migrado — degrada sin romper */
   }
 
   // Paso P: decisión humana del tipo (degradado si la columna tipo_dte no está migrada).
@@ -316,6 +344,7 @@ export async function getPendientesEmision(
     listas_emitir: items.filter((i) => i.balde === "listas").length,
     por_revisar: items.filter((i) => i.balde === "por_revisar").length,
     bloqueadas: items.filter((i) => i.balde === "bloqueadas").length,
+    a_medias: a_medias.length,
     monto_total: items.reduce((s, i) => s + i.monto_total, 0),
     monto_listo: items.filter((i) => i.balde === "listas").reduce((s, i) => s + i.monto_total, 0),
   };
@@ -338,5 +367,5 @@ export async function getPendientesEmision(
   }
 
   // `hayMas`: solo significa algo cuando se pidió con limit (conector MCP).
-  return { items, totales, aprobadas_otros_tipos, hayMas };
+  return { items, totales, aprobadas_otros_tipos, hayMas, a_medias };
 }
