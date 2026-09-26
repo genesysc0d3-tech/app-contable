@@ -2,10 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import * as extensionLib from "./extension";
 import {
-  EXTENSION_ZIP_DOWNLOAD_PROPS,
-  EXTENSION_ZIP_FILENAME,
-  EXTENSION_ZIP_URL,
   EXTENSION_VERSION_ACTUAL,
   EXTENSION_VERSION_MINIMA,
   compararVersiones,
@@ -17,13 +15,14 @@ import {
 } from "./extension";
 
 describe("extension installer download", () => {
-  it("points the install action to the public Motor Local ZIP", () => {
-    expect(EXTENSION_ZIP_URL).toBe("/descargas/massdte-motor-local.zip");
-    expect(EXTENSION_ZIP_FILENAME).toBe("massdte-motor-local.zip");
-    expect(EXTENSION_ZIP_DOWNLOAD_PROPS).toEqual({
-      href: "/descargas/massdte-motor-local.zip",
-      download: "massdte-motor-local.zip",
-    });
+  // Definición del fundador (2026-09-26): la extensión se instala 100% desde la
+  // Chrome Web Store; no existe un .zip de descarga ni un camino "manual".
+  it("no expone ningún .zip de descarga (solo Chrome Web Store)", () => {
+    const claves = Object.keys(extensionLib);
+    expect(claves.filter((k) => /ZIP/.test(k))).toEqual([]);
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const pagina = readFileSync(join(root, "src/app/instalar-extension/page.tsx"), "utf8");
+    expect(pagina).not.toMatch(/\.zip|descargas|Cargar descomprimida/);
   });
 
   // Guarda anti-drift: la versión que la app anuncia como "última" DEBE ser la del

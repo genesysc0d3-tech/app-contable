@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type CSSProperties } from "react";
 import { useToast } from "@/components/Toast";
 import { setEmisionConfig, type BoletasEmisionProveedor, type FacturasEmisionProveedor } from "./actions";
-import { EXTENSION_ZIP_DOWNLOAD_PROPS, EXTENSION_VERSION_ACTUAL, EXTENSION_STORE_URL, EXTENSION_NOMBRE, compararVersiones } from "@/lib/extension";
+import { EXTENSION_VERSION_ACTUAL, EXTENSION_STORE_URL, compararVersiones } from "@/lib/extension";
 import { useVersionDisponible } from "../escritorio/v5/version-disponible-context";
 
 export interface EmissionProviderState {
@@ -339,7 +339,6 @@ function LocalMotorPanel({
   onOpenOptions: () => void;
   onRefresh: () => void;
 }) {
-  const [showInstall, setShowInstall] = useState(false);
   // Versión VIVA en la tienda (derivada de telemetría, del context), NO la
   // constante construida (que puede estar en revisión).
   const disponible = useVersionDisponible();
@@ -375,9 +374,8 @@ function LocalMotorPanel({
             Actualizar
           </button>
           {missing ? (
-            // Publicada en la Chrome Web Store (EXTENSION_STORE_URL seteada) → un solo
-            // clic a la ficha ("Añadir a Chrome"); se auto-actualiza. Sin publicar →
-            // fallback: descarga el .zip y muestra los pasos de carga manual.
+            // Se instala SOLO desde la Chrome Web Store: un clic a la ficha ("Añadir a
+            // Chrome"); se auto-actualiza.
             EXTENSION_STORE_URL ? (
               <a
                 href={EXTENSION_STORE_URL}
@@ -388,9 +386,9 @@ function LocalMotorPanel({
                 Instalar extensión →
               </a>
             ) : (
+              // Sin URL de la tienda configurada: la guía de instalación (nunca un .zip).
               <a
-                {...EXTENSION_ZIP_DOWNLOAD_PROPS}
-                onClick={() => setShowInstall(true)}
+                href="/instalar-extension"
                 style={{ ...smallButtonStyle(false, true), textDecoration: "none", whiteSpace: "nowrap" }}
               >
                 Instalar extensión
@@ -404,34 +402,10 @@ function LocalMotorPanel({
         </div>
       </div>
 
-      {missing && showInstall && (
-        <div style={{
-          marginTop: 12,
-          borderRadius: 12,
-          border: "1px solid var(--border, rgba(255,255,255,.06))",
-          background: "color-mix(in srgb, var(--text, #e8eaf0) 4%, transparent)",
-          padding: "12px 14px",
-          fontSize: 11,
-          lineHeight: 1.6,
-          color: "var(--text2, #8b92a3)",
-        }}>
-          <div style={{ fontWeight: 800, color: "var(--text, #e8eaf0)", marginBottom: 4 }}>
-            Instala la extensión {EXTENSION_NOMBRE} (v{EXTENSION_VERSION_ACTUAL}) en este navegador (Chrome, Edge o Brave)
-          </div>
-          <ol style={{ margin: 0, paddingLeft: 16 }}>
-            <li>El archivo <b>.zip</b> ya se descargó al presionar «Instalar extensión». Descomprímelo (doble clic) → queda una <b>carpeta</b>.</li>
-            <li>En una pestaña nueva entra a <b>chrome://extensions</b> (Chrome, Edge o Brave; no Safari).</li>
-            <li>Activa el «Modo de desarrollador» (arriba a la derecha).</li>
-            <li>Presiona «Cargar descomprimida» y elige la <b>carpeta</b> descomprimida (no el .zip).</li>
-            <li>Listo: la app se conecta sola. (Si no, presiona «Actualizar».)</li>
-          </ol>
-        </div>
-      )}
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginTop: 13 }}>
         <MotorStatusCard title="SII Local" status={ready ? "Activo" : "Pendiente"} detail="Boletas 39/41 vía Portal SII/e-Boleta local." active={ready} />
         <MotorStatusCard title="SimpleAPI" status={vaultReady ? "Bóveda lista" : "Bóveda pendiente"} detail={vaultDetail(vault)} active={vaultReady} />
-        <MotorStatusCard title="Versión" status={version ?? "-"} detail={`Última disponible: v${disponible}${version && compararVersiones(version, disponible) < 0 ? " · reinstala para actualizar" : ""}`} active={ready} />
+        <MotorStatusCard title="Versión" status={version ?? "-"} detail={`Última disponible: v${disponible}${version && compararVersiones(version, disponible) < 0 ? " · Chrome la actualiza sola" : ""}`} active={ready} />
       </div>
     </section>
   );

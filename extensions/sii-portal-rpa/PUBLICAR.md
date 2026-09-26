@@ -103,7 +103,7 @@ refresh token OAuth de la cuenta del publisher, guardado en `.chromewebstore/cre
 bash scripts/publish-extension.sh 0.1.6      # bump (4 archivos en sync) + build + upload + publish
 DRY_RUN=1 bash scripts/publish-extension.sh  # solo build + verificar token
 ```
-Después: commitear el bump (manifests + `modules/core.js` + `src/lib/extension.ts` + `public/descargas/*.zip`) por el flujo normal (PR → dev → main). Google revisa y publica sola; los usuarios se auto-actualizan.
+Después: commitear el bump (manifests + `modules/core.js` + `src/lib/extension.ts`) y la entrada en `EXTENSION_RELEASES.json` por el flujo normal (PR → dev → main). Google revisa y publica sola; los usuarios se auto-actualizan.
 
 Notas verificadas (2026-08-17): el script usa la **API v1.1** (`www.googleapis.com/chromewebstore/v1.1`), que responde para este publisher; la v2 (`chromewebstore.googleapis.com/v2/...:fetchStatus`) daba 404 HTML — si v1.1 dejara de responder, migrar a v2 (endpoints comentados en el script). La store **rechaza versiones ≤ a la publicada** (`PKG_INVALID_VERSION_NUMBER`) — usar ese error como prueba inofensiva del token si hace falta. El refresh token del OAuth Playground puede caducar/revocarse (24 h o si se revoca la app en la cuenta) — si el script dice `invalid_grant`, repetir el paso 4 y sobreescribir `credentials.json`.
 
