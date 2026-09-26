@@ -1,6 +1,7 @@
 import type { AdapterConfig, Row } from "./types";
 import { parseChileanNumber } from "./apply";
 import { cuadreSaldo } from "./saldo-cuadre";
+import { encabezadoConSaldo, encabezadoConSalidas } from "./encabezados";
 
 /**
  * Universal heuristic detector: finds the transaction block by STRUCTURE,
@@ -90,6 +91,14 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
 
   // Last resort: transactions_log layout (1 monto col, no tipo flag, no
   // saldo). Common in manual sales spreadsheets and exchange P2P exports.
+  // "Todo entrada" solo si ningún título habla de plata que sale NI de saldo:
+  // una cartola con cargos leída así convierte egresos en boletas, y con saldo
+  // la heurística llegó a tomar el SALDO como monto (planilla "BOLETAS BIT EM",
+  // 2026-09-11). Las cartolas editadas con SOLO abonos (BCI "Abono EXENTAS",
+  // BICE "ABONOS", BancoEstado "Depósitos / Abonos") no traen ni una ni otro y
+  // siguen pasando. Si no, cae a la IA con alarma.
+  const titulos = txStart > 0 ? rows[txStart - 1] : undefined;
+  if (encabezadoConSalidas(titulos) || encabezadoConSaldo(titulos)) return null;
   const txLogCfg = inferTransactionsLogLayout(sample);
   if (txLogCfg) {
     const firstFecha = String(sample[0][txLogCfg.fecha] ?? "");
