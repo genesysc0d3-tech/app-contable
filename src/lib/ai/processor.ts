@@ -451,6 +451,18 @@ async function limpiarInsercionesPrevias(
  * backoff ni gastar intentos) para retomar donde quedó. Así el pipeline no
  * depende de qué tan rápido sea el modelo de turno.
  */
+/**
+ * Glosa vacía en una fila del lector de cartolas (no de la IA): se rellena para
+ * que el movimiento se guarde. Solo `cartola_preparseada` con fecha, monto y
+ * dirección — una fila vacía que devolvió la IA sigue siendo basura (totales,
+ * encabezados) y se descarta como antes.
+ */
+export function completarGlosaVacia<T extends { descripcion?: string | null; monto?: unknown; tipo_flujo?: string | null; fecha?: string | null; origen?: string | null }>(m: T): T {
+  if (m.descripcion && String(m.descripcion).trim()) return m;
+  if (m.origen !== "cartola_preparseada" || m.monto == null || !m.tipo_flujo || !m.fecha) return m;
+  return { ...m, descripcion: m.tipo_flujo === "salida" ? "Cargo sin glosa en la cartola" : "Abono sin glosa en la cartola" };
+}
+
 export class ProcessorYieldError extends Error {
   constructor(public loteActual: number, public totalLotes: number) {
     super(`YIELD: presupuesto agotado en lote ${loteActual}/${totalLotes}; checkpoint guardado`);
@@ -987,10 +999,14 @@ export async function procesarDocumento(
     }
 
     // Filter out movimientos with null/empty required fields (OpenCode sometimes
-    // returns nulls for summary rows, totals, or headers in cartolas)
+    // returns nulls for summary rows, totals, or headers in cartolas).
+    // Una fila del lector determinístico con fecha+monto+dirección es un movimiento
+    // real aunque el banco no traiga glosa: antes se botaba en silencio (LC,
+    // 2026-09-27: 2 abonos BCI por $250.000 que nunca aparecieron).
     const validIndices: number[] = [];
     for (let i = 0; i < allMovimientos.length; i++) {
-      const m = allMovimientos[i];
+      const m = completarGlosaVacia(allMovimientos[i]);
+      allMovimientos[i] = m;
       if (m.descripcion && m.monto != null && m.tipo_flujo) {
         validIndices.push(i);
       }
