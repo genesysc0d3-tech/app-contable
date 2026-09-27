@@ -301,6 +301,11 @@ export async function classifyChunkWithRetry(
           notas = notas.replace(/PER_\d+/g, (t) => vault.toReal.get(t)?.nombre ?? "");
           notas = notas.replace(/\s{2,}/g, " ").trim() || null;
         }
+        // "[NUM]" es un marcador de cuenta sin identidad detrás: si el modelo lo
+        // cita en las notas, se saca (no hay nada que re-pegar).
+        if (notas && notas.includes("[NUM]")) {
+          notas = notas.replace(/\[NUM\]/g, "").replace(/\s{2,}/g, " ").trim() || null;
+        }
         return { ...prop, receptor_nombre, receptor_rut, notas };
       });
 
