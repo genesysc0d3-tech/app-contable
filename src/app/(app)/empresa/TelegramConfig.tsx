@@ -5,7 +5,7 @@ import { useToast } from "@/components/Toast";
 
 /**
  * Panel de conexión del bot de Telegram (paso del wizard de empresa).
- * Reemplaza al antiguo "IA (DeepSeek)": la IA hoy es centralizada (OpenCode),
+ * Reemplaza al antiguo "IA (DeepSeek)": la IA hoy es centralizada (Fireworks AI en prod),
  * el cliente ya no pone clave. Acá vincula su Telegram para mandar fotos de
  * comprobantes que quedan en la mesa de trabajo por el mismo pipeline que el panel.
  */
