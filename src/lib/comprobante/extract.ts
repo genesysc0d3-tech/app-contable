@@ -276,7 +276,7 @@ export function parseComprobanteTexto(texto: string, opciones?: { hoy?: Date }):
 }
 
 /**
- * OCR (OpenCode/MiniMax) + parser. Solo server: requiere OPENCODE_GO_API_KEY.
+ * OCR (mini → proveedor de AI_PROVIDER: Fireworks en prod) + parser. Solo server.
  */
 export async function extraerComprobante(imageBase64: string, mimeType: string): Promise<ComprobanteExtraccion> {
   const ocr = await ocrImage(imageBase64, mimeType);

@@ -23,22 +23,31 @@ import { canalIAActual } from "../canal";
  * propio" y el modelo le cree (no_comercial). El flujo atomizado de la mini los
  * manda a revisión humana; este flujo todavía no (mismo comportamiento que hoy).
  */
+export const FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1";
+
+/** Key según el canal (prod-app / prod-telegram) y modelo pagado de Fireworks. */
+export function credencialesFireworks(): { apiKey: string; model: string } {
+  // Una key por canal → el gasto de cada uno se ve separado en Fireworks. Si
+  // falta la de Telegram, usa la de la app.
+  const apiKey =
+    (canalIAActual() === "telegram" ? process.env.FIREWORKS_API_KEY_TELEGRAM : undefined) ||
+    process.env.FIREWORKS_API_KEY;
+  if (!apiKey) throw new Error("FIREWORKS_API_KEY no configurada");
+  const model = requirePaidModel(
+    process.env.FIREWORKS_MODEL || "accounts/fireworks/models/deepseek-v4p1-flash",
+    "fireworks",
+  );
+  return { apiKey, model };
+}
+
 export class FireworksProvider extends OpenCodeGoProvider {
   constructor() {
-    // Una key por canal (prod-app / prod-telegram) → el gasto de cada uno se ve
-    // separado en Fireworks. Si falta la de Telegram, usa la de la app.
-    const apiKey =
-      (canalIAActual() === "telegram" ? process.env.FIREWORKS_API_KEY_TELEGRAM : undefined) ||
-      process.env.FIREWORKS_API_KEY;
-    if (!apiKey) throw new Error("FIREWORKS_API_KEY no configurada");
+    const { apiKey, model } = credencialesFireworks();
     super({
       proveedor: "fireworks",
-      baseUrl: "https://api.fireworks.ai/inference/v1",
+      baseUrl: FIREWORKS_BASE_URL,
       apiKey,
-      model: requirePaidModel(
-        process.env.FIREWORKS_MODEL || "accounts/fireworks/models/deepseek-v4p1-flash",
-        "fireworks",
-      ),
+      model,
       costoInputPorMillon: 0.22,
       costoOutputPorMillon: 0.66,
       extraBody: { reasoning_effort: process.env.FIREWORKS_REASONING || "low" },
