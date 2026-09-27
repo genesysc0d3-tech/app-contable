@@ -78,3 +78,27 @@ describe("selección de proveedor", () => {
     expect(JSON.parse(String((f.mock.calls[0][1] as RequestInit).body)).reasoning_effort).toBeUndefined();
   });
 });
+
+describe("key por canal (medir gasto app vs Telegram)", () => {
+  it("dentro del canal telegram usa FIREWORKS_API_KEY_TELEGRAM; fuera, la de la app", async () => {
+    process.env.FIREWORKS_API_KEY_TELEGRAM = "fw-tg";
+    const f = vi.fn(async (..._a: unknown[]) => sse('{"propuestas":[]}'));
+    vi.stubGlobal("fetch", f);
+    const { FireworksProvider } = await import("./fireworks");
+    const { conCanalIA } = await import("../canal");
+    await new FireworksProvider().classifyMovimientos!([MOV]);
+    await conCanalIA("telegram", async () => { await new FireworksProvider().classifyMovimientos!([MOV]); });
+    const auth = f.mock.calls.map((c) => ((c[1] as RequestInit).headers as Record<string, string>).Authorization);
+    expect(auth).toEqual(["Bearer fw-test", "Bearer fw-tg"]);
+    delete process.env.FIREWORKS_API_KEY_TELEGRAM;
+  });
+
+  it("sin key de Telegram, el canal telegram cae a la de la app", async () => {
+    const f = vi.fn(async (..._a: unknown[]) => sse('{"propuestas":[]}'));
+    vi.stubGlobal("fetch", f);
+    const { FireworksProvider } = await import("./fireworks");
+    const { conCanalIA } = await import("../canal");
+    await conCanalIA("telegram", async () => { await new FireworksProvider().classifyMovimientos!([MOV]); });
+    expect(((f.mock.calls[0][1] as RequestInit).headers as Record<string, string>).Authorization).toBe("Bearer fw-test");
+  });
+});

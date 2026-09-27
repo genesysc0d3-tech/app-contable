@@ -16,6 +16,7 @@ import {
 import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entitlements";
 import { esRolEmision } from "@/lib/auth/roles";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
+import { conCanalIA } from "@/lib/ai/canal";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { subirDocumentoR2 } from "@/lib/storage";
 import {
@@ -657,14 +658,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
   const upd = update;
-  after(async () => {
+  // Todo lo que cuelga de un update de Telegram usa la key de IA de Telegram.
+  after(() => conCanalIA("telegram", async () => {
     try {
       if (upd?.message) await handleMessage(upd.message);
       else if (upd?.callback_query) await handleCallback(upd.callback_query);
     } catch (error) {
       console.error("[telegram-webhook] error:", error);
     }
-  });
+  }));
   return NextResponse.json({ ok: true });
 }
 
