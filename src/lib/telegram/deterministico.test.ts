@@ -141,7 +141,9 @@ describe("parser deterministico Telegram", () => {
 
     expect(destino).toBe("DOMIDOG SPA");
     expect(direccion?.tipo_flujo).toBe("entrada");
-    expect(direccion?.decision).toBe("consenso_entrada");
+    // 2026-09-27: la identidad decide sola (un voto); "Transferencia se ha
+    // realizado" es el pantallazo del que paga y no la contradice.
+    expect(direccion?.decision).toBe("identidad_empresa");
   });
 
   it("muestra en el resumen OCR el monto consensuado, no el numero de cuenta", () => {
@@ -230,5 +232,36 @@ describe("robustez determinística — limpieza de markdown del OCR", () => {
   it("la contraparte queda limpia tras la limpieza de markdown", () => {
     const [, segunda] = lineasOcrTelegram("Pago recibido\n**Comprador: Carlos Mena Rojas**");
     expect(origenDesdeTextoTelegram([segunda])).toBe("Carlos Mena Rojas");
+  });
+});
+
+describe("revisión contable 2026-09-27 — dirección y fecha", () => {
+  const dir = (lines: string[], identidades: string[] = ["COMERCIAL ANDES SPA"]) =>
+    resolverDireccionTelegram({ text: lines.join("\n"), destino: destinoDesdeTextoTelegram(lines), origen: origenDesdeTextoTelegram(lines), identidades });
+
+  it("sin identidad, 'a la cuenta'/'destinatario' solos NO deciden (antes: salida)", () => {
+    expect(dir(["Monto $20.000", "Destinatario", "Juan Perez", "A la cuenta 123"], [])).toBeNull();
+  });
+  it("sin identidad, 'transferiste' (pantallazo del que paga) NO decide salida", () => {
+    expect(dir(["Transferiste $20.000", "a Juan Perez"], [])).toBeNull();
+  });
+  it("sin identidad, 'recibiste' sí decide entrada (solo aparece en la app de quien recibe)", () => {
+    const d = dir(["Recibiste $20.000", "de Juan Perez"], []);
+    expect(d?.tipo_flujo).toBe("entrada");
+    expect(d?.decision).toBe("verbal_fuerte");
+  });
+  it("la identidad es UN voto (no 'identidad' + 'rol')", () => {
+    const d = dir(["Monto $20.000", "Para", "Comercial Andes SpA"]);
+    expect(d?.votos.filter((v) => v.parser === "identidad")).toHaveLength(1);
+    expect(d?.votos.some((v) => (v.parser as string) === "rol")).toBe(false);
+  });
+  it("'28 de diciembre' recibido el 2 de enero es del año ANTERIOR", () => {
+    const f = fechaDesdeTextoTelegram(["Fecha: 28 de diciembre", "Monto $10.000"], "2027-01-02");
+    expect(f.fecha).toBe("2026-12-28");
+  });
+  it("una fecha numérica posterior a la recepción no se acepta (cae al fallback)", () => {
+    const f = fechaDesdeTextoTelegram(["Fecha 15/03/2027"], "2026-09-27");
+    expect(f.visible).toBe(false);
+    expect(f.fecha).toBe("2026-09-27");
   });
 });
