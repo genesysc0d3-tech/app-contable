@@ -6,6 +6,9 @@ import { parseExcel } from "@/lib/parsers";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { conCanalIA } from "@/lib/ai/canal";
+import { leerComprobante } from "@/lib/lectura/comprobante";
+import { cargarIdentidadesEmpresa } from "@/lib/lectura/identidades";
+import { chileDateString } from "@/lib/chile-date";
 import { descargarDocumento } from "@/lib/storage";
 import { procesarDocumento, ProcessorYieldError } from "@/lib/ai/processor";
 import { PdfProtegidoError, esErrorDeClavePdf, variantesClaveDesdeRut } from "./pdf-protegido";
@@ -325,8 +328,21 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
     plantilla = parsed.plantilla;
+  } else if (job.tipo === "csv") {
+    // CSV = cartola: mismo lector determinístico que el Excel (XLSX lee CSV).
+    // Antes iba como texto directo a la IA, sin alarma (plan PR 5/8).
+    const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer;
+    const parsed = await parseExcel(ab, { documento_id: job.documento_id, empresa_id: job.empresa_id });
+    contenido = parsed.content;
+    preExtracted = parsed.preExtracted;
+    plantilla = parsed.plantilla;
   } else if (job.tipo === "pdf") {
     contenido = await leerTextoPdf(sb, job, fileBuffer);
+    // Un PDF corto es un comprobante: primero el determinístico. Una cartola en
+    // PDF (larga) sigue a la IA.
+    if (contenido.length <= PDF_COMPROBANTE_MAX_CHARS) {
+      preExtracted = await comprobanteDeterministico(sb, job, contenido);
+    }
   } else if (job.tipo === "imagen") {
     const { groupedText } = await ocrAndGroupImages([{
       base64: fileBuffer.toString("base64"),
@@ -336,11 +352,44 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
       storageProvider: provider,
     }], { contexto: { empresaId: job.empresa_id, documentoId: job.documento_id } });
     contenido = groupedText;
+    preExtracted = await comprobanteDeterministico(sb, job, groupedText);
   } else {
     contenido = fileBuffer.toString("utf-8");
   }
 
   return { contenido, preExtracted, plantilla };
+}
+
+/** Sobre este largo, el texto de un PDF es una cartola (va a la IA), no un comprobante. */
+const PDF_COMPROBANTE_MAX_CHARS = 3_000;
+
+/**
+ * Comprobante de la app (imagen suelta o PDF corto): OCR → determinístico. Si la
+ * lectura es SEGURA, sale como movimiento pre-extraído — igual que una fila de
+ * cartola: reglas primero, IA solo para clasificar lo que ninguna regla calce.
+ * Si es ambigua o no se reconoce, null → sigue la IA como hasta ahora (la
+ * pregunta a la clienta para los ambiguos es el PR 7/8). Plan PR 5/8.
+ */
+async function comprobanteDeterministico(
+  sb: Sb,
+  job: DocumentProcessingJob,
+  texto: string,
+): Promise<import("@/lib/parsers/types").PreExtractedMovimiento[] | null> {
+  if (!texto.trim()) return null;
+  const identidades = await cargarIdentidadesEmpresa(sb, job.empresa_id);
+  const r = leerComprobante(texto, {
+    identidades,
+    fechaFallback: chileDateString(job.created_at ? new Date(job.created_at) : new Date()),
+  });
+  if (r.kind !== "parsed") return null;
+  return [{
+    fecha: r.parsed.fecha,
+    descripcion: r.parsed.descripcion,
+    monto: r.parsed.monto,
+    tipo_flujo: r.parsed.tipo_flujo,
+    origen: "comprobante_deterministico",
+    n_documento: r.parsed.n_documento,
+  }];
 }
 
 /**
