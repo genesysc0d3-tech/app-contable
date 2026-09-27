@@ -84,8 +84,35 @@ export interface ParsedLine {
   plantilla_medio_pago?: string | null;
   /** 1-based row number in the original Excel sheet (for user-facing display). */
   excel_row?: number;
+  /** El monto venía como TEXTO en la celda ("$100"): la fórmula SUMA del banco no lo cuenta. */
+  monto_texto?: boolean;
   /** Saldo de la fila si la cartola tiene columna saldo. Usado para validar duplicados. */
   saldo?: number;
+}
+
+/**
+ * Una fila de la hoja con PLATA (algún monto distinto de cero) que el lector no
+ * convirtió en movimiento. `legitimo` = fila de totales/saldos/resumen, que no es
+ * una transacción; todo lo demás es una pérdida y se reporta.
+ */
+export interface DescarteFila {
+  excel_row: number;
+  motivo: "sin_fecha" | "fecha_ilegible" | "tipo_desconocido" | "cargo_y_abono" | "resumen";
+  legitimo: boolean;
+  fecha: string | null;
+  monto: number;
+  tipo_flujo: "entrada" | "salida" | null;
+  descripcion: string;
+}
+
+/** Censo de la hoja leída: toda fila con plata queda contada. */
+export interface CensoCartola {
+  hoja: string;
+  filas_con_monto: number;
+  leidas: number;
+  descartes: DescarteFila[];
+  /** Otras hojas del libro que parecen traer movimientos y NO se leyeron. */
+  otras_hojas_con_datos: string[];
 }
 
 export interface OrchestratorResult {
@@ -104,6 +131,8 @@ export interface OrchestratorResult {
    * `null` when the legacy fallback (layer 4) was used.
    */
   preExtracted: PreExtractedMovimiento[] | null;
+  /** Censo de filas de la hoja leída (null en la capa 4 legacy/IA). */
+  censo?: CensoCartola | null;
   /** true solo si el adapter que parseó lleva la FIRMA de la plantilla massDTE. */
   plantilla: boolean;
 }
