@@ -6,4 +6,5 @@
 // una puerta que compare esta versión con la aceptada por usuarios existentes:
 // solo la registran los consentimientos NUEVOS. Subirla no le vuelve a pedir
 // nada a nadie — decisión del fundador ("todos están en pruebas").
-export const POLICY_VERSION = "2026-09-06";
+// 2026-09-27: Fireworks AI (con DPA) reemplaza a OpenCode (política §4, §4.1; términos §5.1).
+export const POLICY_VERSION = "2026-09-27";
