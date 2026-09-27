@@ -69,6 +69,30 @@ function cleanLimit(value: number | undefined) {
   return Math.max(1, Math.min(10, Math.floor(value)));
 }
 
+/**
+ * Al REPROCESAR un job existente, la metadata nueva se monta sobre la que ya
+ * tenía, conservando lo que describe al documento: su origen (Telegram), las
+ * imágenes del álbum, la mesa y el tipo de imagen. Antes se reemplazaba entera y
+ * la app manda `{}` → un doc de Telegram reprocesado desde la app perdía
+ * `origen: "telegram"` y todas las imágenes del álbum menos la primera, y se iba
+ * directo a la IA (revisión adversarial 2026-09-27). `chat_id` NO se conserva:
+ * un reproceso pedido desde la app no le vuelve a escribir a la clienta por
+ * Telegram; el resultado se ve en la app.
+ */
+const METADATA_DEL_DOCUMENTO = ["origen", "grouped_images", "album", "mesa", "mime"] as const;
+
+export function metadataDeReproceso(anterior: unknown, nueva: unknown): Record<string, unknown> {
+  const base: Record<string, unknown> = {};
+  if (anterior && typeof anterior === "object" && !Array.isArray(anterior)) {
+    for (const k of METADATA_DEL_DOCUMENTO) {
+      const v = (anterior as Record<string, unknown>)[k];
+      if (v !== undefined) base[k] = v;
+    }
+  }
+  const extra = nueva && typeof nueva === "object" && !Array.isArray(nueva) ? (nueva as Record<string, unknown>) : {};
+  return { ...base, ...extra };
+}
+
 export async function enqueueDocumentProcessingJob(sb: Sb, args: EnqueueArgs) {
   const now = new Date().toISOString();
   const idempotencyKey = documentJobIdempotencyKey(args.documentoId);
@@ -103,7 +127,7 @@ export async function enqueueDocumentProcessingJob(sb: Sb, args: EnqueueArgs) {
         completed_at: null,
         storage_path: args.storagePath,
         tipo: args.tipo,
-        metadata: metadata as Json,
+        metadata: metadataDeReproceso(existing.data.metadata, metadata) as Json,
         updated_at: now,
       })
       .eq("id", existing.data.id)
