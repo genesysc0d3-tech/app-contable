@@ -17,7 +17,7 @@ import { sendMessage } from "@/lib/telegram/api";
 import { enviarResumenPropuestas, mensajeLeiEsto, registrarMensajeTelegram } from "@/lib/telegram/propuestas";
 import { chileDateString, chileDayStartUtc } from "@/lib/chile-date";
 import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
-import { extraerCodigoTransaccion, leerComprobante, type ComprobanteLeido } from "@/lib/lectura/comprobante";
+import { elegirComprobanteDelAlbum, extraerCodigoTransaccion, leerComprobante, type ComprobanteLeido } from "@/lib/lectura/comprobante";
 import { cargarIdentidadesEmpresa } from "@/lib/lectura/identidades";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
@@ -506,6 +506,8 @@ export async function clasificarComprobanteTelegram(args: {
   documentoId: string;
   empresaId: string;
   groupedText: string;
+  /** Texto OCR de cada imagen del álbum (para leerlas una por una). */
+  textosPorImagen?: string[];
   chatId?: number;
   receivedAt?: number;
   soloIA?: boolean;
@@ -515,13 +517,24 @@ export async function clasificarComprobanteTelegram(args: {
   const svc = getServiceClient();
   const mesaFactura = args.mesa === "factura";
   const fechaFallback = chileDateString(args.receivedAt ? new Date(args.receivedAt * 1000) : new Date());
-  // El parser determinístico es para UN comprobante (foto suelta). Un álbum = varias
-  // imágenes (1 venta, OCR concatenado con varios montos) → lo confunde y da "ambiguo".
-  // Por eso el álbum entra con soloIA: salta el determinístico y deja que la IA razone
-  // el conjunto como una sola operación.
-  if (!args.soloIA) {
+  // El parser determinístico es para UN comprobante. Un álbum (orden + chat +
+  // comprobante = 1 venta) concatenado lo confunde, así que antes iba entero a la
+  // IA (soloIA). Ahora se lee IMAGEN POR IMAGEN (plan PR 6/8): si hay al menos una
+  // lectura segura y todas coinciden en monto y dirección, es UNA operación y se
+  // usa ese comprobante sin IA. Cero lecturas seguras o montos distintos → IA.
+  let textoComprobante = args.groupedText;
+  let soloIA = args.soloIA;
+  if (soloIA && args.textosPorImagen && args.textosPorImagen.length > 1) {
     const identidades = await cargarIdentidadesEmpresa(svc, args.empresaId);
-    const parsed = leerComprobante(args.groupedText, { identidades, fechaFallback });
+    const elegido = elegirComprobanteDelAlbum(args.textosPorImagen, { identidades, fechaFallback });
+    if (elegido) {
+      textoComprobante = elegido;
+      soloIA = false;
+    }
+  }
+  if (!soloIA) {
+    const identidades = await cargarIdentidadesEmpresa(svc, args.empresaId);
+    const parsed = leerComprobante(textoComprobante, { identidades, fechaFallback });
     if (parsed.kind === "parsed" && await procesarComprobanteDeterministico(svc, args.documentoId, args.empresaId, parsed.parsed, mesaFactura)) {
       if (args.chatId) await enviarResumenPropuestas(args.chatId, args.documentoId, args.empresaId, args.groupedText);
       return { movimientos_total: 1 };
@@ -534,7 +547,7 @@ export async function clasificarComprobanteTelegram(args: {
           mensajeLeiEsto(args.groupedText, {
             resultado: "Requiere revisión",
             motivo: parsed.motivo === "monto_conflictivo" ? "Monto conflictivo" : "Datos insuficientes",
-          }) + "\n\nNo creé boleta automática. Revisalo desde massDTE o mandá un screenshot más claro.",
+          }) + "\n\nNo creé boleta automática. Revísalo desde massDTE o manda un screenshot más claro.",
           { html: true },
         );
         await registrarMensajeTelegram({
