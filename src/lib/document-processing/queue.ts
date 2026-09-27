@@ -266,7 +266,7 @@ async function claimJobs(sb: Sb, args: { limit: number; now: Date; lockOwner: st
   return claimed;
 }
 
-async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
+export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
   if (job.storage_path === "memoria") {
     throw new Error("Archivo original no disponible en almacenamiento");
   }
@@ -286,7 +286,10 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
 
   const groupedImages = Array.isArray(metadata.grouped_images) ? metadata.grouped_images : null;
   if (groupedImages?.length) {
-    const images: { base64: string; mimeType: string; fileName: string }[] = [];
+    // storagePath/Provider van al OCR: la mini baja la imagen con una URL firmada
+    // de vida corta en vez de recibirla como base64 DENTRO de ocr_jobs (la fila
+    // quedaba con el comprobante completo si la función moría a mitad de camino).
+    const images: { base64: string; mimeType: string; fileName: string; storagePath: string; storageProvider: string }[] = [];
     for (const item of groupedImages.slice(0, 12)) {
       if (!item || typeof item !== "object" || Array.isArray(item)) continue;
       const record = item as Record<string, Json>;
@@ -298,12 +301,15 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
         base64: buffer.toString("base64"),
         mimeType: typeof record.mime === "string" ? record.mime : "image/jpeg",
         fileName: typeof record.name === "string" ? record.name : "imagen",
+        storagePath: path,
+        storageProvider: provider,
       });
     }
     if (images.length === 0) throw new Error("No se pudieron descargar las imagenes agrupadas");
     // Telegram = 1 venta: salta la 2ª pasada IA de agrupado y acorta el timeout OCR.
     const esTelegram = metadata.origen === "telegram";
-    const { groupedText } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000 } : undefined);
+    const contexto = { empresaId: job.empresa_id, documentoId: job.documento_id };
+    const { groupedText } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000, contexto } : { contexto });
     return { contenido: groupedText, preExtracted: null, plantilla: false };
   }
 
@@ -326,7 +332,9 @@ async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) {
       base64: fileBuffer.toString("base64"),
       mimeType: typeof metadata.mime === "string" ? metadata.mime : "image/jpeg",
       fileName: job.storage_path.split("/").pop() || "imagen",
-    }]);
+      storagePath: job.storage_path,
+      storageProvider: provider,
+    }], { contexto: { empresaId: job.empresa_id, documentoId: job.documento_id } });
     contenido = groupedText;
   } else {
     contenido = fileBuffer.toString("utf-8");

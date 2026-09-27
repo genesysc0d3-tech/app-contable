@@ -30,6 +30,8 @@ const ESPERA_MS = Number(process.env.OCR_MINI_TIMEOUT_MS || 8_000);
 const SONDEO_MS = 250;
 /** Vida de la URL firmada: solo tiene que durar lo que el mini tarda en bajarla. */
 const URL_TTL_S = 300;
+/** Una fila de ocr_jobs con más de esto es huérfana (su función murió): se borra. */
+const ORFANA_MS = 15 * 60 * 1000;
 
 /**
  * ¿Está encendido el carril del mini? Apagado por defecto: encenderlo es una
@@ -92,6 +94,18 @@ export async function ocrConMini(args: OcrMiniArgs): Promise<{ text: string; ms:
 
   const limite = args.timeoutMs ?? ESPERA_MS;
   let jobId: string | null = null;
+
+  // Limpieza de huérfanas: si una función de Vercel murió a mitad del sondeo, su
+  // `finally` nunca corrió y la fila (URL o base64 de la imagen + el texto con
+  // identidad de terceros) quedó viva. Toda fila de más de 15 min se borra acá,
+  // de pasada, sin esperar un cron. No bloquea el OCR.
+  try {
+    void Promise.resolve(
+      db.from("ocr_jobs").delete().lt("created_at", new Date(Date.now() - ORFANA_MS).toISOString()),
+    ).catch(() => undefined);
+  } catch {
+    /* la limpieza nunca rompe el OCR */
+  }
 
   try {
     const imageUrl = await urlDeImagen(args.storagePath, args.storageProvider, args.base64, args.mimeType);
