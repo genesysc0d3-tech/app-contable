@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
+const purgas: Array<{ c: string; iso: string }> = [];
 const filas = new Map<string, { estado: string; resultado: unknown }>();
 let insertFalla = false;
 let seq = 0;
@@ -35,6 +36,10 @@ vi.mock("@supabase/supabase-js", () => ({
       delete: () => ({
         eq: (_c: string, id: string) => {
           filas.delete(id);
+          return Promise.resolve({ error: null });
+        },
+        lt: (c: string, iso: string) => {
+          purgas.push({ c, iso });
           return Promise.resolve({ error: null });
         },
       }),
@@ -126,5 +131,21 @@ describe("ocrConMini", () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     expect(await ocrConMini(ARGS)).toBeNull();
     process.env.SUPABASE_SERVICE_ROLE_KEY = guardado;
+  });
+});
+
+describe("limpieza de filas huérfanas de ocr_jobs (PR 2/8)", () => {
+  it("cada OCR borra las filas con más de 15 minutos", async () => {
+    process.env.OCR_MINI_ENABLED = "1";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.test";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "k";
+    purgas.length = 0;
+    resolverJob("listo", { text: "hola" });
+    await ocrConMini({ base64: "AAAA", mimeType: "image/jpeg", timeoutMs: 1000 });
+    expect(purgas).toHaveLength(1);
+    expect(purgas[0].c).toBe("created_at");
+    const edadMin = (Date.now() - new Date(purgas[0].iso).getTime()) / 60000;
+    expect(edadMin).toBeGreaterThan(14);
+    expect(edadMin).toBeLessThan(16);
   });
 });
