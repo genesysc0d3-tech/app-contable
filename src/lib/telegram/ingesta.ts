@@ -17,7 +17,8 @@ import { sendMessage } from "@/lib/telegram/api";
 import { enviarResumenPropuestas, mensajeLeiEsto, registrarMensajeTelegram } from "@/lib/telegram/propuestas";
 import { chileDateString, chileDayStartUtc } from "@/lib/chile-date";
 import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
-import { elegirComprobanteDelAlbum, extraerCodigoTransaccion, leerComprobante, type ComprobanteLeido } from "@/lib/lectura/comprobante";
+import { completarComprobante, elegirComprobanteDelAlbum, extraerCodigoTransaccion, leerComprobante, type ComprobanteLeido } from "@/lib/lectura/comprobante";
+import { aplicarRespuesta, preguntaAclaracion, sePuedePreguntar, type AclaracionGuardada, type RespuestaAclaracion } from "@/lib/telegram/aclaracion";
 import { cargarIdentidadesEmpresa } from "@/lib/lectura/identidades";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
@@ -502,6 +503,60 @@ export async function procesarComprobanteTelegram(args: {
  * NO atrapa errores: el caller (try/catch propio o markJobFailedOrRetryable de la cola)
  * los maneja.
  */
+/**
+ * La clienta tocó un botón de la pregunta (plan 7a). Aplica la respuesta a la
+ * aclaración guardada en el documento; si falta otra cosa devuelve la siguiente
+ * pregunta; si está completa, crea el movimiento igual que una lectura segura
+ * (sigue al Check, nunca se emite solo). Idempotente: si el documento ya tiene
+ * movimiento o ya no espera respuesta, no hace nada.
+ */
+export async function responderAclaracionTelegram(args: {
+  empresaId: string;
+  respuesta: RespuestaAclaracion;
+}): Promise<
+  | { estado: "siguiente"; texto: string; teclado: import("./api").InlineKeyboardMarkup }
+  | { estado: "listo"; monto: number; tipo_flujo: "entrada" | "salida" }
+  | { estado: "descartado" }
+  | { estado: "ya_resuelto" }
+> {
+  const svc = getServiceClient();
+  const { documentoId } = args.respuesta;
+  const { data: doc } = await svc
+    .from("documentos_subidos")
+    .select("id, progreso_ia, movimientos_detectados")
+    .eq("id", documentoId)
+    .eq("empresa_id", args.empresaId)
+    .maybeSingle();
+  const prog = (doc?.progreso_ia ?? {}) as Record<string, unknown>;
+  const guardada = prog.aclaracion as AclaracionGuardada | undefined;
+  if (!doc || prog.estado !== "requiere_revision" || !guardada || (doc.movimientos_detectados ?? 0) > 0) {
+    return { estado: "ya_resuelto" };
+  }
+
+  if (args.respuesta.tipo === "descartar") {
+    await svc.from("documentos_subidos").update({
+      progreso_ia: { ...prog, estado: "descartado_por_clienta", aclaracion: null } as Json,
+    }).eq("id", documentoId).eq("empresa_id", args.empresaId);
+    return { estado: "descartado" };
+  }
+
+  const nueva = aplicarRespuesta(guardada, args.respuesta);
+  if (!nueva) return { estado: "ya_resuelto" };
+  if (nueva.pendientes.length > 0) {
+    await svc.from("documentos_subidos").update({
+      progreso_ia: { ...prog, aclaracion: nueva as unknown as Json } as Json,
+    }).eq("id", documentoId).eq("empresa_id", args.empresaId);
+    const { texto, teclado } = preguntaAclaracion(nueva, documentoId);
+    return { estado: "siguiente", texto, teclado };
+  }
+
+  const leido = completarComprobante(nueva, {});
+  if (!leido) return { estado: "ya_resuelto" };
+  const ok = await procesarComprobanteDeterministico(svc, documentoId, args.empresaId, leido, nueva.mesa === "factura");
+  if (!ok) return { estado: "ya_resuelto" };
+  return { estado: "listo", monto: leido.monto, tipo_flujo: leido.tipo_flujo };
+}
+
 export async function clasificarComprobanteTelegram(args: {
   documentoId: string;
   empresaId: string;
@@ -540,7 +595,23 @@ export async function clasificarComprobanteTelegram(args: {
       return { movimientos_total: 1 };
     }
     if (parsed.kind === "ambiguous") {
-      await marcarComprobanteAmbiguo(svc, args.documentoId, args.empresaId, parsed.motivo, parsed.diagnostico);
+      const aclaracion: AclaracionGuardada | undefined = parsed.aclaracion
+        ? { ...parsed.aclaracion, mesa: mesaFactura ? "factura" : "boleta" }
+        : undefined;
+      await marcarComprobanteAmbiguo(svc, args.documentoId, args.empresaId, parsed.motivo, {
+        ...parsed.diagnostico,
+        ...(aclaracion ? { aclaracion: aclaracion as unknown as Json } : {}),
+      });
+      // Si hay algo concreto que preguntar, se le pregunta con botones (plan 7a).
+      if (args.chatId && sePuedePreguntar(aclaracion)) {
+        const { texto, teclado } = preguntaAclaracion(aclaracion, args.documentoId);
+        const msg = await sendMessage(args.chatId, texto, { html: true, replyMarkup: teclado });
+        await registrarMensajeTelegram({
+          chatId: args.chatId, empresaId: args.empresaId, messageId: msg?.message_id,
+          documentoId: args.documentoId, kind: "estado", estado: "requiere_revision",
+        });
+        return { movimientos_total: 0 };
+      }
       if (args.chatId) {
         const msg = await sendMessage(
           args.chatId,

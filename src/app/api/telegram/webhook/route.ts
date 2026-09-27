@@ -17,6 +17,7 @@ import { contextoCuentaPorEmpresa, telegramHabilitadoEmpresa } from "@/lib/entit
 import { esRolEmision } from "@/lib/auth/roles";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { conCanalIA } from "@/lib/ai/canal";
+import { leerCallbackAclaracion } from "@/lib/telegram/aclaracion";
 import { iniciarDrenaje } from "@/lib/document-processing/drain";
 import { subirDocumentoR2 } from "@/lib/storage";
 import {
@@ -33,6 +34,7 @@ import {
 import {
   crearDocumentoTelegram,
   procesarComprobanteTelegram,
+  responderAclaracionTelegram,
   contarComprobantesTelegramHoy,
   nombreComprobanteTelegram,
 } from "@/lib/telegram/ingesta";
@@ -767,6 +769,35 @@ async function handleCallback(cq: TelegramCallbackQuery) {
   const empresaId = await empresaDelChat(chatId);
   if (!empresaId) { await answerCallbackQuery(cq.id, "Tu Telegram no está conectado."); return; }
 
+  // Respuesta a "¿cuál fue el monto?" / "¿te llegó o lo pagaste?" (plan 7a).
+  if (data.startsWith("ac:")) {
+    const respuesta = leerCallbackAclaracion(data);
+    if (!respuesta) { await answerCallbackQuery(cq.id); return; }
+    const r = await responderAclaracionTelegram({ empresaId, respuesta });
+    if (r.estado === "siguiente") {
+      await answerCallbackQuery(cq.id);
+      if (messageId) await editMessageText(chatId, messageId, r.texto, { html: true, replyMarkup: r.teclado });
+    } else if (r.estado === "listo") {
+      await answerCallbackQuery(cq.id, "Anotado");
+      const monto = `$${r.monto.toLocaleString("es-CL")}`;
+      if (messageId) {
+        await editMessageText(
+          chatId,
+          messageId,
+          r.tipo_flujo === "entrada"
+            ? `✅ Anotado: te llegaron <b>${monto}</b>. Queda en tu Check para aprobarla antes de emitir.`
+            : `✅ Anotado: pagaste <b>${monto}</b>. Es un gasto: no lleva boleta.`,
+          { html: true },
+        );
+      }
+    } else if (r.estado === "descartado") {
+      await answerCallbackQuery(cq.id, "Listo");
+      if (messageId) await editMessageText(chatId, messageId, "👍 Ok, no lo tomo en cuenta.", { html: true });
+    } else {
+      await answerCallbackQuery(cq.id, "Ese comprobante ya estaba resuelto.");
+    }
+    return;
+  }
   if (data.startsWith("ses:")) {
     await handleSesionCallback(chatId, messageId, cq.id, data);
     return;
