@@ -1,4 +1,4 @@
-import type { AdapterConfig, ParsedLine, PreExtractedMovimiento, Row } from "./types";
+import type { AdapterConfig, DescarteFila, ParsedLine, PreExtractedMovimiento, Row } from "./types";
 
 /**
  * Parse a Chilean-formatted number: "1.600.000", "80,000", "1.234,56" → integer.
@@ -126,6 +126,31 @@ function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
   return null;
 }
 
+const RESUMEN_RE = /\b(sub\s*total|total(es)?|saldo\s+(inicial|final|anterior|disponible|contable)|resumen)\b/i;
+
+/** Fila de totales/saldos: tiene plata pero no es una transacción. */
+function esFilaResumen(r: Row): boolean {
+  return r.some((v) => typeof v === "string" && RESUMEN_RE.test(v));
+}
+
+/** Plata de la fila según las columnas del mapeo (0 si no trae monto). */
+function montoEnFila(r: Row, cfg: AdapterConfig): { monto: number; tipo: DescarteFila["tipo_flujo"] } {
+  const c = cfg.columns;
+  const layout = cfg.layout ?? "two_cols";
+  if (layout === "single_col" || layout === "transactions_log") {
+    const m = c.monto != null && c.monto >= 0 ? Math.abs(parseChileanNumber(r[c.monto])) : 0;
+    const tipo = layout === "transactions_log"
+      ? ((cfg.default_tipo_flujo ?? "entrada") === "salida" ? "salida" : "entrada")
+      : null;
+    return { monto: m, tipo };
+  }
+  const cargo = Math.abs(parseChileanNumber(r[c.cargo]));
+  const abono = Math.abs(parseChileanNumber(r[c.abono]));
+  if (cargo && !abono) return { monto: cargo, tipo: "salida" };
+  if (abono && !cargo) return { monto: abono, tipo: "entrada" };
+  return { monto: cargo + abono, tipo: null };
+}
+
 /**
  * Apply an adapter config to raw rows → list of parsed transaction lines.
  * Supports two layouts:
@@ -137,19 +162,41 @@ function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
  *  - Rows where the fecha column doesn't contain a date
  *  - Rows without a valid amount / ambiguous type
  */
-export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
+export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: DescarteFila[]): ParsedLine[] {
   const lines: ParsedLine[] = [];
   const { columns: c } = cfg;
   const layout = cfg.layout ?? "two_cols";
   const start = cfg.skip_rows_before_data;
   const anioPista = inferirAnioPista(rows);
+  // Pasada una fila "Resumen/Total/Saldo", lo que sigue es el bloque de
+  // resumen del banco (BICE: "RESUMEN DEL PERIODO", "TOTAL ABONOS", "SALDO FINAL").
+  let bloqueResumen = false;
 
   for (let i = start; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.length === 0) continue;
+    if (esFilaResumen(r)) bloqueResumen = true;
+
+    // Censo: una fila con plata que no termina en movimiento se anota con su
+    // motivo. Antes cada `continue` de abajo la botaba en silencio (incidente
+    // LC 2026-09-27: filas perdidas sin que nadie se enterara).
+    const plata = montoEnFila(r, cfg);
+    const descartar = (motivo: DescarteFila["motivo"], fecha: string | null, tipo: DescarteFila["tipo_flujo"]) => {
+      if (!descartes || !plata.monto) return;
+      const resumen = bloqueResumen || esFilaResumen(r);
+      descartes.push({
+        excel_row: i + 1,
+        motivo: resumen ? "resumen" : motivo,
+        legitimo: resumen,
+        fecha,
+        monto: plata.monto,
+        tipo_flujo: tipo ?? plata.tipo,
+        descripcion: String(r[c.descripcion] ?? "").trim(),
+      });
+    };
 
     const fechaRaw = r[c.fecha];
-    if (!fechaRaw) continue;
+    if (!fechaRaw) { descartar("sin_fecha", null, null); continue; }
 
     // Convert Date objects (from cellDates:true) to ISO string. El tipo Row
     // declara string|number, pero con cellDates el runtime trae Date reales.
@@ -175,7 +222,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       // Se acepta lo que normalizeDate sepa convertir a ISO (incluye yyyymmdd y
       // dd/mm sin año); lo demás no es un movimiento.
       const iso = normalizeDate(fechaStr, cfg.date_format, anioPista);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) { descartar("fecha_ilegible", null, null); continue; }
       fechaStr = iso;
     }
 
@@ -189,7 +236,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       const amount = parseChileanNumber(r[montoCol]);
       if (!amount) continue;
       const t = classifyTipoFlag(r[tipoCol]);
-      if (!t) continue;
+      if (!t) { descartar("tipo_desconocido", fechaStr, null); continue; }
       tipo = t;
       monto = amount;
     } else if (layout === "transactions_log") {
@@ -206,7 +253,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       // Both zero → metadata, summary, or blank line
       if (!cargo && !abono) continue;
       // Both non-zero → ambiguous, skip
-      if (cargo && abono) continue;
+      if (cargo && abono) { descartar("cargo_y_abono", fechaStr, null); continue; }
       tipo = cargo ? "SALIDA" : "ENTRADA";
       monto = cargo || abono;
     }
@@ -224,10 +271,12 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
       const v = String(r[idx] ?? "").trim();
       return v || null;
     };
+    const celdaMonto = layout === "two_cols" ? (tipo === "SALIDA" ? r[c.cargo] : r[c.abono]) : r[c.monto ?? -1];
     lines.push({
       tipo,
       fecha,
       monto,
+      ...(typeof celdaMonto === "string" ? { monto_texto: true } : {}),
       descripcion,
       n_documento,
       excel_row: i + 1,
@@ -241,7 +290,33 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig): ParsedLine[] {
     });
   }
 
+  if (descartes) marcarFilasDeTotales(lines, descartes);
   return lines;
+}
+
+/**
+ * Una fila sin fecha cuyo monto es la suma de los abonos, de los cargos o de
+ * todo lo leído es la fila de totales del banco (BancoEstado, BICE: sin texto,
+ * solo el número). No es una transacción → descarte legítimo.
+ */
+function marcarFilasDeTotales(lines: ParsedLine[], descartes: DescarteFila[]): void {
+  // Dos formas de sumar: la nuestra (todo lo leído) y la del Excel del banco,
+  // cuya fórmula SUMA ignora los montos escritos como texto (BancoEstado: un
+  // abono "$100" en texto → el total del banco quedaba $100 abajo).
+  const suma = (tipo: ParsedLine["tipo"] | null, soloNumeros: boolean) =>
+    lines
+      .filter((l) => (tipo == null || l.tipo === tipo) && !(soloNumeros && l.monto_texto))
+      .reduce((s, l) => s + l.monto, 0);
+  const sumas = [false, true]
+    .flatMap((soloNumeros) => [suma("ENTRADA", soloNumeros), suma("SALIDA", soloNumeros), suma(null, soloNumeros)])
+    .filter((x) => x > 0);
+  for (const d of descartes) {
+    if (d.legitimo || d.motivo !== "sin_fecha") continue;
+    if (sumas.some((s) => Math.abs(s - d.monto) <= 1)) {
+      d.legitimo = true;
+      d.motivo = "resumen";
+    }
+  }
 }
 
 /**

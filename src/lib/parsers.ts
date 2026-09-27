@@ -1,5 +1,5 @@
 import { parseExcelWithOrchestrator } from "./parsers/orchestrator";
-import type { PreExtractedMovimiento } from "./parsers/types";
+import type { CensoCartola, PreExtractedMovimiento } from "./parsers/types";
 
 /**
  * Public entry point for Excel parsing.
@@ -22,6 +22,8 @@ export async function parseExcel(
   capa_usada: number;
   /** Firma de la plantilla massDTE (ver AdapterConfig.plantilla). */
   plantilla: boolean;
+  /** Censo de filas con plata de la hoja leída (null en capa 4). */
+  censo: CensoCartola | null;
 }> {
   const { content, result } = await parseExcelWithOrchestrator(buffer, opts);
   return {
@@ -29,5 +31,6 @@ export async function parseExcel(
     preExtracted: result.preExtracted,
     capa_usada: result.capa_usada,
     plantilla: result.plantilla,
+    censo: result.censo ?? null,
   };
 }
