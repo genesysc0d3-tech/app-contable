@@ -161,3 +161,53 @@ Cumple el punto (ii) de las gestiones en paralelo. **Fireworks AI** (Fireworks.a
 
 ---
 *Borrador generado con compliance-cl (pack ley-21719). No constituye asesoría legal.*
+
+## Actualización 2026-09-27: activación y lectura del texto vigente
+
+**Activado en producción el 2026-09-27.** Fireworks AI procesa la extracción, la clasificación
+y el OCR de respaldo. **OpenCode no recibe datos en producción.** Copia fechada y con hash en
+`dpa-proveedores/fireworks-*-2026-09-27.txt`.
+
+Al leer el texto completo aparecieron dos correcciones a la actualización anterior:
+
+1. **Las SCC de la UE no rigen para AlphaCode.** La cláusula 12.1 del DPA las aplica solo
+   cuando al cliente le rige la ley europea de protección de datos, y a AlphaCode no le rige.
+   Además, las "Applicable Data Protection Laws" del DPA son solo las de la UE y EE.UU.; la ley
+   chilena no aparece. Por eso la garantía adecuada del art. 27 b) no es "SCC UE", sino **el
+   propio contrato**: términos §2.4, que incorporan el DPA, más las obligaciones que el DPA le
+   impone al encargado sobre los "Covered Data" sin condicionarlas a ninguna ley:
+   - 4.2: tratar solo por instrucción del cliente.
+   - 4.3: no vender, no usar para otro fin, no combinar y (f) no entrenar ni mejorar modelos.
+   - 4.5: no retener prompts ni respuestas.
+   - 6: sub-encargados listados, con aviso de cambios y derecho a objetar.
+   - 7: asistencia con los derechos del titular.
+   - 9: auditoría o informe SOC 2 Type II.
+   - 10.1: aviso de brecha en **48 h**.
+   - 11: devolución y borrado.
+
+   Esto satisface el estándar del art. 28 ("principios, derechos y garantías similares o
+   mayores"), que no exige SCC. Es la misma conclusión que antes, pero con otro fundamento.
+2. **Retención con matices** (DPA 4.5 y documento de retención):
+   - El caché de prompts puede dejar el texto en **memoria volátil por unos minutos**, nunca en
+     almacenamiento persistente.
+   - La Response API guarda 30 días; massDTE no la usa (solo `/chat/completions`:
+     `opencodego.ts`, `ocr.ts`).
+   - El registro de prompts para funciones avanzadas (FireOptimizer) requiere activación
+     explícita, y no se activa.
+
+**Fireworks como responsable (DPA 3(b)):** solo sobre los "Administration Data" y los "Usage
+Data" de la cuenta. No aplica a las cartolas.
+
+**Sub-encargados (Schedule 4):** AWS (EE.UU./Japón), GCP (EE.UU.), Oracle Cloud (EE.UU./Japón/
+Reino Unido/Alemania), Cloudflare (global), Vercel, Pylon, Linear, Discord y Slack (EE.UU.).
+Deben quedar en el RAT como destinos posibles. Entre ellos no hay ningún país como el del
+incidente de OpenCode (sección 3).
+
+**Controles que se mantienen:**
+- seudonimización antes del envío;
+- lista de destinos permitidos fail-closed (`egress.ts`);
+- intervención humana;
+- OCR primero en la mini, local.
+
+**Pendiente:** recapturar el DPA una vez al año o cuando Fireworks avise un cambio de
+sub-encargados (DPA 6.4).
