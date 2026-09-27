@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leerComprobante } from "./comprobante";
+import { elegirComprobanteDelAlbum, leerComprobante } from "./comprobante";
 
 // Anclas de la lectura determinística única (plan PR 4/8). Comprobantes
 // SINTÉTICOS con la forma de los reales. Si un cambio altera una de estas
@@ -39,5 +39,26 @@ describe("leerComprobante — anclas", () => {
 
   it("un chat sin transferencia → no reconocido (sigue la IA)", () => {
     expect(leer("hola, te pago mañana los 30 lucas del usdt").kind).toBe("unrecognized");
+  });
+});
+
+describe("álbum de Telegram, imagen por imagen (plan PR 6/8)", () => {
+  const ctx = { identidades: ID, fechaFallback: "2026-09-27" };
+  const ORDEN = "Orden P2P #4431\nVendes 50 USDT\nPrecio 1.060\nTotal 53.000 CLP\nEsperando pago";
+  const CHAT = "comprador: listo te transferí\nyo: ok reviso";
+  const COMP = ["Comprobante de transferencia", "Monto: $53.000", "Fecha: 14/09/2026", "De: Juan Perez Soto", "Para: Comercial Andes SpA"].join("\n");
+
+  it("orden + chat + comprobante = UNA operación → usa el comprobante (sin IA)", () => {
+    expect(elegirComprobanteDelAlbum([ORDEN, CHAT, COMP], ctx)).toBe(COMP);
+  });
+  it("dos comprobantes del MISMO pago → una operación", () => {
+    expect(elegirComprobanteDelAlbum([COMP, COMP], ctx)).toBe(COMP);
+  });
+  it("dos comprobantes de montos distintos → null (sigue la IA)", () => {
+    const OTRO = COMP.replace("$53.000", "$20.000");
+    expect(elegirComprobanteDelAlbum([COMP, OTRO], ctx)).toBeNull();
+  });
+  it("ninguna lectura segura → null (sigue la IA)", () => {
+    expect(elegirComprobanteDelAlbum([ORDEN, CHAT], ctx)).toBeNull();
   });
 });

@@ -312,8 +312,8 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     // Telegram = 1 venta: salta la 2ª pasada IA de agrupado y acorta el timeout OCR.
     const esTelegram = metadata.origen === "telegram";
     const contexto = { empresaId: job.empresa_id, documentoId: job.documento_id };
-    const { groupedText } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000, contexto } : { contexto });
-    return { contenido: groupedText, preExtracted: null, plantilla: false };
+    const { groupedText, textos } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000, contexto } : { contexto });
+    return { contenido: groupedText, preExtracted: null, plantilla: false, textosPorImagen: textos };
   }
 
   const fileBuffer = await descargarDocumento(provider, job.storage_path, bajar);
@@ -357,7 +357,7 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     contenido = fileBuffer.toString("utf-8");
   }
 
-  return { contenido, preExtracted, plantilla };
+  return { contenido, preExtracted, plantilla, textosPorImagen: undefined as string[] | undefined };
 }
 
 /** Sobre este largo, el texto de un PDF es una cartola (va a la IA), no un comprobante. */
@@ -630,7 +630,7 @@ async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: r.movimientos_total };
     }
 
-    const { contenido, preExtracted, plantilla } = await extractContentFromJob(sb, job);
+    const { contenido, preExtracted, plantilla, textosPorImagen } = await extractContentFromJob(sb, job);
     if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
 
     let movimientosTotal: number;
@@ -641,7 +641,7 @@ async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
       // Álbum (multi-imagen) → IA (el parser determinístico es de 1 comprobante y se
       // confunde con varios montos). Foto suelta vía cola → determinístico-primero.
       const esAlbum = Array.isArray(meta.grouped_images) && meta.grouped_images.length > 1;
-      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, chatId, soloIA: esAlbum, mesa: meta.mesa === "factura" ? "factura" : "boleta" });
+      const r = await clasificarComprobanteTelegram({ documentoId: job.documento_id, empresaId: job.empresa_id, groupedText: contenido, textosPorImagen, chatId, soloIA: esAlbum, mesa: meta.mesa === "factura" ? "factura" : "boleta" });
       movimientosTotal = r.movimientos_total;
     } else {
       // Presupuesto de tiempo: si el modelo de turno es lento y no alcanza,

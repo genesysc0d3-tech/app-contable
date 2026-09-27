@@ -142,3 +142,24 @@ export function leerComprobante(
   };
 }
 
+
+/**
+ * Álbum (varias imágenes de UNA venta: orden, chat, comprobante): cada imagen se
+ * lee por separado. Si hay al menos una lectura segura y todas las seguras
+ * coinciden en monto y dirección, es una sola operación → devuelve el texto de
+ * ese comprobante. Si no hay ninguna segura, o hay montos/direcciones distintos,
+ * null → el álbum sigue a la IA. (plan PR 6/8)
+ */
+export function elegirComprobanteDelAlbum(
+  textos: string[],
+  ctx: { identidades: string[]; fechaFallback: string },
+): string | null {
+  const seguras: Array<{ texto: string; parsed: ComprobanteLeido }> = [];
+  for (const texto of textos) {
+    const r = leerComprobante(texto, ctx);
+    if (r.kind === "parsed") seguras.push({ texto, parsed: r.parsed });
+  }
+  if (seguras.length === 0) return null;
+  const operaciones = new Set(seguras.map((x) => `${x.parsed.monto}:${x.parsed.tipo_flujo}`));
+  return operaciones.size === 1 ? seguras[0].texto : null;
+}
