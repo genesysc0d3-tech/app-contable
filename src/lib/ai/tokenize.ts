@@ -260,5 +260,26 @@ export function rehydrateReceptor(
     return { receptor_nombre: receptor.receptor_nombre ?? null, receptor_rut: real?.rut ?? null };
   }
 
-  return receptor;
+  // Token DENTRO de un texto: el modelo copia la glosa tokenizada con su forma
+  // jurídica ("PER_2 Limitada"). Antes solo se reconocía el token exacto, el
+  // marcador sobrevivía y el fail-closed tumbaba la cartola ENTERA (LC,
+  // 2026-09-27, primer día con DeepSeek V4.1 en Fireworks). Se re-pega cada
+  // token con el nombre real; si alguno no existe en la bóveda, el nombre se
+  // descarta (aguas abajo se recupera de la glosa cruda).
+  const nombre = n && TOKEN_EN_TEXTO.test(n) ? repegarEnTexto(n, vault) : receptor.receptor_nombre;
+  const rut = r && (TOKEN_EN_TEXTO.test(r) || r.includes("[NUM]")) ? null : receptor.receptor_rut;
+  return { receptor_nombre: nombre, receptor_rut: rut };
+}
+
+const TOKEN_EN_TEXTO = /\bPER_\d+\b/;
+
+function repegarEnTexto(texto: string, vault: Vault): string | null {
+  let desconocido = false;
+  const out = texto.replace(/\bPER_\d+\b/g, (tok) => {
+    const real = vault.toReal.get(tok)?.nombre;
+    if (!real) desconocido = true;
+    return real ?? "";
+  });
+  if (desconocido || out.includes("[NUM]")) return null;
+  return out.replace(/\s{2,}/g, " ").trim() || null;
 }
