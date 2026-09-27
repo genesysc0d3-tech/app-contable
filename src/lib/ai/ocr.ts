@@ -175,6 +175,8 @@ export async function ocrAndGroupImages(
   opts?: { skipGrouping?: boolean; ocrTimeoutMs?: number; contexto?: OcrContexto },
 ): Promise<{
   groupedText: string;
+  /** Texto OCR de cada imagen, en orden (el álbum se lee imagen por imagen). */
+  textos: string[];
   totalTokensInput: number;
   totalTokensOutput: number;
 }> {
@@ -193,13 +195,13 @@ export async function ocrAndGroupImages(
   let totalTokensOutput = ocrResults.reduce((s, r) => s + r.tokens_output, 0);
 
   if (images.length <= 1) {
-    return { groupedText: ocrResults[0]?.text ?? "", totalTokensInput, totalTokensOutput };
+    return { groupedText: ocrResults[0]?.text ?? "", totalTokensInput, totalTokensOutput, textos: ocrResults.map((r) => r.text) };
   }
 
   // Telegram/álbum = 1 venta: saltar la 2ª pasada IA de agrupado (DeepSeek) —
   // concatenar alcanza y ahorra un round-trip de modelo (más rápido).
   if (opts?.skipGrouping) {
-    return { groupedText: ocrResults.map((r) => r.text).join("\n\n"), totalTokensInput, totalTokensOutput };
+    return { groupedText: ocrResults.map((r) => r.text).join("\n\n"), totalTokensInput, totalTokensOutput, textos: ocrResults.map((r) => r.text) };
   }
 
   // Agrupar imágenes de la misma operación con un modelo de texto (DeepSeek).
@@ -220,6 +222,7 @@ ${ocrResults.map((r, i) => `[Imagen ${i + 1}: ${r.fileName}]\n${r.text}`).join("
     totalTokensOutput += grouped.tokens_output;
     return {
       groupedText: grouped.text || ocrResults.map((r) => r.text).join("\n\n"),
+      textos: ocrResults.map((r) => r.text),
       totalTokensInput,
       totalTokensOutput,
     };
@@ -227,6 +230,7 @@ ${ocrResults.map((r, i) => `[Imagen ${i + 1}: ${r.fileName}]\n${r.text}`).join("
     // Si el agrupado falla, concatenar es suficiente para el pipeline.
     return {
       groupedText: ocrResults.map((r) => r.text).join("\n\n"),
+      textos: ocrResults.map((r) => r.text),
       totalTokensInput,
       totalTokensOutput,
     };
