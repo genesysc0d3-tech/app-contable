@@ -26,6 +26,7 @@ import {
   answerCallbackQuery,
   getFileBase64,
   type TelegramUpdate,
+  borrarMensajeRecibido,
   type TelegramMessage,
   type TelegramPhotoSize,
   type TelegramCallbackQuery,
@@ -86,6 +87,10 @@ const TOPE_DIARIO = 50;
 // costo por 10 sin agregar información. Se corta antes de bajar la foto.
 const MAX_FOTOS_ALBUM = 4;
 
+// Telegram no ofrece contrato de tratamiento de datos: la foto del comprobante
+// se saca del chat apenas queda copiada en nuestro almacenamiento.
+const FOTO_BORRADA = "🔒 Saqué la foto de este chat por privacidad. Queda guardada solo en massDTE.";
+
 const MSG = {
   instruccionesVincular:
     "👋 <b>Hola, soy el bot de massDTE.</b>\n\n" +
@@ -132,11 +137,13 @@ const MSG = {
   sesionMandaFotos: (mesa: string) =>
     `📸 Dale, mándame las imágenes del comprobante para la <b>${mesa}</b>.\n` +
     `Hasta <b>${MAX_FOTOS_ALBUM}</b>, y con eso armo la propuesta.`,
-  sesionRecibida: (n: number) =>
+  sesionRecibida: (n: number, borrada: boolean) =>
     `📸 Recibí <b>${n} de ${MAX_FOTOS_ALBUM}</b> imágenes.\n\n` +
+    (borrada ? `${FOTO_BORRADA}\n\n` : "") +
     "¿Las proceso, o falta alguna?",
-  sesionTope: (n: number) =>
+  sesionTope: (n: number, borrada: boolean) =>
     `📸 Recibí <b>${n} de ${MAX_FOTOS_ALBUM}</b> — es el máximo por comprobante.\n\n` +
+    (borrada ? `${FOTO_BORRADA}\n\n` : "") +
     "Las proceso ahora.",
   sesionSinFotos:
     "📸 Todavía no me llega ninguna imagen. Mándamelas y las proceso.",
@@ -376,7 +383,12 @@ async function iniciarSesionChat(chatId: number, textoInicial: string): Promise<
  * forma de no adivinar. Al llegar al tope se procesa solo, porque ya no puede
  * mandar más.
  */
-async function recibirFotoSesion(chatId: number, sesion: Sesion, foto: TelegramPhotoSize): Promise<void> {
+async function recibirFotoSesion(
+  chatId: number,
+  sesion: Sesion,
+  foto: TelegramPhotoSize,
+  original?: { messageId: number; privado: boolean },
+): Promise<void> {
   const svc = getServiceClient();
   const empresaId = sesion.empresa_id!;
   const grupo = `ses_${sesion.token}`;
@@ -430,17 +442,23 @@ async function recibirFotoSesion(chatId: number, sesion: Sesion, foto: TelegramP
     return;
   }
 
+  // Ya está copiada en R2: la foto original sale del chat (solo chats privados;
+  // la Bot API no deja borrar mensajes ajenos en grupos sin ser admin).
+  const borrada = original?.privado
+    ? await borrarMensajeRecibido(chatId, original.messageId)
+    : false;
+
   await tocarSesion(svc, chatId);
 
   if (posicion >= MAX_FOTOS_ALBUM) {
     // Tope: ya no puede mandar más, no tiene sentido preguntarle.
-    await say(chatId, MSG.sesionTope(posicion));
+    await say(chatId, MSG.sesionTope(posicion, borrada));
     await procesarSesion(chatId, sesion);
     return;
   }
 
   // Se EDITA el mismo mensaje para que el contador no llene el chat de globos.
-  const texto = MSG.sesionRecibida(posicion);
+  const texto = MSG.sesionRecibida(posicion, borrada);
   const teclado = kbSesionProcesar(sesion.token);
   const editado = sesion.message_id
     ? await editMessageText(chatId, sesion.message_id, texto, { html: true, replyMarkup: teclado })
@@ -750,7 +768,10 @@ async function handleMessage(msg: TelegramMessage) {
       await iniciarSesionChat(chatId, MSG.fotoSinSesion);
       return;
     }
-    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id, sesion);
+    await recibirComprobante(chatId, msg.photo, msg.date, msg.media_group_id, sesion, {
+      messageId: msg.message_id,
+      privado: msg.chat.type === "private",
+    });
     return;
   }
 
@@ -900,7 +921,7 @@ async function handleCallback(cq: TelegramCallbackQuery) {
     const prop = await propuestaPorId(propId, empresaId);
     if (!prop) { await answerCallbackQuery(cq.id, "No encontré la boleta"); return; }
     await setPendingEdit(chatId, propId, campo, messageId ?? null);
-    await say(chatId, `✏️ Escribí ${labelCampo(campo)} nuevo.\nActual: <b>${valorActual(prop, campo)}</b> 👇`);
+    await say(chatId, `✏️ Escribe ${labelCampo(campo)} nuevo.\nActual: <b>${valorActual(prop, campo)}</b> 👇`);
     await answerCallbackQuery(cq.id);
     return;
   }
@@ -1015,7 +1036,7 @@ async function handleDuplicadoCallback(
     const text =
       "⚠️ <b>¿Seguro?</b>\n\n" +
       `Esta operación ya parece registrada: <b>${Math.round(d.monto).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })}</b>.\n` +
-      "Si aceptás igual, voy a crear otra propuesta y podrías duplicar la boleta.";
+      "Si aceptas igual, voy a crear otra propuesta y podrías duplicar la boleta.";
     const edited = messageId ? await editMessageText(chatId, messageId, text, { html: true, replyMarkup: kbConfirmarDuplicado(actionId) }) : false;
     if (!edited) await sendMessage(chatId, text, { html: true, replyMarkup: kbConfirmarDuplicado(actionId) });
     await answerCallbackQuery(callbackId);
@@ -1186,7 +1207,7 @@ async function mostrarPendientes(chatId: number) {
     return;
   }
   const tipo = await tipoChat(empresaId);
-  await say(chatId, `📌 Tenés <b>${props.length}</b> boleta${props.length === 1 ? "" : "s"} pendiente${props.length === 1 ? "" : "s"}. Te las reenvío:`);
+  await say(chatId, `📌 Tienes <b>${props.length}</b> boleta${props.length === 1 ? "" : "s"} pendiente${props.length === 1 ? "" : "s"}. Te las reenvío:`);
   for (const prop of props) {
     const { text, keyboard } = mensajeBoleta(prop, tipo);
     const msg = await sendMessage(chatId, text, { html: true, replyMarkup: keyboard });
@@ -1639,6 +1660,7 @@ async function recibirComprobante(
   receivedAt?: number,
   mediaGroupId?: string,
   sesion?: Sesion,
+  original?: { messageId: number; privado: boolean },
 ) {
   const svc = getServiceClient();
 
@@ -1677,7 +1699,7 @@ async function recibirComprobante(
       const permitida = sesion.opciones.some((o) => o.id === sesion.empresa_id);
       if (!permitida) { await say(chatId, MSG.sinPermisos); return; }
     }
-    await recibirFotoSesion(chatId, sesion, foto);
+    await recibirFotoSesion(chatId, sesion, foto, original);
     return;
   }
 
