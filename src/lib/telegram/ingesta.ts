@@ -477,8 +477,8 @@ export async function procesarComprobanteTelegram(args: {
       await sendMessage(
         args.chatId,
         aborted
-          ? "⏳ Tardé demasiado leyendo ese comprobante y se cortó. Probá de nuevo en un momento."
-          : "😕 Tuve un problema procesando ese comprobante. Probá de nuevo en un ratito.",
+          ? "⏳ Tardé demasiado leyendo ese comprobante y se cortó. Prueba de nuevo en un momento."
+          : "😕 Tuve un problema procesando ese comprobante. Prueba de nuevo en un ratito.",
         { html: true },
       );
     }

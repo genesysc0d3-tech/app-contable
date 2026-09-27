@@ -123,6 +123,22 @@ export async function sendMessage(
   }
 }
 
+/**
+ * Borra del chat un mensaje que el usuario le mandó al bot (la foto del
+ * comprobante, una vez copiada a nuestro almacenamiento). La Bot API lo
+ * permite solo en chats privados y dentro de 48 h. Devuelve si se borró; no
+ * lanza nunca: que no se pueda borrar no debe cortar el procesamiento.
+ */
+export async function borrarMensajeRecibido(chatId: number, messageId: number): Promise<boolean> {
+  try {
+    await tgCall<boolean>("deleteMessage", { chat_id: chatId, message_id: messageId });
+    return true;
+  } catch (err) {
+    console.error("[telegram] deleteMessage falló:", err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
 /** Edita un mensaje ya enviado (texto + botones). No lanza. */
 export async function editMessageText(
   chatId: number,

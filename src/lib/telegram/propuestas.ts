@@ -7,6 +7,7 @@
  * (`tipo_contribuyente`, editable con /config); acá solo se muestra.
  */
 
+import { enmascararCuenta, enmascararRut, iniciales, minimizarTexto } from "./minimizar";
 import { createHash } from "crypto";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "../database.types";
@@ -436,10 +437,11 @@ function partyFromLines(lines: string[], fallbackNombre?: string | null): PartyF
 }
 
 function appendParty(lines: string[], title: string, party: PartyFields): void {
+  // Telegram no tiene contrato de tratamiento: identidad de terceros minimizada.
   const entries = [
-    ["Nombre", party.nombre],
-    ["RUT", party.rut],
-    ["Cuenta", party.cuenta],
+    ["Nombre", party.nombre ? iniciales(party.nombre) : null],
+    ["RUT", party.rut ? enmascararRut(party.rut) : null],
+    ["Cuenta", party.cuenta ? enmascararCuenta(party.cuenta) : null],
     ["Banco", party.banco],
   ].filter(([, value]) => Boolean(value));
   if (entries.length === 0) return;
@@ -479,7 +481,6 @@ function resumenOcrComprobante(ocrText: string, options: ComprobanteLeidoOptions
   const destino = destinoDesdeOcr(lines);
   const origen = firstLabelValue(lines, [/(?:de|desde|origen|remitente|pagador)\b/]);
   const codigo = codigoDesdeOcr(lines);
-  const email = firstMatch(lines, /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
   const fecha = options.fecha ?? fechaDesdeOcr(lines);
   const mensaje = firstLabelValue(lines, [/(?:mensaje|comentario|glosa|asunto|concepto|motivo)\b/]);
   const origenSection = sectionLines(lines, /datos.*(?:origen|emisor|remitente|pagador)|^origen$/i, /datos.*(?:destinatario|destino|beneficiario|receptor)|^destino$|^para$|^monto|^fecha|^c[oó]digo|^operaci[oó]n/i);
@@ -495,8 +496,7 @@ function resumenOcrComprobante(ocrText: string, options: ComprobanteLeidoOptions
   appendParty(copyLines, "Origen", origenParty);
   appendParty(copyLines, "Destino", destinoParty);
   appendIf(copyLines, "Código", codigo);
-  appendIf(copyLines, "Mensaje", mensaje);
-  appendIf(copyLines, "Copia enviada a", email);
+  appendIf(copyLines, "Mensaje", mensaje ? minimizarTexto(mensaje) : mensaje);
   appendIf(copyLines, "Motivo", options.motivo);
 
   const header = "📄 <b>Comprobante leído</b>";
@@ -521,7 +521,7 @@ export function mensajeMovimientoSinBoleta(m: MovimientoBot): { text: string; ke
         "🛒 <b>Esto parece una COMPRA</b> (plata que enviaste), no una venta.\n" +
         `• Monto: <b>${CLP(m.monto)}</b>\n` +
         `• Fecha: ${esc(m.fecha)}\n` +
-        `• Detalle: ${esc(m.descripcion)}\n\n` +
+        `• Detalle: ${esc(minimizarTexto(m.descripcion))}\n\n` +
         "massDTE es <b>solo de ventas</b>: una compra no genera boleta.\n" +
         "¿Esto es un <b>ingreso (venta)</b> tuyo, o una <b>compra</b>?",
       keyboard: kbMovimientoSinBoleta(m.id),
@@ -532,7 +532,7 @@ export function mensajeMovimientoSinBoleta(m: MovimientoBot): { text: string; ke
       "ℹ️ <b>Detecté un movimiento, pero no una boleta para emitir.</b>\n" +
       `• Monto: <b>${CLP(m.monto)}</b>\n` +
       `• Fecha: ${esc(m.fecha)}\n` +
-      `• Detalle: ${esc(m.descripcion)}`,
+      `• Detalle: ${esc(minimizarTexto(m.descripcion))}`,
   };
 }
 
@@ -543,8 +543,8 @@ export function mensajeConfirmarIngreso(m: MovimientoBot): { text: string; keybo
     text:
       "⚠️ <b>¿Seguro que es una VENTA?</b>\n\n" +
       "Lo leí como <b>compra</b> (plata que enviaste):\n" +
-      `<i>${esc(m.descripcion)}</i>\n\n` +
-      "Seguí solo si de verdad fue un <b>pago que recibiste</b> por una venta. Ahí te creo la boleta.",
+      `<i>${esc(minimizarTexto(m.descripcion))}</i>\n\n` +
+      "Sigue solo si de verdad fue un <b>pago que recibiste</b> por una venta. Ahí te creo la boleta.",
     keyboard: kbConfirmarIngreso(m.id),
   };
 }
@@ -554,7 +554,7 @@ export function mensajeConfirmarCompra(m: MovimientoBot): { text: string; keyboa
   return {
     text:
       "🛒 <b>¿Seguro que es una compra?</b>\n\n" +
-      `<i>${esc(m.descripcion)}</i>\n\n` +
+      `<i>${esc(minimizarTexto(m.descripcion))}</i>\n\n` +
       "Si es compra la <b>descarto</b> del flujo — massDTE es solo de ventas, no emite boleta.",
     keyboard: kbConfirmarCompra(m.id),
   };
@@ -573,7 +573,8 @@ export function mensajeBoleta(p: PropuestaBot, tipo: TipoBoleta): { text: string
   if (p.moneda_origen && p.monto_moneda_origen) {
     lines.push(`• Origen: ${p.monto_moneda_origen} ${esc(p.moneda_origen)}`);
   }
-  lines.push(`• Cliente: ${p.receptor_nombre ? esc(p.receptor_nombre) : "consumidor final"}${p.receptor_rut ? ` (${esc(p.receptor_rut)})` : ""}`);
+  // Iniciales y RUT enmascarado: se reconoce; el dato completo está en massDTE.
+  lines.push(`• Cliente: ${p.receptor_nombre ? esc(iniciales(p.receptor_nombre)) : "consumidor final"}${p.receptor_rut ? ` (RUT ${esc(enmascararRut(p.receptor_rut))})` : ""}`);
 
   if (p.estado === "aprobado") {
     return { text: lines.join("\n") + "\n\n✅ <b>Aprobada</b> — está en Agregados, lista para emitir." };
@@ -649,8 +650,8 @@ export function labelCampo(codigo: string): string {
 /** Valor actual de un campo, para el prompt "X actual: …". */
 export function valorActual(p: PropuestaBot, codigo: string): string {
   if (codigo === "m") return CLP(p.total ?? 0);
-  if (codigo === "c") return p.receptor_nombre ?? "(sin nombre)";
-  if (codigo === "r") return p.receptor_rut ?? "(sin RUT)";
+  if (codigo === "c") return p.receptor_nombre ? iniciales(p.receptor_nombre) : "(sin nombre)";
+  if (codigo === "r") return p.receptor_rut ? enmascararRut(p.receptor_rut) : "(sin RUT)";
   if (codigo === "f") return p.fecha || "(sin fecha)";
   return "";
 }
@@ -725,7 +726,7 @@ export async function editarCampoBot(
       .update({ fecha }, { count: "exact" })
       .eq("empresa_id", empresaId)
       .eq("id", propRow.movimiento_id);
-    if (movError || !movCount) return { ok: false, error: "No pude guardar la fecha. Probá de nuevo." };
+    if (movError || !movCount) return { ok: false, error: "No pude guardar la fecha. Prueba de nuevo." };
   } else {
     return { ok: false, error: "Campo desconocido." };
   }
@@ -735,7 +736,7 @@ export async function editarCampoBot(
     .update(update, { count: "exact" })
     .eq("empresa_id", empresaId)
     .eq("id", propId);
-  if (error || !count) return { ok: false, error: "No pude guardar el cambio. Probá de nuevo." };
+  if (error || !count) return { ok: false, error: "No pude guardar el cambio. Prueba de nuevo." };
 
   const prop = await propuestaPorId(propId, empresaId);
   if (!prop) return { ok: false, error: "No encontré la propuesta." };
@@ -862,10 +863,10 @@ export function mensajeDuplicado(d: DuplicadoBot): { text: string; keyboard: Inl
       "⚠️ <b>Esto parece un duplicado.</b>\n" +
       `• Monto: <b>${CLP(d.monto)}</b>\n` +
       `• Fecha: ${esc(d.fecha)}\n` +
-      `• Detalle: ${esc(d.descripcion)}\n` +
+      `• Detalle: ${esc(minimizarTexto(d.descripcion))}\n` +
       (d.n_documento ? `• Código: ${esc(d.n_documento)}\n` : "") +
       `\n${esc(d.motivo)}\n\n` +
-      "Podés descartarlo o aceptarlo igual. Si aceptás, te voy a pedir confirmación otra vez porque puede duplicar una boleta.",
+      "Puedes descartarlo o aceptarlo igual. Si aceptas, te voy a pedir confirmación otra vez porque puede duplicar una boleta.",
     keyboard: kbDuplicado(d.actionId),
   };
 }
