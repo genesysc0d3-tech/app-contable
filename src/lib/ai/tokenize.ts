@@ -57,7 +57,7 @@ const TELEFONO_RE = /(?:\+?56[\s.-]?)(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}\b|\b9[\s.-]\
 // Ahora las alternativas van de más larga a más corta (para que TRANSFERENCIA gane
 // antes que TRANSFER) y el cierre es un lookahead que tolera cola.
 const CONTRAPARTE_RE =
-  /\b(transferencias?|transferencia|transfer|transf\.?|trf|abonos?|ingresos?|dep[oó]sitos?|tef)(\s+(?:de|a|desde|para|por|recibida|enviada)){0,2}\s+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ.'\s]*?[A-Za-zÁÉÍÓÚÑáéíóúñ])(?=[\s.\-]*(?:$|[\/,;|()]|\bref\b|\bn[°º]\b|\d))(?:\s+(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])\b)?/gi;
+  /\b(transferencias?|transferencia|transfer|transf\.?|trf|abonos?|ingresos?|dep[oó]sitos?|tef)((?:\s+(?:de|a|desde|para|por|recibida|enviada)){0,2})\s+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ.'\s]*?[A-Za-zÁÉÍÓÚÑáéíóúñ])(?=[\s.\-]*(?:$|[\/,;|()]|\bref\b|\bn[°º]\b|\d))(?:\s+(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])\b)?/gi;
 // Señal de clasificación que NUNCA se tokeniza aunque caiga tras "Transf de": cripto,
 // plataformas, forex y términos de TIPO de operación (que el clasificador podría usar).
 // Si el "nombre" capturado trae esto, es señal, no identidad de un tercero.

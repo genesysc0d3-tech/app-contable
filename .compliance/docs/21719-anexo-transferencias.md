@@ -18,7 +18,7 @@ AlphaCode SpA, RUT 78.448.088-7, Av. Apoquindo 6410 Of. 605, Las Condes, Santiag
 | Resend | EE.UU. (us-east-1) | email y nombre | correo saliente | DPA del proveedor. Cláusulas modelo PENDIENTES |
 | ImprovMX | EE.UU./internacional | email en tránsito (no almacena) | correo entrante | PENDIENTE |
 | Google (Gmail) | EE.UU./internacional | buzón de soporte y de ejercicio de derechos | recepción | Términos de consumidor. PENDIENTE evaluar cuenta con DPA |
-| Telegram | internacional | imágenes de comprobantes | recepción | [verificar mecanismo] |
+| Telegram | internacional | imágenes de comprobantes (el bot las borra del chat tras copiarlas) y respuestas minimizadas del bot | recepción opcional | **Sin mecanismo del Art. 27**: Telegram no ofrece DPA. Riesgo aceptado y medidas en el RAT, sección "Riesgo aceptado — Telegram" |
 
 ## 2.bis Destinatarios elegidos por el cliente (no son encargados de AlphaCode)
 Solo existen si el usuario conecta su propio asistente de IA (conector MCP). AlphaCode no los contrata, no les transfiere por iniciativa propia y no puede exigirles cláusulas: el usuario elige el destinatario y acepta los términos de ese proveedor. Por eso no caben en la tabla de importadores.
