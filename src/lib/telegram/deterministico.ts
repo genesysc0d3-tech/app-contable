@@ -50,7 +50,7 @@ export type FechaTelegramDecision = {
 export type DireccionTelegramDecision = {
   tipo_flujo: TipoFlujoTelegram;
   decision: string;
-  votos: Array<{ parser: "identidad" | "rol" | "verbal"; tipo_flujo: TipoFlujoTelegram; motivo: string }>;
+  votos: Array<{ parser: "identidad" | "verbal"; tipo_flujo: TipoFlujoTelegram; motivo: string }>;
   destino_es_empresa: boolean;
   origen_es_empresa: boolean;
 };
@@ -380,11 +380,24 @@ export function resolverMontoTelegram(lines: string[]): MontoTelegramResolution 
   };
 }
 
+/**
+ * Una fecha de comprobante nunca es POSTERIOR a cuando llegó (+1 día por zona
+ * horaria) ni de hace más de 2 años. Antes se aceptaba hasta +1 año: "28 dic"
+ * recibido el 2 de enero quedaba en diciembre del año SIGUIENTE (otro F29).
+ */
 function fechaEnRango(fecha: string, fallback: string): boolean {
   const year = Number(fecha.slice(0, 4));
   const fallbackYear = Number(fallback.slice(0, 4));
   if (!Number.isFinite(year) || !Number.isFinite(fallbackYear)) return true;
-  return year >= fallbackYear - 2 && year <= fallbackYear + 1;
+  if (year < fallbackYear - 2) return false;
+  return fecha <= sumarDia(fallback);
+}
+
+function sumarDia(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 function lineaFechaBloqueada(line: string): boolean {
@@ -406,8 +419,10 @@ export function fechaDesdeTextoTelegram(lines: string[], fallback: string): Fech
 
     const textual = line.match(monthPattern);
     if (textual?.[1]) {
-      const raw = /\d{4}/.test(textual[1]) ? textual[1] : `${textual[1]} ${fallbackYear}`;
-      const fecha = parseFecha(raw);
+      const conAnio = /\d{4}/.test(textual[1]);
+      let fecha = parseFecha(conAnio ? textual[1] : `${textual[1]} ${fallbackYear}`);
+      // Sin año y "en el futuro" (28 dic recibido el 2 ene) → es del año anterior.
+      if (!conAnio && fecha > sumarDia(fallback)) fecha = parseFecha(`${textual[1]} ${fallbackYear - 1}`);
       if (fechaEnRango(fecha, fallback)) return { fecha, visible: true, linea: line, decision: "fecha_textual_visible" };
     }
   }
@@ -476,6 +491,28 @@ export function nombreContraparteTelegram(text: string): string {
   return text.split(/\s+/).slice(0, 6).join(" ");
 }
 
+// Palabras FUERTES: solo aparecen en un lado (quien recibe o quien envía).
+// DÉBILES: aparecen en comprobantes de los dos lados ("a la cuenta", "cuenta
+// destino", "destinatario", "monto transferido" están también en uno RECIBIDO).
+const VERBO_ENTRADA_FUERTE = /\b(recibiste|te transfirio|pago recibido|transferencia recibida|te pagaron|acreditado)\b/;
+const VERBO_SALIDA_FUERTE = /\b(enviaste|transferiste|realizaste|transferencia se ha realizado)\b/;
+const VERBO_ENTRADA_DEBIL = /\b(abono|abonado)\b/;
+const VERBO_SALIDA_DEBIL = /\b(monto transferido|a la cuenta|cuenta destino|destinatario)\b/;
+
+/**
+ * Dirección del comprobante (revisión contable 2026-09-27).
+ *
+ * OJO con los verbos: en P2P el comprobante casi siempre es el PANTALLAZO DEL QUE
+ * PAGA ("Transferiste $50.000 a DOMIDOG SPA", "Transferencia realizada") y para la
+ * clienta es plata que LE LLEGÓ. Por eso los verbos de "salida" no contradicen a
+ * la identidad. Reglas:
+ *  - identidad del contribuyente en destino/origen → decide (UN voto; antes
+ *    "identidad" y "rol" contaban dos veces el mismo dato).
+ *  - sin identidad + "recibiste/te pagaron…" (solo aparece en la app de quien
+ *    recibe) → entrada, con confianza menor (la ingesta la deja fuera del bulk).
+ *  - sin identidad + solo "transferiste…" o palabras débiles → null: ambiguo, que
+ *    aclare la clienta (puede ser el pantallazo de su comprador).
+ */
 export function resolverDireccionTelegram(args: {
   text: string;
   destino: string;
@@ -486,44 +523,29 @@ export function resolverDireccionTelegram(args: {
   const origenEsEmpresa = args.origen ? contieneIdentidadTelegram(args.origen, args.identidades) : false;
   const votos: DireccionTelegramDecision["votos"] = [];
 
+  let identidad: TipoFlujoTelegram | null = null;
   if (destinoEsEmpresa && !origenEsEmpresa) {
+    identidad = "entrada";
     votos.push({ parser: "identidad", tipo_flujo: "entrada", motivo: "identidad_empresa_en_destino" });
-    votos.push({ parser: "rol", tipo_flujo: "entrada", motivo: "bloque_destino_contiene_empresa" });
   } else if (origenEsEmpresa && !destinoEsEmpresa) {
+    identidad = "salida";
     votos.push({ parser: "identidad", tipo_flujo: "salida", motivo: "identidad_empresa_en_origen" });
-    votos.push({ parser: "rol", tipo_flujo: "salida", motivo: "bloque_origen_contiene_empresa" });
   }
 
   const norm = normalizeForTelegramMatch(args.text);
-  if (/\b(recibiste|te transfirio|pago recibido|abono|abonado|transferencia recibida|te pagaron|acreditado)\b/.test(norm)) {
-    votos.push({ parser: "verbal", tipo_flujo: "entrada", motivo: "texto_indica_pago_recibido" });
-  } else if (/\b(enviaste|transferiste|realizaste|monto transferido|a la cuenta|cuenta destino|destinatario|transferencia se ha realizado)\b/.test(norm)) {
-    votos.push({ parser: "verbal", tipo_flujo: "salida", motivo: "texto_indica_transferencia_enviada" });
+  let fuerte: TipoFlujoTelegram | null = null;
+  if (VERBO_ENTRADA_FUERTE.test(norm)) fuerte = "entrada";
+  else if (VERBO_SALIDA_FUERTE.test(norm)) fuerte = "salida";
+  if (fuerte) {
+    votos.push({ parser: "verbal", tipo_flujo: fuerte, motivo: fuerte === "entrada" ? "texto_indica_pago_recibido" : "texto_indica_transferencia_enviada" });
+  } else if (VERBO_ENTRADA_DEBIL.test(norm)) {
+    votos.push({ parser: "verbal", tipo_flujo: "entrada", motivo: "palabra_debil_entrada" });
+  } else if (VERBO_SALIDA_DEBIL.test(norm)) {
+    votos.push({ parser: "verbal", tipo_flujo: "salida", motivo: "palabra_debil_salida" });
   }
 
-  const entradas = votos.filter((vote) => vote.tipo_flujo === "entrada");
-  const salidas = votos.filter((vote) => vote.tipo_flujo === "salida");
-  let tipo: TipoFlujoTelegram | null = null;
-  let decision = "sin_consenso";
-
-  if (entradas.length >= 2 && entradas.length >= salidas.length) {
-    tipo = "entrada";
-    decision = "consenso_entrada";
-  } else if (salidas.length >= 2 && salidas.length >= entradas.length) {
-    tipo = "salida";
-    decision = "consenso_salida";
-  } else {
-    const identidad = votos.find((vote) => vote.parser === "identidad");
-    const unico = votos.length === 1 ? votos[0] : null;
-    if (identidad) {
-      tipo = identidad.tipo_flujo;
-      decision = "identidad_empresa_prioritaria";
-    } else if (unico) {
-      tipo = unico.tipo_flujo;
-      decision = "unico_voto_verbal";
-    }
-  }
-
-  if (!tipo) return null;
-  return { tipo_flujo: tipo, decision, votos, destino_es_empresa: destinoEsEmpresa, origen_es_empresa: origenEsEmpresa };
+  const base = { votos, destino_es_empresa: destinoEsEmpresa, origen_es_empresa: origenEsEmpresa };
+  if (identidad) return { tipo_flujo: identidad, decision: "identidad_empresa", ...base };
+  if (fuerte === "entrada") return { tipo_flujo: "entrada", decision: "verbal_fuerte", ...base };
+  return null; // sin identidad y sin "recibiste": no se adivina, pregunta a la clienta
 }

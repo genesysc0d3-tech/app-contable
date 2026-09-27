@@ -106,6 +106,8 @@ async function normalizarMovimientosTelegram(
 type ParsedComprobanteTelegram = {
   fecha: string;
   fechaVisible: boolean;
+  /** La dirección salió de la identidad del contribuyente (no solo de un verbo). */
+  direccionPorIdentidad: boolean;
   monto: number;
   tipo_flujo: "entrada" | "salida";
   contraparte_nombre: string | null;
@@ -196,6 +198,7 @@ async function parseComprobanteTelegramDeterministico(
     parsed: {
       fecha: fecha.fecha,
       fechaVisible: fecha.visible,
+      direccionPorIdentidad: direccion.decision !== "verbal_fuerte",
       monto: monto.decision.monto,
       tipo_flujo: direccion.tipo_flujo,
       contraparte_nombre: contraparteReal,
@@ -235,8 +238,14 @@ async function procesarComprobanteDeterministico(
   const duplicate = (existentes ?? []).find((m) => {
     if (m.documento_id === documentoId) return false;
     if (parsed.n_documento && m.n_documento === parsed.n_documento && Number(m.monto) === parsed.monto) return true;
-    return m.fecha === parsed.fecha && Number(m.monto) === parsed.monto && m.descripcion === parsed.descripcion;
+    return false;
   });
+  // Sin n° de operación, "mismo monto + fecha + glosa" NO prueba que sea el mismo
+  // pago: un cliente puede pagar dos veces lo mismo el mismo día, y descartarlo
+  // es subdeclarar ventas. Se guarda igual, marcado para revisar (2026-09-27).
+  const posibleDuplicado = parsed.n_documento
+    ? null
+    : (existentes ?? []).find((m) => m.documento_id !== documentoId && m.fecha === parsed.fecha && Number(m.monto) === parsed.monto && m.descripcion === parsed.descripcion) ?? null;
 
   if (duplicate) {
     const doc = Array.isArray(duplicate.documentos_subidos)
@@ -330,8 +339,11 @@ async function procesarComprobanteDeterministico(
       total: parsed.monto,
       monto_neto: neto,
       iva: exento ? 0 : parsed.monto - neto,
-      confianza: 0.92,
-      notas: `${notaTipo} detectada por parser determinístico de Telegram${identificarContraparte && parsed.contraparte_nombre ? ` · contraparte ${parsed.contraparte_nombre}` : ""}`,
+      // 0.92 solo con fecha vista en el comprobante y dirección por identidad; si
+      // la fecha se asumió o la dirección salió solo de un verbo, 0.78 (fuera de
+      // "Poner listas" 0.8: se mira una por una). Posible duplicado: 0.5.
+      confianza: posibleDuplicado ? 0.5 : parsed.fechaVisible && parsed.direccionPorIdentidad ? 0.92 : 0.78,
+      notas: `${posibleDuplicado ? "⚠ Posible duplicado: ya hay otro movimiento con el mismo monto, fecha y glosa — revisa antes de emitir. " : ""}${notaTipo} detectada por parser determinístico de Telegram${identificarContraparte && parsed.contraparte_nombre ? ` · contraparte ${parsed.contraparte_nombre}` : ""}`,
       fuente_clasificacion: "telegram_deterministico",
     });
     if (propError) {
