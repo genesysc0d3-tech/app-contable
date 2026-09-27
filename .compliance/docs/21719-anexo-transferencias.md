@@ -9,7 +9,8 @@ AlphaCode SpA, RUT 78.448.088-7, Av. Apoquindo 6410 Of. 605, Las Condes, Santiag
 
 | Proveedor | País/región | Datos | Finalidad | Mecanismo |
 |---|---|---|---|---|
-| OpenCode / Anomaly Innovations, Inc. | EE.UU. (San Francisco). **Regiones de subprocesamiento NO declaradas por el proveedor** | imágenes y texto de cartolas/comprobantes (RUT, montos, nombres) | OCR + clasificación por IA (**zero-retention, sin entrenamiento**) | Cláusulas modelo [COMPLETAR firma] |
+| Fireworks.ai, Inc. (desde 2026-09-27) | EE.UU.; sub-encargados en EE.UU./Japón/Reino Unido/Alemania (DPA Schedule 4) | texto seudonimizado de cartolas y comprobantes; imágenes solo si la mini (OCR local) está caída | extracción, clasificación y OCR de respaldo (**retención cero, sin entrenamiento**) | DPA incorporado a los términos (§2.4): obligaciones del encargado como garantía adecuada, art. 27 b)/28. Las SCC de la UE no rigen para AlphaCode (DPA 12.1) |
+| ~~OpenCode / Anomaly Innovations, Inc.~~ | — | **ya no recibe datos en producción desde el 2026-09-27** | — | — |
 | Supabase (producción) | EE.UU. (us-east-1) | base de datos y almacenamiento (todos los datos de cuenta) | infraestructura | DPA del proveedor vigente. Cláusulas modelo PENDIENTES de suscribir |
 | Supabase (respaldo sellado) | Brasil (sa-east-1) | copia congelada al 2026-08-22, sin escrituras nuevas | resguardo de continuidad | Sin transferencias desde el 2026-08-22. Destrucción comprometida al 2026-12-31 |
 | Vercel | EE.UU. | datos en tránsito (hosting/funciones) | hosting | DPA del proveedor. Cláusulas modelo PENDIENTES |

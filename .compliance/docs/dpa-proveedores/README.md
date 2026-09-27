@@ -1,6 +1,6 @@
 # Contratos de tratamiento de datos — evidencia
 
-Capturados el **2026-08-23** desde la web pública de cada proveedor.
+Capturados el **2026-08-23** desde la web pública de cada proveedor (Fireworks AI: **2026-09-27**).
 
 ## Por qué están acá
 
@@ -25,6 +25,10 @@ pregunta. Eso es esto.
 | Vercel | `vercel-dpa-2026-08-23.txt` | `54df81fe70f0b594` | <https://vercel.com/legal/dpa> |
 | Cloudflare | `cloudflare-dpa-2026-08-23.txt` | `8d4bd428bc8b3a2b` | <https://www.cloudflare.com/cloudflare-customer-dpa/> |
 | Resend | `resend-dpa-2026-08-23.txt` | `a824b5ee405a51c6` | <https://resend.com/legal/dpa> |
+| Fireworks AI (2026-09-27) | `fireworks-dpa-2026-09-27.txt` | `18477ce6efa76930` | <https://fireworks.ai/dpa> |
+| Fireworks AI — términos (v. 10-jul-2026) | `fireworks-terminos-2026-09-27.txt` | `ffed5bde3e285a0c` | <https://fireworks.ai/terms-of-service> |
+| Fireworks AI — retención | `fireworks-retencion-datos-2026-09-27.txt` | `c224658996842408` | <https://docs.fireworks.ai/guides/security_compliance/data_handling> |
+| Fireworks AI — privacidad | `fireworks-privacidad-2026-09-27.txt` | `fb2035ff17c58c54` | <https://fireworks.ai/privacy-policy> |
 
 El hash permite acreditar que la copia no se alteró después de capturarla.
 
@@ -38,7 +42,7 @@ Resend. Un documento de terceros dentro del árbol del proyecto no es inerte.
 
 | Proveedor | Situación |
 |---|---|
-| **OpenCode** (Anomaly Innovations, Inc.) | No ofrece contrato de tratamiento. Ver `../21719-evaluacion-proveedor-ia.md`: evaluación de riesgo, controles compensatorios y plazos |
+| **OpenCode** (Anomaly Innovations, Inc.) | **Ya no recibe datos en producción desde el 2026-09-27** (reemplazado por Fireworks AI). No ofrece contrato de tratamiento. Ver `../21719-evaluacion-proveedor-ia.md`: evaluación de riesgo, controles compensatorios y plazos |
 | **Telegram** | Servicio de mensajería de consumo, no ofrece contrato a nadie. Declarado en los T&C §5.1 y aceptado por el usuario. Canal **opcional**: la app funciona sin él |
 | **Mercado Pago** | Transitorio — se reemplaza por Reveniu. No se gestiona contrato con un proveedor que sale |
 | **ImprovMX** | Pendiente de evaluar |
