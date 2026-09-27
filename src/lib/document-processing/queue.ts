@@ -5,6 +5,7 @@ import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
+import { conCanalIA } from "@/lib/ai/canal";
 import { descargarDocumento } from "@/lib/storage";
 import { procesarDocumento, ProcessorYieldError } from "@/lib/ai/processor";
 import { PdfProtegidoError, esErrorDeClavePdf, variantesClaveDesdeRut } from "./pdf-protegido";
@@ -500,6 +501,14 @@ async function completarJob(sb: Sb, job: DocumentProcessingJob): Promise<boolean
 }
 
 async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
+  // Un job que nació en Telegram (álbum, reproceso) gasta con la key de Telegram.
+  const origen = job.metadata && typeof job.metadata === "object" && !Array.isArray(job.metadata)
+    ? (job.metadata as Record<string, Json>).origen
+    : null;
+  return conCanalIA(origen === "telegram" ? "telegram" : "app", () => processOneJobEnCanal(sb, job));
+}
+
+async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
   const now = new Date();
   try {
     await sb

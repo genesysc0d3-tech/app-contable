@@ -1,5 +1,6 @@
 import { OpenCodeGoProvider } from "./opencodego";
 import { requirePaidModel } from "../model-guard";
+import { canalIAActual } from "../canal";
 
 /**
  * Fireworks AI (2026-09-26) — reemplazo de OpenCode Go antes del 1-dic (21.719).
@@ -24,7 +25,11 @@ import { requirePaidModel } from "../model-guard";
  */
 export class FireworksProvider extends OpenCodeGoProvider {
   constructor() {
-    const apiKey = process.env.FIREWORKS_API_KEY;
+    // Una key por canal (prod-app / prod-telegram) → el gasto de cada uno se ve
+    // separado en Fireworks. Si falta la de Telegram, usa la de la app.
+    const apiKey =
+      (canalIAActual() === "telegram" ? process.env.FIREWORKS_API_KEY_TELEGRAM : undefined) ||
+      process.env.FIREWORKS_API_KEY;
     if (!apiKey) throw new Error("FIREWORKS_API_KEY no configurada");
     super({
       proveedor: "fireworks",
