@@ -32,7 +32,7 @@ const EJEMPLOS_CONTEXTO: { chip: string; texto: string }[] = [
 let idCounter = 0;
 
 // El backend despacha el parser según este tipo: parseExcel, pdf-parse,
-// OCR OpenCode para fotos/capturas, o texto plano (csv).
+// OCR (mini local → Fireworks de respaldo) para fotos/capturas, o texto plano (csv).
 function tipoForFile(file: File): { tipo: string; mime: string } {
   const ext = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? "";
   if (ext === "pdf") return { tipo: "pdf", mime: "application/pdf" };
