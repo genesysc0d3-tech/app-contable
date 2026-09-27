@@ -70,7 +70,7 @@ export async function fetchOpenCodeStreaming(args: {
 
     if (!res.ok || !res.body) {
       const body = await res.text().catch(() => "");
-      throw new Error(`OpenCode Go API error ${res.status}: ${body.slice(0, 500)}`);
+      throw new Error(`API IA error ${res.status}: ${body.slice(0, 500)}`);
     }
 
     const reader = res.body.getReader();
