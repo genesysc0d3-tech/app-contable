@@ -313,7 +313,7 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     const esTelegram = metadata.origen === "telegram";
     const contexto = { empresaId: job.empresa_id, documentoId: job.documento_id };
     const { groupedText, textos } = await ocrAndGroupImages(images, esTelegram ? { skipGrouping: true, ocrTimeoutMs: 60_000, contexto } : { contexto });
-    return { contenido: groupedText, preExtracted: null, plantilla: false, textosPorImagen: textos };
+    return { contenido: groupedText, preExtracted: null, plantilla: false, censo: null, textosPorImagen: textos };
   }
 
   const fileBuffer = await descargarDocumento(provider, job.storage_path, bajar);
@@ -321,6 +321,7 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
   let contenido: string;
   let preExtracted: import("@/lib/parsers/types").PreExtractedMovimiento[] | null = null;
   let plantilla = false;
+  let censo: import("@/lib/parsers/types").CensoCartola | null = null;
 
   if (job.tipo === "excel") {
     const ab = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer;
@@ -328,6 +329,7 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
     plantilla = parsed.plantilla;
+    censo = parsed.censo;
   } else if (job.tipo === "csv") {
     // CSV = cartola: mismo lector determinístico que el Excel (XLSX lee CSV).
     // Antes iba como texto directo a la IA, sin alarma (plan PR 5/8).
@@ -336,6 +338,7 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     contenido = parsed.content;
     preExtracted = parsed.preExtracted;
     plantilla = parsed.plantilla;
+    censo = parsed.censo;
   } else if (job.tipo === "pdf") {
     contenido = await leerTextoPdf(sb, job, fileBuffer);
     // Un PDF corto es un comprobante: primero el determinístico. Una cartola en
@@ -357,7 +360,7 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     contenido = fileBuffer.toString("utf-8");
   }
 
-  return { contenido, preExtracted, plantilla, textosPorImagen: undefined as string[] | undefined };
+  return { contenido, preExtracted, plantilla, censo, textosPorImagen: undefined as string[] | undefined };
 }
 
 /** Sobre este largo, el texto de un PDF es una cartola (va a la IA), no un comprobante. */
@@ -630,7 +633,7 @@ async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: r.movimientos_total };
     }
 
-    const { contenido, preExtracted, plantilla, textosPorImagen } = await extractContentFromJob(sb, job);
+    const { contenido, preExtracted, plantilla, censo, textosPorImagen } = await extractContentFromJob(sb, job);
     if (!contenido.trim()) throw new Error("Documento vacio o sin contenido legible");
 
     let movimientosTotal: number;
@@ -647,7 +650,7 @@ async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
       // Presupuesto de tiempo: si el modelo de turno es lento y no alcanza,
       // el processor hace yield con checkpoint y seguimos en otra invocación.
       const deadline = Date.now() + JOB_TIME_BUDGET_MS;
-      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined, { deadline, esPlantilla: plantilla });
+      const result = await procesarDocumento(job.documento_id, job.empresa_id, contenido, undefined, preExtracted ?? undefined, { deadline, esPlantilla: plantilla, censo });
       if (result.error) throw new Error(result.error);
       movimientosTotal = result.movimientos_total;
     }

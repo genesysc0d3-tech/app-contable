@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { calcularCuadre, cuadreParaOps, type CuadreCartola } from "@/lib/cartola/cuadre";
+import type { CensoCartola } from "@/lib/parsers/types";
 import type { Database } from "../database.types";
 import { getAIProvider } from "./provider";
 import { createVault, tokenizeForAI, rehydrateReceptor } from "./tokenize";
@@ -476,7 +478,7 @@ export async function procesarDocumento(
   contenido: string,
   ocrTokens?: { ocrTokensInput: number; ocrTokensOutput: number },
   preExtracted?: PreExtractedMovimiento[],
-  opts?: { deadline?: number; esPlantilla?: boolean }
+  opts?: { deadline?: number; esPlantilla?: boolean; censo?: CensoCartola | null }
 ): Promise<{ movimientos_total: number; error?: string }> {
   const supabase = getServiceClient();
   const systemPrompt = getSystemPrompt();
@@ -1628,6 +1630,36 @@ export async function procesarDocumento(
       costo_usd: costo,
     });
 
+    // ── CUADRE DE CARTOLA ── (lib/cartola/cuadre.ts) Toda fila con plata de la
+    // hoja tiene que terminar guardada, declarada duplicada o como fila de
+    // totales; lo demás es una pérdida y queda a la vista. Nunca tumba un
+    // documento sano: si el cálculo falla, se loguea y se sigue.
+    let cuadre: CuadreCartola | undefined;
+    if (opts?.censo && Array.isArray(preExtracted) && preExtracted.length > 0) {
+      try {
+        const { count: nMovs } = await supabase
+          .from("movimientos_raw")
+          .select("id", { count: "exact", head: true })
+          .eq("documento_id", documentoId);
+        const { count: nProps } = await supabase
+          .from("propuestas_ia")
+          .select("id, movimientos_raw!inner(documento_id)", { count: "exact", head: true })
+          .eq("movimientos_raw.documento_id", documentoId);
+        cuadre = calcularCuadre({
+          censo: opts.censo,
+          leidas: preExtracted.map((m) => ({
+            excel_row: m.excel_row ?? null, fecha: m.fecha, monto: m.monto,
+            tipo_flujo: m.tipo_flujo, descripcion: m.descripcion,
+          })),
+          filasGuardadas: indicesToKeep.map((i) => (validMovimientos[i] as { excel_row?: number }).excel_row),
+          filasDuplicadas: duplicadosDetalle.filter((d) => !d.info_only).map((d) => d.excel_row),
+          db: { movimientos: nMovs ?? 0, propuestas: nProps ?? 0 },
+        });
+      } catch (e) {
+        console.error(`[cuadre] ${documentoId} no se pudo calcular:`, e instanceof Error ? e.message : e);
+      }
+    }
+
     // Mark as completed
     const insertados = movimientosToInsert.length;
     await supabase
@@ -1645,9 +1677,26 @@ export async function procesarDocumento(
           // revisado:false = la llamada falló (fail-open) — distinguible de
           // "sin conflicto" para que "me ignoró" sea reconstruible.
           contexto_veredicto: veredictoDoc ?? undefined,
+          cuadre: cuadre ?? undefined,
         } as unknown as Database["public"]["Tables"]["documentos_subidos"]["Update"]["progreso_ia"],
       })
       .eq("id", documentoId);
+
+    if (cuadre && !cuadre.ok) {
+      try {
+        await recordOpsEvent({
+          sb: supabase,
+          severity: "error",
+          source: "ia",
+          eventName: "cartola_descuadre",
+          summary: `Cartola descuadrada: ${cuadre.perdidas.length} fila(s) con plata no llegaron a la mesa ($${cuadre.monto_perdido.toLocaleString("es-CL")}).`,
+          empresaId,
+          resourceType: "documento",
+          resourceId: documentoId,
+          metadata: cuadreParaOps(cuadre),
+        });
+      } catch { /* el aviso no puede tumbar el documento */ }
+    }
 
     // Reconciliación: si el dedup descartó una fracción ALTA de los movimientos válidos,
     // emítelo a ops_events (antes la pérdida era silenciosa). Re-subir el mismo archivo

@@ -1,5 +1,7 @@
 import * as XLSX from "xlsx";
 import type {
+  CensoCartola,
+  DescarteFila,
   AdapterConfig,
   OrchestratorResult,
   PreExtractedMovimiento,
@@ -98,6 +100,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          censo: { ...result.censo, otras_hojas_con_datos: otrasHojasConDatos(workbook, sheetName) },
           plantilla: true,
         };
         await logParserEvent({
@@ -134,6 +137,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          censo: { ...result.censo, otras_hojas_con_datos: otrasHojasConDatos(workbook, sheetName) },
           plantilla: cached.config.plantilla === true,
         };
         await logParserEvent({
@@ -178,6 +182,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          censo: { ...result.censo, otras_hojas_con_datos: otrasHojasConDatos(workbook, sheetName) },
           plantilla: heuristicCfg.plantilla === true,
         };
         await logParserEvent({
@@ -217,6 +222,7 @@ export async function parseExcelWithOrchestrator(
           warnings: result.warnings,
           error: null,
           preExtracted: result.preExtracted,
+          censo: { ...result.censo, otras_hojas_con_datos: otrasHojasConDatos(workbook, sheetName) },
           plantilla: namedCfg.plantilla === true,
         };
         await logParserEvent({
@@ -294,6 +300,32 @@ async function adaptadorManualConHuellaLegacy(
   return row?.source === "manual" ? row : null;
 }
 
+const FECHA_TXT_RE = /^\s*\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?\s*$|^\s*\d{4}-\d{2}-\d{2}/;
+
+/**
+ * Hojas del libro (aparte de la leída) que parecen traer movimientos: ≥3 filas
+ * con una fecha y un monto. El orquestador solo lee la primera hoja que calza;
+ * un libro con una hoja por mes perdía las demás sin aviso.
+ */
+export function otrasHojasConDatos(workbook: XLSX.WorkBook, leida: string): string[] {
+  const out: string[] = [];
+  for (const name of workbook.SheetNames) {
+    if (name === leida) continue;
+    const rows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[name], { header: 1, defval: "" });
+    let n = 0;
+    for (const r of rows) {
+      const cells = r as unknown[];
+      const fecha = cells.some((v) => v instanceof Date || (typeof v === "string" && FECHA_TXT_RE.test(v)));
+      // El libro se lee con cellDates: las fechas llegan como Date, no como
+      // número, así que cualquier número ≠ 0 cuenta como monto (excluir el rango
+      // de seriales de Excel dejaba fuera montos comunes como $40.000).
+      const monto = cells.some((v) => typeof v === "number" && v !== 0);
+      if (fecha && monto && ++n >= 3) { out.push(name); break; }
+    }
+  }
+  return out;
+}
+
 function tryApply(
   rows: Row[],
   cfg: AdapterConfig,
@@ -305,8 +337,10 @@ function tryApply(
   rowsExtracted: number;
   warnings: string[];
   preExtracted: PreExtractedMovimiento[];
+  censo: CensoCartola;
 } | null {
-  const lines = applyAdapter(rows, cfg);
+  const descartes: DescarteFila[] = [];
+  const lines = applyAdapter(rows, cfg, descartes);
   const validation = validate(lines, rows, cfg);
   if (!validation.ok) {
     fallas?.push(`${capa ?? "?"}[${sheetName}]: ${validation.errors.join("; ")}`);
@@ -317,6 +351,13 @@ function tryApply(
     rowsExtracted: lines.length,
     warnings: validation.warnings,
     preExtracted: linesToPreExtracted(lines),
+    censo: {
+      hoja: sheetName,
+      filas_con_monto: lines.length + descartes.length,
+      leidas: lines.length,
+      descartes,
+      otras_hojas_con_datos: [],
+    },
   };
 }
 
