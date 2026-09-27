@@ -55,7 +55,7 @@ describe("fetchOpenCodeStreaming — parser SSE del gateway OpenCode", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("Internal server error", { status: 500 })));
     await expect(
       fetchOpenCodeStreaming({ url: "http://x", apiKey: "k", body: {} }),
-    ).rejects.toThrow(/OpenCode Go API error 500/);
+    ).rejects.toThrow(/API IA error 500/);
   });
 
   it("stream cortado sin finish_reason (corte silencioso del gateway) lanza error", async () => {

@@ -16,6 +16,7 @@
 
 import { requirePaidModel } from "./model-guard";
 import { fetchOpenCodeStreaming } from "./opencode-stream";
+import { credencialesFireworks, FIREWORKS_BASE_URL } from "./providers/fireworks";
 import { assertApprovedDataProcessor } from "./egress";
 import { ocrConMini, ocrMiniHabilitado } from "./ocr-mini";
 
@@ -80,6 +81,44 @@ async function openCodeChat(
   }
 }
 
+/**
+ * Llamada remota del OCR y del agrupado según AI_PROVIDER (2026-09-26). En
+ * producción es "fireworks": NADA sale a OpenCode (sin DPA). DeepSeek V4.1
+ * Flash lee imágenes: probado con un comprobante sintético, texto exacto,
+ * 642+76 tokens (~US$0,0002), 2,4 s. OpenCode queda solo para preview/dev.
+ */
+async function chatRemoto(
+  tipo: "ocr" | "agrupado",
+  content: string | Array<Record<string, unknown>>,
+  timeoutMs = 120_000,
+): Promise<{ text: string; tokens_input: number; tokens_output: number }> {
+  const proveedor = process.env.AI_PROVIDER || "opencodego";
+  if (proveedor !== "fireworks") return openCodeChat(tipo === "ocr" ? OCR_MODEL : GROUP_MODEL, content, timeoutMs);
+  const { apiKey, model } = credencialesFireworks();
+  assertApprovedDataProcessor("fireworks", model);
+  try {
+    const data = await fetchOpenCodeStreaming({
+      url: `${FIREWORKS_BASE_URL}/chat/completions`,
+      apiKey,
+      idleTimeoutMs: timeoutMs,
+      body: {
+        model,
+        temperature: 0.1,
+        // Copiar texto no requiere razonar; el agrupado tampoco.
+        reasoning_effort: "none",
+        max_tokens: 4000,
+        messages: [{ role: "user", content }],
+      },
+    });
+    return { text: stripThink(data.content), tokens_input: data.tokens_input, tokens_output: data.tokens_output };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Fireworks ${tipo}: sin respuesta en ${timeoutMs}ms (timeout de inactividad)`);
+    }
+    throw err;
+  }
+}
+
 /** De dónde viene la imagen, para que el mini pueda bajarla sin credenciales. */
 export interface OcrContexto {
   empresaId?: string | null;
@@ -114,7 +153,7 @@ export async function ocrImage(
     if (local) return { text: local.text, tokens_input: 0, tokens_output: 0 };
   }
 
-  return openCodeChat(OCR_MODEL, [
+  return chatRemoto("ocr", [
     { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
     { type: "text", text: OCR_PROMPT },
   ], timeoutMs);
@@ -176,7 +215,7 @@ TEXTOS EXTRAÍDOS:
 ${ocrResults.map((r, i) => `[Imagen ${i + 1}: ${r.fileName}]\n${r.text}`).join("\n\n")}`;
 
   try {
-    const grouped = await openCodeChat(GROUP_MODEL, groupingPrompt);
+    const grouped = await chatRemoto("agrupado", groupingPrompt);
     totalTokensInput += grouped.tokens_input;
     totalTokensOutput += grouped.tokens_output;
     return {
