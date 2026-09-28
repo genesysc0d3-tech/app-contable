@@ -2,6 +2,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { STALE_RUNNING_MS } from "./state";
 
 /**
+ * Empresas con un job `running` (uno a la vez por empresa: claimJobs las salta).
+ * `soloFrescos`: ignora los running más viejos que el reaper (el próximo drenaje los
+ * recupera antes de reclamar). null = no se pudo consultar.
+ */
+export async function empresasOcupadas(
+  sb: SupabaseClient,
+  opts: { soloFrescos: boolean; now?: Date },
+): Promise<string[] | null> {
+  let q = sb.from("document_processing_jobs").select("empresa_id").eq("status", "running");
+  if (opts.soloFrescos) {
+    const staleIso = new Date((opts.now ?? new Date()).getTime() - STALE_RUNNING_MS).toISOString();
+    q = q.gte("locked_at", staleIso);
+  }
+  const { data, error } = await q.limit(500);
+  if (error) return null;
+  return [...new Set((data ?? []).map((r) => (r as { empresa_id: string }).empresa_id).filter(Boolean))];
+}
+
+/**
  * ¿Cuánto falta (ms) para el próximo job pendiente que un drenaje PUEDE TOMAR?
  * - 0 si ya está vencido, null si no hay ninguno tomable dentro del horizonte.
  *
@@ -21,15 +40,9 @@ export async function msHastaProximoJobTomable(
   withinMs: number,
   now: Date = new Date(),
 ): Promise<number | null> {
-  const staleIso = new Date(now.getTime() - STALE_RUNNING_MS).toISOString();
-  const { data: corriendo, error: errRun } = await sb
-    .from("document_processing_jobs")
-    .select("empresa_id")
-    .eq("status", "running")
-    .gte("locked_at", staleIso);
   // Si no se puede saber quién corre, se comporta como antes (sin filtro): prefiere
   // encadenar de más a dejar una cartola colgada hasta el cron.
-  const ocupadas = errRun ? [] : [...new Set((corriendo ?? []).map((r) => (r as { empresa_id: string }).empresa_id).filter(Boolean))];
+  const ocupadas = (await empresasOcupadas(sb, { soloFrescos: true, now })) ?? [];
 
   let q = sb
     .from("document_processing_jobs")

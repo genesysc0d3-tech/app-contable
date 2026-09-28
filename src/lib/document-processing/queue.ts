@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
-import { msHastaProximoJobTomable } from "./proximo-job";
+import { empresasOcupadas, msHastaProximoJobTomable } from "./proximo-job";
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
@@ -236,11 +236,20 @@ async function runningCountForEmpresa(sb: Sb, empresaId: string) {
 }
 
 async function claimJobs(sb: Sb, args: { limit: number; now: Date; lockOwner: string }) {
-  const { data: candidates, error } = await sb
+  // Candidatos SOLO de empresas libres (2026-09-28): antes se traían los limit*4 más
+  // antiguos y recién después se descartaban los de empresas con un job corriendo;
+  // si esos 4 eran todos de una empresa ocupada (5 cartolas subidas juntas), el job
+  // tomable de OTRA empresa quedaba fuera → claimed 0 → kicks sin progreso y esa otra
+  // empresa esperando toda la cola de la primera. Mismo criterio que la sonda
+  // (proximo-job.ts); el chequeo por job de abajo se mantiene contra carreras.
+  const ocupadas = await empresasOcupadas(sb as unknown as SupabaseClient, { soloFrescos: false });
+  let consulta = sb
     .from("document_processing_jobs")
     .select("*")
     .in("status", ["queued", "retryable"])
-    .lte("next_run_at", args.now.toISOString())
+    .lte("next_run_at", args.now.toISOString());
+  if (ocupadas && ocupadas.length > 0) consulta = consulta.not("empresa_id", "in", `(${ocupadas.join(",")})`);
+  const { data: candidates, error } = await consulta
     .order("created_at", { ascending: true })
     .limit(args.limit * 4);
   if (error) throw new Error(`JOB_CANDIDATE_QUERY_FAILED:${error.message}`);
