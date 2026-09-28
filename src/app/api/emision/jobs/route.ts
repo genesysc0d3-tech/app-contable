@@ -471,9 +471,20 @@ export async function POST(request: Request) {
   }
 
   // Adopción: suelta el candado del job viejo SIN cambiarle el estado — sigue siendo
-  // lápida (lapida.ts) y bloquea re-emitir hasta el veredicto. Acotado a ESE job_id.
+  // lápida (lapida.ts) y bloquea re-emitir hasta el veredicto. Acotado a ESE job_id y
+  // SOLO si el candado vivo de la cuenta es justamente el suyo: con otro candado vivo
+  // (el lote corriendo, otra persona) el acquire de abajo va a fallar y no se toca nada.
+  // (Un candado vencido lo limpia el propio acquire.)
   if (adopcion) {
-    await guard.service.from("emision_locks").delete().eq("cuenta_id", guard.cuentaId).eq("job_id", adopcion.jobViejoId);
+    const { data: vivo } = await guard.service
+      .from("emision_locks")
+      .select("job_id")
+      .eq("cuenta_id", guard.cuentaId)
+      .gt("locked_until", new Date().toISOString())
+      .maybeSingle();
+    if (vivo?.job_id === adopcion.jobViejoId) {
+      await guard.service.from("emision_locks").delete().eq("cuenta_id", guard.cuentaId).eq("job_id", adopcion.jobViejoId);
+    }
   }
 
   const lock = await acquireCuentaEmissionLock({
@@ -483,7 +494,7 @@ export async function POST(request: Request) {
     userId: guard.userId,
     provider,
     // El enlace verificación → job adoptado nace con el job (lo valida el veredicto).
-    origin: adopcion ? origenAdopcion(adopcion.jobViejoId) : cleanText(payload.origin) ?? "emision_directa",
+    origin: adopcion ? origenAdopcion(adopcion.jobViejoId, adopcion.via) : cleanText(payload.origin) ?? "emision_directa",
     expectedEmisorRut,
     propuestaId,
     ttlSeconds: provider === "sii_local" ? 15 * 60 : 5 * 60,

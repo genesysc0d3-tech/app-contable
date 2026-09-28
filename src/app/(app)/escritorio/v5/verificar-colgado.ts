@@ -20,7 +20,7 @@ export type ResultadoVerificacion =
   /** No salió, confirmado por el server: la boleta volvió a Listas. */
   | { estado: "no_salio"; linea: string }
   /** No se pudo concluir: queda a medias (folio a mano o "No está en el SII"). */
-  | { estado: "a_medias"; jobIdRevision: string | null; linea: string }
+  | { estado: "a_medias"; jobIdRevision: string | null; linea: string; reintentableDesde?: string | null }
   /** No se abrió la verificación (muy pronto, otro día, candado, extensión…): nada cambió. */
   | { estado: "no_se_pudo"; code: string | null; linea: string };
 
@@ -63,7 +63,7 @@ export function desenlaceDeMensaje(data: ExtMsg): { d: DesenlaceVerificacion; fo
   return null;
 }
 
-async function cerrarJob(jobId: string, estado: "revision_pendiente", motivo: string) {
+async function cerrarJob(jobId: string, estado: "revision_pendiente" | "failed", motivo: string) {
   try {
     await fetch("/api/emision/jobs", {
       method: "DELETE",
@@ -202,6 +202,19 @@ export async function verificarJobColgado(args: {
       if (res.ok && j?.ok) return { estado: "no_salio", linea: "No salió en el SII: vuelve a Listas para emitirla." };
       if (j?.error === "PROPUESTA_YA_EMITIDA" && typeof j.folio === "number") {
         return { estado: "ya_emitida", folio: j.folio, boletaId: null, boletaCreatedAt: null, linea: `Esa boleta ya está registrada con el folio ${j.folio}.` };
+      }
+      if (j?.error === "MUY_PRONTO") {
+        // Todavía puede estar saliendo (o la fila tarda en aparecer): no vuelve a Listas.
+        // La verificación solo leyó y no encontró nada → se cierra sin lápida; el
+        // intento original sigue protegido y se puede volver a verificar.
+        const hora = horaChile(typeof j.desde === "string" ? j.desde : null);
+        await cerrarJob(vJobId, "failed", "Verificación: aún no aparece en el SII (muy pronto para confirmar)");
+        return {
+          estado: "a_medias",
+          jobIdRevision: null,
+          reintentableDesde: typeof j.desde === "string" ? j.desde : null,
+          linea: `Todavía no aparece en el SII, pero es muy pronto para darla por no emitida. Sigue a medias${hora ? `: vuelve a verificarla desde las ${hora}` : ""}.`,
+        };
       }
     } catch { /* cae a a medias */ }
   }

@@ -23,7 +23,7 @@
 
 import { chileDateString } from "@/lib/chile-date";
 import { noSalioEsConfiable } from "./fecha-intento";
-import { esLapidaEfectiva } from "./lapida";
+import { DECLARAR_SIN_RESPUESTA_TRAS_MS, esLapidaEfectiva, puedeDeclararNoSalio } from "./lapida";
 
 /** Margen tras el vencimiento antes de poder adoptar (B1). */
 export const MARGEN_ADOPCION_MS = 2 * 60 * 1000;
@@ -31,18 +31,38 @@ export const MARGEN_ADOPCION_MS = 2 * 60 * 1000;
 export const VENTANA_MAX_MS = 30 * 60 * 1000;
 
 /**
- * El job de verificación guarda a QUIÉN adoptó en su `origin` (texto libre, sin
- * migración). Así el server puede validar después el veredicto contra ese enlace, que
- * nació con el job (no lo manda la página al final).
+ * LEER se puede a los +2 min; DEVOLVER A LISTAS ("no salió") exige más (revisión
+ * adversarial 2026-09-28): la 0.2.8 no trae evidencia firmada de la tabla leída (el
+ * "no salió" lo reporta la página) y un intento sin respuesta puede seguir vivo un buen
+ * rato (ventana tapada, rAF dormido, reloj del cliente atrasado; el worker no re-chequea
+ * el vencimiento antes del clic) y la fila tarda en aparecer en /reportes. Por eso:
+ *  - vía `vencido`: la misma vara que la declaración humana, `expires_at + 30 min`
+ *    (puedeDeclararNoSalio, lapida.ts);
+ *  - vía `fin`: 10 min desde el último signo de vida del intento (created_at/heartbeat).
+ * Antes de eso, "no la encontré" deja la boleta a medias ("verificable de nuevo desde…").
+ */
+export const NO_SALIO_FIN_TRAS_MS = 10 * 60 * 1000;
+
+/**
+ * El job de verificación guarda a QUIÉN adoptó y POR QUÉ VÍA en su `origin` (texto
+ * libre, sin migración): `verificacion_adopta:<vencido|fin>:<job_id>`. Así el server
+ * valida después el veredicto contra ese enlace, que nació con el job (no lo manda la
+ * página al final).
  */
 const PREFIJO_ORIGEN = "verificacion_adopta:";
-export function origenAdopcion(jobViejoId: string): string {
-  return `${PREFIJO_ORIGEN}${jobViejoId}`;
+export type ViaAdopcion = "vencido" | "fin_confirmado";
+export function origenAdopcion(jobViejoId: string, via: ViaAdopcion): string {
+  return `${PREFIJO_ORIGEN}${via === "vencido" ? "vencido" : "fin"}:${jobViejoId}`;
+}
+export function adopcionDeOrigen(origin: string | null | undefined): { jobId: string; via: ViaAdopcion } | null {
+  if (typeof origin !== "string" || !origin.startsWith(PREFIJO_ORIGEN)) return null;
+  const resto = origin.slice(PREFIJO_ORIGEN.length);
+  const m = /^(vencido|fin):(.+)$/.exec(resto);
+  if (!m || !m[2].trim()) return null;
+  return { jobId: m[2].trim(), via: m[1] === "vencido" ? "vencido" : "fin_confirmado" };
 }
 export function jobAdoptadoDeOrigen(origin: string | null | undefined): string | null {
-  if (typeof origin !== "string" || !origin.startsWith(PREFIJO_ORIGEN)) return null;
-  const id = origin.slice(PREFIJO_ORIGEN.length).trim();
-  return id.length > 0 ? id : null;
+  return adopcionDeOrigen(origin)?.jobId ?? null;
 }
 
 export type JobAdoptable = {
@@ -54,6 +74,8 @@ export type JobAdoptable = {
   empresa_id: string;
   created_at: string;
   expires_at: string | null;
+  /** Último latido del intento (si hubo): cuenta como signo de vida para la vía `fin`. */
+  heartbeat_at?: string | null;
 };
 
 export type VentanaVerificacion = { desde_ms: number; hasta_ms: number };
@@ -65,7 +87,7 @@ export type DecisionAdopcion =
       ventana: VentanaVerificacion;
       /** Fecha Chile (YYYY-MM-DD) del intento: con ella se calza la fila en /reportes. */
       fechaIntento: string;
-      via: "vencido" | "fin_confirmado";
+      via: ViaAdopcion;
     }
   | {
       ok: false;
@@ -115,7 +137,7 @@ export function decidirAdopcion(args: {
   const ahoraMs = ahora.getTime();
   const creadoMs = Date.parse(job.created_at);
   const vence = job.expires_at ? Date.parse(job.expires_at) : NaN;
-  let via: "vencido" | "fin_confirmado";
+  let via: ViaAdopcion;
   if (args.finConfirmado === true) {
     // (b) Solo quien lanzó el intento: fue SU navegador el que vio el fin del job.
     if (job.usuario_id !== args.userId) {
@@ -200,11 +222,12 @@ export function validarVeredictoNoSalio(args: {
   viejo: JobAdoptable | null;
   userId: string;
   ahora: Date;
-}): { ok: true } | { ok: false; code: string; detalle: string } {
+}): { ok: true } | { ok: false; code: string; detalle: string; desdeMs?: number } {
   const v = args.verificacion;
   if (!v) return { ok: false, code: "JOB_NO_ENCONTRADO", detalle: "No encontramos esa verificación." };
-  const adoptado = jobAdoptadoDeOrigen(v.origin);
-  if (!adoptado) return { ok: false, code: "NO_ES_VERIFICACION", detalle: "Ese job no es una verificación de un intento anterior." };
+  const enlace = adopcionDeOrigen(v.origin);
+  const adoptado = enlace?.jobId ?? null;
+  if (!enlace || !adoptado) return { ok: false, code: "NO_ES_VERIFICACION", detalle: "Ese job no es una verificación de un intento anterior." };
   if (v.usuario_id !== args.userId) return { ok: false, code: "JOB_DE_OTRA_PERSONA", detalle: "Esa verificación la lanzó otra persona." };
   if (v.estado !== "created" && v.estado !== "running") return { ok: false, code: "VERIFICACION_CERRADA", detalle: "Esa verificación ya se cerró." };
   const vence = v.expires_at ? Date.parse(v.expires_at) : NaN;
@@ -221,6 +244,19 @@ export function validarVeredictoNoSalio(args: {
   const fechaIntento = chileDateString(new Date(creado));
   if (!noSalioEsConfiable({ fechaIntento, desdeMs: creado, hastaMs: hasta, ahoraMs: args.ahora.getTime() })) {
     return { ok: false, code: "OTRO_DIA", detalle: "El intento y la verificación no son del mismo día: no se puede confirmar que no salió." };
+  }
+  // Antes del plazo, "no la encontré" no devuelve a Listas (ver NO_SALIO_FIN_TRAS_MS).
+  const ahoraMs = args.ahora.getTime();
+  if (enlace.via === "vencido") {
+    if (!puedeDeclararNoSalio(o, args.ahora)) {
+      const desdeMs = Number.isFinite(viejoVence) ? viejoVence + DECLARAR_SIN_RESPUESTA_TRAS_MS : NaN;
+      return { ok: false, code: "MUY_PRONTO", detalle: "Todavía es muy pronto para dar por hecho que no salió.", ...(Number.isFinite(desdeMs) ? { desdeMs } : {}) };
+    }
+  } else {
+    const latido = o.heartbeat_at ? Date.parse(o.heartbeat_at) : NaN;
+    const vida = Math.max(creado, Number.isFinite(latido) ? latido : creado);
+    const desdeMs = vida + NO_SALIO_FIN_TRAS_MS;
+    if (ahoraMs < desdeMs) return { ok: false, code: "MUY_PRONTO", detalle: "Todavía es muy pronto para dar por hecho que no salió.", desdeMs };
   }
   return { ok: true };
 }

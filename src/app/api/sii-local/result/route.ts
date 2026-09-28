@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { validarAccesoCuenta } from "@/lib/entitlements";
 import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { jobAdoptadoDeOrigen, validarVeredictoNoSalio } from "@/lib/emission/adopcion";
+import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -487,6 +488,43 @@ async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) 
  * confirmado de la extensión). Si no, al vencer volvería a aparecer "sin respuesta"
  * en A medias con la boleta ya registrada. Best-effort.
  */
+/**
+ * Glosa y receptor con que se EMITIÓ una propuesta (misma política que el lote:
+ * resolverGlosa, nunca la glosa cruda del banco). Para registrar la boleta que
+ * encontró una verificación. Best-effort: null si falla (queda el genérico).
+ */
+async function datosEmitidosDePropuesta(sb: ServiceDb, propuestaId: string, tipoDte: number) {
+  try {
+    const { data } = await sb
+      .from("propuestas_ia")
+      .select("notas, receptor_rut, receptor_nombre, receptor_giro, receptor_direccion, receptor_comuna, movimientos_raw!propuestas_ia_movimiento_id_fkey(documentos_subidos!movimientos_raw_documento_id_fkey(glosa_comun, glosa_activa))")
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (!data) return null;
+    const p = data as unknown as {
+      notas: string | null; receptor_rut: string | null; receptor_nombre: string | null; receptor_giro: string | null;
+      receptor_direccion: string | null; receptor_comuna: string | null;
+      movimientos_raw?: { documentos_subidos?: { glosa_comun?: string | null; glosa_activa?: boolean | null } | Array<{ glosa_comun?: string | null; glosa_activa?: boolean | null }> | null } | Array<{ documentos_subidos?: unknown }> | null;
+    };
+    const mov = Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw;
+    const docRaw = (mov as { documentos_subidos?: unknown } | null | undefined)?.documentos_subidos;
+    const doc = (Array.isArray(docRaw) ? docRaw[0] : docRaw) as { glosa_comun?: string | null; glosa_activa?: boolean | null } | null | undefined;
+    const glosa = resolverGlosa(
+      { notas: p.notas, glosaComun: doc?.glosa_comun ?? null, glosaComunActiva: doc?.glosa_activa ?? null },
+      tipoDte === 39 || tipoDte === 41 ? tipoDte : undefined,
+    );
+    return {
+      glosa,
+      receptor: {
+        rut: p.receptor_rut, razon_social: p.receptor_nombre, giro: p.receptor_giro,
+        direccion: p.receptor_direccion, comuna: p.receptor_comuna,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function levantarAdoptado(sb: ServiceDb, job: { origin?: string | null; propuesta_id?: string | null }) {
   const adoptado = jobAdoptadoDeOrigen(job.origin ?? null);
   if (!adoptado || !job.propuesta_id) return;
@@ -963,11 +1001,14 @@ export async function POST(request: Request) {
 
   // ── VEREDICTO "NO SALIÓ" DE UNA VERIFICACIÓN ────────────────────────────
   // La extensión 0.2.8 entrega "verificado_sin_folio" (tabla completa leída, 0
-  // candidatas) solo a la página; la página lo reenvía acá con el job de VERIFICACIÓN.
-  // El server no le cree a la página: exige que ese job haya adoptado al intento
-  // (enlace escrito al crearlo, adopcion.ts), que ambos sigan abiertos, que sea el
-  // mismo día Chile y que no exista folio ni boleta. Solo entonces baja el intento
-  // original (y la verificación) a `failed`: la boleta vuelve a Listas.
+  // candidatas) solo a la PÁGINA y no persiste evidencia de esa lectura en el server:
+  // lo que llega acá es la palabra de la página. Por eso el server no la trata como
+  // evidencia del SII sino como una declaración con controles: el job de verificación
+  // tiene que haber adoptado al intento (enlace escrito al crearlo, adopcion.ts), ambos
+  // abiertos, mismo día Chile, sin folio ni boleta, y el MISMO plazo que la declaración
+  // humana (vía vencido: expires_at + 30 min; vía fin: 10 min desde el último signo de
+  // vida). Antes del plazo → MUY_PRONTO (queda a medias). Se audita tal cual es.
+  // (Cuando la extensión persista la lectura en sii_local_resultados, usarla acá.)
   if (payload.veredicto_verificacion != null) {
     if (payload.veredicto_verificacion !== "no_salio") return NextResponse.json({ ok: false, error: "VEREDICTO_INVALIDO" }, { status: 400 });
     const jobIdVer = cleanText(payload.job_id);
@@ -985,14 +1026,19 @@ export async function POST(request: Request) {
     const { data: jobViejo, error: errViejo } = adoptadoId
       ? await sb
           .from("emision_jobs")
-          .select("job_id, estado, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at")
+          .select("job_id, estado, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at, heartbeat_at")
           .eq("job_id", adoptadoId)
           .maybeSingle()
       : { data: null, error: null };
     if (errViejo) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
     const ahoraVer = new Date();
     const valido = validarVeredictoNoSalio({ verificacion: jobVer, viejo: jobViejo ?? null, userId: user.id, ahora: ahoraVer });
-    if (!valido.ok) return NextResponse.json({ ok: false, error: valido.code, detalle: valido.detalle }, { status: 409 });
+    if (!valido.ok) {
+      return NextResponse.json(
+        { ok: false, error: valido.code, detalle: valido.detalle, desde: valido.desdeMs != null ? new Date(valido.desdeMs).toISOString() : null },
+        { status: 409 },
+      );
+    }
     const viejo = jobViejo!;
     const { data: boletaVigente, error: errBolVer } = await sb
       .from("boletas_emitidas")
@@ -1016,7 +1062,7 @@ export async function POST(request: Request) {
     if ((conFolioVer ?? []).length > 0) {
       return NextResponse.json({ ok: false, error: "FOLIO_CAPTURADO", detalle: `El SII devolvió el folio ${conFolioVer![0].folio} para este intento: la boleta sí salió.` }, { status: 409 });
     }
-    const mensajeVer = "Verificado en el Resumen de ventas del SII: la boleta no salió";
+    const mensajeVer = "La verificación automática (reportada por la página) no encontró la boleta en el Resumen de ventas del SII";
     const ahoraIsoVer = ahoraVer.toISOString();
     // running → failed está permitido (locks.ts); el UPDATE re-filtra por estado: si
     // entre medio llegó el resultado (→ completed) o se selló, no se pisa.
@@ -1038,13 +1084,13 @@ export async function POST(request: Request) {
       severity: "warn",
       source: "sii-local",
       eventName: "sii_local_verificado_no_salio",
-      summary: "Verificación en el Resumen de ventas: la boleta no salió (vuelve a Listas)",
+      summary: "La verificación automática (reportada por la página) no encontró la boleta en el Resumen de ventas (vuelve a Listas)",
       empresaId: viejo.empresa_id,
       cuentaId: viejo.cuenta_id,
       usuarioId: user.id,
       resourceType: "emision_job",
       resourceId: viejo.job_id,
-      metadata: { verificacion_job_id: jobVer.job_id, origen: "verificacion_reportes" },
+      metadata: { verificacion_job_id: jobVer.job_id, origen: "verificacion_reportes_reportada_por_pagina", evidencia_servidor: false },
     });
     await recordCuentaAudit({
       sb,
@@ -1054,8 +1100,8 @@ export async function POST(request: Request) {
       accion: "emision_fallida",
       recursoTipo: "emision_job",
       recursoId: viejo.job_id,
-      resumen: "Verificado en el SII: la boleta no salió (vuelve a Listas)",
-      metadata: { origen: "verificacion_reportes", verificacion_job_id: jobVer.job_id },
+      resumen: "La verificación automática (reportada por la página) no encontró la boleta en el SII (vuelve a Listas)",
+      metadata: { origen: "verificacion_reportes_reportada_por_pagina", evidencia_servidor: false, verificacion_job_id: jobVer.job_id },
     });
     return NextResponse.json({ ok: true, jobs_cerrados: 1 });
   }
@@ -1394,8 +1440,15 @@ export async function POST(request: Request) {
   // con marca visible + alerta ops — antes los libros divergían en silencio.
 
   const totals = totalsFor(tipoDte, montoTotal, result?.totales ?? null);
-  const receptor = result?.receptor ?? null;
-  const detalles = Array.isArray(result?.detalles) && result.detalles.length > 0
+  // Verificación de un intento ADOPTADO: el job de verificación no lleva glosa ni
+  // receptor (solo lee /reportes); lo que se emitió de verdad sale de la PROPUESTA.
+  const desdePropuesta = jobAdoptadoDeOrigen(job.origin) && job.propuesta_id
+    ? await datosEmitidosDePropuesta(sb, job.propuesta_id, tipoDte)
+    : null;
+  const receptor = desdePropuesta?.receptor ?? result?.receptor ?? null;
+  const detalles = desdePropuesta
+    ? [{ nro_lin: 1, nombre: desdePropuesta.glosa, qty: 1, monto: montoTotal }]
+    : Array.isArray(result?.detalles) && result.detalles.length > 0
     ? result.detalles.map((detalle, index) => ({
         nro_lin: index + 1,
         nombre: cleanText(detalle.nombre) ?? "Servicio prestado",

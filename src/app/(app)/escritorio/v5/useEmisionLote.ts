@@ -399,9 +399,15 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           }
           // A medias / no se pudo verificar: el intento original queda como lápida
           // (revision_pendiente), nunca re-emitible a ciegas.
-          await closeJob(job.jobId, "revision_pendiente", `${desenlace.motivo} ${v.linea}`);
+          // "Muy pronto" (el server no devuelve a Listas antes de 10 min desde el último
+          // signo de vida del intento): acá el intento queda sellado a medias, así que la
+          // línea no promete re-verificar; la salida es folio a mano / "No está en el SII".
+          const linea = v.estado === "a_medias" && v.reintentableDesde
+            ? "Todavía no aparece en el SII y es muy pronto para darla por no emitida. Quedó a medias: búscala en el SII y escribe su folio, o márcala como que no está."
+            : v.linea;
+          await closeJob(job.jobId, "revision_pendiente", `${desenlace.motivo} ${linea}`);
           setJobIdRevision(v.estado === "a_medias" && v.jobIdRevision ? v.jobIdRevision : job.jobId);
-          return { estado: "revisar", motivo: v.linea, folio: null };
+          return { estado: "revisar", motivo: linea, folio: null };
         }
         // 5. sellar el job según el desenlace:
         //  - emitida  → el server ya soltó el lock en /result (no tocar).

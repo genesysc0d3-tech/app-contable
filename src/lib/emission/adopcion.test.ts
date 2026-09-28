@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   MARGEN_ADOPCION_MS,
+  NO_SALIO_FIN_TRAS_MS,
+  adopcionDeOrigen,
   decidirAdopcion,
   interpretarVerificacion,
   jobAdoptadoDeOrigen,
@@ -115,12 +117,15 @@ describe("decidirAdopcion — B1: nunca un job que puede estar vivo", () => {
 
 describe("origen de la verificación: el enlace nace con el job", () => {
   it("ida y vuelta", () => {
-    expect(jobAdoptadoDeOrigen(origenAdopcion("server:sii_local:abc"))).toBe("server:sii_local:abc");
+    expect(jobAdoptadoDeOrigen(origenAdopcion("server:sii_local:abc", "vencido"))).toBe("server:sii_local:abc");
+    expect(adopcionDeOrigen(origenAdopcion("server:sii_local:abc", "fin_confirmado"))).toEqual({ jobId: "server:sii_local:abc", via: "fin_confirmado" });
+    expect(adopcionDeOrigen(origenAdopcion("server:sii_local:abc", "vencido"))).toEqual({ jobId: "server:sii_local:abc", via: "vencido" });
   });
   it("un origin cualquiera no es adopción", () => {
     expect(jobAdoptadoDeOrigen("verificacion_lote")).toBeNull();
     expect(jobAdoptadoDeOrigen("emision_lote")).toBeNull();
     expect(jobAdoptadoDeOrigen("verificacion_adopta:")).toBeNull();
+    expect(jobAdoptadoDeOrigen("verificacion_adopta:server:sii_local:abc")).toBeNull(); // sin vía: no vale
     expect(jobAdoptadoDeOrigen(null)).toBeNull();
   });
 });
@@ -143,17 +148,19 @@ describe("interpretarVerificacion — una línea para la clienta", () => {
 });
 
 describe("validarVeredictoNoSalio — el server baja la lápida SOLO con este veredicto", () => {
-  const ahora = new Date(venceMs + 4 * 60_000);
+  // Vía vencido: el veredicto recién vale con expires_at + 30 min (misma vara que la
+  // declaración humana).
+  const ahora = new Date(venceMs + 31 * 60_000);
   const verif: JobVerificacion = {
     job_id: "server:sii_local:verif",
     estado: "running",
-    origin: origenAdopcion(viejo.job_id),
+    origin: origenAdopcion(viejo.job_id, "vencido"),
     propuesta_id: "prop-1",
     usuario_id: "u1",
     cuenta_id: "c1",
     empresa_id: "e1",
-    created_at: new Date(venceMs + 3 * 60_000).toISOString(),
-    expires_at: new Date(venceMs + 18 * 60_000).toISOString(),
+    created_at: new Date(venceMs + 30 * 60_000).toISOString(),
+    expires_at: new Date(venceMs + 45 * 60_000).toISOString(),
   };
   it("verificación propia, abierta, que adoptó a ese job, mismo día → ok", () => {
     expect(validarVeredictoNoSalio({ verificacion: verif, viejo, userId: "u1", ahora })).toEqual({ ok: true });
@@ -163,7 +170,7 @@ describe("validarVeredictoNoSalio — el server baja la lápida SOLO con este ve
     expect(r).toMatchObject({ ok: false, code: "NO_ES_VERIFICACION" });
   });
   it("verificación que adoptó OTRO job → rechazo", () => {
-    const r = validarVeredictoNoSalio({ verificacion: { ...verif, origin: origenAdopcion("otro") }, viejo, userId: "u1", ahora });
+    const r = validarVeredictoNoSalio({ verificacion: { ...verif, origin: origenAdopcion("otro", "vencido") }, viejo, userId: "u1", ahora });
     expect(r.ok).toBe(false);
   });
   it("verificación de otra persona → rechazo", () => {
@@ -184,6 +191,47 @@ describe("validarVeredictoNoSalio — el server baja la lápida SOLO con este ve
     const ayer = { ...viejo, created_at: "2026-09-28T02:37:07Z", expires_at: "2026-09-28T02:52:07Z" };
     const r = validarVeredictoNoSalio({ verificacion: verif, viejo: ayer, userId: "u1", ahora });
     expect(r).toMatchObject({ ok: false, code: "OTRO_DIA" });
+  });
+});
+
+describe("B1 del veredicto: leer a +2 min, devolver a Listas recién con plazo", () => {
+  const verifTemprana: JobVerificacion = {
+    job_id: "server:sii_local:verif",
+    estado: "running",
+    origin: origenAdopcion(viejo.job_id, "vencido"),
+    propuesta_id: "prop-1",
+    usuario_id: "u1",
+    cuenta_id: "c1",
+    empresa_id: "e1",
+    created_at: new Date(venceMs + 3 * 60_000).toISOString(),
+    expires_at: new Date(venceMs + 18 * 60_000).toISOString(),
+  };
+  it("vía vencido, 'no salió' a +4 min → MUY_PRONTO, desde expires_at + 30 min", () => {
+    const r = validarVeredictoNoSalio({ verificacion: verifTemprana, viejo, userId: "u1", ahora: new Date(venceMs + 4 * 60_000) });
+    expect(r).toEqual({ ok: false, code: "MUY_PRONTO", detalle: expect.any(String), desdeMs: venceMs + 30 * 60_000 });
+  });
+  it("vía vencido, a +29 min → todavía MUY_PRONTO", () => {
+    const r = validarVeredictoNoSalio({ verificacion: { ...verifTemprana, created_at: new Date(venceMs + 28 * 60_000).toISOString(), expires_at: new Date(venceMs + 43 * 60_000).toISOString() }, viejo, userId: "u1", ahora: new Date(venceMs + 29 * 60_000) });
+    expect(r).toMatchObject({ ok: false, code: "MUY_PRONTO" });
+  });
+  const verifFin: JobVerificacion = {
+    ...verifTemprana,
+    origin: origenAdopcion(viejo.job_id, "fin_confirmado"),
+    created_at: "2026-09-28T17:44:00Z",
+    expires_at: "2026-09-28T17:59:00Z",
+  };
+  it("vía fin confirmado, 'no salió' a 5 min del intento → MUY_PRONTO (desde created_at + 10 min)", () => {
+    const r = validarVeredictoNoSalio({ verificacion: verifFin, viejo, userId: "u1", ahora: new Date("2026-09-28T17:45:00Z") });
+    expect(r).toMatchObject({ ok: false, code: "MUY_PRONTO", desdeMs: Date.parse(CREADO) + NO_SALIO_FIN_TRAS_MS });
+  });
+  it("vía fin confirmado, a 11 min del intento → ok", () => {
+    const r = validarVeredictoNoSalio({ verificacion: verifFin, viejo, userId: "u1", ahora: new Date("2026-09-28T17:51:00Z") });
+    expect(r).toEqual({ ok: true });
+  });
+  it("vía fin: un latido reciente del intento corre el plazo", () => {
+    const conLatido = { ...viejo, heartbeat_at: "2026-09-28T17:48:00Z" };
+    const r = validarVeredictoNoSalio({ verificacion: verifFin, viejo: conLatido, userId: "u1", ahora: new Date("2026-09-28T17:51:00Z") });
+    expect(r).toMatchObject({ ok: false, code: "MUY_PRONTO", desdeMs: Date.parse("2026-09-28T17:58:00Z") });
   });
 });
 
