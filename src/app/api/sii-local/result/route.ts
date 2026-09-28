@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { ESTADOS_LAPIDA, esLapidaEfectiva } from "@/lib/emission/lapida";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +22,13 @@ interface SiiLocalResultPayload {
    * siempre — "ingrésalo abajo" — y no existía). Solo sobre jobs con lápida.
    */
   registrar_folio_manual?: number | null;
+  /**
+   * SALIDA HUMANA (2026-09-28, plan-emision-confiable B3b): "Revisé el SII y esta
+   * boleta NO está". Sobre una lápida (a medias o sin respuesta) que la verificación
+   * automática no puede resolver (otro día, >250 boletas, extensión vieja). Devuelve
+   * la propuesta a Listas. Queda auditado como declaración de la persona.
+   */
+  declarar_no_salio?: boolean;
   /** Telemetría de flota: versión de la extensión que POSTea (bridge 0.1.7+). */
   extension_version?: string | null;
   result?: {
@@ -410,11 +418,20 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
 async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) {
   if (!propuestaId) return;
   try {
+    const ahoraIso = new Date().toISOString();
     await sb
       .from("emision_jobs")
-      .update({ estado: "completed", estado_visible: "completed", updated_at: new Date().toISOString() })
+      .update({ estado: "completed", estado_visible: "completed", updated_at: ahoraIso })
       .eq("propuesta_id", propuestaId)
       .eq("estado", "revision_pendiente");
+    // + los SIN RESPUESTA (job del lote vencido y abierto, lapida.ts): con la boleta ya
+    // registrada dejan de ser una duda; si no, seguirían apareciendo en "A medias".
+    await sb
+      .from("emision_jobs")
+      .update({ estado: "completed", estado_visible: "completed", updated_at: ahoraIso })
+      .eq("propuesta_id", propuestaId)
+      .in("estado", ["created", "running"])
+      .lt("expires_at", ahoraIso);
   } catch {
     /* best-effort */
   }
@@ -434,17 +451,20 @@ async function calceReportesVetado(
   try {
     // -04:00 (invierno) cubre también el horario de verano: una hora de más solo sobre-veta.
     const desde = `${args.fechaEmision}T00:00:00-04:00`;
+    // Lápidas a medias + SIN RESPUESTA (2026-09-28, I1): una boleta colgada del mismo
+    // monto también puede ser la fila única que vio el worker.
     const { data: lapidas, error: errLapidas } = await sb
       .from("emision_jobs")
-      .select("job_id, propuesta_id")
+      .select("job_id, propuesta_id, estado, expires_at, created_at")
       .eq("empresa_id", args.empresaId)
-      .eq("estado", "revision_pendiente")
+      .in("estado", [...ESTADOS_LAPIDA])
       .gte("created_at", desde)
       .not("propuesta_id", "is", null)
       .limit(50);
     // M1: Supabase devuelve {error} sin lanzar → fail-closed explícito.
     if (errLapidas) return true;
-    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id);
+    const ahoraVeto = new Date();
+    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id && esLapidaEfectiva(j, ahoraVeto) !== null);
     if (otras.length === 0) return false;
     const { data: props, error: errProps } = await sb
       .from("propuestas_ia")
@@ -663,12 +683,14 @@ export async function POST(request: Request) {
 
     const { data: jobManual } = await sb
       .from("emision_jobs")
-      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id")
+      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id, expires_at, created_at")
       .eq("job_id", jobIdManual)
       .maybeSingle();
     if (!jobManual) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
     if (jobManual.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
-    if (jobManual.estado !== "revision_pendiente") {
+    // Lápida real: a medias (revision_pendiente) o SIN RESPUESTA (job del lote vencido
+    // y abierto, lapida.ts) — la clienta ve su folio en el SII y lo registra.
+    if (esLapidaEfectiva(jobManual) === null) {
       return NextResponse.json(
         { ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no quedó a medias: no corresponde registrar un folio a mano." },
         { status: 409 },
@@ -746,6 +768,85 @@ export async function POST(request: Request) {
       already_exists: Boolean(respaldoManual.already),
       recuperado: true,
     });
+  }
+
+  // ── SALIDA HUMANA: "Revisé el SII y no está" ─────────────────────────────
+  // Sin esto una lápida que la verificación no alcanza (otro día: /reportes muestra
+  // solo hoy; más de 250 boletas; extensión vieja) dejaba a la clienta TRABADA para
+  // siempre. Fail-closed: solo el dueño del job, solo sobre una lápida real
+  // (lapida.ts), solo si la propuesta NO tiene boleta vigente. Cierra como `failed`
+  // TODAS las lápidas de esa propuesta (si queda una, sigue bloqueada) y deja rastro
+  // de que fue una declaración humana, no un veredicto del RPA.
+  if (payload.declarar_no_salio === true) {
+    const jobIdDecl = cleanText(payload.job_id);
+    if (!jobIdDecl) return NextResponse.json({ ok: false, error: "JOB_ID_REQUERIDO" }, { status: 400 });
+    const { data: jobDecl, error: errDecl } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id, expires_at, created_at")
+      .eq("job_id", jobIdDecl)
+      .maybeSingle();
+    if (errDecl) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    if (!jobDecl) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
+    if (jobDecl.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
+    if (!jobDecl.propuesta_id || esLapidaEfectiva(jobDecl) === null) {
+      return NextResponse.json({ ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no está a medias." }, { status: 409 });
+    }
+    const { data: boletaVigente, error: errBol } = await sb
+      .from("boletas_emitidas")
+      .select("id, folio")
+      .eq("propuesta_id", jobDecl.propuesta_id)
+      .neq("estado", "anulada")
+      .limit(1)
+      .maybeSingle();
+    if (errBol) return NextResponse.json({ ok: false, error: "BOLETA_QUERY_FAILED" }, { status: 500 });
+    if (boletaVigente) {
+      return NextResponse.json(
+        { ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: `Esta boleta ya está registrada con el folio ${boletaVigente.folio}.` },
+        { status: 409 },
+      );
+    }
+    const { data: lapidasProp, error: errLap } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, propuesta_id, expires_at, created_at")
+      .eq("propuesta_id", jobDecl.propuesta_id)
+      .in("estado", [...ESTADOS_LAPIDA]);
+    if (errLap) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    const ahoraDecl = new Date();
+    const aCerrar = (lapidasProp ?? []).filter((j) => esLapidaEfectiva(j, ahoraDecl) !== null).map((j) => j.job_id);
+    const mensaje = "Declarado por la persona: revisó el SII y la boleta no salió";
+    // Directo a la tabla, NO por releaseCuentaEmissionLock: su guard prohíbe (a
+    // propósito) bajar una lápida a `failed`; esta es la única puerta que lo permite,
+    // y solo con la declaración humana. El candado del lote ya se soltó al sellarla.
+    const { error: errUpd } = await sb
+      .from("emision_jobs")
+      .update({ estado: "failed", estado_visible: "failed", status_message: mensaje, updated_at: ahoraDecl.toISOString() })
+      .in("job_id", aCerrar);
+    if (errUpd) return NextResponse.json({ ok: false, error: "DECLARACION_FALLIDA", detalle: errUpd.message }, { status: 500 });
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_no_salio_declarado_a_mano",
+      summary: "La persona declaró que la boleta no salió en el SII (vuelve a Listas)",
+      empresaId: jobDecl.empresa_id,
+      cuentaId: jobDecl.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobDecl.job_id,
+      metadata: { jobs_cerrados: aCerrar.length, origen: "declaracion_humana" },
+    });
+    await recordCuentaAudit({
+      sb,
+      cuentaId: jobDecl.cuenta_id,
+      empresaId: jobDecl.empresa_id,
+      usuarioId: user.id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: jobDecl.job_id,
+      resumen: "Declaró que la boleta no salió en el SII tras revisarlo (vuelve a Listas)",
+      metadata: { origen: "declaracion_no_salio", jobs_cerrados: aCerrar.length },
+    });
+    return NextResponse.json({ ok: true, jobs_cerrados: aCerrar.length });
   }
 
   let result = payload.result;

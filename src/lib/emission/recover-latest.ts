@@ -66,3 +66,22 @@ export async function recoverLatestFolio(jobId: string | null): Promise<RecoverL
     return { estado: "error", mensaje: "Error de red al recuperar el folio." };
   }
 }
+
+/**
+ * "Revisé el SII y esta boleta NO está" (salida humana de una lápida, 2026-09-28).
+ * La propuesta vuelve a Listas; queda auditado como declaración de la persona.
+ */
+export async function declararNoSalio(jobId: string): Promise<{ ok: true } | { ok: false; mensaje: string }> {
+  try {
+    const res = await fetch("/api/sii-local/result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: jobId, declarar_no_salio: true }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json?.ok) return { ok: true };
+    return { ok: false, mensaje: json?.detalle ?? json?.error ?? "No se pudo marcar la boleta." };
+  } catch {
+    return { ok: false, mensaje: "Error de red al marcar la boleta." };
+  }
+}

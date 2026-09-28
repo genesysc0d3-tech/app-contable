@@ -17,6 +17,7 @@ import {
   type MotivoPausa,
 } from "@/lib/emission/lote-runner";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
+import { fechaParaEmitir, noSalioEsConfiable } from "@/lib/emission/fecha-intento";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
@@ -257,6 +258,9 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         const full = item as ItemLoteEmision;
         reportar("Preparando…");
         // 1. lock + autorización (server) + enlace propuesta_id
+        // Fecha de ESTA boleta = la del momento de emitirla (no la del modal): un lote
+        // que cruza las 00:00 no debe verificar con la fecha de ayer (doble folio).
+        const fechaIntento = fechaParaEmitir(new Date());
         const job = await startJob(full.propuestaId, full.tipoDte);
         if (!job) return { estado: "fallida", motivo: "No se pudo iniciar (autorización, otra emisión en curso, o permiso)." };
         // Server en pausa: sin job, sin ventana, sin folio. El runner conserva este
@@ -284,7 +288,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
               emisorRut: job.emisorRut ?? empresaRut ?? "",
               tipoDte: full.tipoDte as 33 | 34,
               totalClp: full.monto,
-              fechaEmision: full.fechaEmision,
+              fechaEmision: fechaIntento,
               formaPago: full.formaPago as "contado" | "credito",
               receptor: {
                 rut: full.receptorRut ?? "",
@@ -316,7 +320,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             foliosHoy: job.foliosHoy,
             tipoDte: full.tipoDte as 39 | 41,
             monto: full.monto,
-            fechaEmision: full.fechaEmision,
+            fechaEmision: fechaIntento,
             receptor: {
               rut: full.receptorRut,
               razonSocial: full.receptorNombre,
@@ -413,7 +417,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
               foliosHoy: vjob.foliosHoy,
               tipoDte: full.tipoDte as 39 | 41,
               monto: full.monto,
-              fechaEmision: full.fechaEmision,
+              fechaEmision: fechaIntento,
               receptor: {},
               detalle: full.detalle,
               medioPago: full.medioPago,
@@ -427,6 +431,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             waiterRef.current = null;
             window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: vjob.jobId }, origin());
             if (v.estado === "revisar") setJobIdRevision(vjob.jobId);
+            // Guarda de medianoche: "no la encontré" solo vale si el intento, su fecha y
+            // la verificación son del MISMO día Chile (el listado muestra solo hoy).
+            if (v.estado === "fallida" && !noSalioEsConfiable({ fechaIntento, desdeMs: intentoDesdeMs, hastaMs: intentoHastaMs, ahoraMs: Date.now() })) {
+              const motivo = "El intento cruzó la medianoche y el listado del SII solo muestra el día: no puedo confirmar si salió. Quedó a medias: verifícala en el SII.";
+              await closeJob(vjob.jobId, "revision_pendiente", motivo);
+              setJobIdRevision(vjob.jobId);
+              return { estado: "revisar", motivo, folio: null };
+            }
             if (v.estado !== "emitida") await closeJob(vjob.jobId, v.estado === "revisar" ? "revision_pendiente" : "failed", "motivo" in v ? v.motivo : undefined);
             if (v.estado === "fallida") return { estado: "fallida", motivo: `${desenlace.motivo} Verifiqué en el SII: no salió, se puede reintentar.` };
             return v;

@@ -13,7 +13,12 @@
  * reciente (es el que registra el folio a mano). Se ordena por fecha del
  * movimiento y luego por monto, para cotejar contra el Resumen del SII.
  */
-export type JobLapida = { job_id: string; propuesta_id: string | null; created_at: string };
+export type JobLapida = {
+  job_id: string; propuesta_id: string | null; created_at: string;
+  /** a_medias = el RPA dejó lápida (probable folio real); sin_respuesta = la extensión
+   *  nunca contestó y el job venció (puede haber salido o no). Default a_medias. */
+  motivo?: "a_medias" | "sin_respuesta";
+};
 
 export type PropuestaAMedias = {
   id: string;
@@ -36,6 +41,7 @@ export type ItemAMedias = {
   documento_nombre: string | null;
   /** Cuándo quedó a medias (ISO). */
   lapida_at: string;
+  motivo: "a_medias" | "sin_respuesta";
 };
 
 export function construirAMedias(jobs: JobLapida[], propuestas: PropuestaAMedias[]): ItemAMedias[] {
@@ -59,6 +65,7 @@ export function construirAMedias(jobs: JobLapida[], propuestas: PropuestaAMedias
       tipo_dte: p.tipo_dte ?? null,
       documento_nombre: p.documento_nombre ?? null,
       lapida_at: job.created_at,
+      motivo: job.motivo ?? "a_medias",
     });
   }
   items.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.monto_total - b.monto_total));

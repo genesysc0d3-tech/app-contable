@@ -7,6 +7,7 @@
 // error de consulta = no se emite (el lote lo marca fallida y se reintenta).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ESTADOS_LAPIDA, esLapidaEfectiva, type JobParaLapida } from "./lapida";
 
 type Sb = SupabaseClient;
 
@@ -43,18 +44,24 @@ export async function revisarYaEmitida(sb: Sb, propuestaId: string): Promise<Pro
   return { ok: true };
 }
 
-/** (b1) ¿quedó "a medias" (lápida)? Bloqueo INCONDICIONAL hasta recuperar el folio. */
-async function revisarLapida(sb: Sb, propuestaId: string): Promise<PropuestaEmitible> {
+/**
+ * (b1) ¿quedó "a medias" (lápida) o SIN RESPUESTA (job del lote vencido y abierto)?
+ * Bloqueo INCONDICIONAL hasta verificar/recuperar el folio (ver lapida.ts).
+ */
+async function revisarLapida(sb: Sb, propuestaId: string, ahora: Date = new Date()): Promise<PropuestaEmitible> {
   const { data, error } = await sb
     .from("emision_jobs")
-    .select("job_id")
+    .select("estado, propuesta_id, expires_at, created_at")
     .eq("propuesta_id", propuestaId)
-    .eq("estado", "revision_pendiente")
-    .limit(1)
-    .maybeSingle();
+    .in("estado", [...ESTADOS_LAPIDA])
+    .limit(20);
   if (error) return CONSULTA_FALLIDA;
-  if (data) {
+  const motivos = ((data ?? []) as JobParaLapida[]).map((j) => esLapidaEfectiva(j, ahora));
+  if (motivos.includes("a_medias")) {
     return { ok: false, status: 409, error: "REVISION_PENDIENTE", detalle: "Esta boleta quedó a medias en el SII. Recupera su folio antes de re-emitir." };
+  }
+  if (motivos.includes("sin_respuesta")) {
+    return { ok: false, status: 409, error: "SIN_RESPUESTA", detalle: "Esta boleta quedó sin respuesta del SII. Verifícala en Emitir → A medias antes de re-emitir." };
   }
   return { ok: true };
 }
@@ -68,7 +75,7 @@ async function revisarLapida(sb: Sb, propuestaId: string): Promise<PropuestaEmit
 export async function revisarPostCandado(sb: Sb, propuestaId: string): Promise<PropuestaEmitible> {
   const ya = await revisarYaEmitida(sb, propuestaId);
   if (!ya.ok) return ya;
-  return revisarLapida(sb, propuestaId);
+  return revisarLapida(sb, propuestaId, new Date());
 }
 
 /** (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
@@ -96,7 +103,7 @@ async function revisarEnVuelo(sb: Sb, propuestaId: string, ahora: Date): Promise
 export async function revisarPropuestaEmitible(sb: Sb, propuestaId: string, ahora = new Date()): Promise<PropuestaEmitible> {
   const [ya, lapida, vuelo] = await Promise.all([
     revisarYaEmitida(sb, propuestaId),
-    revisarLapida(sb, propuestaId),
+    revisarLapida(sb, propuestaId, ahora),
     revisarEnVuelo(sb, propuestaId, ahora),
   ]);
   for (const r of [ya, lapida, vuelo]) if (!r.ok) return r;

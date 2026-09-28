@@ -5,6 +5,7 @@ import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
 import { revisarPostCandado, revisarPropuestaEmitible } from "@/lib/emission/propuesta-emitible";
+import { estadoCierreSeguro } from "@/lib/emission/cierre-seguro";
 import { buildVisibleEmissionLock, type ActiveEmissionLock } from "@/lib/emission/lock-visibility";
 import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
@@ -525,16 +526,23 @@ export async function POST(request: Request) {
   let foliosHoy: number[] = [];
   if (provider === "sii_local") {
     try {
-      const hoyChile = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const diaChile = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+      const ahora = new Date();
+      const hoyChile = diaChile(ahora);
+      const ayerChile = diaChile(new Date(ahora.getTime() - 24 * 3600 * 1000));
       const { data: hoy } = await guard.service
         .from("boletas_emitidas")
         .select("folio")
         .eq("empresa_id", guard.empresaId)
-        .eq("tipo_dte", tipoDte)
-        .eq("fecha_emision", hoyChile)
+        // AMBOS tipos del carril (2026-09-28): el calce de /reportes no filtra por Tipo;
+        // excluir también los folios del otro tipo evita que una 39 ya registrada del
+        // mismo monto se tome como la 41 en vuelo (folio cruzado). Solo excluye: seguro.
+        .in("tipo_dte", tipoDte === 33 || tipoDte === 34 ? [33, 34] : [39, 41])
+        // Hoy y AYER: una boleta que cruzó la medianoche quedó registrada con la otra fecha.
+        .in("fecha_emision", [hoyChile, ayerChile])
         // Anuladas INCLUIDAS: siguen en /reportes con su monto y también deben excluirse.
         .order("folio", { ascending: false })
-        .limit(500);
+        .limit(1000);
       foliosHoy = (hoy ?? []).map((b) => Number(b.folio)).filter((n) => Number.isInteger(n) && n > 0);
     } catch { /* best-effort */ }
   }
@@ -632,7 +640,9 @@ export async function DELETE(request: Request) {
   }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
-  const estado = cleanCloseEstado(payload.estado);
+  // Con propuesta (job del lote), un `cancelled` se sella como lápida: pudo haber
+  // apretado EMITIR (riesgo C, ver cierre-seguro.ts).
+  const estado = estadoCierreSeguro(cleanCloseEstado(payload.estado), job);
   // Idempotencia + no re-procesar, CON una excepción crítica: la carrera
   // CAPTURE_DEBUG puede sellar 'failed' un job que en verdad emitió (evidencia
   // débil post-EMITIR). Un terminal PERMISIVO ('failed'/'cancelled'/'expired')

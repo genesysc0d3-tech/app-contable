@@ -4,23 +4,27 @@ import { revisarPostCandado, revisarPropuestaEmitible, revisarYaEmitida } from "
 
 type Resp = { data: unknown; error: { message: string } | null };
 
-// Cliente falso: cada tabla devuelve una respuesta fija; lleva la cuenta de consultas.
+// Cliente falso: "boletas" (ya emitida, maybeSingle), "revision" (lápidas: lista de
+// jobs, se espera con await), "vuelo" (en curso, maybeSingle). Lleva la cuenta.
 function fakeSb(respuestas: { boletas?: Resp; revision?: Resp; vuelo?: Resp }) {
   const consultas: string[] = [];
   const sb = {
     from(table: string) {
-      const filtros: Record<string, unknown> = {};
       const q = {
         select: () => q,
-        eq: (c: string, v: unknown) => { filtros[c] = v; return q; },
+        eq: () => q,
         neq: () => q,
-        in: (c: string) => { filtros[c] = "in"; return q; },
+        in: () => q,
         gt: () => q,
         limit: () => q,
         async maybeSingle(): Promise<Resp> {
-          const cual = table === "boletas_emitidas" ? "boletas" : filtros.estado === "revision_pendiente" ? "revision" : "vuelo";
+          const cual = table === "boletas_emitidas" ? "boletas" : "vuelo";
           consultas.push(cual);
-          return respuestas[cual as keyof typeof respuestas] ?? { data: null, error: null };
+          return respuestas[cual] ?? { data: null, error: null };
+        },
+        then(ok: (v: Resp) => unknown, ko?: (e: unknown) => unknown) {
+          consultas.push("revision");
+          return Promise.resolve(respuestas.revision ?? { data: [], error: null }).then(ok, ko);
         },
       };
       return q;
@@ -28,6 +32,10 @@ function fakeSb(respuestas: { boletas?: Resp; revision?: Resp; vuelo?: Resp }) {
   } as unknown as SupabaseClient;
   return { sb, consultas };
 }
+
+// Lápidas como las devuelve la base.
+const lapida = { data: [{ estado: "revision_pendiente", propuesta_id: "p", expires_at: null, created_at: "2026-09-28T01:00:00Z" }], error: null };
+const colgado = { data: [{ estado: "running", propuesta_id: "p", expires_at: "2026-09-28T02:52:07Z", created_at: "2026-09-28T02:37:07Z" }], error: null };
 
 const falla = { data: null, error: { message: "timeout" } };
 
@@ -64,19 +72,19 @@ describe("revisarPropuestaEmitible — falla CERRADA", () => {
   it("precedencia intacta aunque vayan en paralelo: ya emitida gana a a-medias y en-vuelo", async () => {
     const r = await revisarPropuestaEmitible(fakeSb({
       boletas: { data: { id: "b1", folio: 7 }, error: null },
-      revision: { data: { job_id: "j" }, error: null },
+      revision: lapida,
       vuelo: { data: { job_id: "k" }, error: null },
     }).sb, "p");
     expect(r).toMatchObject({ error: "PROPUESTA_YA_EMITIDA", folio: 7 });
     const r2 = await revisarPropuestaEmitible(fakeSb({
-      revision: { data: { job_id: "j" }, error: null },
+      revision: lapida,
       vuelo: { data: { job_id: "k" }, error: null },
     }).sb, "p");
     expect(r2).toMatchObject({ error: "REVISION_PENDIENTE" });
   });
 
   it("a medias → 409 REVISION_PENDIENTE; en vuelo → 409 EMISION_EN_CURSO", async () => {
-    expect(await revisarPropuestaEmitible(fakeSb({ revision: { data: { job_id: "j" }, error: null } }).sb, "p"))
+    expect(await revisarPropuestaEmitible(fakeSb({ revision: lapida }).sb, "p"))
       .toMatchObject({ status: 409, error: "REVISION_PENDIENTE" });
     expect(await revisarPropuestaEmitible(fakeSb({ vuelo: { data: { job_id: "j" }, error: null } }).sb, "p"))
       .toMatchObject({ status: 409, error: "EMISION_EN_CURSO" });
@@ -93,7 +101,7 @@ describe("revisarPostCandado — con el candado tomado", () => {
     expect(r).toMatchObject({ ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", folio: 24133, boletaId: "b1" });
   });
   it("quedó a medias entre el chequeo y el candado → 409 REVISION_PENDIENTE", async () => {
-    const r = await revisarPostCandado(fakeSb({ revision: { data: { job_id: "j" }, error: null } }).sb, "p");
+    const r = await revisarPostCandado(fakeSb({ revision: lapida }).sb, "p");
     expect(r).toMatchObject({ ok: false, status: 409, error: "REVISION_PENDIENTE" });
   });
   it("NO mira 'en vuelo' (el job propio recién creado)", async () => {
@@ -103,5 +111,16 @@ describe("revisarPostCandado — con el candado tomado", () => {
   });
   it("error de consulta → rechaza", async () => {
     expect((await revisarPostCandado(fakeSb({ revision: falla }).sb, "p")).ok).toBe(false);
+  });
+});
+
+describe("sin respuesta (caso LC 27-sep) — job del lote vencido y abierto bloquea", () => {
+  it("antes quedaba re-emitible; ahora 409 SIN_RESPUESTA", async () => {
+    const r = await revisarPropuestaEmitible(fakeSb({ revision: colgado }).sb, "p", new Date("2026-09-28T12:00:00Z"));
+    expect(r).toMatchObject({ ok: false, status: 409, error: "SIN_RESPUESTA" });
+  });
+  it("con el candado tomado también se ve", async () => {
+    const r = await revisarPostCandado(fakeSb({ revision: colgado }).sb, "p");
+    expect(r).toMatchObject({ ok: false, status: 409, error: "SIN_RESPUESTA" });
   });
 });
