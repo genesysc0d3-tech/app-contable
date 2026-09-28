@@ -59,8 +59,10 @@ describe("la ref se VE (fuente) y NO se imprime", () => {
   });
   it("el doble folio lleva la MISMA ref de la propuesta (queda visible)", () => {
     const src = leer("src/app/api/sii-local/result/route.ts");
-    expect(src).toContain("propuesta_id: null, ref: await refDePropuesta(sb, args.empresaId, args.propuestaId)");
-    expect(src).toContain("propuesta_id: null, ref: await refDePropuesta(sb, empresaId, job.propuesta_id)");
+    expect(src).toContain("propuesta_id: null, ...(await conRef(sb, args.empresaId, args.propuestaId))");
+    expect(src).toContain("propuesta_id: null, ...(await conRef(sb, empresaId, job.propuesta_id))");
+    // Sin la migración, mandar `ref` (aunque sea null) rompería el insert de un folio real.
+    expect(src).toContain("return ref ? { ref } : {};");
   });
   it("el trigger nunca bloquea guardar una boleta", () => {
     expect(leer("supabase/migrations/20260928120000_emision_refs.sql")).toMatch(/exception when others then\s+new\.ref := null;/);

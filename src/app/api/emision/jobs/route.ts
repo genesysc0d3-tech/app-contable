@@ -368,7 +368,7 @@ export async function POST(request: Request) {
     const emitible = await revisarPropuestaEmitible(guard.service, propuestaId);
     if (!emitible.ok) {
       return NextResponse.json(
-        { ok: false, error: emitible.error, detalle: emitible.detalle, folio: emitible.folio ?? null, boleta_id: emitible.boletaId ?? null },
+        { ok: false, error: emitible.error, detalle: emitible.detalle, folio: emitible.folio ?? null, boleta_id: emitible.boletaId ?? null, boleta_created_at: emitible.boletaCreatedAt ?? null },
         { status: emitible.status },
       );
     }
@@ -479,7 +479,7 @@ export async function POST(request: Request) {
     if (!post.ok) {
       await releaseCuentaEmissionLock({ sb: guard.service, cuentaId: guard.cuentaId, jobId: lock.jobId, estado: "cancelled" });
       return NextResponse.json(
-        { ok: false, error: post.error, detalle: post.detalle, folio: post.folio ?? null, boleta_id: post.boletaId ?? null },
+        { ok: false, error: post.error, detalle: post.detalle, folio: post.folio ?? null, boleta_id: post.boletaId ?? null, boleta_created_at: post.boletaCreatedAt ?? null },
         { status: post.status },
       );
     }

@@ -130,8 +130,7 @@ export async function getPendientesEmision(
     const ahoraLapida = new Date();
     const jobs: JobLapida[] = ((revJobs ?? []) as Array<JobLapida & { estado: string; expires_at: string | null }>)
       .map((j) => ({ ...j, motivo: esLapidaEfectiva(j, ahoraLapida) }))
-      .filter((j): j is JobLapida & { estado: string; expires_at: string | null; motivo: MotivoLapida } => j.motivo !== null)
-      .slice(0, 60);
+      .filter((j): j is JobLapida & { estado: string; expires_at: string | null; motivo: MotivoLapida } => j.motivo !== null);
     enRevision = new Set(jobs.map((j) => j.propuesta_id).filter((id): id is string => typeof id === "string"));
     if (enRevision.size > 0) {
       const { data: revProps } = await supabase

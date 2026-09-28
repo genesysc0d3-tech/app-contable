@@ -174,7 +174,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
   type StartJob =
     | { jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
     | { pausada: true; detalle: string }
-    | { yaEmitida: true; folio: number | null; boletaId: string | null }
+    | { yaEmitida: true; folio: number | null; boletaId: string | null; boletaCreatedAt: string | null }
     | { frenada: true; motivo: string }
     | { yaAMedias: true }
     | null;
@@ -210,7 +210,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
       switch (c.tipo) {
         case "ok": return { jobId: c.jobId, expiresAt: c.expiresAt, emisorRut: c.emisorRut, foliosHoy: c.foliosHoy };
         case "pausada": return { pausada: true, detalle: c.detalle };
-        case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId };
+        case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId, boletaCreatedAt: c.boletaCreatedAt };
         case "frenada": return { frenada: true, motivo: c.motivo };
         case "a_medias": return { yaAMedias: true };
         case "reintentar": return { frenada: true, motivo: "Vamos más rápido de lo que el servidor permite. Lo que falta queda guardado: reanuda en un minuto." };
@@ -408,7 +408,12 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           // resultado de NUESTRO intento llegó tarde y se guardó: salió, con su folio
           // (cuenta como emitida: tope de sesión, cadencia y rango de folios). Sin
           // folio legible no se afirma nada → lápida, como cuando no se pudo verificar.
-          if (vjob && "yaEmitida" in vjob && vjob.folio !== null) {
+          // Solo si esa boleta se registró DENTRO de la ventana de este intento (con 60 s
+          // de margen): si es anterior, es de otra persona/pestaña y nuestro folio posible
+          // sigue sin verificar → cae a la lápida de abajo (revisión final, I3).
+          const registradaEnVentana = vjob && "yaEmitida" in vjob && vjob.boletaCreatedAt
+            && Date.parse(vjob.boletaCreatedAt) >= intentoDesdeMs - 60_000;
+          if (vjob && "yaEmitida" in vjob && vjob.folio !== null && registradaEnVentana) {
             return { estado: "emitida", folio: vjob.folio, boletaId: vjob.boletaId };
           }
           if (vjob && "jobId" in vjob) {

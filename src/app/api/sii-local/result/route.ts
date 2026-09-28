@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { validarAccesoCuenta } from "@/lib/entitlements";
 import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
@@ -415,6 +416,28 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
 // estar bloqueada (ahora sale por yaEmitidas, no por enRevision). Idempotente: si ya
 // está completed, el WHERE no matchea. Best-effort: la boleta ya quedó guardada, que
 // es lo que importa.
+/**
+ * Declaraciones humanas (folio a mano / "no está en el SII"): la persona debe seguir
+ * siendo miembro ACTIVO de la cuenta dueña del job (no basta un rol global). null = OK.
+ */
+async function accesoDeclaracion(sb: ServiceDb, userId: string, job: { empresa_id: string; cuenta_id: string }): Promise<NextResponse | null> {
+  try {
+    const acceso = await validarAccesoCuenta(sb, userId, job.empresa_id);
+    if (!acceso.ok) return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
+    if (acceso.cuentaId !== job.cuenta_id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
+    return null;
+  } catch {
+    return NextResponse.json({ ok: false, error: "ACCESO_NO_VERIFICADO" }, { status: 500 });
+  }
+}
+
+/** `{ ref }` solo si existe: sin la migración aplicada, mandar la columna `ref` (aunque
+ *  sea null) haría fallar el insert de un folio REAL. */
+async function conRef(sb: ServiceDb, empresaId: string, propuestaId: string | null): Promise<{ ref?: string }> {
+  const ref = await refDePropuesta(sb, empresaId, propuestaId);
+  return ref ? { ref } : {};
+}
+
 /** Ref interna de una propuesta (emision_refs). Best-effort: null si no hay o falla. */
 async function refDePropuesta(sb: ServiceDb, empresaId: string, propuestaId: string | null): Promise<string | null> {
   if (!propuestaId) return null;
@@ -630,7 +653,7 @@ async function backfillFolioSinJobVivo(
         .eq("empresa_id", args.empresaId).eq("propuesta_id", args.propuestaId).neq("estado", "anulada").maybeSingle();
       if (propViva && String(propViva.folio) !== String(args.folio)) {
         const { data: boletaB } = await sb
-          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null, ref: await refDePropuesta(sb, args.empresaId, args.propuestaId) }).select("id").single();
+          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null, ...(await conRef(sb, args.empresaId, args.propuestaId)) }).select("id").single();
         await recordOpsEvent({
           sb, severity: "critical", source: "sii-local", eventName: "doble_folio_propuesta",
           summary: `Doble folio para una propuesta (recuperación): folios ${propViva.folio} y ${args.folio}`,
@@ -708,7 +731,10 @@ export async function POST(request: Request) {
       .eq("job_id", jobIdManual)
       .maybeSingle();
     if (!jobManual) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
-    if (jobManual.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
+    // Cualquier persona ACTIVA de la misma cuenta con rol de emisión (no solo quien
+    // lanzó el intento: si Marge no está, la clienta no queda trabada). Auditado.
+    const accesoManual = await accesoDeclaracion(sb, user.id, jobManual);
+    if (accesoManual) return accesoManual;
     // Lápida real: a medias (revision_pendiente) o SIN RESPUESTA (job del lote vencido
     // y abierto, lapida.ts) — la clienta ve su folio en el SII y lo registra.
     if (esLapidaEfectiva(jobManual) === null) {
@@ -808,7 +834,8 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (errDecl) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
     if (!jobDecl) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
-    if (jobDecl.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
+    const accesoDecl = await accesoDeclaracion(sb, user.id, jobDecl);
+    if (accesoDecl) return accesoDecl;
     if (!jobDecl.propuesta_id || esLapidaEfectiva(jobDecl) === null) {
       return NextResponse.json({ ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no está a medias." }, { status: 409 });
     }
@@ -864,11 +891,15 @@ export async function POST(request: Request) {
     // Re-filtra por estado en el UPDATE: si entre el select y acá llegó un resultado
     // (lift → completed) o un latido revivió el job, no se pisa.
     const ahoraIso = ahoraDecl.toISOString();
-    const { error: errUpd } = await sb
+    const { data: cerrados, error: errUpd } = await sb
       .from("emision_jobs")
       .update({ estado: "failed", estado_visible: "failed", status_message: mensaje, updated_at: ahoraIso })
       .in("job_id", aCerrar)
-      .or(`estado.eq.revision_pendiente,and(estado.in.(created,running),expires_at.lt.${ahoraIso})`);
+      .or(`estado.eq.revision_pendiente,and(estado.in.(created,running),expires_at.lt.${ahoraIso})`)
+      .select("job_id");
+    if (!errUpd && (cerrados ?? []).length === 0) {
+      return NextResponse.json({ ok: false, error: "NADA_QUE_CERRAR", detalle: "Esta boleta cambió de estado mientras la marcabas (llegó su resultado o sigue en curso). Recarga y revísala de nuevo." }, { status: 409 });
+    }
     if (errUpd) return NextResponse.json({ ok: false, error: "DECLARACION_FALLIDA", detalle: errUpd.message }, { status: 500 });
     await recordOpsEvent({
       sb,
@@ -881,7 +912,7 @@ export async function POST(request: Request) {
       usuarioId: user.id,
       resourceType: "emision_job",
       resourceId: jobDecl.job_id,
-      metadata: { jobs_cerrados: aCerrar.length, origen: "declaracion_humana" },
+      metadata: { jobs_cerrados: (cerrados ?? []).length, origen: "declaracion_humana", lanzado_por_otra_persona: jobDecl.usuario_id !== user.id },
     });
     await recordCuentaAudit({
       sb,
@@ -892,9 +923,9 @@ export async function POST(request: Request) {
       recursoTipo: "emision_job",
       recursoId: jobDecl.job_id,
       resumen: "Declaró que la boleta no salió en el SII tras revisarlo (vuelve a Listas)",
-      metadata: { origen: "declaracion_no_salio", jobs_cerrados: aCerrar.length },
+      metadata: { origen: "declaracion_no_salio", jobs_cerrados: (cerrados ?? []).length },
     });
-    return NextResponse.json({ ok: true, jobs_cerrados: aCerrar.length });
+    return NextResponse.json({ ok: true, jobs_cerrados: (cerrados ?? []).length });
   }
 
   let result = payload.result;
@@ -1346,7 +1377,7 @@ export async function POST(request: Request) {
         const { data: boletaB } = await sb
           .from("boletas_emitidas")
           // Con la MISMA ref de la propuesta: dos boletas con la misma ref = doble folio visible.
-          .insert({ ...boletaInsert, propuesta_id: null, ref: await refDePropuesta(sb, empresaId, job.propuesta_id) })
+          .insert({ ...boletaInsert, propuesta_id: null, ...(await conRef(sb, empresaId, job.propuesta_id)) })
           .select("id, folio, estado")
           .single();
         await recordOpsEvent({

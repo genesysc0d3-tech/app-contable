@@ -25,7 +25,7 @@ describe("clasificarStartJob — el lote no revienta en cadena", () => {
   });
   it("pausa del server, ya emitida y ok se mantienen", () => {
     expect(clasificarStartJob(409, { code: "EMISION_PAUSADA" }).tipo).toBe("pausada");
-    expect(clasificarStartJob(409, { error: "PROPUESTA_YA_EMITIDA", folio: 7, boleta_id: "b" })).toEqual({ tipo: "ya_emitida", folio: 7, boletaId: "b" });
+    expect(clasificarStartJob(409, { error: "PROPUESTA_YA_EMITIDA", folio: 7, boleta_id: "b" })).toEqual({ tipo: "ya_emitida", folio: 7, boletaId: "b", boletaCreatedAt: null });
     expect(clasificarStartJob(200, { ok: true, job_id: "j", expires_at: "x", folios_hoy: [1] })).toMatchObject({ tipo: "ok", jobId: "j", foliosHoy: [1] });
   });
   it("cualquier otro rechazo → error (como antes: fallida de esa boleta)", () => {

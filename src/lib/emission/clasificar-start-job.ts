@@ -11,7 +11,7 @@
 export type ClaseStartJob =
   | { tipo: "ok"; jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
   | { tipo: "pausada"; detalle: string }
-  | { tipo: "ya_emitida"; folio: number | null; boletaId: string | null }
+  | { tipo: "ya_emitida"; folio: number | null; boletaId: string | null; boletaCreatedAt: string | null }
   | { tipo: "frenada"; motivo: string }
   | { tipo: "a_medias" }
   // 429 (12 pedidos/min por usuario): una racha de boletas saltadas sin cadencia lo
@@ -43,6 +43,7 @@ export function clasificarStartJob(status: number, json: Record<string, unknown>
       tipo: "ya_emitida",
       folio: typeof j.folio === "number" ? j.folio : null,
       boletaId: typeof j.boleta_id === "string" ? j.boleta_id : null,
+      boletaCreatedAt: typeof j.boleta_created_at === "string" ? j.boleta_created_at : null,
     };
   }
   if (status === 409 && (j.error === "REVISION_PENDIENTE" || j.error === "SIN_RESPUESTA")) {

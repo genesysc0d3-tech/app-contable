@@ -18,6 +18,9 @@ export type PropuestaEmitible =
       /** Solo en PROPUESTA_YA_EMITIDA: la boleta que ya existe. Permite a la
        *  verificación de una emisión incierta cerrarla como emitida con su folio. */
       folio?: number | null; boletaId?: string | null;
+      /** Cuándo se registró esa boleta: la verificación de un intento incierto solo la
+       *  acepta como propia si cae dentro de la ventana del intento. */
+      boletaCreatedAt?: string | null;
     };
 
 const CONSULTA_FALLIDA: PropuestaEmitible = {
@@ -31,15 +34,15 @@ const CONSULTA_FALLIDA: PropuestaEmitible = {
 export async function revisarYaEmitida(sb: Sb, propuestaId: string): Promise<PropuestaEmitible> {
   const { data, error } = await sb
     .from("boletas_emitidas")
-    .select("id, folio")
+    .select("id, folio, created_at")
     .eq("propuesta_id", propuestaId)
     .neq("estado", "anulada")
     .limit(1)
     .maybeSingle();
   if (error) return CONSULTA_FALLIDA;
   if (data) {
-    const fila = data as { id: string; folio: number | null };
-    return { ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida.", folio: fila.folio ?? null, boletaId: fila.id };
+    const fila = data as { id: string; folio: number | null; created_at?: string | null };
+    return { ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida.", folio: fila.folio ?? null, boletaId: fila.id, boletaCreatedAt: fila.created_at ?? null };
   }
   return { ok: true };
 }
