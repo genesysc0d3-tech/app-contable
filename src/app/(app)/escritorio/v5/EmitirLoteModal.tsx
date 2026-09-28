@@ -332,6 +332,20 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
   // Todas las no-emitidas por mí ya las había emitido otra persona/pestaña: no es
   // un fracaso, la cartola quedó al día (2 personas emitiendo, 2026-09-27).
   const ya = p.yaEmitidas ?? 0;
+  const enAMedias = p.yaAMedias ?? 0;
+  // Nada nuevo que emitir: lo que quedaba ya estaba emitido o en A medias.
+  if (folios.length === 0 && fallas.length === 0 && enAMedias > 0) {
+    return (
+      <>
+        <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
+        <div style={h1}>Quedaron para revisar</div>
+        <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
+          {enAMedias === 1 ? `1 ${doc} ya estaba en A medias` : `${enAMedias} ${docs} ya estaban en A medias`}{ya > 0 ? ` y ${ya} ya estaban emitidas` : ""}. No se emitió nada dos veces: revísalas en Emitir → A medias.
+        </div>
+        <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Cerrar y revisar</button>
+      </>
+    );
+  }
   if (folios.length === 0 && ya > 0 && fallas.length === 0) {
     return (
       <>
@@ -480,9 +494,9 @@ function PausadaRemota({ p, docs, onCerrar }: { p: import("@/lib/emission/lote-r
   return (
     <>
       <Badge bg="rgba(255,255,255,.05)">⏸</Badge>
-      <div style={h1}>Emisión en pausa</div>
+      <div style={h1}>{p.pausaRemota?.tipo === "frenada" ? "Emisión frenada" : "Emisión en pausa"}</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 8, lineHeight: 1.55 }}>{p.pausaRemota?.motivo ?? "Pausamos la emisión por un rato. Inténtalo de nuevo más tarde."}</div>
-      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de la pausa{(p.yaEmitidas ?? 0) > 0 ? ` (${p.yaEmitidas} ya lo estaban)` : ""}. El resto queda pendiente.</div>
+      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de {p.pausaRemota?.tipo === "frenada" ? "frenar" : "la pausa"}{(p.yaEmitidas ?? 0) > 0 ? ` (${p.yaEmitidas} ya lo estaban)` : ""}{(p.yaAMedias ?? 0) > 0 ? `; ${p.yaAMedias} en A medias` : ""}. El resto queda pendiente.</div>
       {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
       <button onClick={onCerrar} style={{ ...primaryBtn }}>Entendido</button>
     </>

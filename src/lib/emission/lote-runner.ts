@@ -89,7 +89,7 @@ export interface ProgresoLote {
   // folio (propuestaId viene en item). folio = el que se alcanzó a leer, si alguno.
   revisionPendiente: { item: ItemLote; folio: number | null } | null;
   /** Copy humano del server cuando el lote quedó en `pausada_remota`. */
-  pausaRemota: { motivo: string } | null;
+  pausaRemota: { motivo: string; tipo: "pausa" | "frenada" } | null;
   resultados: Array<{ item: ItemLote; desenlace: DesenlaceItem }>;
   folios: number[];
 }
@@ -185,7 +185,7 @@ export async function ejecutarLote(
     if (desenlace.estado === "pausada_remota" || desenlace.estado === "frenada") {
       p.subestado = null;
       p.itemActual = null;
-      p.pausaRemota = { motivo: desenlace.motivo };
+      p.pausaRemota = { motivo: desenlace.motivo, tipo: desenlace.estado === "frenada" ? "frenada" : "pausa" };
       p.fase = "pausada_remota";
       emitir();
       return p;

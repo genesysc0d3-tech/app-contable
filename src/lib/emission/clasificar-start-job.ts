@@ -14,6 +14,9 @@ export type ClaseStartJob =
   | { tipo: "ya_emitida"; folio: number | null; boletaId: string | null }
   | { tipo: "frenada"; motivo: string }
   | { tipo: "a_medias" }
+  // 429 (12 pedidos/min por usuario): una racha de boletas saltadas sin cadencia lo
+  // gatilla. No es una falla de la boleta: se espera y se reintenta.
+  | { tipo: "reintentar"; esperaMs: number }
   | { tipo: "error" };
 
 const PAUSA_DEFAULT =
@@ -28,6 +31,10 @@ function horaChile(iso: unknown): string | null {
 
 export function clasificarStartJob(status: number, json: Record<string, unknown> | null | undefined): ClaseStartJob {
   const j = json ?? {};
+  if (status === 429) {
+    const seg = typeof j.retry_after_seconds === "number" && j.retry_after_seconds > 0 ? j.retry_after_seconds : 10;
+    return { tipo: "reintentar", esperaMs: Math.min(seg, 60) * 1000 };
+  }
   if (status === 409 && j.code === "EMISION_PAUSADA") {
     return { tipo: "pausada", detalle: typeof j.detalle === "string" && j.detalle.trim() ? j.detalle : PAUSA_DEFAULT };
   }
@@ -47,6 +54,10 @@ export function clasificarStartJob(status: number, json: Record<string, unknown>
     if (bloqueo?.is_mine === false) {
       const quien = typeof bloqueo.usuario_nombre === "string" && bloqueo.usuario_nombre.trim() ? bloqueo.usuario_nombre : "Otra persona";
       return { tipo: "frenada", motivo: `${quien} está emitiendo en esta empresa. Lo que falta queda guardado: sigue cuando termine${hora ? ` (a más tardar a las ${hora})` : ""}.` };
+    }
+    if (!bloqueo) {
+      // El candado venció entre el intento y la consulta: ya no se sabe de quién era.
+      return { tipo: "frenada", motivo: "Había otra emisión abierta en esta empresa y ya se liberó. Lo que falta queda guardado: reanuda." };
     }
     return { tipo: "frenada", motivo: `Tu emisión anterior sigue abierta (otra pestaña o una boleta sin respuesta). Se libera sola${hora ? ` a las ${hora}` : " en unos minutos"}; lo que falta queda guardado para seguir.` };
   }

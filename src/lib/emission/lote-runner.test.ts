@@ -241,7 +241,7 @@ describe("pausada_remota — el server frenó la emisión (kill switch)", () => 
     let pausas = 0;
     const p = await ejecutarLote(items, driver, { alPausar: async () => { pausas += 1; return "continuar"; } });
     expect(p.fase).toBe("pausada_remota");
-    expect(p.pausaRemota).toEqual({ motivo: "Pausamos boletas." });
+    expect(p.pausaRemota).toEqual({ motivo: "Pausamos boletas.", tipo: "pausa" });
     // "b" NO cuenta como procesada: slice(procesadas) la conserva como pendiente.
     expect(p.procesadas).toBe(1);
     expect(p.emitidas).toBe(1);

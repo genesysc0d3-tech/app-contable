@@ -180,18 +180,27 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     | null;
   const startJob = useCallback(async (propuestaId: string, tipoDte: number, origin: "emision_lote" | "verificacion_lote" = "emision_lote"): Promise<StartJob> => {
     try {
-      const res = await fetch("/api/emision/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: "sii_local",
-          tipo_dte: tipoDte,
-          origin,
-          expected_emisor_rut: empresaRut ?? null,
-          propuesta_id: propuestaId,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
+      let res: Response | null = null;
+      let json: Record<string, unknown> = {};
+      // Hasta 3 intentos si el server dice 429 (racha de saltadas sin cadencia).
+      for (let intento = 0; intento < 3; intento++) {
+        res = await fetch("/api/emision/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "sii_local",
+            tipo_dte: tipoDte,
+            origin,
+            expected_emisor_rut: empresaRut ?? null,
+            propuesta_id: propuestaId,
+          }),
+        });
+        json = await res.json().catch(() => ({}));
+        const pre = clasificarStartJob(res.status, json);
+        if (pre.tipo !== "reintentar") break;
+        await new Promise((r) => setTimeout(r, pre.esperaMs));
+      }
+      if (!res) return null;
       // Clasificación pura (clasificar-start-job.ts): pausa del server, ya emitida,
       // candado / en curso (frena UNA vez), ya a medias (se salta), ok, o error.
       // El server resuelve el emisor_rut autoritativo (empresa.rut de la DB) y lo
@@ -204,6 +213,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId };
         case "frenada": return { frenada: true, motivo: c.motivo };
         case "a_medias": return { yaAMedias: true };
+        case "reintentar": return { frenada: true, motivo: "Vamos más rápido de lo que el servidor permite. Lo que falta queda guardado: reanuda en un minuto." };
         default: return null;
       }
     } catch {

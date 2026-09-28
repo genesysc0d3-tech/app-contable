@@ -109,7 +109,10 @@ export function limpiarLotePendiente(empresaId: string, mesa: MesaLote = "boleta
  * `slice(procesadas)` la dejaba PRIMERA en el rastro y "Reanudar" la re-emitía
  * aunque pudo haber salido en el SII → doble folio. Se excluye: si la pestaña muere
  * con ella en el aire, su job queda "sin respuesta" (lapida.ts) y aparece en
- * A medias; si nunca llegó a abrir job, sigue en Listas. Nunca se re-emite a ciegas.
+ * A medias; si nunca llegó a abrir job, sigue en Listas. Residual conocido (PR 5,
+ * adopción): en la verificación de una emisión incierta el intento original se
+ * cierra `failed` justo antes de abrir la verificación; si la pestaña muere en ese
+ * instante, la propuesta queda en Listas (ya no en el rastro de Reanudar).
  * Una frenada / pausa del server NO la consume ni la deja en vuelo (itemActual null):
  * esa sí se conserva.
  */

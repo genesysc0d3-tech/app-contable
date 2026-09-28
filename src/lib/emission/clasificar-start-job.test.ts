@@ -32,4 +32,13 @@ describe("clasificarStartJob — el lote no revienta en cadena", () => {
     expect(clasificarStartJob(500, { error: "PROPUESTA_CHECK_FAILED" }).tipo).toBe("error");
     expect(clasificarStartJob(402, { error: "CUOTA" }).tipo).toBe("error");
   });
+
+  it("429 (racha de saltadas) → reintentar, no fallida", () => {
+    expect(clasificarStartJob(429, { error: "RATE_LIMITED", retry_after_seconds: 7 })).toEqual({ tipo: "reintentar", esperaMs: 7000 });
+  });
+  it("candado ya vencido (bloqueo null) → motivo neutro, no 'tu emisión'", () => {
+    const r = clasificarStartJob(409, { error: "EMISION_BLOQUEADA", bloqueo: null });
+    expect(r.tipo).toBe("frenada");
+    if (r.tipo === "frenada") expect(r.motivo).not.toContain("Tu emisión anterior");
+  });
 });

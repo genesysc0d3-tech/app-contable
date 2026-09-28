@@ -1009,7 +1009,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <div className="l">
             <span className="b">{listasCount}</span> {listasCount === 1 ? "lista" : "listas"} para emitir · <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
           </div>
-          {lockedByOther && (
+          {lockedByOther && !(candadoPropio && loteOpen) && (
             <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
               <strong style={{ fontSize: 9 }}>{candadoPropio ? "Emisión abierta" : businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
             </div>
