@@ -31,6 +31,8 @@ export interface Perdida {
   descripcion: string;
   /** Celda de fecha tal como vino (solo descartes del lector). */
   fecha_cruda?: string | null;
+  /** El cliente la agregó a la mesa desde el visor (botón "Agregarlos"). */
+  agregada?: { movimiento_id: string; en: string };
 }
 
 export interface CuadreCartola {
