@@ -16,6 +16,7 @@ function fakeSb(respuestas: { boletas?: Resp; revision?: Resp; vuelo?: Resp }) {
         neq: () => q,
         in: () => q,
         gt: () => q,
+        order: () => q,
         limit: () => q,
         async maybeSingle(): Promise<Resp> {
           const cual = table === "boletas_emitidas" ? "boletas" : "vuelo";

@@ -25,10 +25,25 @@ export function esLapidaEfectiva(job: JobParaLapida, ahora: Date = new Date()): 
   if (!job.propuesta_id) return null; // boleta única: su reja es el candado
   if (job.estado === "revision_pendiente") return "a_medias";
   if (job.estado !== "created" && job.estado !== "running") return null;
-  if (job.created_at < SIN_RESPUESTA_DESDE) return null;
+  // Date.parse, no strings: PostgREST devuelve "+00:00" y fracciones de segundo.
+  if (Date.parse(job.created_at) < Date.parse(SIN_RESPUESTA_DESDE)) return null;
   if (!job.expires_at) return null;
   return Date.parse(job.expires_at) <= ahora.getTime() ? "sin_respuesta" : null;
 }
 
 /** Estados que hay que traer para juzgar lápidas. */
 export const ESTADOS_LAPIDA = ["revision_pendiente", "created", "running"] as const;
+
+/**
+ * ¿Se puede ofrecer "No está en el SII" (salida humana) sobre esta lápida?
+ * Una SIN RESPUESTA recién vencida puede seguir viva (ventana del SII tapada, rAF
+ * dormido): la regla dura bloquea re-emitir desde el segundo que vence, pero la
+ * salida humana espera 30 min más para no devolver a Listas algo que aún trabaja.
+ */
+export const DECLARAR_SIN_RESPUESTA_TRAS_MS = 30 * 60 * 1000;
+export function puedeDeclararNoSalio(job: JobParaLapida, ahora: Date = new Date()): boolean {
+  const motivo = esLapidaEfectiva(job, ahora);
+  if (motivo === "a_medias") return true;
+  if (motivo === "sin_respuesta") return Date.parse(job.expires_at as string) + DECLARAR_SIN_RESPUESTA_TRAS_MS <= ahora.getTime();
+  return false;
+}

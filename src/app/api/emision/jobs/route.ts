@@ -642,7 +642,11 @@ export async function DELETE(request: Request) {
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
   // Con propuesta (job del lote), un `cancelled` se sella como lápida: pudo haber
   // apretado EMITIR (riesgo C, ver cierre-seguro.ts).
-  const estado = estadoCierreSeguro(cleanCloseEstado(payload.estado), job);
+  const pedido = cleanCloseEstado(payload.estado);
+  // Solo sobre jobs ABIERTOS: un `cancelled` tardío sobre un job ya cerrado `failed`
+  // (pre-emit seguro / verificado "no salió") no debe volverse una lápida espuria.
+  const abierto = job.estado === "created" || job.estado === "running";
+  const estado = abierto ? estadoCierreSeguro(pedido, job) : pedido;
   // Idempotencia + no re-procesar, CON una excepción crítica: la carrera
   // CAPTURE_DEBUG puede sellar 'failed' un job que en verdad emitió (evidencia
   // débil post-EMITIR). Un terminal PERMISIVO ('failed'/'cancelled'/'expired')

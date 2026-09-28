@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { ESTADOS_LAPIDA, esLapidaEfectiva } from "@/lib/emission/lapida";
+import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -665,6 +665,15 @@ export async function POST(request: Request) {
     } catch { /* columnas sin migrar o fallo puntual: la telemetría espera */ }
   }
 
+  // Declaraciones HUMANAS (folio a mano / "no está en el SII"): exigen el mismo rol de
+  // emisión y no estar vetado que el resto de la ruta (antes solo exigían ser dueño
+  // del job: un usuario vetado o degradado podía devolver boletas a Listas).
+  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true) {
+    const { data: uDecl } = await sb.from("usuarios").select("rol, vetado").eq("id", user.id).maybeSingle();
+    if (!uDecl || uDecl.vetado) return NextResponse.json({ ok: false, error: "USUARIO_BLOQUEADO" }, { status: 403 });
+    if (!ROLES_EMISION.has(String(uDecl.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
+  }
+
   // ── RESCATE MANUAL DEL FOLIO ────────────────────────────────────────────
   // El RPA emitió (hay folio real en el SII) pero no capturó la pantalla: el
   // job quedó con lápida y "Recuperar folio" no tiene nada que rescatar. Acá
@@ -791,6 +800,12 @@ export async function POST(request: Request) {
     if (!jobDecl.propuesta_id || esLapidaEfectiva(jobDecl) === null) {
       return NextResponse.json({ ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no está a medias." }, { status: 409 });
     }
+    if (!puedeDeclararNoSalio(jobDecl)) {
+      return NextResponse.json(
+        { ok: false, error: "MUY_PRONTO", detalle: "Esta boleta quedó sin respuesta hace poco y el SII podría seguir procesándola. Espera unos minutos y revísala de nuevo." },
+        { status: 409 },
+      );
+    }
     const { data: boletaVigente, error: errBol } = await sb
       .from("boletas_emitidas")
       .select("id, folio")
@@ -813,14 +828,35 @@ export async function POST(request: Request) {
     if (errLap) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
     const ahoraDecl = new Date();
     const aCerrar = (lapidasProp ?? []).filter((j) => esLapidaEfectiva(j, ahoraDecl) !== null).map((j) => j.job_id);
+    // Si el server YA tiene un folio capturado para alguno de esos intentos (stash de
+    // la extensión), la boleta salió: no se puede declarar "no salió" (doble folio).
+    if (aCerrar.length > 0) {
+      const { data: conFolio, error: errRes } = await sb
+        .from("sii_local_resultados")
+        .select("folio")
+        .in("job_id", aCerrar)
+        .not("folio", "is", null)
+        .limit(1);
+      if (errRes) return NextResponse.json({ ok: false, error: "RESULTADOS_QUERY_FAILED" }, { status: 500 });
+      if ((conFolio ?? []).length > 0) {
+        return NextResponse.json(
+          { ok: false, error: "FOLIO_CAPTURADO", detalle: `El SII devolvió el folio ${conFolio![0].folio} para este intento: la boleta sí salió. Regístrala con ese folio.` },
+          { status: 409 },
+        );
+      }
+    }
     const mensaje = "Declarado por la persona: revisó el SII y la boleta no salió";
     // Directo a la tabla, NO por releaseCuentaEmissionLock: su guard prohíbe (a
     // propósito) bajar una lápida a `failed`; esta es la única puerta que lo permite,
     // y solo con la declaración humana. El candado del lote ya se soltó al sellarla.
+    // Re-filtra por estado en el UPDATE: si entre el select y acá llegó un resultado
+    // (lift → completed) o un latido revivió el job, no se pisa.
+    const ahoraIso = ahoraDecl.toISOString();
     const { error: errUpd } = await sb
       .from("emision_jobs")
-      .update({ estado: "failed", estado_visible: "failed", status_message: mensaje, updated_at: ahoraDecl.toISOString() })
-      .in("job_id", aCerrar);
+      .update({ estado: "failed", estado_visible: "failed", status_message: mensaje, updated_at: ahoraIso })
+      .in("job_id", aCerrar)
+      .or(`estado.eq.revision_pendiente,and(estado.in.(created,running),expires_at.lt.${ahoraIso})`);
     if (errUpd) return NextResponse.json({ ok: false, error: "DECLARACION_FALLIDA", detalle: errUpd.message }, { status: 500 });
     await recordOpsEvent({
       sb,

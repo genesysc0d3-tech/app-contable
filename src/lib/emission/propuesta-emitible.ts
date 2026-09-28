@@ -54,7 +54,8 @@ async function revisarLapida(sb: Sb, propuestaId: string, ahora: Date = new Date
     .select("estado, propuesta_id, expires_at, created_at")
     .eq("propuesta_id", propuestaId)
     .in("estado", [...ESTADOS_LAPIDA])
-    .limit(20);
+    .order("created_at", { ascending: false })
+    .limit(50);
   if (error) return CONSULTA_FALLIDA;
   const motivos = ((data ?? []) as JobParaLapida[]).map((j) => esLapidaEfectiva(j, ahora));
   if (motivos.includes("a_medias")) {

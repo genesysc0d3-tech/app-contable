@@ -853,7 +853,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 <div className="inf">
                   <div className="tt">{it.receptor_nombre || it.descripcion || "Sin nombre"}</div>
                   <div className="sub">
-                    {formatShortDateEsCl(it.fecha, true)}{it.documento_nombre ? ` · ${it.documento_nombre}` : ""} · {it.motivo === "sin_respuesta" ? "el SII no respondió" : "quedó a medias"} el {formatShortDateEsCl(it.lapida_at.slice(0, 10))} a las {horaChile(it.lapida_at)}
+                    {formatShortDateEsCl(it.fecha, true)}{it.documento_nombre ? ` · ${it.documento_nombre}` : ""} · {it.motivo === "sin_respuesta" ? "no tuvimos respuesta" : "quedó a medias"} el {formatShortDateEsCl(it.lapida_at)} a las {horaChile(it.lapida_at)}
                   </div>
                 </div>
                 <div className="mo">{fmt(it.monto_total)}</div>
@@ -866,7 +866,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                     {guardandoFolio === it.id ? "Guardando…" : "Guardar folio"}
                   </button>
                   <button type="button" onClick={() => void declararNoSalioAMedias(it)} disabled={declarando === it.id}
-                    title={`Revisaste el SII del ${formatShortDateEsCl(it.lapida_at.slice(0, 10))} cerca de las ${horaChile(it.lapida_at)} y no hay una boleta de ${fmt(it.monto_total)}`}
+                    title={`Revisaste el SII del ${formatShortDateEsCl(it.lapida_at)} cerca de las ${horaChile(it.lapida_at)} y no hay una boleta de ${fmt(it.monto_total)}`}
                     style={{ height: 28, fontSize: 11, fontWeight: 700, color: armadoNoSalio === it.id ? "#fff" : "var(--text2)", background: armadoNoSalio === it.id ? "var(--amber, #f59e0b)" : "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", cursor: "pointer", opacity: declarando === it.id ? 0.5 : 1 }}>
                     {declarando === it.id ? "Marcando…" : armadoNoSalio === it.id ? "¿Seguro? Revisé y no está" : "No está en el SII"}
                   </button>

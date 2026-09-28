@@ -1,4 +1,4 @@
-import { ESTADOS_LAPIDA, esLapidaEfectiva, type MotivoLapida } from "@/lib/emission/lapida";
+import { esLapidaEfectiva, SIN_RESPUESTA_DESDE, type MotivoLapida } from "@/lib/emission/lapida";
 import type { createClient } from "@/lib/supabase/server";
 import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
@@ -121,7 +121,9 @@ export async function getPendientesEmision(
       .from("emision_jobs")
       .select("job_id, propuesta_id, created_at, estado, expires_at")
       .eq("empresa_id", empresaId)
-      .in("estado", [...ESTADOS_LAPIDA])
+      // Filtro en SQL (no solo en JS): los created/running viejos, anteriores al corte o
+      // aún vivos, no deben ocupar la ventana y dejar fuera una revision_pendiente.
+      .or(`estado.eq.revision_pendiente,and(estado.in.(created,running),created_at.gte.${SIN_RESPUESTA_DESDE},expires_at.lt.${new Date().toISOString()})`)
       .not("propuesta_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(120);
