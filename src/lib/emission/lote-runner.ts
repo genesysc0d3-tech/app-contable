@@ -45,7 +45,12 @@ export type DesenlaceItem =
   // ítem NO se consumió (no cuenta como procesado, queda pendiente para reanudar)
   // y el lote se detiene en seco: seguir sería estrellar cada boleta contra la
   // misma pausa. `motivo` es el copy humano que ya viene del server.
-  | { estado: "pausada_remota"; motivo: string };
+  | { estado: "pausada_remota"; motivo: string }
+  // ya_emitida = el server contestó 409 PROPUESTA_YA_EMITIDA ANTES de abrir job:
+  // otra persona/pestaña ya emitió esta boleta (2 personas emitiendo la misma
+  // empresa, 2026-09-27). No hay ventana ni folio nuevo: se cuenta y se SIGUE sin
+  // pedir decisión humana (antes caía en "fallida" y pausaba el lote boleta a boleta).
+  | { estado: "ya_emitida"; motivo: string };
 
 export type FaseLote =
   | "preparando"
@@ -61,8 +66,9 @@ export type MotivoPausa = "error" | "tope";
 
 export interface ProgresoLote {
   total: number;
-  procesadas: number; // emitidas + fallidas + revision
+  procesadas: number; // emitidas + fallidas + revision + yaEmitidas
   emitidas: number;
+  yaEmitidas: number; // saltadas porque otra persona ya las emitió (sin pausa)
   fallidas: number;
   revision: number; // boletas "a medias" que frenaron el lote
   indiceActual: number; // 0-based; -1 antes de empezar
@@ -122,6 +128,7 @@ export async function ejecutarLote(
     total: items.length,
     procesadas: 0,
     emitidas: 0,
+    yaEmitidas: 0,
     fallidas: 0,
     revision: 0,
     indiceActual: -1,
@@ -183,6 +190,8 @@ export async function ejecutarLote(
       emitidasDesdeTope += 1;
     } else if (desenlace.estado === "revisar") {
       p.revision += 1;
+    } else if (desenlace.estado === "ya_emitida") {
+      p.yaEmitidas += 1;
     } else {
       p.fallidas += 1;
     }
@@ -237,7 +246,8 @@ export async function ejecutarLote(
     }
 
     // ── Cadencia humana antes de la próxima ────────────────────────────────────
-    if (!esUltima) {
+    // Una "ya emitida" no tocó el portal: no hay nada que espaciar.
+    if (!esUltima && desenlace.estado !== "ya_emitida") {
       if (detenido()) {
         p.fase = "detenida";
         emitir();

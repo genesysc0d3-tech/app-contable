@@ -4,6 +4,7 @@ import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { revisarPropuestaEmitible, revisarYaEmitida } from "@/lib/emission/propuesta-emitible";
 import { buildVisibleEmissionLock, type ActiveEmissionLock } from "@/lib/emission/lock-visibility";
 import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
@@ -362,40 +363,10 @@ export async function POST(request: Request) {
     // CANDADO ANTI-DOBLE-FOLIO — fail-closed ANTES de tocar el portal (defensa
     // temprana; el lock por cuenta y el UNIQUE de boletas_emitidas son las redes
     // duras posteriores). El carril mock ya hace este chequeo; el real faltaba.
-    // (a) ¿la propuesta YA tiene boleta vigente? (carrera única↔lote / 2 pestañas)
-    const { data: yaBoleta } = await guard.service
-      .from("boletas_emitidas")
-      .select("id")
-      .eq("propuesta_id", propuestaId)
-      .neq("estado", "anulada")
-      .limit(1)
-      .maybeSingle();
-    if (yaBoleta) {
-      return NextResponse.json({ ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida." }, { status: 409 });
-    }
-    // (b1) ¿quedó "a medias" (lápida)? Bloqueo INCONDICIONAL hasta recuperar el folio.
-    const { data: enRevision } = await guard.service
-      .from("emision_jobs")
-      .select("job_id")
-      .eq("propuesta_id", propuestaId)
-      .eq("estado", "revision_pendiente")
-      .limit(1)
-      .maybeSingle();
-    if (enRevision) {
-      return NextResponse.json({ ok: false, error: "REVISION_PENDIENTE", detalle: "Esta boleta quedó a medias en el SII. Recupera su folio antes de re-emitir." }, { status: 409 });
-    }
-    // (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
-    // bloquear una propuesta para siempre si un intento crasheó pre-emit.
-    const { data: enVuelo } = await guard.service
-      .from("emision_jobs")
-      .select("job_id")
-      .eq("propuesta_id", propuestaId)
-      .in("estado", ["created", "running"])
-      .gt("expires_at", new Date().toISOString())
-      .limit(1)
-      .maybeSingle();
-    if (enVuelo) {
-      return NextResponse.json({ ok: false, error: "EMISION_EN_CURSO", detalle: "Ya hay una emisión en curso para esta boleta." }, { status: 409 });
+    // Un error de consulta RECHAZA (antes se saltaba el control: falla abierta).
+    const emitible = await revisarPropuestaEmitible(guard.service, propuestaId);
+    if (!emitible.ok) {
+      return NextResponse.json({ ok: false, error: emitible.error, detalle: emitible.detalle }, { status: emitible.status });
     }
 
     // GATE DE CUOTA DEL PLAN (crítica #1 de la auditoría). Las masivas (con
@@ -492,6 +463,18 @@ export async function POST(request: Request) {
       metadata: { provider, tipo_dte: tipoDte, error: lock.error, detalle: lock.detalle },
     });
     return NextResponse.json({ ok: false, error: lock.error, detalle: lock.detalle }, { status: 500 });
+  }
+
+  // RE-CHEQUEO "ya emitida" CON EL CANDADO TOMADO (2026-09-28). El chequeo de
+  // arriba corre sin candado: dos personas emitiendo la misma empresa ("Marge y
+  // yo") pueden pasar ambas el chequeo y la segunda tomar el candado justo cuando
+  // la primera ya guardó su boleta. Con el candado en mano la foto es firme.
+  if (propuestaId) {
+    const ya = await revisarYaEmitida(guard.service, propuestaId);
+    if (!ya.ok) {
+      await releaseCuentaEmissionLock({ sb: guard.service, cuentaId: guard.cuentaId, jobId: lock.jobId, estado: "cancelled" });
+      return NextResponse.json({ ok: false, error: ya.error, detalle: ya.detalle }, { status: ya.status });
+    }
   }
 
   let reservedFolio: number | null = null;

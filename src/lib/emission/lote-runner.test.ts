@@ -251,3 +251,23 @@ describe("pausada_remota — el server frenó la emisión (kill switch)", () => 
     expect(log.filter((l) => l.startsWith("emitir:"))).toEqual(["emitir:a", "emitir:b"]);
   });
 });
+
+describe("ejecutarLote — ya emitida por otra persona (2026-09-28)", () => {
+  const yaEmitida = (): DesenlaceItem => ({ estado: "ya_emitida", motivo: "otra persona" });
+
+  it("NO pausa pidiendo decisión, cuenta aparte y sigue con la próxima", async () => {
+    const { driver, log } = fakeDriver([emitida(1), yaEmitida(), emitida(2)]);
+    const pausas: MotivoPausa[] = [];
+    const p = await ejecutarLote([item("a"), item("b"), item("c")], driver, {
+      alPausar: async (m) => { pausas.push(m); return "detener"; },
+    });
+    expect(pausas).toEqual([]);
+    expect(p.fase).toBe("terminada");
+    expect(p.emitidas).toBe(2);
+    expect(p.yaEmitidas).toBe(1);
+    expect(p.fallidas).toBe(0);
+    expect(p.procesadas).toBe(3);
+    // Sin cadencia tras la ya emitida: no tocó el portal.
+    expect(log).toEqual(["emitir:a", "esperar:4250", "emitir:b", "emitir:c"]);
+  });
+});

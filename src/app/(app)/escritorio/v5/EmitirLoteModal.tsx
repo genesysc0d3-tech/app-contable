@@ -326,6 +326,22 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
   // HONESTIDAD DEL CIERRE (cazado en vivo 2026-08-27): con TODO fallido el
   // modal decía "Listo ✅ 0 emitidas" — un check verde sobre un fracaso total
   // (p. ej. lock de cuenta tomado). Cero emitidas = advertencia con el motivo.
+  // Todas las no-emitidas por mí ya las había emitido otra persona/pestaña: no es
+  // un fracaso, la cartola quedó al día (2 personas emitiendo, 2026-09-27).
+  const ya = p.yaEmitidas ?? 0;
+  if (folios.length === 0 && ya > 0 && fallas.length === 0) {
+    return (
+      <>
+        <Badge bg="rgba(34,197,94,.13)">✅</Badge>
+        <div style={h1}>Ya estaban emitidas</div>
+        <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
+          {ya === 1 ? `Esta ${doc} ya la había emitido otra persona o pestaña.` : `Estas ${ya} ${docs} ya las había emitido otra persona o pestaña.`} No se emitió nada dos veces.
+        </div>
+        <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Ver en el historial</button>
+      </>
+    );
+  }
+
   if (folios.length === 0) {
     return (
       <>
@@ -345,7 +361,7 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
       <Badge bg="rgba(34,197,94,.13)">✅</Badge>
       <div style={h1}>Listo</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? `${doc} emitida` : `${docs} emitidas`} y guardadas.</div>
-      {chips([{ l: "Folios", v: rango }, ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
+      {chips([{ l: "Folios", v: rango }, ...(ya > 0 ? [{ l: "Ya emitidas", v: `${ya}` }] : []), ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
       {/* Feedback real 2026-09-23: "41 aprobadas, 40 emitidas, no encontré la que
           falta". La saltada sigue aprobada y en Listas dentro de su cartola — hay
           que DECIRLO, no dejar que la cuenten restando montos contra el SII. */}
