@@ -3,11 +3,14 @@
 import { useState, useMemo } from "react";
 import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import { normalizarRef } from "@/lib/emission/ref-emision";
 import { chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
 export interface BoletaRow {
   id: string; folio: number | null; tipo_dte: number; fecha_emision: string; created_at?: string | null;
   receptor_razon_social: string | null; monto_total: number; estado: string;
+  /** ID interno R-XXX-XXX (soporte / "para no perderse"); null en boletas antiguas. */
+  ref?: string | null;
 }
 
 function fmt(n: number) { return `$${Math.round(n).toLocaleString("es-CL")}`; }
@@ -35,7 +38,10 @@ export default function BoletasMensualesView({ boletas, month, year }: {
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
+    // Por ID interno: "r-7f3-kx9", "7F3KX9" o dictado con espacios.
+    const refBuscada = normalizarRef(search);
     return boletas.filter(b => {
+      if (refBuscada && b.ref === refBuscada) return true;
       const folio = String(b.folio ?? "");
       const receptor = (b.receptor_razon_social ?? "").toLowerCase();
       const monto = fmt(b.monto_total).toLowerCase();
@@ -120,15 +126,15 @@ export default function BoletasMensualesView({ boletas, month, year }: {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "58px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center", padding: "7px 10px", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
-            <span>Folio</span><span>Tipo</span><span>Receptor</span><span>Estado</span><span>Emisión SII</span><span>Edición/Subida</span><span style={{ textAlign: "right" }}>Monto</span><span />
+          <div style={{ display: "grid", gridTemplateColumns: "58px 76px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center", padding: "7px 10px", color: "var(--text2)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <span>Folio</span><span>Ref.</span><span>Tipo</span><span>Receptor</span><span>Estado</span><span>Emisión SII</span><span>Edición/Subida</span><span style={{ textAlign: "right" }}>Monto</span><span />
           </div>
           {displayed.map(b => {
             const anulada = b.estado === "anulada";
             const badge = TIPO_BADGE[b.tipo_dte] ?? { label: `DTE ${b.tipo_dte}`, color: "var(--text2)", bg: "var(--bg-muted)" };
             return (
               <div key={b.id} style={{
-                display: "grid", gridTemplateColumns: "58px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center",
+                display: "grid", gridTemplateColumns: "58px 76px 62px minmax(150px,1fr) 78px 82px 82px 70px 58px", gap: 8, alignItems: "center",
                 padding: "8px 10px", borderRadius: 6,
                 background: anulada ? "rgba(239,68,68,.02)" : "rgba(255,255,255,.02)",
                 border: "1px solid var(--border)", opacity: anulada ? .5 : 1,
@@ -136,6 +142,7 @@ export default function BoletasMensualesView({ boletas, month, year }: {
                 <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text2)", minWidth: 30, fontVariantNumeric: "tabular-nums" }}>
                   #{b.folio}
                 </span>
+                <RefChip ref_={b.ref ?? null} />
                 <span style={{
                   fontSize: 7, padding: "1px 5px", borderRadius: 3, fontWeight: 700,
                   background: badge.bg, color: badge.color, flexShrink: 0,
@@ -167,5 +174,18 @@ export default function BoletasMensualesView({ boletas, month, year }: {
         </div>
       )}
     </div>
+  );
+}
+
+/** ID interno con botón copiar (para dictarlo a soporte o buscarlo). "—" en boletas antiguas. */
+function RefChip({ ref_ }: { ref_: string | null }) {
+  const [copiado, setCopiado] = useState(false);
+  if (!ref_) return <span style={{ fontSize: 10, color: "var(--text3)" }}>—</span>;
+  return (
+    <button type="button" title="Copiar ID" aria-label={`Copiar ID ${ref_}`}
+      onClick={() => { void navigator.clipboard?.writeText(ref_).then(() => { setCopiado(true); window.setTimeout(() => setCopiado(false), 1200); }).catch(() => {}); }}
+      style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 9.5, fontWeight: 650, color: copiado ? "var(--green, #22c55e)" : "var(--text2)", background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left", letterSpacing: ".02em", fontVariantNumeric: "tabular-nums" }}>
+      {copiado ? "Copiado" : ref_}
+    </button>
   );
 }

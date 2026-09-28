@@ -485,6 +485,24 @@ export async function POST(request: Request) {
     }
   }
 
+  // ID interno R-XXX-XXX (2026-09-28): uno por propuesta; el reintento reusa el mismo.
+  // Para soporte y para que la clienta no se pierda; NO va a la boleta del SII.
+  // Best-effort TOTAL: sin la migración aplicada o si falla, la emisión sigue igual.
+  let refEmision: string | null = null;
+  if (propuestaId) {
+    try {
+      const { data: refData, error: refErr } = await guard.service.rpc("emision_ref_nueva", {
+        p_empresa_id: guard.empresaId,
+        p_propuesta_id: propuestaId,
+        p_tipo_dte: tipoDte,
+      });
+      if (!refErr && typeof refData === "string") {
+        refEmision = refData;
+        await guard.service.from("emision_jobs").update({ ref: refEmision }).eq("job_id", lock.jobId);
+      }
+    } catch { /* best-effort */ }
+  }
+
   let reservedFolio: number | null = null;
   if (provider === "simpleapi") {
     const reserva = await reserveSimpleApiFolio({
@@ -550,6 +568,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     job_id: lock.jobId,
+    ref: refEmision,
     expires_at: lock.lockedUntil,
     locked_until: lock.lockedUntil,
     cuenta_id: guard.cuentaId,

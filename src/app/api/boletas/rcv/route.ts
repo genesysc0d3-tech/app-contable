@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await guard.service
     .from("boletas_emitidas")
-    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
+    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado,ref")
     .eq("empresa_id", guard.empresaId)
     .gte("fecha_emision", range.start)
     .lt("fecha_emision", range.end)
