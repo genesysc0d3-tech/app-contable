@@ -53,6 +53,64 @@ export function inferirAnioPista(rows: Row[]): number | null {
 }
 
 /**
+ * Rango de fechas COMPLETAS de la hoja (cabecera "FECHA DESDE / HASTA", filas
+ * con año, Date de cellDates). Sirve para dar año a las fechas "dd/mm": una
+ * cartola dic–ene tiene "20/12" (año anterior) y "05/01" (año siguiente) en la
+ * misma hoja, y un único año pista corría una de las dos.
+ */
+export interface RangoFechas { min: string; max: string }
+export function inferirRangoFechas(rows: Row[]): RangoFechas | null {
+  let min: string | null = null; let max: string | null = null;
+  const suma = (y: number, m: number, d: number) => {
+    if (y < 2000 || y > 2100 || !esFechaCalendario(y, m, d)) return;
+    const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (min == null || iso < min) min = iso;
+    if (max == null || iso > max) max = iso;
+  };
+  const n = (x: string) => parseInt(x, 10);
+  for (const r of rows) {
+    for (const cell of r ?? []) {
+      if (cell == null) continue;
+      const asDate = cell as unknown;
+      if (asDate instanceof Date) {
+        if (!Number.isNaN(asDate.getTime())) suma(asDate.getFullYear(), asDate.getMonth() + 1, asDate.getDate());
+        continue;
+      }
+      const t = String(cell).trim();
+      // Al inicio de la celda, o tras "desde/hasta" ("FECHA DESDE: 15/12/2025").
+      const reDmy = /(?:^|\b(?:desde|hasta)\s*:?\s*)(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/gi;
+      let hit = false;
+      for (const m of t.matchAll(reDmy)) { suma(n(m[3]), n(m[2]), n(m[1])); hit = true; }
+      if (hit) continue;
+      let m = t.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      if (m) { suma(n(m[1]), n(m[2]), n(m[3])); continue; }
+      m = t.match(/^(20\d{2})(\d{2})(\d{2})$/);
+      if (m) suma(n(m[1]), n(m[2]), n(m[3]));
+    }
+  }
+  return min != null && max != null ? { min, max } : null;
+}
+
+/**
+ * Año para "dd/mm" según el rango de la hoja: entre (año min − 1) y (año max + 1)
+ * gana el que deja la fecha dentro del rango o, si ninguno, más cerca de él.
+ * Empate → el año menor (el pasado es más creíble que el futuro).
+ */
+function anioSegunRango(mm: number, dd: number, rango: RangoFechas): number | null {
+  const [y0, m0, d0] = rango.min.split("-").map(Number);
+  const [y1, m1, d1] = rango.max.split("-").map(Number);
+  const lo = Date.UTC(y0, m0 - 1, d0); const hi = Date.UTC(y1, m1 - 1, d1);
+  let mejor: number | null = null; let mejorDist = Infinity;
+  for (let y = y0 - 1; y <= y1 + 1; y++) {
+    if (!esFechaCalendario(y, mm, dd)) continue;
+    const f = Date.UTC(y, mm - 1, dd);
+    const dist = f < lo ? lo - f : f > hi ? f - hi : 0;
+    if (dist < mejorDist) { mejor = y; mejorDist = dist; }
+  }
+  return mejor;
+}
+
+/**
  * ¿Día/mes/año forman una fecha REAL del calendario? Sin rollover: 31/02,
  * 29/02 en año no bisiesto, mes 13 o día 0/32 NO son fechas (JS Date las
  * "arregla" corriéndolas al mes siguiente, que es justo lo que no queremos).
@@ -90,6 +148,7 @@ export function parseFechaCartola(
   format: AdapterConfig["date_format"],
   anioPista?: number | null,
   ahora: Date = new Date(),
+  rango?: RangoFechas | null,
 ): FechaCartola {
   if (v == null) return { ok: false, motivo: "fecha_ilegible" };
   const s = String(v).trim();
@@ -110,6 +169,10 @@ export function parseFechaCartola(
   if (mSinAnio) {
     const dd = parseInt(mSinAnio[1], 10); const mm = parseInt(mSinAnio[2], 10);
     if (!(dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12)) return { ok: false, motivo: "fecha_imposible" };
+    if (rango) {
+      const yr = anioSegunRango(mm, dd, rango);
+      return yr == null ? { ok: false, motivo: "fecha_imposible" } : isoSiReal(yr, mm, dd);
+    }
     let y = anioPista ?? ahora.getFullYear();
     if (anioPista == null) {
       const candidata = new Date(y, mm - 1, dd).getTime();
@@ -219,7 +282,10 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: Descar
   const { columns: c } = cfg;
   const layout = cfg.layout ?? "two_cols";
   const start = cfg.skip_rows_before_data;
-  const anioPista = inferirAnioPista(rows);
+  // "dd/mm" sin año: con fechas completas en la hoja, el año sale del rango
+  // DESDE–HASTA (cruce dic–ene); sin ninguna, año actual con tope de 7 días
+  // al futuro. (El año pista único corría una de las dos puntas del cruce.)
+  const rango = inferirRangoFechas(rows);
   // Pasada una fila "Resumen/Total/Saldo", lo que sigue es el bloque de
   // resumen del banco (BICE: "RESUMEN DEL PERIODO", "TOTAL ABONOS", "SALDO FINAL").
   let bloqueResumen = false;
@@ -276,7 +342,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: Descar
       // (incluye yyyymmdd y dd/mm sin año). "32/13/2026" o "31/02/2026" no se
       // corren al mes siguiente: van al censo como fecha_imposible, y el cuadre
       // las muestra como perdidas en vez de meter un movimiento con fecha falsa.
-      const f = parseFechaCartola(fechaStr, cfg.date_format, anioPista);
+      const f = parseFechaCartola(fechaStr, cfg.date_format, null, new Date(), rango);
       if (!f.ok) { descartar(f.motivo, null, null); continue; }
       fechaStr = f.iso;
     }

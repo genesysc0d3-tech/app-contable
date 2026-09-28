@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyAdapter, esFechaCalendario, normalizeDate, parseFechaCartola } from "./apply";
+import { applyAdapter, esFechaCalendario, inferirRangoFechas, normalizeDate, parseFechaCartola } from "./apply";
+import { validate } from "./validator";
 import { calcularCuadre } from "@/lib/cartola/cuadre";
 import type { AdapterConfig, DescarteFila, Row } from "./types";
 
@@ -101,5 +102,67 @@ describe("applyAdapter — una fecha imposible va al censo, no a la mesa", () =>
     expect(cuadre.ok).toBe(false);
     expect(cuadre.perdidas).toEqual([expect.objectContaining({ excel_row: 3, motivo: "fecha_imposible", monto: 5000 })]);
     expect(cuadre.monto_perdido).toBe(5000);
+  });
+});
+
+// Revisión adversarial B1: sacar las filas de fecha absurda antes de validar
+// NO puede anular el check 2b (incidente M&E: columna de montos mapeada como
+// fecha → seriales de Excel que caen en 2042, 2067, 2099).
+describe("check 2b sigue viendo la columna mal mapeada (M&E)", () => {
+  const rowsME: Row[] = [
+    ["Fecha", "Glosa", "Cargo", "Abono"],
+    [46242, "a", "", "10.000"],
+    [52000, "b", "", "11.000"],
+    [61000, "c", "", "12.000"],
+    [73000, "d", "", "13.000"],
+    [45000, "e", "", "14.000"],
+    [46243, "f", "", "15.000"],
+    [46244, "g", "", "16.000"],
+    [46245, "h", "", "17.000"],
+    [46246, "i", "", "18.000"],
+    [46247, "j", "", "19.000"],
+  ];
+  it("los descartes por fecha fuera de rango cuentan para rechazar la capa", () => {
+    const descartes: DescarteFila[] = [];
+    const lines = applyAdapter(rowsME, cfg, descartes);
+    expect(lines).toHaveLength(7);
+    expect(descartes.filter((d) => d.motivo === "fecha_fuera_de_rango")).toHaveLength(3);
+    const v = validate(lines, rowsME, cfg, descartes);
+    expect(v.ok).toBe(false);
+    expect(v.errors.join(" ")).toMatch(/check_2b_fechas_absurdas: 3\/10/);
+  });
+  it("un dedazo suelto en una cartola normal no tumba la capa", () => {
+    const rows: Row[] = [["Fecha", "Glosa", "Cargo", "Abono"]];
+    for (let d = 1; d <= 9; d++) rows.push([`0${d}/09/2026`, `m${d}`, "", `${d}0.000`]);
+    rows.push(["32/09/2026", "dedazo", "", "5.000"]);
+    const descartes: DescarteFila[] = [];
+    const lines = applyAdapter(rows, cfg, descartes);
+    const v = validate(lines, rows, cfg, descartes);
+    expect(v.errors.filter((e) => e.startsWith("check_2b"))).toEqual([]);
+  });
+});
+
+// Revisión adversarial B2: "dd/mm" sin año en una cartola que cruza el año.
+// El año sale del rango DESDE–HASTA de la hoja, no de un único año pista.
+describe("dd/mm sin año en cartola dic–ene", () => {
+  const cfgSinAnio: AdapterConfig = { ...cfg, skip_rows_before_data: 2, date_format: "unknown" };
+  const fechas = (cabecera: Row) => applyAdapter([
+    cabecera,
+    ["Fecha", "Glosa", "Cargo", "Abono"],
+    ["20/12", "diciembre", "", "1.000"],
+    ["05/01", "enero", "", "2.000"],
+  ], cfgSinAnio).map((l) => l.fecha);
+
+  it("DESDE 15/12/2024 HASTA 14/01/2025 → 2024-12-20 y 2025-01-05", () => {
+    expect(fechas(["FECHA DESDE", "15/12/2024", "HASTA", "14/01/2025"])).toEqual(["2024-12-20", "2025-01-05"]);
+    expect(fechas(["FECHA DESDE 15/12/2025 HASTA 14/01/2026", "", "", ""])).toEqual(["2025-12-20", "2026-01-05"]);
+  });
+  it("solo HASTA 14/01/2026 → 20/12 es del año anterior, no del futuro", () => {
+    expect(fechas(["HASTA", "14/01/2026", "", ""])).toEqual(["2025-12-20", "2026-01-05"]);
+  });
+  it("inferirRangoFechas toma min y max de las fechas completas", () => {
+    expect(inferirRangoFechas([["FECHA DESDE: 15/12/2025", "14/01/2026"], ["02/09", "x"]]))
+      .toEqual({ min: "2025-12-15", max: "2026-01-14" });
+    expect(inferirRangoFechas([["02/09", "x", 1000]])).toBeNull();
   });
 });
