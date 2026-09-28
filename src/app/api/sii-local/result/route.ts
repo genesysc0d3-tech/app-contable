@@ -1306,7 +1306,12 @@ export async function POST(request: Request) {
   // Rama FELIZ: la boleta ya está guardada; este registro solo alimenta el historial,
   // así que va después de responder (plan-costo-vercel §6 PR 3). Las ramas de FALLA
   // siguen síncronas: son el STASH que usa recover_latest para rescatar el folio.
-  after(() => rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result }));
+  // Sin job_id queda SÍNCRONO: recover_latest sin job toma la fila más reciente del
+  // usuario, y una "persisted" que llegara tarde podía tapar el stash de falla de la
+  // boleta siguiente (falso rescate).
+  const registroFeliz = () => rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
+  if (effectiveJobId) after(registroFeliz);
+  else await registroFeliz();
   if (pdfPendiente) {
     await recordSiiLocalFailure(sb, job, "PDF_PENDIENTE", "Boleta SII local persistida sin PDF adjunto", {
       tipo_dte: tipoDte,

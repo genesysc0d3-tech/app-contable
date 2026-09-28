@@ -27,7 +27,7 @@ export function aalDelToken(accessToken: string | null | undefined): string | nu
   const partes = accessToken.split(".");
   if (partes.length !== 3) return null;
   try {
-    const json = JSON.parse(Buffer.from(partes[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as { aal?: unknown };
+    const json = JSON.parse(Buffer.from(partes[1], "base64url").toString("utf8")) as { aal?: unknown };
     return typeof json.aal === "string" ? json.aal : null;
   } catch {
     return null;
