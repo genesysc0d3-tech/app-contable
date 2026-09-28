@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { revisarPropuestaEmitible, revisarYaEmitida } from "./propuesta-emitible";
+import { revisarPostCandado, revisarPropuestaEmitible, revisarYaEmitida } from "./propuesta-emitible";
 
 type Resp = { data: unknown; error: { message: string } | null };
 
@@ -71,5 +71,24 @@ describe("revisarPropuestaEmitible — falla CERRADA", () => {
 
   it("re-chequeo con candado: error → rechaza", async () => {
     expect((await revisarYaEmitida(fakeSb({ boletas: falla }).sb, "p")).ok).toBe(false);
+  });
+});
+
+describe("revisarPostCandado — con el candado tomado", () => {
+  it("ya emitida → 409 con folio y boleta_id (la verificación la cierra como emitida)", async () => {
+    const r = await revisarPostCandado(fakeSb({ boletas: { data: { id: "b1", folio: 24133 }, error: null } }).sb, "p");
+    expect(r).toMatchObject({ ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", folio: 24133, boletaId: "b1" });
+  });
+  it("quedó a medias entre el chequeo y el candado → 409 REVISION_PENDIENTE", async () => {
+    const r = await revisarPostCandado(fakeSb({ revision: { data: { job_id: "j" }, error: null } }).sb, "p");
+    expect(r).toMatchObject({ ok: false, status: 409, error: "REVISION_PENDIENTE" });
+  });
+  it("NO mira 'en vuelo' (el job propio recién creado)", async () => {
+    const { sb, consultas } = fakeSb({ vuelo: { data: { job_id: "propio" }, error: null } });
+    expect(await revisarPostCandado(sb, "p")).toEqual({ ok: true });
+    expect(consultas).toEqual(["boletas", "revision"]);
+  });
+  it("error de consulta → rechaza", async () => {
+    expect((await revisarPostCandado(fakeSb({ revision: falla }).sb, "p")).ok).toBe(false);
   });
 });

@@ -46,10 +46,11 @@ export type DesenlaceItem =
   // y el lote se detiene en seco: seguir sería estrellar cada boleta contra la
   // misma pausa. `motivo` es el copy humano que ya viene del server.
   | { estado: "pausada_remota"; motivo: string }
-  // ya_emitida = el server contestó 409 PROPUESTA_YA_EMITIDA ANTES de abrir job:
-  // otra persona/pestaña ya emitió esta boleta (2 personas emitiendo la misma
-  // empresa, 2026-09-27). No hay ventana ni folio nuevo: se cuenta y se SIGUE sin
-  // pedir decisión humana (antes caía en "fallida" y pausaba el lote boleta a boleta).
+  // ya_emitida = el server contestó 409 PROPUESTA_YA_EMITIDA al pedir el job (antes
+  // o justo después de tomar el candado, que se suelta): otra persona/pestaña ya
+  // emitió esta boleta (2 personas emitiendo la misma empresa, 2026-09-27). No se
+  // abrió ventana ni hay folio nuevo: se cuenta y se SIGUE sin pedir decisión
+  // humana (antes caía en "fallida" y pausaba el lote boleta a boleta).
   | { estado: "ya_emitida"; motivo: string };
 
 export type FaseLote =

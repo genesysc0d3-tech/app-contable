@@ -12,7 +12,12 @@ type Sb = SupabaseClient;
 
 export type PropuestaEmitible =
   | { ok: true }
-  | { ok: false; status: 409 | 500; error: string; detalle: string };
+  | {
+      ok: false; status: 409 | 500; error: string; detalle: string;
+      /** Solo en PROPUESTA_YA_EMITIDA: la boleta que ya existe. Permite a la
+       *  verificación de una emisión incierta cerrarla como emitida con su folio. */
+      folio?: number | null; boletaId?: string | null;
+    };
 
 const CONSULTA_FALLIDA: PropuestaEmitible = {
   ok: false,
@@ -25,14 +30,45 @@ const CONSULTA_FALLIDA: PropuestaEmitible = {
 export async function revisarYaEmitida(sb: Sb, propuestaId: string): Promise<PropuestaEmitible> {
   const { data, error } = await sb
     .from("boletas_emitidas")
-    .select("id")
+    .select("id, folio")
     .eq("propuesta_id", propuestaId)
     .neq("estado", "anulada")
     .limit(1)
     .maybeSingle();
   if (error) return CONSULTA_FALLIDA;
-  if (data) return { ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida." };
+  if (data) {
+    const fila = data as { id: string; folio: number | null };
+    return { ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida.", folio: fila.folio ?? null, boletaId: fila.id };
+  }
   return { ok: true };
+}
+
+/** (b1) ¿quedó "a medias" (lápida)? Bloqueo INCONDICIONAL hasta recuperar el folio. */
+async function revisarLapida(sb: Sb, propuestaId: string): Promise<PropuestaEmitible> {
+  const { data, error } = await sb
+    .from("emision_jobs")
+    .select("job_id")
+    .eq("propuesta_id", propuestaId)
+    .eq("estado", "revision_pendiente")
+    .limit(1)
+    .maybeSingle();
+  if (error) return CONSULTA_FALLIDA;
+  if (data) {
+    return { ok: false, status: 409, error: "REVISION_PENDIENTE", detalle: "Esta boleta quedó a medias en el SII. Recupera su folio antes de re-emitir." };
+  }
+  return { ok: true };
+}
+
+/**
+ * Re-chequeo CON EL CANDADO TOMADO: ya emitida + lápida. El chequeo previo corre sin
+ * candado; entre medio otra persona pudo terminar la boleta (emitida) o dejarla a
+ * medias (el lote suelta el candado al sellar la lápida). "En vuelo" no se mira: el
+ * job recién creado por el candado es el propio.
+ */
+export async function revisarPostCandado(sb: Sb, propuestaId: string): Promise<PropuestaEmitible> {
+  const ya = await revisarYaEmitida(sb, propuestaId);
+  if (!ya.ok) return ya;
+  return revisarLapida(sb, propuestaId);
 }
 
 /**
@@ -43,18 +79,8 @@ export async function revisarPropuestaEmitible(sb: Sb, propuestaId: string, ahor
   const ya = await revisarYaEmitida(sb, propuestaId);
   if (!ya.ok) return ya;
 
-  // (b1) ¿quedó "a medias" (lápida)? Bloqueo INCONDICIONAL hasta recuperar el folio.
-  const { data: enRevision, error: errRevision } = await sb
-    .from("emision_jobs")
-    .select("job_id")
-    .eq("propuesta_id", propuestaId)
-    .eq("estado", "revision_pendiente")
-    .limit(1)
-    .maybeSingle();
-  if (errRevision) return CONSULTA_FALLIDA;
-  if (enRevision) {
-    return { ok: false, status: 409, error: "REVISION_PENDIENTE", detalle: "Esta boleta quedó a medias en el SII. Recupera su folio antes de re-emitir." };
-  }
+  const lapida = await revisarLapida(sb, propuestaId);
+  if (!lapida.ok) return lapida;
 
   // (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
   // bloquear una propuesta para siempre si un intento crasheó pre-emit.

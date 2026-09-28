@@ -265,7 +265,9 @@ function Legal({ onAceptar, onCancelar, error }: { onAceptar: () => void; onCanc
 }
 
 function Corriendo({ p, onDetener }: { p: import("@/lib/emission/lote-runner").ProgresoLote; onDetener: () => void }) {
-  const emit = p.emitidas;
+  // Avance por PROCESADAS (no emitidas): una "ya emitida" o una fallida también
+  // avanzan la fila; con emitidas la barra se quedaba pegada en "1 de N".
+  const emit = p.procesadas;
   const pct = p.total ? Math.round((emit / p.total) * 100) : 0;
   const cur = p.itemActual;
   const recientes = p.folios.slice(-6);
@@ -348,7 +350,7 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
         <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
         <div style={h1}>No se emitió ninguna</div>
         <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
-          {p.total === 1 ? `La ${doc} no se pudo emitir.` : `Ninguna de las ${p.total} ${docs} se pudo emitir.`}
+          {p.total === 1 ? `La ${doc} no se pudo emitir.` : ya > 0 ? `${fallas.length} de ${p.total} ${docs} no se pudieron emitir; ${ya} ya estaban emitidas.` : `Ninguna de las ${p.total} ${docs} se pudo emitir.`}
         </div>
         {motivo && <div style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 8, background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", textAlign: "left" }}>{motivo}</div>}
         <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Cerrar y revisar</button>
@@ -462,7 +464,7 @@ function Detenida({ p, onCerrar }: { p: import("@/lib/emission/lote-runner").Pro
     <>
       <Badge bg="rgba(255,255,255,.05)">⏹</Badge>
       <div style={h1}>Detenido</div>
-      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{p.emitidas} de {p.total} emitidas. El resto quedó intacto.</div>
+      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{p.emitidas} de {p.total} emitidas{(p.yaEmitidas ?? 0) > 0 ? ` (${p.yaEmitidas} ya lo estaban)` : ""}. El resto quedó intacto.</div>
       {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
       <button onClick={onCerrar} style={{ ...primaryBtn }}>Cerrar</button>
     </>
@@ -479,7 +481,7 @@ function PausadaRemota({ p, docs, onCerrar }: { p: import("@/lib/emission/lote-r
       <Badge bg="rgba(255,255,255,.05)">⏸</Badge>
       <div style={h1}>Emisión en pausa</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 8, lineHeight: 1.55 }}>{p.pausaRemota?.motivo ?? "Pausamos la emisión por un rato. Inténtalo de nuevo más tarde."}</div>
-      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de la pausa. El resto queda pendiente.</div>
+      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de la pausa{(p.yaEmitidas ?? 0) > 0 ? ` (${p.yaEmitidas} ya lo estaban)` : ""}. El resto queda pendiente.</div>
       {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
       <button onClick={onCerrar} style={{ ...primaryBtn }}>Entendido</button>
     </>

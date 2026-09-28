@@ -162,7 +162,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
   type StartJob =
     | { jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
     | { pausada: true; detalle: string }
-    | { yaEmitida: true }
+    | { yaEmitida: true; folio: number | null; boletaId: string | null }
     | null;
   const startJob = useCallback(async (propuestaId: string, tipoDte: number, origin: "emision_lote" | "verificacion_lote" = "emision_lote"): Promise<StartJob> => {
     try {
@@ -187,7 +187,13 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         };
       }
       // Otra persona/pestaña ya la emitió: no es una falla de esta boleta.
-      if (res.status === 409 && json?.error === "PROPUESTA_YA_EMITIDA") return { yaEmitida: true };
+      if (res.status === 409 && json?.error === "PROPUESTA_YA_EMITIDA") {
+        return {
+          yaEmitida: true,
+          folio: typeof json.folio === "number" ? json.folio : null,
+          boletaId: typeof json.boleta_id === "string" ? json.boleta_id : null,
+        };
+      }
       if (!res.ok || !json.ok || !json.job_id || !json.expires_at) return null;
       // El server resuelve el emisor_rut autoritativo (empresa.rut de la DB) y lo
       // devuelve en expected_emisor_rut. Lo usamos como fuente de verdad para el
@@ -383,10 +389,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           reportar("Verificando en el Resumen de ventas del SII si la boleta salió…");
           await closeJob(job.jobId, "failed", desenlace.motivo);
           const vjob = await startJob(item.propuestaId, full.tipoDte, "verificacion_lote");
-          // Si al pedir la verificación el server ya tiene la boleta registrada (el
-          // resultado llegó tarde), salió: nada que verificar ni lápida que dejar.
-          if (vjob && "yaEmitida" in vjob) return { estado: "ya_emitida", motivo: "Sí salió: quedó registrada con su folio." };
-          if (vjob && !("pausada" in vjob)) {
+          // Si al pedir la verificación el server ya tiene la boleta registrada, el
+          // resultado de NUESTRO intento llegó tarde y se guardó: salió, con su folio
+          // (cuenta como emitida: tope de sesión, cadencia y rango de folios). Sin
+          // folio legible no se afirma nada → lápida, como cuando no se pudo verificar.
+          if (vjob && "yaEmitida" in vjob && vjob.folio !== null) {
+            return { estado: "emitida", folio: vjob.folio, boletaId: vjob.boletaId };
+          }
+          if (vjob && !("pausada" in vjob) && !("yaEmitida" in vjob)) {
             const payloadVerify = buildBoletaJob({
               empresaId,
               emisorRut: vjob.emisorRut ?? empresaRut ?? undefined,
