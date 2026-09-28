@@ -103,6 +103,8 @@ export interface DescarteFila {
   monto: number;
   tipo_flujo: "entrada" | "salida" | null;
   descripcion: string;
+  /** La celda de fecha tal como vino (diagnóstico: "32/13/2026", un serial…). */
+  fecha_cruda?: string | null;
 }
 
 /** Censo de la hoja leída: toda fila con plata queda contada. */

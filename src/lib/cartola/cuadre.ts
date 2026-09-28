@@ -29,6 +29,8 @@ export interface Perdida {
   tipo_flujo: string | null;
   motivo: string;
   descripcion: string;
+  /** Celda de fecha tal como vino (solo descartes del lector). */
+  fecha_cruda?: string | null;
 }
 
 export interface CuadreCartola {
@@ -69,7 +71,7 @@ export function calcularCuadre(args: {
     if (d.legitimo) continue;
     perdidas.push({
       excel_row: d.excel_row, fecha: d.fecha, monto: d.monto, tipo_flujo: d.tipo_flujo,
-      motivo: d.motivo, descripcion: d.descripcion,
+      motivo: d.motivo, descripcion: d.descripcion, fecha_cruda: d.fecha_cruda ?? null,
     });
   }
 

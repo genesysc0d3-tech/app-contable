@@ -69,11 +69,13 @@ export function validate(
     const anio = Number(String(l.fecha).slice(0, 4));
     return !Number.isFinite(anio) || anio < anioMin || anio > anioMax;
   });
-  // applyAdapter ya NO convierte en movimiento una fecha imposible (32/13) ni
-  // fuera de 2000..actual+1 (el serial 73000 = 2099): la manda al censo. Esas
-  // filas siguen delatando la columna mal mapeada, así que se suman acá.
+  // applyAdapter ya NO convierte en movimiento una fecha fuera de
+  // 2000..actual+1 (el serial 73000 = 2099): la manda al censo. Esas filas
+  // siguen delatando la columna mal mapeada, así que se suman acá. Una fecha
+  // IMPOSIBLE ("32/09/2026") no: es un dedazo, no una columna equivocada, y el
+  // cuadre ya la muestra como pérdida.
   const descartadasPorFecha = (descartes ?? []).filter(
-    (d) => !d.legitimo && (d.motivo === "fecha_imposible" || d.motivo === "fecha_fuera_de_rango"),
+    (d) => !d.legitimo && d.motivo === "fecha_fuera_de_rango",
   );
   const nAbsurdas = absurdas.length + descartadasPorFecha.length;
   const nConFecha = conFecha.length + descartadasPorFecha.length;
