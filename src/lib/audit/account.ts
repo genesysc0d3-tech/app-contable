@@ -37,7 +37,8 @@ export type CuentaAuditAction =
   | "plan_cambiado_dev"
   | "trial_cortesia_cambiado"
   | "trial_reiniciado"
-  | "carril_emision_cambiado";
+  | "carril_emision_cambiado"
+  | "cuadre_filas_agregadas";
 
 export async function recordCuentaAudit(args: {
   sb: Sb;
