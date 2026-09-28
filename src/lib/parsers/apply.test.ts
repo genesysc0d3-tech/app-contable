@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  inferirAnioPista,
+  inferirRangoFechas,
   applyAdapter,
   linesToPreExtracted,
-  normalizeDate,
+  parseFechaCartola,
   parseChileanNumber,
   serializeLines,
 } from "./apply";
 import type { AdapterConfig, ParsedLine, Row } from "./types";
+
+/** ISO si la fecha se lee; si no, el motivo ("fecha_ilegible" / "fecha_imposible"). */
+function fecha(v: unknown, f: AdapterConfig["date_format"], opts?: Parameters<typeof parseFechaCartola>[2]): string {
+  const r = parseFechaCartola(v, f, opts);
+  return r.ok ? r.iso : r.motivo;
+}
 
 // --- Config factories (override puntual con `over`) -----------------------
 
@@ -88,42 +94,42 @@ describe("parseChileanNumber — montos CLP con separadores chilenos", () => {
   });
 });
 
-// --- normalizeDate ---------------------------------------------------------
+// --- parseFechaCartola ---------------------------------------------------------
 
-describe("normalizeDate — a ISO yyyy-mm-dd", () => {
+describe("parseFechaCartola — a ISO yyyy-mm-dd", () => {
   it("dd/mm/yyyy y dd-mm-yyyy → ISO con padding", () => {
-    expect(normalizeDate("14/06/2026", "dd/mm/yyyy")).toBe("2026-06-14");
-    expect(normalizeDate("14-06-2026", "dd-mm-yyyy")).toBe("2026-06-14");
-    expect(normalizeDate("4/6/2026", "dd/mm/yyyy")).toBe("2026-06-04");
+    expect(fecha("14/06/2026", "dd/mm/yyyy")).toBe("2026-06-14");
+    expect(fecha("14-06-2026", "dd-mm-yyyy")).toBe("2026-06-14");
+    expect(fecha("4/6/2026", "dd/mm/yyyy")).toBe("2026-06-04");
   });
 
   it("formato 'unknown' usa la heurística dd/mm/yyyy", () => {
-    expect(normalizeDate("14/06/2026", "unknown")).toBe("2026-06-14");
+    expect(fecha("14/06/2026", "unknown")).toBe("2026-06-14");
   });
 
   it("año de 2 dígitos: pivote en 50 (>50 = 19xx, <=50 = 20xx)", () => {
-    expect(normalizeDate("14/06/26", "dd/mm/yyyy")).toBe("2026-06-14");
-    expect(normalizeDate("14/06/99", "dd/mm/yyyy")).toBe("1999-06-14");
-    expect(normalizeDate("14/06/50", "dd/mm/yyyy")).toBe("2050-06-14");
-    expect(normalizeDate("14/06/51", "dd/mm/yyyy")).toBe("1951-06-14");
+    expect(fecha("14/06/26", "dd/mm/yyyy")).toBe("2026-06-14");
+    expect(fecha("14/06/99", "dd/mm/yyyy")).toBe("1999-06-14");
+    expect(fecha("14/06/50", "dd/mm/yyyy")).toBe("2050-06-14");
+    expect(fecha("14/06/51", "dd/mm/yyyy")).toBe("1951-06-14");
   });
 
   it("yyyy-mm-dd con padding", () => {
-    expect(normalizeDate("2026-06-14", "yyyy-mm-dd")).toBe("2026-06-14");
-    expect(normalizeDate("2026/6/4", "yyyy-mm-dd")).toBe("2026-06-04");
+    expect(fecha("2026-06-14", "yyyy-mm-dd")).toBe("2026-06-14");
+    expect(fecha("2026/6/4", "yyyy-mm-dd")).toBe("2026-06-04");
   });
 
   it("último recurso: parsea dd/mm/yyyy aunque el formato declarado sea yyyy-mm-dd", () => {
-    expect(normalizeDate("14/06/2026", "yyyy-mm-dd")).toBe("2026-06-14");
+    expect(fecha("14/06/2026", "yyyy-mm-dd")).toBe("2026-06-14");
   });
 
-  it("null / vacío → ''", () => {
-    expect(normalizeDate(null, "dd/mm/yyyy")).toBe("");
-    expect(normalizeDate("", "dd/mm/yyyy")).toBe("");
+  it("null / vacío → ilegible", () => {
+    expect(fecha(null, "dd/mm/yyyy")).toBe("fecha_ilegible");
+    expect(fecha("", "dd/mm/yyyy")).toBe("fecha_ilegible");
   });
 
-  it("no parseable → devuelve el string tal cual (no inventa fecha)", () => {
-    expect(normalizeDate("no-es-fecha", "dd/mm/yyyy")).toBe("no-es-fecha");
+  it("no parseable → ilegible (no inventa fecha)", () => {
+    expect(fecha("no-es-fecha", "dd/mm/yyyy")).toBe("fecha_ilegible");
   });
 });
 
@@ -232,7 +238,7 @@ describe("applyAdapter — layout transactions_log (una columna monto, sin flag)
 // --- applyAdapter: comportamiento común ------------------------------------
 
 describe("applyAdapter — comportamiento común", () => {
-  it("convierte objetos Date (cellDates) a ISO local sin pasar por normalizeDate", () => {
+  it("convierte objetos Date (cellDates) a ISO local sin pasar por parseFechaCartola", () => {
     const rows: Row[] = [
       ["Fecha", "Glosa", "Cargo", "Abono", "Saldo"],
       [new Date(2026, 5, 14) as unknown as string, "Con Date", "", "100.000", "0"], // mes 5 = junio
@@ -349,21 +355,24 @@ describe("applyAdapter — fechas como número serial de Excel", () => {
 // Incidente 2026-09-23: dos cartolas BancoEstado no parecían cartola y cayeron a
 // la IA (que las clasificó afectas por el giro). Sus fechas: "20260923" y "02/09".
 describe("fechas BancoEstado: yyyymmdd y dd/mm sin año", () => {
-  it("20260923 → 2026-09-23; un número de 8 dígitos que no es fecha se deja tal cual", () => {
-    expect(normalizeDate("20260923", "unknown")).toBe("2026-09-23");
-    expect(normalizeDate("20261345", "unknown")).toBe("20261345");
+  it("20260923 → 2026-09-23; un número de 8 dígitos que no es fecha es ilegible", () => {
+    expect(fecha("20260923", "unknown")).toBe("2026-09-23");
+    expect(fecha("20261345", "unknown")).toBe("fecha_ilegible");
   });
-  it("dd/mm sin año → usa el año pista (de las fechas completas de la hoja)", () => {
-    expect(normalizeDate("02/09", "unknown", 2025)).toBe("2025-09-02");
-    expect(normalizeDate("3-9", "unknown", 2026)).toBe("2026-09-03");
+  it("dd/mm sin año → año del rango del período (DESDE/HASTA de la hoja)", () => {
+    const ahora = new Date(2026, 8, 28);
+    expect(fecha("02/09", "unknown", { rango: { min: "2025-09-01", max: "2025-09-22", explicito: true }, ahora })).toBe("2025-09-02");
+    expect(fecha("3-9", "unknown", { rango: { min: "2026-09-01", max: "2026-09-22", explicito: true }, ahora })).toBe("2026-09-03");
   });
-  it("dd/mm sin pista → año actual, y si queda en el futuro es el año anterior (cartola de dic subida en ene)", () => {
-    expect(normalizeDate("02/09", "unknown", null, new Date(2026, 8, 23))).toBe("2026-09-02");
-    expect(normalizeDate("28/12", "unknown", null, new Date(2027, 0, 5))).toBe("2026-12-28");
+  it("dd/mm sin rango → año actual, y si queda en el futuro es el año anterior (cartola de dic subida en ene)", () => {
+    expect(fecha("02/09", "unknown", { ahora: new Date(2026, 8, 23) })).toBe("2026-09-02");
+    expect(fecha("28/12", "unknown", { ahora: new Date(2027, 0, 5) })).toBe("2026-12-28");
   });
-  it("inferirAnioPista: toma el año más frecuente de las fechas completas (FECHA DESDE/HASTA)", () => {
-    expect(inferirAnioPista([["FECHA DESDE", "FECHA HASTA"], ["01/09/2025", "22/09/2025"], ["02/09", "x", 1000]])).toBe(2025);
-    expect(inferirAnioPista([["02/09", "x", 1000], ["03/09", "y", 2000]])).toBeNull();
+  it("inferirRangoFechas: FECHA DESDE / HASTA con la fecha abajo de la etiqueta", () => {
+    const cfgR = { columns: { fecha: 0 } as AdapterConfig["columns"], skip_rows_before_data: 2 };
+    expect(inferirRangoFechas([["FECHA DESDE", "FECHA HASTA"], ["01/09/2025", "22/09/2025"], ["02/09", "x", 1000]], cfgR))
+      .toEqual({ min: "2025-09-01", max: "2025-09-22", explicito: true });
+    expect(inferirRangoFechas([["02/09", "x", 1000], ["03/09", "y", 2000]], { ...cfgR, skip_rows_before_data: 0 })).toBeNull();
   });
   it("applyAdapter: hoja Movimientos de BancoEstado (dd/mm, sin año en la hoja) sale con fecha ISO", () => {
     const rows = [

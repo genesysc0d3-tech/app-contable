@@ -341,7 +341,7 @@ function tryApply(
 } | null {
   const descartes: DescarteFila[] = [];
   const lines = applyAdapter(rows, cfg, descartes);
-  const validation = validate(lines, rows, cfg);
+  const validation = validate(lines, rows, cfg, descartes);
   if (!validation.ok) {
     fallas?.push(`${capa ?? "?"}[${sheetName}]: ${validation.errors.join("; ")}`);
     return null;

@@ -18,6 +18,8 @@ export type JobLapida = {
   /** a_medias = el RPA dejó lápida (probable folio real); sin_respuesta = la extensión
    *  nunca contestó y el job venció (puede haber salido o no). Default a_medias. */
   motivo?: "a_medias" | "sin_respuesta";
+  /** Vencimiento del intento: "Verificar en el SII" se ofrece desde expires_at + 2 min. */
+  expires_at?: string | null;
 };
 
 export type PropuestaAMedias = {
@@ -42,6 +44,8 @@ export type ItemAMedias = {
   /** Cuándo quedó a medias (ISO). */
   lapida_at: string;
   motivo: "a_medias" | "sin_respuesta";
+  /** Vencimiento del intento (ISO) o null. */
+  expires_at: string | null;
 };
 
 export function construirAMedias(jobs: JobLapida[], propuestas: PropuestaAMedias[]): ItemAMedias[] {
@@ -66,6 +70,7 @@ export function construirAMedias(jobs: JobLapida[], propuestas: PropuestaAMedias
       documento_nombre: p.documento_nombre ?? null,
       lapida_at: job.created_at,
       motivo: job.motivo ?? "a_medias",
+      expires_at: job.expires_at ?? null,
     });
   }
   items.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.monto_total - b.monto_total));

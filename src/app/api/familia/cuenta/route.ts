@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { listarEmpresasSelector } from "@/app/(app)/escritorio/v5/actions";
 
@@ -19,9 +19,11 @@ import { listarEmpresasSelector } from "@/app/(app)/escritorio/v5/actions";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return respuesta({ ok: false, error: "NO_AUTH" }, 401);
+  // Puerta de massCrypto: 401 JSON (massCrypto lo lee como "sin sesión" y manda a
+  // entrar a massDTE, donde el proxy pide el MFA). Sesión + inactividad + MFA acá.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { user } = guard;
 
   const r = await listarEmpresasSelector();
   if (!r.ok) return respuesta({ ok: false, error: r.error }, r.error === "NO_AUTH" ? 401 : 403);

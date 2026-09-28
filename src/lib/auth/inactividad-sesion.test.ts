@@ -64,7 +64,7 @@ describe("un login recién hecho nunca está vencido (last_sign_in_at)", () => {
     expect(ultimaVezVisto(null, null)).toBeNull();
   });
   it("el guard y el middleware le pasan last_sign_in_at (si no, el bug vuelve)", () => {
-    for (const ruta of ["src/lib/api/account-guard.ts", "src/lib/supabase/proxy.ts"]) {
+    for (const ruta of ["src/lib/api/sesion-segura.ts", "src/lib/supabase/proxy.ts"]) {
       expect(readFileSync(ruta, "utf8")).toMatch(/sesionVencidaPorInactividad\([^;]*user\.last_sign_in_at/);
     }
   });
@@ -113,7 +113,10 @@ const sinImports = (ruta: string) =>
 
 describe("la regla sigue enchufada donde corresponde", () => {
   it("el guard de las rutas la LLAMA (de ahí la hereda /api/extension/vault-key)", () => {
-    expect(sinImports("src/lib/api/account-guard.ts")).toContain("sesionVencidaPorInactividad(");
+    // La regla vive en sesion-segura.ts (inactividad + MFA, 2026-09-28) y el guard de
+    // cuenta la invoca: las dos mitades tienen que seguir enchufadas.
+    expect(sinImports("src/lib/api/sesion-segura.ts")).toContain("sesionVencidaPorInactividad(");
+    expect(sinImports("src/lib/api/account-guard.ts")).toContain("verificarSesionSegura(");
   });
 
   it("el middleware la LLAMA y cierra la sesión (signOut revoca también para la extensión)", () => {
@@ -123,7 +126,7 @@ describe("la regla sigue enchufada donde corresponde", () => {
   });
 
   it("los dos refrescan ultimo_acceso, o el reloj nunca avanza", () => {
-    expect(sinImports("src/lib/api/account-guard.ts")).toContain("debeRefrescarUltimoAcceso(");
+    expect(sinImports("src/lib/api/sesion-segura.ts")).toContain("debeRefrescarUltimoAcceso(");
     expect(sinImports("src/lib/supabase/proxy.ts")).toContain("debeRefrescarUltimoAcceso(");
   });
 

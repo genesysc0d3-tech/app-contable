@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recibirDTE } from "@/lib/sii-mock/recepcion";
+import { mockSiiHttpHabilitado, requireSesionSegura } from "@/lib/api/sesion-segura";
 
 /**
  * Endpoint mock del SII. Thin wrapper sobre `recibirDTE` (lib/sii-mock).
@@ -8,6 +9,11 @@ import { recibirDTE } from "@/lib/sii-mock/recepcion";
  * se pueda llamar in-process desde el `intermediario` sin pasar por HTTP.
  */
 export async function POST(request: Request) {
+  // Mock SIN protección propia (antes dependía 100 % del proxy). Solo fuera de
+  // producción, y aun así con sesión segura: ver mockSiiHttpHabilitado.
+  if (!mockSiiHttpHabilitado(process.env)) return NextResponse.json({ ok: false, error: "NO_ENCONTRADO" }, { status: 404 });
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
   let body: { xml_dte?: string } = {};
   try {
     body = await request.json();
