@@ -9,7 +9,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SRC = readFileSync(join(__dirname, "background.js"), "utf8");
+// MASSDTE_BACKGROUND_SRC=<ruta> corre la suite contra OTRO background (p. ej. el de la
+// 0.2.8: `git show 19effe7:extensions/sii-portal-rpa/background.js > /tmp/bg.js`), igual
+// que MASSDTE_WORKER_SRC en el sintético: un test de conducta nueva se VE fallar antes.
+const SRC = readFileSync(process.env.MASSDTE_BACKGROUND_SRC || join(__dirname, "background.js"), "utf8");
 
 // Corta `function NOMBRE(...) { ... }` contando llaves (ignora las de strings/regex
 // simples: el código de estas funciones no tiene llaves dentro de strings).
@@ -165,10 +168,36 @@ describe("librero · verificación por evento de boletas (verificarEnReportes)",
     expect(terminales()).toHaveLength(0);
   });
 
-  it("tabla COMPLETA y 0 candidatas → 'no salió' con verificado_sin_folio (la app la deja re-emitible)", () => {
+  it("tabla COMPLETA, rango de fechas = hoy y 0 candidatas → 'no salió' con verificado_sin_folio (la app la deja re-emitible)", () => {
+    fx.verificarEnReportes(estadoV());
+    responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true, reportes_tabla_completa: true, reportes_rango_cubre_emision: true, reportes_calce: { source: "reportes_sin_candidatas", candidatas: 0, excluidas_por_tipo: 0 } } });
+    expect(terminales().at(-1)).toMatchObject({ status: "error", verificado_sin_folio: true });
+  });
+
+  // 0.2.9 (medianoche, plan §3b + adversarial B2): el Resumen muestra SOLO HOY. Un
+  // intento de ayer (reanudar al día siguiente) o que cruzó las 00:00 no se puede
+  // probar ausente con la tabla de hoy → a medias, jamás "no salió" (sería re-emitir
+  // una boleta que sí salió = doble folio). FALLA con el background 0.2.8.
+  it("0.2.9: tabla completa y 0 candidatas pero el intento NO es de hoy → a medias, nunca verificado_sin_folio", () => {
+    fx.verificarEnReportes(estadoV());
+    responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true, reportes_tabla_completa: true, reportes_rango_cubre_emision: false } });
+    const t = terminales().at(-1);
+    expect(t.status).toBe("result_needs_review");
+    expect(t.verificado_sin_folio).toBeUndefined();
+  });
+
+  it("0.2.9: worker sin el flag de rango (versión mezclada) → a medias, nunca 'no salió'", () => {
     fx.verificarEnReportes(estadoV());
     responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true, reportes_tabla_completa: true } });
-    expect(terminales().at(-1)).toMatchObject({ status: "error", verificado_sin_folio: true });
+    expect(terminales().at(-1).status).toBe("result_needs_review");
+  });
+
+  it("0.2.9: una fila del mismo monto descartada SOLO por el tipo (39/41) → a medias, no 'no salió'", () => {
+    fx.verificarEnReportes(estadoV());
+    responder({ ok: true, result: { folio: null, folio_confidence: "none", reportes_tabla_leida: true, reportes_tabla_completa: true, reportes_rango_cubre_emision: true, reportes_calce: { source: "reportes_sin_candidatas", candidatas: 0, excluidas_por_tipo: 1 } } });
+    const t = terminales().at(-1);
+    expect(t.status).toBe("result_needs_review");
+    expect(t.verificado_sin_folio).toBeUndefined();
   });
 
   it("B1: tabla leída pero INCOMPLETA (paginada / cargando) y 0 candidatas → a medias, nunca 'no salió'", () => {
@@ -196,7 +225,7 @@ describe("librero · verificación por evento de boletas (verificarEnReportes)",
   it("después de un terminal, un nuevo disparo no habla por el job", () => {
     const s = estadoV();
     fx.verificarEnReportes(s);
-    responder({ ok: true, result: { folio: null, reportes_tabla_leida: true, reportes_tabla_completa: true } });
+    responder({ ok: true, result: { folio: null, reportes_tabla_leida: true, reportes_tabla_completa: true, reportes_rango_cubre_emision: true } });
     const n = tabsMsgs.length;
     fx.verificarEnReportes(s);
     expect(tabsMsgs.length).toBe(n);
