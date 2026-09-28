@@ -103,9 +103,13 @@ export async function autoDrenajeSiHayAtascados(args?: {
 }): Promise<boolean> {
   const now = args?.now ?? Date.now();
   if (now - ultimoAutoKick < AUTO_KICK_MIN_MS) return false;
+  // Freno ANTES de consultar (plan-costo-vercel §2 D): antes solo se armaba si SÍ
+  // había atascados, así que con la cola sana cada carga de la mesa hacía dos COUNT
+  // globales. Ahora máx. una consulta cada 2 min por instancia (el rescate se
+  // retrasa ≤ 2 min; la cadena normal no depende de esto).
+  ultimoAutoKick = now;
   const hay = await (args?.probeFn ?? hayJobsAtascados)();
   if (!hay) return false;
-  ultimoAutoKick = now;
   await (args?.drenarFn ?? iniciarDrenaje)("mesa-autodrenaje");
   return true;
 }
