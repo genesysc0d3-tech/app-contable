@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { ANCLA_LABELS, ANCLA_LABELS_BOLETA, ANCLAS_AUTO_KILL, describeAncla } from "@/lib/emission/sii-libreto";
 import { AUTO_PAUSA_UMBRAL, AUTO_PAUSA_WINDOW_MS } from "@/lib/ops/diagnostics";
@@ -98,9 +98,12 @@ function serviceClient() {
 type Sb = NonNullable<ReturnType<typeof serviceClient>>;
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher del proxy: sesión + inactividad + MFA acá (sesion-segura.ts).
+  // Bloquear es seguro: es telemetría y puede disparar la AUTO-PAUSA de la flota;
+  // una sesión aal1 no debe poder frenar la emisión de todos. No toca folios.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
 
   // F1g: un worker en bucle (o un cliente malicioso) no inunda ops_events ni
   // el conteo. Un lote real avisa a lo más una vez por documento fallido.

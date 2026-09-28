@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { validarAccesoCuenta } from "@/lib/entitlements";
@@ -39,9 +39,13 @@ function intOrNull(v: unknown): number | null {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher del proxy: sesión + inactividad + MFA acá (sesion-segura.ts).
+  // Bloquear NO pierde folios: el Resumen de Ventas del SII sigue siendo la fuente
+  // y la reconciliación es idempotente (se re-ejecuta tras el MFA). Y lo contrario
+  // sí sería grave: esta ruta da de alta boletas con filas que manda el cliente.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
 
   const { data: usuario } = await supabase
     .from("usuarios").select("empresa_id, rol").eq("id", user.id).single();

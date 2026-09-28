@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { validarAccesoCuenta } from "@/lib/entitlements";
 import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura, respuestaSesionInsegura, resultSoloRegistraSesionInsegura } from "@/lib/api/sesion-segura";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
@@ -670,9 +670,11 @@ async function backfillFolioSinJobVivo(
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher del proxy: sesión + inactividad + MFA aal2 se evalúan ACÁ
+  // (sesion-segura.ts). Sin usuario → 401 siempre.
+  const guard = await requireSesionSegura();
+  const user = guard.user;
+  if (!user) return guard.ok ? respuestaSesionInsegura("NO_AUTH") : guard.response;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -684,6 +686,34 @@ export async function POST(request: Request) {
     payload = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
+  }
+
+  // Sesión insegura (inactividad vencida o MFA pendiente) con usuario válido:
+  //  · Declaraciones HUMANAS y todo lo demás → 401 (el humano reintenta tras el MFA).
+  //  · Captura del folio que manda la extensión (result / recover_latest) → NO se
+  //    bloquea, solo se REGISTRA. "Nunca se pierde un folio": la boleta ya existe en
+  //    el SII; si esto respondiera 401, la única copia quedaría en el stash de la
+  //    extensión (chrome.storage.local, best-effort, tope de 12 reentregas) y un
+  //    fallo ahí = folio invisible → re-emisión → boleta DUPLICADA sin NC posible.
+  //    Los gates de abajo (dueño del job, rol, vetado, UNIQUE, folio de otro doc,
+  //    emisor cruzado) siguen aplicando igual. El evento deja el rastro para auditar.
+  if (!guard.ok) {
+    if (!resultSoloRegistraSesionInsegura(payload)) return guard.response;
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_result_sesion_insegura",
+      summary: `Resultado SII aceptado con sesión insegura (${guard.motivo}): no se bloquea para no perder el folio`,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: typeof payload.job_id === "string" ? payload.job_id : null,
+      metadata: {
+        motivo: guard.motivo,
+        recover_latest: payload.recover_latest === true,
+        folio: positiveInt(payload.result?.folio),
+      },
+    });
   }
 
   // Telemetría de flota (bridge 0.1.7+): anota qué versión corre esta empresa.
@@ -1522,9 +1552,10 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Lectura del historial: se bloquea con sesión insegura (nada que perder).
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const user = guard.user;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 
 interface SiiPageMapPayload {
   job_id?: string | null;
@@ -64,9 +64,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, stored: false, disabled: true });
   }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher: sesión + inactividad + MFA acá (sesion-segura.ts).
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const user = guard.user;
 
   let payload: SiiPageMapPayload;
   try {
@@ -96,9 +97,9 @@ export async function POST(request: Request) {
 export async function GET() {
   if (!pageMapEnabled()) return NextResponse.json({ ok: true, maps: [], disabled: true });
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const user = guard.user;
 
   return NextResponse.json({ ok: true, maps: pageMaps().filter((entry) => entry.user_id === user.id) });
 }
