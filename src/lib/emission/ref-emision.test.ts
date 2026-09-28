@@ -6,6 +6,12 @@ describe("ref interna R-XXX-XXX", () => {
     expect(ALFABETO_REF).toHaveLength(24);
     for (const ch of "AEIOU01LV") expect(ALFABETO_REF).not.toContain(ch);
   });
+  it("vectores dorados (paridad con la función SQL emision_ref_nueva)", () => {
+    expect(formatoRef("7F3KX")).toBe("R-7F3-KXH");
+    expect(formatoRef("22222")).toBe("R-222-222");
+    expect(formatoRef("ZZZZZ")).toBe("R-ZZZ-ZZ7");
+    expect(formatoRef("BCD9M")).toBe("R-BCD-9MF");
+  });
   it("formato y dígito de control", () => {
     const r = formatoRef("7F3KX")!;
     expect(r).toMatch(/^R-[23456789BCDFGHJKMNPRSTXZ]{3}-[23456789BCDFGHJKMNPRSTXZ]{3}$/);
@@ -50,6 +56,14 @@ describe("la ref se VE (fuente) y NO se imprime", () => {
   it("columna 'Ref.' en la tabla de Boletas/Facturas y junto al folio en la mesa", () => {
     expect(leer("src/app/(app)/escritorio/v5/sections/BoletasMensualesView.tsx")).toContain("<span>Ref.</span>");
     expect(leer("src/app/(app)/escritorio/v5/Mesa.tsx")).toContain("b.ref &&");
+  });
+  it("el doble folio lleva la MISMA ref de la propuesta (queda visible)", () => {
+    const src = leer("src/app/api/sii-local/result/route.ts");
+    expect(src).toContain("propuesta_id: null, ref: await refDePropuesta(sb, args.empresaId, args.propuestaId)");
+    expect(src).toContain("propuesta_id: null, ref: await refDePropuesta(sb, empresaId, job.propuesta_id)");
+  });
+  it("el trigger nunca bloquea guardar una boleta", () => {
+    expect(leer("supabase/migrations/20260928120000_emision_refs.sql")).toMatch(/exception when others then\s+new\.ref := null;/);
   });
   it("nunca viaja a la boleta del SII (no está en el payload del job)", () => {
     expect(leer("src/lib/emission/boleta-job-payload.ts")).not.toMatch(/\bref\b/);

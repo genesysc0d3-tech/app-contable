@@ -16,6 +16,8 @@ create table if not exists public.emision_refs (
   -- Sin FK a propuestas_ia a propósito: la ref sobrevive si la propuesta o la cartola
   -- se borran (soporte la sigue encontrando). Copia mínima sin PII:
   propuesta_id uuid unique,
+  -- Fecha de referencia: la del movimiento si la conoce quien la pide; el trigger de
+  -- boletas guarda la fecha de emisión.
   fecha_mov date,
   monto numeric,
   tipo_dte integer,
@@ -57,7 +59,7 @@ declare
   intento integer := 0;
 begin
   if p_propuesta_id is not null then
-    select ref into existente from public.emision_refs where propuesta_id = p_propuesta_id;
+    select ref into existente from public.emision_refs where propuesta_id = p_propuesta_id and empresa_id = p_empresa_id;
     if existente is not null then
       return existente;
     end if;
@@ -112,8 +114,15 @@ security definer
 set search_path = public
 as $$
 begin
+  -- BLINDADO: la ref es un extra; JAMÁS puede impedir que se guarde una boleta real
+  -- (folio emitido en el SII). Cualquier error → ref null + warning.
   if new.ref is null then
-    new.ref := public.emision_ref_nueva(new.empresa_id, new.propuesta_id, new.fecha_emision, new.monto_total, new.tipo_dte);
+    begin
+      new.ref := public.emision_ref_nueva(new.empresa_id, new.propuesta_id, new.fecha_emision, new.monto_total, new.tipo_dte);
+    exception when others then
+      new.ref := null;
+      raise warning 'emision_ref_nueva: %', sqlerrm;
+    end;
   end if;
   return new;
 end;

@@ -19,15 +19,21 @@ export async function GET(request: Request) {
   const range = monthRange(year, month);
   if (!range) return NextResponse.json({ ok: false, error: "MONTH_INVALID" }, { status: 400 });
 
-  const { data, error } = await guard.service
+  const consulta = (columnas: string) => guard.service
     .from("boletas_emitidas")
-    .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado,ref")
+    .select(columnas)
     .eq("empresa_id", guard.empresaId)
     .gte("fecha_emision", range.start)
     .lt("fecha_emision", range.end)
     .order("fecha_emision", { ascending: false })
     .order("folio", { ascending: false })
     .limit(1000);
+  const BASE = "id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado";
+  let { data, error } = await consulta(`${BASE},ref`);
+  // Tolerante al orden de deploy: sin la columna `ref` (migración sin aplicar), sin ella.
+  if (error && (error.code === "42703" || /\bref\b/.test(error.message ?? ""))) {
+    ({ data, error } = await consulta(BASE));
+  }
 
   if (error) return NextResponse.json({ ok: false, error: "QUERY_FAILED", detalle: error.message }, { status: 500 });
 

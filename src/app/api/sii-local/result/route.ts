@@ -415,6 +415,18 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
 // estar bloqueada (ahora sale por yaEmitidas, no por enRevision). Idempotente: si ya
 // está completed, el WHERE no matchea. Best-effort: la boleta ya quedó guardada, que
 // es lo que importa.
+/** Ref interna de una propuesta (emision_refs). Best-effort: null si no hay o falla. */
+async function refDePropuesta(sb: ServiceDb, empresaId: string, propuestaId: string | null): Promise<string | null> {
+  if (!propuestaId) return null;
+  try {
+    const { data } = await (sb as unknown as { from: (t: string) => { select: (c: string) => { eq: (a: string, b: string) => { eq: (a: string, b: string) => { maybeSingle: () => Promise<{ data: { ref?: string } | null }> } } } } })
+      .from("emision_refs").select("ref").eq("empresa_id", empresaId).eq("propuesta_id", propuestaId).maybeSingle();
+    return typeof data?.ref === "string" ? data.ref : null;
+  } catch {
+    return null;
+  }
+}
+
 async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) {
   if (!propuestaId) return;
   try {
@@ -618,7 +630,7 @@ async function backfillFolioSinJobVivo(
         .eq("empresa_id", args.empresaId).eq("propuesta_id", args.propuestaId).neq("estado", "anulada").maybeSingle();
       if (propViva && String(propViva.folio) !== String(args.folio)) {
         const { data: boletaB } = await sb
-          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null }).select("id").single();
+          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null, ref: await refDePropuesta(sb, args.empresaId, args.propuestaId) }).select("id").single();
         await recordOpsEvent({
           sb, severity: "critical", source: "sii-local", eventName: "doble_folio_propuesta",
           summary: `Doble folio para una propuesta (recuperación): folios ${propViva.folio} y ${args.folio}`,
@@ -1333,7 +1345,8 @@ export async function POST(request: Request) {
       if (propViva && String(propViva.folio) !== String(folio)) {
         const { data: boletaB } = await sb
           .from("boletas_emitidas")
-          .insert({ ...boletaInsert, propuesta_id: null })
+          // Con la MISMA ref de la propuesta: dos boletas con la misma ref = doble folio visible.
+          .insert({ ...boletaInsert, propuesta_id: null, ref: await refDePropuesta(sb, empresaId, job.propuesta_id) })
           .select("id, folio, estado")
           .single();
         await recordOpsEvent({
