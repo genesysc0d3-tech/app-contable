@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { calcularCuadre } from "./cuadre";
 import {
-  CONFIANZA_RECUPERADA, esAgregable, fechaIsoValida, leerCuadre, marcarAgregadas,
+  CONFIANZA_RECUPERADA, esAgregable, fechaIsoValida, leerCuadre, marcarAgregadas, motivoTexto,
   movimientoRecuperado, planAgregar, propuestaRecuperada, resumenCuadre,
 } from "./cuadre-mesa";
 import { idsRecuperacion, uuidV5 } from "./cuadre-ids";
@@ -177,5 +177,23 @@ describe("cableado del cuadre", () => {
     // Relee progreso_ia justo antes de escribir el cuadre final.
     expect(src).toMatch(/const \{ data: fresco \}[\s\S]*marcarAgregadas\(leerCuadre\(progresoFresco\)/);
     expect(src.match(/ignoreDuplicates: true/g)?.length).toBe(2);
+  });
+});
+
+describe("esAgregable — solo filas bien leídas que no llegaron a la mesa (revisión final)", () => {
+  const base = { fila: 12, fecha: "2026-09-04", monto: 170000, tipo_flujo: "entrada", descripcion: "Transf", legitimo: false } as const;
+  it("no_guardada con fecha real → sí", () => {
+    expect(esAgregable({ ...base, motivo: "no_guardada" } as never)).toBe(true);
+  });
+  it("fecha_fuera_de_rango trae una ISO válida (1999/2091) → NUNCA se agrega", () => {
+    expect(esAgregable({ ...base, fecha: "1999-06-14", motivo: "fecha_fuera_de_rango" } as never)).toBe(false);
+    expect(esAgregable({ ...base, fecha: "2091-01-01", motivo: "fecha_fuera_de_rango" } as never)).toBe(false);
+  });
+  it("fecha_imposible → no", () => {
+    expect(esAgregable({ ...base, motivo: "fecha_imposible" } as never)).toBe(false);
+  });
+  it("los motivos nuevos tienen su texto", () => {
+    expect(motivoTexto("fecha_imposible")).toBe("Fecha imposible");
+    expect(motivoTexto("fecha_fuera_de_rango")).toBe("Fecha fuera de rango");
   });
 });

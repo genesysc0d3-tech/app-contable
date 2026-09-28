@@ -62,3 +62,23 @@ describe("la ruta /api/sii-local/result aplica la política", () => {
     expect(rec).toContain("elegirResultadoRecuperable(");
   });
 });
+
+describe("elegirResultadoRecuperable — sin job_id no cruza jobs (revisión final I2)", () => {
+  it("la más reciente es insegura del job X y hay una segura vieja del job W → elige X, no W", () => {
+    const filas = [
+      { job_id: "X", status: STATUS_SESION_INSEGURA, result: { folio: 2 } },
+      { job_id: "W", status: "persisted", result: { folio: 1 } },
+    ];
+    expect(elegirResultadoRecuperable(filas)?.job_id).toBe("X");
+  });
+  it("dentro del mismo job sigue prefiriendo la segura", () => {
+    const filas = [
+      { job_id: "X", status: STATUS_SESION_INSEGURA, result: { folio: 2 } },
+      { job_id: "X", status: "persisted", result: { folio: 2 } },
+    ];
+    expect(elegirResultadoRecuperable(filas)?.status).toBe("persisted");
+  });
+  it("veredicto_verificacion con sesión insegura → bloquear", () => {
+    expect(politicaResultSesionInsegura({ veredicto_verificacion: "no_salio" })).toBe("bloquear");
+  });
+});

@@ -24,3 +24,10 @@ describe("desenlaceDeMensaje — qué contestó la extensión a la verificación
     expect(desenlaceDeMensaje({ ...base, type: "APP_CONTABLE_SII_JOB_STATUS", status: "capturing_result" })).toBeNull();
   });
 });
+
+describe("desenlaceDeMensaje — solo respaldo no es 'salió' (revisión final I1)", () => {
+  it("persisted ok pero pendiente_verificacion_sesion → revisar", () => {
+    const r = desenlaceDeMensaje({ type: "APP_CONTABLE_SII_JOB_RESULT", result: { folio: 24531, folio_confidence: "high", persisted: { ok: true, pendiente_verificacion_sesion: "MFA_REQUERIDO" } } } as never);
+    expect(r?.d).toBe("revisar");
+  });
+});

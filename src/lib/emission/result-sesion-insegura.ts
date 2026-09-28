@@ -26,7 +26,10 @@ export function politicaResultSesionInsegura(payload: {
   declarar_no_salio?: unknown;
   recover_latest?: unknown;
   result?: unknown;
+  veredicto_verificacion?: unknown;
 }): PoliticaResultInseguro {
+  // Veredicto de una verificación (no salió): devuelve boletas a Listas → sesión segura.
+  if (payload.veredicto_verificacion != null) return "bloquear";
   // Declaraciones humanas: el humano reintenta tras el MFA; nada que perder.
   if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true) return "bloquear";
   // Promover el stash a boleta ES escribir libros: solo con sesión segura.
@@ -46,7 +49,14 @@ export function politicaResultSesionInsegura(payload: {
  * (la que dejó una captura real mientras faltaba el MFA). Así una fila plantada
  * por una sesión aal1 no le gana a la captura legítima del mismo job.
  */
-export function elegirResultadoRecuperable<T extends { status?: string | null; result?: unknown }>(filas: T[] | null | undefined): T | undefined {
+export function elegirResultadoRecuperable<T extends { status?: string | null; result?: unknown; job_id?: string | null }>(filas: T[] | null | undefined): T | undefined {
   const validas = (filas ?? []).filter((f) => f.result != null && typeof f.result === "object");
-  return validas.find((f) => f.status !== STATUS_SESION_INSEGURA) ?? validas[0];
+  if (validas.length === 0) return undefined;
+  // Sin job_id pedido, las filas pueden ser de VARIOS jobs: primero se fija el job de
+  // la fila más reciente y recién ahí se prefiere la segura DENTRO de ese job. Si no,
+  // una segura vieja de otro job ganaba ("ya estaba") y el folio nuevo nunca se
+  // registraba (revisión final 2026-09-28, I2).
+  const job = validas[0].job_id ?? null;
+  const delJob = validas.filter((f) => (f.job_id ?? null) === job);
+  return delJob.find((f) => f.status !== STATUS_SESION_INSEGURA) ?? delJob[0];
 }

@@ -37,7 +37,7 @@ type ExtMsg = {
   result?: {
     folio?: number | string;
     folio_confidence?: string;
-    persisted?: { ok?: boolean; boleta_id?: string };
+    persisted?: { ok?: boolean; boleta_id?: string; pendiente_verificacion_sesion?: unknown };
   };
 };
 
@@ -49,7 +49,10 @@ export function desenlaceDeMensaje(data: ExtMsg): { d: DesenlaceVerificacion; fo
   if (data.type === "APP_CONTABLE_SII_JOB_RESULT") {
     const folioNum = Number(data.result?.folio);
     const folio = Number.isFinite(folioNum) && folioNum > 0 ? folioNum : null;
-    const ok = data.result?.folio_confidence === "high" && data.result?.persisted?.ok === true && folio != null;
+    // Con sesión insegura el server solo lo dejó en su respaldo (sin boleta): no es
+    // "salió, ya está en Boletas" — queda a medias hasta completar la verificación.
+    const soloRespaldo = Boolean(data.result?.persisted?.pendiente_verificacion_sesion);
+    const ok = data.result?.folio_confidence === "high" && data.result?.persisted?.ok === true && folio != null && !soloRespaldo;
     return ok ? { d: "emitida", folio, boletaId: data.result?.persisted?.boleta_id ?? null } : { d: "revisar", texto: data.message };
   }
   if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return null;

@@ -24,7 +24,13 @@ const MOTIVOS: Record<string, string> = {
   fecha_ilegible: "Fecha ilegible",
   tipo_desconocido: "No se sabe si es abono o cargo",
   cargo_y_abono: "Trae cargo y abono a la vez",
+  fecha_imposible: "Fecha imposible",
+  fecha_fuera_de_rango: "Fecha fuera de rango",
 };
+
+/** Motivos que SÍ se pueden agregar solos: la fila se leyó bien y solo no llegó a
+ *  la mesa. Lista blanca: un motivo nuevo (p.ej. una fecha dudosa) nunca se cuela. */
+const MOTIVOS_AGREGABLES = new Set(["no_guardada"]);
 
 export function motivoTexto(motivo: string): string {
   return MOTIVOS[motivo] ?? "No llegó a la mesa";
@@ -67,7 +73,10 @@ export function fechaIsoValida(f: string | null | undefined): f is string {
 
 /** Una fila se puede agregar sola si trae fecha real, dirección y plata. */
 export function esAgregable(p: Perdida): boolean {
-  return fechaIsoValida(p.fecha)
+  // Revisión final 2026-09-28: una fila "fecha_fuera_de_rango" trae una ISO válida
+  // (1999, 2091) y se agregaba con esa fecha falsa. Solo motivos de la lista blanca.
+  return MOTIVOS_AGREGABLES.has(p.motivo)
+    && fechaIsoValida(p.fecha)
     && (p.tipo_flujo === "entrada" || p.tipo_flujo === "salida")
     && Number(p.monto) > 0;
 }
