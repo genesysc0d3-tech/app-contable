@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -160,6 +160,34 @@ async function recordSiiLocalFailure(
     resourceId: job.job_id,
     metadata: { error, ...metadata },
   });
+}
+
+/**
+ * Documento de origen de una propuesta (propuesta → movimiento → documento) en UNA
+ * ida a la base con joins (plan-costo-vercel §6 PR 3; antes eran 3 idas en cadena por
+ * boleta). Si el join falla por lo que sea, cae a la cadena de siempre: quedarse sin
+ * el documento haría insertar una segunda fila "boleta_sii_local" (la mentira ámbar
+ * de 2026-08-27).
+ */
+async function documentoDeLaPropuesta(sb: ServiceDb, propuestaId: string): Promise<{ id: string; tipo: string; progreso_ia: unknown } | null> {
+  const { data, error } = await sb
+    .from("propuestas_ia")
+    .select("movimiento_id, movimientos_raw!propuestas_ia_movimiento_id_fkey(documento_id, documentos_subidos!movimientos_raw_documento_id_fkey(id, tipo, progreso_ia))")
+    .eq("id", propuestaId)
+    .maybeSingle();
+  if (!error) {
+    const mov = (data as { movimientos_raw?: unknown } | null)?.movimientos_raw;
+    const movObj = (Array.isArray(mov) ? mov[0] : mov) as { documentos_subidos?: unknown } | null | undefined;
+    const doc = movObj?.documentos_subidos;
+    const docObj = (Array.isArray(doc) ? doc[0] : doc) as { id: string; tipo: string; progreso_ia: unknown } | null | undefined;
+    return docObj ?? null;
+  }
+  const { data: prop } = await sb.from("propuestas_ia").select("movimiento_id").eq("id", propuestaId).maybeSingle();
+  if (!prop?.movimiento_id) return null;
+  const { data: movRow } = await sb.from("movimientos_raw").select("documento_id").eq("id", prop.movimiento_id).maybeSingle();
+  if (!movRow?.documento_id) return null;
+  const { data: reqDoc } = await sb.from("documentos_subidos").select("id, tipo, progreso_ia").eq("id", movRow.documento_id).maybeSingle();
+  return reqDoc ?? null;
 }
 
 async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
@@ -1237,21 +1265,15 @@ export async function POST(request: Request) {
   // Guardia dura: SOLO docs tipo boleta_unica (jamás renombrar una cartola).
   let solicitudActualizada = false;
   if (job.propuesta_id) {
-    const { data: prop } = await sb.from("propuestas_ia").select("movimiento_id").eq("id", job.propuesta_id).maybeSingle();
-    if (prop?.movimiento_id) {
-      const { data: movRow } = await sb.from("movimientos_raw").select("documento_id").eq("id", prop.movimiento_id).maybeSingle();
-      if (movRow?.documento_id) {
-        const { data: reqDoc } = await sb.from("documentos_subidos").select("id, tipo, progreso_ia").eq("id", movRow.documento_id).maybeSingle();
-        if (reqDoc?.tipo === "boleta_unica") {
-          const progresoPrevio = (reqDoc.progreso_ia && typeof reqDoc.progreso_ia === "object") ? reqDoc.progreso_ia as Record<string, unknown> : {};
-          const origenPrevio = typeof progresoPrevio.origen === "string" ? progresoPrevio.origen : progresoEmitido.origen;
-          const { error: updErr } = await sb.from("documentos_subidos").update({
-            nombre_archivo: `${docWord} SII #${boleta.folio} - ${receptorLabel}`,
-            progreso_ia: { ...progresoPrevio, ...progresoEmitido, origen: origenPrevio },
-          }).eq("id", reqDoc.id);
-          solicitudActualizada = !updErr;
-        }
-      }
+    const reqDoc = await documentoDeLaPropuesta(sb, job.propuesta_id);
+    if (reqDoc?.tipo === "boleta_unica") {
+      const progresoPrevio = (reqDoc.progreso_ia && typeof reqDoc.progreso_ia === "object") ? reqDoc.progreso_ia as Record<string, unknown> : {};
+      const origenPrevio = typeof progresoPrevio.origen === "string" ? progresoPrevio.origen : progresoEmitido.origen;
+      const { error: updErr } = await sb.from("documentos_subidos").update({
+        nombre_archivo: `${docWord} SII #${boleta.folio} - ${receptorLabel}`,
+        progreso_ia: { ...progresoPrevio, ...progresoEmitido, origen: origenPrevio },
+      }).eq("id", reqDoc.id);
+      solicitudActualizada = !updErr;
     }
   }
   if (!solicitudActualizada) {
@@ -1281,7 +1303,10 @@ export async function POST(request: Request) {
   if (result?.receptor_omitido === true) {
     await recordSiiLocalFailure(sb, job, "RECEPTOR_OMITIDO", "Documento emitido sin el receptor pedido", { folio, tipo_dte: tipoDte }, "warn");
   }
-  await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
+  // Rama FELIZ: la boleta ya está guardada; este registro solo alimenta el historial,
+  // así que va después de responder (plan-costo-vercel §6 PR 3). Las ramas de FALLA
+  // siguen síncronas: son el STASH que usa recover_latest para rescatar el folio.
+  after(() => rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result }));
   if (pdfPendiente) {
     await recordSiiLocalFailure(sb, job, "PDF_PENDIENTE", "Boleta SII local persistida sin PDF adjunto", {
       tipo_dte: tipoDte,

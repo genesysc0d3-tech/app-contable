@@ -35,7 +35,7 @@ describe("revisarPropuestaEmitible — falla CERRADA", () => {
   it("todo limpio → ok", async () => {
     const { sb, consultas } = fakeSb({});
     expect(await revisarPropuestaEmitible(sb, "p")).toEqual({ ok: true });
-    expect(consultas).toEqual(["boletas", "revision", "vuelo"]);
+    expect([...consultas].sort()).toEqual(["boletas", "revision", "vuelo"]);
   });
 
   it("error al consultar boletas → rechaza (antes pasaba de largo)", async () => {
@@ -56,10 +56,23 @@ describe("revisarPropuestaEmitible — falla CERRADA", () => {
   });
 
   it("ya emitida → 409 PROPUESTA_YA_EMITIDA (el lote la salta sin pausar)", async () => {
-    const { sb, consultas } = fakeSb({ boletas: { data: { id: "b1" }, error: null } });
+    const { sb } = fakeSb({ boletas: { data: { id: "b1" }, error: null } });
     const r = await revisarPropuestaEmitible(sb, "p");
     expect(r).toMatchObject({ ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA" });
-    expect(consultas).toEqual(["boletas"]);
+  });
+
+  it("precedencia intacta aunque vayan en paralelo: ya emitida gana a a-medias y en-vuelo", async () => {
+    const r = await revisarPropuestaEmitible(fakeSb({
+      boletas: { data: { id: "b1", folio: 7 }, error: null },
+      revision: { data: { job_id: "j" }, error: null },
+      vuelo: { data: { job_id: "k" }, error: null },
+    }).sb, "p");
+    expect(r).toMatchObject({ error: "PROPUESTA_YA_EMITIDA", folio: 7 });
+    const r2 = await revisarPropuestaEmitible(fakeSb({
+      revision: { data: { job_id: "j" }, error: null },
+      vuelo: { data: { job_id: "k" }, error: null },
+    }).sb, "p");
+    expect(r2).toMatchObject({ error: "REVISION_PENDIENTE" });
   });
 
   it("a medias → 409 REVISION_PENDIENTE; en vuelo → 409 EMISION_EN_CURSO", async () => {

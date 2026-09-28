@@ -71,20 +71,10 @@ export async function revisarPostCandado(sb: Sb, propuestaId: string): Promise<P
   return revisarLapida(sb, propuestaId);
 }
 
-/**
- * Chequeo completo ANTES de tomar el candado: ya emitida → a medias → en vuelo.
- * El orden importa: "ya emitida" es el código que el lote salta sin pausar.
- */
-export async function revisarPropuestaEmitible(sb: Sb, propuestaId: string, ahora = new Date()): Promise<PropuestaEmitible> {
-  const ya = await revisarYaEmitida(sb, propuestaId);
-  if (!ya.ok) return ya;
-
-  const lapida = await revisarLapida(sb, propuestaId);
-  if (!lapida.ok) return lapida;
-
-  // (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
-  // bloquear una propuesta para siempre si un intento crasheó pre-emit.
-  const { data: enVuelo, error: errVuelo } = await sb
+/** (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
+ *  bloquear una propuesta para siempre si un intento crasheó pre-emit. */
+async function revisarEnVuelo(sb: Sb, propuestaId: string, ahora: Date): Promise<PropuestaEmitible> {
+  const { data, error } = await sb
     .from("emision_jobs")
     .select("job_id")
     .eq("propuesta_id", propuestaId)
@@ -92,9 +82,23 @@ export async function revisarPropuestaEmitible(sb: Sb, propuestaId: string, ahor
     .gt("expires_at", ahora.toISOString())
     .limit(1)
     .maybeSingle();
-  if (errVuelo) return CONSULTA_FALLIDA;
-  if (enVuelo) {
-    return { ok: false, status: 409, error: "EMISION_EN_CURSO", detalle: "Ya hay una emisión en curso para esta boleta." };
-  }
+  if (error) return CONSULTA_FALLIDA;
+  if (data) return { ok: false, status: 409, error: "EMISION_EN_CURSO", detalle: "Ya hay una emisión en curso para esta boleta." };
+  return { ok: true };
+}
+
+/**
+ * Chequeo completo ANTES de tomar el candado: ya emitida → a medias → en vuelo.
+ * Las tres consultas van EN PARALELO (plan-costo-vercel §6 PR 3: una ida a la base
+ * en vez de tres por boleta) pero se JUZGAN en este orden, así la precedencia de
+ * códigos es la de siempre: "ya emitida" es el código que el lote salta sin pausar.
+ */
+export async function revisarPropuestaEmitible(sb: Sb, propuestaId: string, ahora = new Date()): Promise<PropuestaEmitible> {
+  const [ya, lapida, vuelo] = await Promise.all([
+    revisarYaEmitida(sb, propuestaId),
+    revisarLapida(sb, propuestaId),
+    revisarEnVuelo(sb, propuestaId, ahora),
+  ]);
+  for (const r of [ya, lapida, vuelo]) if (!r.ok) return r;
   return { ok: true };
 }
