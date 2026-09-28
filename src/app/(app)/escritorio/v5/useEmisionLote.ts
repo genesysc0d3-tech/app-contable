@@ -98,12 +98,15 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         const folioNum = Number(data.result?.folio);
         const folio = Number.isFinite(folioNum) ? folioNum : null;
         // Emitida = folio con evidencia fuerte Y guardado confirmado en la app.
-        const emitida = data.result?.folio_confidence === "high" && persisted?.ok === true && folio != null;
+        // Con sesión insegura el server solo lo guardó en su respaldo (sin boleta en los
+        // libros): no es "emitida" — queda a medias hasta completar la verificación.
+        const soloRespaldo = Boolean((persisted as { pendiente_verificacion_sesion?: unknown } | undefined)?.pendiente_verificacion_sesion);
+        const emitida = data.result?.folio_confidence === "high" && persisted?.ok === true && folio != null && !soloRespaldo;
         if (emitida) {
           w.resolve({ estado: "emitida", folio: folio as number, boletaId: persisted?.boleta_id ?? null });
         } else {
           // Folio real sin guardar (o sin evidencia): "a medias" → frena el lote.
-          w.resolve({ estado: "revisar", motivo: persisted?.detalle ?? persisted?.error ?? "Emitiste, pero no se confirmó el guardado en la app.", folio });
+          w.resolve({ estado: "revisar", motivo: soloRespaldo ? "El folio quedó respaldado, pero falta verificar tu sesión: entra de nuevo a la app y usa Recuperar folio." : persisted?.detalle ?? persisted?.error ?? "Emitiste, pero no se confirmó el guardado en la app.", folio });
         }
         return;
       }

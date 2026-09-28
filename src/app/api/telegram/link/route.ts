@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { telegramHabilitadoEmpresa } from "@/lib/entitlements";
@@ -19,9 +19,11 @@ export async function GET() {
   const botUsername = process.env.TELEGRAM_BOT_USERNAME;
   const botConfigured = Boolean(botUsername && process.env.TELEGRAM_BOT_TOKEN);
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher (api/telegram/ se excluye por el WEBHOOK): sin esto, una sesión
+  // aal1 vinculaba su propio chat al bot de la empresa y emitía por Telegram.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
 
   const { data: usuario } = await supabase
     .from("usuarios")
@@ -79,9 +81,11 @@ export async function GET() {
  * al chat desconectado para que el takeover/corte nunca sea silencioso.
  */
 export async function DELETE() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher (api/telegram/ se excluye por el WEBHOOK): sin esto, una sesión
+  // aal1 vinculaba su propio chat al bot de la empresa y emitía por Telegram.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
 
   const { data: usuario } = await supabase
     .from("usuarios")
@@ -135,9 +139,11 @@ export async function POST() {
   }
 
   // Auth + empresa (mismo patrón que /api/intermediaria/emitir-boleta).
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher (api/telegram/ se excluye por el WEBHOOK): sin esto, una sesión
+  // aal1 vinculaba su propio chat al bot de la empresa y emitía por Telegram.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
 
   const { data: usuario } = await supabase
     .from("usuarios")

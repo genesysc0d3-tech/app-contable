@@ -2,7 +2,8 @@ import { NextResponse, after } from "next/server";
 import { validarAccesoCuenta } from "@/lib/entitlements";
 import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura, respuestaSesionInsegura } from "@/lib/api/sesion-segura";
+import { STATUS_SESION_INSEGURA, elegirResultadoRecuperable, politicaResultSesionInsegura } from "@/lib/emission/result-sesion-insegura";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
@@ -199,9 +200,9 @@ async function documentoDeLaPropuesta(sb: ServiceDb, propuestaId: string): Promi
   return reqDoc ?? null;
 }
 
-async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
+async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }): Promise<boolean> {
   try {
-    await sb.from("sii_local_resultados").insert({
+    const { error: insertError } = await sb.from("sii_local_resultados").insert({
       user_id: entry.user_id,
       job_id: entry.job_id,
       folio: entry.folio,
@@ -214,10 +215,15 @@ async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: s
       .delete()
       .eq("user_id", entry.user_id)
       .lt("received_at", new Date(Date.now() - RESULT_RETENTION_DAYS * 24 * 3600 * 1000).toISOString());
+    // true = la fila quedó guardada (la rama de sesión insegura depende de esto
+    // para no decirle a la extensión que suelte un folio que no se guardó).
+    if (insertError) console.error("[sii-local-result] no se pudo registrar el resultado", insertError.message);
+    return !insertError;
   } catch (error) {
     // Log best-effort: si la tabla aún no existe (migración pendiente) no se
     // bloquea la emisión, solo se pierde la recuperación posterior.
     console.error("[sii-local-result] no se pudo registrar el resultado", error);
+    return false;
   }
 }
 
@@ -670,9 +676,11 @@ async function backfillFolioSinJobVivo(
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher del proxy: sesión + inactividad + MFA aal2 se evalúan ACÁ
+  // (sesion-segura.ts). Sin usuario → 401 siempre.
+  const guard = await requireSesionSegura();
+  const user = guard.user;
+  if (!user) return guard.ok ? respuestaSesionInsegura("NO_AUTH") : guard.response;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -684,6 +692,51 @@ export async function POST(request: Request) {
     payload = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
+  }
+
+  // Sesión insegura (inactividad vencida o MFA pendiente) con usuario válido
+  // (política completa en lib/emission/result-sesion-insegura.ts):
+  //  · captura del folio de la extensión → SOLO al stash del servidor, NUNCA a
+  //    boletas_emitidas (una sesión aal1 no escribe libros). Se responde ok para que
+  //    la extensión suelte su copia local: el folio ya vive en el servidor. Tras el
+  //    MFA, "Recuperar folio" (recover_latest) lo promueve con todos los gates.
+  //  · todo lo demás (declaraciones humanas, recover_latest, formulario manual) → 401.
+  // Si el stash del servidor falla → 503: la extensión conserva su copia y reintenta.
+  if (!guard.ok) {
+    if (politicaResultSesionInsegura(payload) === "bloquear") return guard.response;
+    const jobIdInseguro = typeof payload.job_id === "string" && payload.job_id.trim() ? payload.job_id.trim() : null;
+    const folioInseguro = positiveInt(payload.result?.folio);
+    const guardado = await rememberResult(sb, {
+      user_id: user.id,
+      job_id: jobIdInseguro,
+      folio: folioInseguro,
+      status: STATUS_SESION_INSEGURA,
+      error: guard.motivo,
+      result: payload.result,
+    });
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_result_sesion_insegura",
+      summary: guardado
+        ? `Resultado SII guardado SOLO en el stash (sesión insegura: ${guard.motivo}); se registra tras el MFA con "Recuperar folio"`
+        : `Resultado SII con sesión insegura (${guard.motivo}) y el stash falló: la extensión conserva su copia`,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobIdInseguro,
+      metadata: { motivo: guard.motivo, folio: folioInseguro, stash_ok: guardado },
+    });
+    if (!guardado) {
+      return NextResponse.json({ ok: false, error: "STASH_NO_DISPONIBLE", sesion: guard.motivo }, { status: 503 });
+    }
+    return NextResponse.json({
+      ok: true,
+      boleta_id: null,
+      folio: folioInseguro,
+      pendiente_verificacion_sesion: guard.motivo,
+      detalle: "El folio quedó resguardado. Entra a massDTE y usa «Recuperar folio» para registrarlo.",
+    });
   }
 
   // Telemetría de flota (bridge 0.1.7+): anota qué versión corre esta empresa.
@@ -933,11 +986,14 @@ export async function POST(request: Request) {
   if (payload.recover_latest) {
     let query = sb
       .from("sii_local_resultados")
-      .select("job_id, result")
+      .select("job_id, result, status")
       .eq("user_id", user.id)
       .not("result", "is", null)
       .order("received_at", { ascending: false })
-      .limit(1);
+      // Varias filas (no 1): se prefiere la captura con sesión segura sobre una
+      // "sesion_insegura" del mismo job (elegirResultadoRecuperable). Sin filtrar por
+      // status: el stash de sesión insegura TIENE que poder promoverse tras el MFA.
+      .limit(10);
     if (payload.job_id) query = query.eq("job_id", payload.job_id);
     // Sin job_id el rescate es "lo último que emitiste": acotarlo a 24 h. Sin la
     // ventana podía resucitar una boleta VIEJA de otra emisión y reportarla como
@@ -950,7 +1006,7 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const recovered = recoveredRows?.[0] as { job_id: string | null; result: unknown } | undefined;
+    const recovered = elegirResultadoRecuperable(recoveredRows as Array<{ job_id: string | null; result: unknown; status: string | null }> | null);
     if (!recovered?.result || typeof recovered.result !== "object") {
       return NextResponse.json({ ok: false, error: "SIN_RESULTADO_SII_RECUPERABLE" }, { status: 404 });
     }
@@ -1522,9 +1578,10 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Lectura del historial: se bloquea con sesión insegura (nada que perder).
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const user = guard.user;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

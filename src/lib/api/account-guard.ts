@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { contextoCuentaPorEmpresa, validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { puedeEmitir } from "@/lib/pagos/metering";
-import { debeRefrescarUltimoAcceso, sesionVencidaPorInactividad } from "@/lib/auth/inactividad-sesion";
+import { respuestaSesionInsegura, verificarSesionSegura } from "@/lib/api/sesion-segura";
 
 type Sb = SupabaseClient<Database>;
 
@@ -44,27 +44,15 @@ export async function requireAccountApiAccess(options: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, response: NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 }) };
 
-  // Cierre por inactividad. Va ACÁ y no en cada ruta: toda ruta que use este
-  // guard lo hereda, incluida /api/extension/vault-key, que es la que abre la
-  // bóveda con las claves del SII y que el middleware NO cubre (está excluida
-  // del matcher). Ver lib/auth/inactividad-sesion.ts para el porqué.
+  // Cierre por inactividad + MFA aal2. Van ACÁ y no en cada ruta: toda ruta que use
+  // este guard los hereda, incluida /api/extension/vault-key, que es la que abre la
+  // bóveda con las claves del SII y que el proxy NO cubre (está excluida del
+  // matcher). Antes solo se revisaba la inactividad: una sesión aal1 de alguien con
+  // MFA pedía la llave de la bóveda igual (hueco 2026-09-28). La regla es UNA y vive
+  // en sesion-segura.ts (misma decisión que el proxy). Ver lib/auth/inactividad-sesion.ts.
   {
-    const url0 = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key0 = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (url0 && key0) {
-      const sb0 = createServiceClient<Database>(url0, key0);
-      const { data: visto } = await sb0.from("usuarios").select("ultimo_acceso").eq("id", user.id).maybeSingle();
-      // last_sign_in_at: un login recién hecho nunca está "vencido" (incidente 2026-09-22).
-      if (sesionVencidaPorInactividad(visto?.ultimo_acceso, Date.now(), user.last_sign_in_at)) {
-        return {
-          ok: false,
-          response: NextResponse.json({ ok: false, error: "SESSION_EXPIRED" }, { status: 401 }),
-        };
-      }
-      if (debeRefrescarUltimoAcceso(visto?.ultimo_acceso)) {
-        await sb0.from("usuarios").update({ ultimo_acceso: new Date().toISOString() }).eq("id", user.id);
-      }
-    }
+    const sesion = await verificarSesionSegura(supabase, user);
+    if (!sesion.ok) return { ok: false, response: respuestaSesionInsegura(sesion.motivo) };
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
