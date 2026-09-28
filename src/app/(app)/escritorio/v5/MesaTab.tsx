@@ -13,6 +13,7 @@ import MedioPagoControl from "./MedioPagoControl";
 import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import VeredictoCard from "./VeredictoCard";
 import VeredictoCartola from "./VeredictoCartola";
+import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
 import AtribucionDoc from "./AtribucionDoc";
 // Perf: el editor bulk de cartolas sale del bundle inicial (solo existe dentro
 // del popup); se precarga en idle tras montar la mesa — abrir sigue instantáneo.
@@ -227,6 +228,11 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     }
   };
 
+  // Si se perdieron TODAS las filas (0 propuestas), el visor igual se muestra:
+  // es justo donde vive "Faltan N por $X" y el botón Agregarlos.
+  const selCuadre = selDoc ? leerCuadre(selDoc.progreso_ia) : null;
+  const selCuadreFaltan = selCuadre ? resumenCuadre(selCuadre).faltan > 0 : false;
+
   const tipoNombre = (selDoc?.nombre_archivo ?? "");
   const tipo = selDoc
     ? ((selDoc.tipo ?? "").startsWith("boleta_") ? "boleta"
@@ -314,7 +320,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
           <VeredictoCard key={pend[0].id} propuesta={pend[0]} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} onClose={() => setSelDocId(null)} documentoId={selDoc.id} onViewImage={() => setViewImgDocId(selDoc.id)} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} />
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
-        ) : tipo === "massdte" && selDoc.estado === "procesado" && selProps.length > 0 ? (
+        ) : tipo === "massdte" && selDoc.estado === "procesado" && (selProps.length > 0 || selCuadreFaltan) ? (
           <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} />
         ) : (
           <>

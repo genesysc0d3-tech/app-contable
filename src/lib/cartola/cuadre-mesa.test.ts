@@ -6,6 +6,7 @@ import {
   CONFIANZA_RECUPERADA, esAgregable, fechaIsoValida, leerCuadre, marcarAgregadas,
   movimientoRecuperado, planAgregar, propuestaRecuperada, resumenCuadre,
 } from "./cuadre-mesa";
+import { idsRecuperacion, uuidV5 } from "./cuadre-ids";
 import type { CensoCartola } from "@/lib/parsers/types";
 
 const censo = (over: Partial<CensoCartola> = {}): CensoCartola => ({
@@ -21,8 +22,7 @@ const cuadreLC = () => calcularCuadre({
   filasGuardadas: [2, 5], filasDuplicadas: [], db: { movimientos: 2, propuestas: 2 },
 });
 
-let n = 0;
-const ids = () => `id-${++n}`;
+const ids = idsRecuperacion("doc-lc");
 
 describe("resumen del cuadre para el visor", () => {
   it("caso LC → 'Faltan 2 por $250.000', 2 de 4 en la mesa, con la lista", () => {
@@ -109,12 +109,24 @@ describe("Agregarlos: idempotente y deja la cartola cuadrada", () => {
     expect(marcarAgregadas(final, plan).guardadas).toBe(4);
   });
 
-  it("con una reserva previa (click anterior o corte) se reusan LOS MISMOS ids", () => {
-    const c = cuadreLC();
-    const reservado = { ...c, recuperacion: { desde: "2026-09-28T12:00:00Z", filas: planAgregar(c, ids) } };
-    const otra = planAgregar(reservado, ids);
-    expect(otra).toEqual(reservado.recuperacion.filas);
-    expect(marcarAgregadas(reservado, otra).recuperacion).toBeUndefined();
+  it("dos pestañas con la MISMA foto vieja → cero duplicados (ids deterministas)", () => {
+    const foto = cuadreLC();
+    const planA = planAgregar(foto, idsRecuperacion("doc-lc"));
+    const planB = planAgregar(JSON.parse(JSON.stringify(foto)), idsRecuperacion("doc-lc"));
+    // Simula la tabla con upsert ignoreDuplicates por id.
+    const tabla = new Map<string, unknown>();
+    for (const f of [...planA, ...planB]) {
+      if (!tabla.has(f.movimiento_id)) tabla.set(f.movimiento_id, f);
+    }
+    expect(tabla.size).toBe(2);
+    expect(planB).toEqual(planA);
+    // Movimiento y propuesta nunca comparten id; otro documento, otros ids.
+    expect(planA[0].movimiento_id).not.toBe(planA[0].propuesta_id);
+    expect(planAgregar(foto, idsRecuperacion("otro-doc"))[0].movimiento_id).not.toBe(planA[0].movimiento_id);
+  });
+
+  it("uuid v5 correcto (vector conocido de RFC 4122: DNS 'www.example.com')", () => {
+    expect(uuidV5("www.example.com", "6ba7b810-9dad-11d1-80b4-00c04fd430c8")).toBe("2ed6657d-e927-568b-95e1-2665a8aea6a2");
   });
 
   it("el movimiento nace con la forma del processor y la glosa rellena", () => {
@@ -127,14 +139,15 @@ describe("Agregarlos: idempotente y deja la cartola cuadrada", () => {
     });
   });
 
-  it("la propuesta nace pendiente, bajo 'Poner listas', sin tipo_dte ni notas", () => {
+  it("la propuesta nace NEUTRA como el fallback del processor: nunca boleta afecta por defecto", () => {
     const c = cuadreLC();
-    const p = propuestaRecuperada(c.perdidas[0], { id: "p1", movimientoId: "m1", empresaId: "e1", mesa: "boleta", exento: false });
-    expect(p).toMatchObject({ estado: "pendiente", tipo_propuesto: "boleta", tipo_dte: null, notas: null, receptor_rut: null, total: 80000, iva: 80000 - Math.round(80000 / 1.19) });
+    const p = propuestaRecuperada(c.perdidas[0], { id: "p1", movimientoId: "m1", empresaId: "e1", mesa: "boleta" });
+    expect(p).toMatchObject({
+      estado: "pendiente", tipo_propuesto: "no_comercial", tipo_dte: null, notas: null,
+      receptor_rut: null, total: 80000, monto_neto: 80000, iva: 0, confianza: 0.4,
+    });
     expect(CONFIANZA_RECUPERADA).toBeLessThan(0.8);
-    const ex = propuestaRecuperada(c.perdidas[0], { id: "p1", movimientoId: "m1", empresaId: "e1", mesa: "boleta", exento: true });
-    expect(ex).toMatchObject({ tipo_propuesto: "exenta", iva: 0, monto_neto: 80000 });
-    const cargo = propuestaRecuperada({ ...c.perdidas[0], tipo_flujo: "salida" }, { id: "p2", movimientoId: "m2", empresaId: "e1", mesa: "boleta", exento: false });
+    const cargo = propuestaRecuperada({ ...c.perdidas[0], tipo_flujo: "salida" }, { id: "p2", movimientoId: "m2", empresaId: "e1", mesa: "boleta" });
     expect(cargo).toMatchObject({ tipo_propuesto: "gasto_egreso", iva: 0 });
   });
 });
@@ -148,6 +161,9 @@ describe("cableado del cuadre", () => {
   it("el visor de la cartola muestra el cuadre y recarga la mesa al agregar", () => {
     expect(leer("VeredictoCartola.tsx")).toMatch(/<CuadreCartolaLinea documentoId=\{doc\.id\} resumen=\{resCuadre\}/);
     expect(leer("MesaTab.tsx")).toMatch(/onCuadreAgregado=\{reload\}/);
+    // Con 0 propuestas (se perdió todo) el visor igual aparece: ahí vive el botón.
+    expect(leer("MesaTab.tsx")).toMatch(/\(selProps\.length > 0 \|\| selCuadreFaltan\)/);
+    expect(leer("VeredictoCartola.tsx")).toMatch(/En tu cartola: Abonos/);
     expect(leer("CuadreCartolaLinea.tsx")).toMatch(/agregarFilasFaltantes\(documentoId\)/);
   });
   it("el server action lleva guard y upsert idempotente", () => {
@@ -156,7 +172,10 @@ describe("cableado del cuadre", () => {
     expect(src).toMatch(/ROLES_EMISION\.has/);
     expect(src).toMatch(/validarAccesoCuenta\(sb, user\.id, empresaId\)/);
     expect(src).toMatch(/\.eq\("empresa_id", empresaId\)/);
-    expect(src).toMatch(/\.is\("progreso_ia->cuadre->recuperacion", null\)/);
+    expect(src).toMatch(/planAgregar\(cuadre, idsRecuperacion\(documentoId\)\)/);
+    expect(src).not.toMatch(/randomUUID/);
+    // Relee progreso_ia justo antes de escribir el cuadre final.
+    expect(src).toMatch(/const \{ data: fresco \}[\s\S]*marcarAgregadas\(leerCuadre\(progresoFresco\)/);
     expect(src.match(/ignoreDuplicates: true/g)?.length).toBe(2);
   });
 });

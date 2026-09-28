@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -9,7 +8,7 @@ import { ROLES_EMISION } from "@/lib/auth/roles";
 import { validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { recordCuentaAudit } from "@/lib/audit/account";
-import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
+import { idsRecuperacion } from "@/lib/cartola/cuadre-ids";
 import {
   leerCuadre, marcarAgregadas, movimientoRecuperado, planAgregar, propuestaRecuperada,
 } from "@/lib/cartola/cuadre-mesa";
@@ -21,9 +20,9 @@ export type AgregarFaltantesResult =
 /**
  * "Agregarlos" del visor de la cartola (paso 3 del cuadre): devuelve a la mesa
  * las filas con plata que el procesamiento dejó fuera, como PENDIENTES de
- * revisar. Idempotente: los ids se reservan en progreso_ia.cuadre.recuperacion
- * antes de insertar y un segundo click reusa esos mismos ids (upsert que ignora
- * el repetido). Mismo guard que el resto de las acciones de la mesa.
+ * revisar. Idempotente: ids deterministas (uuid v5 de documento + fila) y
+ * upsert que ignora el repetido — dos clicks, dos pestañas o un reintento
+ * jamás duplican. Mismo guard que el resto de las acciones de la mesa.
  */
 export async function agregarFilasFaltantes(documentoId: string): Promise<AgregarFaltantesResult> {
   const supportBlock = await getDevSupportWriteBlock("cuadre_agregar_filas");
@@ -64,38 +63,16 @@ export async function agregarFilasFaltantes(documentoId: string): Promise<Agrega
   const cuadre = leerCuadre(progreso);
   if (!cuadre) return { ok: false, error: "Esta cartola no tiene cuadre" };
 
-  const plan = planAgregar(cuadre, randomUUID);
+  const plan = planAgregar(cuadre, idsRecuperacion(documentoId));
   if (plan.length === 0) return { ok: true, agregadas: 0, yaEstaban: true };
-
-  // Reserva (compare-and-set): solo un click gana. Si ya había una reserva de
-  // un intento anterior, se reusa tal cual (planAgregar devolvió sus ids).
-  if (!cuadre.recuperacion) {
-    const reservado = { ...cuadre, recuperacion: { desde: new Date().toISOString(), filas: plan } };
-    const { data: tomado, error: errReserva } = await sb
-      .from("documentos_subidos")
-      .update({ progreso_ia: { ...progreso, cuadre: reservado } as unknown as Json })
-      .eq("id", documentoId)
-      .eq("empresa_id", empresaId)
-      .is("progreso_ia->cuadre->recuperacion", null)
-      .select("id");
-    if (errReserva) return { ok: false, error: "No se pudo reservar la operación — intenta de nuevo" };
-    if (!tomado || tomado.length === 0) return { ok: false, error: "Ya se están agregando — actualiza en unos segundos" };
-  }
-
-  const { data: emp } = await sb
-    .from("empresas")
-    .select("tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
-    .eq("id", empresaId)
-    .maybeSingle();
   const mesa = doc.mesa === "factura" ? "factura" : "boleta";
-  const exento = carrilEsExento(emp ?? null, mesa);
 
   const movs = plan.map((f) => movimientoRecuperado(cuadre.perdidas[f.idx], { id: f.movimiento_id, empresaId, documentoId }));
   const { error: errMov } = await sb.from("movimientos_raw").upsert(movs, { onConflict: "id", ignoreDuplicates: true });
   if (errMov) return { ok: false, error: "No se pudieron agregar los movimientos — intenta de nuevo" };
 
   const props = plan.map((f) => propuestaRecuperada(cuadre.perdidas[f.idx], {
-    id: f.propuesta_id, movimientoId: f.movimiento_id, empresaId, mesa, exento,
+    id: f.propuesta_id, movimientoId: f.movimiento_id, empresaId, mesa,
   }));
   const { error: errProp } = await sb.from("propuestas_ia").upsert(props, { onConflict: "id", ignoreDuplicates: true });
   if (errProp) return { ok: false, error: "No se pudieron crear las propuestas — intenta de nuevo" };
@@ -109,10 +86,19 @@ export async function agregarFilasFaltantes(documentoId: string): Promise<Agrega
     return { ok: false, error: "No se confirmaron todas las filas — intenta de nuevo" };
   }
 
-  const final = marcarAgregadas(cuadre, plan);
+  // Releer JUSTO antes de escribir: no pisar otros campos de progreso_ia ni lo
+  // que otra pestaña ya marcó (marcarAgregadas no vuelve a sumar lo marcado).
+  const { data: fresco } = await sb
+    .from("documentos_subidos")
+    .select("progreso_ia")
+    .eq("id", documentoId)
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+  const progresoFresco = (fresco?.progreso_ia ?? progreso) as Record<string, unknown>;
+  const final = marcarAgregadas(leerCuadre(progresoFresco) ?? cuadre, plan);
   const { error: errFinal } = await sb
     .from("documentos_subidos")
-    .update({ progreso_ia: { ...progreso, cuadre: final } as unknown as Json })
+    .update({ progreso_ia: { ...progresoFresco, cuadre: final } as unknown as Json })
     .eq("id", documentoId)
     .eq("empresa_id", empresaId);
   if (errFinal) return { ok: false, error: "Se agregaron, pero no se pudo actualizar el cuadre — intenta de nuevo" };

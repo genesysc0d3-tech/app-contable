@@ -1,4 +1,4 @@
-import type { CuadreCartola, Perdida, RecuperacionEnCurso } from "./cuadre";
+import type { CuadreCartola, Perdida } from "./cuadre";
 
 /**
  * CUADRE EN LA MESA (pasos 2 y 3 del cuadre de cartola).
@@ -11,9 +11,9 @@ import type { CuadreCartola, Perdida, RecuperacionEnCurso } from "./cuadre";
  *     `marcarAgregadas`: el botón "Agregarlos" que devuelve a la mesa las
  *     filas con plata que se habían perdido, como pendientes de revisar.
  *
- * Idempotencia: los ids de lo que se va a insertar se deciden ANTES y quedan
- * reservados en `cuadre.recuperacion`; un segundo click o un reintento reusa
- * esos mismos ids (upsert que ignora el repetido) y nunca duplica.
+ * Idempotencia: los ids son DETERMINISTAS (lib/cartola/cuadre-ids.ts: uuid v5
+ * de documento + fila). Dos clicks, dos pestañas o un reintento tras un corte
+ * calculan los mismos ids y el upsert ignora el repetido: nunca duplica.
  */
 
 export type MotivoPerdida = Perdida["motivo"];
@@ -55,7 +55,6 @@ export function leerCuadre(progresoIa: unknown): CuadreCartola | null {
       ok: q.db?.ok !== false,
     },
     calculado_en: String(q.calculado_en ?? ""),
-    ...(q.recuperacion && Array.isArray(q.recuperacion.filas) ? { recuperacion: q.recuperacion } : {}),
   };
 }
 
@@ -139,17 +138,24 @@ export function resumenCuadre(c: CuadreCartola): ResumenCuadre {
   };
 }
 
+export interface FilaPlan { idx: number; movimiento_id: string; propuesta_id: string }
+
+/** Clave estable de una fila perdida dentro de su documento (base de los ids). */
+export function claveFila(p: Perdida, idx: number): string {
+  return typeof p.excel_row === "number" ? `fila:${p.excel_row}` : `idx:${idx}`;
+}
+
 /**
- * Qué insertar. Si ya hay una reserva (click anterior, reintento tras un corte)
- * se reusa TAL CUAL: mismos ids → el upsert ignora lo que ya entró.
+ * Qué insertar: las pendientes que se pueden agregar solas, con los ids que da
+ * `idsDe` (deterministas en producción, así el upsert es idempotente).
  */
-export function planAgregar(c: CuadreCartola, nuevoId: () => string): RecuperacionEnCurso["filas"] {
-  if (c.recuperacion && c.recuperacion.filas.length > 0) {
-    return c.recuperacion.filas.filter((f) => c.perdidas[f.idx] && !c.perdidas[f.idx].agregada);
-  }
+export function planAgregar(
+  c: CuadreCartola,
+  idsDe: (clave: string) => { movimiento_id: string; propuesta_id: string },
+): FilaPlan[] {
   return pendientesDe(c)
     .filter(({ p }) => esAgregable(p))
-    .map(({ idx }) => ({ idx, movimiento_id: nuevoId(), propuesta_id: nuevoId() }));
+    .map(({ p, idx }) => ({ idx, ...idsDe(claveFila(p, idx)) }));
 }
 
 /** Fila de movimientos_raw: la misma forma que guarda el processor. */
@@ -168,32 +174,32 @@ export function movimientoRecuperado(p: Perdida, a: { id: string; empresaId: str
 }
 
 /**
- * Propuesta de una fila recuperada: nace PENDIENTE y bajo el umbral de
- * "Poner listas" (0.8), así el cliente la mira una por una en Editar como
- * cualquier otra que la IA no pudo decidir. Sin tipo_dte (decisión humana), sin
- * notas (se imprimen en la boleta) y sin identidad de terceros.
+ * Propuesta de una fila recuperada: la MISMA propuesta neutra que el processor
+ * sintetiza cuando nadie clasificó el movimiento (fallback de OpenCode en
+ * processor.ts): abono -> no_comercial, cargo -> gasto_egreso, IVA 0,
+ * confianza 0.4. Nada de "boleta afecta" por defecto (incidente P2P->afecta
+ * 2026-09-24): una fila recuperada puede ser un traspaso propio o P2P, así que
+ * decide el cliente en Editar. Pendiente, bajo "Poner listas" (0.8), sin
+ * tipo_dte, sin notas (se imprimen en la boleta) y sin identidad de terceros.
  */
-export const CONFIANZA_RECUPERADA = 0.5;
+export const CONFIANZA_RECUPERADA = 0.4;
 
 export function propuestaRecuperada(
   p: Perdida,
-  a: { id: string; movimientoId: string; empresaId: string; mesa: "boleta" | "factura"; exento: boolean },
+  a: { id: string; movimientoId: string; empresaId: string; mesa: "boleta" | "factura" },
 ) {
   const total = Number(p.monto);
-  const venta = p.tipo_flujo === "entrada";
-  const exento = !venta || a.exento;
-  const neto = exento ? total : Math.round(total / 1.19);
   return {
     id: a.id,
     empresa_id: a.empresaId,
     movimiento_id: a.movimientoId,
     mesa: a.mesa,
     estado: "pendiente" as const,
-    tipo_propuesto: venta ? (a.exento ? "exenta" : "boleta") : "gasto_egreso",
+    tipo_propuesto: p.tipo_flujo === "salida" ? "gasto_egreso" : "no_comercial",
     tipo_dte: null,
     total,
-    monto_neto: neto,
-    iva: exento ? 0 : total - neto,
+    monto_neto: total,
+    iva: 0,
     confianza: CONFIANZA_RECUPERADA,
     receptor_nombre: null,
     receptor_rut: null,
@@ -206,7 +212,8 @@ export function propuestaRecuperada(
 
 /**
  * El cuadre después de agregar: cada fila queda marcada con su movimiento, lo
- * guardado sube, la reserva se libera y el veredicto se recalcula.
+ * guardado sube y el veredicto se recalcula. Lo ya marcado no vuelve a sumar
+ * (dos pestañas que terminan a la vez escriben el mismo resultado).
  */
 export function marcarAgregadas(
   c: CuadreCartola,
@@ -224,10 +231,8 @@ export function marcarAgregadas(
   const propuestas = c.db.propuestas + n;
   const dbOk = movimientos === guardadas && propuestas === movimientos;
   const pendientes = perdidas.filter((p) => !p.agregada);
-  const { recuperacion: _r, ...resto } = c;
-  void _r;
   return {
-    ...resto,
+    ...c,
     perdidas,
     guardadas,
     db: { movimientos, propuestas, ok: dbOk },

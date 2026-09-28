@@ -181,7 +181,7 @@ export default function VeredictoCartola({
           <span style={{ fontSize: "1em", fontWeight: 600, color: "var(--text3)" }}>movimientos</span>
           {resCuadre ? (
             <span style={{ marginLeft: "auto", fontSize: "1.1em", color: "var(--text3)", textAlign: "right" }}>
-              Abonos <b style={{ color: "var(--text)" }}>{fmt(resCuadre.abonos)}</b> · Cargos <b style={{ color: "var(--text)" }}>{fmt(resCuadre.cargos)}</b>
+              En tu cartola: Abonos <b style={{ color: "var(--text)" }}>{fmt(resCuadre.abonos)}</b> · Cargos <b style={{ color: "var(--text)" }}>{fmt(resCuadre.cargos)}</b>
             </span>
           ) : (
             <span style={{ marginLeft: "auto", fontSize: "1.18em", color: "var(--text2)" }}>total <b style={{ color: "var(--text)" }}>{fmt(total)}</b></span>
@@ -335,6 +335,7 @@ export default function VeredictoCartola({
             {!puedeAprobar && (
               <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, marginTop: "-0.4em" }}>
                 {pendientes > 0 ? guiaPendientes
+                  : count === 0 && (resCuadre?.faltan ?? 0) > 0 ? <>Agrega las filas que faltan para empezar</>
                   : todoJuzgado ? <>Las {juzgadas} quedaron <b>sin boleta</b> (juzgadas). ¿Te arrepentiste? Restáuralas en <b>Editar</b>.</>
                   : <>Todo enviado a Emitir</>}
               </div>

@@ -33,16 +33,6 @@ export interface Perdida {
   agregada?: { movimiento_id: string; en: string };
 }
 
-/**
- * Reserva de la recuperación en curso: ids decididos ANTES de insertar, para que
- * apretar dos veces (o reintentar tras un corte) reuse los mismos ids y jamás
- * duplique un movimiento. Ver lib/cartola/cuadre-mesa.ts.
- */
-export interface RecuperacionEnCurso {
-  desde: string;
-  filas: { idx: number; movimiento_id: string; propuesta_id: string }[];
-}
-
 export interface CuadreCartola {
   ok: boolean;
   hoja: string;
@@ -58,7 +48,6 @@ export interface CuadreCartola {
   /** La DB confirma lo guardado: movimientos y 1 propuesta por movimiento. */
   db: { movimientos: number; propuestas: number; ok: boolean };
   calculado_en: string;
-  recuperacion?: RecuperacionEnCurso;
 }
 
 export function calcularCuadre(args: {
