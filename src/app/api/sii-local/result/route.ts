@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { validarAccesoCuenta } from "@/lib/entitlements";
 import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
+import { jobAdoptadoDeOrigen, validarVeredictoNoSalio } from "@/lib/emission/adopcion";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -30,6 +31,14 @@ interface SiiLocalResultPayload {
    * la propuesta a Listas. Queda auditado como declaración de la persona.
    */
   declarar_no_salio?: boolean;
+  /**
+   * VEREDICTO DE LA VERIFICACIÓN ("Verificar y seguir", 2026-09-28): el job de
+   * verificación (`job_id`) leyó el Resumen de ventas del SII completo y la boleta no
+   * está. El server lo valida contra SUS filas (el job de verificación adoptó a ese
+   * intento, mismo usuario, misma propuesta, mismo día) y recién ahí baja la lápida
+   * del intento original a `failed`. Es la única puerta automática para eso.
+   */
+  veredicto_verificacion?: "no_salio" | null;
   /** Telemetría de flota: versión de la extensión que POSTea (bridge 0.1.7+). */
   extension_version?: string | null;
   result?: {
@@ -472,6 +481,28 @@ async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) 
   }
 }
 
+/**
+ * La verificación de un intento ADOPTADO (adopcion.ts) registró la boleta: el intento
+ * original se cierra `completed` aunque todavía no haya vencido (verificación por fin
+ * confirmado de la extensión). Si no, al vencer volvería a aparecer "sin respuesta"
+ * en A medias con la boleta ya registrada. Best-effort.
+ */
+async function levantarAdoptado(sb: ServiceDb, job: { origin?: string | null; propuesta_id?: string | null }) {
+  const adoptado = jobAdoptadoDeOrigen(job.origin ?? null);
+  if (!adoptado || !job.propuesta_id) return;
+  try {
+    await sb
+      .from("emision_jobs")
+      .update({ estado: "completed", estado_visible: "completed", updated_at: new Date().toISOString() })
+      .eq("job_id", adoptado)
+      .eq("propuesta_id", job.propuesta_id)
+      .in("estado", ["created", "running", "revision_pendiente"]);
+    await liftRevisionTombstone(sb, job.propuesta_id);
+  } catch {
+    /* best-effort */
+  }
+}
+
 // 0.2.8 (cierre del ciclo, adversarial F3): un folio "alto" que salió del calce único
 // en /reportes (monto + fecha + hora) NO se acepta si HOY esta empresa tiene otra boleta
 // del mismo tipo y monto "a medias" (lápida revision_pendiente sin boleta): la fila
@@ -481,7 +512,7 @@ async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) 
 // falla, se veta (fail-closed: prefiere "a medias" a un folio cruzado).
 async function calceReportesVetado(
   sb: ServiceDb,
-  args: { empresaId: string; tipoDte: number; montoTotal: number; fechaEmision: string; jobId: string | null },
+  args: { empresaId: string; tipoDte: number; montoTotal: number; fechaEmision: string; jobId: string | null; propuestaId?: string | null },
 ): Promise<boolean> {
   try {
     // -04:00 (invierno) cubre también el horario de verano: una hora de más solo sobre-veta.
@@ -499,7 +530,9 @@ async function calceReportesVetado(
     // M1: Supabase devuelve {error} sin lanzar → fail-closed explícito.
     if (errLapidas) return true;
     const ahoraVeto = new Date();
-    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id && esLapidaEfectiva(j, ahoraVeto) !== null);
+    // Las lápidas de la MISMA propuesta no vetan: son la misma boleta (la verificación
+    // de un intento adoptado busca justamente la fila de ese intento, adopcion.ts).
+    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id && j.propuesta_id !== args.propuestaId && esLapidaEfectiva(j, ahoraVeto) !== null);
     if (otras.length === 0) return false;
     const { data: props, error: errProps } = await sb
       .from("propuestas_ia")
@@ -703,7 +736,7 @@ export async function POST(request: Request) {
   // Declaraciones HUMANAS (folio a mano / "no está en el SII"): exigen el mismo rol de
   // emisión y no estar vetado que el resto de la ruta (antes solo exigían ser dueño
   // del job: un usuario vetado o degradado podía devolver boletas a Listas).
-  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true) {
+  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true || payload.veredicto_verificacion != null) {
     const { data: uDecl } = await sb.from("usuarios").select("rol, vetado").eq("id", user.id).maybeSingle();
     if (!uDecl || uDecl.vetado) return NextResponse.json({ ok: false, error: "USUARIO_BLOQUEADO" }, { status: 403 });
     if (!ROLES_EMISION.has(String(uDecl.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
@@ -928,6 +961,105 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, jobs_cerrados: (cerrados ?? []).length });
   }
 
+  // ── VEREDICTO "NO SALIÓ" DE UNA VERIFICACIÓN ────────────────────────────
+  // La extensión 0.2.8 entrega "verificado_sin_folio" (tabla completa leída, 0
+  // candidatas) solo a la página; la página lo reenvía acá con el job de VERIFICACIÓN.
+  // El server no le cree a la página: exige que ese job haya adoptado al intento
+  // (enlace escrito al crearlo, adopcion.ts), que ambos sigan abiertos, que sea el
+  // mismo día Chile y que no exista folio ni boleta. Solo entonces baja el intento
+  // original (y la verificación) a `failed`: la boleta vuelve a Listas.
+  if (payload.veredicto_verificacion != null) {
+    if (payload.veredicto_verificacion !== "no_salio") return NextResponse.json({ ok: false, error: "VEREDICTO_INVALIDO" }, { status: 400 });
+    const jobIdVer = cleanText(payload.job_id);
+    if (!jobIdVer) return NextResponse.json({ ok: false, error: "JOB_ID_REQUERIDO" }, { status: 400 });
+    const { data: jobVer, error: errVer } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, origin, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at")
+      .eq("job_id", jobIdVer)
+      .maybeSingle();
+    if (errVer) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    if (!jobVer) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
+    const accesoVer = await accesoDeclaracion(sb, user.id, jobVer);
+    if (accesoVer) return accesoVer;
+    const adoptadoId = jobAdoptadoDeOrigen(jobVer.origin);
+    const { data: jobViejo, error: errViejo } = adoptadoId
+      ? await sb
+          .from("emision_jobs")
+          .select("job_id, estado, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at")
+          .eq("job_id", adoptadoId)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (errViejo) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    const ahoraVer = new Date();
+    const valido = validarVeredictoNoSalio({ verificacion: jobVer, viejo: jobViejo ?? null, userId: user.id, ahora: ahoraVer });
+    if (!valido.ok) return NextResponse.json({ ok: false, error: valido.code, detalle: valido.detalle }, { status: 409 });
+    const viejo = jobViejo!;
+    const { data: boletaVigente, error: errBolVer } = await sb
+      .from("boletas_emitidas")
+      .select("id, folio")
+      .eq("propuesta_id", viejo.propuesta_id as string)
+      .neq("estado", "anulada")
+      .limit(1)
+      .maybeSingle();
+    if (errBolVer) return NextResponse.json({ ok: false, error: "BOLETA_QUERY_FAILED" }, { status: 500 });
+    if (boletaVigente) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: `Esta boleta ya está registrada con el folio ${boletaVigente.folio}.`, folio: boletaVigente.folio }, { status: 409 });
+    }
+    // Un folio capturado para cualquiera de los dos jobs (stash de la extensión) = salió.
+    const { data: conFolioVer, error: errResVer } = await sb
+      .from("sii_local_resultados")
+      .select("folio")
+      .in("job_id", [viejo.job_id, jobVer.job_id])
+      .not("folio", "is", null)
+      .limit(1);
+    if (errResVer) return NextResponse.json({ ok: false, error: "RESULTADOS_QUERY_FAILED" }, { status: 500 });
+    if ((conFolioVer ?? []).length > 0) {
+      return NextResponse.json({ ok: false, error: "FOLIO_CAPTURADO", detalle: `El SII devolvió el folio ${conFolioVer![0].folio} para este intento: la boleta sí salió.` }, { status: 409 });
+    }
+    const mensajeVer = "Verificado en el Resumen de ventas del SII: la boleta no salió";
+    const ahoraIsoVer = ahoraVer.toISOString();
+    // running → failed está permitido (locks.ts); el UPDATE re-filtra por estado: si
+    // entre medio llegó el resultado (→ completed) o se selló, no se pisa.
+    const { data: cerradoViejo, error: errUpdVer } = await sb
+      .from("emision_jobs")
+      .update({ estado: "failed", estado_visible: "failed", status_message: mensajeVer, updated_at: ahoraIsoVer })
+      .eq("job_id", viejo.job_id)
+      .in("estado", ["created", "running"])
+      .select("job_id");
+    if (errUpdVer) return NextResponse.json({ ok: false, error: "VEREDICTO_FALLIDO", detalle: errUpdVer.message }, { status: 500 });
+    if ((cerradoViejo ?? []).length === 0) {
+      return NextResponse.json({ ok: false, error: "NADA_QUE_CERRAR", detalle: "Esa boleta cambió de estado mientras la verificábamos. Recarga Emitir." }, { status: 409 });
+    }
+    await sb.from("emision_locks").delete().eq("cuenta_id", viejo.cuenta_id).eq("job_id", viejo.job_id);
+    await sb.from("emision_jobs").update({ status_message: mensajeVer }).eq("job_id", jobVer.job_id);
+    await releaseCuentaEmissionLock({ sb, cuentaId: jobVer.cuenta_id, jobId: jobVer.job_id, estado: "failed" });
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_verificado_no_salio",
+      summary: "Verificación en el Resumen de ventas: la boleta no salió (vuelve a Listas)",
+      empresaId: viejo.empresa_id,
+      cuentaId: viejo.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: viejo.job_id,
+      metadata: { verificacion_job_id: jobVer.job_id, origen: "verificacion_reportes" },
+    });
+    await recordCuentaAudit({
+      sb,
+      cuentaId: viejo.cuenta_id,
+      empresaId: viejo.empresa_id,
+      usuarioId: user.id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: viejo.job_id,
+      resumen: "Verificado en el SII: la boleta no salió (vuelve a Listas)",
+      metadata: { origen: "verificacion_reportes", verificacion_job_id: jobVer.job_id },
+    });
+    return NextResponse.json({ ok: true, jobs_cerrados: 1 });
+  }
+
   let result = payload.result;
   let effectiveJobId = payload.job_id ?? null;
   if (payload.recover_latest) {
@@ -992,7 +1124,7 @@ export async function POST(request: Request) {
     // botones "Recuperar folio/PDF" funcionen aunque el job ya esté cerrado.
     const jobCerrado = jobGate.job;
     const vetoCalceCerrado = Boolean(jobCerrado && esCalceReportes(result) && tipoDte && montoTotal && fechaEmision)
-      && await calceReportesVetado(sb, { empresaId: jobCerrado!.empresa_id, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: effectiveJobId });
+      && await calceReportesVetado(sb, { empresaId: jobCerrado!.empresa_id, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: effectiveJobId, propuestaId: jobCerrado!.propuesta_id ?? null });
     const evidenciaFuerte = (result?.folio_confidence === "high" && !vetoCalceCerrado) || Boolean(pdfInfo?.folio);
     // La red aplica a TODA falla del gate que venga con `job` adjunto (cerrado,
     // expirado, empresa desactivada por downgrade, plan vencido): la ownership
@@ -1014,6 +1146,7 @@ export async function POST(request: Request) {
         pdfInfo,
       });
       if (respaldo.ok) {
+        await levantarAdoptado(sb, jobCerrado);
         await rememberResult(sb, {
           user_id: user.id,
           job_id: effectiveJobId,
@@ -1085,7 +1218,7 @@ export async function POST(request: Request) {
   // URL del PDF). Es el ÚNICO requisito para registrar la boleta: el folio es
   // la prueba de emisión. El PDF se adjunta aparte (puede quedar pendiente).
   const vetoCalce = Boolean(esCalceReportes(result) && tipoDte && montoTotal && fechaEmision)
-    && await calceReportesVetado(sb, { empresaId, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: job.job_id });
+    && await calceReportesVetado(sb, { empresaId, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: job.job_id, propuestaId: job.propuesta_id ?? null });
   const hasStrongEvidence = (result?.folio_confidence === "high" && !vetoCalce) || Boolean(pdfInfo?.folio);
   if (vetoCalce) {
     await recordOpsEvent({
@@ -1253,6 +1386,7 @@ export async function POST(request: Request) {
     }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
+    await levantarAdoptado(sb, job);
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
   }
 
@@ -1517,6 +1651,7 @@ export async function POST(request: Request) {
     },
   });
   await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
+  await levantarAdoptado(sb, job);
 
   return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id, pdf_pendiente: pdfPendiente });
 }

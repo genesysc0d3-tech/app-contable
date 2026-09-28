@@ -8,9 +8,22 @@
 // como lápida `revision_pendiente` (a medias: se verifica antes de re-emitir).
 // El lote nunca pide `cancelled` (usa `failed` para lo pre-emit seguro).
 
-export type EstadoCierre = "failed" | "cancelled" | "revision_pendiente";
+import { esLapidaEfectiva, type JobParaLapida } from "./lapida";
+
+export type EstadoCierre ="failed" | "cancelled" | "revision_pendiente";
 
 export function estadoCierreSeguro(pedido: EstadoCierre, job: { propuesta_id: string | null }): EstadoCierre {
   if (pedido === "cancelled" && job.propuesta_id) return "revision_pendiente";
   return pedido;
+}
+
+/**
+ * ¿El DELETE debe dejar el job como está? (Verificar y seguir, 2026-09-28.)
+ * Una lápida SIN RESPUESTA (job del lote vencido y abierto) solo baja a `failed` con
+ * el veredicto "no salió" que valida el server (/api/sii-local/result, adopcion.ts) o
+ * con la declaración humana. Un DELETE `failed`/`cancelled` no la baja; sí puede
+ * sellarla a medias (`revision_pendiente`, más protección).
+ */
+export function deleteRespetaSinRespuesta(job: JobParaLapida, estado: EstadoCierre, ahora: Date = new Date()): boolean {
+  return estado !== "revision_pendiente" && esLapidaEfectiva(job, ahora) === "sin_respuesta";
 }
