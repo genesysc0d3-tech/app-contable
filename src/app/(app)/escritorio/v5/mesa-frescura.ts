@@ -72,6 +72,9 @@ export const INTERVALO_NORMAL_MS = 15_000;
 /** Con un lote en curso (propio o de otra persona): la mesa queda detrás del modal
  *  o en otra pestaña; basta con que no se quede pegada. Recarga final al terminar. */
 export const INTERVALO_LOTE_MS = 60_000;
+/** Tope de una carga de /api/mesa: el recargador tiene UNA en vuelo; sin tope, un
+ *  fetch colgado dejaría la mesa congelada. */
+export const TIMEOUT_CARGA_MS = 45_000;
 /** Ventana de coalescencia: una boleta = INSERT boleta + UPDATE propuesta + UPDATE doc. */
 export const DEBOUNCE_MS = 500;
 
@@ -168,6 +171,7 @@ export function mergeRcv<T extends FilaRcv>(filas: T[], nueva: T, mes: string): 
   sin.push(nueva);
   return sin.sort((a, b) => {
     if (a.fecha_emision !== b.fecha_emision) return a.fecha_emision < b.fecha_emision ? 1 : -1;
-    return (b.folio ?? -1) - (a.folio ?? -1);
+    // Como Postgres con DESC: los folios null van PRIMERO dentro del día.
+    return (b.folio ?? Number.MAX_SAFE_INTEGER) - (a.folio ?? Number.MAX_SAFE_INTEGER);
   });
 }

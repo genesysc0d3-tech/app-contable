@@ -154,6 +154,10 @@ describe("mergeRcv", () => {
     const out = mergeRcv([f("a", "2026-09-10", 5)], f("a", "2026-09-10", 5), "2026-09");
     expect(out).toHaveLength(1);
   });
+  it("folio null va primero dentro del día (como Postgres DESC)", () => {
+    const out = mergeRcv([f("a", "2026-09-10", 5)], f("n", "2026-09-10", null), "2026-09");
+    expect(out.map((x) => x.id)).toEqual(["n", "a"]);
+  });
   it("otro mes → no toca la lista", () => {
     const filas = [f("a", "2026-09-10", 5)];
     expect(mergeRcv(filas, f("z", "2026-08-31", 9), "2026-09")).toBe(filas);

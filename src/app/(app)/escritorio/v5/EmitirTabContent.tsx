@@ -221,7 +221,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loteOpen, setLoteOpen] = useState(false);
-  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
+  const { lockedByOther, lockedByOtherUser, businessMode, lockMessage } = useEmissionLockStatus();
   // Reanudar un lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
   // lotePendiente = los IDs que faltan (leídos de localStorage); loteResume = esos
   // items re-hidratados del server para pasárselos al modal; null = emisión fresca.
@@ -283,7 +283,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const expandedDocsRef = useRef(expandedDocs);
   expandedDocsRef.current = expandedDocs;
   const juzgadasViejasRef = useRef(false);
-  const loteEnCursoJuzgadas = loteOpen || lockedByOther;
+  const loteEnCursoJuzgadas = loteOpen || lockedByOtherUser;
   useEffect(() => {
     if (dataRef.current !== data) { dataRef.current = data; juzgadasViejasRef.current = true; }
     if (!juzgadasViejasRef.current || loteEnCursoJuzgadas) return;
@@ -332,8 +332,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // cada recarga (plan-costo-vercel §5 b). Lo que sí aporta Emitir es saber si OTRA
   // persona tiene el candado: con un lote ajeno en curso la mesa espacia sus recargas.
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: lockedByOther } }));
-  }, [lockedByOther]);
+    // lockedByOtherUser (no lockedByOther): un candado PROPIO pegado no es "otra
+    // persona emitiendo" y no debe cambiar el ritmo de la mesa.
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: lockedByOtherUser } }));
+  }, [lockedByOtherUser]);
   useEffect(() => () => {
     window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: false } }));
   }, []);

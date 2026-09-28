@@ -7,7 +7,10 @@ import { describe, expect, it } from "vitest";
 // función de la mesa vuelve a cargar todo eso en memoria para hacer dos COUNT.
 const raiz = join(__dirname, "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(raiz, rel), "utf8");
-const importsEstaticos = (src: string) => [...src.matchAll(/^import\s[\s\S]*?from\s+"([^"]+)";/gm)].map((m) => m[1]);
+const importsEstaticos = (src: string) => [
+  ...[...src.matchAll(/^(?:import|export)\s[\s\S]*?from\s+"([^"]+)";/gm)].map((m) => m[1]),
+  ...[...src.matchAll(/require\(\s*"([^"]+)"\s*\)/g)].map((m) => m[1]),
+];
 
 describe("auto-drenaje liviano", () => {
   it("auto-drenaje.ts no importa estáticamente la cola ni el drenaje", () => {

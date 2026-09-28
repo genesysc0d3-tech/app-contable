@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import RightColumnView from "./RightColumnView";
 import Mesa, { type MesaProps } from "./Mesa";
 import GuardarailOrbe from "./GuardarailOrbe";
@@ -11,7 +11,7 @@ import { pendingResaltar, type ApuntableTipo } from "./apuntar";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
-import { cadenciaDocs, crearEspaciador, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, type Espaciador, type Recargador } from "./mesa-frescura";
+import { cadenciaDocs, crearEspaciador, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
 
 // La MESA es parte de la clave (bug transversal 2026-08-27): sin ella, boletas y
 // facturas del mismo día/rango compartían entrada de caché y una le servía a la
@@ -28,7 +28,9 @@ async function cargarMesa(params: { date?: string; month?: string; view?: string
   try {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
-    const r = await fetch(`/api/mesa?${qs.toString()}`, { cache: "no-store" });
+    // Con tope: el recargador tiene UNA carga en vuelo; un fetch colgado para siempre
+    // (socket muerto tras suspender el notebook) congelaría la mesa hasta F5.
+    const r = await fetch(`/api/mesa?${qs.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_CARGA_MS) });
     return (await r.json()) as CargarMesaResult;
   } catch {
     return { ok: false, error: "FETCH_FAILED" };
@@ -84,6 +86,14 @@ export default function MesaController({
   // Mesa vigente para lecturas fuera del render (recargador, poll): nunca un closure viejo.
   const mesaRef = useRef(mesa);
   useEffect(() => { mesaRef.current = mesa; }, [mesa]);
+  // Toda mesa que entra pasa por acá: el ref queda al día ANTES del próximo pedido
+  // (el efecto de arriba corre después del render; un pedido agendado entre medio
+  // leería el rango anterior y descartaría la respuesta buena).
+  const aplicarMesa = useCallback((m: MesaDateDependent) => {
+    mesaRef.current = m;
+    setMesa(m);
+    broadcastMesa(m);
+  }, []);
 
   // Recarga el rango ACTUAL sin navegar (tras aprobar/rechazar/mapear). A
   // diferencia de navigate, ignora la cache (los datos cambiaron): marca VIEJOS los
@@ -111,12 +121,11 @@ export default function MesaController({
     aplicar: (p, fresca) => {
       for (const v of cacheRef.current.values()) v.vieja = true;
       cacheRef.current.set(keyOf(p.view, p.date, p.month, p.mesa), { mesa: fresca, vieja: false });
-      setMesa(fresca);
-      broadcastMesa(fresca);
+      aplicarMesa(fresca);
     },
     });
     return recargadorRef.current;
-  }, []);
+  }, [aplicarMesa]);
   // Estable: el contexto no cambia de identidad con cada `mesa` (menos re-renders y
   // los canales/efectos que dependen de él no se re-suscriben).
   const reloadMesa = useCallback((opts?: { silent?: boolean }) => {
@@ -139,7 +148,7 @@ export default function MesaController({
     const key = keyOf(params.view, params.date, params.month, params.mesa);
     const cached = cacheRef.current.get(key);
     if (cached) {
-      setMesa(cached.mesa); broadcastMesa(cached.mesa);
+      aplicarMesa(cached.mesa);
       // Vieja: se muestra al tiro y se trae la fresca por detrás (el recargador
       // descarta la respuesta si el usuario siguió navegando).
       if (cached.vieja) window.setTimeout(() => recargador().pedir(), 0);
@@ -147,9 +156,9 @@ export default function MesaController({
     }
     startTransition(async () => {
       const res = await cargarMesa(params);
-      if (res.ok) { cacheRef.current.set(key, { mesa: res.mesa, vieja: false }); setMesa(res.mesa); broadcastMesa(res.mesa); }
+      if (res.ok) { cacheRef.current.set(key, { mesa: res.mesa, vieja: false }); aplicarMesa(res.mesa); }
     });
-  }, [mesa, recargador]);
+  }, [mesa, recargador, aplicarMesa]);
 
   // "Shader cache" del calendario (misma filosofía que el conmutador de mesa):
   // los otros dos modos (día/semana/mes) del rango actual se precargan en idle
@@ -239,7 +248,7 @@ export default function MesaController({
       // la mesa por defecto (boletas) ENCIMA de la de facturas — el usuario
       // subía su plantilla y veía "Nada por aquí" con los contadores en 0,
       // creyendo que había fallado (el archivo estaba perfecto).
-      const mesaActiva = mesa.mesaActiva;
+      const mesaActiva = mesaRef.current.mesaActiva;
       const key = keyOf("day", date, month, mesaActiva);
       cacheRef.current.delete(key); // datos nuevos → forzar re-fetch
       // SILENCIOSO (sin startTransition) → NO atenúa la mesa (era el "gris" que se
@@ -248,7 +257,7 @@ export default function MesaController({
       // a "procesado" sin volver a atenuar.
       void (async () => {
         const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva });
-        if (res.ok) { cacheRef.current.set(key, { mesa: res.mesa, vieja: false }); setMesa(res.mesa); broadcastMesa(res.mesa); }
+        if (res.ok) { cacheRef.current.set(key, { mesa: res.mesa, vieja: false }); aplicarMesa(res.mesa); }
       })();
     };
 
@@ -268,7 +277,7 @@ export default function MesaController({
     };
 
     const onUploaded = (e: Event) => {
-      const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesa.selDate;
+      const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesaRef.current.selDate;
       recargarDia(date);
       vigilar(date);
     };
@@ -283,8 +292,8 @@ export default function MesaController({
         const { at, date } = JSON.parse(flag) as { at: number; date?: string };
         if (Date.now() - at < 120_000) {
           sessionStorage.removeItem("massdte:uploaded-at");
-          recargarDia(date ?? mesa.selDate);
-          vigilar(date ?? mesa.selDate);
+          recargarDia(date ?? mesaRef.current.selDate);
+          vigilar(date ?? mesaRef.current.selDate);
         } else {
           sessionStorage.removeItem("massdte:uploaded-at");
         }
@@ -295,7 +304,9 @@ export default function MesaController({
       window.removeEventListener("massdte:uploaded", onUploaded);
       for (const t of timers) clearTimeout(t);
     };
-  }, [mesa]);
+  // Deps estables (2026-09-28): con [mesa], el primer recargarDia → setMesa → cleanup
+  // cancelaba TODA la escalera de vigilancia (quedaba muerta desde el primer paso).
+  }, [aplicarMesa]);
 
   // ── COLUMNA VERTEBRAL DE FRESCURA (patrón Linear/Figma/Notion) ───────────────
   // UNA suscripción Realtime en el contenedor SIEMPRE montado (MesaController vive
@@ -306,23 +317,28 @@ export default function MesaController({
   // cada DocCardList tenían la suya y cada boleta gatillaba N recargas completas.
   //
   // Espaciado (plan-costo-vercel §5 d): ráfaga → debounce 500 ms → mínimo 15 s entre
-  // recargas (60 s con un lote en curso, propio u de otra persona: la mesa queda
-  // detrás del modal); la última nunca se pierde y al TERMINAR el lote se vacía al
-  // tiro. Con la pestaña oculta no se recarga: se anota y se refresca al volver.
+  // recargas (60 s con un lote PROPIO: la mesa queda detrás del modal); la última
+  // nunca se pierde y al TERMINAR el lote se vacía al tiro. Con la pestaña oculta no
+  // se recarga: se anota y se refresca al volver.
   const loteRef = useRef<{ propio: boolean; otro: boolean; boletaVista: boolean }>({ propio: false, otro: false, boletaVista: false });
   const ocultaSuciaRef = useRef(false);
+  const ocultaDesdeRef = useRef<number | null>(null);
   const espaciadorRef = useRef<Espaciador | null>(null);
   const espaciador = useCallback((): Espaciador => {
     if (espaciadorRef.current) return espaciadorRef.current;
     espaciadorRef.current = crearEspaciador(
       () => recargador().pedir(),
-      () => (loteRef.current.propio || loteRef.current.otro ? INTERVALO_LOTE_MS : INTERVALO_NORMAL_MS),
+      // 60 s solo con lote PROPIO (la mesa queda detrás del modal). Con el lote de otra
+      // persona esta clienta mira la mesa directo: se queda en 15 s.
+      () => (loteRef.current.propio ? INTERVALO_LOTE_MS : INTERVALO_NORMAL_MS),
     );
     return espaciadorRef.current;
   }, [recargador]);
   useEffect(() => () => espaciador().cancelar(), [espaciador]);
 
-  useEffect(() => {
+  // useLayoutEffect: queda escuchando ANTES de los efectos de los hijos (que avisan
+  // el estado inicial del candado al montar); con useEffect ese primer aviso se perdía.
+  useLayoutEffect(() => {
     // Lote en curso: lo avisa useEmisionLote (propio) y la pestaña Emitir (candado de
     // otra persona). Al terminar: recarga final inmediata + RCV completo.
     const onLote = (e: Event) => {
@@ -393,9 +409,13 @@ export default function MesaController({
       h = setTimeout(() => { intento += 1; recargador().pedir(); agendar(); }, ms);
     };
     const onVisible = () => {
-      if (document.hidden) { if (h) clearTimeout(h); h = null; return; }
-      // Volvió: lo que llegó por Realtime mientras estaba oculta, o docs en proceso.
-      if (ocultaSuciaRef.current || docsEnProceso !== "") {
+      if (document.hidden) { if (h) clearTimeout(h); h = null; ocultaDesdeRef.current = Date.now(); return; }
+      // Volvió: lo que llegó por Realtime mientras estaba oculta, docs en proceso, o
+      // estuvo oculta más de un minuto (el navegador puede haber dormido el websocket
+      // y perdido eventos sin avisar).
+      const largo = ocultaDesdeRef.current !== null && Date.now() - ocultaDesdeRef.current > 60_000;
+      ocultaDesdeRef.current = null;
+      if (ocultaSuciaRef.current || docsEnProceso !== "" || largo) {
         ocultaSuciaRef.current = false;
         recargador().pedir();
       }

@@ -38,7 +38,9 @@ export default function RcvViewWrapper({ boletas, boletasYear, boletasMonth, ini
     const onEmitted = (e: Event) => {
       const key = currentKeyRef.current;
       const detail = (e as CustomEvent<{ boleta?: BoletaRow | null; completo?: boolean } | undefined>).detail;
-      const fila = detail?.completo ? null : detail?.boleta ?? null;
+      const cruda = detail?.completo ? null : detail?.boleta ?? null;
+      // Fila incompleta (sin id o fecha): no se puede ubicar → re-pedir el mes, como antes.
+      const fila = cruda && cruda.id && typeof cruda.fecha_emision === "string" ? cruda : null;
       setMonthCache((current) => {
         if (!(key in current)) return current; // no cargado aún: el fetch normal lo traerá
         if (fila) {
