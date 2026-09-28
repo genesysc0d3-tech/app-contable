@@ -102,3 +102,25 @@ export function limpiarLotePendiente(empresaId: string, mesa: MesaLote = "boleta
     /* no-op */
   }
 }
+
+/**
+ * Qué guardar para reanudar (2026-09-28, plan-emision-confiable §1.2, riesgo B).
+ * La boleta EN VUELO (itemActual) todavía no cuenta como procesada, así que
+ * `slice(procesadas)` la dejaba PRIMERA en el rastro y "Reanudar" la re-emitía
+ * aunque pudo haber salido en el SII → doble folio. Se excluye: si la pestaña muere
+ * con ella en el aire, su job queda "sin respuesta" (lapida.ts) y aparece en
+ * A medias; si nunca llegó a abrir job, sigue en Listas. Residual conocido (PR 5,
+ * adopción): en la verificación de una emisión incierta el intento original se
+ * cierra `failed` justo antes de abrir la verificación; si la pestaña muere en ese
+ * instante, la propuesta queda en Listas (ya no en el rastro de Reanudar).
+ * Una frenada / pausa del server NO la consume ni la deja en vuelo (itemActual null):
+ * esa sí se conserva.
+ */
+export function rastroReanudacion(
+  baseIds: string[],
+  progreso: { procesadas: number; itemActual: { propuestaId: string } | null },
+): string[] {
+  const resto = baseIds.slice(progreso.procesadas);
+  const enVuelo = progreso.itemActual?.propuestaId ?? null;
+  return enVuelo ? resto.filter((id) => id !== enVuelo) : resto;
+}

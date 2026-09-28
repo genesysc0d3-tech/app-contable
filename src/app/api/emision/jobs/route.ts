@@ -4,6 +4,8 @@ import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { revisarPostCandado, revisarPropuestaEmitible } from "@/lib/emission/propuesta-emitible";
+import { estadoCierreSeguro } from "@/lib/emission/cierre-seguro";
 import { buildVisibleEmissionLock, type ActiveEmissionLock } from "@/lib/emission/lock-visibility";
 import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
@@ -362,40 +364,13 @@ export async function POST(request: Request) {
     // CANDADO ANTI-DOBLE-FOLIO — fail-closed ANTES de tocar el portal (defensa
     // temprana; el lock por cuenta y el UNIQUE de boletas_emitidas son las redes
     // duras posteriores). El carril mock ya hace este chequeo; el real faltaba.
-    // (a) ¿la propuesta YA tiene boleta vigente? (carrera única↔lote / 2 pestañas)
-    const { data: yaBoleta } = await guard.service
-      .from("boletas_emitidas")
-      .select("id")
-      .eq("propuesta_id", propuestaId)
-      .neq("estado", "anulada")
-      .limit(1)
-      .maybeSingle();
-    if (yaBoleta) {
-      return NextResponse.json({ ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: "Esta boleta ya fue emitida." }, { status: 409 });
-    }
-    // (b1) ¿quedó "a medias" (lápida)? Bloqueo INCONDICIONAL hasta recuperar el folio.
-    const { data: enRevision } = await guard.service
-      .from("emision_jobs")
-      .select("job_id")
-      .eq("propuesta_id", propuestaId)
-      .eq("estado", "revision_pendiente")
-      .limit(1)
-      .maybeSingle();
-    if (enRevision) {
-      return NextResponse.json({ ok: false, error: "REVISION_PENDIENTE", detalle: "Esta boleta quedó a medias en el SII. Recupera su folio antes de re-emitir." }, { status: 409 });
-    }
-    // (b2) ¿hay un job aún EN VUELO (no expirado)? Acotado a no-expirados para no
-    // bloquear una propuesta para siempre si un intento crasheó pre-emit.
-    const { data: enVuelo } = await guard.service
-      .from("emision_jobs")
-      .select("job_id")
-      .eq("propuesta_id", propuestaId)
-      .in("estado", ["created", "running"])
-      .gt("expires_at", new Date().toISOString())
-      .limit(1)
-      .maybeSingle();
-    if (enVuelo) {
-      return NextResponse.json({ ok: false, error: "EMISION_EN_CURSO", detalle: "Ya hay una emisión en curso para esta boleta." }, { status: 409 });
+    // Un error de consulta RECHAZA (antes se saltaba el control: falla abierta).
+    const emitible = await revisarPropuestaEmitible(guard.service, propuestaId);
+    if (!emitible.ok) {
+      return NextResponse.json(
+        { ok: false, error: emitible.error, detalle: emitible.detalle, folio: emitible.folio ?? null, boleta_id: emitible.boletaId ?? null, boleta_created_at: emitible.boletaCreatedAt ?? null },
+        { status: emitible.status },
+      );
     }
 
     // GATE DE CUOTA DEL PLAN (crítica #1 de la auditoría). Las masivas (con
@@ -494,6 +469,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: lock.error, detalle: lock.detalle }, { status: 500 });
   }
 
+  // RE-CHEQUEO CON EL CANDADO TOMADO (2026-09-28): ya emitida + a medias. El
+  // chequeo de arriba corre sin candado: dos personas emitiendo la misma empresa
+  // ("Marge y yo") pueden pasar ambas el chequeo y la segunda tomar el candado justo
+  // cuando la primera ya guardó su boleta (o la dejó a medias: el lote suelta el
+  // candado al sellar la lápida). Con el candado en mano la foto es firme.
+  if (propuestaId) {
+    const post = await revisarPostCandado(guard.service, propuestaId);
+    if (!post.ok) {
+      await releaseCuentaEmissionLock({ sb: guard.service, cuentaId: guard.cuentaId, jobId: lock.jobId, estado: "cancelled" });
+      return NextResponse.json(
+        { ok: false, error: post.error, detalle: post.detalle, folio: post.folio ?? null, boleta_id: post.boletaId ?? null, boleta_created_at: post.boletaCreatedAt ?? null },
+        { status: post.status },
+      );
+    }
+  }
+
+  // ID interno R-XXX-XXX (2026-09-28): uno por propuesta; el reintento reusa el mismo.
+  // Para soporte y para que la clienta no se pierda; NO va a la boleta del SII.
+  // Best-effort TOTAL: sin la migración aplicada o si falla, la emisión sigue igual.
+  let refEmision: string | null = null;
+  if (propuestaId) {
+    try {
+      const { data: refData, error: refErr } = await guard.service.rpc("emision_ref_nueva", {
+        p_empresa_id: guard.empresaId,
+        p_propuesta_id: propuestaId,
+        p_tipo_dte: tipoDte,
+      });
+      if (!refErr && typeof refData === "string") {
+        refEmision = refData;
+        await guard.service.from("emision_jobs").update({ ref: refEmision }).eq("job_id", lock.jobId);
+      }
+    } catch { /* best-effort */ }
+  }
+
   let reservedFolio: number | null = null;
   if (provider === "simpleapi") {
     const reserva = await reserveSimpleApiFolio({
@@ -535,16 +544,23 @@ export async function POST(request: Request) {
   let foliosHoy: number[] = [];
   if (provider === "sii_local") {
     try {
-      const hoyChile = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const diaChile = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+      const ahora = new Date();
+      const hoyChile = diaChile(ahora);
+      const ayerChile = diaChile(new Date(ahora.getTime() - 24 * 3600 * 1000));
       const { data: hoy } = await guard.service
         .from("boletas_emitidas")
         .select("folio")
         .eq("empresa_id", guard.empresaId)
-        .eq("tipo_dte", tipoDte)
-        .eq("fecha_emision", hoyChile)
+        // AMBOS tipos del carril (2026-09-28): el calce de /reportes no filtra por Tipo;
+        // excluir también los folios del otro tipo evita que una 39 ya registrada del
+        // mismo monto se tome como la 41 en vuelo (folio cruzado). Solo excluye: seguro.
+        .in("tipo_dte", tipoDte === 33 || tipoDte === 34 ? [33, 34] : [39, 41])
+        // Hoy y AYER: una boleta que cruzó la medianoche quedó registrada con la otra fecha.
+        .in("fecha_emision", [hoyChile, ayerChile])
         // Anuladas INCLUIDAS: siguen en /reportes con su monto y también deben excluirse.
         .order("folio", { ascending: false })
-        .limit(500);
+        .limit(1000);
       foliosHoy = (hoy ?? []).map((b) => Number(b.folio)).filter((n) => Number.isInteger(n) && n > 0);
     } catch { /* best-effort */ }
   }
@@ -552,6 +568,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     job_id: lock.jobId,
+    ref: refEmision,
     expires_at: lock.lockedUntil,
     locked_until: lock.lockedUntil,
     cuenta_id: guard.cuentaId,
@@ -642,7 +659,13 @@ export async function DELETE(request: Request) {
   }
   if (!job) return NextResponse.json({ ok: false, error: "JOB_NOT_FOUND" }, { status: 404 });
   if (job.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_FORBIDDEN" }, { status: 403 });
-  const estado = cleanCloseEstado(payload.estado);
+  // Con propuesta (job del lote), un `cancelled` se sella como lápida: pudo haber
+  // apretado EMITIR (riesgo C, ver cierre-seguro.ts).
+  const pedido = cleanCloseEstado(payload.estado);
+  // Solo sobre jobs ABIERTOS: un `cancelled` tardío sobre un job ya cerrado `failed`
+  // (pre-emit seguro / verificado "no salió") no debe volverse una lápida espuria.
+  const abierto = job.estado === "created" || job.estado === "running";
+  const estado = abierto ? estadoCierreSeguro(pedido, job) : pedido;
   // Idempotencia + no re-procesar, CON una excepción crítica: la carrera
   // CAPTURE_DEBUG puede sellar 'failed' un job que en verdad emitió (evidencia
   // débil post-EMITIR). Un terminal PERMISIVO ('failed'/'cancelled'/'expired')

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RCVContentWrapper } from "./LeftQuickActions";
 import BoletasMensualesView, { type BoletaRow } from "./sections/BoletasMensualesView";
+import { mergeRcv } from "./mesa-frescura";
 
 const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -26,21 +27,31 @@ export default function RcvViewWrapper({ boletas, boletasYear, boletasMonth, ini
   const currentBoletas = useMemo(() => monthCache[currentKey] ?? [], [currentKey, monthCache]);
 
   // El RCV es una isla: cache propia por mes, fuera del estado de la mesa. Cuando el
-  // sensor central (MesaController) detecta una boleta nueva, avisa por "massdte:emitted";
-  // acá invalidamos el mes VISIBLE para forzar su re-fetch (si no, una boleta emitida en
-  // el mes ya cargado no aparecía hasta navegar a otro mes y volver, o F5).
+  // sensor central (MesaController) detecta una boleta nueva, avisa por "massdte:emitted"
+  // con la FILA del evento: se agrega al mes visible sin re-pedir el mes entero (antes,
+  // cada boleta de un lote borraba el mes → "Cargando RCV…" parpadeando y un GET
+  // completo por boleta). Sin fila, o al terminar un lote ({ completo }), se invalida
+  // el mes visible como siempre para quedar alineado con el server.
   const currentKeyRef = useRef(currentKey);
   useEffect(() => { currentKeyRef.current = currentKey; }, [currentKey]);
   useEffect(() => {
-    const onEmitted = () => {
+    const onEmitted = (e: Event) => {
       const key = currentKeyRef.current;
+      const detail = (e as CustomEvent<{ boleta?: BoletaRow | null; completo?: boolean } | undefined>).detail;
+      const cruda = detail?.completo ? null : detail?.boleta ?? null;
+      // Fila incompleta (sin id o fecha): no se puede ubicar → re-pedir el mes, como antes.
+      const fila = cruda && cruda.id && typeof cruda.fecha_emision === "string" ? cruda : null;
       setMonthCache((current) => {
         if (!(key in current)) return current; // no cargado aún: el fetch normal lo traerá
+        if (fila) {
+          const merged = mergeRcv(current[key], fila, key);
+          return merged === current[key] ? current : { ...current, [key]: merged };
+        }
         const next = { ...current };
         delete next[key]; // dispara el efecto de fetch (loading solo si no hay error previo)
         return next;
       });
-      setErrorsByMonth((current) => ({ ...current, [currentKeyRef.current]: null }));
+      if (!fila) setErrorsByMonth((current) => ({ ...current, [currentKeyRef.current]: null }));
     };
     window.addEventListener("massdte:emitted", onEmitted);
     return () => window.removeEventListener("massdte:emitted", onEmitted);

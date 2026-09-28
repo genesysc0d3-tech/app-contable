@@ -45,7 +45,21 @@ export type DesenlaceItem =
   // ítem NO se consumió (no cuenta como procesado, queda pendiente para reanudar)
   // y el lote se detiene en seco: seguir sería estrellar cada boleta contra la
   // misma pausa. `motivo` es el copy humano que ya viene del server.
-  | { estado: "pausada_remota"; motivo: string };
+  | { estado: "pausada_remota"; motivo: string }
+  // ya_emitida = el server contestó 409 PROPUESTA_YA_EMITIDA al pedir el job (antes
+  // o justo después de tomar el candado, que se suelta): otra persona/pestaña ya
+  // emitió esta boleta (2 personas emitiendo la misma empresa, 2026-09-27). No se
+  // abrió ventana ni hay folio nuevo: se cuenta y se SIGUE sin pedir decisión
+  // humana (antes caía en "fallida" y pausaba el lote boleta a boleta).
+  | { estado: "ya_emitida"; motivo: string }
+  // frenada = el server no dejó abrir el job por un CANDADO (propio colgado u otra
+  // persona) o una emisión en curso (2026-09-28, caso LC 23:43). Como pausada_remota:
+  // NO consume el ítem y detiene el lote UNA vez con el motivo (antes: "fallida" y
+  // "¿Saltar y seguir?" en cada boleta, todas rebotando contra el mismo candado).
+  | { estado: "frenada"; motivo: string }
+  // ya_a_medias = la propuesta ya tiene una lápida (a medias / sin respuesta): no se
+  // re-emite (está en la pestaña A medias); se salta sin pausa y se sigue.
+  | { estado: "ya_a_medias"; motivo: string };
 
 export type FaseLote =
   | "preparando"
@@ -61,8 +75,10 @@ export type MotivoPausa = "error" | "tope";
 
 export interface ProgresoLote {
   total: number;
-  procesadas: number; // emitidas + fallidas + revision
+  procesadas: number; // emitidas + fallidas + revision + yaEmitidas + yaAMedias
   emitidas: number;
+  yaEmitidas: number; // saltadas porque otra persona ya las emitió (sin pausa)
+  yaAMedias: number; // saltadas porque ya estaban a medias / sin respuesta (sin pausa)
   fallidas: number;
   revision: number; // boletas "a medias" que frenaron el lote
   indiceActual: number; // 0-based; -1 antes de empezar
@@ -73,7 +89,7 @@ export interface ProgresoLote {
   // folio (propuestaId viene en item). folio = el que se alcanzó a leer, si alguno.
   revisionPendiente: { item: ItemLote; folio: number | null } | null;
   /** Copy humano del server cuando el lote quedó en `pausada_remota`. */
-  pausaRemota: { motivo: string } | null;
+  pausaRemota: { motivo: string; tipo: "pausa" | "frenada" } | null;
   resultados: Array<{ item: ItemLote; desenlace: DesenlaceItem }>;
   folios: number[];
 }
@@ -122,6 +138,8 @@ export async function ejecutarLote(
     total: items.length,
     procesadas: 0,
     emitidas: 0,
+    yaEmitidas: 0,
+    yaAMedias: 0,
     fallidas: 0,
     revision: 0,
     indiceActual: -1,
@@ -164,10 +182,10 @@ export async function ejecutarLote(
     // Kill switch del server: este ítem NO se tocó (ni job, ni ventana, ni folio).
     // No se cuenta como procesado —así slice(procesadas) lo conserva como
     // pendiente— y el lote se detiene acá mismo, sin preguntar.
-    if (desenlace.estado === "pausada_remota") {
+    if (desenlace.estado === "pausada_remota" || desenlace.estado === "frenada") {
       p.subestado = null;
       p.itemActual = null;
-      p.pausaRemota = { motivo: desenlace.motivo };
+      p.pausaRemota = { motivo: desenlace.motivo, tipo: desenlace.estado === "frenada" ? "frenada" : "pausa" };
       p.fase = "pausada_remota";
       emitir();
       return p;
@@ -183,6 +201,10 @@ export async function ejecutarLote(
       emitidasDesdeTope += 1;
     } else if (desenlace.estado === "revisar") {
       p.revision += 1;
+    } else if (desenlace.estado === "ya_emitida") {
+      p.yaEmitidas += 1;
+    } else if (desenlace.estado === "ya_a_medias") {
+      p.yaAMedias += 1;
     } else {
       p.fallidas += 1;
     }
@@ -237,7 +259,8 @@ export async function ejecutarLote(
     }
 
     // ── Cadencia humana antes de la próxima ────────────────────────────────────
-    if (!esUltima) {
+    // Una "ya emitida" no tocó el portal: no hay nada que espaciar.
+    if (!esUltima && desenlace.estado !== "ya_emitida" && desenlace.estado !== "ya_a_medias") {
       if (detenido()) {
         p.fase = "detenida";
         emitir();

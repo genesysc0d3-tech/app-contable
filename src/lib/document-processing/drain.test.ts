@@ -136,6 +136,17 @@ describe("auto-drenaje al cargar la mesa", () => {
     expect(drenar).toHaveBeenCalledTimes(2);
     expect(drenar).toHaveBeenCalledWith("mesa-autodrenaje");
   });
+  it("freno ANTES de consultar: con la cola sana, máx. una consulta cada 2 min", async () => {
+    _resetAutoDrenaje();
+    const probe = vi.fn(async () => false);
+    const t0 = 9_000_000;
+    await autoDrenajeSiHayAtascados({ now: t0, probeFn: probe, drenarFn: vi.fn() });
+    await autoDrenajeSiHayAtascados({ now: t0 + 10_000, probeFn: probe, drenarFn: vi.fn() });
+    await autoDrenajeSiHayAtascados({ now: t0 + 60_000, probeFn: probe, drenarFn: vi.fn() });
+    expect(probe).toHaveBeenCalledTimes(1);
+    await autoDrenajeSiHayAtascados({ now: t0 + 2 * 60_000 + 1, probeFn: probe, drenarFn: vi.fn() });
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
   it("sin nada atascado → no toca la cola", async () => {
     _resetAutoDrenaje();
     const drenar = vi.fn(async () => {});

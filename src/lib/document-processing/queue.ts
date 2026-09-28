@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
+import { empresasOcupadas, msHastaProximoJobTomable } from "./proximo-job";
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel } from "@/lib/parsers";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
@@ -235,11 +236,20 @@ async function runningCountForEmpresa(sb: Sb, empresaId: string) {
 }
 
 async function claimJobs(sb: Sb, args: { limit: number; now: Date; lockOwner: string }) {
-  const { data: candidates, error } = await sb
+  // Candidatos SOLO de empresas libres (2026-09-28): antes se traían los limit*4 más
+  // antiguos y recién después se descartaban los de empresas con un job corriendo;
+  // si esos 4 eran todos de una empresa ocupada (5 cartolas subidas juntas), el job
+  // tomable de OTRA empresa quedaba fuera → claimed 0 → kicks sin progreso y esa otra
+  // empresa esperando toda la cola de la primera. Mismo criterio que la sonda
+  // (proximo-job.ts); el chequeo por job de abajo se mantiene contra carreras.
+  const ocupadas = await empresasOcupadas(sb as unknown as SupabaseClient, { soloFrescos: false });
+  let consulta = sb
     .from("document_processing_jobs")
     .select("*")
     .in("status", ["queued", "retryable"])
-    .lte("next_run_at", args.now.toISOString())
+    .lte("next_run_at", args.now.toISOString());
+  if (ocupadas && ocupadas.length > 0) consulta = consulta.not("empresa_id", "in", `(${ocupadas.join(",")})`);
+  const { data: candidates, error } = await consulta
     .order("created_at", { ascending: true })
     .limit(args.limit * 4);
   if (error) throw new Error(`JOB_CANDIDATE_QUERY_FAILED:${error.message}`);
@@ -722,26 +732,13 @@ export async function processDocumentQueue(args: ProcessQueueArgs = {}) {
  * Devuelve true si había un job vivo (queued/running/retryable) que se canceló.
  */
 /**
- * ¿Cuánto falta (ms) para el próximo job pendiente (queued/retryable)?
- * - 0 si ya está vencido, null si no hay ninguno dentro del horizonte.
- * Lo usa el drenaje encadenado para NO morir cuando lo único que queda es un
- * reintento con backoff a 1-2 min de futuro (incidente 2026-08-22: la cadena
- * terminaba y la cartola quedaba a medias hasta el cron del día siguiente).
+ * Próximo job pendiente TOMABLE (excluye empresas con un job corriendo). Ver
+ * proximo-job.ts. Se mantiene acá el nombre para no romper a drain.ts.
  */
 export async function msHastaProximoJobPendiente(withinMs: number, sbArg?: Sb): Promise<number | null> {
   const sb = sbArg ?? serviceClient();
   if (!sb) return null;
-  const { data, error } = await sb
-    .from("document_processing_jobs")
-    .select("next_run_at")
-    .in("status", ["queued", "retryable"])
-    .order("next_run_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data?.next_run_at) return null;
-  const delta = new Date(data.next_run_at).getTime() - Date.now();
-  if (delta > withinMs) return null;
-  return Math.max(0, delta);
+  return msHastaProximoJobTomable(sb as unknown as SupabaseClient, withinMs);
 }
 
 export async function cancelDocumentProcessingJob(sb: Sb, documentoId: string): Promise<boolean> {

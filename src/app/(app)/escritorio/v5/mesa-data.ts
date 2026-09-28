@@ -133,20 +133,26 @@ export async function fetchMesaDateDependent(
   const PROPS_LIMIT = 1000;
 
   // ── Consultas date-dependientes (paralelas) ──
-  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawRes, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
+  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawResConRef, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
     supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun,contexto_usuario").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,ref").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr),
     supabase.from("empresas").select("boletas_emision_proveedor,facturas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd),
   ]);
+  // Tolerante al ORDEN de deploy: si la columna `ref` aún no existe (migración
+  // 20260928120000 sin aplicar, error 42703), repetir sin ella en vez de dejar la
+  // mesa sin "Últimas emitidas".
+  const boletasRawRes = boletasRawResConRef.error && (boletasRawResConRef.error.code === "42703" || /\bref\b/.test(boletasRawResConRef.error.message ?? ""))
+    ? await supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300)
+    : boletasRawResConRef;
   // Desborde del tope de propuestas: total real del rango vs lo servido.
   const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
   const propuestasTruncadas = propuestasTotal > (propsData.data?.length ?? 0);
@@ -209,7 +215,7 @@ export async function fetchMesaDateDependent(
     docsAgregados.filter((d) => ["boleta_unica", "boleta_sii_local", "dte_simpleapi"].includes(d.tipo)).map((d) => (d.progreso_ia as { boleta_id?: string } | null)?.boleta_id).filter((v): v is string => Boolean(v)),
   );
   const glosaDe = (detalles: unknown) => Array.isArray(detalles) && detalles[0] && typeof detalles[0] === "object" ? String((detalles[0] as { nombre?: unknown }).nombre ?? "") : "";
-  const boletasView = boletas.map((b) => ({ ...b, es_unica: boletaUnicaIds.has(b.id), detalle: glosaDe((b as { detalles?: unknown }).detalles) }));
+  const boletasView = boletas.map((b) => ({ ...b, ref: (b as { ref?: string | null }).ref ?? null, es_unica: boletaUnicaIds.has(b.id), detalle: glosaDe((b as { detalles?: unknown }).detalles) }));
 
   // ── Feed de actividad del rango (vista Actividad del panel derecho) ──
   // Es date-DEPENDIENTE: se arma con los docs y boletas del rango visible.
