@@ -293,6 +293,8 @@ const WORKER_STATUS_LABELS: Record<string, string> = {
   retrying: "Reintentando",
   emitted: "Boleta emitida",
   result_needs_review: "Requiere revisión",
+  // Extensión 0.2.9: folio emitido y enviado; massDTE aún no confirma el guardado.
+  result_awaiting_ack: "Guardando…",
   learning_observing: "Modo aprendizaje",
   cancelled: "Cancelado",
   closed: "Ventana cerrada",

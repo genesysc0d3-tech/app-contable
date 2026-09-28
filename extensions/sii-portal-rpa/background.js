@@ -420,6 +420,10 @@ function handleResultPersisted(message) {
     clearPendingResult(message.job_id);
   }
   if (state && state.resultSentAt && !state.resultPersisted) {
+    // Revisión 0.2.9 (I2): el server NO guardó (JOB_EXPIRED, PERSISTENCE_FAILED,
+    // BAD_JSON, FOLIO_DE_OTRO_DOCUMENTO…). Un cierre posterior ya no puede decir "se
+    // está guardando": avisoCierrePostEmit manda result_needs_review.
+    state.ackFallo = true;
     if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
     sendToSii(state.workerTabId, {
       type: "APP_CONTABLE_SII_WORKER_OVERLAY",
@@ -435,7 +439,7 @@ function handleResultPersisted(message) {
 // camino → estado NO terminal honesto, sin frenar el lote (0.2.9, H2). Si nunca se
 // envió un resultado, se mantiene el aviso de siempre (a medias, no re-emitir).
 function avisoCierrePostEmit(state, textoSinResultado) {
-  if (state.resultSentAt) {
+  if (state.resultSentAt && !state.ackFallo) {
     sendToApp(state, statusMessage(
       state.jobId,
       "result_awaiting_ack",

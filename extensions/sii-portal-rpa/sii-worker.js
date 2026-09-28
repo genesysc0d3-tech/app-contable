@@ -68,7 +68,8 @@
       ackFallbackTimer = setTimeout(() => {
         ackFallbackTimer = null;
         if (currentMode !== "LOCKED_AUTOMATION") return;
-        renderOverlay("AWAITING_ACK", `${message} massDTE todavía no confirma el guardado; se guardará solo. No la emitas de nuevo.`);
+        const base = String(message || "").replace(/\s*Guardándola en massDTE…?\s*$/, "");
+        renderOverlay("AWAITING_ACK", `${base} massDTE todavía no confirma el guardado; se guardará solo. No la emitas de nuevo.`);
       }, ackFallbackMs);
     }
     const overlay = ensureOverlay();
@@ -98,7 +99,7 @@
         </div>`
       : done || awaitingAck
         ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-            <button type="button" data-app-contable-action="${done && currentJobLogoutAfter ? "logout_and_close" : "close"}" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#0f5132;font-size:12px;font-weight:800;cursor:pointer;">${done && currentJobLogoutAfter ? "Cerrar sesión y ventana" : "Cerrar ventana"}</button>
+            <button type="button" data-app-contable-action="${currentJobLogoutAfter ? "logout_and_close" : "close"}" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#0f5132;font-size:12px;font-weight:800;cursor:pointer;">${currentJobLogoutAfter ? "Cerrar sesión y ventana" : "Cerrar ventana"}</button>
           </div>`
         : "";
 
@@ -138,8 +139,17 @@
         type: "APP_CONTABLE_SII_WORKER_ACTION",
         job_id: currentJobId,
         action,
-      }, () => {
-        if (!chrome.runtime.lastError) return;
+      }, (response) => {
+        if (!chrome.runtime.lastError) {
+          // 0.2.9 (M2): el service worker se reinició y ya no conoce este trabajo →
+          // "Cerrar ventana" quedaba muerto. Se intenta cerrar desde acá; si Chrome no
+          // lo deja, se dice cómo (el folio ya está en el stash de la extensión).
+          if (response?.error === "JOB_NOT_FOUND" && action === "close") {
+            try { window.close(); } catch { /* sigue el aviso */ }
+            renderOverlay("HUMAN_REQUIRED", "La extensión se reinició y ya no controla esta ventana. Ciérrala con la X; si la boleta salió, su folio quedó guardado en la extensión y se entrega solo a massDTE.");
+          }
+          return;
+        }
         renderOverlay("PAUSED", "La extensión fue recargada y esta ventana perdió conexión. Vuelve a la app para guardar el PDF SII detectado.");
       });
     } catch {
@@ -629,7 +639,10 @@
         // clasifica (sacar una candidata por error puede volver "no salió" una que salió).
         header_boleta: reI(rp.header_boleta, /^BOLETA$/i),
         tipo_exenta: reI(rp.tipo_exenta, /EXENT|NO\s*AFECTA|^41$/i),
-        tipo_afecta: reI(rp.tipo_afecta, /AFECTA|^39$/i),
+        // Tolerante: "Boleta electrónica" a secas = 39 (la exenta se revisa ANTES). Si
+        // clasifica mal, lo peor es "a medias": una exclusión por tipo nunca da "high"
+        // ni "no salió" (ver calzarFolioEnReportes y verificarEnReportes).
+        tipo_afecta: reI(rp.tipo_afecta, /AFECTA|ELECTRONICA|^39$/i),
         ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
         ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
         menu_item: reI(rp.menu_item, /RESUMEN DE VENTAS/i),
@@ -1541,6 +1554,11 @@
       // La tabla SÍ dice el tipo en otras filas pero no en ésta: no se puede afirmar
       // que sea del tipo del job, nunca cierra sola (igual que fechaIlegible).
       if (tipoJob && tablaTraeTipo && f.tipoDte == null) return medium("tipo_ilegible", { en_ventana: 1, hora_emitir: horaEmit });
+      // Revisión 0.2.9 (I1): mientras el texto de la columna Tipo no esté calibrado en
+      // MV, descartar una fila SOLO por el tipo no alcanza para cerrar sola: si la
+      // descartada era la nuestra (mal clasificada), la otra del mismo monto quedaría
+      // "única" y se le asignaría un folio ajeno. Con exclusiones → a medias.
+      if (excluidasPorTipo > 0) return medium("excluidas_por_tipo", { en_ventana: 1, hora_emitir: horaEmit });
       return { folio: f.folio, confidence: "high", evidence: { source: "reportes_calce_unico", hora_fila: f.hora, hora_emitir: horaEmit, ...base, en_ventana: 1 } };
     }
     return medium(enVentana.length === 0 ? "ninguna_en_ventana" : "varias_en_ventana", { en_ventana: enVentana.length, hora_emitir: horaEmit });

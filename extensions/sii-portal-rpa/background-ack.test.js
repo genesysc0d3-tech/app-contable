@@ -166,6 +166,15 @@ describe("0.2.9 · DONE y autocierre recién tras el ACK del guardado (H2)", () 
     expect(overlays.at(-1).mode).toBe("AWAITING_ACK");
   });
 
+  it("revisión I2: ack FALLIDO (server no guardó) y después cerrar → result_needs_review, nunca 'se está guardando'", async () => {
+    const s = postEmit();
+    await fx.handleCapturedResult(s, fuerte());
+    fx.handleResultPersisted({ job_id: "j1", ok: false, error: "PERSISTENCE_FAILED" });
+    cerrar(fx);
+    expect(statuses().some((m) => m.status === "result_awaiting_ack")).toBe(false);
+    expect(frenos()).toHaveLength(1);
+  });
+
   it("close post-emit SIN resultado enviado (no hubo folio fuerte) → se mantiene el aviso de siempre", () => {
     postEmit();
     cerrar(fx);

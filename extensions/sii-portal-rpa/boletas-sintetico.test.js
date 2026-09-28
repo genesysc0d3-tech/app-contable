@@ -29,14 +29,15 @@ const testHooks = {}; // window.__MASSDTE_TEST__: el worker expone resolverLibre
 // Lo que el worker le manda al librero (chrome.runtime.sendMessage): WORKER_ACTION
 // close/capture/…, FINAL_EMIT_CLICKED. 0.2.9: para ver si la ventana se cierra sola.
 const alLibrero = [];
+let respuestaLibrero = () => undefined; // lo que "contesta" el librero a sendMessage
 
 function mountWorker() {
-  const win = { addEventListener() {}, removeEventListener() {}, innerWidth: 1280, getComputedStyle: () => ({ visibility: "visible", display: "block" }), __MASSDTE_TEST__: testHooks };
+  const win = { close() { win.cerrada = true; }, addEventListener() {}, removeEventListener() {}, innerWidth: 1280, getComputedStyle: () => ({ visibility: "visible", display: "block" }), __MASSDTE_TEST__: testHooks };
   const chrome = {
     runtime: {
       id: "sintetico", lastError: null,
       getManifest: () => ({ version: "sintetico" }),
-      sendMessage: (m, cb) => { alLibrero.push(m); if (cb) cb(); },
+      sendMessage: (m, cb) => { alLibrero.push(m); if (cb) cb(respuestaLibrero(m)); },
       onMessage: { addListener: (h) => { driveListener = h; } },
     },
   };
@@ -822,6 +823,7 @@ describe("0.2.9 · el autocierre de la ventana espera el ACK del guardado (H2)",
       await vi.advanceTimersByTimeAsync(2_000);
       expect(html()).toContain("data-app-contable-action=\"close\"");
       expect(html()).toContain("Folio 7");
+      expect(html()).not.toContain("Guardándola"); // M4: sin el texto duplicado
       expect(cierres()).toHaveLength(0); // habilita cerrar, no cierra sola
     } finally {
       fakeDocument.createElement = orig;
@@ -871,7 +873,9 @@ describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
     expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
   });
 
-  it("una 39 y una 41 del mismo monto en ventana, job 41 → high con la 41 (antes: 'varias')", async () => {
+  // Revisión 0.2.9 (I1): si la fila descartada por tipo era la NUESTRA mal clasificada,
+  // la otra del mismo monto quedaría "única" → folio ajeno. Sin calibrar en MV: medium.
+  it("una 39 y una 41 del mismo monto en ventana, job 41 → sugiere la 41 pero NUNCA high (excluidas_por_tipo)", async () => {
     vi.setSystemTime(new Date(EMIT_AT + 60_000));
     escenaReportes([
       { fecha: "25/09/2026", hora: "15:27", folio: 1241, monto: "$ 196.000", tipo: "Boleta afecta" },
@@ -879,6 +883,18 @@ describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
     ]);
     const res = await capturarEnReportes(jobReportes());
     expect(res.result.folio).toBe(1242);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("excluidas_por_tipo");
+  });
+
+  it("I1: la 39 aparece como 'Boleta electrónica' a secas → cuenta como 39 (no tipo_ilegible)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:10", folio: 1240, monto: "$ 15.000", tipo: "Boleta exenta" },
+      { fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "Boleta electrónica" },
+    ]);
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBe(1241);
     expect(res.result.folio_confidence).toBe("high");
   });
 
@@ -937,5 +953,48 @@ describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
     const res = await capturarEnReportes(jobReportes(), { final_emit_at: EMIT_AT });
     expect(res.result.reportes_tabla_completa).toBe(true);
     expect(res.result.reportes_rango_cubre_emision).toBe(true);
+  });
+});
+
+describe("0.2.9 · revisión: botón Cerrar tras reinicio del SW (M2) y logout_after en AWAITING_ACK (M3)", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+
+  function capturarOverlay(fn) {
+    const creados = [];
+    const orig = fakeDocument.createElement;
+    fakeDocument.createElement = (...a) => { const n = orig(...a); creados.push(n); return n; };
+    try { fn(); } finally { fakeDocument.createElement = orig; }
+    return () => String(creados.at(-1)?.innerHTML ?? "");
+  }
+
+  it("M2: 'Cerrar ventana' con el librero contestando JOB_NOT_FOUND → la ventana intenta cerrarse sola y lo dice", async () => {
+    escenaEmision();
+    alLibrero.length = 0;
+    respuestaLibrero = (m) => (m.type === "APP_CONTABLE_SII_WORKER_ACTION" ? { ok: false, error: "JOB_NOT_FOUND" } : undefined);
+    try {
+      overlay("DONE", { auto_close: true });
+      let html = () => "";
+      const orig = fakeDocument.createElement;
+      const creados = [];
+      fakeDocument.createElement = (...a) => { const n = orig(...a); creados.push(n); return n; };
+      try {
+        await vi.advanceTimersByTimeAsync(5_100);
+        html = () => String(creados.at(-1)?.innerHTML ?? "");
+      } finally { fakeDocument.createElement = orig; }
+      expect(cierres()).toHaveLength(1);
+      expect(html()).toContain("Ciérrala con la X");
+    } finally {
+      respuestaLibrero = () => undefined;
+    }
+  });
+
+  it("M3: boleta única (logout_after) sin ack → el aviso AWAITING_ACK ofrece 'Cerrar sesión y ventana'", async () => {
+    escenaEmision();
+    const html = capturarOverlay(() => {
+      driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_WORKER_OVERLAY", job_id: "o1", job: { logout_after: true }, mode: "AWAITING_ACK", message: "Folio 9." }, {}, () => {});
+    });
+    expect(html()).toContain("logout_and_close");
+    // restaurar: el resto de la suite no es boleta única
+    driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_WORKER_OVERLAY", job_id: "o1", job: { logout_after: false }, mode: "LOCKED_AUTOMATION", message: "x" }, {}, () => {});
   });
 });
