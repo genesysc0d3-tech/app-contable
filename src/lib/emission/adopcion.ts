@@ -265,7 +265,9 @@ export function validarVeredictoNoSalio(args: {
  * ¿Se ofrece "Verificar en el SII" para un ítem de A medias? Solo boletas (39/41)
  * SIN RESPUESTA de HOY (/reportes muestra solo hoy; las de otro día quedan con folio a
  * mano / "No está en el SII"). Devuelve "no" (no se muestra), "ya" (botón activo) o
- * desde cuándo (vencido hace < 2 min: aún puede estar trabajando, B1).
+ * desde cuándo. El botón espera el MISMO plazo que el veredicto "no salió"
+ * (expires_at + 30 min): antes, cada clic abría el SII ~3 min para terminar en
+ * MUY_PRONTO. (El server igual permite leer desde +2 min: lo usa el lote.)
  */
 export function verificableEnAMedias(
   it: { motivo: "a_medias" | "sin_respuesta"; tipo_dte: number | null; lapida_at: string; expires_at: string | null },
@@ -277,6 +279,6 @@ export function verificableEnAMedias(
   const vence = it.expires_at ? Date.parse(it.expires_at) : NaN;
   if (!Number.isFinite(creado) || !Number.isFinite(vence)) return "no";
   if (chileDateString(new Date(creado)) !== chileDateString(ahora)) return "no";
-  const desdeMs = vence + MARGEN_ADOPCION_MS;
+  const desdeMs = vence + DECLARAR_SIN_RESPUESTA_TRAS_MS;
   return ahora.getTime() >= desdeMs ? "ya" : { desdeMs };
 }

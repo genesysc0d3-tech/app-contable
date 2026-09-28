@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { validarAccesoCuenta } from "@/lib/entitlements";
-import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
+import { ESTADOS_LAPIDA, esLapidaEfectiva, plazoDeclararNoSalio, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { jobAdoptadoDeOrigen, validarVeredictoNoSalio } from "@/lib/emission/adopcion";
 import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
 import { ROLES_EMISION } from "@/lib/auth/roles";
@@ -938,6 +938,17 @@ export async function POST(request: Request) {
     if (errLap) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
     const ahoraDecl = new Date();
     const aCerrar = (lapidasProp ?? []).filter((j) => esLapidaEfectiva(j, ahoraDecl) !== null).map((j) => j.job_id);
+    // El plazo vale para CADA lápida que se va a cerrar, no solo la declarada: una
+    // verificación sellada a medias no puede arrastrar a Listas al intento original
+    // sin respuesta que venció hace minutos (podría seguir vivo → doble folio).
+    const plazo = plazoDeclararNoSalio(lapidasProp ?? [], ahoraDecl);
+    if (!plazo.ok) {
+      const hora = new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(plazo.desdeMs));
+      return NextResponse.json(
+        { ok: false, error: "MUY_PRONTO", desde: new Date(plazo.desdeMs).toISOString(), detalle: `Esta boleta quedó sin respuesta hace poco y el SII podría seguir procesándola. Podrás marcarla desde las ${hora}.` },
+        { status: 409 },
+      );
+    }
     // Si el server YA tiene un folio capturado para alguno de esos intentos (stash de
     // la extensión), la boleta salió: no se puede declarar "no salió" (doble folio).
     if (aCerrar.length > 0) {

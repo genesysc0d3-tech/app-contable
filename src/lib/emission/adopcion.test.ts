@@ -237,11 +237,12 @@ describe("B1 del veredicto: leer a +2 min, devolver a Listas recién con plazo",
 
 describe("verificableEnAMedias — el botón solo donde sirve", () => {
   const it0 = { motivo: "sin_respuesta" as const, tipo_dte: 41, lapida_at: CREADO, expires_at: VENCE };
-  it("sin respuesta de hoy, vencida hace 3 min → botón", () => {
-    expect(verificableEnAMedias(it0, new Date(venceMs + 3 * 60_000))).toBe("ya");
+  it("sin respuesta de hoy, vencida hace 31 min → botón", () => {
+    expect(verificableEnAMedias(it0, new Date(venceMs + 31 * 60_000))).toBe("ya");
   });
-  it("vencida hace 1 min → todavía no (dice desde cuándo)", () => {
-    expect(verificableEnAMedias(it0, new Date(venceMs + 60_000))).toEqual({ desdeMs: venceMs + MARGEN_ADOPCION_MS });
+  it("vencida hace 3 min → todavía no: el botón espera el plazo del 'no salió' (expires_at + 30 min)", () => {
+    expect(verificableEnAMedias(it0, new Date(venceMs + 3 * 60_000))).toEqual({ desdeMs: venceMs + 30 * 60_000 });
+    expect(verificableEnAMedias(it0, new Date(venceMs + 60_000))).toEqual({ desdeMs: venceMs + 30 * 60_000 });
   });
   it("de AYER → no aparece (/reportes muestra solo hoy)", () => {
     expect(verificableEnAMedias({ ...it0, lapida_at: "2026-09-28T02:37:07Z", expires_at: "2026-09-28T02:52:07Z" }, new Date("2026-09-28T12:00:00Z"))).toBe("no");
