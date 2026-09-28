@@ -108,8 +108,9 @@ export type SesionSeguraResult =
 /**
  * Guard para rutas FUERA del matcher del proxy: sesión + inactividad + MFA, con
  * 401 JSON. Devuelve también `user` cuando existe aunque la sesión sea insegura,
- * para la única ruta que decide NO bloquear y solo registrar (/api/sii-local/result,
- * captura de folio real: ver ahí).
+ * para la única ruta que no responde 401 a todo: /api/sii-local/result, que con
+ * sesión insegura guarda la captura del folio SOLO en el stash del servidor (sin
+ * escribir boletas). Ver lib/emission/result-sesion-insegura.ts.
  */
 export async function requireSesionSegura(): Promise<SesionSeguraResult> {
   const supabase = await createClient();
@@ -131,23 +132,4 @@ export async function requireSesionSegura(): Promise<SesionSeguraResult> {
  */
 export function mockSiiHttpHabilitado(env: { NODE_ENV?: string; MASSDTE_ENABLE_SII_MOCK_HTTP?: string }): boolean {
   return env.NODE_ENV !== "production" || env.MASSDTE_ENABLE_SII_MOCK_HTTP === "1";
-}
-
-/**
- * /api/sii-local/result: ¿esta llamada se BLOQUEA con sesión insegura, o solo se
- * registra? Solo se deja pasar la captura del folio que manda la extensión
- * (result / recover_latest): el folio ya existe en el SII y bloquearlo arriesga
- * perderlo (el stash de la extensión es best-effort y tiene tope de reintentos).
- * Las declaraciones HUMANAS (folio a mano, "no salió") y cualquier otra cosa se
- * bloquean: el humano reintenta tras el MFA y no se pierde nada.
- */
-export function resultSoloRegistraSesionInsegura(payload: {
-  registrar_folio_manual?: unknown;
-  declarar_no_salio?: unknown;
-  recover_latest?: unknown;
-  result?: unknown;
-}): boolean {
-  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true) return false;
-  if (payload.recover_latest === true) return true;
-  return payload.result != null && typeof payload.result === "object";
 }
