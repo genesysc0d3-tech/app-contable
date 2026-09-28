@@ -18,7 +18,7 @@ import { esRolEmision } from "@/lib/auth/roles";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { conCanalIA } from "@/lib/ai/canal";
 import { leerCallbackAclaracion } from "@/lib/telegram/aclaracion";
-import { iniciarDrenaje } from "@/lib/document-processing/drain";
+import { iniciarDrenaje } from "@/lib/document-processing/auto-drenaje";
 import { subirDocumentoR2 } from "@/lib/storage";
 import {
   sendMessage,

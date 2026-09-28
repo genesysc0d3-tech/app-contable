@@ -10,7 +10,7 @@ import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/lib/document-processing/abuse-guard";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
-import { iniciarDrenaje } from "@/lib/document-processing/drain";
+import { iniciarDrenaje } from "@/lib/document-processing/auto-drenaje";
 import { defaultStorageProvider, subirDocumentoR2 } from "@/lib/storage";
 import { createHash } from "crypto";
 

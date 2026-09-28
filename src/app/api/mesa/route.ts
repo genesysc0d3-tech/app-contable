@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { autoDrenajeSiHayAtascados } from "@/lib/document-processing/drain";
+import { autoDrenajeSiHayAtascados } from "@/lib/document-processing/auto-drenaje";
 import { cargarMesa } from "@/app/(app)/escritorio/v5/actions";
 
 // Carga de mesa por HTTP en vez de server action. Motivo (bug "mesa gris
