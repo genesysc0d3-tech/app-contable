@@ -11,7 +11,7 @@ import { chileDateString } from "@/lib/chile-date";
 import { recoverLatestFolio, registrarFolioAMano, type RecoverLatestResult } from "@/lib/emission/recover-latest";
 import { useEmisionLote, type ItemLoteEmision } from "./useEmisionLote";
 import { verificarExtensionCompatible } from "./useExtensionStatus";
-import { guardarLotePendiente, limpiarLotePendiente } from "@/lib/emission/lote-persist";
+import { guardarLotePendiente, limpiarLotePendiente, rastroReanudacion } from "@/lib/emission/lote-persist";
 
 export interface LoteItemInput {
   id: string;
@@ -175,7 +175,8 @@ export default function EmitirLoteModal({
     // Realtime encoge), para que slice(procesadas) no se corra ni pierda boletas.
     if (corriendo || fase === "requiere_revision" || fase === "pausada_remota") {
       const base = itemsAlIniciarRef.current ?? items;
-      const remainingIds = base.slice(progreso.procesadas).map((i) => i.id);
+      // Sin la boleta EN VUELO (rastroReanudacion): Reanudar no la re-emite a ciegas.
+      const remainingIds = rastroReanudacion(base.map((i) => i.id), progreso);
       guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? base.length }, mesa);
     }
   }, [progreso, corriendo, fase, terminalLimpio, empresaId, items, totalOriginal, mesa]);
@@ -363,7 +364,7 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
       <Badge bg="rgba(34,197,94,.13)">✅</Badge>
       <div style={h1}>Listo</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? `${doc} emitida` : `${docs} emitidas`} y guardadas.</div>
-      {chips([{ l: "Folios", v: rango }, ...(ya > 0 ? [{ l: "Ya emitidas", v: `${ya}` }] : []), ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
+      {chips([{ l: "Folios", v: rango }, ...(ya > 0 ? [{ l: "Ya emitidas", v: `${ya}` }] : []), ...((p.yaAMedias ?? 0) > 0 ? [{ l: "En A medias", v: `${p.yaAMedias}` }] : []), ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
       {/* Feedback real 2026-09-23: "41 aprobadas, 40 emitidas, no encontré la que
           falta". La saltada sigue aprobada y en Listas dentro de su cartola — hay
           que DECIRLO, no dejar que la cuenten restando montos contra el SII. */}

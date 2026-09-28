@@ -228,6 +228,10 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loteOpen, setLoteOpen] = useState(false);
   const { lockedByOther, lockedByOtherUser, businessMode, lockMessage } = useEmissionLockStatus();
+  // Otra PERSONA emitiendo (el único "Equipo" real) vs TU candado abierto (otra
+  // pestaña o una boleta sin respuesta). Antes todo candado era "Equipo: …" y un
+  // candado propio pintaba tu nombre como si fuera otra persona (LC 27-sep).
+  const candadoPropio = lockedByOther && !lockedByOtherUser;
   // Reanudar un lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
   // lotePendiente = los IDs que faltan (leídos de localStorage); loteResume = esos
   // items re-hidratados del server para pasárselos al modal; null = emisión fresca.
@@ -1007,7 +1011,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           </div>
           {lockedByOther && (
             <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
-              <strong style={{ fontSize: 9 }}>{businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
+              <strong style={{ fontSize: 9 }}>{candadoPropio ? "Emisión abierta" : businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
             </div>
           )}
           <div className="r">
@@ -1038,7 +1042,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? `Selecciona ${esFacturas ? "facturas" : "boletas"}` : `Emitir ${selectedCount}`}
+              {" "}{candadoPropio ? "Emisión abierta" : lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? `Selecciona ${esFacturas ? "facturas" : "boletas"}` : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>

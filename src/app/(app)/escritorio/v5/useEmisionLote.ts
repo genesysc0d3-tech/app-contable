@@ -18,6 +18,7 @@ import {
 } from "@/lib/emission/lote-runner";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
 import { fechaParaEmitir, noSalioEsConfiable } from "@/lib/emission/fecha-intento";
+import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
@@ -174,6 +175,8 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     | { jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
     | { pausada: true; detalle: string }
     | { yaEmitida: true; folio: number | null; boletaId: string | null }
+    | { frenada: true; motivo: string }
+    | { yaAMedias: true }
     | null;
   const startJob = useCallback(async (propuestaId: string, tipoDte: number, origin: "emision_lote" | "verificacion_lote" = "emision_lote"): Promise<StartJob> => {
     try {
@@ -189,34 +192,20 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         }),
       });
       const json = await res.json().catch(() => ({}));
-      if (res.status === 409 && json?.code === "EMISION_PAUSADA") {
-        return {
-          pausada: true,
-          detalle: typeof json.detalle === "string" && json.detalle.trim()
-            ? json.detalle
-            : "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Tus documentos quedan listos y no se pierde nada; inténtalo de nuevo más tarde.",
-        };
-      }
-      // Otra persona/pestaña ya la emitió: no es una falla de esta boleta.
-      if (res.status === 409 && json?.error === "PROPUESTA_YA_EMITIDA") {
-        return {
-          yaEmitida: true,
-          folio: typeof json.folio === "number" ? json.folio : null,
-          boletaId: typeof json.boleta_id === "string" ? json.boleta_id : null,
-        };
-      }
-      if (!res.ok || !json.ok || !json.job_id || !json.expires_at) return null;
+      // Clasificación pura (clasificar-start-job.ts): pausa del server, ya emitida,
+      // candado / en curso (frena UNA vez), ya a medias (se salta), ok, o error.
       // El server resuelve el emisor_rut autoritativo (empresa.rut de la DB) y lo
-      // devuelve en expected_emisor_rut. Lo usamos como fuente de verdad para el
-      // payload de la extensión, igual que la boleta única (EmitirDirectaView):
-      // sin esto el job viaja sin emisor_rut y la extensión lo rechaza fail-closed
-      // (EMISOR_RUT_INVALID) en TODAS las boletas del lote.
-      return {
-        jobId: json.job_id as string,
-        expiresAt: json.expires_at as string,
-        emisorRut: (json.expected_emisor_rut ?? null) as string | null,
-        foliosHoy: Array.isArray(json.folios_hoy) ? (json.folios_hoy as number[]) : [],
-      };
+      // devuelve en expected_emisor_rut: es la fuente de verdad del payload (sin él
+      // la extensión rechaza fail-closed EMISOR_RUT_INVALID en TODO el lote).
+      const c = clasificarStartJob(res.status, json);
+      switch (c.tipo) {
+        case "ok": return { jobId: c.jobId, expiresAt: c.expiresAt, emisorRut: c.emisorRut, foliosHoy: c.foliosHoy };
+        case "pausada": return { pausada: true, detalle: c.detalle };
+        case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId };
+        case "frenada": return { frenada: true, motivo: c.motivo };
+        case "a_medias": return { yaAMedias: true };
+        default: return null;
+      }
     } catch {
       return null;
     }
@@ -267,6 +256,8 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         // ítem como pendiente y detiene el lote; el modal muestra el detalle.
         if ("pausada" in job) return { estado: "pausada_remota", motivo: job.detalle };
         if ("yaEmitida" in job) return { estado: "ya_emitida", motivo: "Ya estaba emitida (otra persona o pestaña la emitió)." };
+        if ("frenada" in job) return { estado: "frenada", motivo: job.motivo };
+        if ("yaAMedias" in job) return { estado: "ya_a_medias", motivo: "Ya estaba en A medias: revísala ahí antes de volver a emitirla." };
 
         // 2. MISMO payload que la emisión única (fuente única) — desde la propuesta.
         //    Boleta (39/41) → e-Boleta; factura (33/34) → portal gratuito, con su
@@ -410,7 +401,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           if (vjob && "yaEmitida" in vjob && vjob.folio !== null) {
             return { estado: "emitida", folio: vjob.folio, boletaId: vjob.boletaId };
           }
-          if (vjob && !("pausada" in vjob) && !("yaEmitida" in vjob)) {
+          if (vjob && "jobId" in vjob) {
             const payloadVerify = buildBoletaJob({
               empresaId,
               emisorRut: vjob.emisorRut ?? empresaRut ?? undefined,

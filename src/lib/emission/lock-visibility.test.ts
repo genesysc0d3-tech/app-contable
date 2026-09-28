@@ -49,6 +49,13 @@ describe("buildVisibleEmissionLock", () => {
     expect(visible.is_mine).toBe(true);
   });
 
+  it("candado PROPIO con plan business (caso LC 27-sep): nunca 'está emitiendo desde su computador'", () => {
+    const visible = buildVisibleEmissionLock({ lock, businessMode: true, currentUserId: "user-a", usuario: { nombre: "LC SERVICES" }, avance: 16 });
+    expect(visible.mensaje).not.toContain("esta emitiendo desde su computador");
+    expect(visible.mensaje).not.toContain("LC SERVICES");
+    expect(visible.mensaje).toContain("Tu emisión anterior sigue abierta");
+  });
+
   it("con equipo, dice cuánto lleva la tanda (dueño + avance); fuera de Business jamás", () => {
     const conAvance = buildVisibleEmissionLock({ lock, businessMode: true, currentUserId: "user-b", usuario: { nombre: "Juan Perez" }, avance: 34 });
     expect(conAvance.mensaje).toContain("Juan Perez esta emitiendo desde su computador · 34 boletas ya salieron en esta tanda");

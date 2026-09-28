@@ -28,6 +28,13 @@ function cleanText(value: unknown) {
   return text.length > 0 ? text : null;
 }
 
+function horaChile(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(t));
+}
+
 export function genericEmissionLockMessage() {
   return "Hay una emision en curso para esta cuenta. Intenta nuevamente cuando termine.";
 }
@@ -50,6 +57,17 @@ export function buildVisibleEmissionLock(args: {
     estado_visible: args.lock.estado_visible ?? null,
     is_mine: args.lock.usuario_id === args.currentUserId,
   };
+
+  // El candado es TUYO (caso LC 27-sep: cuenta de 1 persona con plan business veía
+  // "Equipo: LC SERVICES está emitiendo desde su computador"): nunca "Equipo", nunca
+  // tu propio nombre como si fuera otra persona. Dice qué es y cuándo se libera.
+  if (base.is_mine) {
+    const hora = horaChile(args.lock.locked_until);
+    return {
+      ...base,
+      mensaje: `Tu emisión anterior sigue abierta (otra pestaña o una boleta sin respuesta). Se libera sola${hora ? ` a las ${hora}` : " en unos minutos"}.`,
+    };
+  }
 
   if (!args.businessMode) {
     return {
