@@ -152,11 +152,14 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
   }, [ctxReload, router]);
   useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); }, []);
 
-  // Realtime updates. Canal ÚNICO por instancia: en el Check hay varios DocCardList montados
-  // a la vez (un panel por origen), y Supabase falla si dos comparten el mismo nombre de canal
-  // ("cannot add postgres_changes callbacks after subscribe()").
+  // Realtime + sondeo de docs en proceso: DENTRO de la mesa los hace MesaController
+  // (una suscripción y un sondeo con escalera y pausa en pestaña oculta,
+  // plan-costo-vercel §5 b/c). Antes cada DocCardList montado (uno por panel) tenía
+  // su canal y su intervalo de 5 s → N recargas completas por cada cambio. Fuera de
+  // la mesa (sin contexto) se conserva el comportamiento de siempre.
   const channelId = useId().replace(/:/g, "");
   useEffect(() => {
+    if (ctxReload) return;
     const channel = supabase
       .channel(`v5-docs-${empresaId}-${channelId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` },
@@ -165,15 +168,15 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
         () => { fetchDocsAuto(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDocsAuto, empresaId, channelId]);
+  }, [ctxReload, fetchDocsAuto, empresaId, channelId]);
 
-  // Polling while processing
+  // Polling while processing (solo fuera de la mesa; ver arriba)
   const hasProcessing = docs.some(d => d.estado === "procesando" || d.estado === "subido");
   useEffect(() => {
-    if (!hasProcessing) return;
-    const interval = setInterval(() => fetchDocsAuto(), 5000);
+    if (ctxReload || !hasProcessing) return;
+    const interval = setInterval(() => { if (!document.hidden) fetchDocsAuto(); }, 5000);
     return () => clearInterval(interval);
-  }, [hasProcessing, fetchDocsAuto]);
+  }, [ctxReload, hasProcessing, fetchDocsAuto]);
 
   async function callApi(path: string, docId: string) {
     try {

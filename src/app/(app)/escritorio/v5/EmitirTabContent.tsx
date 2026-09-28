@@ -1,10 +1,9 @@
 "use client";
 
 import { mesDeFecha, pendingResaltar, resaltarElemento } from "./apuntar";
-import { useState, useMemo, useEffect, useRef, useId, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
-import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
@@ -222,6 +221,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loteOpen, setLoteOpen] = useState(false);
+  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
   // Reanudar un lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
   // lotePendiente = los IDs que faltan (leídos de localStorage); loteResume = esos
   // items re-hidratados del server para pasárselos al modal; null = emisión fresca.
@@ -275,15 +275,22 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     });
   }, []);
 
+  // Con cada recarga de la cola se re-piden las juzgadas de las cartolas abiertas (una
+  // server action por cartola). Durante un lote (propio o de otra persona) la cola se
+  // recarga seguido y eso no cambia qué se juzgó: se deja para cuando el lote termina
+  // (plan-costo-vercel §5 f). Lo emitido en vivo ya lo muestra el modal del lote.
   const dataRef = useRef(data);
   const expandedDocsRef = useRef(expandedDocs);
   expandedDocsRef.current = expandedDocs;
+  const juzgadasViejasRef = useRef(false);
+  const loteEnCursoJuzgadas = loteOpen || lockedByOther;
   useEffect(() => {
-    if (dataRef.current === data) return;
-    dataRef.current = data;
+    if (dataRef.current !== data) { dataRef.current = data; juzgadasViejasRef.current = true; }
+    if (!juzgadasViejasRef.current || loteEnCursoJuzgadas) return;
+    juzgadasViejasRef.current = false;
     setJuzgadasByDoc({});
     for (const key of expandedDocsRef.current) if (key !== "__sueltas__") cargarJuzgadas(key);
-  }, [data, cargarJuzgadas]);
+  }, [data, cargarJuzgadas, loteEnCursoJuzgadas]);
 
   // Una BLOQUEADA vive en una cartola ya aprobada: para editarla hay que
   // devolver la cartola completa primero (modelo cartola-unidad). El botón
@@ -319,25 +326,17 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // Cupo/plan agotado: banner persistente con CTA a /planes (un toast se esfuma
   // y "te sugiere pagar" no es "te lleva a pagar").
   const [planCta, setPlanCta] = useState<string | null>(null);
-  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
 
-  // Auto-refresh SILENCIOSO: la cola sigue al dato nuevo sin botón manual y sin que el
-  // ojo lo note (reload silent = no atenúa la mesa). Canal único por instancia (mismo
-  // patrón que DocCardList) + debounce para coalescer ráfagas. reloadRef evita re-suscribir.
-  const channelId = useId().replace(/:/g, "");
-  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reloadRef = useRef(reload);
-  useEffect(() => { reloadRef.current = reload; }, [reload]);
+  // Auto-refresh de la cola: lo hace la suscripción ÚNICA de MesaController
+  // (propuestas_ia + boletas_emitidas + documentos_subidos). Este canal duplicaba
+  // cada recarga (plan-costo-vercel §5 b). Lo que sí aporta Emitir es saber si OTRA
+  // persona tiene el candado: con un lote ajeno en curso la mesa espacia sus recargas.
   useEffect(() => {
-    if (!empresaId) return;
-    const bump = () => { if (autoTimer.current) clearTimeout(autoTimer.current); autoTimer.current = setTimeout(() => reloadRef.current({ silent: true }), 500); };
-    const ch = supabase
-      .channel(`v5-emitir-${empresaId}-${channelId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "propuestas_ia", filter: `empresa_id=eq.${empresaId}` }, bump)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "boletas_emitidas", filter: `empresa_id=eq.${empresaId}` }, bump)
-      .subscribe();
-    return () => { if (autoTimer.current) clearTimeout(autoTimer.current); supabase.removeChannel(ch); };
-  }, [empresaId, channelId]);
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: lockedByOther } }));
+  }, [lockedByOther]);
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: false } }));
+  }, []);
 
   // Escape cierra el modal de confirmación (nunca a mitad de una emisión).
   useEffect(() => {

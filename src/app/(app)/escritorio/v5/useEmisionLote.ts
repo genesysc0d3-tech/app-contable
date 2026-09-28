@@ -155,6 +155,16 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     return () => window.removeEventListener("beforeunload", handler);
   }, [corriendo]);
 
+  // Avisa a la mesa que hay un lote PROPIO corriendo: espacia sus recargas y al
+  // terminar hace una recarga final (cubre todos los cierres: terminada, detenida,
+  // a medias, pausa remota, cerrar el modal). plan-costo-vercel §5 d.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "propio", activo: corriendo } }));
+  }, [corriendo]);
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "propio", activo: false } }));
+  }, []);
+
   // KILL SWITCH (tanda 1, 2026-09-10): el server puede contestar 409
   // EMISION_PAUSADA con un `detalle` humano. Se distingue del resto de fallos
   // porque NO es "esta boleta falló": es "no abras ninguna". El lote se detiene
