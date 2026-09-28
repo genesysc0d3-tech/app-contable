@@ -97,7 +97,7 @@ export interface ParsedLine {
  */
 export interface DescarteFila {
   excel_row: number;
-  motivo: "sin_fecha" | "fecha_ilegible" | "tipo_desconocido" | "cargo_y_abono" | "resumen";
+  motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango" | "tipo_desconocido" | "cargo_y_abono" | "resumen";
   legitimo: boolean;
   fecha: string | null;
   monto: number;
