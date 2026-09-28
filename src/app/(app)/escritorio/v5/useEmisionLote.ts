@@ -17,7 +17,8 @@ import {
   type MotivoPausa,
 } from "@/lib/emission/lote-runner";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
-import { fechaParaEmitir, noSalioEsConfiable } from "@/lib/emission/fecha-intento";
+import { fechaParaEmitir } from "@/lib/emission/fecha-intento";
+import { verificarJobColgado } from "./verificar-colgado";
 import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 
@@ -48,10 +49,6 @@ type ExtMsg = {
   message?: string;
   /** Falla pre-emit con el canal muerto tras mandar la emisión (pudo emitir). */
   emision_incierta?: boolean;
-  /** Status de un job de VERIFICACIÓN (solo lee /reportes). */
-  verificacion?: boolean;
-  /** Verificación: tabla leída 3 veces y la boleta no está → no salió de verdad. */
-  verificado_sin_folio?: boolean;
   result?: {
     folio?: number | string;
     folio_confidence?: string;
@@ -64,8 +61,6 @@ interface Waiter {
   reportar: (s: string) => void;
   resolve: (d: DesenlaceItem) => void;
   done: boolean;
-  /** Job de verificación: cualquier cierre que no sea "verificado_sin_folio" es "revisar". */
-  verify?: boolean;
 }
 
 const origin = () => window.location.origin;
@@ -124,12 +119,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           return;
         }
         if (st === "error" || st === "cancelled" || st === "closed") {
-          // VERIFICACIÓN: solo "tabla leída 3 veces y no está" es fallida de verdad;
-          // cerrar la ventana, no poder abrir /reportes, red caída → a medias (lápida).
-          if (w.verify && data.verificado_sin_folio !== true) {
-            w.resolve({ estado: "revisar", motivo: data.message ?? "No pude verificar en el SII si esta boleta salió. Quedó a medias.", folio: null });
-            return;
-          }
+          // (Los jobs de VERIFICACIÓN los escucha verificar-colgado.ts, no este waiter.)
           w.resolve({ estado: "fallida", motivo: data.message ?? "No se pudo emitir esta boleta.", emisionIncierta: data.emision_incierta === true });
           return;
         }
@@ -181,7 +171,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     | { frenada: true; motivo: string }
     | { yaAMedias: true }
     | null;
-  const startJob = useCallback(async (propuestaId: string, tipoDte: number, origin: "emision_lote" | "verificacion_lote" = "emision_lote"): Promise<StartJob> => {
+  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<StartJob> => {
     try {
       let res: Response | null = null;
       let json: Record<string, unknown> = {};
@@ -193,7 +183,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           body: JSON.stringify({
             provider: "sii_local",
             tipo_dte: tipoDte,
-            origin,
+            origin: "emision_lote",
             expected_emisor_rut: empresaRut ?? null,
             propuesta_id: propuestaId,
           }),
@@ -351,22 +341,6 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
 
         // 3. enviar a la extensión y esperar el desenlace TERMINAL de este job
         const intentoDesdeMs = Date.now();
-        const esperarDesenlace = (jobId: string, tipo: string, payload: object, timeoutMs: number) => new Promise<DesenlaceItem>((resolve) => {
-          let settled = false;
-          const finish = (d: DesenlaceItem) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(to);
-            const w = waiterRef.current;
-            if (w && w.jobId === jobId) w.done = true;
-            resolve(d);
-          };
-          waiterRef.current = { jobId, reportar, done: false, resolve: finish, verify: true };
-          // Timeout propio y corto (adversarial #9): un login manual pendiente no congela
-          // el lote 15 min; a medias y sigue.
-          const to = setTimeout(() => finish({ estado: "revisar", motivo: "La verificación no confirmó a tiempo. Quedó a medias: confirma su folio en Emitir → A medias." }), timeoutMs);
-          window.postMessage({ source: "app-contable", type: tipo, protocol_version: 1, job: payload }, origin());
-        });
         const desenlace = await new Promise<DesenlaceItem>((resolve) => {
           let settled = false;
           const finish = (d: DesenlaceItem) => {
@@ -396,69 +370,48 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
 
         // 4b. CUADRE POR EVENTO (2026-09-26): la boleta falló DESPUÉS de llegar al modal.
         // Pudo apretar EMITIR y morir antes de avisar (navegación del SII, puerto
-        // cerrado): habría un folio real que nadie ve y la propuesta quedaría
-        // re-emitible → doble folio. Antes de darla por no emitida, un job de
-        // VERIFICACIÓN abre /reportes y calza por monto + fecha + la ventana horaria
-        // del intento. Única candidata → emitida (registrada con todos los guards);
-        // folio posible pero ambiguo → "a medias" (lápida, visible en Emitir);
-        // nada → fallida de verdad (re-emitible). Sin clics de nadie.
+        // cerrado): habría un folio real que nadie ve. Antes de darla por no emitida se
+        // verifica en el Resumen de ventas del SII (verify_only, solo lectura).
+        // ADOPCIÓN (2026-09-28, revisión final I3/M3): el intento original YA NO se cierra
+        // `failed` antes de tener veredicto — si la pestaña moría en ese instante, la
+        // propuesta quedaba re-emitible. Ahora la verificación ADOPTA el job (sigue siendo
+        // lápida mientras tanto) con "fin confirmado": la extensión nos dio su estado
+        // terminal y arriba le mandamos cerrar la ventana worker. Salió → registrada; no
+        // salió (validado por el server, mismo día) → `failed`; lo demás → a medias.
         if (desenlace.estado === "fallida" && desenlace.emisionIncierta && !esFactura) {
-          const intentoHastaMs = Date.now();
-          reportar("Verificando en el Resumen de ventas del SII si la boleta salió…");
-          await closeJob(job.jobId, "failed", desenlace.motivo);
-          const vjob = await startJob(item.propuestaId, full.tipoDte, "verificacion_lote");
-          // Si al pedir la verificación el server ya tiene la boleta registrada, el
-          // resultado de NUESTRO intento llegó tarde y se guardó: salió, con su folio
-          // (cuenta como emitida: tope de sesión, cadencia y rango de folios). Sin
-          // folio legible no se afirma nada → lápida, como cuando no se pudo verificar.
-          // Solo si esa boleta se registró DENTRO de la ventana de este intento (con 60 s
-          // de margen): si es anterior, es de otra persona/pestaña y nuestro folio posible
-          // sigue sin verificar → cae a la lápida de abajo (revisión final, I3).
-          const registradaEnVentana = vjob && "yaEmitida" in vjob && vjob.boletaCreatedAt
-            && Date.parse(vjob.boletaCreatedAt) >= intentoDesdeMs - 60_000;
-          if (vjob && "yaEmitida" in vjob && vjob.folio !== null && registradaEnVentana) {
-            return { estado: "emitida", folio: vjob.folio, boletaId: vjob.boletaId };
+          const v = await verificarJobColgado({
+            jobViejoId: job.jobId,
+            propuestaId: item.propuestaId,
+            tipoDte: full.tipoDte as 39 | 41,
+            monto: full.monto,
+            empresaId,
+            empresaRut: job.emisorRut ?? empresaRut ?? null,
+            finConfirmado: true,
+            reportar,
+          });
+          if (v.estado === "emitida" && v.folio != null) return { estado: "emitida", folio: v.folio, boletaId: v.boletaId };
+          // Ya registrada al pedir la verificación: el resultado de NUESTRO intento llegó
+          // tarde y se guardó. Solo si esa boleta es de la ventana de este intento (60 s
+          // de margen); si es anterior, es de otra persona/pestaña → lápida (I3).
+          if (v.estado === "ya_emitida" && v.folio != null && v.boletaCreatedAt && Date.parse(v.boletaCreatedAt) >= intentoDesdeMs - 60_000) {
+            return { estado: "emitida", folio: v.folio, boletaId: v.boletaId };
           }
-          if (vjob && "jobId" in vjob) {
-            const payloadVerify = buildBoletaJob({
-              empresaId,
-              emisorRut: vjob.emisorRut ?? empresaRut ?? undefined,
-              foliosHoy: vjob.foliosHoy,
-              tipoDte: full.tipoDte as 39 | 41,
-              monto: full.monto,
-              fechaEmision: fechaIntento,
-              receptor: {},
-              detalle: full.detalle,
-              medioPago: full.medioPago,
-              logoutAfter: false,
-              jobId: vjob.jobId,
-              expiresAt: vjob.expiresAt,
-              verifyOnly: true,
-              verifyWindow: { desde_ms: intentoDesdeMs, hasta_ms: intentoHastaMs },
-            });
-            const v = await esperarDesenlace(vjob.jobId, "APP_CONTABLE_SII_BOLETA_JOB", payloadVerify, 180_000);
-            waiterRef.current = null;
-            window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: vjob.jobId }, origin());
-            if (v.estado === "revisar") setJobIdRevision(vjob.jobId);
-            // Guarda de medianoche: "no la encontré" solo vale si el intento, su fecha y
-            // la verificación son del MISMO día Chile (el listado muestra solo hoy).
-            if (v.estado === "fallida" && !noSalioEsConfiable({ fechaIntento, desdeMs: intentoDesdeMs, hastaMs: intentoHastaMs, ahoraMs: Date.now() })) {
-              const motivo = "El intento cruzó la medianoche y el listado del SII solo muestra el día: no puedo confirmar si salió. Quedó a medias: verifícala en el SII.";
-              await closeJob(vjob.jobId, "revision_pendiente", motivo);
-              setJobIdRevision(vjob.jobId);
-              return { estado: "revisar", motivo, folio: null };
-            }
-            if (v.estado !== "emitida") await closeJob(vjob.jobId, v.estado === "revisar" ? "revision_pendiente" : "failed", "motivo" in v ? v.motivo : undefined);
-            if (v.estado === "fallida") return { estado: "fallida", motivo: `${desenlace.motivo} Verifiqué en el SII: no salió, se puede reintentar.` };
-            return v;
+          if (v.estado === "no_salio") {
+            // El server ya cerró el intento y la verificación (`failed`): re-emitible.
+            return { estado: "fallida", motivo: `${desenlace.motivo} Verifiqué en el SII: no salió, se puede reintentar.` };
           }
-          // No se pudo abrir el job de verificación (candado, cuota, kill switch): con
-          // la emisión incierta NO se deja re-emitible → lápida (a medias, visible).
-          await closeJob(job.jobId, "revision_pendiente", `${desenlace.motivo} No pude verificar en el SII.`);
-          setJobIdRevision(job.jobId);
-          return { estado: "revisar", motivo: "No pude verificar en el SII si esta boleta salió. Quedó a medias: confirma su folio en Emitir → A medias.", folio: null };
+          // A medias / no se pudo verificar: el intento original queda como lápida
+          // (revision_pendiente), nunca re-emitible a ciegas.
+          // "Muy pronto" (el server no devuelve a Listas antes de 10 min desde el último
+          // signo de vida del intento): acá el intento queda sellado a medias, así que la
+          // línea no promete re-verificar; la salida es folio a mano / "No está en el SII".
+          const linea = v.estado === "a_medias" && v.reintentableDesde
+            ? "Todavía no aparece en el SII y es muy pronto para darla por no emitida. Quedó a medias: búscala en el SII y escribe su folio, o márcala como que no está."
+            : v.linea;
+          await closeJob(job.jobId, "revision_pendiente", `${desenlace.motivo} ${linea}`);
+          setJobIdRevision(v.estado === "a_medias" && v.jobIdRevision ? v.jobIdRevision : job.jobId);
+          return { estado: "revisar", motivo: linea, folio: null };
         }
-
         // 5. sellar el job según el desenlace:
         //  - emitida  → el server ya soltó el lock en /result (no tocar).
         //  - revisar  → LÁPIDA 'revision_pendiente': posible folio real → bloquea re-emitir

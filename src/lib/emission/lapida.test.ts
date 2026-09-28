@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DECLARAR_SIN_RESPUESTA_TRAS_MS, esLapidaEfectiva, puedeDeclararNoSalio, SIN_RESPUESTA_DESDE } from "./lapida";
+import { DECLARAR_SIN_RESPUESTA_TRAS_MS, esLapidaEfectiva, plazoDeclararNoSalio, puedeDeclararNoSalio, SIN_RESPUESTA_DESDE } from "./lapida";
 
 const ahora = new Date("2026-09-28T12:00:00Z");
 const base = { propuesta_id: "p", created_at: "2026-09-28T02:37:07Z", expires_at: "2026-09-28T02:52:07Z" };
@@ -48,5 +48,28 @@ describe("puedeDeclararNoSalio — la salida humana espera a que el job esté mu
   });
   it("job sin lápida → no", () => {
     expect(puedeDeclararNoSalio({ ...base, estado: "failed" }, ahora)).toBe(false);
+  });
+});
+
+describe("plazoDeclararNoSalio — el plazo vale para CADA lápida que se cierra", () => {
+  // Intento original sin respuesta, vencido hace 5 min; verificación sellada a medias.
+  const ahora5 = new Date("2026-09-28T18:00:00Z");
+  const original = { estado: "running", propuesta_id: "p", created_at: "2026-09-28T17:40:00Z", expires_at: "2026-09-28T17:55:00Z" };
+  const verifAMedias = { estado: "revision_pendiente", propuesta_id: "p", created_at: "2026-09-28T17:57:00Z", expires_at: "2026-09-28T18:12:00Z" };
+  it("la a medias sola se puede declarar al tiro", () => {
+    expect(plazoDeclararNoSalio([verifAMedias], ahora5)).toEqual({ ok: true });
+  });
+  it("pero NO arrastra al original sin respuesta de hace 5 min → desde expires_at + 30 min", () => {
+    expect(plazoDeclararNoSalio([verifAMedias, original], ahora5)).toEqual({ ok: false, desdeMs: Date.parse("2026-09-28T18:25:00Z") });
+  });
+  it("con varias sin respuesta, manda la más tardía", () => {
+    const otro = { ...original, created_at: "2026-09-28T17:44:00Z", expires_at: "2026-09-28T17:59:00Z" };
+    expect(plazoDeclararNoSalio([original, otro], ahora5)).toEqual({ ok: false, desdeMs: Date.parse("2026-09-28T18:29:00Z") });
+  });
+  it("cumplidos los 30 min → ok", () => {
+    expect(plazoDeclararNoSalio([verifAMedias, original], new Date("2026-09-28T18:26:00Z"))).toEqual({ ok: true });
+  });
+  it("jobs que no son lápida (failed, vivos) no cuentan", () => {
+    expect(plazoDeclararNoSalio([{ ...original, estado: "failed" }, { ...original, expires_at: "2026-09-28T18:10:00Z" }], ahora5)).toEqual({ ok: true });
   });
 });
