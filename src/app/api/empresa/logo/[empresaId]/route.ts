@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createClient as createSsrClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ empresaId: string }> },
 ) {
-  const supabase = await createSsrClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return new NextResponse("No autorizado", { status: 401 });
-  }
+  // Fuera del matcher (un 307 rompería el <img>). NO es público: exige sesión y
+  // misma empresa, así que también inactividad + MFA (sesion-segura.ts). El costo
+  // es bajo: el navegador lo cachea 1 h y revalida con ETag.
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
   const { data: usuario } = await supabase
     .from("usuarios")
     .select("empresa_id")

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createClient as createSsrClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { cuentaIdDeEmpresa, esTitularDeCuenta } from "@/lib/entitlements";
 
 // SVG excluido a propósito: puede llevar <script> y se sirve same-origin
@@ -10,11 +10,10 @@ const ALLOWED_MIME = new Set([
 ]);
 
 export async function POST(request: Request) {
-  const supabase = await createSsrClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  // Fuera del matcher: sesión + inactividad + MFA acá (sesion-segura.ts).
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const { supabase, user } = guard;
   const { data: usuario } = await supabase
     .from("usuarios")
     .select("empresa_id")

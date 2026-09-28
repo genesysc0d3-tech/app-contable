@@ -47,3 +47,19 @@ export function puedeDeclararNoSalio(job: JobParaLapida, ahora: Date = new Date(
   if (motivo === "sin_respuesta") return Date.parse(job.expires_at as string) + DECLARAR_SIN_RESPUESTA_TRAS_MS <= ahora.getTime();
   return false;
 }
+
+/**
+ * "No está en el SII" cierra TODAS las lápidas de la propuesta, no solo la declarada.
+ * Por eso el plazo se exige a CADA una (revisión adversarial 2026-09-28): una
+ * verificación sellada a medias (revision_pendiente, declarable al tiro) no puede
+ * arrastrar al intento original sin respuesta que venció hace 5 min. Devuelve desde
+ * cuándo se podrá (el más tardío) si alguna todavía no cumple.
+ */
+export function plazoDeclararNoSalio(jobs: JobParaLapida[], ahora: Date = new Date()): { ok: true } | { ok: false; desdeMs: number } {
+  let desdeMs = -Infinity;
+  for (const j of jobs) {
+    if (esLapidaEfectiva(j, ahora) === null || puedeDeclararNoSalio(j, ahora)) continue;
+    desdeMs = Math.max(desdeMs, Date.parse(j.expires_at as string) + DECLARAR_SIN_RESPUESTA_TRAS_MS);
+  }
+  return Number.isFinite(desdeMs) ? { ok: false, desdeMs } : { ok: true };
+}

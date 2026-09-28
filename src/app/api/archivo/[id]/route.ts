@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createClient as createSsrClient } from "@/lib/supabase/server";
+import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { getFileR2 } from "@/lib/storage";
 
 // Ruta única de SERVIDO de archivos (S0c). Resuelve el provider del documento
@@ -21,9 +21,11 @@ function mimeFor(name: string): string {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const supabase = await createSsrClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return new NextResponse("No autorizado", { status: 401 });
+  // Fuera del matcher del proxy (un 307 a login rompería el <img>): la sesión,
+  // la inactividad y el MFA aal2 se exigen ACÁ, con 401 JSON (sesion-segura.ts).
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const supabase = guard.supabase;
 
   const { id } = await params;
   // RLS hace la autorización: el usuario solo ve documentos de su empresa.

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { FileXls, FilePdf, FileCsv, FileImage, File as FileGenerico, type Icon } from "@phosphor-icons/react";
 import { fmt, type Propuesta } from "./revisar-shared";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
+import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
+import CuadreCartolaLinea from "./CuadreCartolaLinea";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
 // para el conjunto: izquierda = el archivo, centro = agregados (nº tx · total · split
@@ -49,7 +51,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null; progreso_ia?: unknown };
   propuestas: Propuesta[];
@@ -74,9 +76,17 @@ export default function VeredictoCartola({
   /** Cartola completamente DECIDIDA (todo aprobado/juzgado): el visor cambia de
       modo — sin Editar/Eliminar/Aprobar; el camino de vuelta vive en Emitir. */
   decidida?: boolean;
+  /** Tras "Agregarlos" del cuadre: recargar la mesa para ver las filas nuevas. */
+  onCuadreAgregado?: () => void;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
+  // CUADRE DE CARTOLA (progreso_ia.cuadre, lo deja el processor): con él, el
+  // héroe muestra abonos y cargos POR SEPARADO — el "total" sumaba entradas +
+  // salidas (LC 2026-09-27: "162M vs 84M"). Sin cuadre (PDF, plantillas) queda
+  // el total de siempre.
+  const cuadre = leerCuadre(doc.progreso_ia);
+  const resCuadre = cuadre ? resumenCuadre(cuadre) : null;
 
   // Split exenta/afecta: del agregado server-side si está, si no lo cuento acá.
   const esExenta = (p: Propuesta) => {
@@ -169,7 +179,13 @@ export default function VeredictoCartola({
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <span style={{ fontSize: "3em", fontWeight: 800, color: "var(--text)", letterSpacing: "-.04em", lineHeight: 1 }}>{count}</span>
           <span style={{ fontSize: "1em", fontWeight: 600, color: "var(--text3)" }}>movimientos</span>
-          <span style={{ marginLeft: "auto", fontSize: "1.18em", color: "var(--text2)" }}>total <b style={{ color: "var(--text)" }}>{fmt(total)}</b></span>
+          {resCuadre ? (
+            <span style={{ marginLeft: "auto", fontSize: "1.1em", color: "var(--text3)", textAlign: "right" }}>
+              En tu cartola: Abonos <b style={{ color: "var(--text)" }}>{fmt(resCuadre.abonos)}</b> · Cargos <b style={{ color: "var(--text)" }}>{fmt(resCuadre.cargos)}</b>
+            </span>
+          ) : (
+            <span style={{ marginLeft: "auto", fontSize: "1.18em", color: "var(--text2)" }}>total <b style={{ color: "var(--text)" }}>{fmt(total)}</b></span>
+          )}
         </div>
 
         <div style={divider} />
@@ -187,6 +203,9 @@ export default function VeredictoCartola({
             </>)}
           </span>
         </div>
+
+        {/* CUADRE: "500 de 500 ✓" o "Faltan N por $X" con la lista y Agregarlos. */}
+        {resCuadre && <CuadreCartolaLinea documentoId={doc.id} resumen={resCuadre} onAgregado={onCuadreAgregado} />}
 
         {/* FILAS QUE NO ENTRARON (2026-09-03): el processor de plantillas
             siempre las guardó en progreso_ia.errores_filas, pero el visor solo
@@ -316,6 +335,7 @@ export default function VeredictoCartola({
             {!puedeAprobar && (
               <div style={{ fontSize: "0.85em", color: "var(--text3)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, marginTop: "-0.4em" }}>
                 {pendientes > 0 ? guiaPendientes
+                  : count === 0 && (resCuadre?.faltan ?? 0) > 0 ? <>Agrega las filas que faltan para empezar</>
                   : todoJuzgado ? <>Las {juzgadas} quedaron <b>sin boleta</b> (juzgadas). ¿Te arrepentiste? Restáuralas en <b>Editar</b>.</>
                   : <>Todo enviado a Emitir</>}
               </div>
