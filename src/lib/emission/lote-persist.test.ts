@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { guardarLotePendiente, leerLotePendiente, limpiarLotePendiente } from "./lote-persist";
+import { guardarLotePendiente, leerLotePendiente, limpiarLotePendiente, rastroReanudacion } from "./lote-persist";
 
 // Mock de localStorage (vitest node no lo trae). El módulo chequea `typeof window`.
 const store = new Map<string, string>();
@@ -79,5 +79,18 @@ describe("lote-persist — reanudación segura del lote", () => {
     // La mesa factura NUNCA hereda el legacy (eran lotes de boletas).
     store.set(KEY_LEGACY, JSON.stringify({ remainingIds: ["p8"], total: 1, at: Date.now() }));
     expect(leerLotePendiente("emp1", "factura")).toBeNull();
+  });
+});
+
+describe("rastroReanudacion — la boleta en vuelo no se re-emite (caso LC)", () => {
+  const base = Array.from({ length: 20 }, (_, i) => `p${i}`);
+  it("16 procesadas y la 17 en el aire → el rastro parte en la 18, sin la 17", () => {
+    const r = rastroReanudacion(base, { procesadas: 16, itemActual: { propuestaId: "p16" } });
+    expect(r[0]).toBe("p17");
+    expect(r).not.toContain("p16");
+    expect(r).toHaveLength(3);
+  });
+  it("frenada/pausa del server (sin ítem en vuelo) → la conserva", () => {
+    expect(rastroReanudacion(base, { procesadas: 16, itemActual: null })[0]).toBe("p16");
   });
 });

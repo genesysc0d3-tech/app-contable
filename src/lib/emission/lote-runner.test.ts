@@ -241,7 +241,7 @@ describe("pausada_remota — el server frenó la emisión (kill switch)", () => 
     let pausas = 0;
     const p = await ejecutarLote(items, driver, { alPausar: async () => { pausas += 1; return "continuar"; } });
     expect(p.fase).toBe("pausada_remota");
-    expect(p.pausaRemota).toEqual({ motivo: "Pausamos boletas." });
+    expect(p.pausaRemota).toEqual({ motivo: "Pausamos boletas.", tipo: "pausa" });
     // "b" NO cuenta como procesada: slice(procesadas) la conserva como pendiente.
     expect(p.procesadas).toBe(1);
     expect(p.emitidas).toBe(1);
@@ -249,5 +249,50 @@ describe("pausada_remota — el server frenó la emisión (kill switch)", () => 
     expect(p.resultados.map((r) => r.item.propuestaId)).toEqual(["a"]);
     expect(pausas).toBe(0);
     expect(log.filter((l) => l.startsWith("emitir:"))).toEqual(["emitir:a", "emitir:b"]);
+  });
+});
+
+describe("ejecutarLote — ya emitida por otra persona (2026-09-28)", () => {
+  const yaEmitida = (): DesenlaceItem => ({ estado: "ya_emitida", motivo: "otra persona" });
+
+  it("NO pausa pidiendo decisión, cuenta aparte y sigue con la próxima", async () => {
+    const { driver, log } = fakeDriver([emitida(1), yaEmitida(), emitida(2)]);
+    const pausas: MotivoPausa[] = [];
+    const p = await ejecutarLote([item("a"), item("b"), item("c")], driver, {
+      alPausar: async (m) => { pausas.push(m); return "detener"; },
+    });
+    expect(pausas).toEqual([]);
+    expect(p.fase).toBe("terminada");
+    expect(p.emitidas).toBe(2);
+    expect(p.yaEmitidas).toBe(1);
+    expect(p.fallidas).toBe(0);
+    expect(p.procesadas).toBe(3);
+    // Sin cadencia tras la ya emitida: no tocó el portal.
+    expect(log).toEqual(["emitir:a", "esperar:4250", "emitir:b", "emitir:c"]);
+  });
+});
+
+describe("ejecutarLote — candado propio / a medias no revientan en cadena (LC 23:43)", () => {
+  it("frenada: detiene UNA vez, sin pausa por boleta y sin consumir el ítem", async () => {
+    const frenada: DesenlaceItem = { estado: "frenada", motivo: "Tu emisión anterior sigue abierta" };
+    const { driver } = fakeDriver([emitida(1), emitida(2), frenada]);
+    const pausas: MotivoPausa[] = [];
+    const p = await ejecutarLote([item("a"), item("b"), item("c"), item("d")], driver, {
+      alPausar: async (m) => { pausas.push(m); return "continuar"; },
+    });
+    expect(pausas).toEqual([]);
+    expect(p.fase).toBe("pausada_remota");
+    expect(p.procesadas).toBe(2); // "c" NO se consumió: queda para reanudar
+    expect(p.pausaRemota?.motivo).toContain("Tu emisión anterior");
+  });
+  it("ya_a_medias: se salta sin pausa, se cuenta y sigue", async () => {
+    const aMedias: DesenlaceItem = { estado: "ya_a_medias", motivo: "ya estaba a medias" };
+    const { driver } = fakeDriver([emitida(1), aMedias, emitida(2)]);
+    const pausas: MotivoPausa[] = [];
+    const p = await ejecutarLote([item("a"), item("b"), item("c")], driver, { alPausar: async (m) => { pausas.push(m); return "detener"; } });
+    expect(pausas).toEqual([]);
+    expect(p.fase).toBe("terminada");
+    expect(p.yaAMedias).toBe(1);
+    expect(p.emitidas).toBe(2);
   });
 });

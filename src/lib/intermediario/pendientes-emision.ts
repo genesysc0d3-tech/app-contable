@@ -1,3 +1,4 @@
+import { esLapidaEfectiva, SIN_RESPUESTA_DESDE, type MotivoLapida } from "@/lib/emission/lapida";
 import type { createClient } from "@/lib/supabase/server";
 import { getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
@@ -114,15 +115,22 @@ export async function getPendientesEmision(
   let enRevision = new Set<string>();
   let a_medias: ItemAMedias[] = [];
   try {
+    // + SIN RESPUESTA (2026-09-28): job del lote vencido y todavía abierto (caso LC:
+    // la extensión nunca contestó). Resultado desconocido = a medias, no Listas.
     const { data: revJobs } = await supabase
       .from("emision_jobs")
-      .select("job_id, propuesta_id, created_at")
+      .select("job_id, propuesta_id, created_at, estado, expires_at")
       .eq("empresa_id", empresaId)
-      .eq("estado", "revision_pendiente")
+      // Filtro en SQL (no solo en JS): los created/running viejos, anteriores al corte o
+      // aún vivos, no deben ocupar la ventana y dejar fuera una revision_pendiente.
+      .or(`estado.eq.revision_pendiente,and(estado.in.(created,running),created_at.gte.${SIN_RESPUESTA_DESDE},expires_at.lt.${new Date().toISOString()})`)
       .not("propuesta_id", "is", null)
       .order("created_at", { ascending: false })
-      .limit(60);
-    const jobs = (revJobs ?? []) as JobLapida[];
+      .limit(120);
+    const ahoraLapida = new Date();
+    const jobs: JobLapida[] = ((revJobs ?? []) as Array<JobLapida & { estado: string; expires_at: string | null }>)
+      .map((j) => ({ ...j, motivo: esLapidaEfectiva(j, ahoraLapida) }))
+      .filter((j): j is JobLapida & { estado: string; expires_at: string | null; motivo: MotivoLapida } => j.motivo !== null);
     enRevision = new Set(jobs.map((j) => j.propuesta_id).filter((id): id is string => typeof id === "string"));
     if (enRevision.size > 0) {
       const { data: revProps } = await supabase

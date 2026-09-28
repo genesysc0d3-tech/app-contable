@@ -159,6 +159,7 @@ export type Database = {
       }
       boletas_emitidas: {
         Row: {
+          ref: string | null
           anulada_por_id: string | null
           caf_id: string | null
           computa_cupo: boolean
@@ -198,6 +199,7 @@ export type Database = {
           xml_dte: string
         }
         Insert: {
+          ref?: string | null
           anulada_por_id?: string | null
           caf_id?: string | null
           computa_cupo?: boolean
@@ -237,6 +239,7 @@ export type Database = {
           xml_dte: string
         }
         Update: {
+          ref?: string | null
           anulada_por_id?: string | null
           caf_id?: string | null
           computa_cupo?: boolean
@@ -1052,6 +1055,7 @@ export type Database = {
       }
       emision_jobs: {
         Row: {
+          ref: string | null
           created_at: string
           cuenta_id: string
           empresa_id: string
@@ -1071,6 +1075,7 @@ export type Database = {
           usuario_id: string
         }
         Insert: {
+          ref?: string | null
           created_at?: string
           cuenta_id: string
           empresa_id: string
@@ -1090,6 +1095,7 @@ export type Database = {
           usuario_id: string
         }
         Update: {
+          ref?: string | null
           created_at?: string
           cuenta_id?: string
           empresa_id?: string
@@ -3450,6 +3456,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      emision_ref_nueva: {
+        Args: {
+          p_empresa_id: string
+          p_propuesta_id?: string | null
+          p_fecha_mov?: string | null
+          p_monto?: number | null
+          p_tipo_dte?: number | null
+        }
+        Returns: string
+      }
       consume_next_folio: {
         Args: { p_empresa_id: string; p_tipo_dte: number }
         Returns: {

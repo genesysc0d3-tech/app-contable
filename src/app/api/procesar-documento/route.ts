@@ -7,7 +7,7 @@ import { rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/lib/document-processing/abuse-guard";
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
-import { iniciarDrenaje } from "@/lib/document-processing/drain";
+import { iniciarDrenaje } from "@/lib/document-processing/auto-drenaje";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 
 function cleanGroupedImages(value: unknown, args: { empresaId: string; documentoId: string }) {

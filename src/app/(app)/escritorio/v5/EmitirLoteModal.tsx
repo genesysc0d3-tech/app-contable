@@ -11,7 +11,7 @@ import { chileDateString } from "@/lib/chile-date";
 import { recoverLatestFolio, registrarFolioAMano, type RecoverLatestResult } from "@/lib/emission/recover-latest";
 import { useEmisionLote, type ItemLoteEmision } from "./useEmisionLote";
 import { verificarExtensionCompatible } from "./useExtensionStatus";
-import { guardarLotePendiente, limpiarLotePendiente } from "@/lib/emission/lote-persist";
+import { guardarLotePendiente, limpiarLotePendiente, rastroReanudacion } from "@/lib/emission/lote-persist";
 
 export interface LoteItemInput {
   id: string;
@@ -175,7 +175,8 @@ export default function EmitirLoteModal({
     // Realtime encoge), para que slice(procesadas) no se corra ni pierda boletas.
     if (corriendo || fase === "requiere_revision" || fase === "pausada_remota") {
       const base = itemsAlIniciarRef.current ?? items;
-      const remainingIds = base.slice(progreso.procesadas).map((i) => i.id);
+      // Sin la boleta EN VUELO (rastroReanudacion): Reanudar no la re-emite a ciegas.
+      const remainingIds = rastroReanudacion(base.map((i) => i.id), progreso);
       guardarLotePendiente(empresaId, { remainingIds, total: totalOriginal ?? base.length }, mesa);
     }
   }, [progreso, corriendo, fase, terminalLimpio, empresaId, items, totalOriginal, mesa]);
@@ -265,7 +266,9 @@ function Legal({ onAceptar, onCancelar, error }: { onAceptar: () => void; onCanc
 }
 
 function Corriendo({ p, onDetener }: { p: import("@/lib/emission/lote-runner").ProgresoLote; onDetener: () => void }) {
-  const emit = p.emitidas;
+  // Avance por PROCESADAS (no emitidas): una "ya emitida" o una fallida también
+  // avanzan la fila; con emitidas la barra se quedaba pegada en "1 de N".
+  const emit = p.procesadas;
   const pct = p.total ? Math.round((emit / p.total) * 100) : 0;
   const cur = p.itemActual;
   const recientes = p.folios.slice(-6);
@@ -326,13 +329,43 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
   // HONESTIDAD DEL CIERRE (cazado en vivo 2026-08-27): con TODO fallido el
   // modal decía "Listo ✅ 0 emitidas" — un check verde sobre un fracaso total
   // (p. ej. lock de cuenta tomado). Cero emitidas = advertencia con el motivo.
+  // Todas las no-emitidas por mí ya las había emitido otra persona/pestaña: no es
+  // un fracaso, la cartola quedó al día (2 personas emitiendo, 2026-09-27).
+  const ya = p.yaEmitidas ?? 0;
+  const enAMedias = p.yaAMedias ?? 0;
+  // Nada nuevo que emitir: lo que quedaba ya estaba emitido o en A medias.
+  if (folios.length === 0 && fallas.length === 0 && enAMedias > 0) {
+    return (
+      <>
+        <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
+        <div style={h1}>Quedaron para revisar</div>
+        <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
+          {enAMedias === 1 ? `1 ${doc} ya estaba en A medias` : `${enAMedias} ${docs} ya estaban en A medias`}{ya > 0 ? ` y ${ya} ya estaban emitidas` : ""}. No se emitió nada dos veces: revísalas en Emitir → A medias.
+        </div>
+        <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Cerrar y revisar</button>
+      </>
+    );
+  }
+  if (folios.length === 0 && ya > 0 && fallas.length === 0) {
+    return (
+      <>
+        <Badge bg="rgba(34,197,94,.13)">✅</Badge>
+        <div style={h1}>Ya estaban emitidas</div>
+        <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
+          {ya === 1 ? `Esta ${doc} ya la había emitido otra persona o pestaña.` : `Estas ${ya} ${docs} ya las había emitido otra persona o pestaña.`} No se emitió nada dos veces.
+        </div>
+        <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Ver en el historial</button>
+      </>
+    );
+  }
+
   if (folios.length === 0) {
     return (
       <>
         <Badge bg="rgba(245,158,11,.13)">⚠️</Badge>
         <div style={h1}>No se emitió ninguna</div>
         <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>
-          {p.total === 1 ? `La ${doc} no se pudo emitir.` : `Ninguna de las ${p.total} ${docs} se pudo emitir.`}
+          {p.total === 1 ? `La ${doc} no se pudo emitir.` : ya > 0 ? `${fallas.length} de ${p.total} ${docs} no se pudieron emitir; ${ya} ya estaban emitidas.` : `Ninguna de las ${p.total} ${docs} se pudo emitir.`}
         </div>
         {motivo && <div style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 8, background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", textAlign: "left" }}>{motivo}</div>}
         <button onClick={onCerrar} style={{ ...ghostBtn, width: "100%", marginTop: 18 }}>Cerrar y revisar</button>
@@ -345,7 +378,7 @@ function Terminada({ p, doc, docs, onCerrar }: { p: import("@/lib/emission/lote-
       <Badge bg="rgba(34,197,94,.13)">✅</Badge>
       <div style={h1}>Listo</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{folios.length} {folios.length === 1 ? `${doc} emitida` : `${docs} emitidas`} y guardadas.</div>
-      {chips([{ l: "Folios", v: rango }, ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
+      {chips([{ l: "Folios", v: rango }, ...(ya > 0 ? [{ l: "Ya emitidas", v: `${ya}` }] : []), ...((p.yaAMedias ?? 0) > 0 ? [{ l: "En A medias", v: `${p.yaAMedias}` }] : []), ...(fallas.length > 0 ? [{ l: "Fallidas", v: `${fallas.length}` }] : [])])}
       {/* Feedback real 2026-09-23: "41 aprobadas, 40 emitidas, no encontré la que
           falta". La saltada sigue aprobada y en Listas dentro de su cartola — hay
           que DECIRLO, no dejar que la cuenten restando montos contra el SII. */}
@@ -446,7 +479,7 @@ function Detenida({ p, onCerrar }: { p: import("@/lib/emission/lote-runner").Pro
     <>
       <Badge bg="rgba(255,255,255,.05)">⏹</Badge>
       <div style={h1}>Detenido</div>
-      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{p.emitidas} de {p.total} emitidas. El resto quedó intacto.</div>
+      <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 3 }}>{p.emitidas} de {p.total} emitidas{(p.yaEmitidas ?? 0) > 0 ? ` (${p.yaEmitidas} ya lo estaban)` : ""}. El resto quedó intacto.</div>
       {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
       <button onClick={onCerrar} style={{ ...primaryBtn }}>Cerrar</button>
     </>
@@ -461,9 +494,9 @@ function PausadaRemota({ p, docs, onCerrar }: { p: import("@/lib/emission/lote-r
   return (
     <>
       <Badge bg="rgba(255,255,255,.05)">⏸</Badge>
-      <div style={h1}>Emisión en pausa</div>
+      <div style={h1}>{p.pausaRemota?.tipo === "frenada" ? "Emisión frenada" : "Emisión en pausa"}</div>
       <div style={{ fontSize: 13.5, color: "var(--text2)", marginTop: 8, lineHeight: 1.55 }}>{p.pausaRemota?.motivo ?? "Pausamos la emisión por un rato. Inténtalo de nuevo más tarde."}</div>
-      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de la pausa. El resto queda pendiente.</div>
+      <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 10 }}>{p.emitidas} de {p.total} {docs} emitidas antes de {p.pausaRemota?.tipo === "frenada" ? "frenar" : "la pausa"}{(p.yaEmitidas ?? 0) > 0 ? ` (${p.yaEmitidas} ya lo estaban)` : ""}{(p.yaAMedias ?? 0) > 0 ? `; ${p.yaAMedias} en A medias` : ""}. El resto queda pendiente.</div>
       {p.folios.length > 0 && chips([{ l: "Folios", v: p.folios.length === 1 ? `${p.folios[0]}` : `${p.folios[0]} – ${p.folios[p.folios.length - 1]}` }])}
       <button onClick={onCerrar} style={{ ...primaryBtn }}>Entendido</button>
     </>

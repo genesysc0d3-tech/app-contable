@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { validarAccesoCuenta } from "@/lib/entitlements";
+import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
 import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +23,13 @@ interface SiiLocalResultPayload {
    * siempre — "ingrésalo abajo" — y no existía). Solo sobre jobs con lápida.
    */
   registrar_folio_manual?: number | null;
+  /**
+   * SALIDA HUMANA (2026-09-28, plan-emision-confiable B3b): "Revisé el SII y esta
+   * boleta NO está". Sobre una lápida (a medias o sin respuesta) que la verificación
+   * automática no puede resolver (otro día, >250 boletas, extensión vieja). Devuelve
+   * la propuesta a Listas. Queda auditado como declaración de la persona.
+   */
+  declarar_no_salio?: boolean;
   /** Telemetría de flota: versión de la extensión que POSTea (bridge 0.1.7+). */
   extension_version?: string | null;
   result?: {
@@ -160,6 +169,34 @@ async function recordSiiLocalFailure(
     resourceId: job.job_id,
     metadata: { error, ...metadata },
   });
+}
+
+/**
+ * Documento de origen de una propuesta (propuesta → movimiento → documento) en UNA
+ * ida a la base con joins (plan-costo-vercel §6 PR 3; antes eran 3 idas en cadena por
+ * boleta). Si el join falla por lo que sea, cae a la cadena de siempre: quedarse sin
+ * el documento haría insertar una segunda fila "boleta_sii_local" (la mentira ámbar
+ * de 2026-08-27).
+ */
+async function documentoDeLaPropuesta(sb: ServiceDb, propuestaId: string): Promise<{ id: string; tipo: string; progreso_ia: unknown } | null> {
+  const { data, error } = await sb
+    .from("propuestas_ia")
+    .select("movimiento_id, movimientos_raw!propuestas_ia_movimiento_id_fkey(documento_id, documentos_subidos!movimientos_raw_documento_id_fkey(id, tipo, progreso_ia))")
+    .eq("id", propuestaId)
+    .maybeSingle();
+  if (!error) {
+    const mov = (data as { movimientos_raw?: unknown } | null)?.movimientos_raw;
+    const movObj = (Array.isArray(mov) ? mov[0] : mov) as { documentos_subidos?: unknown } | null | undefined;
+    const doc = movObj?.documentos_subidos;
+    const docObj = (Array.isArray(doc) ? doc[0] : doc) as { id: string; tipo: string; progreso_ia: unknown } | null | undefined;
+    return docObj ?? null;
+  }
+  const { data: prop } = await sb.from("propuestas_ia").select("movimiento_id").eq("id", propuestaId).maybeSingle();
+  if (!prop?.movimiento_id) return null;
+  const { data: movRow } = await sb.from("movimientos_raw").select("documento_id").eq("id", prop.movimiento_id).maybeSingle();
+  if (!movRow?.documento_id) return null;
+  const { data: reqDoc } = await sb.from("documentos_subidos").select("id, tipo, progreso_ia").eq("id", movRow.documento_id).maybeSingle();
+  return reqDoc ?? null;
 }
 
 async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
@@ -379,14 +416,57 @@ function totalsFor(tipoDte: number, total: number, payloadTotals: SiiLocalResult
 // estar bloqueada (ahora sale por yaEmitidas, no por enRevision). Idempotente: si ya
 // está completed, el WHERE no matchea. Best-effort: la boleta ya quedó guardada, que
 // es lo que importa.
+/**
+ * Declaraciones humanas (folio a mano / "no está en el SII"): la persona debe seguir
+ * siendo miembro ACTIVO de la cuenta dueña del job (no basta un rol global). null = OK.
+ */
+async function accesoDeclaracion(sb: ServiceDb, userId: string, job: { empresa_id: string; cuenta_id: string }): Promise<NextResponse | null> {
+  try {
+    const acceso = await validarAccesoCuenta(sb, userId, job.empresa_id);
+    if (!acceso.ok) return NextResponse.json({ ok: false, error: acceso.codigo }, { status: 403 });
+    if (acceso.cuentaId !== job.cuenta_id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
+    return null;
+  } catch {
+    return NextResponse.json({ ok: false, error: "ACCESO_NO_VERIFICADO" }, { status: 500 });
+  }
+}
+
+/** `{ ref }` solo si existe: sin la migración aplicada, mandar la columna `ref` (aunque
+ *  sea null) haría fallar el insert de un folio REAL. */
+async function conRef(sb: ServiceDb, empresaId: string, propuestaId: string | null): Promise<{ ref?: string }> {
+  const ref = await refDePropuesta(sb, empresaId, propuestaId);
+  return ref ? { ref } : {};
+}
+
+/** Ref interna de una propuesta (emision_refs). Best-effort: null si no hay o falla. */
+async function refDePropuesta(sb: ServiceDb, empresaId: string, propuestaId: string | null): Promise<string | null> {
+  if (!propuestaId) return null;
+  try {
+    const { data } = await (sb as unknown as { from: (t: string) => { select: (c: string) => { eq: (a: string, b: string) => { eq: (a: string, b: string) => { maybeSingle: () => Promise<{ data: { ref?: string } | null }> } } } } })
+      .from("emision_refs").select("ref").eq("empresa_id", empresaId).eq("propuesta_id", propuestaId).maybeSingle();
+    return typeof data?.ref === "string" ? data.ref : null;
+  } catch {
+    return null;
+  }
+}
+
 async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) {
   if (!propuestaId) return;
   try {
+    const ahoraIso = new Date().toISOString();
     await sb
       .from("emision_jobs")
-      .update({ estado: "completed", estado_visible: "completed", updated_at: new Date().toISOString() })
+      .update({ estado: "completed", estado_visible: "completed", updated_at: ahoraIso })
       .eq("propuesta_id", propuestaId)
       .eq("estado", "revision_pendiente");
+    // + los SIN RESPUESTA (job del lote vencido y abierto, lapida.ts): con la boleta ya
+    // registrada dejan de ser una duda; si no, seguirían apareciendo en "A medias".
+    await sb
+      .from("emision_jobs")
+      .update({ estado: "completed", estado_visible: "completed", updated_at: ahoraIso })
+      .eq("propuesta_id", propuestaId)
+      .in("estado", ["created", "running"])
+      .lt("expires_at", ahoraIso);
   } catch {
     /* best-effort */
   }
@@ -406,17 +486,20 @@ async function calceReportesVetado(
   try {
     // -04:00 (invierno) cubre también el horario de verano: una hora de más solo sobre-veta.
     const desde = `${args.fechaEmision}T00:00:00-04:00`;
+    // Lápidas a medias + SIN RESPUESTA (2026-09-28, I1): una boleta colgada del mismo
+    // monto también puede ser la fila única que vio el worker.
     const { data: lapidas, error: errLapidas } = await sb
       .from("emision_jobs")
-      .select("job_id, propuesta_id")
+      .select("job_id, propuesta_id, estado, expires_at, created_at")
       .eq("empresa_id", args.empresaId)
-      .eq("estado", "revision_pendiente")
+      .in("estado", [...ESTADOS_LAPIDA])
       .gte("created_at", desde)
       .not("propuesta_id", "is", null)
       .limit(50);
     // M1: Supabase devuelve {error} sin lanzar → fail-closed explícito.
     if (errLapidas) return true;
-    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id);
+    const ahoraVeto = new Date();
+    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id && esLapidaEfectiva(j, ahoraVeto) !== null);
     if (otras.length === 0) return false;
     const { data: props, error: errProps } = await sb
       .from("propuestas_ia")
@@ -570,7 +653,7 @@ async function backfillFolioSinJobVivo(
         .eq("empresa_id", args.empresaId).eq("propuesta_id", args.propuestaId).neq("estado", "anulada").maybeSingle();
       if (propViva && String(propViva.folio) !== String(args.folio)) {
         const { data: boletaB } = await sb
-          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null }).select("id").single();
+          .from("boletas_emitidas").insert({ ...backfillRow, propuesta_id: null, ...(await conRef(sb, args.empresaId, args.propuestaId)) }).select("id").single();
         await recordOpsEvent({
           sb, severity: "critical", source: "sii-local", eventName: "doble_folio_propuesta",
           summary: `Doble folio para una propuesta (recuperación): folios ${propViva.folio} y ${args.folio}`,
@@ -617,6 +700,15 @@ export async function POST(request: Request) {
     } catch { /* columnas sin migrar o fallo puntual: la telemetría espera */ }
   }
 
+  // Declaraciones HUMANAS (folio a mano / "no está en el SII"): exigen el mismo rol de
+  // emisión y no estar vetado que el resto de la ruta (antes solo exigían ser dueño
+  // del job: un usuario vetado o degradado podía devolver boletas a Listas).
+  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true) {
+    const { data: uDecl } = await sb.from("usuarios").select("rol, vetado").eq("id", user.id).maybeSingle();
+    if (!uDecl || uDecl.vetado) return NextResponse.json({ ok: false, error: "USUARIO_BLOQUEADO" }, { status: 403 });
+    if (!ROLES_EMISION.has(String(uDecl.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
+  }
+
   // ── RESCATE MANUAL DEL FOLIO ────────────────────────────────────────────
   // El RPA emitió (hay folio real en el SII) pero no capturó la pantalla: el
   // job quedó con lápida y "Recuperar folio" no tiene nada que rescatar. Acá
@@ -635,12 +727,17 @@ export async function POST(request: Request) {
 
     const { data: jobManual } = await sb
       .from("emision_jobs")
-      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id")
+      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id, expires_at, created_at")
       .eq("job_id", jobIdManual)
       .maybeSingle();
     if (!jobManual) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
-    if (jobManual.usuario_id !== user.id) return NextResponse.json({ ok: false, error: "JOB_AJENO" }, { status: 403 });
-    if (jobManual.estado !== "revision_pendiente") {
+    // Cualquier persona ACTIVA de la misma cuenta con rol de emisión (no solo quien
+    // lanzó el intento: si Marge no está, la clienta no queda trabada). Auditado.
+    const accesoManual = await accesoDeclaracion(sb, user.id, jobManual);
+    if (accesoManual) return accesoManual;
+    // Lápida real: a medias (revision_pendiente) o SIN RESPUESTA (job del lote vencido
+    // y abierto, lapida.ts) — la clienta ve su folio en el SII y lo registra.
+    if (esLapidaEfectiva(jobManual) === null) {
       return NextResponse.json(
         { ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no quedó a medias: no corresponde registrar un folio a mano." },
         { status: 409 },
@@ -718,6 +815,117 @@ export async function POST(request: Request) {
       already_exists: Boolean(respaldoManual.already),
       recuperado: true,
     });
+  }
+
+  // ── SALIDA HUMANA: "Revisé el SII y no está" ─────────────────────────────
+  // Sin esto una lápida que la verificación no alcanza (otro día: /reportes muestra
+  // solo hoy; más de 250 boletas; extensión vieja) dejaba a la clienta TRABADA para
+  // siempre. Fail-closed: solo el dueño del job, solo sobre una lápida real
+  // (lapida.ts), solo si la propuesta NO tiene boleta vigente. Cierra como `failed`
+  // TODAS las lápidas de esa propuesta (si queda una, sigue bloqueada) y deja rastro
+  // de que fue una declaración humana, no un veredicto del RPA.
+  if (payload.declarar_no_salio === true) {
+    const jobIdDecl = cleanText(payload.job_id);
+    if (!jobIdDecl) return NextResponse.json({ ok: false, error: "JOB_ID_REQUERIDO" }, { status: 400 });
+    const { data: jobDecl, error: errDecl } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id, expires_at, created_at")
+      .eq("job_id", jobIdDecl)
+      .maybeSingle();
+    if (errDecl) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    if (!jobDecl) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
+    const accesoDecl = await accesoDeclaracion(sb, user.id, jobDecl);
+    if (accesoDecl) return accesoDecl;
+    if (!jobDecl.propuesta_id || esLapidaEfectiva(jobDecl) === null) {
+      return NextResponse.json({ ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no está a medias." }, { status: 409 });
+    }
+    if (!puedeDeclararNoSalio(jobDecl)) {
+      return NextResponse.json(
+        { ok: false, error: "MUY_PRONTO", detalle: "Esta boleta quedó sin respuesta hace poco y el SII podría seguir procesándola. Espera unos minutos y revísala de nuevo." },
+        { status: 409 },
+      );
+    }
+    const { data: boletaVigente, error: errBol } = await sb
+      .from("boletas_emitidas")
+      .select("id, folio")
+      .eq("propuesta_id", jobDecl.propuesta_id)
+      .neq("estado", "anulada")
+      .limit(1)
+      .maybeSingle();
+    if (errBol) return NextResponse.json({ ok: false, error: "BOLETA_QUERY_FAILED" }, { status: 500 });
+    if (boletaVigente) {
+      return NextResponse.json(
+        { ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: `Esta boleta ya está registrada con el folio ${boletaVigente.folio}.` },
+        { status: 409 },
+      );
+    }
+    const { data: lapidasProp, error: errLap } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, propuesta_id, expires_at, created_at")
+      .eq("propuesta_id", jobDecl.propuesta_id)
+      .in("estado", [...ESTADOS_LAPIDA]);
+    if (errLap) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    const ahoraDecl = new Date();
+    const aCerrar = (lapidasProp ?? []).filter((j) => esLapidaEfectiva(j, ahoraDecl) !== null).map((j) => j.job_id);
+    // Si el server YA tiene un folio capturado para alguno de esos intentos (stash de
+    // la extensión), la boleta salió: no se puede declarar "no salió" (doble folio).
+    if (aCerrar.length > 0) {
+      const { data: conFolio, error: errRes } = await sb
+        .from("sii_local_resultados")
+        .select("folio")
+        .in("job_id", aCerrar)
+        .not("folio", "is", null)
+        .limit(1);
+      if (errRes) return NextResponse.json({ ok: false, error: "RESULTADOS_QUERY_FAILED" }, { status: 500 });
+      if ((conFolio ?? []).length > 0) {
+        return NextResponse.json(
+          { ok: false, error: "FOLIO_CAPTURADO", detalle: `El SII devolvió el folio ${conFolio![0].folio} para este intento: la boleta sí salió. Regístrala con ese folio.` },
+          { status: 409 },
+        );
+      }
+    }
+    const mensaje = "Declarado por la persona: revisó el SII y la boleta no salió";
+    // Directo a la tabla, NO por releaseCuentaEmissionLock: su guard prohíbe (a
+    // propósito) bajar una lápida a `failed`; esta es la única puerta que lo permite,
+    // y solo con la declaración humana. El candado del lote ya se soltó al sellarla.
+    // Re-filtra por estado en el UPDATE: si entre el select y acá llegó un resultado
+    // (lift → completed) o un latido revivió el job, no se pisa.
+    const ahoraIso = ahoraDecl.toISOString();
+    const { data: cerrados, error: errUpd } = await sb
+      .from("emision_jobs")
+      .update({ estado: "failed", estado_visible: "failed", status_message: mensaje, updated_at: ahoraIso })
+      .in("job_id", aCerrar)
+      .or(`estado.eq.revision_pendiente,and(estado.in.(created,running),expires_at.lt.${ahoraIso})`)
+      .select("job_id");
+    if (!errUpd && (cerrados ?? []).length === 0) {
+      return NextResponse.json({ ok: false, error: "NADA_QUE_CERRAR", detalle: "Esta boleta cambió de estado mientras la marcabas (llegó su resultado o sigue en curso). Recarga y revísala de nuevo." }, { status: 409 });
+    }
+    if (errUpd) return NextResponse.json({ ok: false, error: "DECLARACION_FALLIDA", detalle: errUpd.message }, { status: 500 });
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_no_salio_declarado_a_mano",
+      summary: "La persona declaró que la boleta no salió en el SII (vuelve a Listas)",
+      empresaId: jobDecl.empresa_id,
+      cuentaId: jobDecl.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobDecl.job_id,
+      metadata: { jobs_cerrados: (cerrados ?? []).length, origen: "declaracion_humana", lanzado_por_otra_persona: jobDecl.usuario_id !== user.id },
+    });
+    await recordCuentaAudit({
+      sb,
+      cuentaId: jobDecl.cuenta_id,
+      empresaId: jobDecl.empresa_id,
+      usuarioId: user.id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: jobDecl.job_id,
+      resumen: "Declaró que la boleta no salió en el SII tras revisarlo (vuelve a Listas)",
+      metadata: { origen: "declaracion_no_salio", jobs_cerrados: (cerrados ?? []).length },
+    });
+    return NextResponse.json({ ok: true, jobs_cerrados: (cerrados ?? []).length });
   }
 
   let result = payload.result;
@@ -1168,7 +1376,8 @@ export async function POST(request: Request) {
       if (propViva && String(propViva.folio) !== String(folio)) {
         const { data: boletaB } = await sb
           .from("boletas_emitidas")
-          .insert({ ...boletaInsert, propuesta_id: null })
+          // Con la MISMA ref de la propuesta: dos boletas con la misma ref = doble folio visible.
+          .insert({ ...boletaInsert, propuesta_id: null, ...(await conRef(sb, empresaId, job.propuesta_id)) })
           .select("id, folio, estado")
           .single();
         await recordOpsEvent({
@@ -1237,21 +1446,15 @@ export async function POST(request: Request) {
   // Guardia dura: SOLO docs tipo boleta_unica (jamás renombrar una cartola).
   let solicitudActualizada = false;
   if (job.propuesta_id) {
-    const { data: prop } = await sb.from("propuestas_ia").select("movimiento_id").eq("id", job.propuesta_id).maybeSingle();
-    if (prop?.movimiento_id) {
-      const { data: movRow } = await sb.from("movimientos_raw").select("documento_id").eq("id", prop.movimiento_id).maybeSingle();
-      if (movRow?.documento_id) {
-        const { data: reqDoc } = await sb.from("documentos_subidos").select("id, tipo, progreso_ia").eq("id", movRow.documento_id).maybeSingle();
-        if (reqDoc?.tipo === "boleta_unica") {
-          const progresoPrevio = (reqDoc.progreso_ia && typeof reqDoc.progreso_ia === "object") ? reqDoc.progreso_ia as Record<string, unknown> : {};
-          const origenPrevio = typeof progresoPrevio.origen === "string" ? progresoPrevio.origen : progresoEmitido.origen;
-          const { error: updErr } = await sb.from("documentos_subidos").update({
-            nombre_archivo: `${docWord} SII #${boleta.folio} - ${receptorLabel}`,
-            progreso_ia: { ...progresoPrevio, ...progresoEmitido, origen: origenPrevio },
-          }).eq("id", reqDoc.id);
-          solicitudActualizada = !updErr;
-        }
-      }
+    const reqDoc = await documentoDeLaPropuesta(sb, job.propuesta_id);
+    if (reqDoc?.tipo === "boleta_unica") {
+      const progresoPrevio = (reqDoc.progreso_ia && typeof reqDoc.progreso_ia === "object") ? reqDoc.progreso_ia as Record<string, unknown> : {};
+      const origenPrevio = typeof progresoPrevio.origen === "string" ? progresoPrevio.origen : progresoEmitido.origen;
+      const { error: updErr } = await sb.from("documentos_subidos").update({
+        nombre_archivo: `${docWord} SII #${boleta.folio} - ${receptorLabel}`,
+        progreso_ia: { ...progresoPrevio, ...progresoEmitido, origen: origenPrevio },
+      }).eq("id", reqDoc.id);
+      solicitudActualizada = !updErr;
     }
   }
   if (!solicitudActualizada) {
@@ -1281,7 +1484,15 @@ export async function POST(request: Request) {
   if (result?.receptor_omitido === true) {
     await recordSiiLocalFailure(sb, job, "RECEPTOR_OMITIDO", "Documento emitido sin el receptor pedido", { folio, tipo_dte: tipoDte }, "warn");
   }
-  await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
+  // Rama FELIZ: la boleta ya está guardada; este registro solo alimenta el historial,
+  // así que va después de responder (plan-costo-vercel §6 PR 3). Las ramas de FALLA
+  // siguen síncronas: son el STASH que usa recover_latest para rescatar el folio.
+  // Sin job_id queda SÍNCRONO: recover_latest sin job toma la fila más reciente del
+  // usuario, y una "persisted" que llegara tarde podía tapar el stash de falla de la
+  // boleta siguiente (falso rescate).
+  const registroFeliz = () => rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: pdfPendiente ? "persisted_pdf_pendiente" : "persisted", result });
+  if (effectiveJobId) after(registroFeliz);
+  else await registroFeliz();
   if (pdfPendiente) {
     await recordSiiLocalFailure(sb, job, "PDF_PENDIENTE", "Boleta SII local persistida sin PDF adjunto", {
       tipo_dte: tipoDte,

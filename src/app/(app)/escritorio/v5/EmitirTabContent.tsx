@@ -1,10 +1,9 @@
 "use client";
 
 import { mesDeFecha, pendingResaltar, resaltarElemento } from "./apuntar";
-import { useState, useMemo, useEffect, useRef, useId, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
-import { supabase } from "@/lib/supabase";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
@@ -15,8 +14,14 @@ import { esTipoExento } from "@/lib/sii/nombre-documento";
 import { mensajeEmisorIncompleto, type CampoEmisor } from "@/lib/sii/emisor-completo";
 import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
-import { registrarFolioAMano } from "@/lib/emission/recover-latest";
+import { declararNoSalio, registrarFolioAMano } from "@/lib/emission/recover-latest";
 import type { ItemAMedias } from "@/lib/intermediario/a-medias";
+
+/** HH:MM en hora de Chile (para buscar la boleta en el Resumen de ventas del SII). */
+function horaChile(iso: string): string {
+  try { return new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)); }
+  catch { return ""; }
+}
 import { devolverCartola, ultimaMiradaCartola } from "../../revisar/actions";
 
 // Perf: el modal de emisión en lote sale del bundle inicial; se precarga en idle
@@ -222,6 +227,11 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   const [emitiendo, setEmitiendo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loteOpen, setLoteOpen] = useState(false);
+  const { lockedByOther, lockedByOtherUser, businessMode, lockMessage } = useEmissionLockStatus();
+  // Otra PERSONA emitiendo (el único "Equipo" real) vs TU candado abierto (otra
+  // pestaña o una boleta sin respuesta). Antes todo candado era "Equipo: …" y un
+  // candado propio pintaba tu nombre como si fuera otra persona (LC 27-sep).
+  const candadoPropio = lockedByOther && !lockedByOtherUser;
   // Reanudar un lote a medias (se cerró la pestaña emitiendo, o el SII lo congeló).
   // lotePendiente = los IDs que faltan (leídos de localStorage); loteResume = esos
   // items re-hidratados del server para pasárselos al modal; null = emisión fresca.
@@ -275,15 +285,22 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     });
   }, []);
 
+  // Con cada recarga de la cola se re-piden las juzgadas de las cartolas abiertas (una
+  // server action por cartola). Durante un lote (propio o de otra persona) la cola se
+  // recarga seguido y eso no cambia qué se juzgó: se deja para cuando el lote termina
+  // (plan-costo-vercel §5 f). Lo emitido en vivo ya lo muestra el modal del lote.
   const dataRef = useRef(data);
   const expandedDocsRef = useRef(expandedDocs);
   expandedDocsRef.current = expandedDocs;
+  const juzgadasViejasRef = useRef(false);
+  const loteEnCursoJuzgadas = loteOpen || lockedByOtherUser;
   useEffect(() => {
-    if (dataRef.current === data) return;
-    dataRef.current = data;
+    if (dataRef.current !== data) { dataRef.current = data; juzgadasViejasRef.current = true; }
+    if (!juzgadasViejasRef.current || loteEnCursoJuzgadas) return;
+    juzgadasViejasRef.current = false;
     setJuzgadasByDoc({});
     for (const key of expandedDocsRef.current) if (key !== "__sueltas__") cargarJuzgadas(key);
-  }, [data, cargarJuzgadas]);
+  }, [data, cargarJuzgadas, loteEnCursoJuzgadas]);
 
   // Una BLOQUEADA vive en una cartola ya aprobada: para editarla hay que
   // devolver la cartola completa primero (modelo cartola-unidad). El botón
@@ -319,25 +336,19 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // Cupo/plan agotado: banner persistente con CTA a /planes (un toast se esfuma
   // y "te sugiere pagar" no es "te lleva a pagar").
   const [planCta, setPlanCta] = useState<string | null>(null);
-  const { lockedByOther, businessMode, lockMessage } = useEmissionLockStatus();
 
-  // Auto-refresh SILENCIOSO: la cola sigue al dato nuevo sin botón manual y sin que el
-  // ojo lo note (reload silent = no atenúa la mesa). Canal único por instancia (mismo
-  // patrón que DocCardList) + debounce para coalescer ráfagas. reloadRef evita re-suscribir.
-  const channelId = useId().replace(/:/g, "");
-  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reloadRef = useRef(reload);
-  useEffect(() => { reloadRef.current = reload; }, [reload]);
+  // Auto-refresh de la cola: lo hace la suscripción ÚNICA de MesaController
+  // (propuestas_ia + boletas_emitidas + documentos_subidos). Este canal duplicaba
+  // cada recarga (plan-costo-vercel §5 b). Lo que sí aporta Emitir es saber si OTRA
+  // persona tiene el candado: con un lote ajeno en curso la mesa espacia sus recargas.
   useEffect(() => {
-    if (!empresaId) return;
-    const bump = () => { if (autoTimer.current) clearTimeout(autoTimer.current); autoTimer.current = setTimeout(() => reloadRef.current({ silent: true }), 500); };
-    const ch = supabase
-      .channel(`v5-emitir-${empresaId}-${channelId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "propuestas_ia", filter: `empresa_id=eq.${empresaId}` }, bump)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "boletas_emitidas", filter: `empresa_id=eq.${empresaId}` }, bump)
-      .subscribe();
-    return () => { if (autoTimer.current) clearTimeout(autoTimer.current); supabase.removeChannel(ch); };
-  }, [empresaId, channelId]);
+    // lockedByOtherUser (no lockedByOther): un candado PROPIO pegado no es "otra
+    // persona emitiendo" y no debe cambiar el ritmo de la mesa.
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: lockedByOtherUser } }));
+  }, [lockedByOtherUser]);
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "otro", activo: false } }));
+  }, []);
 
   // Escape cierra el modal de confirmación (nunca a mitad de una emisión).
   useEffect(() => {
@@ -396,6 +407,27 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
       setGuardandoFolio(null);
     }
   }, [folioAMedias, reload, toast]);
+
+  // "Revisé el SII y no está": dos toques (el primero arma, ~5 s), porque devuelve la
+  // boleta a Listas y un error ahí es un doble folio. La declaración queda auditada.
+  const [armadoNoSalio, setArmadoNoSalio] = useState<string | null>(null);
+  const [declarando, setDeclarando] = useState<string | null>(null);
+  const declararNoSalioAMedias = useCallback(async (it: ItemAMedias) => {
+    if (armadoNoSalio !== it.id) {
+      setArmadoNoSalio(it.id);
+      window.setTimeout(() => setArmadoNoSalio((cur) => (cur === it.id ? null : cur)), 5000);
+      return;
+    }
+    setArmadoNoSalio(null);
+    setDeclarando(it.id);
+    try {
+      const r = await declararNoSalio(it.job_id);
+      if (r.ok) { toast("Listo: la boleta volvió a Listas para emitirla.", "success"); reload(); }
+      else toast(r.mensaje, "error");
+    } finally {
+      setDeclarando(null);
+    }
+  }, [armadoNoSalio, reload, toast]);
 
   // El endpoint de lote solo emite con proveedor mock: con sii_local/simpleapi cada
   // ítem fallaría después de confirmar. Se avisa antes y se bloquea el CTA.
@@ -779,7 +811,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <button className={`pl ${statusFilter === "bloqueadas" ? "act" : "ina"}`} onClick={() => setStatusFilter("bloqueadas")}>Bloqueadas ({bloqueadasCount})</button>
           <button className={`pl ${statusFilter === "todas" ? "act" : "ina"}`} onClick={() => setStatusFilter("todas")}>Todas ({totalCount})</button>
           {aMedias.length > 0 && (
-            <button className={`pl ${statusFilter === "a_medias" ? "act" : "ina"}`} title="El SII las emitió pero la app no alcanzó a leer el folio"
+            <button className={`pl ${statusFilter === "a_medias" ? "act" : "ina"}`} title="No sabemos si salieron en el SII: revísalas antes de volver a emitirlas"
               onClick={() => setStatusFilter("a_medias")}
               style={{ color: "var(--amber, #f59e0b)", borderColor: statusFilter === "a_medias" ? "color-mix(in srgb, var(--amber, #f59e0b) 45%, transparent)" : undefined }}>
               ⚠ A medias ({aMedias.length})
@@ -813,7 +845,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
         {statusFilter === "a_medias" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
             <div style={{ padding: "10px 13px", borderRadius: 10, background: "color-mix(in srgb, var(--amber, #f59e0b) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 28%, transparent)", fontSize: 11.5, lineHeight: 1.45, color: "var(--text)" }}>
-              Estas boletas <b>sí salieron en el SII</b>, pero la app no alcanzó a leer el folio. <b>No las vuelvas a emitir.</b> Búscalas en el SII (Resumen de ventas) por monto y hora, escribe el folio y guárdalo: pasan a Boletas.
+              No sabemos si estas boletas salieron en el SII. <b>No las vuelvas a emitir sin revisar.</b> Búscalas en el SII (Resumen de ventas) por monto, fecha y hora: si está, escribe su folio y guárdalo (pasa a Boletas); si no está, toca <b>No está en el SII</b> y vuelve a Listas.
             </div>
             {aMedias.map((it) => (
               <div key={it.id} className="em-item" style={{ alignItems: "center" }}>
@@ -821,7 +853,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 <div className="inf">
                   <div className="tt">{it.receptor_nombre || it.descripcion || "Sin nombre"}</div>
                   <div className="sub">
-                    {formatShortDateEsCl(it.fecha, true)}{it.documento_nombre ? ` · ${it.documento_nombre}` : ""} · quedó a medias el {formatShortDateEsCl(it.lapida_at.slice(0, 10))}
+                    {formatShortDateEsCl(it.fecha, true)}{it.documento_nombre ? ` · ${it.documento_nombre}` : ""} · {it.motivo === "sin_respuesta" ? "no tuvimos respuesta" : "quedó a medias"} el {formatShortDateEsCl(it.lapida_at)} a las {horaChile(it.lapida_at)}
                   </div>
                 </div>
                 <div className="mo">{fmt(it.monto_total)}</div>
@@ -832,6 +864,11 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                   <button type="submit" disabled={guardandoFolio === it.id || !(folioAMedias[it.id] ?? "").trim()}
                     style={{ height: 28, fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 8, padding: "0 11px", cursor: "pointer", opacity: guardandoFolio === it.id || !(folioAMedias[it.id] ?? "").trim() ? 0.5 : 1 }}>
                     {guardandoFolio === it.id ? "Guardando…" : "Guardar folio"}
+                  </button>
+                  <button type="button" onClick={() => void declararNoSalioAMedias(it)} disabled={declarando === it.id}
+                    title={`Revisaste el SII del ${formatShortDateEsCl(it.lapida_at)} cerca de las ${horaChile(it.lapida_at)} y no hay una boleta de ${fmt(it.monto_total)}`}
+                    style={{ height: 28, fontSize: 11, fontWeight: 700, color: armadoNoSalio === it.id ? "#fff" : "var(--text2)", background: armadoNoSalio === it.id ? "var(--amber, #f59e0b)" : "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 8, padding: "0 10px", cursor: "pointer", opacity: declarando === it.id ? 0.5 : 1 }}>
+                    {declarando === it.id ? "Marcando…" : armadoNoSalio === it.id ? "¿Seguro? Revisé y no está" : "No está en el SII"}
                   </button>
                 </form>
               </div>
@@ -972,9 +1009,9 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <div className="l">
             <span className="b">{listasCount}</span> {listasCount === 1 ? "lista" : "listas"} para emitir · <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
           </div>
-          {lockedByOther && (
+          {lockedByOther && !(candadoPropio && loteOpen) && (
             <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
-              <strong style={{ fontSize: 9 }}>{businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
+              <strong style={{ fontSize: 9 }}>{candadoPropio ? "Emisión abierta" : businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
             </div>
           )}
           <div className="r">
@@ -1005,7 +1042,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
               ) : (
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
               )}
-              {" "}{lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? `Selecciona ${esFacturas ? "facturas" : "boletas"}` : `Emitir ${selectedCount}`}
+              {" "}{candadoPropio ? "Emisión abierta" : lockedByOther ? "Emisión en curso" : emitiendo ? "Emitiendo..." : selectedCount === 0 ? `Selecciona ${esFacturas ? "facturas" : "boletas"}` : `Emitir ${selectedCount}`}
             </button>
           </div>
         </div>

@@ -101,6 +101,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                     <div className="inf" style={{ flex: 1, minWidth: 0 }}>
                       <div className="top" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--text)" }}>
                         <span className="fl" style={{ color: "var(--text)" }}>#{b.folio}</span>
+                        {b.ref && <span title="ID interno" style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 8.5, fontWeight: 600, color: "var(--text3)", letterSpacing: ".02em" }}>{b.ref}</span>}
                         {/* El sello sale del TIPO (Matías 2026-09-07): antes una factura 33 decía "DTE 33". */}
                         {(() => { const af = b.tipo_dte === 39 || b.tipo_dte === 33; const ex = esTipoExento(b.tipo_dte); return (
                         <span className={`bd ${af ? "af" : ex ? "ex" : "an"}`}

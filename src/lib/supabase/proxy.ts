@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "../database.types";
 import { debeRefrescarUltimoAcceso, sesionVencidaPorInactividad } from "@/lib/auth/inactividad-sesion";
+import { aalDelToken, necesitaMfa } from "@/lib/auth/mfa-proxy";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -69,17 +70,16 @@ export async function updateSession(request: NextRequest) {
 
   if (user) {
     // MFA opt-in (Supabase Auth). Solo afecta a quien YA enroló un factor verificado
-    // y está en aal1: debe completar el challenge. FAIL-CLOSED (auditoría #4): si el
-    // chequeo de aal falla, NO dejamos pasar a quien tiene un factor verificado —
-    // pero sí a quien no enroló MFA (no tiene nada que completar, no lo encerramos).
-    let needsMfa = false;
-    try {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      needsMfa = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
-    } catch {
-      const factores = (user.factors ?? []) as Array<{ status?: string | null }>;
-      needsMfa = factores.some((f) => f.status === "verified");
-    }
+    // y está en aal1: debe completar el challenge. FAIL-CLOSED (auditoría #4).
+    // Factores = los del USUARIO QUE DEVOLVIÓ EL SERVIDOR (getUser de arriba), NO los
+    // de la cookie: getAuthenticatorAssuranceLevel() sin token los lee de la cookie
+    // y una cookie editada sin factores se saltaba el MFA (2026-09-28, ver mfa-proxy.ts).
+    // El aal sale del access token que getUser acaba de validar contra Auth.
+    const { data: sesion } = await supabase.auth.getSession();
+    const needsMfa = necesitaMfa({
+      aalActual: aalDelToken(sesion.session?.access_token),
+      factoresServidor: user.factors as Array<{ status?: string | null }> | undefined,
+    });
 
     if (needsMfa) {
       // Rutas protegidas → al challenge. Cualquier /auth/* (challenge, logout,

@@ -17,6 +17,8 @@ import {
   type MotivoPausa,
 } from "@/lib/emission/lote-runner";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
+import { fechaParaEmitir, noSalioEsConfiable } from "@/lib/emission/fecha-intento";
+import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
@@ -155,6 +157,16 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     return () => window.removeEventListener("beforeunload", handler);
   }, [corriendo]);
 
+  // Avisa a la mesa que hay un lote PROPIO corriendo: espacia sus recargas y al
+  // terminar hace una recarga final (cubre todos los cierres: terminada, detenida,
+  // a medias, pausa remota, cerrar el modal). plan-costo-vercel §5 d.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "propio", activo: corriendo } }));
+  }, [corriendo]);
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("massdte:lote", { detail: { origen: "propio", activo: false } }));
+  }, []);
+
   // KILL SWITCH (tanda 1, 2026-09-10): el server puede contestar 409
   // EMISION_PAUSADA con un `detalle` humano. Se distingue del resto de fallos
   // porque NO es "esta boleta falló": es "no abras ninguna". El lote se detiene
@@ -162,41 +174,48 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
   type StartJob =
     | { jobId: string; expiresAt: string; emisorRut: string | null; foliosHoy: number[] }
     | { pausada: true; detalle: string }
+    | { yaEmitida: true; folio: number | null; boletaId: string | null; boletaCreatedAt: string | null }
+    | { frenada: true; motivo: string }
+    | { yaAMedias: true }
     | null;
   const startJob = useCallback(async (propuestaId: string, tipoDte: number, origin: "emision_lote" | "verificacion_lote" = "emision_lote"): Promise<StartJob> => {
     try {
-      const res = await fetch("/api/emision/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: "sii_local",
-          tipo_dte: tipoDte,
-          origin,
-          expected_emisor_rut: empresaRut ?? null,
-          propuesta_id: propuestaId,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (res.status === 409 && json?.code === "EMISION_PAUSADA") {
-        return {
-          pausada: true,
-          detalle: typeof json.detalle === "string" && json.detalle.trim()
-            ? json.detalle
-            : "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Tus documentos quedan listos y no se pierde nada; inténtalo de nuevo más tarde.",
-        };
+      let res: Response | null = null;
+      let json: Record<string, unknown> = {};
+      // Hasta 3 intentos si el server dice 429 (racha de saltadas sin cadencia).
+      for (let intento = 0; intento < 3; intento++) {
+        res = await fetch("/api/emision/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "sii_local",
+            tipo_dte: tipoDte,
+            origin,
+            expected_emisor_rut: empresaRut ?? null,
+            propuesta_id: propuestaId,
+          }),
+        });
+        json = await res.json().catch(() => ({}));
+        const pre = clasificarStartJob(res.status, json);
+        if (pre.tipo !== "reintentar") break;
+        await new Promise((r) => setTimeout(r, pre.esperaMs));
       }
-      if (!res.ok || !json.ok || !json.job_id || !json.expires_at) return null;
+      if (!res) return null;
+      // Clasificación pura (clasificar-start-job.ts): pausa del server, ya emitida,
+      // candado / en curso (frena UNA vez), ya a medias (se salta), ok, o error.
       // El server resuelve el emisor_rut autoritativo (empresa.rut de la DB) y lo
-      // devuelve en expected_emisor_rut. Lo usamos como fuente de verdad para el
-      // payload de la extensión, igual que la boleta única (EmitirDirectaView):
-      // sin esto el job viaja sin emisor_rut y la extensión lo rechaza fail-closed
-      // (EMISOR_RUT_INVALID) en TODAS las boletas del lote.
-      return {
-        jobId: json.job_id as string,
-        expiresAt: json.expires_at as string,
-        emisorRut: (json.expected_emisor_rut ?? null) as string | null,
-        foliosHoy: Array.isArray(json.folios_hoy) ? (json.folios_hoy as number[]) : [],
-      };
+      // devuelve en expected_emisor_rut: es la fuente de verdad del payload (sin él
+      // la extensión rechaza fail-closed EMISOR_RUT_INVALID en TODO el lote).
+      const c = clasificarStartJob(res.status, json);
+      switch (c.tipo) {
+        case "ok": return { jobId: c.jobId, expiresAt: c.expiresAt, emisorRut: c.emisorRut, foliosHoy: c.foliosHoy };
+        case "pausada": return { pausada: true, detalle: c.detalle };
+        case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId, boletaCreatedAt: c.boletaCreatedAt };
+        case "frenada": return { frenada: true, motivo: c.motivo };
+        case "a_medias": return { yaAMedias: true };
+        case "reintentar": return { frenada: true, motivo: "Vamos más rápido de lo que el servidor permite. Lo que falta queda guardado: reanuda en un minuto." };
+        default: return null;
+      }
     } catch {
       return null;
     }
@@ -238,11 +257,17 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         const full = item as ItemLoteEmision;
         reportar("Preparando…");
         // 1. lock + autorización (server) + enlace propuesta_id
+        // Fecha de ESTA boleta = la del momento de emitirla (no la del modal): un lote
+        // que cruza las 00:00 no debe verificar con la fecha de ayer (doble folio).
+        const fechaIntento = fechaParaEmitir(new Date());
         const job = await startJob(full.propuestaId, full.tipoDte);
         if (!job) return { estado: "fallida", motivo: "No se pudo iniciar (autorización, otra emisión en curso, o permiso)." };
         // Server en pausa: sin job, sin ventana, sin folio. El runner conserva este
         // ítem como pendiente y detiene el lote; el modal muestra el detalle.
         if ("pausada" in job) return { estado: "pausada_remota", motivo: job.detalle };
+        if ("yaEmitida" in job) return { estado: "ya_emitida", motivo: "Ya estaba emitida (otra persona o pestaña la emitió)." };
+        if ("frenada" in job) return { estado: "frenada", motivo: job.motivo };
+        if ("yaAMedias" in job) return { estado: "ya_a_medias", motivo: "Ya estaba en A medias: revísala ahí antes de volver a emitirla." };
 
         // 2. MISMO payload que la emisión única (fuente única) — desde la propuesta.
         //    Boleta (39/41) → e-Boleta; factura (33/34) → portal gratuito, con su
@@ -264,7 +289,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
               emisorRut: job.emisorRut ?? empresaRut ?? "",
               tipoDte: full.tipoDte as 33 | 34,
               totalClp: full.monto,
-              fechaEmision: full.fechaEmision,
+              fechaEmision: fechaIntento,
               formaPago: full.formaPago as "contado" | "credito",
               receptor: {
                 rut: full.receptorRut ?? "",
@@ -296,7 +321,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             foliosHoy: job.foliosHoy,
             tipoDte: full.tipoDte as 39 | 41,
             monto: full.monto,
-            fechaEmision: full.fechaEmision,
+            fechaEmision: fechaIntento,
             receptor: {
               rut: full.receptorRut,
               razonSocial: full.receptorNombre,
@@ -379,14 +404,26 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           reportar("Verificando en el Resumen de ventas del SII si la boleta salió…");
           await closeJob(job.jobId, "failed", desenlace.motivo);
           const vjob = await startJob(item.propuestaId, full.tipoDte, "verificacion_lote");
-          if (vjob && !("pausada" in vjob)) {
+          // Si al pedir la verificación el server ya tiene la boleta registrada, el
+          // resultado de NUESTRO intento llegó tarde y se guardó: salió, con su folio
+          // (cuenta como emitida: tope de sesión, cadencia y rango de folios). Sin
+          // folio legible no se afirma nada → lápida, como cuando no se pudo verificar.
+          // Solo si esa boleta se registró DENTRO de la ventana de este intento (con 60 s
+          // de margen): si es anterior, es de otra persona/pestaña y nuestro folio posible
+          // sigue sin verificar → cae a la lápida de abajo (revisión final, I3).
+          const registradaEnVentana = vjob && "yaEmitida" in vjob && vjob.boletaCreatedAt
+            && Date.parse(vjob.boletaCreatedAt) >= intentoDesdeMs - 60_000;
+          if (vjob && "yaEmitida" in vjob && vjob.folio !== null && registradaEnVentana) {
+            return { estado: "emitida", folio: vjob.folio, boletaId: vjob.boletaId };
+          }
+          if (vjob && "jobId" in vjob) {
             const payloadVerify = buildBoletaJob({
               empresaId,
               emisorRut: vjob.emisorRut ?? empresaRut ?? undefined,
               foliosHoy: vjob.foliosHoy,
               tipoDte: full.tipoDte as 39 | 41,
               monto: full.monto,
-              fechaEmision: full.fechaEmision,
+              fechaEmision: fechaIntento,
               receptor: {},
               detalle: full.detalle,
               medioPago: full.medioPago,
@@ -400,6 +437,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
             waiterRef.current = null;
             window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: vjob.jobId }, origin());
             if (v.estado === "revisar") setJobIdRevision(vjob.jobId);
+            // Guarda de medianoche: "no la encontré" solo vale si el intento, su fecha y
+            // la verificación son del MISMO día Chile (el listado muestra solo hoy).
+            if (v.estado === "fallida" && !noSalioEsConfiable({ fechaIntento, desdeMs: intentoDesdeMs, hastaMs: intentoHastaMs, ahoraMs: Date.now() })) {
+              const motivo = "El intento cruzó la medianoche y el listado del SII solo muestra el día: no puedo confirmar si salió. Quedó a medias: verifícala en el SII.";
+              await closeJob(vjob.jobId, "revision_pendiente", motivo);
+              setJobIdRevision(vjob.jobId);
+              return { estado: "revisar", motivo, folio: null };
+            }
             if (v.estado !== "emitida") await closeJob(vjob.jobId, v.estado === "revisar" ? "revision_pendiente" : "failed", "motivo" in v ? v.motivo : undefined);
             if (v.estado === "fallida") return { estado: "fallida", motivo: `${desenlace.motivo} Verifiqué en el SII: no salió, se puede reintentar.` };
             return v;
