@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import PreviewBoletaButton from "@/components/boletas/PreviewBoletaButton";
 import DescargarBoletaButton from "@/components/boletas/DescargarBoletaButton";
+import RefChip from "@/components/boletas/RefChip";
 import { normalizarRef } from "@/lib/emission/ref-emision";
 import { chileDisplayMonthKey, formatDisplayDateEsCl } from "@/lib/display-date";
 
@@ -80,7 +81,7 @@ export default function BoletasMensualesView({ boletas, month, year }: {
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
         </svg>
         <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por folio, receptor o monto..."
+          placeholder="Buscar por folio, ref., receptor o monto..."
           style={{
             width: "100%", padding: "8px 10px 8px 30px", borderRadius: 6,
             border: "1px solid var(--border)", background: "var(--bg-muted)",
@@ -174,18 +175,5 @@ export default function BoletasMensualesView({ boletas, month, year }: {
         </div>
       )}
     </div>
-  );
-}
-
-/** ID interno con botón copiar (para dictarlo a soporte o buscarlo). "—" en boletas antiguas. */
-function RefChip({ ref_ }: { ref_: string | null }) {
-  const [copiado, setCopiado] = useState(false);
-  if (!ref_) return <span style={{ fontSize: 10, color: "var(--text3)" }}>—</span>;
-  return (
-    <button type="button" title="Copiar ID" aria-label={`Copiar ID ${ref_}`}
-      onClick={() => { void navigator.clipboard?.writeText(ref_).then(() => { setCopiado(true); window.setTimeout(() => setCopiado(false), 1200); }).catch(() => {}); }}
-      style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 9.5, fontWeight: 650, color: copiado ? "var(--green, #22c55e)" : "var(--text2)", background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left", letterSpacing: ".02em", fontVariantNumeric: "tabular-nums" }}>
-      {copiado ? "Copiado" : ref_}
-    </button>
   );
 }
