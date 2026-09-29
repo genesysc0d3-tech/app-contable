@@ -112,12 +112,22 @@ describe("la ref se VE (fuente) y NO se imprime", () => {
       "src/lib/pdf/boleta-pdf.ts",
       "src/lib/pdf/boleta-personalizada.ts",
       "src/lib/pdf/factura-personalizada.ts",
+      "src/lib/pdf/baseapi-pdf.ts",
+      "src/lib/pdf/datos-oficiales-dte.ts",
       "src/components/boletas/PreviewBoletaButton.tsx",
       "src/components/boletas/DescargarBoletaButton.tsx",
     ]) {
       const src = leer(f);
-      expect(src, f).not.toMatch(/\bref\b|RefChip/);
+      // `.ref` / `ref:` / `"ref"` = la columna; un `ref={...}` de React no cuenta.
+      expect(src, f).not.toMatch(/\.ref\b|\bref\s*:|["'`]ref["'`]|RefChip|ref_/);
     }
+  });
+  it("el buscador del historial (boletas Y facturas) encuentra por ref y la muestra en la ficha", () => {
+    const page = leer("src/app/(app)/escritorio/v5/page.tsx");
+    expect(page).toMatch(/consultaConRef\(\(columnas\) => supabase\.from\("boletas_emitidas"\)\.select\(columnas\)\s*\.eq\("empresa_id", empresaId\)\.order\("fecha_emision",\{ascending:false\}\)\.order\("folio",\{ascending:false\}\)\.limit\(100\)/);
+    const vista = leer("src/app/(app)/escritorio/v5/SearchHistoryView.tsx");
+    expect(vista).toContain('String(d.ref ?? "").replace(/-/g, "")');
+    expect(vista).toContain('<Row label="Ref.">{String(d.ref ?? "—")}</Row>');
   });
   it("el doble folio lleva la MISMA ref de la propuesta (queda visible)", () => {
     const src = leer("src/app/api/sii-local/result/route.ts");

@@ -100,7 +100,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
                     </div>
                     <div className="inf" style={{ flex: 1, minWidth: 0 }}>
-                      <div className="top" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--text)" }}>
+                      <div className="top" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, rowGap: 2, fontSize: 10, fontWeight: 600, color: "var(--text)" }}>
                         <span className="fl" style={{ color: "var(--text)", minWidth: 34, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>#{b.folio}</span>
                         {/* Ref. (ID interno R-XXX-XXX) al lado del folio, en boletas Y facturas:
                             clic copia; "—" en las antiguas. Solo pantalla, no se imprime. */}

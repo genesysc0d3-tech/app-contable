@@ -135,8 +135,10 @@ export default async function V5Page({ searchParams }: {
     Promise.all([
       supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun")
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
-      supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
+      // Con `ref` para que el buscador del historial encuentre por ID interno (R-XXX-XXX).
+      consultaConRef((columnas) => supabase.from("boletas_emitidas").select(columnas)
         .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
+        "id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado"),
       // Perf F5: columnas EXACTAS que consume SearchHistoryView (antes iba
       // select * + movimientos_raw(*) + join a documentos_subidos que la vista
       // ni miraba — cientos de KB de RSC payload al pedo por cada F5).
@@ -172,7 +174,9 @@ export default async function V5Page({ searchParams }: {
       type: "documento", fecha: doc.created_at, data: searchData(doc),
     });
   }
-  for (const bol of (searchBoletasData.data ?? []).slice(0, 100)) {
+  // select(columnas) dinámico pierde la inferencia de supabase-js: tipo explícito.
+  type BoletaBusqueda = { id: string; folio: number; tipo_dte: number; fecha_emision: string; created_at: string; receptor_rut: string | null; receptor_razon_social: string | null; monto_total: number; estado: string; ref?: string | null };
+  for (const bol of ((searchBoletasData.data ?? []) as unknown as BoletaBusqueda[]).slice(0, 100)) {
     const fechaRegistro = bol.created_at ?? bol.fecha_emision;
     searchHistoryItems.push({
       id: "bol-" + bol.id,
