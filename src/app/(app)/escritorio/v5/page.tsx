@@ -22,6 +22,7 @@ import { chileDateString } from "@/lib/chile-date";
 import { tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import { etiquetaTipo, tituloDocumento } from "@/lib/sii/nombre-documento";
 import { faltanDelEmisor } from "@/lib/sii/emisor-completo";
+import { consultaConRef } from "@/lib/emission/ref-emision";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
 
@@ -121,19 +122,23 @@ export default async function V5Page({ searchParams }: {
       estadoTeam(),
     ]),
     Promise.all([
-    supabase.from("boletas_emitidas")
-      .select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
+    // Registro de Ventas (boletas Y facturas del mes): con `ref` para la columna
+    // "Ref." — igual que /api/boletas/rcv. Sin ella el mes actual mostraba "—".
+    consultaConRef((columnas) => supabase.from("boletas_emitidas")
+      .select(columnas)
       .eq("empresa_id", empresaId)
       .gte("fecha_emision", firstThisMonth)
       .lt("fecha_emision", firstNextMonth)
       .order("fecha_emision",{ascending:false})
       .order("folio",{ascending:false})
-      .limit(1000),
+      .limit(1000), "id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado"),
     Promise.all([
       supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun")
         .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
-      supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")
+      // Con `ref` para que el buscador del historial encuentre por ID interno (R-XXX-XXX).
+      consultaConRef((columnas) => supabase.from("boletas_emitidas").select(columnas)
         .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
+        "id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado"),
       // Perf F5: columnas EXACTAS que consume SearchHistoryView (antes iba
       // select * + movimientos_raw(*) + join a documentos_subidos que la vista
       // ni miraba — cientos de KB de RSC payload al pedo por cada F5).
@@ -169,7 +174,9 @@ export default async function V5Page({ searchParams }: {
       type: "documento", fecha: doc.created_at, data: searchData(doc),
     });
   }
-  for (const bol of (searchBoletasData.data ?? []).slice(0, 100)) {
+  // select(columnas) dinámico pierde la inferencia de supabase-js: tipo explícito.
+  type BoletaBusqueda = { id: string; folio: number; tipo_dte: number; fecha_emision: string; created_at: string; receptor_rut: string | null; receptor_razon_social: string | null; monto_total: number; estado: string; ref?: string | null };
+  for (const bol of ((searchBoletasData.data ?? []) as unknown as BoletaBusqueda[]).slice(0, 100)) {
     const fechaRegistro = bol.created_at ?? bol.fecha_emision;
     searchHistoryItems.push({
       id: "bol-" + bol.id,
@@ -190,7 +197,7 @@ export default async function V5Page({ searchParams }: {
 
   // RCV content for right column
   const rcvContent = (
-    <RcvViewWrapper boletas={(boletasRcvData ?? []) as BoletaRow[]} boletasYear={curYear} boletasMonth={curMonth} initialYear={mesaInicial.calendar.y} initialMonth={mesaInicial.calendar.m} />
+    <RcvViewWrapper boletas={(boletasRcvData ?? []) as unknown as BoletaRow[]} boletasYear={curYear} boletasMonth={curMonth} initialYear={mesaInicial.calendar.y} initialMonth={mesaInicial.calendar.m} />
   );
 
   const dashboardContent = (

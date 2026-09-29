@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { ALFABETO_REF, controlRef, formatoRef, normalizarRef, refValida } from "./ref-emision";
+import { ALFABETO_REF, consultaConRef, controlRef, faltaColumnaRef, formatoRef, normalizarRef, refValida } from "./ref-emision";
+
+describe("consultaConRef (Registro de Ventas con la columna Ref.)", () => {
+  it("pide `ref` junto a las columnas base y devuelve esa respuesta", async () => {
+    const pedidas: string[] = [];
+    const r = await consultaConRef(async (cols) => { pedidas.push(cols); return { data: [{ id: "1", ref: "R-7F3-KXH" }], error: null }; }, "id,folio");
+    expect(pedidas).toEqual(["id,folio,ref"]);
+    expect(r.data).toEqual([{ id: "1", ref: "R-7F3-KXH" }]);
+  });
+  it("sin la columna (migración sin aplicar) repite sin `ref` y no se cae", async () => {
+    const pedidas: string[] = [];
+    const r = await consultaConRef(async (cols) => {
+      pedidas.push(cols);
+      return cols.endsWith(",ref")
+        ? { data: null, error: { code: "42703", message: "column boletas_emitidas.ref does not exist" } }
+        : { data: [{ id: "1" }], error: null };
+    }, "id,folio");
+    expect(pedidas).toEqual(["id,folio,ref", "id,folio"]);
+    expect(r).toEqual({ data: [{ id: "1" }], error: null });
+  });
+  it("otro error NO se oculta con un reintento", async () => {
+    let n = 0;
+    const r = await consultaConRef(async () => { n++; return { data: null, error: { code: "57014", message: "timeout" } }; }, "id");
+    expect(n).toBe(1);
+    expect(r.error?.code).toBe("57014");
+    expect(faltaColumnaRef(null)).toBe(false);
+  });
+});
 
 describe("ref interna R-XXX-XXX", () => {
   it("alfabeto sin vocales ni confundibles (0/O, 1/I/L, U, V)", () => {
@@ -54,8 +81,53 @@ describe("la ref se VE (fuente) y NO se imprime", () => {
   const raiz = join(__dirname, "..", "..", "..");
   const leer = (rel: string) => readFileSync(join(raiz, rel), "utf8");
   it("columna 'Ref.' en la tabla de Boletas/Facturas y junto al folio en la mesa", () => {
-    expect(leer("src/app/(app)/escritorio/v5/sections/BoletasMensualesView.tsx")).toContain("<span>Ref.</span>");
-    expect(leer("src/app/(app)/escritorio/v5/Mesa.tsx")).toContain("b.ref &&");
+    const tabla = leer("src/app/(app)/escritorio/v5/sections/BoletasMensualesView.tsx");
+    expect(tabla).toContain("<span>Ref.</span>");
+    expect(tabla).toContain('import RefChip from "@/components/boletas/RefChip"');
+    expect(tabla).toContain("<RefChip ref_={b.ref ?? null} />");
+  });
+  it("'Últimas emitidas' de la mesa (boletas Y facturas) usa el mismo RefChip, al lado del folio", () => {
+    const mesa = leer("src/app/(app)/escritorio/v5/Mesa.tsx");
+    expect(mesa).toContain('import RefChip from "@/components/boletas/RefChip"');
+    // La MISMA lista sirve a las dos mesas (pestaña "Boletas"/"Facturas"): sin rama por tipo.
+    expect(mesa).toContain('boletasLabel={mesa.mesaActiva === "factura" ? "Facturas" : "Boletas"}');
+    const folio = mesa.indexOf("#{b.folio}</span>");
+    const chip = mesa.indexOf("<RefChip ref_={b.ref ?? null} />");
+    expect(folio).toBeGreaterThan(-1);
+    expect(chip).toBeGreaterThan(folio);
+    // Nada entre el folio y la ref salvo el comentario y el contenedor de ancho fijo.
+    expect(mesa.slice(folio, chip)).not.toMatch(/etiquetaTipo|es_unica/);
+    // La lista de la mesa de facturas trae la ref del server (33/34 viven en boletas_emitidas).
+    const data = leer("src/app/(app)/escritorio/v5/mesa-data.ts");
+    expect(data).toContain('const tiposDteMesa = mesaActiva === "factura" ? [33, 34] : [39, 41];');
+    expect(data).toMatch(/select\("id,folio,tipo_dte,[^"]*,ref"\)\.eq\("empresa_id", empresaId\)\.in\("tipo_dte", tiposDteMesa\)/);
+  });
+  it("el Registro de Ventas pide `ref` también en la carga inicial (antes: '—' en todo el mes actual)", () => {
+    const page = leer("src/app/(app)/escritorio/v5/page.tsx");
+    expect(page).toMatch(/consultaConRef\(\(columnas\) => supabase\.from\("boletas_emitidas"\)\s*\.select\(columnas\)/);
+    expect(page).not.toContain('.select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado")\n      .eq("empresa_id", empresaId)\n      .gte("fecha_emision", firstThisMonth)');
+  });
+  it("RefChip es solo pantalla: ni el PDF ni la vista previa imprimible la usan", () => {
+    for (const f of [
+      "src/lib/pdf/boleta-pdf.ts",
+      "src/lib/pdf/boleta-personalizada.ts",
+      "src/lib/pdf/factura-personalizada.ts",
+      "src/lib/pdf/baseapi-pdf.ts",
+      "src/lib/pdf/datos-oficiales-dte.ts",
+      "src/components/boletas/PreviewBoletaButton.tsx",
+      "src/components/boletas/DescargarBoletaButton.tsx",
+    ]) {
+      const src = leer(f);
+      // `.ref` / `ref:` / `"ref"` = la columna; un `ref={...}` de React no cuenta.
+      expect(src, f).not.toMatch(/\.ref\b|\bref\s*:|["'`]ref["'`]|RefChip|ref_/);
+    }
+  });
+  it("el buscador del historial (boletas Y facturas) encuentra por ref y la muestra en la ficha", () => {
+    const page = leer("src/app/(app)/escritorio/v5/page.tsx");
+    expect(page).toMatch(/consultaConRef\(\(columnas\) => supabase\.from\("boletas_emitidas"\)\.select\(columnas\)\s*\.eq\("empresa_id", empresaId\)\.order\("fecha_emision",\{ascending:false\}\)\.order\("folio",\{ascending:false\}\)\.limit\(100\)/);
+    const vista = leer("src/app/(app)/escritorio/v5/SearchHistoryView.tsx");
+    expect(vista).toContain('String(d.ref ?? "").replace(/-/g, "")');
+    expect(vista).toContain('<Row label="Ref.">{String(d.ref ?? "—")}</Row>');
   });
   it("el doble folio lleva la MISMA ref de la propuesta (queda visible)", () => {
     const src = leer("src/app/api/sii-local/result/route.ts");
