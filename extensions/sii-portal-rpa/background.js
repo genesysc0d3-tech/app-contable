@@ -18,6 +18,40 @@ const CAPABILITIES = [
 
 const activeJobs = new Map();
 
+// ── Telemetría de arranques del service worker (0.2.9) ─────────────────────
+// Para CONFIRMAR con datos si el SW muere a mitad de un lote (H1 del plan
+// 2026-09-28): cada arranque queda en un anillo en chrome.storage.local (sobrevive
+// la muerte del SW) y SW_BOOT_AT viaja en el PONG y en el `diag` de cada resultado.
+// Si `diag.sw_boot_at` > `diag.job_created_at`, el SW que entregó el folio no es el
+// que abrió el job. Solo tiempos y versión: cero PII.
+const SW_BOOT_AT = Date.now();
+const SW_BOOTS_KEY = "sw_boots";
+const SW_BOOTS_MAX = 20;
+let swBoots24h = null;
+
+async function registrarArranqueSw() {
+  try {
+    const got = await chrome.storage.local.get(SW_BOOTS_KEY);
+    const previos = Array.isArray(got?.[SW_BOOTS_KEY]) ? got[SW_BOOTS_KEY].filter((e) => Number.isFinite(e?.at)) : [];
+    const lista = [...previos, { at: SW_BOOT_AT, v: chrome.runtime.getManifest().version }].slice(-SW_BOOTS_MAX);
+    await chrome.storage.local.set({ [SW_BOOTS_KEY]: lista });
+    swBoots24h = lista.filter((e) => SW_BOOT_AT - e.at < 24 * 60 * 60 * 1000).length;
+  } catch {
+    // Best-effort: la telemetría nunca bloquea nada.
+  }
+}
+registrarArranqueSw();
+
+function diagResultado(state) {
+  const creado = Date.parse(state?.createdAt || "");
+  return {
+    sw_boot_at: SW_BOOT_AT,
+    sw_boots_24h: swBoots24h,
+    job_created_at: Number.isFinite(creado) ? creado : null,
+    ext_version: chrome.runtime.getManifest().version,
+  };
+}
+
 // ===== Auto-actualización silenciosa (estilo Chrome/VS Code) =====
 // Gatillo por USO, no por reloj: cada vez que la app le habla a la extensión
 // (el PING que ya existe) se le pide a Chrome un chequeo inmediato, con freno
@@ -293,18 +327,129 @@ async function handleCapturedResult(state, result) {
   const msg = conPdf
     ? `Boleta emitida en SII. Folio ${result.folio}. PDF de respaldo capturado.`
     : `Boleta emitida en SII. Folio ${result.folio}. El PDF de respaldo quedó pendiente (se puede adjuntar luego); la boleta ya quedó registrada.`;
-  const message = resultMessage(state.jobId, { ...resultWithPdf, job: state.job }, msg);
+  const message = resultMessage(state.jobId, { ...resultWithPdf, job: state.job, diag: diagResultado(state) }, msg);
   // PRIMERO el stash, DESPUÉS la entrega: si la pestaña de la app está cerrada,
   // el folio sobrevive en storage y se reentrega al próximo ping de la app.
   await stashPendingResult(state.jobId, message, state.job?.empresa_id ?? null);
   sendToApp(state, message);
   state.awaitingResult = false;
+  // 0.2.9 (H2, causa confirmada 2026-09-28: 18/18 "Cerraste tras emitir…" con la
+  // boleta SÍ guardada): el DONE ya NO se manda al ENVIAR. El DONE arma el autocierre
+  // de 5 s y, con el POST /api/sii-local/result lento, el "close" llegaba antes del
+  // ack → result_needs_review → el lote se frenaba por una falsa alarma. Ahora:
+  // "Guardando…" (sin autocierre) → DONE con auto_close recién con el ack
+  // (handleResultPersisted) → sin ack en ACK_TIMEOUT_MS, estado honesto (AWAITING_ACK).
+  state.resultSentAt = Date.now();
+  state.folioEnviado = result.folio;
+  state.doneMessage = conPdf ? `Boleta emitida. Folio ${result.folio}. PDF capturado.` : `Boleta emitida. Folio ${result.folio}. PDF pendiente.`;
   sendToSii(state.workerTabId, {
     type: "APP_CONTABLE_SII_WORKER_OVERLAY",
     job_id: state.jobId,
-    mode: "DONE",
-    message: conPdf ? `Boleta emitida. Folio ${result.folio}. PDF capturado.` : `Boleta emitida. Folio ${result.folio}. PDF pendiente.`,
+    mode: "LOCKED_AUTOMATION",
+    message: `Boleta emitida. Folio ${result.folio}. Guardándola en massDTE…`,
+    // Si este SW muere esperando, el worker se desbloquea solo (ver renderOverlay).
+    ack_fallback_ms: ACK_TIMEOUT_MS + 15 * 1000,
   });
+  armarEsperaAck(state);
+}
+
+// ── Espera del ack del guardado (0.2.9, H2) ─────────────────────────────────
+// 60 s: el POST normal tarda 1-10 s; con Vercel al límite de CPU se vieron >5 s.
+// Vencido el plazo NO es un error ni un cierre del usuario: el folio está en el
+// stash y se reentrega solo. Se avisa a la app con un estado NO terminal (la app
+// sigue esperando el resultado, que llega cuando el POST termina) y la ventana
+// queda con el folio visible y un botón para cerrarla.
+const ACK_TIMEOUT_MS = 60 * 1000;
+
+function armarEsperaAck(state) {
+  if (state.ackTimer) clearTimeout(state.ackTimer);
+  state.ackTimer = setTimeout(() => {
+    state.ackTimer = null;
+    if (activeJobs.get(state.jobId) !== state || state.resultPersisted) return;
+    sinAckAunDelGuardado(state);
+  }, ACK_TIMEOUT_MS);
+}
+
+function sinAckAunDelGuardado(state) {
+  const folio = state.folioEnviado ?? "";
+  sendToSii(state.workerTabId, {
+    type: "APP_CONTABLE_SII_WORKER_OVERLAY",
+    job_id: state.jobId,
+    mode: "AWAITING_ACK",
+    message: `Boleta emitida. Folio ${folio}. massDTE todavía no confirma que la guardó; se guardará sola. No la emitas de nuevo.`,
+  });
+  sendToApp(state, statusMessage(
+    state.jobId,
+    "result_awaiting_ack",
+    `Boleta emitida con folio ${folio}. Esperando que massDTE confirme el guardado; no la emitas de nuevo.`,
+    true,
+    { folio: state.folioEnviado ?? null, ms_desde_envio: Date.now() - (state.resultSentAt || Date.now()) },
+  ));
+}
+
+// Ack de app-bridge (POST /api/sii-local/result respondió). ok → folio guardado:
+// limpia el stash, desarma los avisos "sin resolver" y RECIÉN AHÍ el DONE con
+// autocierre. ok:false → la app ya recibe el resultado con persisted.ok=false y lo
+// deja "a medias"; la ventana lo dice honesto y no se cierra sola.
+function handleResultPersisted(message) {
+  const state = message?.job_id ? activeJobs.get(message.job_id) : null;
+  if (message?.ok === true && message.job_id) {
+    clearPendingResult(message.job_id);
+    if (state) {
+      state.resultPersisted = true;
+      if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
+      if (state.resultSentAt) {
+        sendToSii(state.workerTabId, {
+          type: "APP_CONTABLE_SII_WORKER_OVERLAY",
+          job_id: state.jobId,
+          mode: "DONE",
+          auto_close: true,
+          message: state.doneMessage || "Boleta emitida y guardada en massDTE.",
+        });
+      }
+    }
+    return;
+  }
+  if (message?.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO", "FOLIO_DE_OTRO_DOCUMENTO", "EMISOR_CRUZADO"].includes(message.error)) {
+    // FOLIO_DE_OTRO_DOCUMENTO / EMISOR_CRUZADO (0.2.8): el server dejó la boleta "a
+    // medias" a propósito; reintentar el mismo payload solo volvería a chocar (y, por
+    // la red de seguridad, podría levantar la lápida). El humano confirma en la app.
+    // Rechazo PERMANENTE de la cuenta: reintentar jamás va a funcionar.
+    // (FORBIDDEN no limpia: el resultado es de otra sesión y su dueño lo
+    // reintenta desde la suya; el filtro por empresa evita el spam acá.)
+    clearPendingResult(message.job_id);
+  }
+  if (state && state.resultSentAt && !state.resultPersisted) {
+    // Revisión 0.2.9 (I2): el server NO guardó (JOB_EXPIRED, PERSISTENCE_FAILED,
+    // BAD_JSON, FOLIO_DE_OTRO_DOCUMENTO…). Un cierre posterior ya no puede decir "se
+    // está guardando": avisoCierrePostEmit manda result_needs_review.
+    state.ackFallo = true;
+    if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
+    sendToSii(state.workerTabId, {
+      type: "APP_CONTABLE_SII_WORKER_OVERLAY",
+      job_id: state.jobId,
+      mode: "AWAITING_ACK",
+      message: `Boleta emitida. Folio ${state.folioEnviado ?? ""}. massDTE no pudo confirmar el guardado; revísala en la app (Emitir → A medias). No la emitas de nuevo.`,
+    });
+  }
+}
+
+// Cierre post-emit sin guardado confirmado. Si el resultado con folio fuerte YA se
+// envió (stash + entrega), el cierre no es "perdiste la boleta": el guardado va en
+// camino → estado NO terminal honesto, sin frenar el lote (0.2.9, H2). Si nunca se
+// envió un resultado, se mantiene el aviso de siempre (a medias, no re-emitir).
+function avisoCierrePostEmit(state, textoSinResultado) {
+  if (state.resultSentAt && !state.ackFallo) {
+    sendToApp(state, statusMessage(
+      state.jobId,
+      "result_awaiting_ack",
+      `La ventana se cerró con la boleta ya emitida (folio ${state.folioEnviado ?? "capturado"}) y enviada a massDTE; se está guardando. No la emitas de nuevo.`,
+      true,
+      { folio: state.folioEnviado ?? null, ms_desde_envio: Date.now() - state.resultSentAt },
+    ));
+    return;
+  }
+  sendToApp(state, statusMessage(state.jobId, "result_needs_review", textoSinResultado, true));
 }
 
 async function sendToApp(jobState, message) {
@@ -445,6 +590,7 @@ function pauseWorker(state, message) {
 function closeWorker(state) {
   activeJobs.delete(state.jobId);
   if (state.learningTimer) clearTimeout(state.learningTimer);
+  if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
   if (state.workerWindowId) {
     chrome.windows.remove(state.workerWindowId).catch(() => undefined);
   } else if (state.workerTabId && !state.workerTabReusada) {
@@ -886,7 +1032,7 @@ function handleWorkerAction(message, sender, sendResponse) {
     // YA emitido). El usuario puede cerrar la ventana, pero el trabajo queda vivo
     // pidiendo el folio; el backfill del servidor lo registra con evidencia fuerte.
     if (state.finalEmitClicked) {
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "Cerraste tras emitir. Si viste el folio, ingrésalo abajo para no perder la boleta; no re-emitas.", true));
+      if (!state.resultPersisted) avisoCierrePostEmit(state, "Cerraste tras emitir. Si viste el folio, ingrésalo abajo para no perder la boleta; no re-emitas.");
       closeWorker(state);
       sendResponse?.({ ok: true });
       return false;
@@ -903,7 +1049,7 @@ function handleWorkerAction(message, sender, sendResponse) {
     // guardada → doble emisión; auditoría: crítico). El stash + reentrega ya
     // protegen el folio; el estado no-cerrante mantiene el candado en la app.
     if (state.finalEmitClicked && !state.resultPersisted) {
-      sendToApp(state, statusMessage(state.jobId, "result_needs_review", "Cerraste tras emitir y la boleta aún no se confirma guardada. Se guardará sola al volver a la app; no re-emitas.", true));
+      avisoCierrePostEmit(state, "Cerraste tras emitir y la boleta aún no se confirma guardada. Se guardará sola al volver a la app; no re-emitas.");
       closeWorker(state);
       sendResponse?.({ ok: true });
       return false;
@@ -1481,6 +1627,19 @@ function verificarEnReportes(state) {
       return;
     }
     state.verifyTerminal = true;
+    // 0.2.9: "no salió" exige además (a) que TODAS las fechas posibles del intento
+    // sean HOY (el Resumen solo muestra hoy: un intento de ayer o que cruzó la
+    // medianoche no se puede probar ausente → re-emitir sería doble folio) y (b) que
+    // ninguna fila del mismo monto se haya descartado SOLO por el tipo (39/41): si
+    // la columna Tipo se leyó mal, esa podía ser la nuestra.
+    const rangoCubre = result?.reportes_rango_cubre_emision === true;
+    const excluidasPorTipo = Number(result?.reportes_calce?.excluidas_por_tipo || 0);
+    if (result?.reportes_tabla_completa === true && (!rangoCubre || excluidasPorTipo > 0)) {
+      sendToApp(state, statusMessage(state.jobId, "result_needs_review", !rangoCubre
+        ? "El Resumen de ventas del SII muestra solo el día de hoy y este intento puede ser de otro día. Quedó a medias: confirma su folio en Emitir → A medias antes de re-emitir."
+        : "En el Resumen de ventas del SII hay una boleta del mismo monto de otro tipo. Quedó a medias: confirma en Emitir → A medias antes de re-emitir.", true, { verificacion: true }));
+      return;
+    }
     if (result?.reportes_tabla_completa === true) {
       // Tabla COMPLETA (pie "1-N de N", sin "Cargando…"), con 2 refrescos, y 0
       // candidatas: no salió. Incompleta/cargando → a medias abajo (B1).
@@ -1762,7 +1921,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // quedar sin respuesta o la app cree que no hay extensión).
     const respondePong = (hasVault) => sendResponse(baseMessage({
       type: "APP_CONTABLE_EXTENSION_PONG",
-      extension_version: EXTENSION_VERSION,
+      // 0.2.9: la versión REAL instalada (manifest), no la constante de core.js.
+      extension_version: chrome.runtime.getManifest().version,
+      // 0.2.9: telemetría de muertes del SW (ver registrarArranqueSw).
+      sw_boot_at: SW_BOOT_AT,
+      sw_boots_24h: swBoots24h,
       capabilities: CAPABILITIES,
       has_vault: hasVault,
       nonce: message.nonce,
@@ -1776,19 +1939,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Ack de app-bridge: el POST /api/sii-local/result respondió ok → el folio quedó
   // guardado en la app. Limpia el stash y desarma los avisos "sin resolver".
   if (message?.type === "APP_CONTABLE_SII_RESULT_PERSISTED") {
-    if (message.ok === true && message.job_id) {
-      clearPendingResult(message.job_id);
-      const state = activeJobs.get(message.job_id);
-      if (state) state.resultPersisted = true;
-    } else if (message.job_id && ["USUARIO_BLOQUEADO", "ROL_SIN_PERMISO", "FOLIO_DE_OTRO_DOCUMENTO", "EMISOR_CRUZADO"].includes(message.error)) {
-      // FOLIO_DE_OTRO_DOCUMENTO / EMISOR_CRUZADO (0.2.8): el server dejó la boleta "a
-      // medias" a propósito; reintentar el mismo payload solo volvería a chocar (y, por
-      // la red de seguridad, podría levantar la lápida). El humano confirma en la app.
-      // Rechazo PERMANENTE de la cuenta: reintentar jamás va a funcionar.
-      // (FORBIDDEN no limpia: el resultado es de otra sesión y su dueño lo
-      // reintenta desde la suya; el filtro por empresa evita el spam acá.)
-      clearPendingResult(message.job_id);
-    }
+    handleResultPersisted(message);
     sendResponse?.({ ok: true });
     return false;
   }
@@ -2001,8 +2152,9 @@ chrome.windows.onRemoved.addListener((windowId) => {
     // confirmó, no mandar nada — pisar "Boleta emitida" con "sin resolver" por
     // cerrar la ventana con la X asustaba y volvía a bloquear el botón.
     if (state.finalEmitClicked) {
+      if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
       if (!state.resultPersisted) {
-        sendToApp(state, statusMessage(jobId, "result_needs_review", "Cerraste la ventana tras emitir y la boleta aún no se confirma guardada. Se guardará sola al volver a la app; no re-emitas.", true));
+        avisoCierrePostEmit(state, "Cerraste la ventana tras emitir y la boleta aún no se confirma guardada. Se guardará sola al volver a la app; no re-emitas.");
       }
       continue;
     }

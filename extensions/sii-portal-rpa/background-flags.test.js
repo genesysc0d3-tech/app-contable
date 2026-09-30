@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const BACKGROUND_SRC = readFileSync(join(__dirname, "background.js"), "utf8");
+// MASSDTE_BACKGROUND_SRC=<ruta>: correr contra otra versión (p. ej. la 0.2.8) para ver fallar lo nuevo.
+const BACKGROUND_SRC = readFileSync(process.env.MASSDTE_BACKGROUND_SRC || join(__dirname, "background.js"), "utf8");
 const BRIDGE_SRC = readFileSync(join(__dirname, "app-bridge.js"), "utf8");
 
 describe("background.js — flags de producción", () => {
@@ -104,5 +105,33 @@ describe("app-bridge.js — allowlist de APP_CONTABLE_SII_CAMBIO_SII (BG2)", () 
     const b = mountBridge();
     b.extSends({ source: "app-contable-extension", type: "APP_CONTABLE_SII_CAMBIO_SII", job_id: "job-2", portal: "facturas", error: "SIN_BOTON_VALIDAR" });
     expect(b.fetches[0].body).toMatchObject({ code: null, paso: null, mapa: null, posible_cambio_sii: false, extension_version: "9.9.9-test" });
+  });
+});
+
+
+// 0.2.9 — PONG con la versión REAL instalada (plan §0.4) y telemetría de arranques del
+// service worker (plan §4). A nivel de fuente: el PONG vive dentro del listener y no se
+// puede extraer solo. FALLAN con el background 0.2.8.
+describe("background.js — PONG y telemetría del service worker (0.2.9)", () => {
+  const pong = () => {
+    const i = BACKGROUND_SRC.indexOf('type: "APP_CONTABLE_EXTENSION_PONG"');
+    expect(i).toBeGreaterThan(0);
+    return BACKGROUND_SRC.slice(i, BACKGROUND_SRC.indexOf("}));", i));
+  };
+
+  it("el PONG informa chrome.runtime.getManifest().version, no la constante de core.js", () => {
+    expect(pong()).toMatch(/extension_version:\s*chrome\.runtime\.getManifest\(\)\.version/);
+    expect(pong()).not.toMatch(/extension_version:\s*EXTENSION_VERSION\b/);
+  });
+
+  it("SW_BOOT_AT existe, se persiste en chrome.storage.local (anillo sw_boots) y viaja en el PONG", () => {
+    expect(BACKGROUND_SRC).toMatch(/^const SW_BOOT_AT = Date\.now\(\);/m);
+    expect(BACKGROUND_SRC).toMatch(/chrome\.storage\.local\.set\(\{ \[SW_BOOTS_KEY\]: lista \}\)/);
+    expect(BACKGROUND_SRC).toMatch(/^registrarArranqueSw\(\);/m);
+    expect(pong()).toMatch(/sw_boot_at:\s*SW_BOOT_AT/);
+  });
+
+  it("el resultado enviado a la app lleva diag (sw_boot_at) sin pisar sus campos", () => {
+    expect(BACKGROUND_SRC).toMatch(/resultMessage\(state\.jobId, \{ \.\.\.resultWithPdf, job: state\.job, diag: diagResultado\(state\) \}/);
   });
 });

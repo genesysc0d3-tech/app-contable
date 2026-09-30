@@ -26,14 +26,18 @@ let driveListener = null;
 // /reportes buscando folio, el siguiente no debe heredarlo).
 const location = { href: "https://eboleta.sii.cl/emitir/" };
 const testHooks = {}; // window.__MASSDTE_TEST__: el worker expone resolverLibreto acá
+// Lo que el worker le manda al librero (chrome.runtime.sendMessage): WORKER_ACTION
+// close/capture/…, FINAL_EMIT_CLICKED. 0.2.9: para ver si la ventana se cierra sola.
+const alLibrero = [];
+let respuestaLibrero = () => undefined; // lo que "contesta" el librero a sendMessage
 
 function mountWorker() {
-  const win = { addEventListener() {}, removeEventListener() {}, innerWidth: 1280, getComputedStyle: () => ({ visibility: "visible", display: "block" }), __MASSDTE_TEST__: testHooks };
+  const win = { close() { win.cerrada = true; }, addEventListener() {}, removeEventListener() {}, innerWidth: 1280, getComputedStyle: () => ({ visibility: "visible", display: "block" }), __MASSDTE_TEST__: testHooks };
   const chrome = {
     runtime: {
       id: "sintetico", lastError: null,
       getManifest: () => ({ version: "sintetico" }),
-      sendMessage: (m, cb) => { if (cb) cb(); },
+      sendMessage: (m, cb) => { alLibrero.push(m); if (cb) cb(respuestaLibrero(m)); },
       onMessage: { addListener: (h) => { driveListener = h; } },
     },
   };
@@ -541,7 +545,7 @@ function tablaReportes(filas, { headers = ["Fecha", "Hora", "Nro Folio", "Tipo",
   const trs = filas.map((f) => el({
     tag: "TR", sel: ["tbody tr"],
     children: headers.map((h) => {
-      const v = /FECHA/i.test(h) ? f.fecha : /HORA/i.test(h) ? f.hora : /FOLIO/i.test(h) ? String(f.folio)
+      const v = /^BOLETA$/i.test(h) ? (f.boleta ?? f.tipo ?? "Exenta") : /FECHA/i.test(h) ? f.fecha : /HORA/i.test(h) ? f.hora : /FOLIO/i.test(h) ? String(f.folio)
         : /TIPO/i.test(h) ? (f.tipo ?? "Boleta exenta") : /MONTO|TOTAL/i.test(h) ? f.monto : "Descargar";
       return el({ tag: "TD", sel: ["td"], text: String(v ?? "") });
     }),
@@ -762,5 +766,318 @@ describe("cierre del ciclo: calce del folio en /reportes (0.2.8)", () => {
     const res = await capturarEnReportes(jobReportes({ emisor_rut: "76.000.000-6" }));
     expect(res.result.folio_confidence).toBe("medium");
     expect(res.result.folio_evidence.motivo).toBe("emisor_distinto");
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 0.2.9 — H2 (causa confirmada 2026-09-28: 18/18 "Cerraste tras emitir…" con la
+// boleta SÍ guardada) + B1 (expires_at antes del clic) + calce Tipo/medianoche.
+// Estos tests FALLAN con el worker 0.2.8 (MASSDTE_WORKER_SRC=<git show 19effe7:…>).
+// ─────────────────────────────────────────────────────────────────────────────
+const cierres = () => alLibrero.filter((m) => m.type === "APP_CONTABLE_SII_WORKER_ACTION" && m.action === "close");
+function overlay(mode, extra = {}) {
+  driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_WORKER_OVERLAY", job_id: "o1", mode, message: "Boleta emitida. Folio 1.", ...extra }, {}, () => {});
+}
+
+describe("0.2.9 · el autocierre de la ventana espera el ACK del guardado (H2)", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+
+  it("overlay DONE SIN auto_close (resultado enviado, sin ack) → la ventana NO se cierra sola", async () => {
+    escenaEmision();
+    alLibrero.length = 0;
+    overlay("DONE");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(cierres()).toHaveLength(0);
+  });
+
+  it("overlay DONE con auto_close:true (el librero recibió el ack) → se cierra sola a los 5 s", async () => {
+    escenaEmision();
+    alLibrero.length = 0;
+    overlay("DONE", { auto_close: true });
+    await vi.advanceTimersByTimeAsync(4_900);
+    expect(cierres()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(cierres()).toHaveLength(1);
+  });
+
+  it("AWAITING_ACK (sin ack en 60 s) → sin autocierre, con botón para cerrar", async () => {
+    escenaEmision();
+    alLibrero.length = 0;
+    overlay("AWAITING_ACK", { auto_close: true }); // aunque venga el flag: solo DONE autocierra
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(cierres()).toHaveLength(0);
+  });
+
+  it("'Guardando…' con ack_fallback_ms y el librero mudo (SW muerto) → pasa sola a AWAITING_ACK con botón Cerrar", async () => {
+    escenaEmision();
+    alLibrero.length = 0;
+    const creados = [];
+    const orig = fakeDocument.createElement;
+    fakeDocument.createElement = (...a) => { const n = orig(...a); creados.push(n); return n; };
+    try {
+      driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_WORKER_OVERLAY", job_id: "o1", mode: "LOCKED_AUTOMATION", message: "Boleta emitida. Folio 7. Guardándola en massDTE…", ack_fallback_ms: 75_000 }, {}, () => {});
+      const html = () => String(creados.at(-1)?.innerHTML ?? "");
+      await vi.advanceTimersByTimeAsync(74_000);
+      expect(html()).not.toContain("data-app-contable-action=\"close\"");
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(html()).toContain("data-app-contable-action=\"close\"");
+      expect(html()).toContain("Folio 7");
+      expect(html()).not.toContain("Guardándola"); // M4: sin el texto duplicado
+      expect(cierres()).toHaveLength(0); // habilita cerrar, no cierra sola
+    } finally {
+      fakeDocument.createElement = orig;
+    }
+  });
+
+  it("la captura con calce fuerte en /reportes NO pinta DONE por su cuenta (no arma el autocierre)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000" }]);
+    alLibrero.length = 0;
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("high");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(cierres()).toHaveLength(0);
+  });
+});
+
+describe("0.2.9 · B1: expires_at se revisa JUSTO antes del EMITIR final", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+
+  it("job vencido → NO clickea el EMITIR final, error pre-emit JOB_VENCIDO_PRE_EMIT", async () => {
+    escenaEmision();
+    const vencido = new Date(Date.now() - 1_000).toISOString();
+    const { res, actions: a } = await drive(jobBoleta({ allow_final_emit: true, expires_at: vencido }));
+    noFirmo(a);
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("JOB_VENCIDO_PRE_EMIT");
+    expect(res.final_emit_clicked).toBe(false);
+  });
+
+  it("control: job vigente → sí llega al EMITIR final", async () => {
+    escenaEmision();
+    const vigente = new Date(Date.now() + 15 * 60_000).toISOString();
+    const { actions: a } = await drive(jobBoleta({ allow_final_emit: true, expires_at: vigente }));
+    expect(a.find((x) => x.role === "btn_emitir_final")).toBeDefined();
+  });
+});
+
+describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+
+  it("fila tipo 39 ('Boleta afecta') del mismo monto y hora, job 41 → NO es candidata (no toma el folio ajeno)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "Boleta afecta" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
+  });
+
+  // Revisión 0.2.9 (I1): si la fila descartada por tipo era la NUESTRA mal clasificada,
+  // la otra del mismo monto quedaría "única" → folio ajeno. Sin calibrar en MV: medium.
+  it("una 39 y una 41 del mismo monto en ventana, job 41 → sugiere la 41 pero NUNCA high (excluidas_por_tipo)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:27", folio: 1241, monto: "$ 196.000", tipo: "Boleta afecta" },
+      { fecha: "25/09/2026", hora: "15:28", folio: 1242, monto: "$ 196.000", tipo: "Boleta exenta" },
+    ]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1242);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("excluidas_por_tipo");
+  });
+
+  it("I1: la 39 aparece como 'Boleta electrónica' a secas → cuenta como 39 (no tipo_ilegible)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:10", folio: 1240, monto: "$ 15.000", tipo: "Boleta exenta" },
+      { fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "Boleta electrónica" },
+    ]);
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("'Boleta no afecta o exenta' cuenta como 41 (no como afecta)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "Boleta no afecta o exenta electrónica" }]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("la tabla trae el tipo en otras filas pero la candidata no se deja leer → medium (tipo_ilegible)", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026", hora: "15:10", folio: 1240, monto: "$ 15.000", tipo: "Boleta afecta" },
+      { fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "—" },
+    ]);
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("tipo_ilegible");
+  });
+
+  it("'Boleta electrónica' a secas (texto NO visto en el portal real) cuenta como 39 por el default tolerante: job 39 → high", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "Boleta electrónica" }]);
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  // Medianoche (Chile UTC-3 en septiembre): EMITIR 23:59:30 del 27, la fila cae 00:00 del 28.
+  const EMIT_MEDIANOCHE = Date.parse("2026-09-28T02:59:30Z"); // 27/09 23:59:30 Chile
+
+  it("clic 23:59:30, fila 28/09 00:00, job con fecha_emision 27/09 → la sugiere (antes: 0 candidatas) pero NUNCA high: la ventana no cae entera en hoy", async () => {
+    vi.setSystemTime(new Date(EMIT_MEDIANOCHE + 90_000));
+    escenaReportes([{ fecha: "28/09/2026", hora: "00:00", folio: 1301, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ fecha_emision: "2026-09-27" }), { final_emit_at: EMIT_MEDIANOCHE });
+    expect(res.result.folio).toBe(1301);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("rango_fuera_de_hoy");
+    // la ventana cruzó la medianoche: la tabla de HOY no puede probar "no salió"
+    expect(res.result.reportes_rango_cubre_emision).toBe(false);
+  });
+
+  // Revisión 0.2.9 (medianoche, bloqueante): el ±1440 sobre la hora sola dejaba pasar
+  // pares CRUZADOS (fecha de un día con hora de otro) → folio AJENO en "high".
+  it("EMITIR 27/09 23:58 + fila del MISMO día 27/09 a las 00:01 (mismo monto, fuera de folios_hoy) → NO high: está a -1437 min, no a +3", async () => {
+    const EMIT_2358 = Date.parse("2026-09-28T02:58:00Z"); // 27/09 23:58 Chile
+    vi.setSystemTime(new Date(EMIT_2358 + 60_000)); // lectura 27/09 23:59
+    escenaReportes([{ fecha: "27/09/2026", hora: "00:01", folio: 1290, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ fecha_emision: "2026-09-27" }), { final_emit_at: EMIT_2358 });
+    expect(res.result.folio_confidence).not.toBe("high");
+    // Aislado del arreglo de cubreHoy: la fila ya no entra a la ventana horaria.
+    expect(res.result.folio_evidence.motivo).toBe("ninguna_en_ventana");
+  });
+
+  it("EMITIR 27/09 23:59:30, lectura el 28/09, fila 28/09 00:02 mismo monto → medium (rango_fuera_de_hoy), nunca high", async () => {
+    vi.setSystemTime(new Date(EMIT_MEDIANOCHE + 5 * 60_000)); // 28/09 00:04:30 Chile
+    escenaReportes([{ fecha: "28/09/2026", hora: "00:02", folio: 1302, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ fecha_emision: "2026-09-27" }), { final_emit_at: EMIT_MEDIANOCHE });
+    expect(res.result.folio).toBe(1302);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("rango_fuera_de_hoy");
+  });
+
+  it("control de regresión: fila del mismo día con fecha y hora completas ('25/09/2026 15:28:10', formato real) → high como siempre", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026 15:28:10", folio: 1241, monto: "$ 196.000" }], { headers: ["Nro Folio", "Total", "Fecha", "Acciones"] });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  // CALIBRACIÓN REAL 2026-09-29 (MV, solo lectura): Tipo y Boleta dicen "Afecta" / "Exenta".
+  const HEADERS_REALES = ["Nro Folio", "Boleta", "Neto", "IVA", "Total", "Tipo", "Vendedor", "Sucursal", "Estado", "Fecha", "Acciones"];
+  it("textos REALES: job 41 con UNA fila 'Exenta' en ventana → candidata, high", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026 15:10:00", folio: 2, monto: "$ 10", tipo: "Afecta" },
+      { fecha: "25/09/2026 15:28:10", folio: 18, monto: "$ 196.000", tipo: "Exenta" },
+    ], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(18);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(0);
+  });
+
+  it("textos REALES: job 41, una 'Afecta' y una 'Exenta' del mismo monto en ventana → la 'Afecta' se excluye, sugiere la 'Exenta' en medium", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026 15:27:30", folio: 2, monto: "$ 196.000", tipo: "Afecta" },
+      { fecha: "25/09/2026 15:28:10", folio: 19, monto: "$ 196.000", tipo: "Exenta" },
+    ], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(19);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("excluidas_por_tipo");
+  });
+
+  it("textos REALES: job 41 con sola fila 'Afecta' del mismo monto → excluida, sin folio", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026 15:28:10", folio: 2, monto: "$ 196.000", tipo: "Afecta" }], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
+  });
+
+  it("textos REALES: job 39 con sola fila 'Exenta' del MISMO monto → excluida por tipo, sin folio", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026 15:28:10", folio: 18, monto: "$ 196.000", tipo: "Exenta" }], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
+  });
+
+  it("textos REALES: job 39 con fila 'Afecta' → high; 'Exenta' no calza afecta ni 'Afecta' calza exenta", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026 15:10:00", folio: 20, monto: "$ 15.000", tipo: "Exenta" },
+      { fecha: "25/09/2026 15:28:10", folio: 2, monto: "$ 196.000", tipo: "Afecta" },
+    ], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBe(2);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  it("clic de AYER (verificación al día siguiente), tabla completa de hoy sin la fila → rango NO cubre la emisión", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 20 * 60 * 60_000)); // 26/09 11:27 Chile
+    escenaReportes([{ fecha: "26/09/2026", hora: "09:00", folio: 1250, monto: "$ 15.000" }]);
+    const res = await capturarEnReportes(jobReportes(), { final_emit_at: EMIT_AT });
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_tabla_completa).toBe(true);
+    expect(res.result.reportes_rango_cubre_emision).toBe(false);
+  });
+
+  it("control: clic de hoy y tabla completa → rango SÍ cubre la emisión", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026", hora: "09:00", folio: 1250, monto: "$ 15.000" }]);
+    const res = await capturarEnReportes(jobReportes(), { final_emit_at: EMIT_AT });
+    expect(res.result.reportes_tabla_completa).toBe(true);
+    expect(res.result.reportes_rango_cubre_emision).toBe(true);
+  });
+});
+
+describe("0.2.9 · revisión: botón Cerrar tras reinicio del SW (M2) y logout_after en AWAITING_ACK (M3)", () => {
+  beforeAll(() => { vi.useFakeTimers(); });
+
+  function capturarOverlay(fn) {
+    const creados = [];
+    const orig = fakeDocument.createElement;
+    fakeDocument.createElement = (...a) => { const n = orig(...a); creados.push(n); return n; };
+    try { fn(); } finally { fakeDocument.createElement = orig; }
+    return () => String(creados.at(-1)?.innerHTML ?? "");
+  }
+
+  it("M2: 'Cerrar ventana' con el librero contestando JOB_NOT_FOUND → la ventana intenta cerrarse sola y lo dice", async () => {
+    escenaEmision();
+    alLibrero.length = 0;
+    respuestaLibrero = (m) => (m.type === "APP_CONTABLE_SII_WORKER_ACTION" ? { ok: false, error: "JOB_NOT_FOUND" } : undefined);
+    try {
+      overlay("DONE", { auto_close: true });
+      let html = () => "";
+      const orig = fakeDocument.createElement;
+      const creados = [];
+      fakeDocument.createElement = (...a) => { const n = orig(...a); creados.push(n); return n; };
+      try {
+        await vi.advanceTimersByTimeAsync(5_100);
+        html = () => String(creados.at(-1)?.innerHTML ?? "");
+      } finally { fakeDocument.createElement = orig; }
+      expect(cierres()).toHaveLength(1);
+      expect(html()).toContain("Ciérrala con la X");
+    } finally {
+      respuestaLibrero = () => undefined;
+    }
+  });
+
+  it("M3: boleta única (logout_after) sin ack → el aviso AWAITING_ACK ofrece 'Cerrar sesión y ventana'", async () => {
+    escenaEmision();
+    const html = capturarOverlay(() => {
+      driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_WORKER_OVERLAY", job_id: "o1", job: { logout_after: true }, mode: "AWAITING_ACK", message: "Folio 9." }, {}, () => {});
+    });
+    expect(html()).toContain("logout_and_close");
+    // restaurar: el resto de la suite no es boleta única
+    driveListener({ source: "app-contable-extension", type: "APP_CONTABLE_SII_WORKER_OVERLAY", job_id: "o1", job: { logout_after: false }, mode: "LOCKED_AUTOMATION", message: "x" }, {}, () => {});
   });
 });
