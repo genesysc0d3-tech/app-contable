@@ -47,3 +47,39 @@ export function cuadreSaldo(
   const ratio = (x: { revisadas: number; fallidas: number }) => (x.revisadas ? x.fallidas / x.revisadas : 1);
   return ratio(inv) < ratio(tal) ? inv : tal;
 }
+
+/**
+ * Igual que cuadreSaldo pero para single_col: UNA columna de monto y una
+ * bandera que dice la dirección (A/C, Abono/Cargo…). Ambos órdenes.
+ */
+export function cuadreSaldoConBandera(
+  filas: Row[],
+  monto: number,
+  bandera: number,
+  saldo: number,
+  clasificar: (v: unknown) => "ENTRADA" | "SALIDA" | null,
+): { revisadas: number; fallidas: number } {
+  const medir = (orden: Row[]) => {
+    let prev: number | null = null;
+    let revisadas = 0;
+    let fallidas = 0;
+    for (const r of orden) {
+      const m = Math.abs(parseChileanNumber(r[monto]));
+      const t = clasificar(r[bandera]);
+      const s = parseChileanNumber(r[saldo]);
+      if (!m || !t || !s) continue;
+      if (prev !== null) {
+        const esperado = prev + (t === "ENTRADA" ? m : -m);
+        const tolerancia = Math.max(100, Math.abs(esperado) * 0.01);
+        revisadas++;
+        if (Math.abs(s - esperado) > tolerancia) fallidas++;
+      }
+      prev = s;
+    }
+    return { revisadas, fallidas };
+  };
+  const tal = medir(filas);
+  const inv = medir([...filas].reverse());
+  const ratio = (x: { revisadas: number; fallidas: number }) => (x.revisadas ? x.fallidas / x.revisadas : 1);
+  return ratio(inv) < ratio(tal) ? inv : tal;
+}

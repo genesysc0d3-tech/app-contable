@@ -24,8 +24,10 @@ describe("selectAdapterForEmpresa — aislamiento cross-tenant del parser", () =
     expect(selectAdapterForEmpresa(rows, A)).toBe(propio);
   });
 
-  it("cae a un adapter global sin dueño (heurístico), seguro de compartir", () => {
-    const global = row({ creado_por_empresa_id: null });
+  // 2026-09-30: un global se comparte solo si está CONFIRMADO (probado por saldo
+  // o total del banco); ver adapter-provisorio.test.ts.
+  it("cae a un adapter global sin dueño CONFIRMADO, seguro de compartir", () => {
+    const global = row({ creado_por_empresa_id: null, estado: "confirmado" });
     const rows = [row({ creado_por_empresa_id: A }), global];
     expect(selectAdapterForEmpresa(rows, B)).toBe(global);
   });
@@ -42,7 +44,7 @@ describe("selectAdapterForEmpresa — aislamiento cross-tenant del parser", () =
 
   it("sin empresaId, solo usa globales (nunca un manual ajeno)", () => {
     expect(selectAdapterForEmpresa([row({ creado_por_empresa_id: A })], undefined)).toBeNull();
-    const global = row({ creado_por_empresa_id: null });
+    const global = row({ creado_por_empresa_id: null, estado: "confirmado" });
     expect(selectAdapterForEmpresa([global], undefined)).toBe(global);
   });
 });

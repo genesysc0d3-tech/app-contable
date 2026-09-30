@@ -27,6 +27,11 @@ export interface AdapterConfig {
   plantilla?: boolean;
   /** Columnas OPCIONALES de la plantilla massDTE extendida (índices, -1 = no existe). */
   plantilla_cols?: { tipo: number; receptor_rut: number; receptor_nombre: number; medio_pago: number };
+  /**
+   * Títulos normalizados de la fila de encabezado con que se derivó el mapa.
+   * Sirve para avisar un cambio de formato: "esperaba encabezado X, llegó Y".
+   */
+  titulos?: string[];
   /** Only meaningful when layout = "transactions_log". Default: "entrada". */
   default_tipo_flujo?: "entrada" | "salida";
   columns: {
@@ -46,9 +51,17 @@ export interface AdapterRow {
   fingerprint: string;
   nombre: string | null;
   tipo_doc: string | null;
-  source: "heuristic" | "named" | "mistral" | "manual";
+  source: "heuristic" | "named" | "mistral" | "manual" | "ia_estructura";
   config: AdapterConfig;
   confianza: number;
+  /**
+   * provisorio = derivado por heurística/nombres/IA y SIN prueba; confirmado =
+   * lo probó el saldo o el total del banco, o lo confirmó el cliente. Ausente
+   * (columna aún no migrada en prod) = provisorio (fail-safe).
+   */
+  estado?: "provisorio" | "confirmado" | null;
+  confirmado_por?: string | null;
+  creado_por_empresa_id?: string | null;
   usage_count: number;
   success_count: number;
   failure_count: number;
@@ -113,6 +126,42 @@ export interface DescarteFila {
   fecha_cruda?: string | null;
 }
 
+/**
+ * SELLO de verificación de una cartola (2026-09-30). Qué PRUEBA respalda la
+ * lectura — nunca un "OK" implícito porque ningún chequeo protestó:
+ *   saldo         el saldo corrido cierra la ecuación fila a fila
+ *   total_banco   el resumen/total/fórmula SUM impreso por el banco calza al peso
+ *   cliente       el cliente confirmó (revisó la muestra o su saldo final cuadró)
+ *   sin_comprobar no hay prueba (o algo la contradice): se pide confirmación
+ */
+export type TipoVerificacion = "saldo" | "total_banco" | "cliente" | "sin_comprobar";
+export interface VerificacionCartola {
+  tipo: TipoVerificacion;
+  /** Por qué (en castellano, para el log y la UI). */
+  detalle: string;
+}
+
+/** Movimiento de muestra "así la leímos" (para que el cliente lo juzgue). */
+export interface MuestraMovimiento {
+  excel_row: number | null;
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  tipo_flujo: "entrada" | "salida";
+}
+
+/** Estado del mapa de columnas con que se leyó la cartola. */
+export interface MapaUsado {
+  adapter_id: string | null;
+  estado: "provisorio" | "confirmado";
+  /** true si el mapa se derivó en ESTA lectura (formato nuevo para la empresa). */
+  nuevo: boolean;
+  /** Aviso de cambio de formato ("esperaba encabezado X, llegó Y"). */
+  cambio_formato?: string | null;
+  /** Dos opiniones (lector + IA de estructura) que no coincidieron. */
+  disputa?: string | null;
+}
+
 /** Censo de la hoja leída: toda fila con plata queda contada. */
 export interface CensoCartola {
   hoja: string;
@@ -121,6 +170,16 @@ export interface CensoCartola {
   descartes: DescarteFila[];
   /** Otras hojas del libro que parecen traer movimientos y NO se leyeron. */
   otras_hojas_con_datos: string[];
+  /** Sello de verificación de la lectura (ausente en censos viejos). */
+  verificacion?: VerificacionCartola;
+  /** Saldo al inicio / al final del período, si la cartola permite saberlo. */
+  saldo_inicial?: number | null;
+  saldo_final?: number | null;
+  /** Cuenta bancaria del encabezado (huella + últimos 4), para encadenar cartolas. */
+  cuenta?: { huella: string; sufijo: string } | null;
+  /** Hasta 3 movimientos de muestra para el "así la leímos". */
+  muestra?: MuestraMovimiento[];
+  mapa?: MapaUsado;
 }
 
 export interface OrchestratorResult {
@@ -143,6 +202,8 @@ export interface OrchestratorResult {
   censo?: CensoCartola | null;
   /** true solo si el adapter que parseó lleva la FIRMA de la plantilla massDTE. */
   plantilla: boolean;
+  /** Sello de verificación (null en la capa 4 legacy/IA: nada que sellar). */
+  verificacion?: VerificacionCartola | null;
 }
 
 export interface PreExtractedMovimiento {
