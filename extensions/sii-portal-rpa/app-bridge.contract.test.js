@@ -26,6 +26,7 @@ function mountBridge({ pageOrigin = PROD_ORIGIN } = {}) {
   let messageHandler = null;  // listener window 'message' del bridge (app → ext)
   let runtimeHandler = null;  // chrome.runtime.onMessage listener (ext → app)
   let fetchResult = { ok: true };
+  let fetchRejects = false;   // simula red caída (fetch rechaza)
 
   const fakeWindow = {
     location: { origin: pageOrigin },
@@ -43,6 +44,7 @@ function mountBridge({ pageOrigin = PROD_ORIGIN } = {}) {
   };
   const fakeFetch = (url, opts) => {
     fetches.push({ url, opts });
+    if (fetchRejects) return Promise.reject(new TypeError("Failed to fetch"));
     return Promise.resolve({ json: () => Promise.resolve(fetchResult) });
   };
 
@@ -52,6 +54,7 @@ function mountBridge({ pageOrigin = PROD_ORIGIN } = {}) {
   return {
     toPage, toBackground, fetches,
     setFetchResult: (r) => { fetchResult = r; },
+    setFetchRejects: (v) => { fetchRejects = v; },
     setLastError: (e) => { fakeChrome.runtime.lastError = e; },
     // App → extensión: la página postea; event.source debe ser window.
     appPosts: (data, origin = pageOrigin) =>
@@ -178,6 +181,23 @@ describe("app-bridge — dirección extensión → app (persistencia del folio)"
     expect(ack.msg.ok).toBe(false); // el stash reintenta
     const toPage = b.toPage.find((m) => m.type === "APP_CONTABLE_SII_JOB_RESULT");
     expect(toPage.result.persisted.ok).toBe(false);
+  });
+
+  // 0.2.9 (revisión): con la red caída el SW también debe enterarse (ack ok:false),
+  // si no la ventana sigue diciendo "se guardará sola" sin confirmación. El error NO es
+  // permanente: el stash se conserva y reintenta.
+  it("JOB_RESULT con la red CAÍDA (fetch rechaza): ackea ok:false PERSISTENCE_FAILED y la página recibe persisted.ok:false", async () => {
+    b.setFetchRejects(true);
+    b.extSends({ source: "app-contable-extension", type: "APP_CONTABLE_SII_JOB_RESULT", job_id: "job-red", result: { folio: 777 } });
+    await flush();
+
+    const ack = b.toBackground.find((m) => m.msg.type === "APP_CONTABLE_SII_RESULT_PERSISTED");
+    expect(ack).toBeTruthy();
+    expect(ack.msg.job_id).toBe("job-red");
+    expect(ack.msg.ok).toBe(false);
+    expect(ack.msg.error).toBe("PERSISTENCE_FAILED");
+    const toPage = b.toPage.find((m) => m.type === "APP_CONTABLE_SII_JOB_RESULT");
+    expect(toPage.result.persisted).toEqual({ ok: false, error: "PERSISTENCE_FAILED" });
   });
 
   it("CAPTURE_DEBUG persiste best-effort y NO reenvía a la página (es telemetría, no UI)", async () => {

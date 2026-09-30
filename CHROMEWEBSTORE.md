@@ -156,6 +156,7 @@ tiene sentido ofrecerlo en búsqueda abierta.
 
 | Versión | Fecha | Cambios | Estado |
 |---|---|---|---|
+| 0.2.9 | 2026-09-28 | **Emisión masiva que ya no se frena en falso.** La ventana del SII se cierra sola recién cuando massDTE confirma que guardó la boleta (antes se cerraba a los 5 segundos aunque el guardado siguiera en camino, y el lote se detenía con "Cerraste tras emitir…" con la boleta sí guardada). Si el guardado tarda, la ventana lo dice y el lote sigue esperando, sin marcar error. Además: no aprieta EMITIR si el intento ya venció; al buscar el folio en el Resumen de ventas distingue boleta afecta de exenta y no da una boleta por "no emitida" si el intento fue de otro día (cruce de medianoche); la extensión informa su versión real y cuándo se reinició, para diagnosticar. Sin permisos nuevos. Queda para la siguiente versión: bitácora "anotar antes de emitir" y recuperar el trabajo en curso si Chrome reinicia la extensión. | Preparada (sin publicar; falta ensayo MV) |
 | 0.2.0 | 2026-08-27 | **Emisión de facturas electrónicas (afectas y exentas)** por el Sistema de Facturación Gratuito del SII: llenado del formulario, firma con la clave del certificado, captura del folio y del PDF oficial. Sin permisos nuevos. | Preparada |
 | 0.1.8 | 2026-08-22 | La aplicación pasa a ser la fuente única del RUT emisor (arregla las cuentas con más de una empresa). | Publicada |
 | 0.1.7 | 2026-08-20 | Traslado al dominio app.massdte.cl. | Publicada |

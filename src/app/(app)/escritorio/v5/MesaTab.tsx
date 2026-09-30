@@ -23,6 +23,7 @@ import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
 import { useMesaReload, pendingOpenDoc, ultimoDocAbierto } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
+import { terminadaDe } from "./cartola-filas";
 
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
 
@@ -142,18 +143,27 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     return m;
   }, [mesa.propuestas]);
 
+  // Propuestas con lápida (a medias / sin respuesta): ya vienen en la mesa
+  // (pendientes.a_medias, empresa-wide) — Check las muestra terminadas, sin acciones.
+  const aMediasIds = useMemo(
+    () => new Set((mesa.pendientes.a_medias ?? []).map((a) => a.id)),
+    [mesa.pendientes.a_medias],
+  );
+
   // Cartolas completamente DECIDIDAS (pedido fundador 2026-09-01): sin pendientes
-  // ni listas — todo aprobado (en Emitir) o juzgado. Se tachan en la mesa del Check.
+  // ni listas — todo aprobado (en Emitir), emitido/a medias o juzgado. Se tachan
+  // en la mesa del Check. Una emitida nunca cuenta como "sin decidir", aunque su
+  // estado haya quedado en 'listo' por un retroceso viejo (incidente MH 2026-09-29).
   const docsDecididos = useMemo(() => {
     const s = new Set<string>();
     propsByDoc.forEach((arr, id) => {
       if (arr.length === 0) return;
-      const sinDecidir = arr.some((p) => p.estado === "pendiente" || p.estado === "editado" || p.estado === "listo");
-      const hayAprobada = arr.some((p) => p.estado === "aprobado");
+      const sinDecidir = arr.some((p) => (p.estado === "pendiente" || p.estado === "editado" || p.estado === "listo") && !terminadaDe(p, aMediasIds));
+      const hayAprobada = arr.some((p) => p.estado === "aprobado" || terminadaDe(p, aMediasIds) !== null);
       if (!sinDecidir && hayAprobada) s.add(id);
     });
     return s;
-  }, [propsByDoc]);
+  }, [propsByDoc, aMediasIds]);
 
   // Nombre + monto por documento para las filas del árbol (Telegram muestra
   // receptor·monto en vez del nombre de archivo). Toma la 1ª propuesta del doc.
@@ -194,7 +204,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     setAprobandoCartola(true);
     try {
       const r = await aprobarCartola(selDoc.id);
-      if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir`);
+      if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir${r.aviso ? ` · ${r.aviso}` : ""}`);
       reload();
     } catch {
       // Un throw de la server action dejaba el botón "Aprobar" deshabilitado para
@@ -321,7 +331,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
         ) : tipo === "massdte" && selDoc.estado === "procesado" && (selProps.length > 0 || selCuadreFaltan) ? (
-          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} />
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} aMediasIds={aMediasIds} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
@@ -482,7 +492,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     )}
                   </div>
                 )}
-                <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} mesa={mesa.mesaActiva} />
+                <CartolaEditor propuestas={selProps} clientes={clientes} empresaId={empresaId} empresaTipo={empresaTipo} onAction={reload} mesa={mesa.mesaActiva} aMediasIds={aMediasIds} />
                 <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
                   <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}>Cerrar</button>
                 </div>

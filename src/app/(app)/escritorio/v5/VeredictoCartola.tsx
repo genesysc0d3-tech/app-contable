@@ -6,6 +6,7 @@ import { fmt, type Propuesta } from "./revisar-shared";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
 import CuadreCartolaLinea from "./CuadreCartolaLinea";
+import { contarTerminadas, terminadaDe } from "./cartola-filas";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
 // para el conjunto: izquierda = el archivo, centro = agregados (nº tx · total · split
@@ -51,7 +52,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado, aMediasIds,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null; progreso_ia?: unknown };
   propuestas: Propuesta[];
@@ -78,6 +79,8 @@ export default function VeredictoCartola({
   decidida?: boolean;
   /** Tras "Agregarlos" del cuadre: recargar la mesa para ver las filas nuevas. */
   onCuadreAgregado?: () => void;
+  /** Propuestas con lápida (a medias): terminadas, no cuentan como listas/pendientes. */
+  aMediasIds?: ReadonlySet<string>;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -101,15 +104,20 @@ export default function VeredictoCartola({
   // "Listo" = estado='listo' (preparada, staged, aún NO en Emitir). El Aprobar
   // atómico SOLO promueve estas → el desglose de la confirmación se calcula sobre
   // ellas, no sobre toda la composición del doc (que puede incluir ya-aprobadas).
-  const aprobadas = propuestas.filter((p) => p.estado === "aprobado").length;
-  const listasProps = propuestas.filter((p) => p.estado === "listo");
+  // Terminadas (emitidas / a medias, cartola-filas.ts): se cuentan aparte — una
+  // emitida NUNCA es "lista", "pendiente" ni "en Emitir" (fundador 2026-09-29).
+  const sinLapidas = aMediasIds ?? new Set<string>();
+  const esTerminada = (p: Propuesta) => terminadaDe(p, sinLapidas) !== null;
+  const { emitidas, aMedias } = contarTerminadas(propuestas, sinLapidas);
+  const aprobadas = propuestas.filter((p) => p.estado === "aprobado" && !esTerminada(p)).length;
+  const listasProps = propuestas.filter((p) => p.estado === "listo" && !esTerminada(p));
   const listas = listasProps.length;
   const totalListas = listasProps.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
   const afectasListas = listasProps.filter((p) => !esExenta(p)).length;
   const exentasListas = listasProps.filter(esExenta).length;
   // 'editado' es borrador (no emitible): cuenta como pendiente para que el
   // Aprobar atómico no lo deje atrás en silencio.
-  const pendientesProps = propuestas.filter((p) => p.estado === "pendiente" || p.estado === "editado");
+  const pendientesProps = propuestas.filter((p) => (p.estado === "pendiente" || p.estado === "editado") && !esTerminada(p));
   const pendientes = pendientesProps.length;
   // Las salidas (gastos) NO llevan boleta: su resolución es RECHAZAR, no "dejar
   // lista". El copy genérico "deja listas las N" inducía a boletear egresos
@@ -171,7 +179,7 @@ export default function VeredictoCartola({
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "0.5em" }}>
           <span style={{ fontSize: "1.5em", fontWeight: 600, color: "var(--text2)", letterSpacing: "-.02em", lineHeight: 1 }}>{mesa === "factura" ? "Plantilla" : "Cartola"}</span>
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: decidida ? "var(--blue)" : dotColor }}>
-            <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: decidida ? "var(--blue)" : dotColor }} />{decidida ? `${aprobadas} en Emitir` : `${listas}/${count} listas`}
+            <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: decidida ? "var(--blue)" : dotColor }} />{decidida ? (aprobadas > 0 ? `${aprobadas} en Emitir` : emitidas > 0 ? `${emitidas} emitida${emitidas === 1 ? "" : "s"}` : `${aMedias} a medias`) : `${listas}/${count - emitidas - aMedias} listas`}
           </span>
         </div>
 
@@ -195,8 +203,14 @@ export default function VeredictoCartola({
           {exentas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(91,156,246,.13)", color: "var(--blue)" }}>Exenta · {exentas}</span>}
           {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(232,85,62,.13)", color: "var(--accent)" }}>Afecta · {afectas}</span>}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 12, fontSize: "1.02em", color: "var(--text2)" }}>
+            {aMedias > 0 && (
+              <span title="No sabemos si salieron en el SII: verifícalas en Emitir → A medias" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--amber)" }} />{aMedias} a medias</span>
+            )}
+            {emitidas > 0 && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--text3)" }} />{emitidas} emitida{emitidas === 1 ? "" : "s"}</span>
+            )}
             {decidida ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--blue)" }} />{aprobadas} en Emitir</span>
+              aprobadas > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--blue)" }} />{aprobadas} en Emitir</span>
             ) : (<>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--green)" }} />{listas} listas</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: pendientes > 0 ? "var(--amber)" : "var(--text3)" }} />{pendientes} pendientes</span>
