@@ -1036,14 +1036,9 @@ export async function ignorarMovimientoSalidaBot(
     .eq("movimiento_id", movId)
   const boleteables = (props ?? []).filter((p) => !["gasto", "gasto_egreso", "no_comercial", "ignorar"].includes(p.tipo_propuesto));
   if (boleteables.length > 0) return "con_propuesta";
-  const noBoleteables = (props ?? []).map((p) => p.id);
-  // Doble candado (2026-09-30): si el borrado falla (p. ej. el trigger
-  // PROPUESTA_CON_EMISION), NO se reporta "ignorado" ni se toca el contador.
-  if (noBoleteables.length > 0) {
-    const { error: propDelErr } = await db.from("propuestas_ia").delete().eq("empresa_id", empresaId).in("id", noBoleteables);
-    if (propDelErr) return "con_propuesta";
-  }
-
+  // Doble candado (2026-09-30): UNA sentencia sobre movimientos_raw; la cascada
+  // se lleva sus propuestas (todas no boleteables, revisado arriba) pasando por el
+  // trigger PROPUESTA_CON_EMISION. Si falla, NO se reporta "ignorado" ni se toca el contador.
   const { error: movDelErr } = await db
     .from("movimientos_raw")
     .delete()

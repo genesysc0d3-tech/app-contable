@@ -27,8 +27,8 @@
 -- borrados de empresa son rollbacks de empresas recién creadas, sin propuestas.
 --
 -- BLOQUEA si la propuesta tiene:
---   (a) una boleta NO anulada y NO sandbox. emision_sandbox nace en
---       20260602221500 y es NOT NULL DEFAULT false desde 20260606120000; igual se usa IS NOT TRUE para tratar un NULL como
+--   (a) una boleta NO anulada y NO sandbox. emision_sandbox nace NOT NULL
+--       DEFAULT false en 20260602221500; igual se usa IS NOT TRUE para tratar un NULL como
 --       real (fail-closed). Sandbox = emisión de prueba del proveedor externo
 --       legado (BaseAPI), explícitamente marcada: nunca tuvo folio real en el SII.
 --       Las boletas 'mock' NO se eximen: emision_proveedor tiene DEFAULT 'mock',
@@ -94,6 +94,11 @@ create table if not exists public.propuestas_borradas_con_emision (
   client_addr inet default inet_client_addr(),
   created_at timestamptz not null default now()
 );
+
+-- Idempotente si una versión previa de esta migración ya creó la tabla sin estas columnas.
+alter table public.propuestas_borradas_con_emision
+  add column if not exists jwt_sub text,
+  add column if not exists client_addr inet default inet_client_addr();
 
 comment on table public.propuestas_borradas_con_emision is
   'Auditoría del bypass massdte.permitir_borrado_emitidas: cada propuesta con boleta/job abierto borrada a conciencia (datos de prueba). Solo service role.';
