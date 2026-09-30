@@ -148,7 +148,7 @@ describe("formato nuevo = provisorio", () => {
       saldo += egreso ? -m : m;
       return [dia(1 + (i % 25)), `D5D76EB61DB98F697D346006F73B22F26229444E|${9010716960000 + i}`, `Transferencia recibida de Cliente ${i}`, egreso ? null : m, egreso ? m : null, saldo];
     });
-    await parsear({ "Hoja 1": [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse()] });
+    await parsear({ "Hoja 1": [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse(), ["", "", "Saldo inicial", null, null, 1_000_000]] });
     expect(guardados).toHaveLength(1);
     expect(guardados[0].empresaId).toBe("emp-test");
     expect(guardados[0].confirmadoPor).toBe("saldo");

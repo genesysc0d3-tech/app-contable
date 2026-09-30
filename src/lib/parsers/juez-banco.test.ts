@@ -113,7 +113,7 @@ describe("sello por cartola", () => {
       saldo += m.cargo ? -m.monto : m.monto;
       return [f(m.dia), m.glosa, m.cargo ? m.monto : null, m.cargo ? null : m.monto, saldo];
     });
-    const r = await parsear(libro([["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"], ...filas]));
+    const r = await parsear(libro([["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"], ["", "Saldo anterior", null, null, 500_000], ...filas]));
     expect(r.verificacion?.tipo).toBe("saldo");
     expect(r.censo?.saldo_final).toBe(saldo);
     expect(r.censo?.saldo_inicial).toBe(500_000);

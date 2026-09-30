@@ -26,7 +26,7 @@ export function necesitaConfirmacion(c: Partial<ConSello>): boolean {
   const v = c.verificacion;
   if (!v) return false;
   if (v.tipo === "cliente") return false;
-  if (v.alerta) return true;
+  if (v.alerta || v.revisar) return true;
   const mapaConfirmadoViejo = !!c.mapa && c.mapa.estado === "confirmado" && c.mapa.nuevo !== true;
   if (v.tipo === "sin_comprobar") return !mapaConfirmadoViejo;
   return !!c.mapa && c.mapa.nuevo === true && c.mapa.estado === "provisorio";
@@ -53,7 +53,9 @@ export function seVeBienPermitido(c: Pick<CuadreCartola, "verificacion" | "perdi
  * `cliente` con esa razón (vuelta 2, N4: si no, alerta perpetua sin salida).
  */
 export function filtradaPermitida(c: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos">): boolean {
-  if (!c.verificacion?.filtrada) return false;
+  // Solo "solo abonos" (el caso massDTE). "Solo cargos" es justo lo que produce
+  // un mapa invertido en una cuenta que solo recibe ventas (vuelta 3, V3-1).
+  if (c.verificacion?.filtrada !== "abonos") return false;
   if ((c.perdidas ?? []).some((p) => !p.agregada)) return false;
   return (c.otras_hojas_con_datos ?? []).length === 0;
 }

@@ -170,6 +170,12 @@ export interface VerificacionCartola {
    * No hay sello, pero el cliente puede confirmarla explícitamente (vuelta 2, N4).
    */
   filtrada?: "abonos" | "cargos";
+  /**
+   * Sin sello pleno por algo que solo el cliente puede juzgar (la primera fila no
+   * se pudo comprobar; el signo del monto no dice la dirección): se le pide mirar
+   * "así la leímos" aunque el mapa ya estuviera confirmado (vuelta 3).
+   */
+  revisar?: boolean;
 }
 
 /** Movimiento de muestra "así la leímos" (para que el cliente lo juzgue). */

@@ -114,6 +114,8 @@ export interface CuadreDeLectura {
   primeraDesdeCero: boolean;
   /** Diferencia (saldo impreso − esperado) de cada fila que no cierra. */
   saltos: number[];
+  /** Monto de la fila de cada salto (mismo orden que `saltos`): un salto de ±2×monto delata cargo↔abono al revés. */
+  montosSalto: number[];
 }
 
 /** Saldo numérico de la celda de saldo de una fila, o null. */
@@ -163,7 +165,10 @@ export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterCo
   const ultimaFila = lines.length ? (lines[lines.length - 1].excel_row ?? 1) - 1 : 0;
   let antes: number | null = null;
   if (col >= 0) {
-    for (let i = primeraFila - 1; i > cfg.header_row && i >= 0 && antes == null; i--) {
+    // Hasta 3 filas arriba del primer movimiento: la fila "Saldo inicial" puede
+    // haber quedado como fila de títulos del bloque (heurística); un título de
+    // texto ("Saldo") no es un número y no cuenta.
+    for (let i = primeraFila - 1; i >= Math.max(0, primeraFila - 3) && antes == null; i--) {
       if (!filasLeidas.has(i)) antes = saldoDeFila(rows, i, col);
     }
   }
@@ -181,6 +186,7 @@ export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterCo
     let fallidas = 0;
     let sinComprobar = 0;
     const saltos: number[] = [];
+    const montosSalto: number[] = [];
     let primeraDesdeCero = false;
     let primera = true;
     for (const l of orden) {
@@ -194,13 +200,13 @@ export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterCo
         const filas = enEspera + 1;
         revisadas += filas;
         const salto = s - (prev + pendiente + efecto);
-        if (Math.abs(salto) > TOLERANCIA_SELLO_PESOS) { fallidas += filas; saltos.push(salto); }
+        if (Math.abs(salto) > TOLERANCIA_SELLO_PESOS) { fallidas += filas; saltos.push(salto); montosSalto.push(l.monto); }
       }
       primera = false;
       prev = s; pendiente = 0; enEspera = 0;
     }
     sinComprobar += enEspera;
-    return { revisadas, fallidas, sinComprobar, saltos, primeraDesdeCero, conInicial: inicial != null };
+    return { revisadas, fallidas, sinComprobar, saltos, montosSalto, primeraDesdeCero, conInicial: inicial != null };
   };
   const mejor = (signo: 1 | -1) => {
     const intradia = invertirDentroDelDia(lines);
@@ -226,5 +232,6 @@ export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterCo
     primeraComprobada: normal.conInicial && normal.sinComprobar === 0,
     primeraDesdeCero: !normal.conInicial && normal.primeraDesdeCero,
     saltos: normal.saltos,
+    montosSalto: normal.montosSalto,
   };
 }

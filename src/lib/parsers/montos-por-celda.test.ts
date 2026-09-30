@@ -94,7 +94,7 @@ describe("texto sucio: leer bien o al censo, nunca 1 en silencio", () => {
 
 describe("CSV chileno", () => {
   it("';' con '1.500' = mil quinientos y '05/09/2026' = 5 de septiembre", async () => {
-    const lin = ["Fecha;Descripcion;Cargo;Abono;Saldo"];
+    const lin = ["Fecha;Descripcion;Cargo;Abono;Saldo", ";Saldo anterior;;;100.000"];
     let s = 100_000;
     for (let d = 1; d <= 14; d++) {
       const m = 1_500 + d * 100; const cargo = d % 4 === 0; s += cargo ? -m : m;

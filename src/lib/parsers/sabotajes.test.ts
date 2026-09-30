@@ -66,8 +66,12 @@ describe("banco de sabotajes (5 bancos × 10 sabotajes, sin red)", () => {
     for (const r of res.filter((x) => x.c.sabotaje === "sin_saldo" && !["chile", "santander"].includes(x.c.banco))) {
       expect(r.sello, r.c.nombre).toBe("sin_comprobar");
     }
-    // Con saldo (y títulos con dirección o no) la ecuación prueba la lectura.
-    for (const r of res.filter((x) => x.c.sabotaje === "base")) expect(r.sello, r.c.nombre).toBe("saldo");
+    // Con saldo la ecuación prueba la lectura; estas cartolas sintéticas no traen
+    // saldo inicial, así que la PRIMERA fila no se comprueba y (vuelta 3) no hay
+    // sello pleno: se pide mirar "así la leímos", nunca un sello falso.
+    for (const r of res.filter((x) => x.c.sabotaje === "base")) {
+      expect(r.sello === "saldo" || /la primera no se puede comprobar/.test(r.detalle ?? ""), r.c.nombre).toBe(true);
+    }
   });
 });
 

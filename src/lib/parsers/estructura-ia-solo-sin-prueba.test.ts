@@ -49,7 +49,7 @@ const fch = (d: number) => `${String(d).padStart(2, "0")}/09/2026`;
 
 describe("paso IA solo sin prueba", () => {
   it("con sello de saldo NO llama a DeepSeek", async () => {
-    const filas: (string | number)[][] = [["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"]];
+    const filas: (string | number)[][] = [["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"], ["", "Saldo inicial", "", "", 1_000_000]];
     let s = 1_000_000;
     for (let i = 1; i <= 14; i++) { const m = 10_000 + i; const c = i % 3 === 0; s += c ? -m : m; filas.push([fch(i), `Mov ${i}`, c ? m : "", c ? "" : m, s]); }
     const r = await parsear(libro(filas));

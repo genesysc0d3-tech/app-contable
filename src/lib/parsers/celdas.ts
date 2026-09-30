@@ -12,9 +12,21 @@
  * de una planilla casera) era invisible para todos los detectores y caía a
  * la capa legacy → IA (bug cazado con la planilla M&E 2026-08-22).
  */
+// Lista CERRADA (vuelta 3, V3-5): nombre completo o abreviatura exacta, en
+// español o inglés. "MARCA" o "junta" no son marzo ni junio.
 const MESES: Record<string, number> = {
-  ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8,
-  sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12,
+  ene: 1, enero: 1, jan: 1, january: 1,
+  feb: 2, febrero: 2, february: 2,
+  mar: 3, marzo: 3, march: 3,
+  abr: 4, abril: 4, apr: 4, april: 4,
+  may: 5, mayo: 5,
+  jun: 6, junio: 6, june: 6,
+  jul: 7, julio: 7, july: 7,
+  ago: 8, agosto: 8, aug: 8, august: 8,
+  sep: 9, sept: 9, set: 9, septiembre: 9, setiembre: 9, september: 9,
+  oct: 10, octubre: 10, october: 10,
+  nov: 11, noviembre: 11, november: 11,
+  dic: 12, diciembre: 12, dec: 12, december: 12,
 };
 /**
  * Fecha con el MES EN TEXTO (vuelta 2, P5): "05-SEP-2026", "05-Ago-2026",
@@ -23,7 +35,7 @@ const MESES: Record<string, number> = {
 export function fechaConMesEnTexto(s: string): { y: number; m: number; d: number } | null {
   const x = s.trim().match(/^(\d{1,2})[\s\-\/.]+([a-záéíóú]{3,10})\.?[\s\-\/.]+(\d{4})$/i);
   if (!x) return null;
-  const m = MESES[x[2].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 3)];
+  const m = MESES[x[2].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")];
   if (!m) return null;
   return { y: parseInt(x[3], 10), m, d: parseInt(x[1], 10) };
 }

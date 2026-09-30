@@ -40,7 +40,7 @@ const cl = (n: number) => n.toLocaleString("es-CL");
 describe("con fecha válida, nunca resumen por palabras", () => {
   it("un pago a 'TOTAL CHILE SPA' (otra columna de texto) se lee como movimiento", async () => {
     let s = 5_000_000;
-    const filas: Celda[][] = [["Fecha", "Descripción", "Destinatario", "Cargos", "Abonos", "Saldo"]];
+    const filas: Celda[][] = [["Fecha", "Descripción", "Destinatario", "Cargos", "Abonos", "Saldo"], ["", "Saldo anterior", "", "", "", cl(5_000_000)]];
     for (let i = 1; i <= 14; i++) {
       const cargo = i % 3 === 0; const m = 30_000 + i * 1_000;
       s += cargo ? -m : m;
@@ -55,7 +55,7 @@ describe("con fecha válida, nunca resumen por palabras", () => {
 
   it("una glosa 'TRASPASO SALDO DISPONIBLE LINEA CREDITO' con fecha se lee", async () => {
     let s = 5_000_000;
-    const filas: Celda[][] = [["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"]];
+    const filas: Celda[][] = [["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"], ["", "Saldo anterior", "", "", cl(5_000_000)]];
     for (let i = 1; i <= 14; i++) {
       const m = 30_000 + i * 1_000; s += m;
       filas.push([fch(i), i === 4 ? "TRASPASO SALDO DISPONIBLE LINEA CREDITO" : `TRANSFERENCIA DE TERCEROS ${i}`, "", cl(m), cl(s)]);
@@ -80,7 +80,7 @@ describe("con fecha válida, nunca resumen por palabras", () => {
 
 describe("subtotales 'Total del día' con fecha: por estructura", () => {
   function cartolaConSubtotales(): { rows: Row[]; movs: number } {
-    const rows: Row[] = [["Fecha", "Descripción", "N° Documento", "Cargos", "Abonos", "Saldo"]];
+    const rows: Row[] = [["Fecha", "Descripción", "N° Documento", "Cargos", "Abonos", "Saldo"], ["", "Saldo anterior", "", "", "", 5_000_000]];
     let s = 5_000_000; let n = 0;
     for (let dia = 1; dia <= 4; dia++) {
       let te = 0; let ts = 0;

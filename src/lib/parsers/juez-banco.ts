@@ -3,7 +3,7 @@ import type * as XLSX from "xlsx";
 import type { AdapterConfig, DescarteFila, ParsedLine, Row, VerificacionCartola } from "./types";
 import { leerCeldaMonto, valorCeldaSuelta } from "./numeros";
 import { normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
-import { cuadreDeLectura } from "./saldo-cuadre";
+import { cuadreDeLectura, TOLERANCIA_SELLO_PESOS } from "./saldo-cuadre";
 import { cellEsFecha } from "./celdas";
 
 /**
@@ -209,6 +209,36 @@ export function titulosContradicenMapa(rows: Row[], cfg: AdapterConfig): boolean
   return false;
 }
 
+/** ¿El título de la columna (fila de encabezado del mapa) dice la dirección? */
+function tituloDiceDireccion(rows: Row[], cfg: AdapterConfig, col: number): boolean {
+  if (col < 0) return false;
+  for (const idx of new Set([cfg.skip_rows_before_data - 1, cfg.header_row])) {
+    const t = normalizarTitulo(rows[idx]?.[col]);
+    if (t && (RE_ENTRADA.test(t) || RE_SALIDA.test(t) || /\(\s*[+-]\s*\/\s*[+-]\s*\)|[+-]\s*\/\s*[+-]/.test(t))) return true;
+  }
+  return false;
+}
+
+/**
+ * ¿Las banderas de dirección (single_col) son ambiguas? Solo letras C/D (C puede
+ * ser Cargo o Crédito), o dos valores distintos que se leen como la MISMA
+ * dirección sin ningún valor de la otra (vuelta 3, V3-2).
+ */
+function banderasAmbiguas(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): boolean {
+  if ((cfg.layout ?? "two_cols") !== "single_col") return false;
+  const col = cfg.columns.tipo_flujo_col ?? -1;
+  if (col < 0) return false;
+  const valores = new Map<string, ParsedLine["tipo"]>();
+  for (const l of lines) {
+    const v = String(rows[(l.excel_row ?? 0) - 1]?.[col] ?? "").trim().toLowerCase();
+    if (v) valores.set(v, l.tipo);
+  }
+  const claves = [...valores.keys()];
+  if (claves.length >= 2 && claves.every((k) => k === "c" || k === "d")) return true;
+  const direcciones = new Set(valores.values());
+  return claves.length >= 2 && direcciones.size === 1;
+}
+
 /**
  * Compara lo leído con lo que imprime el banco. `filasTotales` = filas de
  * totales/resumen ya marcadas por el lector (índices 0-based).
@@ -379,18 +409,39 @@ export function sellarCartola(args: {
       // El primer salto puede ser el ancla del saldo inicial (fila de arriba), no
       // un movimiento faltante: se miran los saltos DENTRO de la cartola.
       const internos = q.saltos.length > 1 ? q.saltos.slice(1) : q.saltos;
-      const soloAbonos = lines.every((l) => l.tipo === "ENTRADA") && internos.every((x) => x < 0);
-      const soloCargos = lines.every((l) => l.tipo === "SALIDA") && internos.every((x) => x > 0);
+      // Vuelta 3 (V3-1): NUNCA "filtrada" si la lectura al revés cuadra, si algún
+      // salto es ±2×monto de su fila (cargo↔abono invertido) o si las banderas
+      // C/D son ambiguas (C = Cargo o C = Crédito): eso es un mapa al revés.
+      // (Que la mayoría de los saltos sea ±2×monto: uno suelto puede ser un
+      // cargo faltante que por azar vale el doble — santander.xlsx real.)
+      const dobles = q.saltos.filter((x, i) => Math.abs(Math.abs(x) - 2 * (q.montosSalto[i] ?? 0)) <= TOLERANCIA_SELLO_PESOS).length;
+      const alReves = q.invertidaCuadra
+        || (q.saltos.length > 0 && dobles / q.saltos.length >= 0.8)
+        || banderasAmbiguas(rows, cfg, lines);
+      const soloAbonos = !alReves && lines.every((l) => l.tipo === "ENTRADA") && internos.every((x) => x < 0);
       return {
         tipo: "sin_comprobar",
         alerta: true,
-        ...(soloAbonos ? { filtrada: "abonos" as const } : soloCargos ? { filtrada: "cargos" as const } : {}),
-        detalle: `El saldo corrido no cierra: ${q.fallidas} de ${q.revisadas} filas no cuadran (¿cartola filtrada o incompleta?)`,
+        ...(soloAbonos ? { filtrada: "abonos" as const } : {}),
+        detalle: alReves
+          ? `El saldo corrido no cierra (${q.fallidas} de ${q.revisadas} filas) y todo indica columnas o banderas al revés (cargo↔abono): corrige las columnas`
+          : `El saldo corrido no cierra: ${q.fallidas} de ${q.revisadas} filas no cuadran (¿cartola filtrada o incompleta?)`,
       };
     }
     const cadena = q.sinSaldo === 0 && q.revisadas >= MIN_FILAS_SELLO && !q.invertidaCuadra;
     // PRIMERA fila (vuelta 2, P1): con saldo inicial (fila de arriba o resumen
     // impreso) se comprueba y el sello dice "todas"; sin él, el sello lo dice.
+    // Vuelta 3 (V3-3): con UNA columna de monto con signo, el saldo prueba que no
+    // faltan filas, NO la convención del signo (en una tarjeta de crédito la
+    // deuda sube con la compra y la ecuación cierra igual). Sin un título que
+    // diga la dirección → sin sello pleno y se pide mirar.
+    if (cadena && layout === "monto_con_signo" && !tituloDiceDireccion(rows, cfg, cfg.columns.monto ?? -1)) {
+      return {
+        tipo: "sin_comprobar",
+        revisar: true,
+        detalle: "El saldo cuadra, pero nada en la cartola dice si el signo negativo es un cargo o un abono (¿tarjeta de crédito?): revisa cómo la leímos",
+      };
+    }
     if (cadena && q.primeraComprobada && q.revisadas === q.leidas) {
       return { tipo: "saldo", detalle: "El saldo corrido cuadra al peso en todas las filas, desde el saldo inicial" };
     }
@@ -402,9 +453,11 @@ export function sellarCartola(args: {
           detalle: "La primera fila deja el saldo inicial en $0 (su monto es su propio saldo): ¿es el saldo anterior y no un movimiento?",
         };
       }
+      // Vuelta 3: la primera sin comprobar → nunca sello pleno; "así la leímos".
       return {
-        tipo: "saldo",
-        detalle: `El saldo corrido cuadra al peso en ${q.revisadas} de ${q.leidas} filas; la primera no se puede comprobar (la cartola no trae saldo inicial)`,
+        tipo: "sin_comprobar",
+        revisar: true,
+        detalle: `El saldo corrido cuadra al peso en ${q.revisadas} de ${q.leidas} filas; la primera no se puede comprobar (la cartola no trae saldo inicial): revisa cómo la leímos`,
       };
     }
   }

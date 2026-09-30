@@ -39,7 +39,7 @@ const fch = (d: number) => `${String(d).padStart(2, "0")}/09/2026`;
 
 describe("glosa partida en 2 filas", () => {
   function cartola(conDoc: boolean): { filas: Celda[][]; n: number } {
-    const filas: Celda[][] = [["Banco Genérico"], [], ["Fecha", "Descripción", "N° Documento", "Cargos", "Abonos", "Saldo"]];
+    const filas: Celda[][] = [["Banco Genérico"], [], ["Fecha", "Descripción", "N° Documento", "Cargos", "Abonos", "Saldo"], ["", "Saldo anterior", "", null, null, 2_000_000]];
     let s = 2_000_000;
     for (let i = 0; i < 26; i++) {
       const entrada = i % 2 === 0; const m = 5_000 + i * 1_000; s += entrada ? m : -m;

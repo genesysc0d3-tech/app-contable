@@ -60,7 +60,7 @@ function sellar(rows: Row[], cfg: AdapterConfig) {
 
 describe("sello 'saldo' estricto (al peso, 100% de las filas)", () => {
   const movs = cuentaGrande();
-  const rows: Row[] = [["Fecha", "Glosa", "Monto A", "Monto B", "Saldo"],
+  const rows: Row[] = [["Fecha", "Glosa", "Monto A", "Monto B", "Saldo"], ["", "Saldo anterior", "", "", cl(50_000_000)],
     ...movs.map((x) => [fch(x.dia), `Mov ${x.dia}`, x.esCargo ? cl(x.m) : "", x.esCargo ? "" : cl(x.m), cl(x.saldo)] as Row)];
 
   it("ADV2-1: cargo↔abono INVERTIDOS con saldo alto jamás se sellan", () => {
@@ -74,7 +74,7 @@ describe("sello 'saldo' estricto (al peso, 100% de las filas)", () => {
   });
 
   it("ADV2-1b: vía orquestador con títulos neutros elige la orientación que cierra AL PESO y no nace global", async () => {
-    const filas: Celda[][] = [["Fecha", "Glosa", "Monto 1", "Monto 2", "Saldo"],
+    const filas: Celda[][] = [["Fecha", "Glosa", "Monto 1", "Monto 2", "Saldo"], ["", "Saldo anterior", "", "", cl(50_000_000)],
       ...movs.map((x) => [fch(x.dia), x.esCargo ? `Pago prov ${x.dia}` : `Transf recibida ${x.dia}`,
         x.esCargo ? "" : cl(x.m), x.esCargo ? cl(x.m) : "", cl(x.saldo)])];
     const r = await parsear(libro([{ nombre: "Cartola", filas }]));

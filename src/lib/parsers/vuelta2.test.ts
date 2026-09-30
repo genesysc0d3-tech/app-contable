@@ -150,10 +150,11 @@ describe("P1 (BLOQUEANTE): la PRIMERA fila también se comprueba", () => {
     expect(sello.tipo).toBe("saldo");
     expect(sello.detalle).toMatch(/todas/);
   });
-  it("sin saldo inicial conocido, el sello NO dice 'todas las filas'", () => {
+  // Vuelta 3: la primera sin comprobar → nunca sello pleno (sin_comprobar, "así la leímos").
+  it("sin saldo inicial conocido, NO hay sello pleno y se dice por qué", () => {
     const rows: Row[] = [["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"], ...movs(1_000_000)];
     const { sello } = sellar(rows);
-    expect(sello.tipo).toBe("saldo");
+    expect(sello.tipo).toBe("sin_comprobar");
     expect(sello.detalle).not.toMatch(/todas/);
     expect(sello.detalle).toMatch(/primera/);
   });
@@ -191,7 +192,7 @@ describe("N4/P3: filtrada y orden dentro del día", () => {
       for (let k = 0; k < 4; k++) { const c = (d + k) % 3 === 0; const m = 10_000 + d * 100 + k * 7; s += c ? -m : m; dia.push([fch(d), `Mov ${d}-${k}`, c ? cl(m) : "", c ? "" : cl(m), cl(s)]); }
       porDia.push(dia.reverse());
     }
-    const { sello } = sellar([["Fecha", "Glosa", "Cargos", "Abonos", "Saldo"], ...porDia.flat()]);
+    const { sello } = sellar([["Fecha", "Glosa", "Cargos", "Abonos", "Saldo"], ["", "Saldo anterior", "", "", cl(5_000_000)], ...porDia.flat()]);
     expect(sello.alerta).toBeFalsy();
     expect(sello.tipo).toBe("saldo");
   });
@@ -245,6 +246,7 @@ describe("N5/P5: CSV UTF-16, monto con signo y meses en texto", () => {
     const r = await parsear(libro(filas));
     expect(r.capa_usada).not.toBe(4);
     expect(r.preExtracted?.filter((p) => p.tipo_flujo === "salida")).toHaveLength(4);
-    expect(r.verificacion?.tipo).toBe("saldo");
+    // Vuelta 3 (V3-3): "Monto" no dice la convención del signo → sin sello pleno.
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
   });
 });
