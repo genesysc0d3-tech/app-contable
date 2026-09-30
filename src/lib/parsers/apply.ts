@@ -1,5 +1,6 @@
 import type { AdapterConfig, DescarteFila, ParsedLine, PreExtractedMovimiento, Row } from "./types";
 import { LectorMontos, leerCeldaMonto, lecturaLaxa, valorCeldaSuelta } from "./numeros";
+import { cellEsFecha, esColumnaDeCodigos, esSerieCorrelativa } from "./celdas";
 
 /**
  * Monto de UNA celda, sin contexto de columna: "1.600.000", "250,000",
@@ -233,6 +234,12 @@ function celdaCruda(v: unknown): string | null {
 }
 
 export const RESUMEN_RE = /\b(sub\s*total|total(es)?|saldo\s+(inicial|final|anterior|disponible|contable)|resumen)\b/i;
+/**
+ * Frases que NINGUNA glosa de movimiento real usa ("SALDO INICIAL", "RESUMEN
+ * DEL PERIODO"): marcan una fila de saldos aunque traiga fecha. "TOTAL" no está
+ * acá: "PAGO TOTAL TARJETA" es un movimiento.
+ */
+const SALDO_O_RESUMEN_RE = /\bsaldo\s+(inicial|final|anterior|disponible|contable)\b|\bresumen\b/i;
 
 /** Plata de la fila según las columnas del mapeo (0 si no trae monto). */
 function montoEnFila(
@@ -351,6 +358,7 @@ export function applyAdapter(
   // glosa "PAGO TOTAL TARJETA" con fecha es un movimiento: antes prendía el
   // bloque para todo lo que seguía y las pérdidas de abajo salían "legítimas".
   let bloqueResumen = false;
+  const filasResumen = new Set<number>();
 
   for (let i = start; i < rows.length; i++) {
     const r = rows[i];
@@ -361,12 +369,16 @@ export function applyAdapter(
     if (conFecha) bloqueResumen = false;
     const palabraFueraDeGlosa = r.some((v, j) => j !== c.descripcion && typeof v === "string" && RESUMEN_RE.test(v));
     const palabraEnGlosa = typeof r[c.descripcion] === "string" && RESUMEN_RE.test(String(r[c.descripcion]));
+    const saldoEnGlosa = typeof r[c.descripcion] === "string" && SALDO_O_RESUMEN_RE.test(String(r[c.descripcion]));
     const filaResumen =
       opts.filasFormula?.has(i) === true ||
       palabraFueraDeGlosa ||
+      saldoEnGlosa ||
       (!conFecha && palabraEnGlosa);
+    if (filaResumen) filasResumen.add(i);
     if (filaResumen && !conFecha) bloqueResumen = true;
     const resumen = filaResumen || (bloqueResumen && !conFecha);
+    if (resumen) filasResumen.add(i);
 
     // Censo: una fila con plata que no termina en movimiento se anota con su
     // motivo. Antes cada `continue` de abajo la botaba en silencio (incidente
@@ -460,8 +472,80 @@ export function applyAdapter(
     });
   }
 
-  if (descartes) marcarFilasDeTotales(lines, descartes);
+  if (descartes) {
+    marcarFilasDeTotales(lines, descartes);
+    censoIndependiente(rows, cfg, lines, descartes, filasResumen);
+  }
   return lines;
+}
+
+/**
+ * CENSO INDEPENDIENTE DEL MAPEO (punto 3, 2026-09-30). El censo de arriba cuenta
+ * con los mismos ojos con que leyó (las columnas del mapa): si el banco inserta
+ * una columna, la plata que quedó fuera del mapa no se ve. Este segundo censo NO
+ * mira el mapa: toda fila de la región de datos con ALGUNA fecha y ALGUNA plata
+ * (en cualquier columna que no sea fecha, saldo, N° de documento o un código)
+ * tiene que haber terminado en movimiento o en descarte explicado. Si no, queda
+ * como sospecha `sin_leer` (no legítima → el cuadre la muestra). Nunca silencio.
+ */
+function censoIndependiente(
+  rows: Row[],
+  cfg: AdapterConfig,
+  lines: ParsedLine[],
+  descartes: DescarteFila[],
+  filasResumen: Set<number>,
+): void {
+  const c = cfg.columns;
+  const start = cfg.skip_rows_before_data;
+  const vistas = new Set<number>([
+    ...lines.map((l) => (l.excel_row ?? 0) - 1),
+    ...descartes.map((d) => d.excel_row - 1),
+  ]);
+  const ncols = rows.slice(start).reduce((m, r) => Math.max(m, r?.length ?? 0), 0);
+  const noPlata = new Set<number>([c.fecha, c.saldo, c.n_documento].filter((x) => x != null && x >= 0));
+  for (let col = 0; col < ncols; col++) {
+    if (noPlata.has(col)) continue;
+    const celdas = rows.slice(start).map((r) => r?.[col]);
+    const nums = celdas.map((v) => {
+      const l = leerCeldaMonto(v);
+      return l ? valorCeldaSuelta(l) : NaN;
+    }).filter((x) => Number.isFinite(x) && x !== 0);
+    if (esColumnaDeCodigos(celdas) || esSerieCorrelativa(nums)) noPlata.add(col);
+  }
+  const lector = new LectorMontos(rows as unknown[][], start, cfg.number_format === "generic" ? "generic" : "chilean");
+  for (let i = start; i < rows.length; i++) {
+    if (vistas.has(i)) continue;
+    const r = rows[i];
+    if (!r || r.length === 0) continue;
+    const conFecha = r.some((v) => cellEsFecha(v as never));
+    if (!conFecha) continue;
+    let plata = 0;
+    r.forEach((v, j) => {
+      if (noPlata.has(j) || v == null || v === "" || v instanceof Date) return;
+      if (typeof v === "number" && ((cellEsFecha(v) && j === c.fecha) || Math.abs(v) < 1)) return; // fecha serial u hora (fracción de día)
+      if (typeof v !== "number" && !leerCeldaMonto(v)) return;
+      const m = lector.leer(r, j);
+      const val = m.ambiguo ? (m.referencia ?? 0) : Math.abs(m.valor);
+      if (val > plata) plata = val;
+    });
+    if (!plata) continue;
+    const resumen = filasResumen.has(i) || r.some((v) => typeof v === "string" && SALDO_O_RESUMEN_RE.test(v));
+    const fechaCelda = r[c.fecha];
+    const fecha = fechaCelda instanceof Date && !Number.isNaN(fechaCelda.getTime())
+      ? `${fechaCelda.getFullYear()}-${String(fechaCelda.getMonth() + 1).padStart(2, "0")}-${String(fechaCelda.getDate()).padStart(2, "0")}`
+      : (() => { const f = parseFechaCartola(String(fechaCelda ?? ""), cfg.date_format); return f.ok ? f.iso : null; })();
+    descartes.push({
+      excel_row: i + 1,
+      motivo: resumen ? "resumen" : "sin_leer",
+      legitimo: resumen,
+      fecha,
+      monto: plata,
+      tipo_flujo: null,
+      descripcion: String(r[c.descripcion] ?? "").trim(),
+      fecha_cruda: celdaCruda(fechaCelda),
+    });
+  }
+  descartes.sort((a, b) => a.excel_row - b.excel_row);
 }
 
 /** Qué sumas de lo leído calzaron con una fila de totales del banco. */

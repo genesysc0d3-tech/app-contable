@@ -2,6 +2,7 @@ import type { AdapterConfig, Row } from "./types";
 import { parseChileanNumber } from "./apply";
 import { cuadreSaldo } from "./saldo-cuadre";
 import { derivarNumberFormat } from "./numeros";
+import { cellEsFecha, esColumnaDeCodigos, esSerieCorrelativa } from "./celdas";
 import { encabezadoConSaldo, encabezadoConSalidas, normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
 
 /**
@@ -15,39 +16,9 @@ import { encabezadoConSaldo, encabezadoConSalidas, normalizarTitulo, RE_ENTRADA,
  * Returns null if no plausible cartola structure is detected. The caller
  * should then fall back to the next layer.
  */
-/**
- * ¿La celda parece una fecha? Cubre las TRES formas en que llega una fecha
- * desde XLSX (cellDates:true): Date nativo, serial de Excel (rango 2000-2099,
- * mismo criterio que apply.ts), o texto dd/mm/yyyy · yyyy-mm-dd. Antes solo
- * se aceptaba texto → una planilla con fechas REALES de Excel (el caso normal
- * de una planilla casera) era invisible para todos los detectores y caía a
- * la capa legacy → IA (bug cazado con la planilla M&E 2026-08-22).
- */
-export function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
-  if (cell == null) return false;
-  if (cell instanceof Date) return !Number.isNaN(cell.getTime());
-  if (typeof cell === "number") return cell >= 36526 && cell <= 73050;
-  const s = String(cell).trim();
-  if (!s) return false;
-  if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
-  // Date ya serializado a string (p.ej. "2026-08-08 00:00:00" o ISO)
-  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(s)) return true;
-  // BancoEstado (incidente 2026-09-23): "20260923" en la cartola y "02/09" (sin
-  // año) en la hoja Movimientos. Sin esto la hoja no parecía cartola y caía a la
-  // IA, que inventaba la glosa y clasificaba por giro. Ventana de año acotada
-  // para no confundir un N° de cuenta de 8 dígitos con una fecha.
-  const m8 = s.match(/^(20\d{2})(\d{2})(\d{2})$/);
-  if (m8) {
-    const y = parseInt(m8[1], 10); const mm = parseInt(m8[2], 10); const dd = parseInt(m8[3], 10);
-    return y >= 2015 && y <= new Date().getFullYear() + 1 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
-  }
-  const mSinAnio = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
-  if (mSinAnio) {
-    const dd = parseInt(mSinAnio[1], 10); const mm = parseInt(mSinAnio[2], 10);
-    return dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12;
-  }
-  return false;
-}
+// cellEsFecha vive en celdas.ts (lo usan también el lector y el censo); se
+// re-exporta acá porque validator y tests lo importan desde heuristic.
+export { cellEsFecha } from "./celdas";
 
 export function detectHeuristic(rows: Row[]): AdapterConfig | null {
   const cfg = detectHeuristicSinFormato(rows);
