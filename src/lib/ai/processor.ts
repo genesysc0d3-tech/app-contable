@@ -28,6 +28,7 @@ import {
   type ClasificacionRegla,
 } from "./classifier";
 import { recordOpsEvent } from "../ops/events";
+import { esErrorCandadoBD, revisarBloqueoDocumento } from "../emission/bloqueo-borrado";
 import {
   construirResumenClasificacion, construirPromptVeredicto, parseVeredicto,
   aplicarVeredictoEnSitio, VEREDICTO_SYSTEM_PROMPT, type VeredictoPersistido,
@@ -411,7 +412,8 @@ async function insertInBatches<T extends Record<string, unknown>>(
  * limpiamos lo que este mismo documento ya haya dejado.
  *
  * GUARDA DE PLATA: si alguna propuesta previa del documento ya tiene una boleta
- * emitida (propuesta_id, ON DELETE SET NULL), NO limpiamos —borrarla orfanaría un
+ * emitida, un job de emisión abierto o una lápida (propuesta_id, ON DELETE SET
+ * NULL), NO limpiamos —borrarla orfanaría un
  * folio real del SII. Eso no debería pasar (los guardas de deshacer/emitir lo
  * bloquean antes), pero si ocurre se aborta el reproceso en vez de corromper.
  */
@@ -419,30 +421,29 @@ async function limpiarInsercionesPrevias(
   documentoId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = getServiceClient();
-  const { data: movsPrevios } = await supabase
+  const { data: movsPrevios, error: movErr } = await supabase
     .from("movimientos_raw")
     .select("id")
     .eq("documento_id", documentoId);
+  // Fail-closed (doble candado 2026-09-30): si no se puede leer, no se limpia NI se
+  // reinserta (reinsertar sin limpiar duplicaría filas).
+  if (movErr) return { ok: false, error: "REPROCESO_REVISION_FALLO" };
   const movIds = (movsPrevios ?? []).map((m) => m.id);
   if (movIds.length === 0) return { ok: true };
 
-  const { data: propsPrevias } = await supabase
-    .from("propuestas_ia")
-    .select("id")
-    .in("movimiento_id", movIds);
-  const propIds = (propsPrevias ?? []).map((p) => p.id);
-
-  if (propIds.length > 0) {
-    const { count } = await supabase
-      .from("boletas_emitidas")
-      .select("id", { count: "exact", head: true })
-      .in("propuesta_id", propIds);
-    if ((count ?? 0) > 0) {
-      return { ok: false, error: "REPROCESO_CON_BOLETA_EMITIDA" };
-    }
-    await supabase.from("propuestas_ia").delete().in("movimiento_id", movIds);
+  // Mismo candado 1 que deshacer/eliminar: boletas no anuladas + jobs abiertos o
+  // lápidas, en trozos de 100 y sin tragarse errores.
+  const bloqueo = await revisarBloqueoDocumento(supabase, movIds);
+  if ("error" in bloqueo) return { ok: false, error: "REPROCESO_REVISION_FALLO" };
+  if (bloqueo.emitidas > 0 || bloqueo.emisionesAbiertas > 0) {
+    return { ok: false, error: "REPROCESO_CON_BOLETA_EMITIDA" };
   }
-  await supabase.from("movimientos_raw").delete().eq("documento_id", documentoId);
+  // Una sentencia: la cascada movimientos_raw → propuestas_ia es atómica y pasa
+  // por el trigger PROPUESTA_CON_EMISION (candado 2).
+  const { error: delErr } = await supabase.from("movimientos_raw").delete().eq("documento_id", documentoId);
+  if (delErr) {
+    return { ok: false, error: esErrorCandadoBD(delErr) ? "REPROCESO_CON_BOLETA_EMITIDA" : "REPROCESO_REVISION_FALLO" };
+  }
   return { ok: true };
 }
 
@@ -580,9 +581,12 @@ export async function procesarDocumento(
   // reintentos del job). Aborta si ya hay una boleta emitida colgando (ver helper).
   const limpieza = await limpiarInsercionesPrevias(documentoId);
   if (!limpieza.ok) {
+    const motivo = limpieza.error === "REPROCESO_CON_BOLETA_EMITIDA"
+      ? "No se puede reprocesar: el documento ya tiene boletas emitidas o una emisión a medias."
+      : "No pudimos revisar si hay boletas emitidas. No se borró nada; inténtalo de nuevo.";
     await supabase
       .from("documentos_subidos")
-      .update({ estado: "error", progreso_ia: { error: "No se puede reprocesar: el documento ya tiene boletas emitidas." } })
+      .update({ estado: "error", progreso_ia: { error: motivo } })
       .eq("id", documentoId);
     return { movimientos_total: 0, error: limpieza.error };
   }

@@ -9,6 +9,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
+import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
 import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 
 const BATCH_SIZE = 50;
@@ -64,6 +65,7 @@ const MENSAJE_INTOCABLE: Record<MotivoIntocable, string> = {
   sin_respuesta: "Esta boleta quedó sin respuesta del SII: verifícala en A medias antes de moverla.",
   en_vuelo: "Esta boleta se está emitiendo en este momento: espera a que termine.",
 };
+const MENSAJE_CANDADO_BD_PROPUESTA = "Esta boleta tiene una emisión registrada o a medias en el SII: no se puede borrar. No se borró nada.";
 async function bloqueoRetroceso(sb: Parameters<typeof clasificarIntocables>[0], empresaId: string, propuestaId: string): Promise<string | null> {
   const sep = await clasificarIntocables(sb, empresaId, [propuestaId]);
   if ("error" in sep) return sep.error;
@@ -975,7 +977,9 @@ export async function devolverAOmitidos(propuestaId: string) {
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
 
-  if (propErr) return { error: propErr.message };
+  // Candado 2 (trigger PROPUESTA_CON_EMISION): si una emisión arrancó entre el
+  // guard y el borrado, la base lo frena — mensaje humano, no el crudo de Postgres.
+  if (propErr) return { error: esErrorCandadoBD(propErr) ? MENSAJE_CANDADO_BD_PROPUESTA : propErr.message };
 
   await ctx.sb
     .from("movimientos_raw")

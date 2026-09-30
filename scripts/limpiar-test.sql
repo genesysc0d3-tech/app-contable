@@ -24,6 +24,8 @@
 --   boletas_emitidas SOLO cuando emision_proveedor = 'mock'.
 --
 -- NO SE BORRA AUTOMATICAMENTE
+--   propuestas con emision abierta o a medias (emision_jobs created/running/
+--   revision_pendiente): el trigger PROPUESTA_CON_EMISION las protege.
 --   boletas_emitidas con emision_proveedor <> 'mock' (sii_local/baseapi legacy)
 --   porque pueden tener folio/PDF real o evidencia de proveedor.
 --   Tambien se conserva su cadena de trazabilidad propuesta->movimiento->doc
@@ -128,13 +130,25 @@ DELETE FROM public.gastos;
 DELETE FROM public.documentos_tributarios;
 DELETE FROM public.boletas_emitidas WHERE emision_proveedor = 'mock';
 
--- Mantener propuestas/movimientos/docs/clientes que trazan boletas no-mock.
+-- Mantener propuestas/movimientos/docs/clientes que trazan boletas no-mock
+-- Y las que tienen una emision abierta o a medias (emision_jobs created/running/
+-- revision_pendiente): el folio pudo salir en el SII. Desde 2026-09-30 el trigger
+-- PROPUESTA_CON_EMISION (migracion 20260930120000) aborta TODO el script si se
+-- intenta borrar una de esas; por eso se excluyen aca en vez de usar el bypass.
+-- (Si de verdad son de prueba: resolver/cancelar esos jobs antes, o ver el bypass
+-- auditado massdte.permitir_borrado_emitidas en la migracion.)
 DELETE FROM public.propuestas_ia p
 WHERE NOT EXISTS (
   SELECT 1
   FROM public.boletas_emitidas b
   WHERE b.propuesta_id = p.id
     AND b.emision_proveedor <> 'mock'
+)
+AND NOT EXISTS (
+  SELECT 1
+  FROM public.emision_jobs j
+  WHERE j.propuesta_id = p.id
+    AND j.estado IN ('created', 'running', 'revision_pendiente')
 );
 
 DELETE FROM public.movimientos_raw m

@@ -6,12 +6,19 @@ import type { Database } from "@/lib/database.types";
 import { deleteFromR2 } from "@/lib/r2";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
+import {
+  esErrorCandadoBD,
+  MENSAJE_CANDADO_BD,
+  MENSAJE_NO_PUDIMOS_REVISAR,
+  revisarBloqueoDocumento,
+} from "@/lib/emission/bloqueo-borrado";
 
 // Elimina un documento COMPLETO de la mesa: archivo físico (R2/Supabase, incluido
 // el álbum Telegram), movimientos, propuestas y la fila. Es el hermano duro de
 // /api/deshacer-documento (que resetea a "subido" y conserva el archivo).
-// BARRERA FINAL intacta: si el documento tiene ≥1 boleta emitida en el SII
-// (folio real), NO se puede eliminar — igual que deshacer, se corrige vía soporte.
+// DOBLE CANDADO (2026-09-30): si el documento tiene ≥1 boleta emitida en el SII
+// (folio real) o una emisión abierta/lápida, NO se puede eliminar — candado 1 en
+// la app (fail-closed) y candado 2 en la base (trigger PROPUESTA_CON_EMISION).
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -94,47 +101,53 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: movimientos } = await svc
+  const { data: movimientos, error: movErr } = await svc
     .from("movimientos_raw")
     .select("id")
     .eq("documento_id", documento_id);
+  if (movErr) {
+    return NextResponse.json({ error: MENSAJE_NO_PUDIMOS_REVISAR }, { status: 503 });
+  }
 
   const movIds = (movimientos ?? []).map((m) => m.id);
-  let propIds: string[] = [];
 
+  // CANDADO 1 (fail-closed, doble candado 2026-09-30): con boletas emitidas en el
+  // SII, un job de emisión en vuelo o una LÁPIDA (a medias / sin respuesta) este
+  // documento está congelado — borrarlo orfanaría folios reales (propuesta_id →
+  // NULL) y re-subir la cartola podría emitir dos veces. Si CUALQUIER consulta
+  // falla, no se borra nada. En trozos de 100 (cartolas grandes = URL larga).
+  // CANDADO 2: el trigger PROPUESTA_CON_EMISION de la base, más abajo.
+  const bloqueo = await revisarBloqueoDocumento(svc, movIds);
+  if ("error" in bloqueo) {
+    console.error("[eliminar-documento] revisión de emitidas falló:", bloqueo.error);
+    return NextResponse.json({ error: MENSAJE_NO_PUDIMOS_REVISAR }, { status: 503 });
+  }
+  const propIds = bloqueo.propIds;
+  if (bloqueo.emitidas > 0) {
+    return NextResponse.json(
+      { error: `Este documento tiene ${bloqueo.emitidas} boleta(s) emitida(s) en el SII y no se puede eliminar. Para corregir o anular, escríbenos a soporte.` },
+      { status: 409 },
+    );
+  }
+  if (bloqueo.emisionesAbiertas > 0) {
+    return NextResponse.json(
+      { error: "Esta boleta tiene una emisión en curso o quedó a medias en el SII. Espera a que termine o recupera su folio antes de eliminar." },
+      { status: 409 },
+    );
+  }
+
+  // Movimientos ANTES que los archivos, en UNA sola sentencia: la cascada
+  // movimientos_raw → propuestas_ia es atómica y pasa por el trigger. Si el
+  // candado 2 salta (carrera: una emisión arrancó recién), la base revierte TODO y
+  // el archivo sigue intacto. Si después falla el borrado del archivo, el documento
+  // queda sin movimientos pero con su archivo y su fila: reintentar eliminar lo cierra.
   if (movIds.length > 0) {
-    // INTEGRIDAD TRIBUTARIA (mismo guard que deshacer): con boletas emitidas en
-    // el SII este documento está congelado — eliminar orfanaría folios reales.
-    const { data: props } = await svc.from("propuestas_ia").select("id").in("movimiento_id", movIds);
-    propIds = (props ?? []).map((p) => p.id);
-    if (propIds.length > 0) {
-      const { count } = await svc
-        .from("boletas_emitidas")
-        .select("id", { count: "exact", head: true })
-        .eq("empresa_id", usuario.empresa_id)
-        .neq("estado", "anulada")
-        .in("propuesta_id", propIds);
-      if ((count ?? 0) > 0) {
-        return NextResponse.json(
-          { error: `Este documento tiene ${count} boleta(s) emitida(s) en el SII y no se puede eliminar. Para corregir o anular, escríbenos a soporte.` },
-          { status: 409 },
-        );
+    const { error: movDelErr } = await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
+    if (movDelErr) {
+      if (esErrorCandadoBD(movDelErr)) {
+        return NextResponse.json({ error: MENSAJE_CANDADO_BD }, { status: 409 });
       }
-      // INTEGRIDAD DE FOLIO (mismo guard que deshacer): bloquear si hay un job de
-      // emisión EN VUELO ('created'/'running') o una LÁPIDA 'revision_pendiente'.
-      // Borrar la propuesta orfanaría la lápida (propuesta_id → NULL) y permitiría
-      // re-emitir un folio ya quemado, o registrar doble cuando el job aterrice.
-      const { count: jobsActivos } = await svc
-        .from("emision_jobs")
-        .select("job_id", { count: "exact", head: true })
-        .in("propuesta_id", propIds)
-        .in("estado", ["created", "running", "revision_pendiente"]);
-      if ((jobsActivos ?? 0) > 0) {
-        return NextResponse.json(
-          { error: "Esta boleta tiene una emisión en curso o quedó a medias en el SII. Espera a que termine o recupera su folio antes de eliminar." },
-          { status: 409 },
-        );
-      }
+      return NextResponse.json({ error: "No se pudo eliminar el documento. No se borró nada; inténtalo de nuevo." }, { status: 500 });
     }
   }
 
@@ -171,14 +184,13 @@ export async function POST(request: Request) {
   await svc.from("audit_chunks").delete().eq("documento_id", documento_id);
   await svc.from("parser_logs").delete().eq("documento_id", documento_id);
 
-  // Orden FK: propuestas → movimientos → ia_uso → fila del documento.
-  if (movIds.length > 0) {
-    await svc.from("propuestas_ia").delete().in("movimiento_id", movIds);
-    await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
-  }
+  // Propuestas y movimientos ya se fueron arriba (cascada). Queda ia_uso → fila.
   await svc.from("ia_uso").delete().eq("documento_id", documento_id);
   const { error: delErr } = await svc.from("documentos_subidos").delete().eq("id", documento_id);
   if (delErr) {
+    if (esErrorCandadoBD(delErr)) {
+      return NextResponse.json({ error: MENSAJE_CANDADO_BD }, { status: 409 });
+    }
     return NextResponse.json({ error: "No se pudo eliminar el documento. Intenta de nuevo." }, { status: 500 });
   }
 
