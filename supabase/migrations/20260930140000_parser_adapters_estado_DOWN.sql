@@ -1,4 +1,4 @@
--- Revierte 20260930120000_parser_adapters_estado.sql. DESTRUYE: qué mapas
+-- Revierte 20260930140000_parser_adapters_estado.sql. DESTRUYE: qué mapas
 -- estaban confirmados, por qué y cuándo (el código vuelve a tratarlos a todos
 -- como provisorios, fail-safe). La confianza rebajada a 0.7 NO se restaura (no
 -- se guardó el valor anterior): respaldar parser_adapters antes de aplicar la UP
