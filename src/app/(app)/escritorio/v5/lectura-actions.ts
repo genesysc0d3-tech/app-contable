@@ -9,8 +9,8 @@ import { validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { leerCuadre } from "@/lib/cartola/cuadre-mesa";
-import { saldoInicialParaConfirmar, sellarPorCliente, verificarSaldoCliente } from "@/lib/cartola/verificacion";
-import { adapterDelDocumento, confirmarAdapter } from "@/lib/parsers/adapter-store";
+import { mensajeSaldoNoCuadra, saldoInicialParaConfirmar, seVeBienPermitido, sellarPorCliente, verificarSaldoCliente } from "@/lib/cartola/verificacion";
+import { adapterDelDocumento, confirmarAdapter, promoverMapaGlobalSiHayConsenso } from "@/lib/parsers/adapter-store";
 
 export type ConfirmarLecturaInput =
   | { accion: "se_ve_bien" }
@@ -68,6 +68,10 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
   let detalle: string;
   let mensaje: string;
   if (input.accion === "se_ve_bien") {
+    // Con alerta, filas perdidas u otra hoja sin leer, 3 filas de muestra no
+    // prueban nada (adversarial-2 A2): el server lo rechaza aunque la UI falle.
+    const permitido = seVeBienPermitido(cuadre);
+    if (!permitido.ok) return { ok: false, error: permitido.motivo ?? "Esta lectura no se puede confirmar solo mirando la muestra" };
     detalle = "Revisaste la muestra y dijiste que se ve bien";
     mensaje = "Listo, quedó confirmada";
   } else {
@@ -90,12 +94,8 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
       return { ok: false, necesitaSaldoInicial: true, error: "Para comprobarlo necesitamos también el saldo con que partió el período" };
     }
     const r = verificarSaldoCliente({ saldoFinalCliente: saldoFinal, saldoInicial, abonos: cuadre.abonos, cargos: cuadre.cargos });
-    if (!r.ok) {
-      return {
-        ok: false,
-        error: `No cuadra: con lo que leímos, tu saldo final debería ser ${pesos(r.esperado)} (diferencia ${pesos(Math.abs(r.diferencia))}). Revisa las columnas o si falta alguna fila.`,
-      };
-    }
+    // Sin revelar el esperado (adversarial-2 A3): el cliente lo copiaría.
+    if (!r.ok) return { ok: false, error: mensajeSaldoNoCuadra() };
     const empalme = inicial.empalma === true ? " y empalma con tu cartola anterior" : "";
     detalle = `Tu saldo final del banco (${pesos(saldoFinal)}) cuadra con lo leído${empalme}`;
     mensaje = "¡Cuadra! Quedó confirmada";
@@ -121,7 +121,10 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
   // ajeno no lo confirma un cliente). Best-effort.
   try {
     const adapter = await adapterDelDocumento(sb, documentoId, empresaId);
-    if (adapter && adapter.estado === "provisorio") await confirmarAdapter(adapter.id, "cliente");
+    if (adapter && adapter.estado === "provisorio" && await confirmarAdapter(adapter.id, "cliente") && adapter.fingerprint && adapter.config) {
+      // Confirmación EXPLÍCITA del cliente: cuenta para el consenso (2+ empresas) que vuelve global el mapa.
+      await promoverMapaGlobalSiHayConsenso(adapter.fingerprint, adapter.config);
+    }
   } catch { /* el aprendizaje nunca rompe la confirmación */ }
 
   await recordCuentaAudit({
@@ -129,7 +132,7 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
     empresaId,
     usuarioId: user.id,
     accion: "cartola_lectura_confirmada",
-    recursoTipo: "documento",
+    recursoTipo: "documento_subido",
     recursoId: documentoId,
     // Sin glosas ni montos de terceros: solo cómo se confirmó.
     resumen: input.accion === "se_ve_bien" ? "Lectura de cartola confirmada mirando la muestra" : "Lectura de cartola confirmada con el saldo final del banco",

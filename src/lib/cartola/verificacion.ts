@@ -32,6 +32,28 @@ export function necesitaConfirmacion(c: Partial<ConSello>): boolean {
   return !!c.mapa && c.mapa.nuevo === true && c.mapa.estado === "provisorio";
 }
 
+/**
+ * ¿Se puede sellar "cliente" con "Se ve bien"? (adversarial-2 A2) 3 filas de
+ * muestra no juzgan "faltan 12 filas" ni "el total del banco no calza": con una
+ * ALERTA, filas perdidas u otra hoja sin leer, "Se ve bien" no sella. Ahí vale
+ * "Corregir columnas" o el saldo final del banco. La UI lo esconde y el server
+ * lo rechaza con esta misma regla.
+ */
+export function seVeBienPermitido(c: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos">): { ok: boolean; motivo?: string } {
+  if (c.verificacion?.alerta) return { ok: false, motivo: "Algo no calza en la lectura: corrige las columnas o comprueba con el saldo final de tu banco" };
+  if ((c.perdidas ?? []).some((p) => !p.agregada)) return { ok: false, motivo: "Hay filas con plata que no se leyeron: revísalas antes de confirmar" };
+  if ((c.otras_hojas_con_datos ?? []).length) return { ok: false, motivo: "Otra hoja del archivo trae movimientos que no se leyeron" };
+  return { ok: true };
+}
+
+/**
+ * "No cuadra" SIN revelar el saldo esperado (adversarial-2 A3): si le decimos el
+ * número, el cliente lo copia y el sello "cliente" queda de goma.
+ */
+export function mensajeSaldoNoCuadra(): string {
+  return "No coincide con lo que leímos. Revisa que el saldo sea el del cierre de este período, las columnas o si falta alguna fila.";
+}
+
 export function verificarSaldoCliente(a: {
   saldoFinalCliente: number;
   saldoInicial: number;
@@ -76,6 +98,8 @@ export function saldoInicialParaConfirmar(
 
 /**
  * ¿Aprobar en Check confirma el mapa? (punto 7c, juez implícito: paperless
+ * "salió del inbox", Rossum "confirmado"). SOLO aprobando FILA A FILA: "Aprobar
+ * cartola" en bloque no es mirar (revisar/actions.ts ya no la llama ahí).
  * "salió del inbox", Rossum "confirmado"). Sí solo si: todo lo de la cartola ya
  * está decidido (nada pendiente/editado/listo), hay al menos 3 filas decididas
  * (con al menos una aprobada) y lo
@@ -86,8 +110,11 @@ export function checkConfirmaMapa(a: {
   guardado: { n: number; entradas: number; salidas: number } | null | undefined;
   movimientos: { monto: number | string | null; tipo_flujo: string | null }[];
   estados: string[];
+  /** El cuadre de la cartola: con alerta o pérdidas, aprobar NO confirma el mapa (adversarial-2 A4). */
+  cuadre?: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos"> | null;
 }): boolean {
   if (!a.guardado) return false;
+  if (a.cuadre && !seVeBienPermitido(a.cuadre).ok) return false;
   if (a.estados.some((e) => e === "pendiente" || e === "editado" || e === "listo")) return false;
   // Decidido = aprobado (va a boleta) o rechazado (una salida/gasto): el cliente
   // miró la fila y aceptó cómo quedó leída. Al menos 3 filas y 1 aprobada.

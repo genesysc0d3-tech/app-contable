@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { fechaIsoValida } from "@/lib/cartola/cuadre-mesa";
+import { seVeBienPermitido } from "@/lib/cartola/verificacion";
 import type { CuadreCartola } from "@/lib/cartola/cuadre";
 import { fmt } from "./revisar-shared";
 import { confirmarLecturaCartola } from "./lectura-actions";
@@ -47,6 +48,8 @@ export default function LecturaMuestra({ documentoId, cuadre, onCorregirColumnas
   const [error, setError] = useState<string | null>(null);
   const muestra = cuadre.muestra ?? [];
   const alerta = cuadre.verificacion?.alerta === true;
+  // Con alerta o filas perdidas, 3 filas de muestra no prueban nada: sin "Se ve bien".
+  const puedeSeVeBien = seVeBienPermitido(cuadre).ok;
   const cambio = cuadre.mapa?.cambio_formato;
 
   const enviar = async (input: Parameters<typeof confirmarLecturaCartola>[1]) => {
@@ -110,9 +113,11 @@ export default function LecturaMuestra({ documentoId, cuadre, onCorregirColumnas
       )}
 
       <div style={{ marginTop: "0.55em", display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <button onClick={() => void enviar({ accion: "se_ve_bien" })} disabled={ocupado} style={{ ...boton(true), opacity: ocupado ? 0.6 : 1 }}>
-          Se ve bien
-        </button>
+        {puedeSeVeBien && (
+          <button onClick={() => void enviar({ accion: "se_ve_bien" })} disabled={ocupado} style={{ ...boton(true), opacity: ocupado ? 0.6 : 1 }}>
+            Se ve bien
+          </button>
+        )}
         {onCorregirColumnas && (
           <button onClick={onCorregirColumnas} disabled={ocupado} style={boton(false)}>
             Corregir columnas

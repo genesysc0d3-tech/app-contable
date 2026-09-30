@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Json } from "@/lib/database.types";
-import { adapterDelDocumento, confirmarAdapter } from "@/lib/parsers/adapter-store";
+import { adapterDelDocumento, confirmarAdapter, promoverMapaGlobalSiHayConsenso } from "@/lib/parsers/adapter-store";
 import { leerCuadre } from "./cuadre-mesa";
 import { checkConfirmaMapa } from "./verificacion";
 
 /**
- * JUEZ IMPLÍCITO DEL CHECK (punto 7c, 2026-09-30). La cadena
+ * JUEZ IMPLÍCITO DEL CHECK (punto 7c, 2026-09-30). Se llama al aprobar FILA A
+ * FILA (aprobarPropuesta), nunca desde "Aprobar cartola" en bloque, y no
+ * confirma si la cartola tiene alerta o filas perdidas. La cadena
  * parser_logs(documento → adapter) → movimientos_raw → propuestas_ia ya existe:
  * si el cliente decidió en Check TODO lo de una cartola y lo guardado sigue
  * exacto a como el lector lo dejó (nadie editó un monto ni una dirección), el
@@ -41,6 +43,7 @@ export async function confirmarMapaPorCheck(
     .eq("empresa_id", empresaId)
     .eq("movimientos_raw.documento_id", documentoId);
   const ok = checkConfirmaMapa({
+    cuadre,
     guardado: cuadre.guardado,
     movimientos: (movs ?? []) as { monto: number; tipo_flujo: string }[],
     estados: ((props ?? []) as { estado: string }[]).map((p) => p.estado),
@@ -51,6 +54,7 @@ export async function confirmarMapaPorCheck(
   if (!adapter || adapter.estado === "confirmado") return false;
   const confirmado = await confirmarAdapter(adapter.id, "check");
   if (!confirmado) return false; // columna sin migrar: queda provisorio (fail-safe)
+  if (adapter.fingerprint && adapter.config) await promoverMapaGlobalSiHayConsenso(adapter.fingerprint, adapter.config);
 
   // Releer justo antes de escribir para no pisar otros campos de progreso_ia.
   const { data: fresco } = await sb

@@ -36,6 +36,15 @@ describe("LecturaMuestra", () => {
     expect(html).not.toMatch(/#[0-9a-f]{6}/i);
   });
 
+  it("con ALERTA (el banco o el saldo contradicen la lectura) no ofrece 'Se ve bien' (adversarial-2 A2)", async () => {
+    const { default: LecturaMuestra } = await import("./LecturaMuestra");
+    const conAlerta: CuadreCartola = { ...cuadre, verificacion: { tipo: "sin_comprobar", alerta: true, detalle: "El banco no calza" } };
+    const html = renderToStaticMarkup(createElement(LecturaMuestra, { documentoId: "d1", cuadre: conAlerta, onCorregirColumnas: () => {} }));
+    expect(html).not.toContain("Se ve bien");
+    expect(html).toContain("Corregir columnas");
+    expect(html).toContain("Saldo final en tu portal del banco");
+  });
+
   it("sin mapeador disponible no ofrece 'Corregir columnas'", async () => {
     const { default: LecturaMuestra } = await import("./LecturaMuestra");
     const html = renderToStaticMarkup(createElement(LecturaMuestra, { documentoId: "d1", cuadre }));

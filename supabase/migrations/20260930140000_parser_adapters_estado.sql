@@ -26,20 +26,29 @@ alter table public.parser_adapters
   drop constraint if exists parser_adapters_confirmado_por_check;
 alter table public.parser_adapters
   add constraint parser_adapters_confirmado_por_check
-  check (confirmado_por is null or confirmado_por in ('saldo', 'total_banco', 'cliente', 'check', 'manual', 'plantilla'));
+  check (confirmado_por is null or confirmado_por in ('saldo', 'total_banco', 'cliente', 'check', 'manual', 'plantilla', 'consenso'));
 
 comment on column public.parser_adapters.estado is
   'provisorio = derivado sin prueba (no se comparte entre empresas, no sube confianza por reuso); confirmado = probado por saldo/total del banco o confirmado por el cliente.';
 comment on column public.parser_adapters.confirmado_por is
-  'Qué lo confirmó: saldo | total_banco | cliente | check | manual | plantilla.';
+  'Qué lo confirmó: saldo | total_banco | cliente | check | manual | plantilla | consenso (global: 2+ empresas confirmaron el mismo mapa).';
 
 -- Backfill. Solo lo que SABEMOS que fue confirmado por una persona o es nuestro:
 --   * manual (el cliente mapeó a mano)            → confirmado / manual
 --   * plantilla massDTE (config.plantilla = true)  → confirmado / plantilla
 -- Todo lo demás (heurísticos/nombres, incluidos los globales viejos: no hay forma
 -- de saber cuáles cuadraron por saldo al nacer) queda provisorio con confianza
--- bajo la de un manual. Se re-confirman solos la próxima vez que una lectura
--- traiga prueba.
+-- bajo la de un manual.
+--
+-- QUÉ PASA CON LAS CLIENTAS EL PRIMER DÍA (revisión adversarial 2026-09-30, M3):
+-- un global provisorio NO se usa para ninguna empresa (el código solo comparte
+-- globales confirmados) y NO se re-confirma solo (nunca vuelve a pasar por el
+-- caché): queda muerto en la tabla, sin borrarse. Cada clienta sin mapa propio
+-- re-deriva su formato con la heurística actual en su próxima subida (la misma
+-- lectura determinística, milisegundos) y ese mapa queda como SUYO: confirmado
+-- si el saldo cierra al peso o el banco calza, provisorio si no. Un global nuevo
+-- solo nace por CONSENSO (2+ empresas confirmaron el mismo mapa). Los manuales
+-- ya eran de su empresa y quedan confirmados.
 update public.parser_adapters
    set estado = 'confirmado', confirmado_por = 'manual', confirmado_en = now()
  where source = 'manual' and estado = 'provisorio';
