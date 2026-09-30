@@ -500,6 +500,17 @@ export function applyAdapter(
         filaAnterior = i;
         continue;
       }
+      // Fecha fuera de rango SIN plata en las columnas del mapa: puede ser un
+      // MONTO que quedó en la columna fecha (50.920 se lee como un serial de
+      // 2039). Batería de sellos falsos 2026-09-30: la fila desaparecía callada.
+      // Al censo con ese número como monto, nunca en silencio.
+      const celdaF = r[c.fecha] as unknown;
+      if (!plata.monto && !resumen && descartes && fecha.motivo === "fecha_fuera_de_rango" && (typeof celdaF === "number" || celdaF instanceof Date)) {
+        const serial = typeof celdaF === "number" ? Math.round(celdaF)
+          : Math.round((Date.UTC(celdaF.getFullYear(), celdaF.getMonth(), celdaF.getDate()) - Date.UTC(1899, 11, 30)) / 86_400_000);
+        descartes.push({ excel_row: i + 1, motivo: "fecha_fuera_de_rango", legitimo: false, fecha: fecha.iso, monto: serial, tipo_flujo: null, descripcion: glosa.trim(), fecha_cruda: celdaCruda(celdaF) });
+        continue;
+      }
       descartar(fecha.motivo, fecha.iso, null);
       continue;
     }

@@ -266,3 +266,15 @@ describe("resumen del banco en OTRA hoja del libro", () => {
     expect(r.verificacion?.tipo).toBe("cliente");
   });
 });
+
+describe("un monto corrido a la columna FECHA no desaparece callado", () => {
+  it("fecha serial de Excel reemplazada por un monto (50.920 = año 2039) y sin monto: sin sello", async () => {
+    const filas: Celda[][] = [["Glosa", "Monto", "Fecha"]];
+    for (let d = 1; d <= 12; d++) filas.push([`Venta ${d}`, 10_000 + d * 137, 46_265 + d]);
+    filas[6] = ["Venta 6", null, 50_920];
+    const r = await parsear(libro(filas, (ws) => { for (let i = 2; i <= 13; i++) if (ws[`C${i}`]) ws[`C${i}`].z = "dd/mm/yyyy"; }));
+    expect(r.plantilla).toBe(true);
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
+    expect(r.verificacion?.alerta).toBe(true);
+  });
+});
