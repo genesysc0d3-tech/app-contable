@@ -9,7 +9,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
-import { clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
+import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 
 const BATCH_SIZE = 50;
 
@@ -191,7 +191,7 @@ export async function restaurarPropuesta(propuestaId: string) {
  */
 export async function rechazarPropuestas(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
@@ -218,7 +218,7 @@ export async function rechazarPropuestas(
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: marcadas };
+  return { ok: true, count: marcadas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 /**
@@ -243,7 +243,7 @@ export async function cambiarTipoPropuestas(
   propuestaIds: string[],
   destino: "afecta" | "exenta",
   mesa: "boleta" | "factura" = "boleta",
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
@@ -352,7 +352,7 @@ export async function cambiarTipoPropuestas(
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: cambiadas };
+  return { ok: true, count: cambiadas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 export async function rechazarPropuesta(propuestaId: string) {
@@ -678,7 +678,7 @@ export async function editarGlosaEmitible(
 // Guard: solo desde 'listo' (jamás degrada aprobadas ni resucita juzgadas acá).
 export async function volverAPendientes(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
@@ -701,7 +701,7 @@ export async function volverAPendientes(
   }
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: devueltas };
+  return { ok: true, count: devueltas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 // Restaurar EN GRUPO (pedido fundador 2026-09-02): en Juzgadas se pueden
@@ -710,7 +710,7 @@ export async function volverAPendientes(
 // ni degrada aprobadas).
 export async function restaurarPropuestas(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
@@ -733,7 +733,7 @@ export async function restaurarPropuestas(
   }
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: restauradas };
+  return { ok: true, count: restauradas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 // Devolver cartola (espejo de aprobarCartola, pedido fundador 2026-09-01): desde

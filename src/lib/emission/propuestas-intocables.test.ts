@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { clasificarStartJob } from "./clasificar-start-job";
 import {
+  avisoSeQuedan,
   clasificarIntocables,
   contarIntocables,
   motivoJobIntocable,
@@ -169,4 +171,32 @@ describe("acciones de retroceso respetan lo emitido (fuente)", () => {
       expect(trasGuard).not.toMatch(/propuestaIds/);
     },
   );
+});
+
+// Revisión adversarial: "devolver" con un lote corriendo y el conector MCP.
+describe("cierres de la revisión adversarial", () => {
+  it("el server solo crea jobs de lote para propuestas APROBADAS (salvo verificación)", () => {
+    const src = readFileSync(join(__dirname, "../../app/api/emision/jobs/route.ts"), "utf8");
+    expect(src).toMatch(/\.select\("id, empresa_id, estado"\)/);
+    expect(src).toMatch(/!cleanText\(payload\.adopta_job_id\) && \(prop as \{ estado\?: string \| null \}\)\.estado !== "aprobado"/);
+    expect(src).toMatch(/error: "PROPUESTA_NO_APROBADA"/);
+  });
+  it("el lote se FRENA (no marca fallida) si la cartola volvió a Check", () => {
+    expect(clasificarStartJob(409, { ok: false, error: "PROPUESTA_NO_APROBADA" }).tipo).toBe("frenada");
+  });
+  it("MCP devolver_a_revision pasa por el guard antes del update", () => {
+    const src = readFileSync(join(__dirname, "../../app/api/mcp/route.ts"), "utf8");
+    const i = src.indexOf("clasificarIntocables(ctx.svc, ctx.empresaId, ids)");
+    const j = src.indexOf('.update({ estado: "pendiente" })');
+    expect(i).toBeGreaterThan(0);
+    expect(j).toBeGreaterThan(i);
+    expect(src.slice(j, j + 120)).toMatch(/\.in\("id", sep\.tocables\)/);
+  });
+  it("los bulk avisan lo que se quedó", () => {
+    expect(avisoSeQuedan(new Map([["a", "emitida"], ["b", "a_medias"]]))).toBe("1 ya emitida se queda · 1 a medias se queda (verifícala en A medias)");
+    expect(avisoSeQuedan(new Map())).toBe("");
+    for (const fn of ["volverAPendientes", "rechazarPropuestas", "cambiarTipoPropuestas", "restaurarPropuestas"]) {
+      expect(cuerpo(fn)).toMatch(/aviso: avisoSeQuedan\(sepR\.intocables\) \|\| undefined/);
+    }
+  });
 });

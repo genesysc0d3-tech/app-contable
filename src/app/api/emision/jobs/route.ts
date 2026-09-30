@@ -352,7 +352,7 @@ export async function POST(request: Request) {
     }
     const { data: prop, error: propErr } = await guard.service
       .from("propuestas_ia")
-      .select("id, empresa_id")
+      .select("id, empresa_id, estado")
       .eq("id", propuestaId)
       .maybeSingle();
     if (propErr) {
@@ -360,6 +360,16 @@ export async function POST(request: Request) {
     }
     if (!prop || prop.empresa_id !== guard.empresaId) {
       return NextResponse.json({ ok: false, error: "PROPUESTA_NO_PERTENECE" }, { status: 422 });
+    }
+    // Solo se emite lo APROBADO (incidente MH 2026-09-29, revisión adversarial): si
+    // alguien devolvió la cartola a Check con un lote corriendo, las que aún no
+    // empezaban ya no están en 'aprobado' y el runner las emitía igual → quedaban en
+    // Check con folio real. La verificación (adopción) no emite: queda fuera.
+    if (!cleanText(payload.adopta_job_id) && (prop as { estado?: string | null }).estado !== "aprobado") {
+      return NextResponse.json(
+        { ok: false, error: "PROPUESTA_NO_APROBADA", detalle: "Esta boleta volvió a Check: apruébala de nuevo para emitirla." },
+        { status: 409 },
+      );
     }
   }
 

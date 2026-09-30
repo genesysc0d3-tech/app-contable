@@ -71,8 +71,14 @@ export function contarIntocables(intocables: Map<string, MotivoIntocable>): { em
  *   "581 devueltas a Check · 103 ya emitidas se quedan"
  */
 export function resumenRetroceso(devueltas: number, verbo: string, intocables: Map<string, MotivoIntocable>): string {
+  const aviso = avisoSeQuedan(intocables);
+  return aviso ? `${devueltas} ${verbo} · ${aviso}` : `${devueltas} ${verbo}`;
+}
+
+/** Solo la parte "… se quedan" (vacío si no se quedó ninguna). */
+export function avisoSeQuedan(intocables: Map<string, MotivoIntocable>): string {
   const { emitidas, aMedias, enVuelo } = contarIntocables(intocables);
-  const partes = [`${devueltas} ${verbo}`];
+  const partes: string[] = [];
   if (emitidas > 0) partes.push(`${emitidas} ya ${emitidas === 1 ? "emitida se queda" : "emitidas se quedan"}`);
   if (aMedias > 0) partes.push(`${aMedias} a medias ${aMedias === 1 ? "se queda" : "se quedan"} (verifícala${aMedias === 1 ? "" : "s"} en A medias)`);
   if (enVuelo > 0) partes.push(`${enVuelo} ${enVuelo === 1 ? "se está emitiendo" : "se están emitiendo"} ahora`);

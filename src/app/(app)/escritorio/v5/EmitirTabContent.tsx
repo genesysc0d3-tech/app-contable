@@ -314,6 +314,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     try {
       const r = await devolverCartola(item.documento_id);
       if (r.error) { toast(r.error, "error"); return; }
+      // Nada volvió (todo ya emitido / a medias): no hay qué corregir en Check.
+      if (r.count === 0) { toast(r.resumen ? `Nada volvió a Check: ${r.resumen}` : "Nada que devolver a Check"); reload(); return; }
       // El resumen dice cuántas volvieron y cuántas se quedan por ya estar emitidas
       // (incidente MH 2026-09-29: lo emitido nunca vuelve a Check).
       toast(`Cartola: ${r.resumen ?? `${r.count} devueltas a Check`} — corrige y aprueba de nuevo`);

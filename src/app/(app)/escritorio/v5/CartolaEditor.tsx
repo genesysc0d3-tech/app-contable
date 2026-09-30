@@ -220,7 +220,7 @@ export default function CartolaEditor({
         // contexto bajo el cursor — bug cazado por el fundador 2026-09-02).
         toast(accion === "listo"
           ? `${r.count} marcadas listas`
-          : `${r.count} marcadas sin boleta (tachadas, recuperables)`);
+          : `${r.count} marcadas sin boleta (tachadas, recuperables)${"aviso" in r && r.aviso ? ` · ${r.aviso}` : ""}`);
       }
       setSel(new Set());
       onAction();
@@ -241,7 +241,7 @@ export default function CartolaEditor({
     try {
       const r = await cambiarTipoPropuestas([...sel], destino, mesa === "factura" ? "factura" : "boleta");
       if (r.error) toast(r.error, "error");
-      else toast(`${r.count} ${r.count === 1 ? "quedó" : "quedaron"} como ${destino}`);
+      else toast(`${r.count} ${r.count === 1 ? "quedó" : "quedaron"} como ${destino}${r.aviso ? ` · ${r.aviso}` : ""}`);
       onAction();
     } finally { setBusyBulk(false); }
   }
@@ -374,7 +374,8 @@ export default function CartolaEditor({
       const r = accion === "pendiente" ? await volverAPendientes(ids) : await rechazarPropuestas(ids);
       if (r.error) toast(r.error, "error");
       // Lote deliberado → van al grupo Sin boleta (sin parking; ver bulkSel).
-      else toast(accion === "pendiente" ? `${r.count} de vuelta en pendientes` : `${r.count} marcadas sin boleta (recuperables en Juzgadas)`);
+      // Lo ya emitido / a medias se queda donde está (incidente MH 2026-09-29): se avisa.
+      else toast(`${accion === "pendiente" ? `${r.count} de vuelta en pendientes` : `${r.count} marcadas sin boleta (recuperables en Juzgadas)`}${r.aviso ? ` · ${r.aviso}` : ""}`);
       setSelListas(new Set());
       onAction();
     } finally { setBusyBulk(false); }
@@ -397,7 +398,7 @@ export default function CartolaEditor({
     setBusyBulk(true);
     try {
       const r = await restaurarPropuestas([...selJuz]);
-      if (r.error) toast(r.error, "error"); else toast(`${r.count} restauradas — quedaron pendientes`);
+      if (r.error) toast(r.error, "error"); else toast(`${r.count} restauradas — quedaron pendientes${r.aviso ? ` · ${r.aviso}` : ""}`);
       setSelJuz(new Set());
       onAction();
     } finally { setBusyBulk(false); }

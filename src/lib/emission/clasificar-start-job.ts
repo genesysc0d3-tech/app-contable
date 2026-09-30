@@ -62,6 +62,11 @@ export function clasificarStartJob(status: number, json: Record<string, unknown>
     }
     return { tipo: "frenada", motivo: `Tu emisión anterior sigue abierta (otra pestaña o una boleta sin respuesta). Se libera sola${hora ? ` a las ${hora}` : " en unos minutos"}; lo que falta queda guardado para seguir.` };
   }
+  // La cartola volvió a Check con el lote corriendo (incidente MH 2026-09-29): lo que
+  // falta ya no está aprobado. Se frena el lote; nada se emite fuera de Emitir.
+  if (status === 409 && j.error === "PROPUESTA_NO_APROBADA") {
+    return { tipo: "frenada", motivo: "Esta cartola volvió a Check: lo que falta quedó ahí. Apruébala de nuevo para seguir emitiendo." };
+  }
   if (status === 409 && j.error === "EMISION_EN_CURSO") {
     return { tipo: "frenada", motivo: "Esta boleta ya se está emitiendo en otra pestaña. Lo que falta queda guardado para seguir." };
   }
