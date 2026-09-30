@@ -545,7 +545,7 @@ function tablaReportes(filas, { headers = ["Fecha", "Hora", "Nro Folio", "Tipo",
   const trs = filas.map((f) => el({
     tag: "TR", sel: ["tbody tr"],
     children: headers.map((h) => {
-      const v = /FECHA/i.test(h) ? f.fecha : /HORA/i.test(h) ? f.hora : /FOLIO/i.test(h) ? String(f.folio)
+      const v = /^BOLETA$/i.test(h) ? (f.boleta ?? f.tipo ?? "Exenta") : /FECHA/i.test(h) ? f.fecha : /HORA/i.test(h) ? f.hora : /FOLIO/i.test(h) ? String(f.folio)
         : /TIPO/i.test(h) ? (f.tipo ?? "Boleta exenta") : /MONTO|TOTAL/i.test(h) ? f.monto : "Descargar";
       return el({ tag: "TD", sel: ["td"], text: String(v ?? "") });
     }),
@@ -917,7 +917,7 @@ describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
     expect(res.result.folio_evidence.motivo).toBe("tipo_ilegible");
   });
 
-  it("columna Tipo sin palabras explícitas en NINGUNA fila ('Boleta electrónica') → no filtra (calibrar en MV)", async () => {
+  it("'Boleta electrónica' a secas (texto NO visto en el portal real) cuenta como 39 por el default tolerante: job 39 → high", async () => {
     vi.setSystemTime(new Date(EMIT_AT + 60_000));
     escenaReportes([{ fecha: "25/09/2026", hora: "15:28", folio: 1241, monto: "$ 196.000", tipo: "Boleta electrónica" }]);
     const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
@@ -928,14 +928,89 @@ describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
   // Medianoche (Chile UTC-3 en septiembre): EMITIR 23:59:30 del 27, la fila cae 00:00 del 28.
   const EMIT_MEDIANOCHE = Date.parse("2026-09-28T02:59:30Z"); // 27/09 23:59:30 Chile
 
-  it("clic 23:59:30, fila 28/09 00:00, job con fecha_emision 27/09 → high (antes: 0 candidatas)", async () => {
+  it("clic 23:59:30, fila 28/09 00:00, job con fecha_emision 27/09 → la sugiere (antes: 0 candidatas) pero NUNCA high: la ventana no cae entera en hoy", async () => {
     vi.setSystemTime(new Date(EMIT_MEDIANOCHE + 90_000));
     escenaReportes([{ fecha: "28/09/2026", hora: "00:00", folio: 1301, monto: "$ 196.000" }]);
     const res = await capturarEnReportes(jobReportes({ fecha_emision: "2026-09-27" }), { final_emit_at: EMIT_MEDIANOCHE });
     expect(res.result.folio).toBe(1301);
-    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("rango_fuera_de_hoy");
     // la ventana cruzó la medianoche: la tabla de HOY no puede probar "no salió"
     expect(res.result.reportes_rango_cubre_emision).toBe(false);
+  });
+
+  // Revisión 0.2.9 (medianoche, bloqueante): el ±1440 sobre la hora sola dejaba pasar
+  // pares CRUZADOS (fecha de un día con hora de otro) → folio AJENO en "high".
+  it("EMITIR 27/09 23:58 + fila del MISMO día 27/09 a las 00:01 (mismo monto, fuera de folios_hoy) → NO high: está a -1437 min, no a +3", async () => {
+    const EMIT_2358 = Date.parse("2026-09-28T02:58:00Z"); // 27/09 23:58 Chile
+    vi.setSystemTime(new Date(EMIT_2358 + 60_000)); // lectura 27/09 23:59
+    escenaReportes([{ fecha: "27/09/2026", hora: "00:01", folio: 1290, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ fecha_emision: "2026-09-27" }), { final_emit_at: EMIT_2358 });
+    expect(res.result.folio_confidence).not.toBe("high");
+    // Aislado del arreglo de cubreHoy: la fila ya no entra a la ventana horaria.
+    expect(res.result.folio_evidence.motivo).toBe("ninguna_en_ventana");
+  });
+
+  it("EMITIR 27/09 23:59:30, lectura el 28/09, fila 28/09 00:02 mismo monto → medium (rango_fuera_de_hoy), nunca high", async () => {
+    vi.setSystemTime(new Date(EMIT_MEDIANOCHE + 5 * 60_000)); // 28/09 00:04:30 Chile
+    escenaReportes([{ fecha: "28/09/2026", hora: "00:02", folio: 1302, monto: "$ 196.000" }]);
+    const res = await capturarEnReportes(jobReportes({ fecha_emision: "2026-09-27" }), { final_emit_at: EMIT_MEDIANOCHE });
+    expect(res.result.folio).toBe(1302);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("rango_fuera_de_hoy");
+  });
+
+  it("control de regresión: fila del mismo día con fecha y hora completas ('25/09/2026 15:28:10', formato real) → high como siempre", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026 15:28:10", folio: 1241, monto: "$ 196.000" }], { headers: ["Nro Folio", "Total", "Fecha", "Acciones"] });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(1241);
+    expect(res.result.folio_confidence).toBe("high");
+  });
+
+  // CALIBRACIÓN REAL 2026-09-29 (MV, solo lectura): Tipo y Boleta dicen "Afecta" / "Exenta".
+  const HEADERS_REALES = ["Nro Folio", "Boleta", "Neto", "IVA", "Total", "Tipo", "Vendedor", "Sucursal", "Estado", "Fecha", "Acciones"];
+  it("textos REALES: job 41 con UNA fila 'Exenta' en ventana → candidata, high", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026 15:10:00", folio: 2, monto: "$ 10", tipo: "Afecta" },
+      { fecha: "25/09/2026 15:28:10", folio: 18, monto: "$ 196.000", tipo: "Exenta" },
+    ], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(18);
+    expect(res.result.folio_confidence).toBe("high");
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(0);
+  });
+
+  it("textos REALES: job 41, una 'Afecta' y una 'Exenta' del mismo monto en ventana → la 'Afecta' se excluye, sugiere la 'Exenta' en medium", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026 15:27:30", folio: 2, monto: "$ 196.000", tipo: "Afecta" },
+      { fecha: "25/09/2026 15:28:10", folio: 19, monto: "$ 196.000", tipo: "Exenta" },
+    ], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBe(19);
+    expect(res.result.folio_confidence).toBe("medium");
+    expect(res.result.folio_evidence.motivo).toBe("excluidas_por_tipo");
+  });
+
+  it("textos REALES: job 41 con sola fila 'Afecta' del mismo monto → excluida, sin folio", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026 15:28:10", folio: 2, monto: "$ 196.000", tipo: "Afecta" }], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes());
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
+  });
+
+  it("textos REALES: job 39 con fila 'Afecta' → high; 'Exenta' no calza afecta ni 'Afecta' calza exenta", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([
+      { fecha: "25/09/2026 15:10:00", folio: 20, monto: "$ 15.000", tipo: "Exenta" },
+      { fecha: "25/09/2026 15:28:10", folio: 2, monto: "$ 196.000", tipo: "Afecta" },
+    ], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBe(2);
+    expect(res.result.folio_confidence).toBe("high");
   });
 
   it("clic de AYER (verificación al día siguiente), tabla completa de hoy sin la fila → rango NO cubre la emisión", async () => {

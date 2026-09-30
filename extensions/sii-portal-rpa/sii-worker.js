@@ -633,15 +633,17 @@
         header_monto: reI(rp.header_monto, /MONTO\s*TOTAL|^TOTAL$|^MONTO$/i),
         header_tipo: reI(rp.header_tipo, /^TIPO/i),
         // 0.2.9 (aditivas; <=0.2.8 las ignora): columna "Boleta" y el texto que dice
-        // exenta (41) / afecta (39). CALIBRAR EN ENSAYO MV (solo lectura): no se sabe aún
-        // cuál de las dos columnas trae el tipo ni con qué texto. Conservador a propósito:
-        // solo palabras explícitas o el código exacto; "Boleta electrónica" a secas NO
-        // clasifica (sacar una candidata por error puede volver "no salió" una que salió).
+        // exenta (41) / afecta (39). CALIBRADO 2026-09-29 en el portal real (MV, solo
+        // lectura, 4 boletas: folio 2 Afecta, 18/19/20 Exenta): las columnas "Tipo" y
+        // "Boleta" traen literalmente "Afecta" o "Exenta". Headers reales: Nro Folio |
+        // Boleta | Neto | IVA | Total | Tipo | Vendedor | Sucursal | Estado | Fecha |
+        // Acciones (Fecha "dd/mm/aaaa hh:mm:ss"). La exenta se revisa ANTES
+        // (clasificarTipoDte): "Exenta" no calza afecta y "Afecta" no calza exenta. El
+        // "ELECTRONICA" de afecta es un resto tolerante sin evidencia en el portal real.
+        // Una exclusión por tipo nunca da "high" ni "no salió" (calzarFolioEnReportes /
+        // verificarEnReportes): lo peor de clasificar mal es "a medias".
         header_boleta: reI(rp.header_boleta, /^BOLETA$/i),
         tipo_exenta: reI(rp.tipo_exenta, /EXENT|NO\s*AFECTA|^41$/i),
-        // Tolerante: "Boleta electrónica" a secas = 39 (la exenta se revisa ANTES). Si
-        // clasifica mal, lo peor es "a medias": una exclusión por tipo nunca da "high"
-        // ni "no salió" (ver calzarFolioEnReportes y verificarEnReportes).
         tipo_afecta: reI(rp.tipo_afecta, /AFECTA|ELECTRONICA|^39$/i),
         ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
         ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
@@ -1416,6 +1418,11 @@
     if (LB.reportes.tipo_afecta.test(t)) return 39;
     return null;
   }
+  // Días calendario de `desde` a `hasta` (ambas YYYY-MM-DD). null si alguna no parsea.
+  function diasEntre(desde, hasta) {
+    const a = Date.parse(`${desde}T00:00:00Z`); const b = Date.parse(`${hasta}T00:00:00Z`);
+    return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : null;
+  }
   // Fecha calendario en Chile (YYYY-MM-DD) de un instante.
   function fechaChile(ms) {
     try {
@@ -1543,10 +1550,22 @@
     const mEmit = minutosDeHora(horaEmit);
     // Verificación (cuadre por evento): el librero manda la ventana del intento fallido.
     const { antes, despues } = rango;
+    // Distancia en MINUTOS ABSOLUTOS: con fecha en la fila se suma el salto de días
+    // contra la fecha (Chile) del EMITIR; así una fila del día D a las 00:01 queda a
+    // -1437 min de un EMITIR del D a las 23:58 (no a +3). La vuelta de ±1440 solo
+    // cuando la fila no trae fecha (no hay otra forma de saber el día).
+    const fechaEmit = fechaChile(finalEmitAt);
     const enVentana = candidatas.filter((f) => {
       const m = minutosDeHora(f.hora);
       if (m == null) return false;
-      let d = m - mEmit; if (d > 720) d -= 1440; if (d < -720) d += 1440; // cruce de medianoche
+      let d;
+      if (f.fecha) {
+        const dias = diasEntre(fechaEmit, f.fecha);
+        if (dias == null) return false;
+        d = m + 1440 * dias - mEmit;
+      } else {
+        d = m - mEmit; if (d > 720) d -= 1440; if (d < -720) d += 1440; // cruce de medianoche
+      }
       return d >= -antes && d <= despues;
     });
     if (enVentana.length === 1) {
@@ -1559,6 +1578,9 @@
       // descartada era la nuestra (mal clasificada), la otra del mismo monto quedaría
       // "única" y se le asignaría un folio ajeno. Con exclusiones → a medias.
       if (excluidasPorTipo > 0) return medium("excluidas_por_tipo", { en_ventana: 1, hora_emitir: horaEmit });
+      // El Resumen muestra SOLO HOY: si la ventana del EMITIR no cae entera en hoy, la
+      // "única" visible no prueba nada (la nuestra puede estar en el día que no se ve).
+      if (!rango.cubreHoy) return medium("rango_fuera_de_hoy", { en_ventana: 1, hora_emitir: horaEmit, hora_fila: f.hora });
       return { folio: f.folio, confidence: "high", evidence: { source: "reportes_calce_unico", hora_fila: f.hora, hora_emitir: horaEmit, ...base, en_ventana: 1 } };
     }
     return medium(enVentana.length === 0 ? "ninguna_en_ventana" : "varias_en_ventana", { en_ventana: enVentana.length, hora_emitir: horaEmit });

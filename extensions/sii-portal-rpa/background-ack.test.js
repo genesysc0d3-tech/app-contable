@@ -170,6 +170,9 @@ describe("0.2.9 · DONE y autocierre recién tras el ACK del guardado (H2)", () 
     const s = postEmit();
     await fx.handleCapturedResult(s, fuerte());
     fx.handleResultPersisted({ job_id: "j1", ok: false, error: "PERSISTENCE_FAILED" });
+    // Red caída / server no guardó: NO es permanente → el stash se conserva y reintenta.
+    expect(limpiados).toEqual([]);
+    expect(s.ackFallo).toBe(true);
     cerrar(fx);
     expect(statuses().some((m) => m.status === "result_awaiting_ack")).toBe(false);
     expect(frenos()).toHaveLength(1);
