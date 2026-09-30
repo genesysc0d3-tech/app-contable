@@ -4,6 +4,7 @@ import type { AdapterConfig, DescarteFila, ParsedLine, Row, VerificacionCartola 
 import { leerCeldaMonto, valorCeldaSuelta } from "./numeros";
 import { normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
 import { formatoVerificadoPorSaldo } from "./validator";
+import { cellEsFecha } from "./celdas";
 
 /**
  * JUEZ EXTERNO: lo que el propio banco imprime (puntos 5 y 6, 2026-09-30).
@@ -33,11 +34,13 @@ export interface ResumenImpreso {
   saldoFinal?: number;
 }
 
+// La etiqueta EMPIEZA con "saldo"/"total": una glosa "PAGO TOTAL TARJETA
+// CREDITO" no es el total de abonos del banco.
 const ETIQUETAS: { campo: keyof ResumenImpreso; re: RegExp }[] = [
-  { campo: "saldoInicial", re: /\bsaldo\s+(inicial|anterior)\b/ },
-  { campo: "saldoFinal", re: /\bsaldo\b.*\bfinal\b|\bsaldo\s+contable\s+al\b/ },
-  { campo: "totalCargos", re: /\btotal(es)?\b.*\b(cargos?|debitos?|egresos?|giros?|cheques?)\b/ },
-  { campo: "totalAbonos", re: /\btotal(es)?\b.*\b(abonos?|creditos?|depositos?|ingresos?)\b/ },
+  { campo: "saldoInicial", re: /^saldo\s+(inicial|anterior)\b/ },
+  { campo: "saldoFinal", re: /^saldo\b.*\bfinal\b|^saldo\s+contable\s+al\b/ },
+  { campo: "totalCargos", re: /^total(es)?\b.*\b(cargos?|debitos?|egresos?|giros?|cheques?)\b/ },
+  { campo: "totalAbonos", re: /^total(es)?\b.*\b(abonos?|creditos?|depositos?|ingresos?)\b/ },
 ];
 
 function montoDeCelda(v: unknown): number | null {
@@ -55,6 +58,8 @@ export function detectarResumenImpreso(rows: Row[]): ResumenImpreso | null {
   const out: ResumenImpreso = {};
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
+    // Una fila con fecha es un MOVIMIENTO, no el resumen del banco.
+    if (r.some((v) => cellEsFecha(v as never) && !(typeof v === "number"))) continue;
     for (let j = 0; j < r.length; j++) {
       const v = r[j];
       if (typeof v !== "string") continue;

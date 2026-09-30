@@ -135,6 +135,14 @@ describe("sello por cartola", () => {
 });
 
 describe("funciones puras del juez", () => {
+  it("una GLOSA con 'TOTAL … CREDITO' en una fila con fecha no es el resumen del banco (regresión medida 2026-09-30)", async () => {
+    const { detectarResumenImpreso } = await import("./juez-banco");
+    expect(detectarResumenImpreso([
+      ["Fecha", "Descripción", "Cargos", "Abonos"],
+      ["02/09/2026", "PAGO TOTAL TARJETA CREDITO", "300.000", ""],
+    ])).toBeNull();
+  });
+
   it("detectarResumenImpreso lee etiqueta y valor en la celda de al lado", async () => {
     const { detectarResumenImpreso } = await import("./juez-banco");
     const r = detectarResumenImpreso([
