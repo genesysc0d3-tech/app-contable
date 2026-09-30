@@ -20,8 +20,8 @@ import {
 } from "./revisar-shared";
 import { cambiarTipoPropuestas, ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas, volverAPendientes } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
-
-type SectionKey = "pendientes" | "listas" | "rechazadas" | "emision";
+import RefChip from "@/components/boletas/RefChip";
+import { agruparFilas, type SectionKey, type Terminada } from "./cartola-filas";
 
 const SECTION_META: Record<SectionKey, { label: string; color: string }> = {
   pendientes: { label: "Pendientes", color: "var(--amber)" },
@@ -30,8 +30,13 @@ const SECTION_META: Record<SectionKey, { label: string; color: string }> = {
   // egreso que no lleva boleta — no una eliminación. La tx queda visible y tachada.
   rechazadas: { label: "Sin documento (juzgadas)", color: "var(--text3)" },
   emision: { label: "En emisión", color: "var(--blue)" },
+  // Terminadas (fundador 2026-09-29): visibles, tachadas e intocables, al final.
+  // "A medias" = no sabemos si salió en el SII: se verifica en Emitir → A medias.
+  a_medias: { label: "A medias", color: "var(--amber)" },
+  emitidas: { label: "Emitidas", color: "var(--text3)" },
 };
-const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision"];
+const ORDER: SectionKey[] = ["pendientes", "listas", "rechazadas", "emision", "a_medias", "emitidas"];
+const SIN_A_MEDIAS: ReadonlySet<string> = new Set();
 
 // Bulk gate (BULK_MIN_CONFIANZA, compartido con revisar-shared): nunca poner
 // listas en lote las tx muy inseguras — fuerzan revisión 1×1.
@@ -53,6 +58,8 @@ const CSS = `
   background:linear-gradient(165deg, color-mix(in srgb, var(--text) 4%, var(--surface)), var(--surface));
   transition:border-color .18s, box-shadow .18s, transform .18s;}
 .ce-row:hover{border-color:color-mix(in srgb, var(--text) 18%, transparent);box-shadow:0 6px 18px rgba(0,0,0,.28);transform:translateY(-1px);}
+.ce-row.ce-fin{cursor:default;background:transparent;border-color:color-mix(in srgb, var(--text) 5%, transparent);}
+.ce-row.ce-fin:hover{border-color:color-mix(in srgb, var(--text) 5%, transparent);box-shadow:none;transform:none;}
 .ce-reject{opacity:.22;transition:opacity .15s;}
 .ce-row:hover .ce-reject,.ce-reject:hover{opacity:1;}
 .ce-stat{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;background:transparent;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 9px;border-radius:99px;}
@@ -65,7 +72,7 @@ function confColor(c: number | null | undefined) {
 }
 
 export default function CartolaEditor({
-  propuestas, clientes, empresaId, empresaTipo, onAction, mesa = "boleta",
+  propuestas, clientes, empresaId, empresaTipo, onAction, mesa = "boleta", aMediasIds = SIN_A_MEDIAS,
 }: {
   propuestas: Propuesta[];
   clientes: ClienteResumen[];
@@ -74,12 +81,14 @@ export default function CartolaEditor({
   onAction: () => void;
   /** Carril: en la mesa de facturas el documento es una factura, no una boleta. */
   mesa?: string;
+  /** Propuestas con lápida (a medias / sin respuesta) — ya vienen en la mesa (pendientes.a_medias). */
+  aMediasIds?: ReadonlySet<string>;
 }) {
   const docPalabra = mesa === "factura" ? "factura" : "boleta";
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
-    pendientes: true, listas: false, rechazadas: false, emision: false,
+    pendientes: true, listas: false, rechazadas: false, emision: false, a_medias: false, emitidas: false,
   });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [busyBulk, setBusyBulk] = useState(false);
@@ -109,25 +118,18 @@ export default function CartolaEditor({
   // Con juicio aún pendiente (las tachadas que se quedan en su grupo no son juzgables).
   const esJuzgable = (p: Propuesta) => p.estado === "pendiente" || p.estado === "editado";
 
-  const groups = useMemo(() => {
-    const g: Record<SectionKey, Propuesta[]> = { pendientes: [], listas: [], rechazadas: [], emision: [] };
-    for (const p of propuestas) {
-      // 'editado' es borrador (no emitible): va con las pendientes. Solo 'aprobado'
-      // está comprometida a Emitir.
-      if (p.estado === "pendiente" || p.estado === "editado") g.pendientes.push(p);
-      else if (p.estado === "listo") g.listas.push(p);
-      else if (p.estado === "rechazado" || p.estado === "descartado") {
-        const casa = juzgadasEnSesion.get(p.id);
-        g[casa && casa !== "rechazadas" ? casa : "rechazadas"].push(p);
-      }
-      else if (p.estado === "aprobado") g.emision.push(p);
-    }
-    return g;
-  }, [propuestas, juzgadasEnSesion]);
+  // 'editado' es borrador (no emitible): va con las pendientes. Solo 'aprobado'
+  // está comprometida a Emitir. Las TERMINADAS (emitidas / a medias) van a su grupo
+  // al final, tachadas y sin acciones, sea cual sea su estado (cartola-filas.ts).
+  const { groups, terminadas } = useMemo(
+    () => agruparFilas(propuestas, aMediasIds, juzgadasEnSesion),
+    [propuestas, aMediasIds, juzgadasEnSesion],
+  );
 
   // Total = todo lo vivo (excluye rechazadas), como el agregado del visor resumen.
+  // Las terminadas siguen siendo plata de la cartola: suman al total, no a pendientes.
   const total = useMemo(
-    () => [...groups.pendientes, ...groups.listas, ...groups.emision]
+    () => [...groups.pendientes, ...groups.listas, ...groups.emision, ...groups.a_medias, ...groups.emitidas]
       // Las tachadas aparcadas en su grupo (juzgadasEnSesion) no son vivas: fuera del total.
       .filter((p) => p.estado !== "rechazado" && p.estado !== "descartado")
       .reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0),
@@ -453,7 +455,7 @@ export default function CartolaEditor({
 
       {/* ── Barra de estado (siempre visible, NO scrollea) ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0, flexWrap: "wrap", background: "color-mix(in srgb, var(--text) 2%, transparent)" }}>
-        {(["listas", "pendientes", "rechazadas"] as SectionKey[]).map((k) => {
+        {(["listas", "pendientes", "rechazadas", "a_medias", "emitidas"] as SectionKey[]).map((k) => {
           const n = groups[k].length;
           if (n === 0) return null;
           return (
@@ -571,6 +573,7 @@ export default function CartolaEditor({
                   <div>
                     <TxRow
                       p={row.p}
+                      terminada={terminadas.get(row.p.id)}
                       isOpen={expandedRows.has(row.p.id)}
                       onToggle={() => toggleRow(row.p.id)}
                       onStage={() => stageOne(row.p)}
@@ -578,7 +581,8 @@ export default function CartolaEditor({
                       onRestore={() => restoreOne(row.p)}
                       onVolver={row.p.estado === "listo" ? () => volverUna(row.p) : undefined}
                       selected={sel.has(row.p.id) || selJuz.has(row.p.id) || selListas.has(row.p.id)}
-                      onSelect={row.section === "pendientes" && esJuzgable(row.p)
+                      onSelect={terminadas.has(row.p.id) ? undefined
+                        : row.section === "pendientes" && esJuzgable(row.p)
                         ? (shift: boolean) => toggleSel(row.p.id, shift)
                         : (row.p.estado === "rechazado" || row.p.estado === "descartado")
                           ? () => toggleSelJuz(row.p.id)
@@ -586,7 +590,7 @@ export default function CartolaEditor({
                             ? () => toggleSelLista(row.p.id)
                             : undefined}
                     />
-                    {expandedRows.has(row.p.id) && (
+                    {expandedRows.has(row.p.id) && !terminadas.has(row.p.id) && (
                       <ExpandedDetail
                         propuesta={row.p}
                         clientes={clientes}
@@ -691,14 +695,18 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
 }
 
 /* ─── Fila de tx (colapsada) ─── */
-function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, onVolver, selected = false, onSelect }: {
-  p: Propuesta; isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
+function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, onVolver, selected = false, onSelect }: {
+  p: Propuesta;
+  /** Emitida o a medias: fila tachada, sin casilla, sin detalle y sin acciones. */
+  terminada?: Terminada;
+  isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
   /** Solo listas: ↩ vuelve a pendiente (fundador 2026-09-02: cambio de estado individual en toda sección). */
   onVolver?: () => void;
   selected?: boolean;
   /** Casilla de selección múltiple (pendientes, listas y juzgadas — cada una con su lote). */
   onSelect?: (shift: boolean) => void;
 }) {
+  if (terminada) return <TxRowTerminada p={p} terminada={terminada} />;
   const tm = tipoMeta(p.tipo_propuesto);
   const conf = Math.round((p.confianza ?? 0) * 100);
   // 'aprobado' = comprometida a Emitir → sin ✎ (auditoría #21).
@@ -750,6 +758,38 @@ function TxRow({ p, isOpen, onToggle, onStage, onReject, onRestore, onVolver, se
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Fila terminada (emitida / a medias): visible, tachada, intocable ───
+   Regla del fundador (2026-09-29): "las emitidas nunca vuelven" y "quedan tachadas
+   en Check de agregados". Sin casilla, sin ▶ (no abre detalle), sin ✓/↩/✎/✕. */
+function TxRowTerminada({ p, terminada }: { p: Propuesta; terminada: Terminada }) {
+  const tm = tipoMeta(p.tipo_propuesto);
+  const emitida = terminada.tipo === "emitida";
+  const tachado = { color: "var(--text3)", textDecoration: "line-through" } as const;
+  return (
+    <div className="ce-row ce-fin" aria-label={emitida ? "Emitida — no se puede modificar" : "A medias — verifícala en Emitir"}>
+      <span style={{ width: 16, flexShrink: 0 }} />
+      <span style={{ width: 10, flexShrink: 0 }} />
+      <span title={tm.label} style={{ flexShrink: 0, display: "grid", placeItems: "center", minWidth: 44, height: 30, fontSize: 9, fontWeight: 800, letterSpacing: ".05em", borderRadius: 9, background: "color-mix(in srgb, var(--text) 5%, transparent)", color: "var(--text3)" }}>{tm.sigla}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-.01em", ...tachado, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.movimientos_raw?.descripcion}</div>
+        {p.receptor_nombre && <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.receptor_nombre}</div>}
+      </div>
+      <span style={{ flexShrink: 0, fontSize: 10.5, color: "var(--text3)", minWidth: 56, textAlign: "right" }}>{fmtShort(p.movimientos_raw?.fecha)}</span>
+      <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 750, fontVariantNumeric: "tabular-nums", letterSpacing: "-.01em", ...tachado, minWidth: 76, textAlign: "right" }}>{fmt(p.total ?? p.movimientos_raw?.monto)}</span>
+      {emitida ? (
+        <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 34 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text2)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+            <span style={{ color: "var(--green)" }}>✓</span> Emitida{terminada.folio != null && terminada.folio !== "" ? ` #${terminada.folio}` : ""}
+          </span>
+          {terminada.ref && <RefChip ref_={terminada.ref} />}
+        </span>
+      ) : (
+        <span title="No sabemos si salió en el SII: verifícala en Emitir → A medias" style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "var(--amber)", whiteSpace: "nowrap" }}>A medias</span>
+      )}
     </div>
   );
 }
