@@ -219,9 +219,9 @@ describe("unicidad: si otra lectura del mismo archivo también cuadra, no se sel
 
 describe("vuelta 2 de la batería", () => {
   it("censo: fecha dd/mm/aa en la columna fecha y plata corrida a otra columna → no pasa callada", async () => {
-    const filas: Celda[][] = [["Fecha", "Glosa", "Monto", "Tipo", "RUT receptor", "Nombre receptor", "Medio de pago"]];
-    for (let d = 1; d <= 12; d++) filas.push([`${String(d).padStart(2, "0")}/09/26`, `Venta ${d}`, 10_000 + d * 137, "", "", "", ""]);
-    filas[5][2] = null; filas[5][3] = 55_555; // una celda combinada corrió el monto a "Tipo"
+    const filas: Celda[][] = [["Fecha", "Glosa", "Monto"]];
+    for (let d = 1; d <= 12; d++) filas.push([`${String(d).padStart(2, "0")}/09/26`, `Venta ${d}`, 10_000 + d * 137]);
+    filas[5][2] = null; filas[5][3] = 914_420; // una celda combinada corrió el monto a una columna sin título
     const r = await parsear(libro(filas));
     expect(r.verificacion?.detalle).toMatch(/no leyó|sin leer|mapa/);
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
@@ -246,5 +246,23 @@ describe("vuelta 2 de la batería", () => {
     const r = await parsear(libro(filas, (ws) => { ws["C14"] = { t: "n", v: total, f: "SUM(C2:C13)" }; }));
     expect(r.verificacion?.detalle).toMatch(/total/i);
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
+  });
+});
+
+describe("resumen del banco en OTRA hoja del libro", () => {
+  const plantilla = (): Celda[][] => {
+    const filas: Celda[][] = [["Fecha", "Glosa", "Monto"]];
+    for (let d = 1; d <= 12; d++) filas.push([fch(d), `Venta ${d}`, 10_000 + d * 137]);
+    return filas;
+  };
+  const total = plantilla().slice(1).reduce((s, f) => s + (f[2] as number), 0);
+  it("una hoja 'Resumen' cuyo total de abonos no calza con lo leído: sin sello, alerta", async () => {
+    const r = await parsear(libro(plantilla(), undefined, [{ nombre: "Resumen", filas: [["Total Abonos", `$ ${(total + 7_750).toLocaleString("es-CL")}`]] }]));
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
+    expect(r.verificacion?.alerta).toBe(true);
+  });
+  it("si calza, la plantilla sigue con sello cliente", async () => {
+    const r = await parsear(libro(plantilla(), undefined, [{ nombre: "Resumen", filas: [["Total Abonos", `$ ${total.toLocaleString("es-CL")}`]] }]));
+    expect(r.verificacion?.tipo).toBe("cliente");
   });
 });

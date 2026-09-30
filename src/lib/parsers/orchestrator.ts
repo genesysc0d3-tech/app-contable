@@ -20,12 +20,14 @@ import { esPlantillaFacturas } from "../facturas/plantilla";
 import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
 import { leerCeldaMonto } from "./numeros";
 import { buscarSegundaSolucion } from "./unicidad";
+import { toleranciaDelSello } from "./saldo-cuadre";
 import { validate } from "./validator";
 import {
   detalleSubtotales,
   detectarCuenta,
   detectarResumenImpreso,
   formulasSuma,
+  juzgarContraBanco,
   movimientosFueraDelBloque,
   posiblesSubtotales,
   saldosDeLaCartola,
@@ -85,6 +87,12 @@ interface ContextoHoja {
   resumen: ResumenImpreso | null;
   /** Otras hojas del libro con movimientos que esta lectura NO lee. */
   otrasHojas: string[];
+  /**
+   * Resumen del banco impreso en OTRA hoja del libro ("Resumen": total cargos,
+   * total abonos…). Solo sirve para CONTRADECIR (puede ser de otra cuenta o
+   * período): nunca sella.
+   */
+  resumenOtraHoja: ResumenImpreso | null;
   /** Filas (0-based en `rows`) ocultas o con una columna oculta, que traen plata. */
   ocultas: { filas: number[]; columnas: number[] };
 }
@@ -139,6 +147,7 @@ export async function parseExcelWithOrchestrator(
       resumen: detectarResumenImpreso(rows),
       otrasHojas: otrasHojasConDatos(workbook, sheetName),
       ocultas: ocultasConPlata(sheet, rows),
+      resumenOtraHoja: resumenDeOtrasHojas(workbook, sheetName),
     };
 
     const terminar = async (
@@ -449,6 +458,17 @@ export function ocultasConPlata(sheet: XLSX.WorkSheet | undefined, rows: Row[]):
   return { filas, columnas };
 }
 
+/** El primer resumen impreso (totales / saldos con etiqueta) de las OTRAS hojas del libro. */
+export function resumenDeOtrasHojas(workbook: XLSX.WorkBook, leida: string): ResumenImpreso | null {
+  for (const name of workbook.SheetNames) {
+    if (name === leida) continue;
+    const rows = XLSX.utils.sheet_to_json<Row>(workbook.Sheets[name], { header: 1, defval: "" });
+    const r = detectarResumenImpreso(rows);
+    if (r && (r.totalCargos != null || r.totalAbonos != null || r.saldoFinal != null)) return r;
+  }
+  return null;
+}
+
 const FECHA_TXT_RE = /^\s*\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?\s*$|^\s*\d{4}-\d{2}-\d{2}/;
 
 /**
@@ -529,6 +549,13 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
       alerta: true,
       detalle: `${ocultas.length} fila(s) oculta(s) con plata (filas ${lista}${ctx.ocultas.columnas.length ? `; columna(s) oculta(s) ${ctx.ocultas.columnas.map((c) => XLSX.utils.encode_col(c)).join(", ")}` : ""}): un filtro o filas escondidas. Revisa si son movimientos. ${verificacion.alerta ? verificacion.detalle : ""}`.trim(),
     };
+  }
+  // Resumen del banco en OTRA hoja que no calza con lo leído → alerta (batería
+  // de sellos falsos 2026-09-30: una plantilla con hoja "Resumen" seguía
+  // sellada "cliente" aunque le faltara o sobrara una venta).
+  if (ctx.resumenOtraHoja && !verificacion.alerta) {
+    const j = juzgarContraBanco({ rows, cfg, lines, resumen: ctx.resumenOtraHoja, formulas: [], filasTotales: [], tolerancia: toleranciaDelSello(rows, cfg, lines) });
+    if (j.contradice) verificacion = { tipo: "sin_comprobar", alerta: true, detalle: `El resumen de otra hoja del archivo no calza: ${j.contradice}` };
   }
   // Movimientos DEBAJO de la fila de totales del banco (fuera del bloque que el
   // banco declaró): no se sabe si son movimientos de esta cartola. Sin sello.

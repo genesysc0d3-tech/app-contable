@@ -319,7 +319,16 @@ function filaNueva(L: Libro, base: number, glosa: string, monto: number, tipo: M
 }
 
 export const DANOS: { id: string; aplicar: Aplicar }[] = [
-  { id: "borrar_mov", aplicar: (L, r) => { const x = uno(r, L.movs); L.borrarFila(x.fila); return { oraculo: "lectura", economico: true, nota: `borra fila ${x.fila + 1}` }; } },
+  { id: "borrar_mov", aplicar: (L, r) => {
+    const x = uno(r, L.movs);
+    const desc = (L.spec.orden ?? "asc") === "desc";
+    const ultima = [...L.movs].sort((a, b) => (desc ? a.fila - b.fila : b.fila - a.fila))[0] === x;
+    L.borrarFila(x.fila);
+    // Borrar el ÚLTIMO movimiento (cola truncada) no lo contradice el saldo
+    // corrido: solo un saldo final o un total impreso lo verían.
+    const t = testigos(L.it, L.spec);
+    return { oraculo: "lectura", economico: !ultima || t.resumen || t.totalValor, nota: `borra fila ${x.fila + 1}${ultima ? " (la última)" : ""}` };
+  } },
   { id: "duplicar_mov", aplicar: (L, r) => {
     const x = uno(r, L.movs); const copia = copiarFila(L, x.fila);
     L.insertarFila(x.fila + 1, copia); L.movs.push({ fila: x.fila + 1, mov: { ...x.mov } });
@@ -366,7 +375,7 @@ export const DANOS: { id: string; aplicar: Aplicar }[] = [
     if (t.saldo || t.resumen) return { oraculo: "sin_sello", economico: false, nota: "títulos cruzados; el saldo/resumen dice lo contrario" };
     // Sin saldo ni resumen, lo único que dice la dirección son los títulos.
     for (const x of L.movs) x.mov.tipo = x.mov.tipo === "ENTRADA" ? "SALIDA" : "ENTRADA";
-    return { oraculo: "lectura", economico: true, nota: "títulos cruzados (sin saldo ni resumen: mandan los títulos)" };
+    return { oraculo: "lectura", economico: false, nota: "títulos cruzados (sin saldo ni resumen: mandan los títulos)" };
   } },
   { id: "oculta_un_peso", aplicar: (L, r) => {
     if (L.esCsv() || L.it.ext === "xls" || !L.layout()) return null;

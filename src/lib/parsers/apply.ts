@@ -665,7 +665,12 @@ function censoIndependiente(
     if (vistas.has(i)) continue;
     const r = rows[i];
     if (!r || r.length === 0) continue;
-    const conFecha = r.some((v) => cellEsFecha(v as never));
+    // También la fecha que la COLUMNA fecha del mapa sabe leer ("22/08/26",
+    // dd/mm/aa): sin esto, una celda combinada que corría el monto a otra
+    // columna pasaba callada en una planilla con año de 2 dígitos (batería de
+    // sellos falsos 2026-09-30).
+    const conFecha = r.some((v) => cellEsFecha(v as never))
+      || (c.fecha >= 0 && typeof r[c.fecha] === "string" && parseFechaCartola(String(r[c.fecha]), cfg.date_format).ok);
     if (!conFecha) continue;
     let plata = 0;
     r.forEach((v, j) => {
