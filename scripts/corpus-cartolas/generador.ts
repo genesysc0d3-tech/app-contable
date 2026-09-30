@@ -118,6 +118,19 @@ export interface CartolaSintetica {
     mes: number;
     filtrada: boolean;
   };
+  /**
+   * Mapa FÍSICO de la hoja de movimientos (para las mutaciones económicas de
+   * scripts/corpus-cartolas/danos.ts): fila 0-based de cada movimiento de
+   * `verdad` (mismo índice), columna física de cada rol y filas del pie.
+   */
+  fisico?: {
+    hoja: string;
+    filaMov: number[];
+    cols: Partial<Record<Rol, number>>;
+    primeraDatos: number;
+    ultimaDatos: number;
+    filasPie: number[];
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -443,8 +456,10 @@ export function rendir(spec: Spec, seed: number, o: { mes?: number; saldo0?: num
     for (const b of bloques.reverse()) filasCuerpo.push(...b);
   }
   const primeraDatos = filas.length;
-  for (const f of filasCuerpo) { conSpan(filas.length); filas.push(filaFisica(f.celdas)); }
+  const filaMov: number[] = new Array(visibles.length).fill(-1);
+  for (const f of filasCuerpo) { if (f.mov !== undefined) filaMov[f.mov] = filas.length; conSpan(filas.length); filas.push(filaFisica(f.celdas)); }
   const ultimaDatos = filas.length - 1;
+  const filasPie: number[] = [];
 
   // Pie
   const letra = (c: number) => XLSX.utils.encode_col(c);
@@ -477,6 +492,7 @@ export function rendir(spec: Spec, seed: number, o: { mes?: number; saldo0?: num
         if (j >= 0 && v) f[colIdx[j]] = placeholder(v, ctx, extra);
       }
     }
+    filasPie.push(filas.length);
     filas.push(f);
   }
   filas.push(...rendirFilasLibres(spec.abajo as never, ctx, extra, ncols, false));
@@ -499,6 +515,10 @@ export function rendir(spec: Spec, seed: number, o: { mes?: number; saldo0?: num
       saldoInicialImpreso: /SALDO_INICIAL/.test(textoArribaAbajo) || !!spec.extras?.saldo_inicial_fila,
       resumenImpreso: /SALDO_INICIAL|SALDO_FINAL|TOTAL_(CARGOS|ABONOS)/.test(textoArribaAbajo),
       saldoInicial: plan.saldo0, saldoFinal: plan.saldoFinal, cuenta, mes, filtrada: !!spec.filtrada,
+    },
+    fisico: {
+      hoja: spec.hoja.slice(0, 31), filaMov, primeraDatos, ultimaDatos, filasPie,
+      cols: Object.fromEntries(cols.map((c, j) => [c.rol, colIdx[j]]).reverse()) as Partial<Record<Rol, number>>,
     },
   };
 }
