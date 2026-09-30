@@ -252,13 +252,18 @@ export function juzgarContraBanco(args: {
 
   // 3) Fila de totales sin etiqueta direccional ("Total" | | 123 | 456): se mira
   //    celda por celda en las columnas de plata del mapa.
+  //    Si la fila DICE "Total" (no subtotal) y su número no calza con lo leído,
+  //    el banco contradice la lectura.
   for (const i of args.filasTotales) {
     const r = rows[i];
     if (!r || formulas.some((f) => f.fila === i)) continue;
+    const esTotal = r.some((v) => typeof v === "string" && /^\s*total(es)?\b/i.test(v));
     for (const cp of colsPlata) {
       const v = montoDeCelda(r[cp.col]);
       if (v == null || v === 0) continue;
-      if (cerca(Math.abs(v), cp.suma(0, rows.length, false)) || cerca(Math.abs(v), cp.suma(0, rows.length, true))) colsProbadas.add(cp.col);
+      const leido = cp.suma(0, rows.length, false);
+      if (cerca(Math.abs(v), leido) || cerca(Math.abs(v), cp.suma(0, rows.length, true))) colsProbadas.add(cp.col);
+      else if (esTotal) contra.push(`el total impreso del banco en ${cp.nombre} es ${pesos(Math.abs(v))} y leímos ${pesos(leido)}`);
     }
   }
 

@@ -280,7 +280,9 @@ function inferColumns(sample: Row[], header?: Row): InferredCols | null {
 
   // (2) Sin terna que cierre: forma. saldo = columna "corrida" llena.
   const saldoCol = plata
-    .filter((s) => s.isMonotonic && s.nonEmpty >= sample.length * 0.9)
+    // Lleno de PLATA (≠ 0) en casi todas las filas: un 0 tipado en la columna de
+    // abonos (Itaú) no es "lleno" — antes contaba y el abono pasaba por saldo.
+    .filter((s) => s.isMonotonic && s.numberRatio >= 0.9)
     .sort((a, b) => b.nonEmpty - a.nonEmpty)[0];
 
   // cargo & abono: two numeric columns that are mutually exclusive (sum of nonEmpty per row = 1 most of the time)
