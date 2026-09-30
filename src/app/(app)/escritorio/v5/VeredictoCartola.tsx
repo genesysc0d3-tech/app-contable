@@ -108,7 +108,7 @@ export default function VeredictoCartola({
   // emitida NUNCA es "lista", "pendiente" ni "en Emitir" (fundador 2026-09-29).
   const sinLapidas = aMediasIds ?? new Set<string>();
   const esTerminada = (p: Propuesta) => terminadaDe(p, sinLapidas) !== null;
-  const { emitidas } = contarTerminadas(propuestas, sinLapidas);
+  const { emitidas, aMedias } = contarTerminadas(propuestas, sinLapidas);
   const aprobadas = propuestas.filter((p) => p.estado === "aprobado" && !esTerminada(p)).length;
   const listasProps = propuestas.filter((p) => p.estado === "listo" && !esTerminada(p));
   const listas = listasProps.length;
@@ -179,7 +179,7 @@ export default function VeredictoCartola({
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "0.5em" }}>
           <span style={{ fontSize: "1.5em", fontWeight: 600, color: "var(--text2)", letterSpacing: "-.02em", lineHeight: 1 }}>{mesa === "factura" ? "Plantilla" : "Cartola"}</span>
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.98em", fontWeight: 800, color: decidida ? "var(--blue)" : dotColor }}>
-            <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: decidida ? "var(--blue)" : dotColor }} />{decidida ? (aprobadas > 0 ? `${aprobadas} en Emitir` : `${emitidas} emitidas`) : `${listas}/${count - emitidas} listas`}
+            <span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: decidida ? "var(--blue)" : dotColor }} />{decidida ? (aprobadas > 0 ? `${aprobadas} en Emitir` : emitidas > 0 ? `${emitidas} emitida${emitidas === 1 ? "" : "s"}` : `${aMedias} a medias`) : `${listas}/${count - emitidas - aMedias} listas`}
           </span>
         </div>
 
@@ -203,6 +203,9 @@ export default function VeredictoCartola({
           {exentas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(91,156,246,.13)", color: "var(--blue)" }}>Exenta · {exentas}</span>}
           {afectas > 0 && <span style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.34em 0.8em", borderRadius: 8, background: "rgba(232,85,62,.13)", color: "var(--accent)" }}>Afecta · {afectas}</span>}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 12, fontSize: "1.02em", color: "var(--text2)" }}>
+            {aMedias > 0 && (
+              <span title="No sabemos si salieron en el SII: verifícalas en Emitir → A medias" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--amber)" }} />{aMedias} a medias</span>
+            )}
             {emitidas > 0 && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: "0.55em", height: "0.55em", borderRadius: "50%", background: "var(--text3)" }} />{emitidas} emitida{emitidas === 1 ? "" : "s"}</span>
             )}

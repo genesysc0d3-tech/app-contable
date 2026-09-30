@@ -857,8 +857,14 @@ export async function aprobarCartola(
     .eq("estado", "listo")
     .eq("movimientos_raw.documento_id", documentoId);
   if (qErr) return { error: qErr.message, count: 0 };
-  const ids = (props ?? []).map((p) => p.id);
-  if (ids.length === 0) return { ok: true, count: 0 };
+  const todas = (props ?? []).map((p) => p.id);
+  if (todas.length === 0) return { ok: true, count: 0 };
+  // Las terminadas (emitida / a medias) que quedaron en 'listo' por un retroceso
+  // viejo no se tocan (fundador 2026-09-29: "las emitidas nunca vuelven"): Check ya
+  // no las cuenta como listas, así que el conteo del toast calza con el botón.
+  const sep = await clasificarIntocables(ctx.sb, ctx.empresaId, todas);
+  if ("error" in sep) return { error: sep.error, count: 0 };
+  const ids = sep.tocables;
   let aprobadas = 0;
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
@@ -866,7 +872,8 @@ export async function aprobarCartola(
       .from("propuestas_ia")
       .update({ estado: "aprobado" }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
-      .in("id", batch);
+      .in("id", batch)
+      .eq("estado", "listo");
     if (error) return { error: error.message, count: aprobadas };
     aprobadas += count ?? 0;
   }

@@ -166,11 +166,18 @@ export async function fetchMesaDateDependent(
   const boletasRawRes = boletasRawResConRef.error && (boletasRawResConRef.error.code === "42703" || /\bref\b/.test(boletasRawResConRef.error.message ?? ""))
     ? await supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,propuesta_id").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300)
     : boletasRawResConRef;
-  // Mismo resguardo de orden de deploy para la `ref` embebida: sin la columna, la
-  // mesa entera quedaría vacía. Se repite sin ref (solo en ese error).
-  const propsData = propsDataConRef.error && (propsDataConRef.error.code === "42703" || /\bref\b/.test(propsDataConRef.error.message ?? ""))
-    ? await supabase.from("propuestas_ia").select(PROPS_SELECT_SIN_REF).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT)
-    : propsDataConRef;
+  // Red de seguridad del embed: tachar las emitidas es un EXTRA — jamás puede dejar
+  // Check vacío (una mesa vacía por error se ve igual que "no hay nada"). Ante
+  // CUALQUIER error: sin la columna ref (orden de deploy) se repite sin ref; con
+  // otro error (relación, caché de esquema) se repite sin la boleta embebida.
+  const selectPropsDeRespaldo = (cols: string) => supabase.from("propuestas_ia").select(cols).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT);
+  let propsData = propsDataConRef;
+  if (propsDataConRef.error) {
+    const faltaRef = propsDataConRef.error.code === "42703" || /\bref\b/.test(propsDataConRef.error.message ?? "");
+    console.error("[mesa] propuestas con boleta embebida falló — reintento de respaldo", propsDataConRef.error);
+    propsData = (await selectPropsDeRespaldo(faltaRef ? PROPS_SELECT_SIN_REF : PROPS_SELECT_BASE)) as unknown as typeof propsDataConRef;
+    if (propsData.error && faltaRef) propsData = (await selectPropsDeRespaldo(PROPS_SELECT_BASE)) as unknown as typeof propsDataConRef;
+  }
   // Desborde del tope de propuestas: total real del rango vs lo servido.
   const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
   const propuestasTruncadas = propuestasTotal > (propsData.data?.length ?? 0);
