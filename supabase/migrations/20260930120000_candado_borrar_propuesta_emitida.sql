@@ -17,12 +17,18 @@
 -- Cascadas reales (20260410_schema_base.sql): documentos_subidos → movimientos_raw
 -- (ON DELETE CASCADE) → propuestas_ia (ON DELETE CASCADE). Un trigger BEFORE DELETE
 -- FOR EACH ROW también corre en las filas borradas por cascada, y la excepción
--- aborta la SENTENCIA COMPLETA (y su transacción): borrar el documento, sus
--- movimientos o la empresa entera no deja nada a medias. Es lo buscado.
+-- aborta la SENTENCIA COMPLETA (y su transacción): borrar el documento o sus
+-- movimientos no deja nada a medias. Es lo buscado.
+-- OJO empresas: boletas_emitidas y emision_jobs también cascadean desde
+-- empresas(id); el orden entre acciones RI de una misma cascada no está
+-- garantizado, así que al borrar una EMPRESA el trigger puede no ver una boleta
+-- que la cascada ya se llevó. Ese camino lo cubre la purga ARCO
+-- (purga-cuenta.ts revisa boletas y jobs ANTES de borrar nada); los demás
+-- borrados de empresa son rollbacks de empresas recién creadas, sin propuestas.
 --
 -- BLOQUEA si la propuesta tiene:
---   (a) una boleta NO anulada y NO sandbox. emision_sandbox es NOT NULL DEFAULT
---       false (20260606120000); igual se usa IS NOT TRUE para tratar un NULL como
+--   (a) una boleta NO anulada y NO sandbox. emision_sandbox nace en
+--       20260602221500 y es NOT NULL DEFAULT false desde 20260606120000; igual se usa IS NOT TRUE para tratar un NULL como
 --       real (fail-closed). Sandbox = emisión de prueba del proveedor externo
 --       legado (BaseAPI), explícitamente marcada: nunca tuvo folio real en el SII.
 --       Las boletas 'mock' NO se eximen: emision_proveedor tiene DEFAULT 'mock',
@@ -84,6 +90,8 @@ create table if not exists public.propuestas_borradas_con_emision (
   db_user text not null default current_user,
   session_user_name text not null default session_user,
   jwt_role text,
+  jwt_sub text,
+  client_addr inet default inet_client_addr(),
   created_at timestamptz not null default now()
 );
 
@@ -104,6 +112,7 @@ declare
   v_boletas integer;
   v_jobs integer;
   v_jwt_role text;
+  v_jwt_sub text;
   v_bypass boolean;
 begin
   select count(*) into v_boletas
@@ -125,12 +134,15 @@ begin
   if v_bypass then
     -- Una clienta (PostgREST anon/authenticated) nunca puede usar el bypass.
     v_jwt_role := nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role';
+    v_jwt_sub := nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub';
     v_bypass := coalesce(v_jwt_role, '') not in ('anon', 'authenticated');
   end if;
 
   if v_bypass then
-    insert into public.propuestas_borradas_con_emision (propuesta_id, empresa_id, boletas_vivas, jobs_abiertos, jwt_role)
-    values (old.id, old.empresa_id, v_boletas, v_jobs, v_jwt_role);
+    -- db_user queda como el dueño de la función (security definer); quién fue de
+    -- verdad lo dicen session_user_name, jwt_role/jwt_sub y client_addr.
+    insert into public.propuestas_borradas_con_emision (propuesta_id, empresa_id, boletas_vivas, jobs_abiertos, jwt_role, jwt_sub)
+    values (old.id, old.empresa_id, v_boletas, v_jobs, v_jwt_role, v_jwt_sub);
     raise warning 'PROPUESTA_CON_EMISION bypass: propuesta % borrada con % boleta(s) y % job(s) abiertos (auditado)',
       old.id, v_boletas, v_jobs;
     return old;

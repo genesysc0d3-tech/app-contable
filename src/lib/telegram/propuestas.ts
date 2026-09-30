@@ -1037,16 +1037,20 @@ export async function ignorarMovimientoSalidaBot(
   const boleteables = (props ?? []).filter((p) => !["gasto", "gasto_egreso", "no_comercial", "ignorar"].includes(p.tipo_propuesto));
   if (boleteables.length > 0) return "con_propuesta";
   const noBoleteables = (props ?? []).map((p) => p.id);
+  // Doble candado (2026-09-30): si el borrado falla (p. ej. el trigger
+  // PROPUESTA_CON_EMISION), NO se reporta "ignorado" ni se toca el contador.
   if (noBoleteables.length > 0) {
-    await db.from("propuestas_ia").delete().eq("empresa_id", empresaId).in("id", noBoleteables);
+    const { error: propDelErr } = await db.from("propuestas_ia").delete().eq("empresa_id", empresaId).in("id", noBoleteables);
+    if (propDelErr) return "con_propuesta";
   }
 
-  await db
+  const { error: movDelErr } = await db
     .from("movimientos_raw")
     .delete()
     .eq("empresa_id", empresaId)
     .eq("id", movId)
     .eq("tipo_flujo", "salida");
+  if (movDelErr) return "con_propuesta";
 
   const { data: doc } = await db
     .from("documentos_subidos")

@@ -417,7 +417,7 @@ async function insertInBatches<T extends Record<string, unknown>>(
  * folio real del SII. Eso no debería pasar (los guardas de deshacer/emitir lo
  * bloquean antes), pero si ocurre se aborta el reproceso en vez de corromper.
  */
-async function limpiarInsercionesPrevias(
+export async function limpiarInsercionesPrevias(
   documentoId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = getServiceClient();

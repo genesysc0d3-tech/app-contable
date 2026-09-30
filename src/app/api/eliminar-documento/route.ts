@@ -151,6 +151,14 @@ export async function POST(request: Request) {
     }
   }
 
+  // Si el archivo no se puede borrar, los movimientos ya se fueron: que la fila no
+  // siga contando movimientos que no existen (reintentar eliminar lo termina).
+  const marcarSinMovimientos = async () => {
+    if (movIds.length > 0) {
+      await svc.from("documentos_subidos").update({ movimientos_detectados: 0 }).eq("id", documento_id);
+    }
+  };
+
   // Archivos físicos ANTES que la fila: si el borrado del storage falla y ya no
   // existiera el puntero en la DB, quedaría PII infindable (cartola huérfana).
   // Álbum Telegram: varias imágenes bajo el mismo provider del documento.
@@ -162,6 +170,7 @@ export async function POST(request: Request) {
       try {
         await deleteFromR2(p);
       } catch {
+        await marcarSinMovimientos();
         return NextResponse.json(
           { error: "No se pudo eliminar el archivo del almacenamiento. Intenta de nuevo." },
           { status: 500 },
@@ -171,6 +180,7 @@ export async function POST(request: Request) {
   } else if (documento.storage_provider === "supabase" && paths.length > 0) {
     const { error: rmErr } = await svc.storage.from("documentos").remove(paths);
     if (rmErr) {
+      await marcarSinMovimientos();
       return NextResponse.json(
         { error: "No se pudo eliminar el archivo del almacenamiento. Intenta de nuevo." },
         { status: 500 },
