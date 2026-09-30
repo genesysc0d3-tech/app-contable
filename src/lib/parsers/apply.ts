@@ -24,88 +24,190 @@ export function parseChileanNumber(v: unknown): number {
   return neg ? -n : n;
 }
 
-/**
- * Año para fechas que vienen SIN año ("02/09"): BancoEstado exporta así la hoja
- * "Movimientos" (el año solo está en la hoja "Resumen"). Se toma el año más
- * frecuente entre las fechas completas que haya en la hoja (p. ej. "FECHA DESDE /
- * HASTA" de la cabecera); si no hay ninguna, null → el caller usa el año actual.
- */
-export function inferirAnioPista(rows: Row[]): number | null {
-  const conteo = new Map<number, number>();
-  const suma = (y: number) => { if (y >= 2000 && y <= 2100) conteo.set(y, (conteo.get(y) ?? 0) + 1); };
-  for (const r of rows) {
-    for (const cell of r ?? []) {
-      if (cell == null) continue;
-      const asDate = cell as unknown;
-      if (asDate instanceof Date) { if (!Number.isNaN(asDate.getTime())) suma(asDate.getFullYear()); continue; }
-      const t = String(cell).trim();
-      let m = t.match(/^\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})/);
-      if (m) { suma(parseInt(m[1], 10)); continue; }
-      m = t.match(/^(\d{4})[\/\-]\d{1,2}[\/\-]\d{1,2}/);
-      if (m) { suma(parseInt(m[1], 10)); continue; }
-      m = t.match(/^(20\d{2})(\d{2})(\d{2})$/);
-      if (m && parseInt(m[2], 10) >= 1 && parseInt(m[2], 10) <= 12 && parseInt(m[3], 10) >= 1 && parseInt(m[3], 10) <= 31) suma(parseInt(m[1], 10));
+/** Fecha COMPLETA de una celda (dd/mm/yyyy o yyyy-mm-dd al inicio, yyyymmdd, Date). */
+function fechaCompletaDeCelda(cell: unknown): string | null {
+  if (cell == null) return null;
+  let y: number; let m: number; let d: number;
+  if (cell instanceof Date) {
+    if (Number.isNaN(cell.getTime())) return null;
+    y = cell.getFullYear(); m = cell.getMonth() + 1; d = cell.getDate();
+  } else {
+    const t = String(cell).trim();
+    let x = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
+    if (x) { d = +x[1]; m = +x[2]; y = +x[3]; } else {
+      x = t.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/) ?? t.match(/^(20\d{2})(\d{2})(\d{2})$/);
+      if (!x) return null;
+      y = +x[1]; m = +x[2]; d = +x[3];
     }
   }
-  let mejor: number | null = null; let n = 0;
-  for (const [y, c] of conteo) if (c > n) { mejor = y; n = c; }
+  if (y < 2000 || y > 2100 || !esFechaCalendario(y, m, d)) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Rango de fechas del período de la cartola, para dar año a las fechas "dd/mm"
+ * (una cartola dic–ene tiene "20/12" y "05/01" en la misma hoja).
+ *
+ * SOLO dos fuentes (revisión adversarial: una fecha de impresión o una glosa
+ * "01/03/2019 cuota" no pueden decidir el año):
+ *   1. Etiquetas DESDE/HASTA explícitas ("FECHA DESDE: 15/12/2025", o la etiqueta
+ *      y la fecha en la celda de al lado / de abajo). Si hay, mandan (explicito).
+ *   2. Si no, fechas completas de la COLUMNA fecha, desde la primera fila de datos.
+ */
+export interface RangoFechas { min: string; max: string; explicito: boolean }
+export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "columns" | "skip_rows_before_data">): RangoFechas | null {
+  const rangoDe = (isos: string[], explicito: boolean): RangoFechas | null => {
+    if (isos.length === 0) return null;
+    const orden = [...isos].sort();
+    return { min: orden[0], max: orden[orden.length - 1], explicito };
+  };
+
+  const explicitas: string[] = [];
+  const reEnCelda = /\b(?:desde|hasta)\s*:?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/gi;
+  const reEtiqueta = /\b(?:desde|hasta)\s*:?\s*$/i;
+  rows.forEach((r, i) => {
+    (r ?? []).forEach((cell, j) => {
+      if (typeof cell !== "string") return;
+      let hit = false;
+      for (const m of cell.matchAll(reEnCelda)) {
+        const iso = fechaCompletaDeCelda(`${m[1]}/${m[2]}/${m[3]}`);
+        if (iso) { explicitas.push(iso); hit = true; }
+      }
+      if (hit || !reEtiqueta.test(cell.trim())) return;
+      for (const vecina of [r[j + 1], rows[i + 1]?.[j]]) {
+        const iso = fechaCompletaDeCelda(vecina);
+        if (iso) { explicitas.push(iso); break; }
+      }
+    });
+  });
+  if (explicitas.length) return rangoDe(explicitas, true);
+
+  const col = cfg.columns.fecha;
+  const deColumna: string[] = [];
+  if (col >= 0) {
+    for (let i = cfg.skip_rows_before_data; i < rows.length; i++) {
+      const iso = fechaCompletaDeCelda(rows[i]?.[col]);
+      if (iso) deColumna.push(iso);
+    }
+  }
+  return rangoDe(deColumna, false);
+}
+
+const SIETE_DIAS_MS = 7 * 86_400_000;
+
+/**
+ * Año para "dd/mm" según el rango: entre (año min − 1) y (año max + 1), sin
+ * candidatos a más de 7 días en el futuro, gana el que deja la fecha dentro del
+ * rango o más cerca de él. Empate (rango de más de un año) → el más reciente.
+ */
+function anioSegunRango(mm: number, dd: number, rango: RangoFechas, tope: number): number | null {
+  const [y0, m0, d0] = rango.min.split("-").map(Number);
+  const [y1, m1, d1] = rango.max.split("-").map(Number);
+  const lo = Date.UTC(y0, m0 - 1, d0); const hi = Date.UTC(y1, m1 - 1, d1);
+  let mejor: number | null = null; let mejorDist = Infinity;
+  for (let y = y0 - 1; y <= y1 + 1; y++) {
+    // Sin filtrar por calendario: "29/02" en una cartola de 2025 debe salir
+    // fecha_imposible (isoSiReal del caller), no saltar a 2024.
+    if (new Date(y, mm - 1, dd).getTime() > tope) continue;
+    const f = Date.UTC(y, mm - 1, dd);
+    const dist = f < lo ? lo - f : f > hi ? f - hi : 0;
+    if (dist <= mejorDist) { mejor = y; mejorDist = dist; }
+  }
   return mejor;
 }
 
-export function normalizeDate(
+/**
+ * ¿Día/mes/año forman una fecha REAL del calendario? Sin rollover: 31/02,
+ * 29/02 en año no bisiesto, mes 13 o día 0/32 NO son fechas (JS Date las
+ * "arregla" corriéndolas al mes siguiente, que es justo lo que no queremos).
+ */
+export function esFechaCalendario(y: number, m: number, d: number): boolean {
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false;
+  if (m < 1 || m > 12 || d < 1) return false;
+  const bisiesto = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const diasMes = [31, bisiesto ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  return d <= diasMes;
+}
+
+/** Ventana de años creíble para un movimiento de cartola: 2000..año actual+1. */
+export const ANIO_MIN_CARTOLA = 2000;
+export function anioCartolaCreible(y: number, ahora: Date = new Date()): boolean {
+  return y >= ANIO_MIN_CARTOLA && y <= ahora.getFullYear() + 1;
+}
+
+export type FechaCartola =
+  | { ok: true; iso: string }
+  | { ok: false; motivo: "fecha_ilegible" | "fecha_imposible" };
+
+function isoSiReal(y: number, m: number, d: number): FechaCartola {
+  if (!esFechaCalendario(y, m, d)) return { ok: false, motivo: "fecha_imposible" };
+  return { ok: true, iso: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` };
+}
+
+/**
+ * Convierte la fecha de una celda a ISO distinguiendo "no es una fecha"
+ * (fecha_ilegible) de "tiene forma de fecha pero no existe" (fecha_imposible:
+ * "32/13/2026", "31/02/2026"). Nunca inventa una fecha corriéndola.
+ */
+export function parseFechaCartola(
   v: unknown,
   format: AdapterConfig["date_format"],
-  anioPista?: number | null,
-  ahora: Date = new Date(),
-): string {
-  if (v == null) return "";
+  opts: { rango?: RangoFechas | null; ahora?: Date } = {},
+): FechaCartola {
+  if (v == null) return { ok: false, motivo: "fecha_ilegible" };
   const s = String(v).trim();
-  if (!s) return "";
+  if (!s) return { ok: false, motivo: "fecha_ilegible" };
 
   // Incidente 2026-09-23 (2 cartolas BancoEstado cayeron a la IA y salieron
   // AFECTAS): "20260923" (yyyymmdd) y "02/09" (sin año). Formatos del banco,
-  // no rarezas. Sin año: el de la pista (fechas completas de la hoja) o el
-  // actual; si eso deja la fecha en el futuro (cartola de dic subida en ene),
-  // es el año anterior.
+  // no rarezas. Sin año: el del rango del período (ver inferirRangoFechas) o,
+  // sin rango confiable, el actual; nunca más de 7 días en el futuro (cartola
+  // de dic subida en ene → año anterior).
   const m8 = s.match(/^(20\d{2})(\d{2})(\d{2})$/);
   if (m8) {
-    const mm = parseInt(m8[2], 10); const dd = parseInt(m8[3], 10);
-    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return `${m8[1]}-${m8[2]}-${m8[3]}`;
+    const r = isoSiReal(parseInt(m8[1], 10), parseInt(m8[2], 10), parseInt(m8[3], 10));
+    // 8 dígitos que no son fecha real pueden ser un N° de documento → ilegible.
+    return r.ok ? r : { ok: false, motivo: "fecha_ilegible" };
   }
   const mSinAnio = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
   if (mSinAnio) {
     const dd = parseInt(mSinAnio[1], 10); const mm = parseInt(mSinAnio[2], 10);
-    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
-      let y = anioPista ?? ahora.getFullYear();
-      if (anioPista == null) {
-        const candidata = new Date(y, mm - 1, dd).getTime();
-        if (candidata > ahora.getTime() + 7 * 86_400_000) y -= 1;
-      }
-      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    if (!(dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12)) return { ok: false, motivo: "fecha_imposible" };
+    const ahora = opts.ahora ?? new Date();
+    const tope = ahora.getTime() + SIETE_DIAS_MS;
+    const rango = opts.rango;
+    // Un rango de UN solo punto que no viene de DESDE/HASTA (una fecha suelta
+    // en la columna) no dice nada del período → regla del año actual.
+    if (rango && (rango.explicito || rango.min !== rango.max)) {
+      const yr = anioSegunRango(mm, dd, rango, tope);
+      if (yr != null) return isoSiReal(yr, mm, dd);
     }
+    let y = ahora.getFullYear();
+    if (new Date(y, mm - 1, dd).getTime() > tope) y -= 1;
+    return isoSiReal(y, mm, dd);
   }
 
   if (format === "dd/mm/yyyy" || format === "dd-mm-yyyy" || format === "unknown") {
     const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    if (m) return isoSiReal(parseInt(m[3], 10), parseInt(m[2], 10), parseInt(m[1], 10));
     const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
     if (m2) {
       const yy = parseInt(m2[3], 10);
       const fullYear = yy > 50 ? 1900 + yy : 2000 + yy;
-      return `${fullYear}-${m2[2].padStart(2, "0")}-${m2[1].padStart(2, "0")}`;
+      return isoSiReal(fullYear, parseInt(m2[2], 10), parseInt(m2[1], 10));
     }
   }
 
   if (format === "yyyy-mm-dd") {
     const m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    if (m) return isoSiReal(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10));
   }
 
   // Last resort: try the generic form
   const generic = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (generic) return `${generic[3]}-${generic[2].padStart(2, "0")}-${generic[1].padStart(2, "0")}`;
+  if (generic) return isoSiReal(parseInt(generic[3], 10), parseInt(generic[2], 10), parseInt(generic[1], 10));
 
-  return s;
+  return { ok: false, motivo: "fecha_ilegible" };
 }
 
 /**
@@ -124,6 +226,13 @@ function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
   if (/^(cargo|d[eé]bito|debito|egreso|salida|giro|cheque)/.test(s)) return "SALIDA";
   if (/^(abono|cr[eé]dito|credito|ingreso|entrada|dep[oó]sito|deposito|haber)/.test(s)) return "ENTRADA";
   return null;
+}
+
+/** La celda de fecha tal como vino, para diagnosticar un descarte. */
+function celdaCruda(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "Invalid Date" : v.toISOString();
+  return String(v).trim() || null;
 }
 
 const RESUMEN_RE = /\b(sub\s*total|total(es)?|saldo\s+(inicial|final|anterior|disponible|contable)|resumen)\b/i;
@@ -162,12 +271,19 @@ function montoEnFila(r: Row, cfg: AdapterConfig): { monto: number; tipo: Descart
  *  - Rows where the fecha column doesn't contain a date
  *  - Rows without a valid amount / ambiguous type
  */
-export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: DescarteFila[]): ParsedLine[] {
+export function applyAdapter(
+  rows: Row[],
+  cfg: AdapterConfig,
+  descartes?: DescarteFila[],
+  ahora: Date = new Date(),
+): ParsedLine[] {
   const lines: ParsedLine[] = [];
   const { columns: c } = cfg;
   const layout = cfg.layout ?? "two_cols";
   const start = cfg.skip_rows_before_data;
-  const anioPista = inferirAnioPista(rows);
+  // "dd/mm" sin año: el año sale del rango del período (DESDE/HASTA o la
+  // columna fecha; cruce dic–ene), nunca más de 7 días al futuro.
+  const rango = inferirRangoFechas(rows, cfg);
   // Pasada una fila "Resumen/Total/Saldo", lo que sigue es el bloque de
   // resumen del banco (BICE: "RESUMEN DEL PERIODO", "TOTAL ABONOS", "SALDO FINAL").
   let bloqueResumen = false;
@@ -192,6 +308,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: Descar
         monto: plata.monto,
         tipo_flujo: tipo ?? plata.tipo,
         descripcion: String(r[c.descripcion] ?? "").trim(),
+        fecha_cruda: celdaCruda(r[c.fecha]),
       });
     };
 
@@ -218,12 +335,20 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: Descar
       fechaStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
     }
 
+    if (isDate && Number.isNaN((fechaVal as Date).getTime())) { descartar("fecha_ilegible", null, null); continue; }
     if (!isDate && !isSerial) {
-      // Se acepta lo que normalizeDate sepa convertir a ISO (incluye yyyymmdd y
-      // dd/mm sin año); lo demás no es un movimiento.
-      const iso = normalizeDate(fechaStr, cfg.date_format, anioPista);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) { descartar("fecha_ilegible", null, null); continue; }
-      fechaStr = iso;
+      // Se acepta lo que parseFechaCartola sepa convertir a una fecha REAL
+      // (incluye yyyymmdd y dd/mm sin año). "32/13/2026" o "31/02/2026" no se
+      // corren al mes siguiente: van al censo como fecha_imposible, y el cuadre
+      // las muestra como perdidas en vez de meter un movimiento con fecha falsa.
+      const f = parseFechaCartola(fechaStr, cfg.date_format, { rango, ahora });
+      if (!f.ok) { descartar(f.motivo, null, null); continue; }
+      fechaStr = f.iso;
+    }
+    // Año fuera de 2000..actual+1 (p. ej. "14/06/99" → 1999, o un Date/serial
+    // de 2091): tampoco es un movimiento creíble de esta cartola.
+    if (!anioCartolaCreible(parseInt(fechaStr.slice(0, 4), 10), ahora)) {
+      descartar("fecha_fuera_de_rango", fechaStr, null); continue;
     }
 
     let tipo: ParsedLine["tipo"];
@@ -258,7 +383,7 @@ export function applyAdapter(rows: Row[], cfg: AdapterConfig, descartes?: Descar
       monto = cargo || abono;
     }
 
-    const fecha = isDate || isSerial ? fechaStr : normalizeDate(fechaRaw, cfg.date_format);
+    const fecha = fechaStr;
     const descripcion = String(r[c.descripcion] ?? "").trim();
     const n_documento =
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";

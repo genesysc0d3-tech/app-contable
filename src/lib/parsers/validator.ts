@@ -1,4 +1,4 @@
-import type { ParsedLine, Row, AdapterConfig, ValidationResult } from "./types";
+import type { ParsedLine, Row, AdapterConfig, DescarteFila, ValidationResult } from "./types";
 import { cellEsFecha } from "./heuristic";
 import { cuadreSaldo } from "./saldo-cuadre";
 
@@ -32,7 +32,10 @@ const FRACCION_FECHAS_ABSURDAS = 0.2;
 export function validate(
   lines: ParsedLine[],
   rows?: Row[],
-  cfg?: AdapterConfig
+  cfg?: AdapterConfig,
+  /** Censo de applyAdapter: las filas que el lector ya sacó por fecha absurda
+   *  también cuentan para el check 2b (si no, sacarlas lo anula). */
+  descartes?: DescarteFila[],
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -66,10 +69,23 @@ export function validate(
     const anio = Number(String(l.fecha).slice(0, 4));
     return !Number.isFinite(anio) || anio < anioMin || anio > anioMax;
   });
-  if (conFecha.length > 0 && absurdas.length / conFecha.length >= FRACCION_FECHAS_ABSURDAS) {
-    const ejemplos = [...new Set(absurdas.map((l) => l.fecha))].slice(0, 3).join(", ");
+  // applyAdapter ya NO convierte en movimiento una fecha fuera de
+  // 2000..actual+1 (el serial 73000 = 2099): la manda al censo. Esas filas
+  // siguen delatando la columna mal mapeada, así que se suman acá. Una fecha
+  // IMPOSIBLE ("32/09/2026") no: es un dedazo, no una columna equivocada, y el
+  // cuadre ya la muestra como pérdida.
+  const descartadasPorFecha = (descartes ?? []).filter(
+    (d) => !d.legitimo && d.motivo === "fecha_fuera_de_rango",
+  );
+  const nAbsurdas = absurdas.length + descartadasPorFecha.length;
+  const nConFecha = conFecha.length + descartadasPorFecha.length;
+  if (nConFecha > 0 && nAbsurdas / nConFecha >= FRACCION_FECHAS_ABSURDAS) {
+    const ejemplos = [...new Set([
+      ...absurdas.map((l) => l.fecha),
+      ...descartadasPorFecha.map((d) => d.fecha ?? "fecha imposible"),
+    ])].slice(0, 3).join(", ");
     errors.push(
-      `check_2b_fechas_absurdas: ${absurdas.length}/${conFecha.length} fuera de ${anioMin}-${anioMax} (${ejemplos})`,
+      `check_2b_fechas_absurdas: ${nAbsurdas}/${nConFecha} fuera de ${anioMin}-${anioMax} (${ejemplos})`,
     );
   }
 

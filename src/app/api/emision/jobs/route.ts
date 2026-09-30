@@ -4,8 +4,9 @@ import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
-import { revisarPostCandado, revisarPropuestaEmitible } from "@/lib/emission/propuesta-emitible";
-import { estadoCierreSeguro } from "@/lib/emission/cierre-seguro";
+import { revisarPostCandado, revisarPropuestaEmitible, revisarYaEmitida } from "@/lib/emission/propuesta-emitible";
+import { deleteRespetaSinRespuesta, estadoCierreSeguro } from "@/lib/emission/cierre-seguro";
+import { decidirAdopcion, origenAdopcion, type DecisionAdopcion } from "@/lib/emission/adopcion";
 import { buildVisibleEmissionLock, type ActiveEmissionLock } from "@/lib/emission/lock-visibility";
 import { obtenerConfigEmision, providerForTipoDte } from "@/lib/intermediario/client";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
@@ -351,7 +352,7 @@ export async function POST(request: Request) {
     }
     const { data: prop, error: propErr } = await guard.service
       .from("propuestas_ia")
-      .select("id, empresa_id")
+      .select("id, empresa_id, estado")
       .eq("id", propuestaId)
       .maybeSingle();
     if (propErr) {
@@ -360,12 +361,69 @@ export async function POST(request: Request) {
     if (!prop || prop.empresa_id !== guard.empresaId) {
       return NextResponse.json({ ok: false, error: "PROPUESTA_NO_PERTENECE" }, { status: 422 });
     }
+    // Solo se emite lo APROBADO (incidente MH 2026-09-29, revisión adversarial): si
+    // alguien devolvió la cartola a Check con un lote corriendo, las que aún no
+    // empezaban ya no están en 'aprobado' y el runner las emitía igual → quedaban en
+    // Check con folio real. La verificación (adopción) no emite: queda fuera.
+    if (!cleanText(payload.adopta_job_id) && (prop as { estado?: string | null }).estado !== "aprobado") {
+      return NextResponse.json(
+        { ok: false, error: "PROPUESTA_NO_APROBADA", detalle: "Esta boleta volvió a Check: apruébala de nuevo para emitirla." },
+        { status: 409 },
+      );
+    }
+  }
 
+  // ADOPCIÓN ("Verificar y seguir", plan-emision-confiable §1.2 + B1, 2026-09-28): una
+  // verificación que adopta el job colgado de ESTA propuesta. Solo lee el Resumen de
+  // ventas del SII (verify_only); la regla de cuándo se puede vive en adopcion.ts
+  // (vencido ≥ 2 min, o la extensión de quien lo lanzó confirmó su fin).
+  const adoptaJobId = cleanText(payload.adopta_job_id);
+  let adopcion: Extract<DecisionAdopcion, { ok: true }> | null = null;
+  if (adoptaJobId) {
+    if (cleanText(payload.origin) !== "verificacion_lote" || provider !== "sii_local" || (tipoDte !== 39 && tipoDte !== 41) || !propuestaId) {
+      return NextResponse.json({ ok: false, error: "ADOPCION_INVALIDA", detalle: "Solo se puede verificar una boleta del lote." }, { status: 422 });
+    }
+    const { data: jobViejo, error: errViejo } = await guard.service
+      .from("emision_jobs")
+      .select("job_id, estado, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at")
+      .eq("job_id", adoptaJobId)
+      .maybeSingle();
+    if (errViejo) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    // "Ya emitida" va PRIMERO: si el resultado del intento llegó tarde y se registró,
+    // su job ya está `completed` (no adoptable) pero la respuesta útil es el folio.
+    const yaAntes = await revisarYaEmitida(guard.service, propuestaId);
+    if (!yaAntes.ok) {
+      return NextResponse.json(
+        { ok: false, error: yaAntes.error, detalle: yaAntes.detalle, folio: yaAntes.folio ?? null, boleta_id: yaAntes.boletaId ?? null, boleta_created_at: yaAntes.boletaCreatedAt ?? null },
+        { status: yaAntes.status },
+      );
+    }
+    const decision = decidirAdopcion({
+      job: jobViejo ?? null,
+      userId: guard.userId,
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      propuestaId,
+      finConfirmado: payload.fin_confirmado === true,
+      ahora: new Date(),
+    });
+    if (!decision.ok) {
+      return NextResponse.json({ ok: false, error: decision.code, detalle: decision.detalle, libre_desde: decision.libreDesde ?? null }, { status: decision.status });
+    }
+    adopcion = decision;
+  }
+
+  if (propuestaId) {
     // CANDADO ANTI-DOBLE-FOLIO — fail-closed ANTES de tocar el portal (defensa
     // temprana; el lock por cuenta y el UNIQUE de boletas_emitidas son las redes
     // duras posteriores). El carril mock ya hace este chequeo; el real faltaba.
     // Un error de consulta RECHAZA (antes se saltaba el control: falla abierta).
-    const emitible = await revisarPropuestaEmitible(guard.service, propuestaId);
+    // Con adopción se salta la lápida y el "en vuelo" de ESTA propuesta (el job colgado
+    // es justamente el que se verifica); "ya emitida" se mantiene: si ya está
+    // registrada, se devuelve su folio y no se abre nada.
+    const emitible = adopcion
+      ? await revisarYaEmitida(guard.service, propuestaId)
+      : await revisarPropuestaEmitible(guard.service, propuestaId);
     if (!emitible.ok) {
       return NextResponse.json(
         { ok: false, error: emitible.error, detalle: emitible.detalle, folio: emitible.folio ?? null, boleta_id: emitible.boletaId ?? null, boleta_created_at: emitible.boletaCreatedAt ?? null },
@@ -382,12 +440,14 @@ export async function POST(request: Request) {
     // ese plan manual (planActivoManual). Una boleta por job → cantidad=1; el consumo
     // se DERIVA de boletas_emitidas (no hay contador que mantener). dev_mode bypassa
     // para las pruebas internas del operador.
-    const { data: devRow } = await guard.service
+    // La verificación de un intento anterior NO emite nada nuevo: no consume cupo (si
+    // el plan se agotó entre medio, la clienta igual tiene que poder saber si salió).
+    const { data: devRow } = adopcion ? { data: null } : await guard.service
       .from("usuarios")
       .select("dev_mode")
       .eq("id", guard.userId)
       .maybeSingle();
-    const cuota = await verificarEmisionMasiva(guard.service, guard.empresaId, 1, {
+    const cuota = adopcion ? ({ ok: true } as const) : await verificarEmisionMasiva(guard.service, guard.empresaId, 1, {
       devBypass: devRow?.dev_mode === true,
     });
     if (!cuota.ok) {
@@ -420,13 +480,31 @@ export async function POST(request: Request) {
     );
   }
 
+  // Adopción: suelta el candado del job viejo SIN cambiarle el estado — sigue siendo
+  // lápida (lapida.ts) y bloquea re-emitir hasta el veredicto. Acotado a ESE job_id y
+  // SOLO si el candado vivo de la cuenta es justamente el suyo: con otro candado vivo
+  // (el lote corriendo, otra persona) el acquire de abajo va a fallar y no se toca nada.
+  // (Un candado vencido lo limpia el propio acquire.)
+  if (adopcion) {
+    const { data: vivo } = await guard.service
+      .from("emision_locks")
+      .select("job_id")
+      .eq("cuenta_id", guard.cuentaId)
+      .gt("locked_until", new Date().toISOString())
+      .maybeSingle();
+    if (vivo?.job_id === adopcion.jobViejoId) {
+      await guard.service.from("emision_locks").delete().eq("cuenta_id", guard.cuentaId).eq("job_id", adopcion.jobViejoId);
+    }
+  }
+
   const lock = await acquireCuentaEmissionLock({
     sb: guard.service,
     cuentaId: guard.cuentaId,
     empresaId: guard.empresaId,
     userId: guard.userId,
     provider,
-    origin: cleanText(payload.origin) ?? "emision_directa",
+    // El enlace verificación → job adoptado nace con el job (lo valida el veredicto).
+    origin: adopcion ? origenAdopcion(adopcion.jobViejoId, adopcion.via) : cleanText(payload.origin) ?? "emision_directa",
     expectedEmisorRut,
     propuestaId,
     ttlSeconds: provider === "sii_local" ? 15 * 60 : 5 * 60,
@@ -475,7 +553,7 @@ export async function POST(request: Request) {
   // cuando la primera ya guardó su boleta (o la dejó a medias: el lote suelta el
   // candado al sellar la lápida). Con el candado en mano la foto es firme.
   if (propuestaId) {
-    const post = await revisarPostCandado(guard.service, propuestaId);
+    const post = adopcion ? await revisarYaEmitida(guard.service, propuestaId) : await revisarPostCandado(guard.service, propuestaId);
     if (!post.ok) {
       await releaseCuentaEmissionLock({ sb: guard.service, cuentaId: guard.cuentaId, jobId: lock.jobId, estado: "cancelled" });
       return NextResponse.json(
@@ -489,7 +567,7 @@ export async function POST(request: Request) {
   // Para soporte y para que la clienta no se pierda; NO va a la boleta del SII.
   // Best-effort TOTAL: sin la migración aplicada o si falla, la emisión sigue igual.
   let refEmision: string | null = null;
-  if (propuestaId) {
+  if (propuestaId && !adopcion) {
     try {
       const { data: refData, error: refErr } = await guard.service.rpc("emision_ref_nueva", {
         p_empresa_id: guard.empresaId,
@@ -545,7 +623,9 @@ export async function POST(request: Request) {
   if (provider === "sii_local") {
     try {
       const diaChile = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-      const ahora = new Date();
+      // Adopción: los folios del día del INTENTO (hoy es la fecha de la verificación,
+      // no necesariamente la del intento — plan §1.2).
+      const ahora = adopcion ? new Date(adopcion.ventana.desde_ms) : new Date();
       const hoyChile = diaChile(ahora);
       const ayerChile = diaChile(new Date(ahora.getTime() - 24 * 3600 * 1000));
       const { data: hoy } = await guard.service
@@ -565,6 +645,22 @@ export async function POST(request: Request) {
     } catch { /* best-effort */ }
   }
 
+  if (adopcion) {
+    await recordOpsEvent({
+      sb: guard.service,
+      severity: "info",
+      source: "emision",
+      eventName: "emision_adopcion_verificacion",
+      summary: `Verificación de un intento sin respuesta (${adopcion.via === "vencido" ? "vencido" : "fin confirmado por la extensión"})`,
+      cuentaId: guard.cuentaId,
+      empresaId: guard.empresaId,
+      usuarioId: guard.userId,
+      resourceType: "emision_job",
+      resourceId: lock.jobId,
+      metadata: { adopta_job_id: adopcion.jobViejoId, via: adopcion.via, fecha_intento: adopcion.fechaIntento },
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     job_id: lock.jobId,
@@ -579,6 +675,9 @@ export async function POST(request: Request) {
     business_mode: businessMode,
     reserved_folio: reservedFolio,
     reserved_tipo_dte: provider === "simpleapi" ? tipoDte : null,
+    adopcion: adopcion
+      ? { job_viejo: adopcion.jobViejoId, ventana: adopcion.ventana, fecha_intento: adopcion.fechaIntento, via: adopcion.via }
+      : null,
   });
 }
 
@@ -640,7 +739,7 @@ export async function DELETE(request: Request) {
 
   const { data: job, error } = await service.service
     .from("emision_jobs")
-    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, provider, propuesta_id")
+    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, provider, propuesta_id, created_at, expires_at")
     .eq("job_id", jobId)
     .maybeSingle();
   if (error) {
@@ -673,6 +772,12 @@ export async function DELETE(request: Request) {
   // (que quemaría el folio). Los estados PROTECTORES (registrada/lápida) no se
   // tocan. El guard de releaseCuentaEmissionLock refuerza esto a nivel DB.
   const yaProtegido = job.estado === "completed" || job.estado === "revision_pendiente";
+  // Una lápida SIN RESPUESTA (job del lote vencido y abierto) solo baja a `failed` con
+  // el veredicto "no salió" persistido por la verificación (/api/sii-local/result) o
+  // con la declaración humana; un DELETE no la baja (sí puede sellarla a medias).
+  if (deleteRespetaSinRespuesta(job, estado)) {
+    return NextResponse.json({ ok: true, estado: job.estado, lapida: "sin_respuesta" });
+  }
   const permisivoTerminal = job.estado === "failed" || job.estado === "cancelled" || job.estado === "expired";
   if (yaProtegido || (permisivoTerminal && estado !== "revision_pendiente")) {
     return NextResponse.json({ ok: true, estado: job.estado });

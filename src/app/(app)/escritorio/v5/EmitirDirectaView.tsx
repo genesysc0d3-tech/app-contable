@@ -788,7 +788,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       if (data.type === "APP_CONTABLE_SII_JOB_RESULT") {
         const folio = data.result?.folio ? ` Folio #${data.result.folio}.` : "";
         const persisted = data.result?.persisted;
-        const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && persisted?.ok === true);
+        // Solo respaldado (sesión insegura, sin boleta en libros) no cuenta como emitida.
+        const soloRespaldo = Boolean((persisted as { pendiente_verificacion_sesion?: unknown } | undefined)?.pendiente_verificacion_sesion);
+        const emitted = Boolean(data.result?.folio && data.result.folio_confidence === "high" && persisted?.ok === true && !soloRespaldo);
         const persistenceError = persisted?.ok === false ? ` No se guardó en la app: ${persisted.detalle ?? persisted.error ?? "error desconocido"}.` : "";
         const current = localWorkerRef.current;
         const sameJob = current?.jobId != null && current.jobId === (data.job_id ?? null);

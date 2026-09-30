@@ -45,7 +45,8 @@ vi.mock("@supabase/supabase-js", () => ({
       let op: "select" | "update" | "insert" = "select";
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const b: any = {};
-      for (const m of ["select", "eq", "in", "is", "ilike", "limit", "order", "maybeSingle", "single"]) b[m] = () => b;
+      // `neq`: el guard de retroceso (propuestas-intocables) lee boletas_emitidas/emision_jobs.
+      for (const m of ["select", "eq", "neq", "in", "is", "ilike", "limit", "order", "maybeSingle", "single"]) b[m] = () => b;
       b.update = () => { op = "update"; return b; };
       b.insert = () => { op = "insert"; return b; };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

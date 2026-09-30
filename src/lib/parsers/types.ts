@@ -97,12 +97,14 @@ export interface ParsedLine {
  */
 export interface DescarteFila {
   excel_row: number;
-  motivo: "sin_fecha" | "fecha_ilegible" | "tipo_desconocido" | "cargo_y_abono" | "resumen";
+  motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango" | "tipo_desconocido" | "cargo_y_abono" | "resumen";
   legitimo: boolean;
   fecha: string | null;
   monto: number;
   tipo_flujo: "entrada" | "salida" | null;
   descripcion: string;
+  /** La celda de fecha tal como vino (diagnóstico: "32/13/2026", un serial…). */
+  fecha_cruda?: string | null;
 }
 
 /** Censo de la hoja leída: toda fila con plata queda contada. */

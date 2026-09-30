@@ -48,3 +48,25 @@ export function refValida(ref: string): boolean {
   const cuerpo = n.slice(2, 5) + n.slice(6, 8);
   return controlRef(cuerpo) === n[8];
 }
+
+type ErrorConsulta = { code?: string; message?: string } | null;
+
+/** ¿El error es "no existe la columna ref" (migración sin aplicar)? */
+export function faltaColumnaRef(error: ErrorConsulta): boolean {
+  return !!error && (error.code === "42703" || /\bref\b/.test(error.message ?? ""));
+}
+
+/**
+ * Corre la consulta pidiendo también `ref`; si la columna aún no existe (orden de
+ * deploy), la repite sin ella. La ref sale donde exista y nada se cae donde no.
+ * Lo usa la carga inicial del Registro de Ventas (page.tsx), que antes no pedía
+ * `ref` → el mes actual mostraba "—" en toda la columna Ref. (facturas incluidas).
+ */
+export async function consultaConRef<T>(
+  consulta: (columnas: string) => PromiseLike<{ data: T | null; error: ErrorConsulta }>,
+  base: string,
+): Promise<{ data: T | null; error: ErrorConsulta }> {
+  const conRef = await consulta(`${base},ref`);
+  if (faltaColumnaRef(conRef.error)) return consulta(base);
+  return conRef;
+}

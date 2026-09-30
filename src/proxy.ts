@@ -48,6 +48,12 @@ export const config = {
     // autenticación: Bearer en api/mcp, PKCE+rate-limit en api/oauth, y el
     // metadata .well-known es público por estándar. OJO: /oauth/autorizar
     // (la pantalla de consentimiento) NO va acá — esa SÍ exige sesión.
+    // OJO SEGURIDAD (2026-09-28): excluir una ruta la deja SIN el MFA aal2 ni el
+    // cierre por inactividad del proxy. Toda ruta excluida que use la sesión los
+    // exige por su cuenta con requireSesionSegura / requireAccountApiAccess
+    // (src/lib/api/sesion-segura.ts). El test sesion-segura.test.ts lee ESTA lista
+    // y falla si una excluida no llama al guard ni está declarada como ruta
+    // máquina (cron/webhook/OAuth). NUNCA excluir api/ entero.
     "/((?!_next/static|_next/image|favicon.ico|robots.txt$|sw.js$|manifest.webmanifest$|shell$|api/sw-config$|legal(?:/.*)?$|instalar-extension$|api/empresa/upload-logo|api/empresa/logo/|api/archivo/|api/sii-local/|api/extension/|api/telegram/|api/pagos/webhook|api/pagos/flow/|api/pagos/cron|api/ops/cron|api/document-processing/cron|api/document-processing/kick|api/audit/cron|api/familia/|api/mcp$|api/oauth/|\\.well-known/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

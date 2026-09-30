@@ -16,6 +16,8 @@ import InstalarExtension from "./InstalarExtension";
 import { leerLotePendiente, limpiarLotePendiente, type LotePendiente } from "@/lib/emission/lote-persist";
 import { declararNoSalio, registrarFolioAMano } from "@/lib/emission/recover-latest";
 import type { ItemAMedias } from "@/lib/intermediario/a-medias";
+import { verificableEnAMedias } from "@/lib/emission/adopcion";
+import { verificarJobColgado, type ResultadoVerificacion } from "./verificar-colgado";
 
 /** HH:MM en hora de Chile (para buscar la boleta en el Resumen de ventas del SII). */
 function horaChile(iso: string): string {
@@ -312,7 +314,11 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     try {
       const r = await devolverCartola(item.documento_id);
       if (r.error) { toast(r.error, "error"); return; }
-      toast(`Cartola devuelta a Check (${r.count} quedan listas) — corrige y aprueba de nuevo`);
+      // Nada volvió (todo ya emitido / a medias): no hay qué corregir en Check.
+      if (r.count === 0) { toast(r.resumen ? `Nada volvió a Check: ${r.resumen}` : "Nada que devolver a Check"); reload(); return; }
+      // El resumen dice cuántas volvieron y cuántas se quedan por ya estar emitidas
+      // (incidente MH 2026-09-29: lo emitido nunca vuelve a Check).
+      toast(`Cartola: ${r.resumen ?? `${r.count} devueltas a Check`} — corrige y aprueba de nuevo`);
       goToCheck(item);
       reload();
     } finally { setDevolviendo(null); }
@@ -324,7 +330,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     try {
       const r = await devolverCartola(docId);
       if (r.error) toast(r.error, "error");
-      else toast(`${nombre}: ${r.count} devueltas a Check (quedan listas)`);
+      else toast(`${nombre}: ${r.resumen ?? `${r.count} devueltas a Check`}`);
       reload();
     } finally { setDevolviendo(null); }
   }
@@ -429,6 +435,22 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     }
   }, [armadoNoSalio, reload, toast]);
 
+  // "Verificar en el SII" / "Verificar y seguir" (2026-09-28, adopcion.ts): revisa en el
+  // Resumen de ventas del SII una boleta que quedó SIN RESPUESTA. El resultado es UNA
+  // línea donde está mirando la clienta (arriba de A medias, o en la barra de abajo).
+  const [verificando, setVerificando] = useState<string | null>(null);
+  const [lineaVerif, setLineaVerif] = useState<{ texto: string; tono: "ok" | "warn"; donde: "a_medias" | "barra" } | null>(null);
+  // Reloj para que el botón aparezca solo cuando corresponde (vencido + 2 min), sin
+  // esperar a que la mesa recargue. Solo corre si hay alguna sin respuesta.
+  const haySinRespuesta = aMedias.some((it) => it.motivo === "sin_respuesta");
+  const [ahoraMs, setAhoraMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!haySinRespuesta) return;
+    setAhoraMs(Date.now());
+    const t = window.setInterval(() => setAhoraMs(Date.now()), 20_000);
+    return () => window.clearInterval(t);
+  }, [haySinRespuesta]);
+
   // El endpoint de lote solo emite con proveedor mock: con sii_local/simpleapi cada
   // ítem fallaría después de confirmar. Se avisa antes y se bloquea el CTA.
   // Cada mesa mira SU proveedor: boletas → boletas_proveedor; facturas →
@@ -523,6 +545,78 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // que verse aunque la cola del período esté vacía (LC 2026-09-25).
   if (totalCount === 0 && aMedias.length === 0) {
     return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} />;
+  }
+
+  async function verificarItemAMedias(it: ItemAMedias, donde: "a_medias" | "barra"): Promise<ResultadoVerificacion | null> {
+    if (verificando || !empresaId || (it.tipo_dte !== 39 && it.tipo_dte !== 41)) return null;
+    setVerificando(it.id);
+    setLineaVerif({ texto: "Revisando en el Resumen de ventas del SII si la boleta salió…", tono: "warn", donde });
+    try {
+      const r = await verificarJobColgado({
+        jobViejoId: it.job_id,
+        propuestaId: it.id,
+        tipoDte: it.tipo_dte,
+        monto: it.monto_total,
+        empresaId,
+        reportar: (texto) => setLineaVerif({ texto, tono: "warn", donde }),
+      });
+      const quien = `${it.receptor_nombre || "Boleta"} de ${fmt(it.monto_total)}`;
+      setLineaVerif({ texto: `${quien}: ${r.linea}`, tono: r.estado === "emitida" || r.estado === "ya_emitida" || r.estado === "no_salio" ? "ok" : "warn", donde });
+      if (r.estado !== "no_se_pudo") reload();
+      return r;
+    } finally {
+      setVerificando(null);
+    }
+  }
+
+  // Reanudar el lote guardado (mismo camino que el botón "Reanudar").
+  async function reanudarLote() {
+    if (!lotePendiente) return;
+    setResumiendo(true);
+    try {
+      const res = await fetch(`/api/intermediaria/pendientes-emision?mesa=${mesa}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok || !Array.isArray(json.items)) {
+        toast("No pude cargar el lote para reanudar. Reintenta en un momento.", "error");
+        return; // NO limpiar: el rastro sigue para reintentar
+      }
+      const byId = new Map((json.items as Array<LoteItemInput & { listo_emitir?: boolean }>).map((i) => [i.id, i] as const));
+      // Presentes = siguen pendientes en el server. Emitibles = además `listo_emitir`
+      // (nunca reanudar una que se volvió "por revisar": emitiría con tipo por defecto).
+      const presentes = lotePendiente.remainingIds.map((id) => byId.get(id)).filter(Boolean) as Array<LoteItemInput & { listo_emitir?: boolean }>;
+      const resume = presentes.filter((i) => i.listo_emitir !== false) as LoteItemInput[];
+      if (presentes.length === 0) {
+        // El server (empresa-wide) confirma que ninguno sigue pendiente → ya
+        // emitidas o en revisión. Ahora sí es seguro descartar el rastro.
+        limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null);
+        toast("Ese lote ya quedó emitido, no queda nada por reanudar.", "success");
+        return;
+      }
+      if (resume.length === 0) {
+        // Siguen pendientes pero ninguna está lista (volvieron a "por revisar").
+        // No las emitimos a ciegas; el usuario las resuelve en Check. Quedan en la cola.
+        limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null);
+        toast("El resto del lote quedó en “por revisar”. Resuélvelo en Check y emítelo de nuevo.", "error");
+        return;
+      }
+      setLoteResume(resume); setLoteResumeTotal(lotePendiente.total); setLoteOpen(true);
+    } catch {
+      toast("No pude cargar el lote para reanudar. Reintenta en un momento.", "error");
+    } finally {
+      setResumiendo(false);
+    }
+  }
+
+  // Barra "Verificar y seguir": la boleta SIN RESPUESTA más reciente de hoy que ya se
+  // puede verificar (vencida hace ≥ 2 min, B1). Verifica y, si hay un lote guardado,
+  // sigue con lo que faltaba (la boleta en vuelo ya no está en ese rastro).
+  const colgadaVerificable = esFacturas || loteOpen ? null : [...aMedias]
+    .filter((it) => verificableEnAMedias(it, new Date(ahoraMs)) === "ya")
+    .sort((a, b) => (a.lapida_at < b.lapida_at ? 1 : -1))[0] ?? null;
+  const lineaBarra = lineaVerif?.donde === "barra" || (!lockedByOther && colgadaVerificable !== null);
+  async function verificarYSeguir(it: ItemAMedias) {
+    const r = await verificarItemAMedias(it, "barra");
+    if (r && r.estado !== "no_se_pudo" && lotePendiente) await reanudarLote();
   }
 
   async function handleEmitir() {
@@ -764,41 +858,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             <span style={{fontSize:11.5,color:"var(--text)",flex:1,lineHeight:1.4}}>
               Quedó un lote a medias: faltan <b>{lotePendiente.remainingIds.length} de {lotePendiente.total}</b>. Retoma desde donde quedó.
             </span>
-            <button disabled={resumiendo} onClick={async () => {
-              setResumiendo(true);
-              try {
-                const res = await fetch(`/api/intermediaria/pendientes-emision?mesa=${mesa}`);
-                const json = await res.json().catch(() => ({}));
-                if (!res.ok || !json?.ok || !Array.isArray(json.items)) {
-                  toast("No pude cargar el lote para reanudar. Reintenta en un momento.", "error");
-                  return; // NO limpiar: el rastro sigue para reintentar
-                }
-                const byId = new Map((json.items as Array<LoteItemInput & { listo_emitir?: boolean }>).map((i) => [i.id, i] as const));
-                // Presentes = siguen pendientes en el server. Emitibles = además `listo_emitir`
-                // (nunca reanudar una que se volvió "por revisar": emitiría con tipo por defecto).
-                const presentes = lotePendiente.remainingIds.map((id) => byId.get(id)).filter(Boolean) as Array<LoteItemInput & { listo_emitir?: boolean }>;
-                const resume = presentes.filter((i) => i.listo_emitir !== false) as LoteItemInput[];
-                if (presentes.length === 0) {
-                  // El server (empresa-wide) confirma que ninguno sigue pendiente → ya
-                  // emitidas o en revisión. Ahora sí es seguro descartar el rastro.
-                  limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null);
-                  toast("Ese lote ya quedó emitido, no queda nada por reanudar.", "success");
-                  return;
-                }
-                if (resume.length === 0) {
-                  // Siguen pendientes pero ninguna está lista (volvieron a "por revisar").
-                  // No las emitimos a ciegas; el usuario las resuelve en Check. Quedan en la cola.
-                  limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null);
-                  toast("El resto del lote quedó en “por revisar”. Resuélvelo en Check y emítelo de nuevo.", "error");
-                  return;
-                }
-                setLoteResume(resume); setLoteResumeTotal(lotePendiente.total); setLoteOpen(true);
-              } catch {
-                toast("No pude cargar el lote para reanudar. Reintenta en un momento.", "error");
-              } finally {
-                setResumiendo(false);
-              }
-            }}
+            <button disabled={resumiendo} onClick={() => void reanudarLote()}
               style={{fontSize:11,fontWeight:700,color:"#fff",background:"var(--accent)",border:"none",borderRadius:8,padding:"7px 13px",cursor:resumiendo?"default":"pointer",opacity:resumiendo?0.6:1}}>{resumiendo ? "Cargando…" : `Reanudar ${lotePendiente.remainingIds.length} →`}</button>
             <button onClick={() => { limpiarLotePendiente(empresaId ?? "", esFacturas ? "factura" : "boleta"); setLotePendiente(null); }}
               style={{fontSize:10,fontWeight:600,color:"var(--text3)",background:"transparent",border:"none",cursor:"pointer"}}>Descartar</button>
@@ -845,8 +905,13 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
         {statusFilter === "a_medias" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
             <div style={{ padding: "10px 13px", borderRadius: 10, background: "color-mix(in srgb, var(--amber, #f59e0b) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--amber, #f59e0b) 28%, transparent)", fontSize: 11.5, lineHeight: 1.45, color: "var(--text)" }}>
-              No sabemos si estas boletas salieron en el SII. <b>No las vuelvas a emitir sin revisar.</b> Búscalas en el SII (Resumen de ventas) por monto, fecha y hora: si está, escribe su folio y guárdalo (pasa a Boletas); si no está, toca <b>No está en el SII</b> y vuelve a Listas.
+              No sabemos si estas boletas salieron en el SII. <b>No las vuelvas a emitir sin revisar.</b> Las de hoy sin respuesta las puedo revisar yo: toca <b>Verificar en el SII</b>. Las demás, búscalas en el SII (Resumen de ventas) por monto, fecha y hora: si está, escribe su folio y guárdalo (pasa a Boletas); si no está, toca <b>No está en el SII</b> y vuelve a Listas.
             </div>
+            {lineaVerif?.donde === "a_medias" && (
+              <div role="status" aria-live="polite" style={{ padding: "8px 12px", borderRadius: 9, fontSize: 11.5, lineHeight: 1.4, color: "var(--text)", background: lineaVerif.tono === "ok" ? "color-mix(in srgb, var(--green, #22c55e) 10%, transparent)" : "color-mix(in srgb, var(--amber, #f59e0b) 9%, transparent)", border: `1px solid ${lineaVerif.tono === "ok" ? "color-mix(in srgb, var(--green, #22c55e) 30%, transparent)" : "color-mix(in srgb, var(--amber, #f59e0b) 28%, transparent)"}` }}>
+                {lineaVerif.texto}
+              </div>
+            )}
             {aMedias.map((it) => (
               <div key={it.id} className="em-item" style={{ alignItems: "center" }}>
                 <div style={{ width: 16, flexShrink: 0 }} />
@@ -858,6 +923,18 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                 </div>
                 <div className="mo">{fmt(it.monto_total)}</div>
                 <form onSubmit={(e) => { e.preventDefault(); void guardarFolioAMedias(it); }} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                  {(() => {
+                    const v = verificableEnAMedias(it, new Date(ahoraMs));
+                    if (v === "no") return null;
+                    if (v !== "ya") return <span style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap" }}>Verificable desde las {horaChile(new Date(v.desdeMs).toISOString())}</span>;
+                    return (
+                      <button type="button" onClick={() => void verificarItemAMedias(it, "a_medias")} disabled={verificando !== null}
+                        title="Reviso el Resumen de ventas del SII de hoy (solo lectura) y te digo si salió"
+                        style={{ height: 28, fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--amber, #f59e0b)", border: "none", borderRadius: 8, padding: "0 11px", cursor: verificando ? "default" : "pointer", opacity: verificando !== null && verificando !== it.id ? 0.5 : 1, whiteSpace: "nowrap" }}>
+                        {verificando === it.id ? "Verificando…" : "Verificar en el SII"}
+                      </button>
+                    );
+                  })()}
                   <input inputMode="numeric" pattern="[0-9]*" placeholder="Folio SII" aria-label="Folio SII"
                     value={folioAMedias[it.id] ?? ""} onChange={(e) => setFolioAMedias((prev) => ({ ...prev, [it.id]: e.target.value.replace(/\D/g, "") }))}
                     style={{ width: 92, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 12, padding: "0 9px", fontVariantNumeric: "tabular-nums" }} />
@@ -943,7 +1020,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                     {g.docId && listas > 0 && (
                       <button onClick={(e) => { e.stopPropagation(); void handleDevolverCartola(g.docId!, g.nombre); }}
                         disabled={devolviendo === g.docId}
-                        title="Devuelve la cartola completa a Check de agregados: las boletas quedan listas de nuevo (no pierdes el juicio), y apruebas cuando quieras."
+                        title="Devuelve a Check lo que falta emitir de esta cartola: esas boletas quedan listas de nuevo (no pierdes el juicio) y apruebas cuando quieras. Lo ya emitido en el SII se queda donde está."
                         style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: "var(--text2)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "4px 11px", cursor: devolviendo === g.docId ? "wait" : "pointer", whiteSpace: "nowrap" }}>
                         ← {devolviendo === g.docId ? "Devolviendo…" : "Devolver a Check"}
                       </button>
@@ -1009,7 +1086,27 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
           <div className="l">
             <span className="b">{listasCount}</span> {listasCount === 1 ? "lista" : "listas"} para emitir · <span className="b">{selectedCount}</span> seleccionadas · Total: <span className="b">{fmt(selectedTotal)}</span>
           </div>
-          {lockedByOther && !(candadoPropio && loteOpen) && (
+          {/* Mientras verifica, el candado es el de la propia verificación: la línea de
+              resultado manda sobre el aviso de "emisión abierta". */}
+          {lineaBarra && (
+            <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9.5, lineHeight: 1.3 }}>
+              <span role="status" aria-live="polite" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {lineaVerif?.donde === "barra"
+                  ? lineaVerif.texto
+                  : colgadaVerificable && <><strong style={{ fontSize: 9.5 }}>Emisión abierta:</strong> una boleta de {fmt(colgadaVerificable.monto_total)} ({horaChile(colgadaVerificable.lapida_at)}) quedó sin respuesta del SII.</>}
+              </span>
+              {colgadaVerificable && (
+                <button type="button" onClick={() => void verificarYSeguir(colgadaVerificable)} disabled={verificando !== null || resumiendo}
+                  style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: "#fff", background: "var(--amber, #f59e0b)", border: "none", borderRadius: 7, padding: "5px 10px", cursor: verificando ? "default" : "pointer", opacity: verificando ? 0.6 : 1, whiteSpace: "nowrap" }}>
+                  {verificando === colgadaVerificable.id ? "Verificando…" : "Verificar y seguir"}
+                </button>
+              )}
+              {!colgadaVerificable && lineaVerif?.donde === "barra" && !verificando && (
+                <button type="button" aria-label="Cerrar" onClick={() => setLineaVerif(null)} style={{ flexShrink: 0, background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11, padding: 2 }}>✕</button>
+              )}
+            </div>
+          )}
+          {lockedByOther && !(candadoPropio && loteOpen) && !lineaBarra && (
             <div style={{ minWidth: 0, flex: 1, padding: "6px 9px", borderRadius: 9, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.18)", color: "var(--amber)", fontSize: 9, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>
               <strong style={{ fontSize: 9 }}>{candadoPropio ? "Emisión abierta" : businessMode ? "Equipo" : "Emisión en curso"}:</strong>{" "}{lockMessage}
             </div>

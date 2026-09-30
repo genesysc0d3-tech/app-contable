@@ -1,8 +1,11 @@
 import { NextResponse, after } from "next/server";
 import { validarAccesoCuenta } from "@/lib/entitlements";
-import { ESTADOS_LAPIDA, esLapidaEfectiva, puedeDeclararNoSalio } from "@/lib/emission/lapida";
+import { ESTADOS_LAPIDA, esLapidaEfectiva, plazoDeclararNoSalio, puedeDeclararNoSalio } from "@/lib/emission/lapida";
+import { jobAdoptadoDeOrigen, validarVeredictoNoSalio } from "@/lib/emission/adopcion";
+import { resolverGlosa } from "@/lib/intermediario/armar-boleta";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesionSegura, respuestaSesionInsegura } from "@/lib/api/sesion-segura";
+import { STATUS_SESION_INSEGURA, elegirResultadoRecuperable, politicaResultSesionInsegura } from "@/lib/emission/result-sesion-insegura";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
@@ -30,6 +33,14 @@ interface SiiLocalResultPayload {
    * la propuesta a Listas. Queda auditado como declaración de la persona.
    */
   declarar_no_salio?: boolean;
+  /**
+   * VEREDICTO DE LA VERIFICACIÓN ("Verificar y seguir", 2026-09-28): el job de
+   * verificación (`job_id`) leyó el Resumen de ventas del SII completo y la boleta no
+   * está. El server lo valida contra SUS filas (el job de verificación adoptó a ese
+   * intento, mismo usuario, misma propuesta, mismo día) y recién ahí baja la lápida
+   * del intento original a `failed`. Es la única puerta automática para eso.
+   */
+  veredicto_verificacion?: "no_salio" | null;
   /** Telemetría de flota: versión de la extensión que POSTea (bridge 0.1.7+). */
   extension_version?: string | null;
   result?: {
@@ -199,9 +210,9 @@ async function documentoDeLaPropuesta(sb: ServiceDb, propuestaId: string): Promi
   return reqDoc ?? null;
 }
 
-async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }) {
+async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: string | null; folio: number | null; status: string; error?: string | null; result: unknown }): Promise<boolean> {
   try {
-    await sb.from("sii_local_resultados").insert({
+    const { error: insertError } = await sb.from("sii_local_resultados").insert({
       user_id: entry.user_id,
       job_id: entry.job_id,
       folio: entry.folio,
@@ -214,10 +225,15 @@ async function rememberResult(sb: ServiceDb, entry: { user_id: string; job_id: s
       .delete()
       .eq("user_id", entry.user_id)
       .lt("received_at", new Date(Date.now() - RESULT_RETENTION_DAYS * 24 * 3600 * 1000).toISOString());
+    // true = la fila quedó guardada (la rama de sesión insegura depende de esto
+    // para no decirle a la extensión que suelte un folio que no se guardó).
+    if (insertError) console.error("[sii-local-result] no se pudo registrar el resultado", insertError.message);
+    return !insertError;
   } catch (error) {
     // Log best-effort: si la tabla aún no existe (migración pendiente) no se
     // bloquea la emisión, solo se pierde la recuperación posterior.
     console.error("[sii-local-result] no se pudo registrar el resultado", error);
+    return false;
   }
 }
 
@@ -472,6 +488,65 @@ async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) 
   }
 }
 
+/**
+ * La verificación de un intento ADOPTADO (adopcion.ts) registró la boleta: el intento
+ * original se cierra `completed` aunque todavía no haya vencido (verificación por fin
+ * confirmado de la extensión). Si no, al vencer volvería a aparecer "sin respuesta"
+ * en A medias con la boleta ya registrada. Best-effort.
+ */
+/**
+ * Glosa y receptor con que se EMITIÓ una propuesta (misma política que el lote:
+ * resolverGlosa, nunca la glosa cruda del banco). Para registrar la boleta que
+ * encontró una verificación. Best-effort: null si falla (queda el genérico).
+ */
+async function datosEmitidosDePropuesta(sb: ServiceDb, propuestaId: string, tipoDte: number) {
+  try {
+    const { data } = await sb
+      .from("propuestas_ia")
+      .select("notas, receptor_rut, receptor_nombre, receptor_giro, receptor_direccion, receptor_comuna, movimientos_raw!propuestas_ia_movimiento_id_fkey(documentos_subidos!movimientos_raw_documento_id_fkey(glosa_comun, glosa_activa))")
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (!data) return null;
+    const p = data as unknown as {
+      notas: string | null; receptor_rut: string | null; receptor_nombre: string | null; receptor_giro: string | null;
+      receptor_direccion: string | null; receptor_comuna: string | null;
+      movimientos_raw?: { documentos_subidos?: { glosa_comun?: string | null; glosa_activa?: boolean | null } | Array<{ glosa_comun?: string | null; glosa_activa?: boolean | null }> | null } | Array<{ documentos_subidos?: unknown }> | null;
+    };
+    const mov = Array.isArray(p.movimientos_raw) ? p.movimientos_raw[0] : p.movimientos_raw;
+    const docRaw = (mov as { documentos_subidos?: unknown } | null | undefined)?.documentos_subidos;
+    const doc = (Array.isArray(docRaw) ? docRaw[0] : docRaw) as { glosa_comun?: string | null; glosa_activa?: boolean | null } | null | undefined;
+    const glosa = resolverGlosa(
+      { notas: p.notas, glosaComun: doc?.glosa_comun ?? null, glosaComunActiva: doc?.glosa_activa ?? null },
+      tipoDte === 39 || tipoDte === 41 ? tipoDte : undefined,
+    );
+    return {
+      glosa,
+      receptor: {
+        rut: p.receptor_rut, razon_social: p.receptor_nombre, giro: p.receptor_giro,
+        direccion: p.receptor_direccion, comuna: p.receptor_comuna,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function levantarAdoptado(sb: ServiceDb, job: { origin?: string | null; propuesta_id?: string | null }) {
+  const adoptado = jobAdoptadoDeOrigen(job.origin ?? null);
+  if (!adoptado || !job.propuesta_id) return;
+  try {
+    await sb
+      .from("emision_jobs")
+      .update({ estado: "completed", estado_visible: "completed", updated_at: new Date().toISOString() })
+      .eq("job_id", adoptado)
+      .eq("propuesta_id", job.propuesta_id)
+      .in("estado", ["created", "running", "revision_pendiente"]);
+    await liftRevisionTombstone(sb, job.propuesta_id);
+  } catch {
+    /* best-effort */
+  }
+}
+
 // 0.2.8 (cierre del ciclo, adversarial F3): un folio "alto" que salió del calce único
 // en /reportes (monto + fecha + hora) NO se acepta si HOY esta empresa tiene otra boleta
 // del mismo tipo y monto "a medias" (lápida revision_pendiente sin boleta): la fila
@@ -481,7 +556,7 @@ async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) 
 // falla, se veta (fail-closed: prefiere "a medias" a un folio cruzado).
 async function calceReportesVetado(
   sb: ServiceDb,
-  args: { empresaId: string; tipoDte: number; montoTotal: number; fechaEmision: string; jobId: string | null },
+  args: { empresaId: string; tipoDte: number; montoTotal: number; fechaEmision: string; jobId: string | null; propuestaId?: string | null },
 ): Promise<boolean> {
   try {
     // -04:00 (invierno) cubre también el horario de verano: una hora de más solo sobre-veta.
@@ -499,7 +574,9 @@ async function calceReportesVetado(
     // M1: Supabase devuelve {error} sin lanzar → fail-closed explícito.
     if (errLapidas) return true;
     const ahoraVeto = new Date();
-    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id && esLapidaEfectiva(j, ahoraVeto) !== null);
+    // Las lápidas de la MISMA propuesta no vetan: son la misma boleta (la verificación
+    // de un intento adoptado busca justamente la fila de ese intento, adopcion.ts).
+    const otras = (lapidas ?? []).filter((j) => j.job_id !== args.jobId && j.propuesta_id && j.propuesta_id !== args.propuestaId && esLapidaEfectiva(j, ahoraVeto) !== null);
     if (otras.length === 0) return false;
     const { data: props, error: errProps } = await sb
       .from("propuestas_ia")
@@ -670,9 +747,11 @@ async function backfillFolioSinJobVivo(
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Fuera del matcher del proxy: sesión + inactividad + MFA aal2 se evalúan ACÁ
+  // (sesion-segura.ts). Sin usuario → 401 siempre.
+  const guard = await requireSesionSegura();
+  const user = guard.user;
+  if (!user) return guard.ok ? respuestaSesionInsegura("NO_AUTH") : guard.response;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -684,6 +763,51 @@ export async function POST(request: Request) {
     payload = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "BAD_JSON" }, { status: 400 });
+  }
+
+  // Sesión insegura (inactividad vencida o MFA pendiente) con usuario válido
+  // (política completa en lib/emission/result-sesion-insegura.ts):
+  //  · captura del folio de la extensión → SOLO al stash del servidor, NUNCA a
+  //    boletas_emitidas (una sesión aal1 no escribe libros). Se responde ok para que
+  //    la extensión suelte su copia local: el folio ya vive en el servidor. Tras el
+  //    MFA, "Recuperar folio" (recover_latest) lo promueve con todos los gates.
+  //  · todo lo demás (declaraciones humanas, recover_latest, formulario manual) → 401.
+  // Si el stash del servidor falla → 503: la extensión conserva su copia y reintenta.
+  if (!guard.ok) {
+    if (politicaResultSesionInsegura(payload) === "bloquear") return guard.response;
+    const jobIdInseguro = typeof payload.job_id === "string" && payload.job_id.trim() ? payload.job_id.trim() : null;
+    const folioInseguro = positiveInt(payload.result?.folio);
+    const guardado = await rememberResult(sb, {
+      user_id: user.id,
+      job_id: jobIdInseguro,
+      folio: folioInseguro,
+      status: STATUS_SESION_INSEGURA,
+      error: guard.motivo,
+      result: payload.result,
+    });
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_result_sesion_insegura",
+      summary: guardado
+        ? `Resultado SII guardado SOLO en el stash (sesión insegura: ${guard.motivo}); se registra tras el MFA con "Recuperar folio"`
+        : `Resultado SII con sesión insegura (${guard.motivo}) y el stash falló: la extensión conserva su copia`,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: jobIdInseguro,
+      metadata: { motivo: guard.motivo, folio: folioInseguro, stash_ok: guardado },
+    });
+    if (!guardado) {
+      return NextResponse.json({ ok: false, error: "STASH_NO_DISPONIBLE", sesion: guard.motivo }, { status: 503 });
+    }
+    return NextResponse.json({
+      ok: true,
+      boleta_id: null,
+      folio: folioInseguro,
+      pendiente_verificacion_sesion: guard.motivo,
+      detalle: "El folio quedó resguardado. Entra a massDTE y usa «Recuperar folio» para registrarlo.",
+    });
   }
 
   // Telemetría de flota (bridge 0.1.7+): anota qué versión corre esta empresa.
@@ -703,7 +827,7 @@ export async function POST(request: Request) {
   // Declaraciones HUMANAS (folio a mano / "no está en el SII"): exigen el mismo rol de
   // emisión y no estar vetado que el resto de la ruta (antes solo exigían ser dueño
   // del job: un usuario vetado o degradado podía devolver boletas a Listas).
-  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true) {
+  if (payload.registrar_folio_manual != null || payload.declarar_no_salio === true || payload.veredicto_verificacion != null) {
     const { data: uDecl } = await sb.from("usuarios").select("rol, vetado").eq("id", user.id).maybeSingle();
     if (!uDecl || uDecl.vetado) return NextResponse.json({ ok: false, error: "USUARIO_BLOQUEADO" }, { status: 403 });
     if (!ROLES_EMISION.has(String(uDecl.rol))) return NextResponse.json({ ok: false, error: "ROL_SIN_PERMISO" }, { status: 403 });
@@ -867,6 +991,17 @@ export async function POST(request: Request) {
     if (errLap) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
     const ahoraDecl = new Date();
     const aCerrar = (lapidasProp ?? []).filter((j) => esLapidaEfectiva(j, ahoraDecl) !== null).map((j) => j.job_id);
+    // El plazo vale para CADA lápida que se va a cerrar, no solo la declarada: una
+    // verificación sellada a medias no puede arrastrar a Listas al intento original
+    // sin respuesta que venció hace minutos (podría seguir vivo → doble folio).
+    const plazo = plazoDeclararNoSalio(lapidasProp ?? [], ahoraDecl);
+    if (!plazo.ok) {
+      const hora = new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(plazo.desdeMs));
+      return NextResponse.json(
+        { ok: false, error: "MUY_PRONTO", desde: new Date(plazo.desdeMs).toISOString(), detalle: `Esta boleta quedó sin respuesta hace poco y el SII podría seguir procesándola. Podrás marcarla desde las ${hora}.` },
+        { status: 409 },
+      );
+    }
     // Si el server YA tiene un folio capturado para alguno de esos intentos (stash de
     // la extensión), la boleta salió: no se puede declarar "no salió" (doble folio).
     if (aCerrar.length > 0) {
@@ -928,16 +1063,126 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, jobs_cerrados: (cerrados ?? []).length });
   }
 
+  // ── VEREDICTO "NO SALIÓ" DE UNA VERIFICACIÓN ────────────────────────────
+  // La extensión 0.2.8 entrega "verificado_sin_folio" (tabla completa leída, 0
+  // candidatas) solo a la PÁGINA y no persiste evidencia de esa lectura en el server:
+  // lo que llega acá es la palabra de la página. Por eso el server no la trata como
+  // evidencia del SII sino como una declaración con controles: el job de verificación
+  // tiene que haber adoptado al intento (enlace escrito al crearlo, adopcion.ts), ambos
+  // abiertos, mismo día Chile, sin folio ni boleta, y el MISMO plazo que la declaración
+  // humana (vía vencido: expires_at + 30 min; vía fin: 10 min desde el último signo de
+  // vida). Antes del plazo → MUY_PRONTO (queda a medias). Se audita tal cual es.
+  // (Cuando la extensión persista la lectura en sii_local_resultados, usarla acá.)
+  if (payload.veredicto_verificacion != null) {
+    if (payload.veredicto_verificacion !== "no_salio") return NextResponse.json({ ok: false, error: "VEREDICTO_INVALIDO" }, { status: 400 });
+    const jobIdVer = cleanText(payload.job_id);
+    if (!jobIdVer) return NextResponse.json({ ok: false, error: "JOB_ID_REQUERIDO" }, { status: 400 });
+    const { data: jobVer, error: errVer } = await sb
+      .from("emision_jobs")
+      .select("job_id, estado, origin, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at")
+      .eq("job_id", jobIdVer)
+      .maybeSingle();
+    if (errVer) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    if (!jobVer) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
+    const accesoVer = await accesoDeclaracion(sb, user.id, jobVer);
+    if (accesoVer) return accesoVer;
+    const adoptadoId = jobAdoptadoDeOrigen(jobVer.origin);
+    const { data: jobViejo, error: errViejo } = adoptadoId
+      ? await sb
+          .from("emision_jobs")
+          .select("job_id, estado, propuesta_id, usuario_id, cuenta_id, empresa_id, created_at, expires_at, heartbeat_at")
+          .eq("job_id", adoptadoId)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (errViejo) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
+    const ahoraVer = new Date();
+    const valido = validarVeredictoNoSalio({ verificacion: jobVer, viejo: jobViejo ?? null, userId: user.id, ahora: ahoraVer });
+    if (!valido.ok) {
+      return NextResponse.json(
+        { ok: false, error: valido.code, detalle: valido.detalle, desde: valido.desdeMs != null ? new Date(valido.desdeMs).toISOString() : null },
+        { status: 409 },
+      );
+    }
+    const viejo = jobViejo!;
+    const { data: boletaVigente, error: errBolVer } = await sb
+      .from("boletas_emitidas")
+      .select("id, folio")
+      .eq("propuesta_id", viejo.propuesta_id as string)
+      .neq("estado", "anulada")
+      .limit(1)
+      .maybeSingle();
+    if (errBolVer) return NextResponse.json({ ok: false, error: "BOLETA_QUERY_FAILED" }, { status: 500 });
+    if (boletaVigente) {
+      return NextResponse.json({ ok: false, error: "PROPUESTA_YA_EMITIDA", detalle: `Esta boleta ya está registrada con el folio ${boletaVigente.folio}.`, folio: boletaVigente.folio }, { status: 409 });
+    }
+    // Un folio capturado para cualquiera de los dos jobs (stash de la extensión) = salió.
+    const { data: conFolioVer, error: errResVer } = await sb
+      .from("sii_local_resultados")
+      .select("folio")
+      .in("job_id", [viejo.job_id, jobVer.job_id])
+      .not("folio", "is", null)
+      .limit(1);
+    if (errResVer) return NextResponse.json({ ok: false, error: "RESULTADOS_QUERY_FAILED" }, { status: 500 });
+    if ((conFolioVer ?? []).length > 0) {
+      return NextResponse.json({ ok: false, error: "FOLIO_CAPTURADO", detalle: `El SII devolvió el folio ${conFolioVer![0].folio} para este intento: la boleta sí salió.` }, { status: 409 });
+    }
+    const mensajeVer = "La verificación automática (reportada por la página) no encontró la boleta en el Resumen de ventas del SII";
+    const ahoraIsoVer = ahoraVer.toISOString();
+    // running → failed está permitido (locks.ts); el UPDATE re-filtra por estado: si
+    // entre medio llegó el resultado (→ completed) o se selló, no se pisa.
+    const { data: cerradoViejo, error: errUpdVer } = await sb
+      .from("emision_jobs")
+      .update({ estado: "failed", estado_visible: "failed", status_message: mensajeVer, updated_at: ahoraIsoVer })
+      .eq("job_id", viejo.job_id)
+      .in("estado", ["created", "running"])
+      .select("job_id");
+    if (errUpdVer) return NextResponse.json({ ok: false, error: "VEREDICTO_FALLIDO", detalle: errUpdVer.message }, { status: 500 });
+    if ((cerradoViejo ?? []).length === 0) {
+      return NextResponse.json({ ok: false, error: "NADA_QUE_CERRAR", detalle: "Esa boleta cambió de estado mientras la verificábamos. Recarga Emitir." }, { status: 409 });
+    }
+    await sb.from("emision_locks").delete().eq("cuenta_id", viejo.cuenta_id).eq("job_id", viejo.job_id);
+    await sb.from("emision_jobs").update({ status_message: mensajeVer }).eq("job_id", jobVer.job_id);
+    await releaseCuentaEmissionLock({ sb, cuentaId: jobVer.cuenta_id, jobId: jobVer.job_id, estado: "failed" });
+    await recordOpsEvent({
+      sb,
+      severity: "warn",
+      source: "sii-local",
+      eventName: "sii_local_verificado_no_salio",
+      summary: "La verificación automática (reportada por la página) no encontró la boleta en el Resumen de ventas (vuelve a Listas)",
+      empresaId: viejo.empresa_id,
+      cuentaId: viejo.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: viejo.job_id,
+      metadata: { verificacion_job_id: jobVer.job_id, origen: "verificacion_reportes_reportada_por_pagina", evidencia_servidor: false },
+    });
+    await recordCuentaAudit({
+      sb,
+      cuentaId: viejo.cuenta_id,
+      empresaId: viejo.empresa_id,
+      usuarioId: user.id,
+      accion: "emision_fallida",
+      recursoTipo: "emision_job",
+      recursoId: viejo.job_id,
+      resumen: "La verificación automática (reportada por la página) no encontró la boleta en el SII (vuelve a Listas)",
+      metadata: { origen: "verificacion_reportes_reportada_por_pagina", evidencia_servidor: false, verificacion_job_id: jobVer.job_id },
+    });
+    return NextResponse.json({ ok: true, jobs_cerrados: 1 });
+  }
+
   let result = payload.result;
   let effectiveJobId = payload.job_id ?? null;
   if (payload.recover_latest) {
     let query = sb
       .from("sii_local_resultados")
-      .select("job_id, result")
+      .select("job_id, result, status")
       .eq("user_id", user.id)
       .not("result", "is", null)
       .order("received_at", { ascending: false })
-      .limit(1);
+      // Varias filas (no 1): se prefiere la captura con sesión segura sobre una
+      // "sesion_insegura" del mismo job (elegirResultadoRecuperable). Sin filtrar por
+      // status: el stash de sesión insegura TIENE que poder promoverse tras el MFA.
+      .limit(10);
     if (payload.job_id) query = query.eq("job_id", payload.job_id);
     // Sin job_id el rescate es "lo último que emitiste": acotarlo a 24 h. Sin la
     // ventana podía resucitar una boleta VIEJA de otra emisión y reportarla como
@@ -950,7 +1195,7 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const recovered = recoveredRows?.[0] as { job_id: string | null; result: unknown } | undefined;
+    const recovered = elegirResultadoRecuperable(recoveredRows as Array<{ job_id: string | null; result: unknown; status: string | null }> | null);
     if (!recovered?.result || typeof recovered.result !== "object") {
       return NextResponse.json({ ok: false, error: "SIN_RESULTADO_SII_RECUPERABLE" }, { status: 404 });
     }
@@ -992,7 +1237,7 @@ export async function POST(request: Request) {
     // botones "Recuperar folio/PDF" funcionen aunque el job ya esté cerrado.
     const jobCerrado = jobGate.job;
     const vetoCalceCerrado = Boolean(jobCerrado && esCalceReportes(result) && tipoDte && montoTotal && fechaEmision)
-      && await calceReportesVetado(sb, { empresaId: jobCerrado!.empresa_id, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: effectiveJobId });
+      && await calceReportesVetado(sb, { empresaId: jobCerrado!.empresa_id, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: effectiveJobId, propuestaId: jobCerrado!.propuesta_id ?? null });
     const evidenciaFuerte = (result?.folio_confidence === "high" && !vetoCalceCerrado) || Boolean(pdfInfo?.folio);
     // La red aplica a TODA falla del gate que venga con `job` adjunto (cerrado,
     // expirado, empresa desactivada por downgrade, plan vencido): la ownership
@@ -1014,6 +1259,7 @@ export async function POST(request: Request) {
         pdfInfo,
       });
       if (respaldo.ok) {
+        await levantarAdoptado(sb, jobCerrado);
         await rememberResult(sb, {
           user_id: user.id,
           job_id: effectiveJobId,
@@ -1085,7 +1331,7 @@ export async function POST(request: Request) {
   // URL del PDF). Es el ÚNICO requisito para registrar la boleta: el folio es
   // la prueba de emisión. El PDF se adjunta aparte (puede quedar pendiente).
   const vetoCalce = Boolean(esCalceReportes(result) && tipoDte && montoTotal && fechaEmision)
-    && await calceReportesVetado(sb, { empresaId, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: job.job_id });
+    && await calceReportesVetado(sb, { empresaId, tipoDte: tipoDte!, montoTotal: montoTotal!, fechaEmision: fechaEmision!, jobId: job.job_id, propuestaId: job.propuesta_id ?? null });
   const hasStrongEvidence = (result?.folio_confidence === "high" && !vetoCalce) || Boolean(pdfInfo?.folio);
   if (vetoCalce) {
     await recordOpsEvent({
@@ -1253,6 +1499,7 @@ export async function POST(request: Request) {
     }
     await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "already_exists", result });
     await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
+    await levantarAdoptado(sb, job);
     return NextResponse.json({ ok: true, boleta_id: existing.id, folio, estado: existing.estado, already_exists: true });
   }
 
@@ -1260,8 +1507,15 @@ export async function POST(request: Request) {
   // con marca visible + alerta ops — antes los libros divergían en silencio.
 
   const totals = totalsFor(tipoDte, montoTotal, result?.totales ?? null);
-  const receptor = result?.receptor ?? null;
-  const detalles = Array.isArray(result?.detalles) && result.detalles.length > 0
+  // Verificación de un intento ADOPTADO: el job de verificación no lleva glosa ni
+  // receptor (solo lee /reportes); lo que se emitió de verdad sale de la PROPUESTA.
+  const desdePropuesta = jobAdoptadoDeOrigen(job.origin) && job.propuesta_id
+    ? await datosEmitidosDePropuesta(sb, job.propuesta_id, tipoDte)
+    : null;
+  const receptor = desdePropuesta?.receptor ?? result?.receptor ?? null;
+  const detalles = desdePropuesta
+    ? [{ nro_lin: 1, nombre: desdePropuesta.glosa, qty: 1, monto: montoTotal }]
+    : Array.isArray(result?.detalles) && result.detalles.length > 0
     ? result.detalles.map((detalle, index) => ({
         nro_lin: index + 1,
         nombre: cleanText(detalle.nombre) ?? "Servicio prestado",
@@ -1517,14 +1771,16 @@ export async function POST(request: Request) {
     },
   });
   await releaseCuentaEmissionLock({ sb, cuentaId: job.cuenta_id, jobId: job.job_id, estado: "completed" });
+  await levantarAdoptado(sb, job);
 
   return NextResponse.json({ ok: true, boleta_id: boleta.id, folio: boleta.folio, estado: boleta.estado, track_id: boleta.track_id, pdf_pendiente: pdfPendiente });
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, error: "NO_AUTH" }, { status: 401 });
+  // Lectura del historial: se bloquea con sesión insegura (nada que perder).
+  const guard = await requireSesionSegura();
+  if (!guard.ok) return guard.response;
+  const user = guard.user;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -154,6 +154,9 @@ function createSearchText(item: SearchItem) {
     item.subtitle,
     item.type,
     String(d.folio ?? ""),
+    // ID interno: "R-7F3-KXH" y "R7F3KXH" (así también calza "7f3kxh" dictado junto).
+    String(d.ref ?? ""),
+    String(d.ref ?? "").replace(/-/g, ""),
     String(d.receptor_razon_social ?? ""),
     String(d.receptor_rut ?? ""),
     String(d.nombre_archivo ?? ""),
@@ -540,7 +543,7 @@ function Hero({ value, label, color }: { value: string; label: string; color: st
 
 function TypeFields({ item }: { item: NormalizedItem }) {
   const d = item.data ?? {};
-  if (item.type === "boleta") return <><Row label="Estado">{item.statusLabel}</Row><Row label="Receptor">{String(d.receptor_razon_social ?? "-")}</Row><Row label="RUT">{String(d.receptor_rut ?? "-")}</Row><Row label="Folio">#{String(d.folio ?? "-")}</Row><Row label="Emisión SII">{fmtDate(item.emissionDate, "long")}</Row><Row label="Subida/Edición">{fmtDate(item.editDate, "long")}</Row><Row label="Neto">{fmtMoney((d.monto_neto as number | undefined) ?? item.amount) || "-"}</Row><Row label="IVA">{fmtMoney(d.iva as number | undefined) || "-"}</Row></>;
+  if (item.type === "boleta") return <><Row label="Estado">{item.statusLabel}</Row><Row label="Receptor">{String(d.receptor_razon_social ?? "-")}</Row><Row label="RUT">{String(d.receptor_rut ?? "-")}</Row><Row label="Folio">#{String(d.folio ?? "-")}</Row><Row label="Ref.">{String(d.ref ?? "—")}</Row><Row label="Emisión SII">{fmtDate(item.emissionDate, "long")}</Row><Row label="Subida/Edición">{fmtDate(item.editDate, "long")}</Row><Row label="Neto">{fmtMoney((d.monto_neto as number | undefined) ?? item.amount) || "-"}</Row><Row label="IVA">{fmtMoney(d.iva as number | undefined) || "-"}</Row></>;
   if (item.type === "documento") { const progreso = (d.progreso_ia as { movimientos_encontrados?: number; duplicados_saltados?: number } | undefined) ?? {}; return <><Row label="Archivo">{String(d.nombre_archivo ?? item.label)}</Row><Row label="Tipo">{String(d.tipo ?? "Excel")}</Row><Row label="Subido">{fmtDate(item.editDate, "long")}</Row><Row label="Estado">{item.statusLabel}</Row><Row label="Encontrados">{String(progreso.movimientos_encontrados ?? d.movimientos_detectados ?? 0)}</Row>{(progreso.duplicados_saltados ?? 0) > 0 && <Row label="Duplicados">{progreso.duplicados_saltados}</Row>}</>; }
   if (item.type === "propuesta") { const mov = (d.movimientos_raw as MovRaw | undefined) ?? {}; return <><Row label="Descripción">{String(mov.descripcion ?? item.label)}</Row><Row label="Monto">{item.amountLabel}</Row><Row label="Flujo">{mov.tipo_flujo === "entrada" ? "Ingreso" : mov.tipo_flujo === "salida" ? "Gasto" : "-"}</Row><Row label="Fecha mov.">{mov.fecha ? fmtDate(String(mov.fecha), "long") : "-"}</Row><Row label="Documento">{String(mov.n_documento ?? "-")}</Row></>; }
   return <><Row label="Detalle">{item.subtitle || "Registro de actividad"}</Row><Row label="Fecha">{fmtDate(item.activeDate, "long")}</Row></>;
@@ -587,7 +590,7 @@ function highlightText(text: string, query: string) {
 
 function EmptyState({ query, filtered }: { query: string; filtered: boolean }) {
   const title = !filtered ? "Sin historial reciente" : query ? `Sin resultados para "${query}"` : "Sin resultados con estos filtros";
-  const message = query ? "Prueba buscar por folio, RUT, monto, receptor o nombre de archivo." : "Ajusta el tipo, rango de fechas o modo de fecha para ampliar los resultados.";
+  const message = query ? "Prueba buscar por folio, ref., RUT, monto, receptor o nombre de archivo." : "Ajusta el tipo, rango de fechas o modo de fecha para ampliar los resultados.";
   return <div style={{ minHeight: "100%", display: "grid", placeItems: "center", padding: 36, textAlign: "center" }}><div><div style={{ width: 54, height: 54, borderRadius: 18, margin: "0 auto 12px", display: "grid", placeItems: "center", background: "rgba(232,85,62,.1)", color: "var(--accent)" }}><Search size={21} /></div><div style={{ fontSize: 13, fontWeight: 850, color: "var(--text)" }}>{title}</div><div style={{ marginTop: 6, fontSize: 11, color: "var(--text2)", maxWidth: 300, lineHeight: 1.45 }}>{message}</div></div></div>;
 }
 

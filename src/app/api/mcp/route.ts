@@ -6,6 +6,7 @@ import { clientIpFromRequest, rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { clasificarIntocables, contarIntocables } from "@/lib/emission/propuestas-intocables";
 import { LIMITE_FILAS_LECTURA, LIMITE_ESCRITURAS_POR_DIA, MESES_HACIA_ATRAS_MAX, PAGINA_MAX, frenarEscritura, frenarLectura, mensajeDeFreno, paginaAOffset, ventanaDelMes, type Freno } from "@/lib/mcp/manguera";
 
 // Conector MCP de massDTE — copiloto de revisión (lee y ORDENA; no emite).
@@ -323,12 +324,26 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           };
         }
 
-        // Solo estados PRE-emisión "staged" vuelven al check. Lo emitido, lo
-        // descartado y lo pendiente no se tocan (idempotente por construcción).
+        // Lo EMITIDO sigue en 'aprobado' (la verdad es boletas_emitidas), así que el
+        // filtro de estado no basta (incidente MH 2026-09-29): se sacan antes las
+        // emitidas, a medias / sin respuesta y en vuelo. Fail-closed.
+        const sep = await clasificarIntocables(ctx.svc, ctx.empresaId, ids);
+        if ("error" in sep) throw new Error("No se pudo verificar qué documentos ya se emitieron");
+        const seQuedan = contarIntocables(sep.intocables);
+        if (sep.tocables.length === 0) {
+          return {
+            devueltas: 0,
+            se_quedan: seQuedan,
+            nota: "Ninguno se devolvió: ya están emitidos en el SII, a medias o emitiéndose. Lo emitido no vuelve a revisión.",
+          };
+        }
+
+        // Solo estados PRE-emisión "staged" vuelven al check. Lo descartado y lo
+        // pendiente no se tocan (idempotente por construcción).
         const { data: tocadas, error } = await ctx.svc
           .from("propuestas_ia")
           .update({ estado: "pendiente" })
-          .in("id", ids)
+          .in("id", sep.tocables)
           .eq("empresa_id", ctx.empresaId)
           .in("estado", ["aprobado", "listo"])
           .select("id");
@@ -346,11 +361,12 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           usuarioId: ctx.usuarioId,
           resourceType: "mcp_tokens",
           resourceId: ctx.tokenId,
-          metadata: { devueltas, solicitadas: ids.length, origen: "mcp", conector_id: ctx.tokenId },
+          metadata: { devueltas, solicitadas: ids.length, se_quedan_emitidas: seQuedan.emitidas, origen: "mcp", conector_id: ctx.tokenId },
         });
         return {
           devueltas,
           solicitadas: ids.length,
+          se_quedan: seQuedan,
           nota:
             devueltas === ids.length
               ? "Documentos devueltos al balde 'por revisar'. El usuario los verá en el Check de agregados."
