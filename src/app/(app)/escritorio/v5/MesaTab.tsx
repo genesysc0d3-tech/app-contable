@@ -204,7 +204,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     setAprobandoCartola(true);
     try {
       const r = await aprobarCartola(selDoc.id);
-      if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir`);
+      if (r.error) toast(r.error, "error"); else toast(`${r.count} enviadas a Emitir${r.aviso ? ` · ${r.aviso}` : ""}`);
       reload();
     } catch {
       // Un throw de la server action dejaba el botón "Aprobar" deshabilitado para

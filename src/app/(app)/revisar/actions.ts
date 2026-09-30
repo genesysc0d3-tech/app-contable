@@ -847,7 +847,7 @@ export async function ultimaMiradaCartola(
 
 export async function aprobarCartola(
   documentoId: string
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
   const { data: props, error: qErr } = await ctx.sb
@@ -884,7 +884,8 @@ export async function aprobarCartola(
   });
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: aprobadas };
+  const aviso = avisoSeQuedan(sep.intocables);
+  return { ok: true, count: aprobadas, ...(aviso ? { aviso } : {}) };
 }
 
 export async function editarMovimientoPropuesta(
