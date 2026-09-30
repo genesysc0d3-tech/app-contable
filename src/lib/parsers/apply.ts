@@ -1,27 +1,24 @@
 import type { AdapterConfig, DescarteFila, ParsedLine, PreExtractedMovimiento, Row } from "./types";
+import { LectorMontos, leerCeldaMonto, lecturaLaxa, valorCeldaSuelta } from "./numeros";
 
 /**
- * Parse a Chilean-formatted number: "1.600.000", "80,000", "1.234,56" → integer.
- * Drops all non-digit characters, returning a plain integer of the major units.
- * Saldo/monto columns in Chilean bank statements are always integers (CLP).
+ * Monto de UNA celda, sin contexto de columna: "1.600.000", "250,000",
+ * "1.234,56", "$ -418.370", "(5.000)" → entero CLP (fracción truncada).
+ *
+ * Si la celda admite una sola lectura (ver numeros.ts) se usa esa: "250,000" es
+ * 250000 (antes 250: se cortaba en la primera coma, hallazgo 0.1-2 de
+ * docs/investigacion-lector-cartolas-2026-09-30.md) y el signo después del "$"
+ * ya no se pierde. Para leer una COLUMNA de una cartola usar LectorMontos, que
+ * decide el formato mirando todas sus celdas y no adivina si la columna mezcla.
  */
 export function parseChileanNumber(v: unknown): number {
   if (v == null || v === "") return 0;
   // Celdas numéricas (xlsx las entrega como number): redondear, NO stringificar —
   // si no, 53000.5 → "53000.5" → "530005" (×10). Los montos son CLP enteros.
   if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : 0;
-  const s = String(v).trim();
-  if (!s) return 0;
-  const neg = s.startsWith("-");
-  // Formato chileno: la COMA es el separador DECIMAL → se conserva solo la parte
-  // entera. "53.000,00" = 53000, no 5.300.000 (antes daba ×100). El punto es
-  // separador de MILES y se elimina abajo con el resto de los no-dígitos.
-  const intPart = s.split(",")[0];
-  const digits = intPart.replace(/[^\d]/g, "");
-  if (!digits) return 0;
-  const n = parseInt(digits, 10);
-  if (!Number.isFinite(n)) return 0;
-  return neg ? -n : n;
+  const l = leerCeldaMonto(v);
+  if (l) return valorCeldaSuelta(l);
+  return lecturaLaxa(v);
 }
 
 /** Fecha COMPLETA de una celda (dd/mm/yyyy o yyyy-mm-dd al inicio, yyyymmdd, Date). */
@@ -215,7 +212,7 @@ export function parseFechaCartola(
  * Returns "SALIDA" for cargo/débito/egreso variants, "ENTRADA" for abono/
  * crédito/ingreso variants. Returns null if unrecognized.
  */
-function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
+export function classifyTipoFlag(v: unknown): ParsedLine["tipo"] | null {
   if (v == null) return null;
   const s = String(v).trim().toLowerCase();
   if (!s) return null;
@@ -235,29 +232,89 @@ function celdaCruda(v: unknown): string | null {
   return String(v).trim() || null;
 }
 
-const RESUMEN_RE = /\b(sub\s*total|total(es)?|saldo\s+(inicial|final|anterior|disponible|contable)|resumen)\b/i;
-
-/** Fila de totales/saldos: tiene plata pero no es una transacción. */
-function esFilaResumen(r: Row): boolean {
-  return r.some((v) => typeof v === "string" && RESUMEN_RE.test(v));
-}
+export const RESUMEN_RE = /\b(sub\s*total|total(es)?|saldo\s+(inicial|final|anterior|disponible|contable)|resumen)\b/i;
 
 /** Plata de la fila según las columnas del mapeo (0 si no trae monto). */
-function montoEnFila(r: Row, cfg: AdapterConfig): { monto: number; tipo: DescarteFila["tipo_flujo"] } {
+function montoEnFila(
+  r: Row,
+  cfg: AdapterConfig,
+  lector: LectorMontos,
+): { monto: number; tipo: DescarteFila["tipo_flujo"]; ambiguo: boolean } {
   const c = cfg.columns;
   const layout = cfg.layout ?? "two_cols";
   if (layout === "single_col" || layout === "transactions_log") {
-    const m = c.monto != null && c.monto >= 0 ? Math.abs(parseChileanNumber(r[c.monto])) : 0;
+    const m = lector.leer(r, c.monto);
     const tipo = layout === "transactions_log"
       ? ((cfg.default_tipo_flujo ?? "entrada") === "salida" ? "salida" : "entrada")
       : null;
-    return { monto: m, tipo };
+    return { monto: m.ambiguo ? (m.referencia ?? 0) : Math.abs(m.valor), tipo, ambiguo: m.ambiguo };
   }
-  const cargo = Math.abs(parseChileanNumber(r[c.cargo]));
-  const abono = Math.abs(parseChileanNumber(r[c.abono]));
-  if (cargo && !abono) return { monto: cargo, tipo: "salida" };
-  if (abono && !cargo) return { monto: abono, tipo: "entrada" };
-  return { monto: cargo + abono, tipo: null };
+  const cm = lector.leer(r, c.cargo);
+  const am = lector.leer(r, c.abono);
+  const cargo = cm.ambiguo ? (cm.referencia ?? 0) : Math.abs(cm.valor);
+  const abono = am.ambiguo ? (am.referencia ?? 0) : Math.abs(am.valor);
+  const ambiguo = cm.ambiguo || am.ambiguo;
+  if (cargo && !abono) return { monto: cargo, tipo: "salida", ambiguo };
+  if (abono && !cargo) return { monto: abono, tipo: "entrada", ambiguo };
+  return { monto: cargo + abono, tipo: null, ambiguo };
+}
+
+type LecturaFecha =
+  | { ok: true; iso: string }
+  | { ok: false; motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango"; iso: string | null };
+
+/** Fecha de la celda de la columna fecha, con el motivo exacto si no sirve. */
+function leerFechaFila(
+  fechaRaw: unknown,
+  cfg: AdapterConfig,
+  rango: RangoFechas | null,
+  ahora: Date,
+): LecturaFecha {
+  if (!fechaRaw) return { ok: false, motivo: "sin_fecha", iso: null };
+  // Convert Date objects (from cellDates:true) to ISO string. El tipo Row
+  // declara string|number, pero con cellDates el runtime trae Date reales.
+  const fechaVal = fechaRaw as Date | string | number;
+  const isDate = fechaVal instanceof Date;
+  let fechaStr = isDate
+    ? `${fechaVal.getFullYear()}-${String(fechaVal.getMonth() + 1).padStart(2, "0")}-${String(fechaVal.getDate()).padStart(2, "0")}`
+    : String(fechaRaw).trim();
+
+  // Fecha como número serial de Excel (algunos bancos exportan la celda como
+  // número, no texto ni Date): 46245 = 2026-08-11. Rango acotado a 2000–2100
+  // para no confundir montos con fechas.
+  const serial = typeof fechaVal === "number" && Number.isFinite(fechaVal)
+    ? Math.floor(fechaVal)
+    : /^\d{5}$/.test(fechaStr) ? parseInt(fechaStr, 10) : NaN;
+  const isSerial = !isDate && serial >= 36526 && serial <= 73050;
+  if (isSerial) {
+    const d = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
+    fechaStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  if (isDate && Number.isNaN((fechaVal as Date).getTime())) return { ok: false, motivo: "fecha_ilegible", iso: null };
+  if (!isDate && !isSerial) {
+    // Se acepta lo que parseFechaCartola sepa convertir a una fecha REAL
+    // (incluye yyyymmdd y dd/mm sin año). "32/13/2026" o "31/02/2026" no se
+    // corren al mes siguiente: van al censo como fecha_imposible, y el cuadre
+    // las muestra como perdidas en vez de meter un movimiento con fecha falsa.
+    const f = parseFechaCartola(fechaStr, cfg.date_format, { rango, ahora });
+    if (!f.ok) return { ok: false, motivo: f.motivo, iso: null };
+    fechaStr = f.iso;
+  }
+  // Año fuera de 2000..actual+1 (p. ej. "14/06/99" → 1999, o un Date/serial
+  // de 2091): tampoco es un movimiento creíble de esta cartola.
+  if (!anioCartolaCreible(parseInt(fechaStr.slice(0, 4), 10), ahora)) {
+    return { ok: false, motivo: "fecha_fuera_de_rango", iso: fechaStr };
+  }
+  return { ok: true, iso: fechaStr };
+}
+
+export interface OpcionesApply {
+  /**
+   * Filas (índice 0-based) con una fórmula SUMA del banco en una columna de
+   * plata: son de totales POR DEFINICIÓN (juez-banco.ts), no por una palabra.
+   */
+  filasFormula?: Set<number>;
 }
 
 /**
@@ -276,6 +333,7 @@ export function applyAdapter(
   cfg: AdapterConfig,
   descartes?: DescarteFila[],
   ahora: Date = new Date(),
+  opts: OpcionesApply = {},
 ): ParsedLine[] {
   const lines: ParsedLine[] = [];
   const { columns: c } = cfg;
@@ -284,27 +342,43 @@ export function applyAdapter(
   // "dd/mm" sin año: el año sale del rango del período (DESDE/HASTA o la
   // columna fecha; cruce dic–ene), nunca más de 7 días al futuro.
   const rango = inferirRangoFechas(rows, cfg);
-  // Pasada una fila "Resumen/Total/Saldo", lo que sigue es el bloque de
-  // resumen del banco (BICE: "RESUMEN DEL PERIODO", "TOTAL ABONOS", "SALDO FINAL").
+  // Formato de número decidido POR COLUMNA con todas sus celdas (numeros.ts).
+  const lector = new LectorMontos(rows as unknown[][], start, cfg.number_format === "generic" ? "generic" : "chilean");
+  // Bloque de resumen del banco (BICE: "RESUMEN DEL PERIODO", "TOTAL ABONOS",
+  // "SALDO FINAL"). Se decide por ESTRUCTURA (punto 2, 2026-09-30): se abre con
+  // una fila SIN fecha válida que dice total/resumen/saldo (o que trae la
+  // fórmula SUMA del banco) y se CIERRA en cuanto vuelve una fila con fecha. Una
+  // glosa "PAGO TOTAL TARJETA" con fecha es un movimiento: antes prendía el
+  // bloque para todo lo que seguía y las pérdidas de abajo salían "legítimas".
   let bloqueResumen = false;
 
   for (let i = start; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.length === 0) continue;
-    if (esFilaResumen(r)) bloqueResumen = true;
+
+    const fecha = leerFechaFila(r[c.fecha], cfg, rango, ahora);
+    const conFecha = fecha.ok || fecha.motivo === "fecha_fuera_de_rango";
+    if (conFecha) bloqueResumen = false;
+    const palabraFueraDeGlosa = r.some((v, j) => j !== c.descripcion && typeof v === "string" && RESUMEN_RE.test(v));
+    const palabraEnGlosa = typeof r[c.descripcion] === "string" && RESUMEN_RE.test(String(r[c.descripcion]));
+    const filaResumen =
+      opts.filasFormula?.has(i) === true ||
+      palabraFueraDeGlosa ||
+      (!conFecha && palabraEnGlosa);
+    if (filaResumen && !conFecha) bloqueResumen = true;
+    const resumen = filaResumen || (bloqueResumen && !conFecha);
 
     // Censo: una fila con plata que no termina en movimiento se anota con su
     // motivo. Antes cada `continue` de abajo la botaba en silencio (incidente
     // LC 2026-09-27: filas perdidas sin que nadie se enterara).
-    const plata = montoEnFila(r, cfg);
-    const descartar = (motivo: DescarteFila["motivo"], fecha: string | null, tipo: DescarteFila["tipo_flujo"]) => {
+    const plata = montoEnFila(r, cfg, lector);
+    const descartar = (motivo: DescarteFila["motivo"], fechaIso: string | null, tipo: DescarteFila["tipo_flujo"]) => {
       if (!descartes || !plata.monto) return;
-      const resumen = bloqueResumen || esFilaResumen(r);
       descartes.push({
         excel_row: i + 1,
         motivo: resumen ? "resumen" : motivo,
         legitimo: resumen,
-        fecha,
+        fecha: fechaIso,
         monto: plata.monto,
         tipo_flujo: tipo ?? plata.tipo,
         descripcion: String(r[c.descripcion] ?? "").trim(),
@@ -312,44 +386,14 @@ export function applyAdapter(
       });
     };
 
-    const fechaRaw = r[c.fecha];
-    if (!fechaRaw) { descartar("sin_fecha", null, null); continue; }
-
-    // Convert Date objects (from cellDates:true) to ISO string. El tipo Row
-    // declara string|number, pero con cellDates el runtime trae Date reales.
-    const fechaVal = fechaRaw as unknown as Date | string | number;
-    const isDate = fechaVal instanceof Date;
-    let fechaStr = isDate
-      ? `${fechaVal.getFullYear()}-${String(fechaVal.getMonth() + 1).padStart(2, "0")}-${String(fechaVal.getDate()).padStart(2, "0")}`
-      : String(fechaRaw).trim();
-
-    // Fecha como número serial de Excel (algunos bancos exportan la celda como
-    // número, no texto ni Date): 46245 = 2026-08-11. Rango acotado a 2000–2100
-    // para no confundir montos con fechas.
-    const serial = typeof fechaVal === "number" && Number.isFinite(fechaVal)
-      ? Math.floor(fechaVal)
-      : /^\d{5}$/.test(fechaStr) ? parseInt(fechaStr, 10) : NaN;
-    const isSerial = !isDate && serial >= 36526 && serial <= 73050;
-    if (isSerial) {
-      const d = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
-      fechaStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-    }
-
-    if (isDate && Number.isNaN((fechaVal as Date).getTime())) { descartar("fecha_ilegible", null, null); continue; }
-    if (!isDate && !isSerial) {
-      // Se acepta lo que parseFechaCartola sepa convertir a una fecha REAL
-      // (incluye yyyymmdd y dd/mm sin año). "32/13/2026" o "31/02/2026" no se
-      // corren al mes siguiente: van al censo como fecha_imposible, y el cuadre
-      // las muestra como perdidas en vez de meter un movimiento con fecha falsa.
-      const f = parseFechaCartola(fechaStr, cfg.date_format, { rango, ahora });
-      if (!f.ok) { descartar(f.motivo, null, null); continue; }
-      fechaStr = f.iso;
-    }
-    // Año fuera de 2000..actual+1 (p. ej. "14/06/99" → 1999, o un Date/serial
-    // de 2091): tampoco es un movimiento creíble de esta cartola.
-    if (!anioCartolaCreible(parseInt(fechaStr.slice(0, 4), 10), ahora)) {
-      descartar("fecha_fuera_de_rango", fechaStr, null); continue;
-    }
+    if (!fecha.ok) { descartar(fecha.motivo, fecha.iso, null); continue; }
+    const fechaStr = fecha.iso;
+    // Un monto que su columna no permite leer sin adivinar ("250,000" en una
+    // columna de "1.234.567"): al censo, jamás un número inventado.
+    if (plata.ambiguo) { descartar("monto_ambiguo", fechaStr, null); continue; }
+    // Fila de totales con fecha (fórmula SUMA del banco, o "TOTAL" fuera de la
+    // glosa): no es un movimiento.
+    if (resumen) { descartar("resumen", fechaStr, null); continue; }
 
     let tipo: ParsedLine["tipo"];
     let monto: number;
@@ -358,7 +402,7 @@ export function applyAdapter(
       const montoCol = c.monto ?? -1;
       const tipoCol = c.tipo_flujo_col ?? -1;
       if (montoCol < 0 || tipoCol < 0) continue;
-      const amount = parseChileanNumber(r[montoCol]);
+      const amount = Math.abs(lector.leer(r, montoCol).valor);
       if (!amount) continue;
       const t = classifyTipoFlag(r[tipoCol]);
       if (!t) { descartar("tipo_desconocido", fechaStr, null); continue; }
@@ -368,13 +412,15 @@ export function applyAdapter(
       // 1 monto column, no tipo flag → use default_tipo_flujo (defaults to entrada)
       const montoCol = c.monto ?? -1;
       if (montoCol < 0) continue;
-      const amount = parseChileanNumber(r[montoCol]);
+      const amount = lector.leer(r, montoCol).valor;
       if (!amount) continue;
       tipo = (cfg.default_tipo_flujo ?? "entrada") === "salida" ? "SALIDA" : "ENTRADA";
       monto = amount;
     } else {
-      const cargo = parseChileanNumber(r[c.cargo]);
-      const abono = parseChileanNumber(r[c.abono]);
+      // La COLUMNA dice la dirección: un "-5.000" en la columna Cargos es un
+      // cargo de 5.000 (varios bancos los imprimen con signo).
+      const cargo = Math.abs(lector.leer(r, c.cargo).valor);
+      const abono = Math.abs(lector.leer(r, c.abono).valor);
       // Both zero → metadata, summary, or blank line
       if (!cargo && !abono) continue;
       // Both non-zero → ambiguous, skip
@@ -383,11 +429,10 @@ export function applyAdapter(
       monto = cargo || abono;
     }
 
-    const fecha = fechaStr;
     const descripcion = String(r[c.descripcion] ?? "").trim();
     const n_documento =
       c.n_documento >= 0 ? String(r[c.n_documento] ?? "").trim() : "";
-    const saldo = c.saldo >= 0 ? parseChileanNumber(r[c.saldo]) : undefined;
+    const saldo = c.saldo >= 0 ? lector.leer(r, c.saldo).valor : undefined;
 
     // Plantilla extendida: campos que el cliente clasificó fila a fila.
     const pc = cfg.plantilla_cols;
@@ -399,7 +444,7 @@ export function applyAdapter(
     const celdaMonto = layout === "two_cols" ? (tipo === "SALIDA" ? r[c.cargo] : r[c.abono]) : r[c.monto ?? -1];
     lines.push({
       tipo,
-      fecha,
+      fecha: fechaStr,
       monto,
       ...(typeof celdaMonto === "string" ? { monto_texto: true } : {}),
       descripcion,
@@ -419,12 +464,21 @@ export function applyAdapter(
   return lines;
 }
 
+/** Qué sumas de lo leído calzaron con una fila de totales del banco. */
+export interface CalceTotales {
+  entradas: boolean;
+  salidas: boolean;
+  todo: boolean;
+}
+
 /**
  * Una fila sin fecha cuyo monto es la suma de los abonos, de los cargos o de
  * todo lo leído es la fila de totales del banco (BancoEstado, BICE: sin texto,
- * solo el número). No es una transacción → descarte legítimo.
+ * solo el número). No es una transacción → descarte legítimo. Devuelve QUÉ
+ * sumas calzaron: ese calce es PRUEBA a favor de la lectura (juez-banco.ts), no
+ * solo un motivo para botar la fila.
  */
-function marcarFilasDeTotales(lines: ParsedLine[], descartes: DescarteFila[]): void {
+export function marcarFilasDeTotales(lines: ParsedLine[], descartes: DescarteFila[]): CalceTotales {
   // Dos formas de sumar: la nuestra (todo lo leído) y la del Excel del banco,
   // cuya fórmula SUMA ignora los montos escritos como texto (BancoEstado: un
   // abono "$100" en texto → el total del banco quedaba $100 abajo).
@@ -432,16 +486,23 @@ function marcarFilasDeTotales(lines: ParsedLine[], descartes: DescarteFila[]): v
     lines
       .filter((l) => (tipo == null || l.tipo === tipo) && !(soloNumeros && l.monto_texto))
       .reduce((s, l) => s + l.monto, 0);
-  const sumas = [false, true]
-    .flatMap((soloNumeros) => [suma("ENTRADA", soloNumeros), suma("SALIDA", soloNumeros), suma(null, soloNumeros)])
-    .filter((x) => x > 0);
+  const calce: CalceTotales = { entradas: false, salidas: false, todo: false };
+  const cerca = (a: number, b: number) => a > 0 && Math.abs(a - b) <= 1;
   for (const d of descartes) {
-    if (d.legitimo || d.motivo !== "sin_fecha") continue;
-    if (sumas.some((s) => Math.abs(s - d.monto) <= 1)) {
+    if (d.motivo !== "sin_fecha" && d.motivo !== "resumen") continue;
+    let calzo = false;
+    for (const soloNumeros of [false, true]) {
+      if (cerca(suma("ENTRADA", soloNumeros), d.monto) && d.tipo_flujo !== "salida") { calce.entradas = true; calzo = true; }
+      if (cerca(suma("SALIDA", soloNumeros), d.monto) && d.tipo_flujo !== "entrada") { calce.salidas = true; calzo = true; }
+      if (cerca(suma(null, soloNumeros), d.monto)) { calce.todo = true; calzo = true; }
+    }
+    // Solo una fila SIN fecha se vuelve legítima por calzar (como siempre).
+    if (calzo && d.motivo === "sin_fecha") {
       d.legitimo = true;
       d.motivo = "resumen";
     }
   }
+  return calce;
 }
 
 /**

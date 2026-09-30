@@ -1,6 +1,7 @@
 import type { AdapterConfig, Row } from "./types";
 import { parseChileanNumber } from "./apply";
 import { cuadreSaldo } from "./saldo-cuadre";
+import { derivarNumberFormat } from "./numeros";
 import { encabezadoConSaldo, encabezadoConSalidas, normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
 
 /**
@@ -49,6 +50,16 @@ export function cellEsFecha(cell: string | number | null | undefined | Date): bo
 }
 
 export function detectHeuristic(rows: Row[]): AdapterConfig | null {
+  const cfg = detectHeuristicSinFormato(rows);
+  if (!cfg) return null;
+  // number_format DERIVADO de las celdas de plata (punto 1, 2026-09-30): antes
+  // siempre "chilean" y applyAdapter lo ignoraba.
+  const c = cfg.columns;
+  cfg.number_format = derivarNumberFormat(rows as unknown[][], cfg.skip_rows_before_data, [c.cargo, c.abono, c.saldo, c.monto ?? -1]);
+  return cfg;
+}
+
+function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
   // Step 1: find the first run of >= 3 consecutive "transaction-looking" rows
   // (lowered from 5 to also accept smaller test cartolas)
   const txStart = findTransactionBlockStart(rows);

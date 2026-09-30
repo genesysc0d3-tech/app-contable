@@ -97,7 +97,13 @@ export interface ParsedLine {
  */
 export interface DescarteFila {
   excel_row: number;
-  motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango" | "tipo_desconocido" | "cargo_y_abono" | "resumen";
+  /**
+   * monto_ambiguo: la columna mezcla formatos ("1.234.567" y "250,000") y la
+   *   celda no se puede leer sin adivinar (numeros.ts).
+   * sin_leer: el censo INDEPENDIENTE del mapeo vio fecha + plata en la fila y el
+   *   mapeo no la leyó ni la descartó (plata en una columna que el mapa no mira).
+   */
+  motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango" | "tipo_desconocido" | "cargo_y_abono" | "resumen" | "monto_ambiguo" | "sin_leer";
   legitimo: boolean;
   fecha: string | null;
   monto: number;

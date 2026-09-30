@@ -25,8 +25,10 @@ export function cuadreSaldo(
     let revisadas = 0;
     let fallidas = 0;
     for (const r of orden) {
-      const c = parseChileanNumber(r[cargo]);
-      const a = parseChileanNumber(r[abono]);
+      // La columna da la dirección (un "-5.000" en Cargos es un cargo de 5.000);
+      // el saldo sí va con signo (un sobregiro es negativo).
+      const c = Math.abs(parseChileanNumber(r[cargo]));
+      const a = Math.abs(parseChileanNumber(r[abono]));
       const s = parseChileanNumber(r[saldo]);
       if (!c && !a) continue;
       if (!s) continue;
