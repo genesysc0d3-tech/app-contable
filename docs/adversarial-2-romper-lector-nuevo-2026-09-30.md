@@ -317,3 +317,72 @@ Bloquean:
 - **N2** (ALTO): ventas reales escondidas como "subtotal legítimo".
 
 Con N1 y N2 arreglados, y N3/N4 al menos atenuados (N4 es ruido, no plata), mi veredicto pasaría a "listo con el flag de IA apagado". N5 y N6 pueden ir después. **La migración sigue sin aplicar:** respaldar `parser_adapters` antes.
+
+---
+
+# Vuelta 3 (sobre `4294cce`: commits 3d0ec86, c0ea305, 4294cce)
+
+Re-corrí las reproducciones de las vueltas 1 y 2 y ataqué lo nuevo. Tests en `scratchpad/adversarial-2/tests-v3/` (`vuelta3.test.ts` + repros anteriores); en el worktree no quedó nada mío aparte de este doc.
+
+**Red e IA:** 0 llamadas de red, a OpenCode y a Fireworks. Las cartolas reales solo pasaron por lectores determinísticos.
+
+**Suite:**
+- `npx vitest run`: **188 archivos, 2212 tests OK, 5 skipped, exit 0**.
+- `npx tsc --noEmit`: solo el mismo error viejo de `.next/types` (fuera del diff); `src/` limpio.
+
+## Verificación de la vuelta 2
+
+| # | Veredicto | Evidencia |
+|---|---|---|
+| N1 consenso global | **CERRADO** [V] | Dos empresas del mismo dueño con "cliente"/"check" → consenso **false**. Víctima con un global invertido: los títulos de su hoja contradicen el mapa, así que se descarta y re-deriva **9/9 ventas**; y un global sin prueba ahora es `nuevo: true`, o sea que se le pide mirar. |
+| N2 subtotal esconde ventas | **CERRADO** [V] | Con saldo del día repetido: 9/9 leídas, sin descartes (sale alerta de saldo, que es verdad). "TOTAL CHILE SPA" sin saldo: 3/3. |
+| N3 bloque + 1 | **CERRADO** [L] | Exige auditoría `propuesta_aprobada` de CADA aprobada. Esa auditoría solo la escribe `aprobarPropuesta` (service role; RLS de `cuenta_audit_events` solo deja SELECT). Borde: una fila aprobada a mano, devuelta a Check y después aprobada en bloque conserva su auditoría vieja. Menor. |
+| N4 filtrada perpetua | **CERRADO**, pero abre V3-1 (abajo) | santander real → `filtrada: "abonos"` y el botón queda disponible. |
+| N5 UTF-16 | **CERRADO** [V] | "05/09/2026" y "1.500" llegan como texto. |
+| N6 pie pegado a la glosa | **CERRADO** [V] | La última glosa queda limpia. El dedazo mm/dd sigue yéndose a capa 4, igual que en dev. |
+| Vuelta 1 (C1–C3, A1–A5, M1, M2) | **siguen cerrados** [V] | La Cartola N°02 real ahora sella "todas las filas, desde el saldo inicial". |
+
+## Ataques nuevos
+
+### V3-1 — ALTO: "Mi cartola es solo cargos" sella una cartola con cargo↔abono INVERTIDOS
+- **Dónde:** `juez-banco.ts` → `sellarCartola`. La rama `filtrada` no mira `q.invertidaCuadra`: si la lectura al revés cierra al 100 %, no es una cartola filtrada, es un mapa invertido.
+- **Reproducción [V]:**
+  - Una cuenta que solo recibe ventas, leída con un mapa invertido (manual mal hecho por el cliente, o cacheado) → 14 salidas y 0 entradas.
+  - Sale `filtrada: "cargos"` y `filtradaPermitida = true`, así que aparece el botón verde "Mi cartola es solo cargos".
+  - Si se toca, queda sellada `cliente` y el mapa propio confirmado. **Ventas que no se emiten = ventas no declaradas.**
+- **Mismo camino (V3-2) [V]:** `single_col` con banderas en inglés C=Crédito/D=Débito. `classifyTipoFlag` lee "c" como cargo, así que salen 0 de 11 abonos y también se ofrece "solo cargos".
+- **Arreglo (chico):**
+  - `filtrada` solo si `!q.invertidaCuadra` y si ningún salto es ±2×monto de su fila (eso delata inversión, no filtro). Si no → alerta "columnas o banderas al revés".
+  - Además: ofrecer el botón solo en la dirección "abonos", que es el caso massDTE.
+
+### V3-3 — ALTO: estado de cuenta de TARJETA DE CRÉDITO con layout nuevo `monto_con_signo` sale sellado `saldo` con las compras como ENTRADAS
+- **Reproducción [V] (orquestador):** "Fecha | Descripción | Monto | Saldo" con compras positivas, pagos negativos y saldo = deuda.
+  - Resultado: capa 2, `monto_con_signo`, **12 "entradas" = "COMPRA COMERCIO…"**, sello `saldo` "cuadra al peso en 13 de 14 filas".
+  - La ecuación cierra igual en un pasivo (la deuda sube con la compra), así que el sello no distingue a qué lado va la plata.
+  - Nadie le pide mirar (sello con prueba) y el mapa nace confirmado: sería candidato a consenso global.
+- **Arreglo:**
+  - En `monto_con_signo` el saldo prueba que no faltan filas, **no la convención de signo**. Sin un título que diga la dirección (Abono/Cargo, Ingreso/Egreso) → `sin_comprobar` y pedir "así la leímos".
+  - Además: vetar la hoja si trae vocabulario de tarjeta (cupo, facturado, pago mínimo, tarjeta, estado de cuenta TC).
+
+### V3-4 — MEDIO: el consenso global todavía se falsifica, pero caro y ya no en silencio
+- **Qué hace falta:**
+  1. 2 cuentas pagadoras (2 registros).
+  2. Cartolas fabricadas con un N° de cuenta inventado en el encabezado. `detectarCuenta` lee lo que diga el archivo, así que la huella sale distinta.
+  3. Datos que cierren al peso con el mapa malo.
+  4. Títulos neutros; con títulos que contradicen, el global se descarta.
+- **[V]:** con esos datos `hayConsensoParaGlobal = true`.
+- **Por qué ya no es silencioso:** la víctima recibe `nuevo: true` y se le pide mirar.
+- **Arreglo opcional:** exigir además ≥N días entre confirmaciones o una revisión manual (ops_event) antes de activar un global.
+
+### V3-5 — BAJO: fechas con mes en texto
+- **Bien [V]:** "05-SEP-2026", "5 dic 2025", "05/sept./2026" y "31-SEP-2026" (imposible).
+- **Se cuela:** toma las 3 primeras letras de cualquier palabra, así que "5 MARCA 2026" pasa a 05-03 y "1 junta 2026" a 01-06. Solo importa en la columna fecha o en `cellEsFecha` (censo, resumen). Arreglo: lista cerrada de nombres de mes completos o abreviados.
+- **No soportado:** "12-Ago-26", año de 2 dígitos. Queda `fecha_ilegible`, visible, sin error silencioso.
+
+## Veredicto vuelta 3 — ¿listo para producción con el flag de IA apagado? **NO.**
+
+Todo lo de las vueltas 1 y 2 quedó cerrado de verdad. Bloquean dos caminos nuevos por los que **ventas o compras quedan mal declaradas con sello verde o con un botón que invita a sellarlas**:
+- **V3-1:** la rama "filtrada" no descarta el mapa invertido.
+- **V3-3:** `monto_con_signo` sella por saldo sin saber la convención de signo (tarjeta de crédito).
+
+Los dos arreglos son chicos y locales (`sellarCartola` y la rama `monto_con_signo`). Con esos dos arreglados y un test por cada uno, el veredicto pasa a **SÍ** (flag IA apagado, migración con respaldo previo de `parser_adapters`).

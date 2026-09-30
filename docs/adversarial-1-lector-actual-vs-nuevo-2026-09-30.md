@@ -348,3 +348,86 @@ npx tsx <scratch>/adversarial-1/medir.ts [--sin-ia]          # mis 51 (necesita 
 npx tsx <scratch>/adversarial-1/medir.ts --v2 [--sin-ia]     # 16 casos dirigidos (casos2.ts)
 npx tsx <scratch>/adversarial-1/reales.ts                    # reales, sin red
 ```
+
+---
+
+# Vuelta 3 — después de 3d0ec86, c0ea305 y 4294cce
+
+Mismo método que la vuelta 2: actual = origin/dev d0aab37, en un worktree temporal que recreé y borré al final; nuevo = 4294cce. Corrí los 67 casos míos, 12 casos nuevos contra lo recién agregado (`casos3.ts`), el banco de 50 del constructor y las 2 cartolas reales, estas solo con lector determinístico y sin red. El "nuevo + IA" usó DeepSeek por OpenCode (`solo-opencode.ts`).
+
+**Red:** 0 llamadas a Fireworks redirigidas y 0 a otros hosts bloqueadas en las 4 corridas; 130 llamadas reales a DeepSeek (50 + 52 + 16 + 12); 0 intentos de red en las reales.
+
+## Tabla
+
+| Banco | Actual | Nuevo sin IA | Nuevo + IA |
+|---|---|---|---|
+| 50 del constructor | 38 OK · **5 silenciosos** | 46 prob. + 4 pregunta · **0 silenciosos** | igual |
+| Mis 51 | 27 OK · **3 silenciosos** · 16 capa 4 | **33 prob. + 8 pregunta · 0 silenciosos** · 5 mal-pregunta · 4 capa 4 · 1 rechazo falso | 33 + 9 · **0 silenciosos** · 6 mal-pregunta · 3 capa 4 |
+| 16 de la vuelta 2 | 8 OK · **5 silenciosos** · 2 capa 4 | **10 prob. + 3 pregunta · 0 silenciosos** · 3 mal-pregunta | igual |
+| 12 de la vuelta 3 | 4 OK · **2 silenciosos** · 6 capa 4 | 6 prob. + 1 pregunta · **1 silencioso** · 2 mal-pregunta · 2 capa 4 | 7 + 1 · **1 silencioso** · 1 mal-pregunta · 2 capa 4 |
+| Reales (2) | 238 + 675 filas | **idénticas**. Santander: alerta "33 de 238 no cuadran (¿filtrada?)"; Cartola N°02: saldo "desde el saldo inicial" | (no van a la IA) |
+
+**En mis 79 casos:**
+- Exactas: actual 39 · nuevo 61 · nuevo+IA 63.
+- Silenciosos: **actual 10 · nuevo 1 · nuevo+IA 1**.
+
+**Cerrados desde la vuelta 2:**
+- Montos con signo (Falabella ×3, Ripley con signo).
+- Fechas "05-SEP-2026".
+- P1 `v2_saldo_anterior_glosa_rara`: ahora 28/28, "desde el saldo inicial".
+- P2 glosa en 3 filas.
+- P3 orden dentro del día invertido: ya no da falsa alarma.
+
+## 12 casos de la vuelta 3
+
+| # | caso | qué ataca | actual | nuevo sin IA (sello) | nuevo + IA (sello) |
+|---|---|---|---|---|---|
+| 1 | `v3_primera_fila_informativa` (discutible) | 1ª fila con fecha 'RETENCION DEP. 24H (INFORMATIVO)' con cargo 50.000 y el saldo SIN moverse (= saldo inicial); no hay fila de saldo inicial arriba. | SILENCIOSO | SILENCIOSO (saldo) | SILENCIOSO (saldo) |
+| 2 | `v3_numero_raro_arriba_col_saldo` | Fila entre títulos y movimientos 'Cupo línea de crédito' con 2.000.000 en la columna Saldo (no es saldo inicial). | OK | OK_PROBADO (saldo) | OK_PROBADO (saldo) |
+| 3 | `v3_glosa_empieza_total_mov_real` | Movimiento REAL con glosa que EMPIEZA con 'TOTAL PAGO PROVEEDORES', con fecha y saldo que sí se mueve. | OK | OK_PROBADO (saldo) | OK_PROBADO (saldo) |
+| 4 | `v3_total_dia_un_mov_sin_saldo` | Un movimiento por día + 'Total del día' con fecha e igual monto; sin saldo (subtotal con 1 sola fila previa). | SILENCIOSO | OK_PREGUNTA (sin_comprobar) | OK_PREGUNTA (sin_comprobar) |
+| 5 | `v3_signo_invertido_sin_saldo` (discutible) | Una columna 'Monto' con signo AL REVÉS (negativo = abono, estilo estado de tarjeta), sin saldo ni bandera. | ATRAPADO_CAPA4 | MAL_PREGUNTA (sin_comprobar) | MAL_PREGUNTA (sin_comprobar) |
+| 6 | `v3_falabella_signo_texto_desc` | Monto con signo como texto '-$12.345' / '$12.345', saldo texto, orden DESCENDENTE. | ATRAPADO_CAPA4 | OK_PROBADO (saldo) | OK_PROBADO (saldo) |
+| 7 | `v3_mes_texto_ingles_cruce_anio` | Fechas '28-Dec-2025' … '05-Jan-2026' (mes en inglés, cruce de año). | ATRAPADO_CAPA4 | OK_PROBADO (saldo) | OK_PROBADO (saldo) |
+| 8 | `v3_mes_texto_sin_anio_cruce` | Fechas '18 DIC' … '10 ENE' (mes en letras SIN año) con período 18/12/2025 al 10/01/2026. | ATRAPADO_CAPA4 | ATRAPADO_CAPA4 (-) alerta | ATRAPADO_CAPA4 (-) |
+| 9 | `v3_csv_utf16le_bom` | Texto Unicode de Excel: UTF-16LE con BOM, TAB, montos '1.234.567'. | ATRAPADO_CAPA4 | OK_PROBADO (saldo) | OK_PROBADO (saldo) |
+| 10 | `v3_csv_utf16le_sin_bom` | Mismo archivo UTF-16LE pero SIN BOM. | ATRAPADO_CAPA4 | ATRAPADO_CAPA4 (-) alerta | ATRAPADO_CAPA4 (-) |
+| 11 | `v3_glosa_5_filas_al_inicio` | Los 3 primeros movimientos con glosa en 5 filas (4 continuaciones, una con 'N° 44110' en la columna Doc). | OK | MAL_PREGUNTA (sin_comprobar) alerta | OK_PROBADO (saldo) |
+| 12 | `v3_salto_pagina_encabezado_repetido` | Salto de página a mitad: 'Página 1 de 2', título repetido y fila de títulos REPETIDA; luego sigue. | OK | OK_PROBADO (saldo) | OK_PROBADO (saldo) |
+
+**Qué dicen:**
+- **Aguantan:**
+  - "TOTAL PAGO PROVEEDORES" real se lee como movimiento.
+  - Un "Total del día" con 1 sola fila previa no se duplica (el actual lo duplicaba en silencio: 24/12).
+  - Falabella en texto y descendente sale bien.
+  - Mes en inglés con cruce de año sale bien.
+  - UTF-16LE con BOM sale bien.
+  - El salto de página con títulos repetidos sale bien.
+  - Un número raro en la columna saldo sobre el bloque no rompe nada.
+- **Queda 1 silencioso: `v3_primera_fila_informativa` (discutible).**
+  - Qué pasa: una 1ª fila "RETENCION DEP. 24H (INFORMATIVO)" con cargo 50.000 y el saldo sin moverse se lee como un cargo. Sale sellada **"saldo"** con el detalle honesto "cuadra al peso en 28 de 29 filas; la primera no se puede comprobar".
+  - Por qué igual es un problema: el sello es "saldo", así que `necesitaConfirmacion` no pregunta (`juez-banco.ts:405-408`, `verificacion.ts:25-33`). El detalle es verdad, pero nadie lo mira.
+  - Contexto: el actual también la leía mal, sin sello. La causa es que el 1er movimiento, sin saldo inicial, sigue sin comprobarse.
+  - Arreglo sugerido: cuando la 1ª fila no se comprobó, un sello distinto (p. ej. `saldo` con `alerta` suave, o mostrar esa fila en "Así la leímos").
+- **Visibles, no silenciosos:**
+  - `v3_glosa_5_filas_al_inicio`: lee 23/26 con alerta (el actual 26/26; con IA 26/26 con sello). Es una regresión menor que se ve.
+  - `v3_signo_invertido_sin_saldo`: el signo al revés (estilo tarjeta) sale sin prueba y pide confirmar. Es lo correcto.
+- **Capa 4 en ambos (con alarma):** "18 DIC" sin año y UTF-16 **sin** BOM.
+
+**Latencia:**
+- Determinístico: 2–30 ms por cartola.
+- DeepSeek: mediana 4,7–7,0 s, máx. 20 s, con **9/50 timeouts** en el banco del constructor y 2–3 en mis bancos.
+- La IA solo entra sin prueba, así que en nuevo+IA la mediana por cartola es ~4–5 ms y el peor caso medido fue 3,9 s.
+- Aporte de la IA en los 129 casos: 3 mejoras (`correlativo_sin_titulos`, `bandera_debe_haber` visible, glosa en 5 filas) y 0 empeoramientos.
+
+## Veredicto vuelta 3 (binario)
+
+- **¿Listo para producción con IA APAGADA? SÍ.**
+  - En los 50 del constructor y en mis 79 hay 0 regresiones silenciosas frente al actual.
+  - Los silenciosos bajan de 10 a 1, y ese 1 es discutible, lo comparte el actual y el sello lo reconoce en el detalle.
+  - Las cartolas reales salen idénticas y con sellos veraces.
+  - Queda como deuda recomendada (no bloqueante): que "la primera no se puede comprobar" active "Así la leímos".
+- **¿Listo con IA PRENDIDA? NO todavía.**
+  - No es por seguridad: ya no puede empeorar un sello, porque solo entra sin prueba y la disputa queda visible.
+  - Es por costo/beneficio: aporta en 3 de 129 casos, con 9–18% de timeouts de 20 s según la hora, y suma un proveedor más por el que viaja la grilla (enmascarada).
+  - Prenderla cuando: (a) el timeout se baje a ~8 s con reintento o caché, y (b) haya un caso real de clienta que la necesite.
