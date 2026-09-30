@@ -26,6 +26,7 @@ import {
   detectarCuenta,
   detectarResumenImpreso,
   formulasSuma,
+  movimientosFueraDelBloque,
   posiblesSubtotales,
   saldosDeLaCartola,
   sellarCartola,
@@ -527,6 +528,16 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
       tipo: "sin_comprobar",
       alerta: true,
       detalle: `${ocultas.length} fila(s) oculta(s) con plata (filas ${lista}${ctx.ocultas.columnas.length ? `; columna(s) oculta(s) ${ctx.ocultas.columnas.map((c) => XLSX.utils.encode_col(c)).join(", ")}` : ""}): un filtro o filas escondidas. Revisa si son movimientos. ${verificacion.alerta ? verificacion.detalle : ""}`.trim(),
+    };
+  }
+  // Movimientos DEBAJO de la fila de totales del banco (fuera del bloque que el
+  // banco declaró): no se sabe si son movimientos de esta cartola. Sin sello.
+  const fuera = movimientosFueraDelBloque(lines, descartes, ctx.formulas);
+  if (fuera.length && !verificacion.alerta) {
+    verificacion = {
+      tipo: "sin_comprobar",
+      alerta: true,
+      detalle: `${fuera.length} movimiento(s) debajo de una fila de totales (filas ${fuera.slice(0, 6).join(", ")}${fuera.length > 6 ? "…" : ""}): ¿son de esta cartola? Revisa cómo la leímos`,
     };
   }
   // Plata que no se leyó gana a cualquier prueba: otra hoja con movimientos que

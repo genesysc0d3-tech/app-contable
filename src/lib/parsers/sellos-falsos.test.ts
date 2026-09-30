@@ -122,6 +122,10 @@ describe("daño cruzar cargo↔abono: títulos que contradicen el mapa nunca sel
     expect(SELLOS).not.toContain(r.verificacion?.tipo);
     expect(r.verificacion?.alerta).toBe(true);
   });
+  it("igual con títulos en inglés (Credit/Debit al revés)", async () => {
+    const r = await parsear(libro(cartolaConSaldo({ tituloCargo: "Credit", tituloAbono: "Debit" })));
+    expect(SELLOS).not.toContain(r.verificacion?.tipo);
+  });
 });
 
 describe("fórmula =SUM: el valor cacheado tiene que ser el de sus celdas", () => {
@@ -210,5 +214,37 @@ describe("unicidad: si otra lectura del mismo archivo también cuadra, no se sel
     const r = await parsear(libro(filas));
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
     expect(r.verificacion?.detalle).toMatch(/otra (forma|lectura)/i);
+  });
+});
+
+describe("vuelta 2 de la batería", () => {
+  it("censo: fecha dd/mm/aa en la columna fecha y plata corrida a otra columna → no pasa callada", async () => {
+    const filas: Celda[][] = [["Fecha", "Glosa", "Monto", "Tipo", "RUT receptor", "Nombre receptor", "Medio de pago"]];
+    for (let d = 1; d <= 12; d++) filas.push([`${String(d).padStart(2, "0")}/09/26`, `Venta ${d}`, 10_000 + d * 137, "", "", "", ""]);
+    filas[5][2] = null; filas[5][3] = 55_555; // una celda combinada corrió el monto a "Tipo"
+    const r = await parsear(libro(filas));
+    expect(r.verificacion?.detalle).toMatch(/no leyó|sin leer|mapa/);
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
+    expect(r.verificacion?.alerta).toBe(true);
+  });
+  it("una fila leída como movimiento cuya glosa dice 'Total…' no deja sellar total_banco", async () => {
+    const filas = cartolaConSaldo().map((f) => [f[0], f[1], f[2], f[3]]);
+    filas[1] = [null, null, null, null];
+    filas[8][1] = "Total del día";
+    const c = filas.slice(2).reduce((s, f) => s + (Number(f[2]) || 0), 0);
+    const a = filas.slice(2).reduce((s, f) => s + (Number(f[3]) || 0), 0);
+    filas.push([], [null, "Total cargos", c, null], [null, "Total abonos", null, a]);
+    const r = await parsear(libro(filas));
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
+  });
+  it("movimientos a los dos lados de una fila de totales: sin sello", async () => {
+    const filas: Celda[][] = [["Fecha", "Glosa", "Monto", "Tipo", "RUT receptor", "Nombre receptor", "Medio de pago"]];
+    for (let d = 1; d <= 12; d++) filas.push([fch(d), `Venta ${d}`, 10_000 + d * 137, "", "", "", ""]);
+    const total = filas.slice(1).reduce((s, f) => s + (f[2] as number), 0);
+    filas.push([null, "TOTAL", total, "", "", "", ""], [fch(20), "Venta bajo el total", 77_000, "", "", "", ""]);
+    // El total es una =SUM del bloque (recalculada): no contradice, pero la venta de abajo queda fuera.
+    const r = await parsear(libro(filas, (ws) => { ws["C14"] = { t: "n", v: total, f: "SUM(C2:C13)" }; }));
+    expect(r.verificacion?.detalle).toMatch(/total/i);
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
   });
 });

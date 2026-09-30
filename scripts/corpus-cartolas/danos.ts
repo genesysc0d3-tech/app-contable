@@ -90,6 +90,8 @@ class Libro {
   }
 
   insertarFila(at: number, fila: Celda[], oculta = false) {
+    // `!rows` suele venir ralo o vacío: sin rellenar, splice lo pega al inicio.
+    while (this.props.length < this.grid.length) this.props.push(undefined);
     this.grid.splice(at, 0, fila);
     this.props.splice(at, 0, oculta ? { hidden: true } : undefined);
     for (const m of this.merges) { if (m.s.r >= at) m.s.r++; if (m.e.r >= at) m.e.r++; }
@@ -99,6 +101,7 @@ class Libro {
   }
 
   borrarFila(at: number) {
+    while (this.props.length < this.grid.length) this.props.push(undefined);
     this.grid.splice(at, 1);
     this.props.splice(at, 1);
     this.merges = this.merges.filter((m) => !(m.s.r === at && m.e.r === at));
@@ -253,11 +256,24 @@ function partirCsv(l: string, sep: string): string[] {
 // ---------------------------------------------------------------------------
 // Testigos del banco en el archivo ORIGINAL (qué contradiría un daño económico)
 
+/**
+ * El resumen impreso cuenta como testigo solo si trae un TOTAL o un SALDO FINAL
+ * con etiqueta inequívoca. "Saldo disponible" NO (en Chile incluye retenciones o
+ * la línea de crédito: no es el saldo contable, decisión documentada).
+ */
+const RE_TESTIGO_RESUMEN = /^(total(es)?\b.*\b(cargos?|abonos?|d[eé]bitos?|cr[eé]ditos?|egresos?|ingresos?|dep[oó]sitos?|giros?|cheques?)\b|saldo\b.*\bfinal\b|saldo\s+contable\s+al\b)/i;
+function resumenReconocible(spec: Spec): boolean {
+  const textos: string[] = [];
+  const junta = (x: unknown) => { if (Array.isArray(x)) x.forEach(junta); else if (typeof x === "string") textos.push(x); };
+  junta([spec.arriba, spec.abajo, (spec.hojas_extra ?? []).map((h) => h.filas), (spec.pie ?? []).map((p) => [p.etiqueta, Object.values(p.celdas ?? {})])]);
+  return textos.some((t) => RE_TESTIGO_RESUMEN.test(t.trim()));
+}
+
 export function testigos(it: ItemCorpus, spec: Spec): { saldo: boolean; resumen: boolean; totalValor: boolean; formula: boolean } {
   const pie = spec.pie ?? [];
   return {
     saldo: it.meta.tieneSaldo,
-    resumen: it.meta.resumenImpreso || /SALDO_INICIAL|SALDO_FINAL|TOTAL_(CARGOS|ABONOS)|TOTAL_VISIBLE/.test(JSON.stringify(pie)),
+    resumen: resumenReconocible(spec),
     totalValor: pie.some((p) => p.tipo === "fila_total" && !p.formula),
     formula: pie.some((p) => p.tipo === "sum" || (p.tipo === "fila_total" && !!p.formula)),
   };
@@ -331,11 +347,17 @@ export const DANOS: { id: string; aplicar: Aplicar }[] = [
   } },
   { id: "cruzar_datos_cargo_abono", aplicar: (L) => {
     if (L.layout() !== "two_cols") return null;
+    // Sin títulos que digan la dirección, las columnas no significan nada por sí
+    // solas: el saldo manda y cruzar los datos no cambia la verdad.
+    if (!titulosDicenDireccion(L)) {
+      for (const x of L.movs) L.escribirMov(x.fila, x.mov.monto, x.mov.tipo === "ENTRADA" ? "SALIDA" : "ENTRADA");
+      return { oraculo: "lectura", economico: false, nota: "datos cruzados en columnas sin títulos de dirección (el saldo manda)" };
+    }
     for (const x of L.movs) { const t = x.mov.tipo === "ENTRADA" ? "SALIDA" : "ENTRADA"; L.escribirMov(x.fila, x.mov.monto, t); x.mov.tipo = t; }
     return { oraculo: "lectura", economico: true, nota: "datos de cargo↔abono intercambiados (títulos quedan)" };
   } },
   { id: "cruzar_titulos_cargo_abono", aplicar: (L) => {
-    if (L.layout() !== "two_cols" || L.filaTitulos == null) return null;
+    if (L.layout() !== "two_cols" || L.filaTitulos == null || !titulosDicenDireccion(L)) return null;
     const h = L.filaTitulos; const c = L.cols;
     const a = L.cel(h, c.cargo!), b = L.cel(h, c.abono!);
     if (!a || !b) return null;
@@ -483,6 +505,16 @@ export const DANOS: { id: string; aplicar: Aplicar }[] = [
     return { oraculo: "lectura", economico: false, nota: `fecha de fila ${x.fila + 1} → ${iso}` };
   } },
 ];
+
+const RE_SAL = /cargo|egreso|debe\b|d[eé]bito|debit|giro|salida|cheque|withdraw|\(\s*-\s*\)/i;
+const RE_ENT = /abono|ingreso|haber|cr[eé]dito|credit|dep[oó]sito|deposit|entrada|\(\s*\+\s*\)/i;
+/** ¿Los títulos de cargo y abono dicen su dirección (en castellano o inglés)? */
+function titulosDicenDireccion(L: Libro): boolean {
+  const h = L.filaTitulos;
+  if (h == null) return false;
+  const tc = String(L.cel(h, L.cols.cargo!)?.v ?? ""), ta = String(L.cel(h, L.cols.abono!)?.v ?? "");
+  return RE_SAL.test(tc) && !RE_ENT.test(tc) && RE_ENT.test(ta) && !RE_SAL.test(ta);
+}
 
 function montoCol(L: Libro, x: MovFisico): number | undefined {
   const c = L.cols;

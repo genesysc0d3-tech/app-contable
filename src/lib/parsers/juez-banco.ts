@@ -219,6 +219,10 @@ function direccionPorTitulos(rows: Row[], cfg: AdapterConfig): boolean {
  * mapa lee como cargo se titula "Abonos" y la de abono "Cargos"). Vuelta 2, N1:
  * un global invertido se aplicaba en silencio aunque la hoja dijera lo contrario.
  */
+// Para CONTRADECIR basta que los títulos lo digan en inglés ("Credit"/"Debit").
+const ENTRADA_X = new RegExp(`${RE_ENTRADA.source}|\\bcredits?\\b|\\bdeposits?\\b`);
+const SALIDA_X = new RegExp(`${RE_SALIDA.source}|\\bdebits?\\b|\\bwithdrawals?\\b`);
+
 export function titulosContradicenMapa(rows: Row[], cfg: AdapterConfig): boolean {
   if ((cfg.layout ?? "two_cols") !== "two_cols") return false;
   // También unas filas más arriba: la heurística puede tomar como "títulos" una
@@ -229,7 +233,7 @@ export function titulosContradicenMapa(rows: Row[], cfg: AdapterConfig): boolean
     if (!fila) continue;
     const tc = normalizarTitulo(fila[cfg.columns.cargo]);
     const ta = normalizarTitulo(fila[cfg.columns.abono]);
-    if (RE_ENTRADA.test(tc) && !RE_SALIDA.test(tc) && RE_SALIDA.test(ta) && !RE_ENTRADA.test(ta)) return true;
+    if (ENTRADA_X.test(tc) && !SALIDA_X.test(tc) && SALIDA_X.test(ta) && !ENTRADA_X.test(ta)) return true;
   }
   return false;
 }
@@ -347,8 +351,14 @@ export function juzgarContraBanco(args: {
     const filas = filasDe(f.col);
     const cubre = filas.length > 0 && filas.every((i) => i >= f.desde && i <= f.hasta);
     if (cerca(Math.abs(f.valor), leido)) {
-      if (cubre && Math.abs(f.valor) > 0) colsProbadas.add(f.col);
-      else avisos.push(`la fórmula SUM del banco en ${cp.nombre} no cubre todas las filas leídas (o suma $0): no prueba la lectura`);
+      // UN SOLO ROL POR CELDA (batería de sellos falsos 2026-09-30): la =SUM es
+      // función de las MISMAS celdas que se leyeron; calzar prueba que no se leyó
+      // mal un número, no que cada celda sea un movimiento ni su dirección (una
+      // celda combinada que corre un cargo a Abonos recalcula la SUM igual).
+      // Sirve para CONTRADECIR, nunca para sellar.
+      avisos.push(cubre && Math.abs(f.valor) > 0
+        ? `la fórmula SUM en ${cp.nombre} calza, pero se calcula de las mismas celdas leídas: no es un testigo independiente`
+        : `la fórmula SUM del banco en ${cp.nombre} no cubre todas las filas leídas (o suma $0): no prueba la lectura`);
     } else contra.push(`la fórmula SUM del banco da ${pesos(Math.abs(f.valor))} en ${cp.nombre} y leímos ${pesos(leido)}`);
   }
 
@@ -526,6 +536,8 @@ export function sellarCartola(args: {
 export function posiblesSubtotales(lines: ParsedLine[]): number[] {
   const out: number[] = [];
   const orden = [...lines].sort((a, b) => (a.excel_row ?? 0) - (b.excel_row ?? 0));
+  // La glosa dice "Total…"/"Subtotal…" y se leyó como movimiento: rol sin resolver.
+  for (const l of orden) if (/^\s*(sub\s*)?total(es)?\b/i.test(l.descripcion ?? "")) out.push(l.excel_row ?? 0);
   const suma = (xs: ParsedLine[], tipo?: ParsedLine["tipo"]) => xs.filter((x) => !tipo || x.tipo === tipo).reduce((s, x) => s + x.monto, 0);
   for (let i = 0; i < orden.length; i++) {
     const l = orden[i];
@@ -549,10 +561,29 @@ export function posiblesSubtotales(lines: ParsedLine[]): number[] {
       if (hit) { out.push(l.excel_row ?? 0); break; }
     }
   }
-  return out;
+  return [...new Set(out)].sort((a, b) => a - b);
+}
+
+/**
+ * ¿Hay movimientos leídos a los DOS lados de una fila de totales (una =SUM o una
+ * fila de resumen sin fecha, no un subtotal del día)? Un movimiento debajo del
+ * total del banco quedó fuera del bloque que el banco declaró: rol sin resolver.
+ */
+export function movimientosFueraDelBloque(lines: ParsedLine[], descartes: DescarteFila[], formulas: FormulaSuma[]): number[] {
+  const totales = [
+    ...formulas.map((f) => f.fila + 1),
+    ...descartes.filter((d) => d.legitimo && d.motivo === "resumen" && !d.subtotal && !d.fecha).map((d) => d.excel_row),
+  ];
+  const filas = lines.map((l) => l.excel_row ?? 0);
+  if (!filas.length) return [];
+  for (const t of totales.sort((a, b) => a - b)) {
+    const arriba = filas.filter((f) => f < t).length;
+    if (arriba > 0 && arriba < filas.length) return filas.filter((f) => f > t);
+  }
+  return [];
 }
 
 export function detalleSubtotales(filas: number[]): string {
   const lista = filas.slice(0, 6).join(", ") + (filas.length > 6 ? "…" : "");
-  return `${filas.length} fila(s) leída(s) como movimiento podrían ser subtotales (su monto es la suma de las anteriores del mismo día; filas ${lista}): revisa cómo la leímos`;
+  return `${filas.length} fila(s) leída(s) como movimiento podrían ser subtotales (dicen "total" o su monto es la suma de las anteriores del mismo día; filas ${lista}): revisa cómo la leímos`;
 }

@@ -92,7 +92,7 @@ async function parte() {
     if (++k % 100 === 0) process.stderr.write(`[${PARTE}] ${k}/${corpus.length} · ${danos.length} daños · ${Math.round((Date.now() - t0) / 1000)} s\n`);
     if (!SELLOS.has(l.sello) || !l.exacta) continue;
     for (const D of DANOS) {
-      if (SOLO_TIPO && D.id !== SOLO_TIPO) continue;
+      if (SOLO_TIPO && !SOLO_TIPO.split(",").includes(D.id)) continue;
       for (let j = 0; j < POR_TIPO; j++) {
         const s = semilla(it.id, D.id, j);
         const d = danar(it, D.id, rngDe(s));

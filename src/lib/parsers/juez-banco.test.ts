@@ -83,7 +83,7 @@ describe("fila de totales y fórmula SUMA", () => {
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
   });
 
-  it("=SUM(rango) del banco: la fila de la fórmula es de totales y su valor prueba la columna", async () => {
+  it("=SUM(rango) del banco: la fila de la fórmula es de totales; calza pero NO sella (mismas celdas)", async () => {
     const filas: Celda[][] = [["Fecha", "Descripción", "Cargos", "Abonos"], ...movs.map((m) => [f(m.dia), m.glosa, m.cargo ? m.monto : null, m.cargo ? null : m.monto])];
     const n = filas.length; // fila Excel de la fórmula = n + 1
     const r = await parsear(libro([...filas, ["", "", null, null]], {
@@ -92,7 +92,11 @@ describe("fila de totales y fórmula SUMA", () => {
     }));
     expect(r.rows_extracted).toBe(12);
     expect(r.censo?.descartes.every((d) => d.legitimo)).toBe(true);
-    expect(r.verificacion?.tipo).toBe("total_banco");
+    // Batería de sellos falsos 2026-09-30: la =SUM se calcula de las mismas
+    // celdas leídas → no es testigo independiente (sirve solo para contradecir).
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
+    expect(r.verificacion?.alerta).toBeFalsy();
+    expect(r.verificacion?.detalle).toMatch(/testigo independiente/);
   });
 
   it("FIXTURE NEGATIVO: una fórmula que no calza con lo leído deja la cartola sin_comprobar", async () => {

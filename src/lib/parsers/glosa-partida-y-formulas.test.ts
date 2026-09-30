@@ -107,9 +107,14 @@ describe("fórmula SUM: el rango tiene que cubrir exactamente lo leído", () => 
     expect(r.verificacion?.tipo).not.toBe("total_banco");
   });
 
-  it("SUM que cubre todas las filas leídas sí sella total_banco", async () => {
+  it("SUM que cubre todas las filas leídas: calza, pero NO sella (se calcula de las mismas celdas leídas)", async () => {
+    // Batería de sellos falsos 2026-09-30 (un solo rol por celda): la =SUM es
+    // función de las MISMAS celdas que se leyeron → no es un testigo
+    // independiente. Una celda combinada que corría un cargo a la columna de
+    // abonos salía sellada total_banco porque la SUM se recalculaba igual.
     const { sc, sa } = sumas();
     const r = await parsear(libro(base(), { C15: { v: sc, f: "SUM(C2:C13)" }, D15: { v: sa, f: "SUM(D2:D13)" } }, "A1:D15"));
-    expect(r.verificacion?.tipo).toBe("total_banco");
+    expect(r.verificacion?.tipo).toBe("sin_comprobar");
+    expect(r.verificacion?.alerta).toBeFalsy();
   });
 });
