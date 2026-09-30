@@ -5,6 +5,7 @@ import { computeGuardarailEmision } from "@/lib/intermediario/guardarail-emision
 import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import type { ActividadItem } from "./ActividadView";
+import { FILTRO_TIPOS_REGISTRO_EMISION, boletasUnicasSinDocumento } from "@/lib/emission/registros-emision";
 
 // ── Helpers de fecha (compartidos con el render del escritorio) ──────────────
 export function todayStr() {
@@ -136,11 +137,14 @@ export async function fetchMesaDateDependent(
   const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawResConRef, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
     supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
-    supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
-    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun,contexto_usuario").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
+    // Sin los registros internos de emisión ("Boleta SII #…", registros-emision.ts):
+    // 358 boletas de un día tapaban la cartola bajo el .limit(50) (LC 2026-09-27) y
+    // además inflaban el punto de "documentos" del calendario.
+    supabase.from("documentos_subidos").select("created_at").eq("empresa_id", empresaId).eq("mesa", mesaActiva).not("tipo", "in", FILTRO_TIPOS_REGISTRO_EMISION).gte("created_at", sm).lt("created_at", em),
+    supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun,contexto_usuario").eq("empresa_id", empresaId).eq("mesa", mesaActiva).not("tipo", "in", FILTRO_TIPOS_REGISTRO_EMISION).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(50),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).in("estado", ["pendiente", "listo", "editado"]).gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
-    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,ref").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
+    supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,propuesta_id,ref").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
     supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr),
@@ -151,7 +155,7 @@ export async function fetchMesaDateDependent(
   // 20260928120000 sin aplicar, error 42703), repetir sin ella en vez de dejar la
   // mesa sin "Últimas emitidas".
   const boletasRawRes = boletasRawResConRef.error && (boletasRawResConRef.error.code === "42703" || /\bref\b/.test(boletasRawResConRef.error.message ?? ""))
-    ? await supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300)
+    ? await supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,propuesta_id").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300)
     : boletasRawResConRef;
   // Desborde del tope de propuestas: total real del rango vs lo servido.
   const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
@@ -198,8 +202,11 @@ export async function fetchMesaDateDependent(
   const factRaw = provData?.facturas_emision_proveedor;
   const facturasProveedor: "mock" | "sii_local" | "simpleapi" = factRaw === "sii_local" || factRaw === "simpleapi" ? factRaw : "mock";
   const docsBase = (docsData.data ?? []) as DocRow[];
-  const boletasComoAgregados = boletas
-    .filter((boleta) => !docsBase.some((doc) => (doc.progreso_ia as { boleta_id?: string } | null)?.boleta_id === boleta.id))
+  // Tarjeta sintética SOLO para boletas de emisión directa (sin propuesta) sin fila
+  // propia: las de una cartola ya no traen su registro 'boleta_sii_local' y no deben
+  // volver como una tarjeta por boleta (registros-emision.ts). Sobre todo el rango
+  // (no solo las 20 recientes): un lote grande no esconde una boleta única del día.
+  const boletasComoAgregados = boletasUnicasSinDocumento(boletasRango, docsBase)
     .map((boleta) => {
       const fechaRegistro = boleta.created_at ?? `${boleta.fecha_emision}T12:00:00.000Z`;
       return {

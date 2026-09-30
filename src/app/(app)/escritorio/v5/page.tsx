@@ -25,6 +25,7 @@ import { faltanDelEmisor } from "@/lib/sii/emisor-completo";
 import { consultaConRef } from "@/lib/emission/ref-emision";
 import type { BoletasEmisionProveedor, FacturasEmisionProveedor } from "../../empresa/actions";
 import type { CAFRow } from "../../empresa/CAFPanel";
+import { FILTRO_TIPOS_REGISTRO_EMISION } from "@/lib/emission/registros-emision";
 
 function mapBoletasProveedor(raw: string | null | undefined): BoletasEmisionProveedor {
   if (raw === "sii_local") return "sii_local";
@@ -134,7 +135,9 @@ export default async function V5Page({ searchParams }: {
       .limit(1000), "id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,estado"),
     Promise.all([
       supabase.from("documentos_subidos").select("id,nombre_archivo,tipo,estado,movimientos_detectados,created_at,progreso_ia,tipo_operacion_hint,glosa_comun,glosa_activa,medio_pago_comun")
-        .eq("empresa_id", empresaId).order("created_at",{ascending:false}).limit(100),
+        // Sin registros internos de emisión: las boletas ya entran al buscador por
+        // boletas_emitidas, y 100 "Boleta SII #…" tapaban las cartolas (registros-emision.ts).
+        .eq("empresa_id", empresaId).not("tipo", "in", FILTRO_TIPOS_REGISTRO_EMISION).order("created_at",{ascending:false}).limit(100),
       // Con `ref` para que el buscador del historial encuentre por ID interno (R-XXX-XXX).
       consultaConRef((columnas) => supabase.from("boletas_emitidas").select(columnas)
         .eq("empresa_id", empresaId).order("fecha_emision",{ascending:false}).order("folio",{ascending:false}).limit(100),
