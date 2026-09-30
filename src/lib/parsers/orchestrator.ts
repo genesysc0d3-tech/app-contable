@@ -5,7 +5,6 @@ import type {
   DescarteFila,
   AdapterConfig,
   MapaUsado,
-  MuestraMovimiento,
   OrchestratorResult,
   ParsedLine,
   PreExtractedMovimiento,
@@ -138,17 +137,7 @@ export async function parseExcelWithOrchestrator(
     }
 
     const fingerprint = computeFingerprint(rows);
-    const formulas = formulasSuma(sheet, XLSX.utils.decode_range, XLSX.utils.decode_cell);
-    const ctx: ContextoHoja = {
-      sheetName,
-      rows,
-      formulas,
-      filasFormula: new Set(formulas.map((f) => f.fila)),
-      resumen: detectarResumenImpreso(rows),
-      otrasHojas: otrasHojasConDatos(workbook, sheetName),
-      ocultas: ocultasConPlata(sheet, rows),
-      resumenOtraHoja: resumenDeOtrasHojas(workbook, sheetName),
-    };
+    const ctx = contextoDeHoja(workbook, sheetName, rows);
 
     const terminar = async (
       lectura: Lectura,
@@ -243,9 +232,36 @@ export async function parseExcelWithOrchestrator(
       else titulosAlReves = true;
     }
     if (cached) {
-      const lectura = leer(ctx, cached.config, fallas, "cache");
+      const delCliente = !!cached.creado_por_empresa_id && cached.estado === "confirmado" && cached.confirmado_por === "cliente";
+      const lectura = leer(ctx, cached.config, fallas, "cache", { saldoLoJuzgaElJuez: delCliente });
       if (lectura && titulosAlReves) {
-        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: "Los títulos de la hoja dicen lo contrario del mapa de columnas guardado (cargo↔abono): revisa las columnas" };
+        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: "Los títulos de la hoja dicen lo contrario del mapa de columnas guardado (cargo↔abono): revisa las columnas", ...(lectura.verificacion.contradice ? { contradice: lectura.verificacion.contradice } : {}) };
+        lectura.censo.verificacion = lectura.verificacion;
+      }
+      // "Listo" del popup "Revisa las columnas" sobre ESTE documento: si el
+      // reproceso lee exactamente lo que el cliente vio (misma firma) y el banco
+      // no lo contradice, la cartola queda confirmada por el cliente. Solo su
+      // propio mapa; una prueba objetiva (saldo/total) no se rebaja.
+      const revision = cached.config.revision_cliente;
+      // "Solo abonos": el saldo no cierra justo porque faltan los cargos.
+      const soloAbonosComoDijo = !!revision?.solo_abonos && lectura?.verificacion.filtrada === "abonos";
+      const revisadaPorCliente = !!lectura && !!revision && !!cached.creado_por_empresa_id
+        && !!opts?.documento_id && revision.documento_id === opts.documento_id
+        && revision.firma === firmaDeLineas(lectura.lines)
+        && (!lectura.verificacion.contradice || soloAbonosComoDijo)
+        && lectura.verificacion.tipo !== "saldo" && lectura.verificacion.tipo !== "total_banco";
+      if (lectura && revisadaPorCliente) {
+        lectura.verificacion = {
+          tipo: "cliente",
+          detalle: revision.solo_abonos
+            ? "Revisaste las columnas y confirmaste que tu cartola trae solo abonos"
+            : "Revisaste las columnas de esta cartola y dijiste que están bien",
+        };
+        lectura.censo.verificacion = lectura.verificacion;
+      } else if (lectura && soloAbonosComoDijo && cached.creado_por_empresa_id) {
+        // Otra cartola del formato que el cliente dijo que trae solo abonos: sin
+        // sello (nada la prueba), pero tampoco se le vuelve a preguntar.
+        lectura.verificacion = { tipo: "sin_comprobar", filtrada: "abonos", detalle: "Trae solo abonos, como dijiste para este formato: el saldo no puede cuadrar" };
         lectura.censo.verificacion = lectura.verificacion;
       }
       if (lectura) {
@@ -259,7 +275,8 @@ export async function parseExcelWithOrchestrator(
         // Un GLOBAL aplicado sin prueba en esta lectura es nuevo PARA ESTA
         // empresa: se le pide mirar (vuelta 2, N1).
         const nuevoParaEmpresa = !cached.creado_por_empresa_id && !conPrueba;
-        return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: nuevoParaEmpresa });
+        const confirmadoPor = cached.estado === "confirmado" ? (cached.confirmado_por ?? null) : conPrueba ? lectura.verificacion.tipo : null;
+        return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: nuevoParaEmpresa, confirmado_por: confirmadoPor });
       } else {
         await decrementAdapterConfianza(
           cached.id,
@@ -313,10 +330,10 @@ export async function parseExcelWithOrchestrator(
       const lectura = elegido.lectura;
       // Una disputa o un cambio de formato sin prueba no se sella como probado.
       if (disputa) {
-        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: disputa };
+        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: disputa, ...(lectura.verificacion.contradice ? { contradice: lectura.verificacion.contradice } : {}) };
         lectura.censo.verificacion = lectura.verificacion;
       } else if (cambio && lectura.verificacion.tipo === "sin_comprobar") {
-        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: `${cambio}. ${lectura.verificacion.detalle}` };
+        lectura.verificacion = { ...lectura.verificacion, alerta: true, detalle: `${cambio}. ${lectura.verificacion.detalle}` };
         lectura.censo.verificacion = lectura.verificacion;
       }
       const titulos = encabezadoNormalizado(rows) ?? undefined;
@@ -335,6 +352,7 @@ export async function parseExcelWithOrchestrator(
       return terminar(lectura, elegido.capa, adapterId, {
         adapter_id: adapterId,
         estado: confirmado ? "confirmado" : "provisorio",
+        confirmado_por: confirmado ? lectura.verificacion.tipo : null,
         nuevo: true,
         cambio_formato: cambio,
         disputa,
@@ -495,35 +513,93 @@ export function otrasHojasConDatos(workbook: XLSX.WorkBook, leida: string): stri
   return out;
 }
 
-/** Hasta 3 movimientos para el "así la leímos": una entrada, una salida y el mayor. */
-export function muestraDeLectura(lines: ParsedLine[]): MuestraMovimiento[] {
-  const a = (l: ParsedLine): MuestraMovimiento => ({
-    excel_row: l.excel_row ?? null,
-    fecha: l.fecha,
-    descripcion: l.descripcion,
-    monto: l.monto,
-    tipo_flujo: l.tipo === "ENTRADA" ? "entrada" : "salida",
-  });
-  const mayor = (xs: ParsedLine[]) => xs.reduce<ParsedLine | null>((m, l) => (!m || l.monto > m.monto ? l : m), null);
-  const elegidas: ParsedLine[] = [];
-  for (const l of [mayor(lines.filter((x) => x.tipo === "ENTRADA")), mayor(lines.filter((x) => x.tipo === "SALIDA")), mayor(lines), ...lines]) {
-    if (l && !elegidas.includes(l)) elegidas.push(l);
-    if (elegidas.length === 3) break;
+/** Todo lo que el juez necesita de una hoja del libro (una vez por hoja). */
+function contextoDeHoja(workbook: XLSX.WorkBook, sheetName: string, rows: Row[]): ContextoHoja {
+  const sheet = workbook.Sheets[sheetName];
+  const formulas = formulasSuma(sheet, XLSX.utils.decode_range, XLSX.utils.decode_cell);
+  return {
+    sheetName,
+    rows,
+    formulas,
+    filasFormula: new Set(formulas.map((f) => f.fila)),
+    resumen: detectarResumenImpreso(rows),
+    otrasHojas: otrasHojasConDatos(workbook, sheetName),
+    ocultas: ocultasConPlata(sheet, rows),
+    resumenOtraHoja: resumenDeOtrasHojas(workbook, sheetName),
+  };
+}
+
+/**
+ * Firma de una lectura: cuántos movimientos y cuánto por dirección. El "Listo"
+ * del cliente vale para el reproceso solo si se lee exactamente lo mismo.
+ */
+export function firmaDeLineas(lines: ParsedLine[]): string {
+  const suma = (t: ParsedLine["tipo"]) => lines.filter((l) => l.tipo === t).reduce((s, l) => s + l.monto, 0);
+  return `${lines.length}|${Math.round(suma("ENTRADA"))}|${Math.round(suma("SALIDA"))}`;
+}
+
+/**
+ * EL JUEZ con un mapa ELEGIDO (popup "Revisa las columnas"): aplica el mapa a
+ * la hoja del libro donde produce movimientos (la misma regla que al guardar)
+ * y la sella igual que el orquestador. Solo lectura: no toca la base.
+ */
+export function juzgarMapaEnLibro(
+  workbook: XLSX.WorkBook,
+  cfg: AdapterConfig,
+): { ok: true; hoja: string; rows: Row[]; lines: ParsedLine[]; descartes: DescarteFila[]; verificacion: VerificacionCartola; otrasHojas: string[] } | { ok: false; error: string } {
+  const hojas = workbook.SheetNames
+    .map((n) => ({ n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" }) }))
+    .filter((h) => h.rows.length > 0);
+  if (!hojas.length) return { ok: false, error: "El archivo está vacío" };
+  const produce = (h: { rows: Row[] }) => {
+    try { return applyAdapter(h.rows, cfg).length > 0; } catch { return false; }
+  };
+  const hoja = hojas.find(produce) ?? hojas[0];
+  const fallas: string[] = [];
+  const ctx = contextoDeHoja(workbook, hoja.n, hoja.rows);
+  let lectura: Lectura | null = null;
+  try {
+    lectura = leer(ctx, cfg, fallas, "cliente", { saldoLoJuzgaElJuez: true });
+  } catch (e) {
+    fallas.push(e instanceof Error ? e.message : String(e));
   }
-  return elegidas.map(a);
+  if (!lectura) return { ok: false, error: fallas[0]?.replace(/^cliente\[[^\]]*\]:\s*/, "") || "Con estas columnas no se pudo leer la cartola" };
+  return {
+    ok: true,
+    hoja: hoja.n,
+    rows: hoja.rows,
+    lines: lectura.lines,
+    descartes: lectura.descartes,
+    verificacion: lectura.verificacion,
+    otrasHojas: ctx.otrasHojas,
+  };
 }
 
 /** Aplica un mapa, valida y SELLA. null = no pasó el validador (con el porqué en `fallas`). */
-function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: string): Lectura | null {
+function leer(
+  ctx: ContextoHoja,
+  cfg: AdapterConfig,
+  fallas: string[],
+  capa: string,
+  /**
+   * Columnas que eligió el CLIENTE (popup o su mapa confirmado): el saldo que no
+   * cierra no descarta la lectura (check 6 del validador, pensado para elegir
+   * entre detectores); lo juzga el juez y queda como contradicción a la vista.
+   */
+  opts: { saldoLoJuzgaElJuez?: boolean } = {},
+): Lectura | null {
   const { rows, sheetName } = ctx;
   const descartes: DescarteFila[] = [];
   const lines = applyAdapter(rows, cfg, descartes, undefined, { filasFormula: ctx.filasFormula });
   const validation = validate(lines, rows, cfg, descartes);
-  if (!validation.ok) {
-    fallas.push(`${capa}[${sheetName}]: ${validation.errors.join("; ")}`);
+  const errores = opts.saldoLoJuzgaElJuez ? validation.errors.filter((e) => !e.startsWith("check_6_saldo")) : validation.errors;
+  if (errores.length) {
+    fallas.push(`${capa}[${sheetName}]: ${errores.join("; ")}`);
     return null;
   }
   let verificacion = sellarCartola({ rows, cfg, lines, descartes, resumen: ctx.resumen, formulas: ctx.formulas });
+  // Lo que el BANCO contradice se conserva aunque otra alerta cambie el detalle.
+  const contradice = verificacion.contradice;
   // UNICIDAD (numberOfSolutions === 1): un sello solo vale si ninguna OTRA
   // lectura del mismo archivo también pasa todas las pruebas (unicidad.ts).
   if (verificacion.tipo === "saldo" || verificacion.tipo === "total_banco") {
@@ -576,6 +652,7 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
       detalle: `Otra(s) hoja(s) del archivo traen movimientos que no se leyeron (${ctx.otrasHojas.join(", ")}). ${verificacion.detalle}`.trim(),
     };
   }
+  if (contradice && !verificacion.contradice) verificacion = { ...verificacion, contradice };
   const saldos = saldosDeLaCartola(lines, ctx.resumen);
   return {
     cfg,
@@ -597,7 +674,6 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
       saldo_inicial: saldos.inicial,
       saldo_final: saldos.final,
       cuenta: detectarCuenta(rows, cfg.skip_rows_before_data),
-      muestra: muestraDeLectura(lines),
     },
   };
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import { applyAdapter, parseFechaCartola } from "./apply";
 import { sellarCartola } from "./juez-banco";
-import { filtradaPermitida, necesitaConfirmacion } from "../cartola/verificacion";
+import { filtradaPermitida, revisarColumnas } from "../cartola/verificacion";
 import type { AdapterConfig, DescarteFila, Row } from "./types";
 
 // VUELTA 3 de las revisiones adversariales (docs/adversarial-1 y -2, "Vuelta 3").
@@ -64,7 +64,7 @@ describe("V3-3: monto con signo sin título que diga la dirección no sella", ()
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), "C");
     const r = (await parseExcelWithOrchestrator(XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer, { empresa_id: "e" })).result;
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
-    expect(necesitaConfirmacion({ verificacion: r.verificacion ?? undefined, mapa: r.censo?.mapa })).toBe(true);
+    expect(revisarColumnas({ verificacion: r.verificacion ?? undefined, mapa: r.censo?.mapa }).abrir).toBe(true);
   });
 });
 
@@ -75,7 +75,7 @@ describe("primera fila sin comprobar: nunca sello pleno", () => {
     for (let i = 2; i <= 14; i++) { const m = 20_000 + i; s += m; rows.push([f(i), `Venta ${i}`, "", cl(m), cl(s)]); }
     const { v } = sellar(rows, base);
     expect(v.tipo).toBe("sin_comprobar");
-    expect(necesitaConfirmacion({ verificacion: v, mapa: { adapter_id: "a", estado: "confirmado", nuevo: false } })).toBe(true);
+    expect(revisarColumnas({ verificacion: v, mapa: { adapter_id: "a", estado: "confirmado", nuevo: false } }).abrir).toBe(true);
   });
 });
 

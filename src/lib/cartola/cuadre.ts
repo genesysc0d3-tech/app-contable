@@ -1,4 +1,4 @@
-import type { CensoCartola, MapaUsado, MuestraMovimiento, VerificacionCartola } from "@/lib/parsers/types";
+import type { CensoCartola, MapaUsado, VerificacionCartola } from "@/lib/parsers/types";
 
 /**
  * CUADRE DE CARTOLA — invariante final del procesamiento.
@@ -58,9 +58,7 @@ export interface CuadreCartola {
   saldo_inicial?: number | null;
   saldo_final?: number | null;
   cuenta?: { huella: string; sufijo: string } | null;
-  /** "Así la leímos": hasta 3 movimientos para que el cliente los juzgue. */
-  muestra?: MuestraMovimiento[];
-  mapa?: MapaUsado & { confirmado_por?: string | null };
+  mapa?: MapaUsado;
   /** Lo que quedó guardado (conteo y sumas): si el cliente no lo editó, sigue igual. */
   guardado?: { n: number; entradas: number; salidas: number };
 }
@@ -129,7 +127,6 @@ export function calcularCuadre(args: {
     saldo_inicial: censo.saldo_inicial ?? null,
     saldo_final: censo.saldo_final ?? null,
     cuenta: censo.cuenta ?? null,
-    muestra: censo.muestra ?? [],
     ...(censo.mapa ? { mapa: censo.mapa } : {}),
     guardado: {
       n: guardadasLeidas.length,

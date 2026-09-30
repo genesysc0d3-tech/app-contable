@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkConfirmaMapa, filtradaPermitida, mensajeSaldoNoCuadra, seVeBienPermitido } from "./verificacion";
+import { checkConfirmaMapa, filtradaPermitida, lecturaLimpia } from "./verificacion";
 import { hayConsensoParaGlobal } from "@/lib/parsers/adapter-store";
 import type { CuadreCartola } from "./cuadre";
 import type { AdapterConfig } from "@/lib/parsers/types";
@@ -22,24 +22,16 @@ const base: CuadreCartola = {
   verificacion: { tipo: "sin_comprobar", detalle: "sin saldo" },
 };
 
-describe("'Se ve bien' no puede tapar una contradicción", () => {
+describe("una lectura con alerta o pérdidas no está limpia", () => {
   it("sin alerta ni pérdidas: permitido", () => {
-    expect(seVeBienPermitido(base).ok).toBe(true);
+    expect(lecturaLimpia(base)).toBe(true);
   });
   it("con alerta (el banco no calza, disputa, plata sin leer): rechazado", () => {
-    expect(seVeBienPermitido({ ...base, verificacion: { tipo: "sin_comprobar", alerta: true, detalle: "El banco no calza" } }).ok).toBe(false);
+    expect(lecturaLimpia({ ...base, verificacion: { tipo: "sin_comprobar", alerta: true, detalle: "El banco no calza" } })).toBe(false);
   });
   it("con filas perdidas o con otra hoja sin leer: rechazado", () => {
-    expect(seVeBienPermitido({ ...base, perdidas: [{ excel_row: 7, fecha: null, monto: 1, tipo_flujo: null, motivo: "sin_fecha", descripcion: "" }] }).ok).toBe(false);
-    expect(seVeBienPermitido({ ...base, otras_hojas_con_datos: ["Septiembre"] }).ok).toBe(false);
-  });
-});
-
-describe("'No cuadra' no dicta la respuesta", () => {
-  it("el mensaje no trae ningún monto", () => {
-    const m = mensajeSaldoNoCuadra();
-    expect(m).toMatch(/no coincide/i);
-    expect(m).not.toMatch(/\d/);
+    expect(lecturaLimpia({ ...base, perdidas: [{ excel_row: 7, fecha: null, monto: 1, tipo_flujo: null, motivo: "sin_fecha", descripcion: "" }] })).toBe(false);
+    expect(lecturaLimpia({ ...base, otras_hojas_con_datos: ["Septiembre"] })).toBe(false);
   });
 });
 

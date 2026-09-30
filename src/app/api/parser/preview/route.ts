@@ -10,8 +10,10 @@ import { hojaExcedeCeldas } from "@/lib/parsers/excel-guard";
 import { rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { recordOpsEvent } from "@/lib/ops/events";
+import { applyAdapter } from "@/lib/parsers/apply";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
-import { descargarDocumento } from "@/lib/storage";
+import { adapterDelDocumento } from "@/lib/parsers/adapter-store";
+import { bajarArchivoCartola, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
 
 const PREVIEW_ROWS = 30;
 
@@ -59,16 +61,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Solo Excel soporta mapeo visual" }, { status: 400 });
   }
 
-  const provider = documento.storage_provider === "r2" ? "r2" : "supabase";
-  const bajar = async (path: string): Promise<Buffer> => {
-    const { data, error } = await sb.storage.from("documentos").download(path);
-    if (error || !data) throw new Error("no file");
-    return Buffer.from(await data.arrayBuffer());
-  };
-  let fileBuf: Buffer;
-  try { fileBuf = await descargarDocumento(provider, documento.storage_path, bajar); }
+  let ab: ArrayBuffer;
+  try { ab = await bajarArchivoCartola(sb, documento, { cache: true }); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
-  const ab = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
   // El archivo ya pasó el cap de 10MB al subir, pero 10MB COMPRIMIDOS pueden
   // declarar un rango gigante que sheet_to_json expande a millones de celdas.
   // CSV/TXT como texto (libro.ts): "1.500" y "05/09/2026" tal cual, no 1,5 ni 9 de mayo.
@@ -86,6 +81,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "EXCEL_DEMASIADO_GRANDE" }, { status: 422 });
   }
 
+  // Popup "Revisa las columnas": PRE-LLENADO con el mapa con que el lector leyó
+  // ESTA cartola (el propio de la empresa), para que si está bien sea un clic en
+  // "Listo". Sin él (global, capa 4), la sugerencia de los detectores.
+  const sbServicio = clienteServicio();
+  const delLector = sbServicio ? await adapterDelDocumento(sbServicio, documento.id, empresaIdEfectiva) : null;
+  const lector = delLector?.config ? configDelCliente(delLector.config) : null;
+
   type SheetData = {
     name: string;
     rows: string[][];
@@ -95,6 +97,8 @@ export async function POST(request: Request) {
     fingerprint: string;
     suggested: AdapterConfig | null;
     suggestedSource: "named" | "heuristic" | null;
+    /** El mapa del lector produce movimientos en esta hoja (la que se leyó). */
+    leeLector: boolean;
   };
 
   const sheets: SheetData[] = workbook.SheetNames.map((name) => {
@@ -125,11 +129,17 @@ export async function POST(request: Request) {
       }
     }
 
-    return { name, rows: preview, totalRows: allRows.length, nonEmptyBeyondPreview, cols, fingerprint, suggested, suggestedSource };
+    let leeLector = false;
+    if (lector && allRows.length > 0) {
+      try { leeLector = applyAdapter(allRows, lector).length > 0; } catch { /* esta hoja no */ }
+    }
+
+    return { name, rows: preview, totalRows: allRows.length, nonEmptyBeyondPreview, cols, fingerprint, suggested, suggestedSource, leeLector };
   });
 
-  const primary = sheets.find((s) => s.totalRows > 0) ?? sheets[0] ?? null;
+  const primary = sheets.find((s) => s.leeLector) ?? sheets.find((s) => s.totalRows > 0) ?? sheets[0] ?? null;
   if (!primary) return NextResponse.json({ error: "Excel vacío" }, { status: 422 });
+
 
   return NextResponse.json({
     documento_id: documento.id,
@@ -139,8 +149,8 @@ export async function POST(request: Request) {
     nonEmptyBeyondPreview: primary.nonEmptyBeyondPreview,
     cols: primary.cols,
     rows: primary.rows,
-    suggested: primary.suggested,
-    suggestedSource: primary.suggestedSource,
+    suggested: lector && primary.leeLector ? lector : primary.suggested,
+    suggestedSource: lector && primary.leeLector ? "lector" : primary.suggestedSource,
     allSheets: sheets.map((s) => ({ name: s.name, totalRows: s.totalRows })),
   });
 }

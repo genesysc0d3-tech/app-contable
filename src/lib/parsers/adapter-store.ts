@@ -192,7 +192,8 @@ export async function promoverMapaGlobalSiHayConsenso(fingerprint: string, confi
       fingerprint,
       nombre: origen.nombre ?? undefined,
       source: origen.source,
-      config: { ...config, titulos: config.titulos, cuenta_huella: undefined },
+      // Sin la cuenta ni la revisión de un documento de la empresa de origen.
+      config: { ...config, titulos: config.titulos, cuenta_huella: undefined, revision_cliente: undefined },
       empresaId: null,
       confirmadoPor: "consenso",
     });
@@ -260,6 +261,12 @@ export async function upsertManualAdapter(args: {
   nombre?: string;
   tipo_doc?: string;
   config: AdapterConfig;
+  /**
+   * El cliente eligió las columnas en el popup "Revisa las columnas" y dijo
+   * "Listo": el mapa queda confirmado por el CLIENTE, solo para su empresa (un
+   * mapa "cliente" nunca cuenta para volverse global: hayConsensoParaGlobal).
+   */
+  confirmadoPor: Extract<ConfirmadoPor, "cliente">;
 }): Promise<string | null> {
   try {
     const sb = getServiceClient();
@@ -277,8 +284,8 @@ export async function upsertManualAdapter(args: {
       .limit(1)
       .maybeSingle();
 
-    // El mapeo a mano ES la confirmación del cliente.
-    const confirmado = { estado: "confirmado", confirmado_por: "manual", confirmado_en: new Date().toISOString() };
+    // Las columnas que eligió el cliente SON su confirmación.
+    const confirmado = { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: new Date().toISOString() };
 
     if (existing.data?.id) {
       const base = {

@@ -44,6 +44,13 @@ export interface AdapterConfig {
   cuenta_huella?: string;
   /** Only meaningful when layout = "transactions_log". Default: "entrada". */
   default_tipo_flujo?: "entrada" | "salida";
+  /**
+   * El cliente revisó las columnas de UN documento en el popup "Revisa las
+   * columnas" y dijo "Listo" (o "solo abonos"). El reproceso de ESE documento,
+   * si lee exactamente lo mismo (`firma`), queda sellado `cliente`. Otras
+   * cartolas del formato no heredan el sello: solo usan el mapa confirmado.
+   */
+  revision_cliente?: { documento_id: string; firma: string; solo_abonos?: boolean };
   columns: {
     fecha: number;
     descripcion: number;
@@ -150,7 +157,7 @@ export interface DescarteFila {
  * lectura — nunca un "OK" implícito porque ningún chequeo protestó:
  *   saldo         el saldo corrido cierra la ecuación fila a fila
  *   total_banco   el resumen/total/fórmula SUM impreso por el banco calza al peso
- *   cliente       el cliente confirmó (revisó la muestra o su saldo final cuadró)
+ *   cliente       el cliente revisó las columnas de ESTA cartola y dijo "Listo"
  *   sin_comprobar no hay prueba (o algo la contradice): se pide confirmación
  */
 export type TipoVerificacion = "saldo" | "total_banco" | "cliente" | "sin_comprobar";
@@ -172,19 +179,16 @@ export interface VerificacionCartola {
   filtrada?: "abonos" | "cargos";
   /**
    * Sin sello pleno por algo que solo el cliente puede juzgar (la primera fila no
-   * se pudo comprobar; el signo del monto no dice la dirección): se le pide mirar
-   * "así la leímos" aunque el mapa ya estuviera confirmado (vuelta 3).
+   * se pudo comprobar; el signo del monto no dice la dirección): se le pide
+   * revisar las columnas aunque el mapa ya estuviera confirmado (vuelta 3).
    */
   revisar?: boolean;
-}
-
-/** Movimiento de muestra "así la leímos" (para que el cliente lo juzgue). */
-export interface MuestraMovimiento {
-  excel_row: number | null;
-  fecha: string;
-  descripcion: string;
-  monto: number;
-  tipo_flujo: "entrada" | "salida";
+  /**
+   * El BANCO contradice la lectura: el total/resumen impreso no calza ("banco")
+   * o el saldo corrido no cierra ("saldo"). Con esto un mapa no se puede guardar
+   * como bueno en el popup "Revisa las columnas" (tampoco en el server).
+   */
+  contradice?: "banco" | "saldo";
 }
 
 /** Estado del mapa de columnas con que se leyó la cartola. */
@@ -197,6 +201,8 @@ export interface MapaUsado {
   cambio_formato?: string | null;
   /** Dos opiniones (lector + IA de estructura) que no coincidieron. */
   disputa?: string | null;
+  /** Con qué se confirmó el mapa (saldo, total_banco, cliente, manual…), si se sabe. */
+  confirmado_por?: string | null;
 }
 
 /** Censo de la hoja leída: toda fila con plata queda contada. */
@@ -220,8 +226,6 @@ export interface CensoCartola {
   saldo_final?: number | null;
   /** Cuenta bancaria del encabezado (huella + últimos 4), para encadenar cartolas. */
   cuenta?: { huella: string; sufijo: string } | null;
-  /** Hasta 3 movimientos de muestra para el "así la leímos". */
-  muestra?: MuestraMovimiento[];
   mapa?: MapaUsado;
 }
 

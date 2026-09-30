@@ -11,6 +11,10 @@ import type { AdapterConfig } from "@/lib/parsers/types";
 
 const EMPRESA = "emp-cliente";
 let archivo: ArrayBuffer;
+// Ruta del archivo en storage: cambia con cada archivo de prueba (el server guarda
+// el archivo unos minutos en memoria por documento + ruta).
+let ruta = "x-0.xlsx";
+let nArchivo = 0;
 const eqs: [string, unknown][] = [];
 const upserts: Record<string, unknown>[] = [];
 
@@ -20,7 +24,7 @@ function tabla(nombre: string) {
   b.eq = (col: string, val: unknown) => { eqs.push([`${nombre}.${col}`, val]); return b; };
   b.single = async () => nombre === "usuarios"
     ? { data: { empresa_id: EMPRESA, rol: "admin", vetado: false }, error: null }
-    : { data: { id: "doc-1", tipo: "excel", storage_provider: "supabase", storage_path: "x.xlsx", empresa_id: EMPRESA }, error: null };
+    : { data: { id: "doc-1", tipo: "excel", storage_provider: "supabase", storage_path: ruta, empresa_id: EMPRESA }, error: null };
   b.maybeSingle = b.single;
   return b;
 }
@@ -65,8 +69,10 @@ const bien: AdapterConfig = { header_row: 0, skip_rows_before_data: 2, date_form
 const alReves: AdapterConfig = { ...bien, columns: { ...bien.columns, cargo: 3, abono: 2 } };
 const post = (url: string, body: unknown) => new Request(`http://localhost${url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+const usar = (buf: ArrayBuffer) => { archivo = buf; ruta = `x-${++nArchivo}.xlsx`; };
+
 beforeEach(() => {
-  archivo = libro(conSaldo());
+  usar(libro(conSaldo()));
   eqs.length = 0;
   upserts.length = 0;
   vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
@@ -133,7 +139,7 @@ describe("/api/parser/save-mapping (Listo)", () => {
     let s = 1_000_000;
     const filas: (string | number)[][] = [["Fecha", "Glosa", "Cargos", "Abonos", "Saldo"]];
     for (let i = 1; i <= 20; i++) { const m = 50_000 + i * 1000; s += m; if (i % 5 === 0) s -= 30_000; filas.push([f(i), `Venta ${i}`, "", cl(m), cl(s)]); }
-    archivo = libro(filas);
+    usar(libro(filas));
     const ok = await POST(post("/api/parser/save-mapping", { documento_id: "doc-1", config: { ...bien, skip_rows_before_data: 1 }, solo_abonos: true }));
     expect(ok.status).toBe(200);
     expect((upserts[0] as { config: AdapterConfig }).config.revision_cliente?.solo_abonos).toBe(true);

@@ -434,12 +434,20 @@ export function sellarCartola(args: {
   const filasTotales = descartes.filter((d) => d.legitimo && d.motivo === "resumen" && !d.subtotal).map((d) => d.excel_row - 1);
   const tolerancia = toleranciaDelSello(rows, cfg, lines);
   const juicio = juzgarContraBanco({ ...args, filasTotales, tolerancia });
-  if (juicio.contradice) return { tipo: "sin_comprobar", alerta: true, detalle: `El banco no calza: ${juicio.contradice}` };
+  if (juicio.contradice) return { tipo: "sin_comprobar", alerta: true, contradice: "banco", detalle: `El banco no calza: ${juicio.contradice}` };
   // Los títulos de la hoja dicen lo CONTRARIO del mapa (la columna leída como
   // cargo se titula "Abonos"): aunque el saldo cierre, el archivo se contradice
   // a sí mismo (daño "cruzar cargo↔abono" de la batería). Sin sello.
   if (titulosContradicenMapa(rows, cfg)) {
-    return { tipo: "sin_comprobar", alerta: true, detalle: "Los títulos de la hoja dicen lo contrario de cómo la leímos (cargo↔abono): corrige las columnas" };
+    // Si además el saldo corrido no cierra con esta lectura, el banco la contradice.
+    const saldoNoCierra = cfg.columns.saldo >= 0 && (cfg.layout ?? "two_cols") !== "transactions_log" && lines.length > 1
+      && cuadreDeLectura(lines, rows, cfg, args.resumen?.saldoInicial ?? null, tolerancia).fallidas > 0;
+    return {
+      tipo: "sin_comprobar",
+      alerta: true,
+      ...(saldoNoCierra ? { contradice: "saldo" as const } : {}),
+      detalle: "Los títulos de la hoja dicen lo contrario de cómo la leímos (cargo↔abono): corrige las columnas",
+    };
   }
   const perdidas = descartes.filter((d) => !d.legitimo);
   if (perdidas.length) {
@@ -471,6 +479,7 @@ export function sellarCartola(args: {
       return {
         tipo: "sin_comprobar",
         alerta: true,
+        contradice: "saldo",
         ...(soloAbonos ? { filtrada: "abonos" as const } : {}),
         detalle: alReves
           ? `El saldo corrido no cierra (${q.fallidas} de ${q.revisadas} filas) y todo indica columnas o banderas al revés (cargo↔abono): corrige las columnas`
@@ -502,7 +511,7 @@ export function sellarCartola(args: {
           detalle: "La primera fila deja el saldo inicial en $0 (su monto es su propio saldo): ¿es el saldo anterior y no un movimiento?",
         };
       }
-      // Vuelta 3: la primera sin comprobar → nunca sello pleno; "así la leímos".
+      // Vuelta 3: la primera sin comprobar → nunca sello pleno; se piden las columnas.
       return {
         tipo: "sin_comprobar",
         revisar: true,

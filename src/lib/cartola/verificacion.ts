@@ -1,56 +1,70 @@
 import type { CuadreCartola } from "./cuadre";
 
 /**
- * CONFIRMACIÓN DEL CLIENTE (punto 8, 2026-09-30). Lógica pura; la UI y las
- * server actions la usan. El principio: aceptar solo con PRUEBA A FAVOR. Cuando
- * la cartola no trae saldo ni totales del banco (23 de 29 en prod), la prueba la
- * pone el cliente de la forma más simple posible:
- *   - mirando 3 movimientos "así la leímos" y diciendo "Se ve bien", o
- *   - tecleando el saldo final que ve en el portal de su banco (conciliación de
- *     toda la vida: Actual "Reconcile", Odoo balance_end_real).
- * Encadenar con la cartola anterior de la misma cuenta (saldo final anterior =
- * saldo inicial nuevo) aporta el saldo inicial y es una prueba adicional.
+ * CONFIRMACIÓN DEL CLIENTE (2026-09-30). Lógica pura; la UI y el server la
+ * usan. Principio: aceptar solo con PRUEBA A FAVOR (saldo al peso / total del
+ * banco). Si no hay prueba, se le abre al cliente el popup "Revisa las
+ * columnas" UNA VEZ POR FORMATO: indica las columnas, dice "Listo" y las
+ * siguientes cartolas de ese formato entran solas. Meta: preguntar lo menos
+ * posible, solo cuando de verdad no se puede saber.
  */
 
 type ConSello = Pick<CuadreCartola, "verificacion" | "mapa">;
 
-/**
- * ¿Pedirle al cliente que mire la lectura? Solo con sello (cuadres nuevos):
- *   - algo CONTRADICE la lectura (alerta) → siempre;
- *   - sin prueba y con un mapa que nadie confirmó → sí;
- *   - sin prueba pero con un mapa que YA confirmaste antes (mismo formato) → no
- *     se insiste: el sello queda honesto (sin_comprobar), sin molestar;
- *   - con prueba pero mapa nuevo provisorio → sí (primera vez del formato).
- */
-export function necesitaConfirmacion(c: Partial<ConSello>): boolean {
-  const v = c.verificacion;
-  if (!v) return false;
-  if (v.tipo === "cliente") return false;
-  if (v.alerta || v.revisar) return true;
-  const mapaConfirmadoViejo = !!c.mapa && c.mapa.estado === "confirmado" && c.mapa.nuevo !== true;
-  if (v.tipo === "sin_comprobar") return !mapaConfirmadoViejo;
-  return !!c.mapa && c.mapa.nuevo === true && c.mapa.estado === "provisorio";
+export interface RevisarColumnas {
+  /** Abrir el popup (una vez, al terminar de procesar) y dejar el aviso en la tarjeta. */
+  abrir: boolean;
+  /** El formato ya estaba confirmado pero ESTE archivo no calza. */
+  otraVez: boolean;
+  /** Una línea: por qué se le pregunta. */
+  motivo: string | null;
 }
 
 /**
- * ¿Se puede sellar "cliente" con "Se ve bien"? (adversarial-2 A2) 3 filas de
- * muestra no juzgan "faltan 12 filas" ni "el total del banco no calza": con una
- * ALERTA, filas perdidas u otra hoja sin leer, "Se ve bien" no sella. Ahí vale
- * "Corregir columnas" o el saldo final del banco. La UI lo esconde y el server
- * lo rechaza con esta misma regla.
+ * ¿Hay que pedirle al cliente que revise las columnas?
+ *   - comprobada (saldo / total del banco) o ya confirmada por el cliente → no;
+ *   - cuadre viejo sin sello → no (los documentos antiguos no molestan);
+ *   - formato sin mapa confirmado para la empresa y sin prueba → sí;
+ *   - formato con mapa confirmado: no, SALVO que un chequeo de este archivo
+ *     falle (montos ambiguos, plata sin leer, el banco contradice, filas
+ *     ocultas, primera fila o signo sin comprobar) → sí, diciendo por qué.
  */
-export function seVeBienPermitido(c: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos">): { ok: boolean; motivo?: string } {
-  if (c.verificacion?.alerta) return { ok: false, motivo: "Algo no calza en la lectura: corrige las columnas o comprueba con el saldo final de tu banco" };
-  if ((c.perdidas ?? []).some((p) => !p.agregada)) return { ok: false, motivo: "Hay filas con plata que no se leyeron: revísalas antes de confirmar" };
-  if ((c.otras_hojas_con_datos ?? []).length) return { ok: false, motivo: "Otra hoja del archivo trae movimientos que no se leyeron" };
-  return { ok: true };
+export function revisarColumnas(c: Partial<ConSello>): RevisarColumnas {
+  const no: RevisarColumnas = { abrir: false, otraVez: false, motivo: null };
+  const v = c.verificacion;
+  if (!v || v.tipo === "cliente" || v.tipo === "saldo" || v.tipo === "total_banco") return no;
+  const chequeoFallo = !!(v.alerta || v.revisar);
+  const formatoConfirmado = !!c.mapa && c.mapa.estado === "confirmado" && c.mapa.nuevo !== true;
+  if (formatoConfirmado) {
+    if (!chequeoFallo) return no;
+    return { abrir: true, otraVez: true, motivo: `Esta vez algo no calza: ${v.detalle || "revisa las columnas"}` };
+  }
+  return {
+    abrir: true,
+    otraVez: false,
+    motivo: chequeoFallo && v.detalle
+      ? v.detalle
+      : "Es la primera vez que vemos este formato y no trae saldo ni totales para comprobarlo solos.",
+  };
+}
+
+/**
+ * ¿La lectura está limpia como para que mirar filas la confirme? (adversarial-2
+ * A2) Con una ALERTA, filas perdidas u otra hoja sin leer, aprobar filas en
+ * Check no confirma el mapa (checkConfirmaMapa).
+ */
+export function lecturaLimpia(c: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos">): boolean {
+  if (c.verificacion?.alerta) return false;
+  if ((c.perdidas ?? []).some((p) => !p.agregada)) return false;
+  return (c.otras_hojas_con_datos ?? []).length === 0;
 }
 
 /**
  * ¿Puede el cliente confirmar "mi cartola es solo abonos/cargos (filtrada)"?
  * Solo si el lector la reconoció como filtrada (una dirección y saltos de saldo
- * explicables por lo que falta) y no hay filas perdidas ni otras hojas. Sella
- * `cliente` con esa razón (vuelta 2, N4: si no, alerta perpetua sin salida).
+ * explicables por lo que falta) y no hay filas perdidas ni otras hojas. Es la
+ * salida "Mi cartola trae solo abonos" del popup (vuelta 2, N4: si no, alerta
+ * perpetua sin salida); el server la vuelve a validar al guardar.
  */
 export function filtradaPermitida(c: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos">): boolean {
   // Solo "solo abonos" (el caso massDTE). "Solo cargos" es justo lo que produce
@@ -58,56 +72,6 @@ export function filtradaPermitida(c: Pick<CuadreCartola, "verificacion" | "perdi
   if (c.verificacion?.filtrada !== "abonos") return false;
   if ((c.perdidas ?? []).some((p) => !p.agregada)) return false;
   return (c.otras_hojas_con_datos ?? []).length === 0;
-}
-
-/**
- * "No cuadra" SIN revelar el saldo esperado (adversarial-2 A3): si le decimos el
- * número, el cliente lo copia y el sello "cliente" queda de goma.
- */
-export function mensajeSaldoNoCuadra(): string {
-  return "No coincide con lo que leímos. Revisa que el saldo sea el del cierre de este período, las columnas o si falta alguna fila.";
-}
-
-export function verificarSaldoCliente(a: {
-  saldoFinalCliente: number;
-  saldoInicial: number;
-  abonos: number;
-  cargos: number;
-}): { ok: boolean; esperado: number; diferencia: number } {
-  const esperado = a.saldoInicial + a.abonos - a.cargos;
-  const diferencia = Math.round(a.saldoFinalCliente - esperado);
-  return { ok: Math.abs(diferencia) <= 1, esperado, diferencia };
-}
-
-export function sellarPorCliente(c: CuadreCartola, detalle: string): CuadreCartola {
-  return {
-    ...c,
-    verificacion: { tipo: "cliente", detalle },
-    ...(c.mapa ? { mapa: { ...c.mapa, estado: "confirmado" as const, confirmado_por: "cliente" } } : {}),
-  };
-}
-
-/**
- * Saldo inicial con que comprobar el saldo final del cliente: el de la propia
- * cartola, o el saldo final de la cartola ANTERIOR de la misma cuenta. Si están
- * los dos, `empalma` dice si coinciden (prueba de continuidad, Odoo is_valid).
- * `anteriores` = cartolas previas de la empresa, de la más nueva a la más vieja.
- */
-export function saldoInicialParaConfirmar(
-  actual: { saldo_inicial?: number | null; cuenta?: { huella: string; sufijo?: string } | null },
-  anteriores: { cuenta?: { huella: string; sufijo?: string } | null; saldo_final?: number | null }[],
-): { valor: number | null; fuente: "cartola" | "anterior" | null; empalma: boolean | null } {
-  const huella = actual.cuenta?.huella;
-  const previa = huella
-    ? anteriores.find((a) => a.cuenta?.huella === huella && typeof a.saldo_final === "number")
-    : undefined;
-  const propio = typeof actual.saldo_inicial === "number" ? actual.saldo_inicial : null;
-  const anterior = typeof previa?.saldo_final === "number" ? previa.saldo_final : null;
-  if (propio != null) {
-    return { valor: propio, fuente: "cartola", empalma: anterior != null ? Math.abs(anterior - propio) <= 1 : null };
-  }
-  if (anterior != null) return { valor: anterior, fuente: "anterior", empalma: null };
-  return { valor: null, fuente: null, empalma: null };
 }
 
 /**
@@ -135,7 +99,7 @@ export function checkConfirmaMapa(a: {
 }): boolean {
   if (!a.guardado) return false;
   if (a.aprobadasFilaAFila !== true) return false;
-  if (a.cuadre && !seVeBienPermitido(a.cuadre).ok) return false;
+  if (a.cuadre && !lecturaLimpia(a.cuadre)) return false;
   if (a.estados.some((e) => e === "pendiente" || e === "editado" || e === "listo")) return false;
   // Decidido = aprobado (va a boleta) o rechazado (una salida/gasto): el cliente
   // miró la fila y aceptó cómo quedó leída. Al menos 3 filas y 1 aprobada.

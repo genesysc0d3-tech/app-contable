@@ -128,8 +128,6 @@ describe("sello por cartola", () => {
     expect(r.capa_usada).not.toBe(4);
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
     expect(r.verificacion?.detalle).toBeTruthy();
-    expect(r.censo?.muestra?.length).toBeGreaterThan(0);
-    expect(r.censo?.muestra?.length).toBeLessThanOrEqual(3);
   });
 
   it("la cuenta del encabezado queda como huella + últimos 4 dígitos (para encadenar cartolas)", async () => {

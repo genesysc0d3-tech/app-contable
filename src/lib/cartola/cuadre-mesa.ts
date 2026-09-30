@@ -66,12 +66,19 @@ export function leerCuadre(progresoIa: unknown): CuadreCartola | null {
     calculado_en: String(q.calculado_en ?? ""),
     // Campos del sello (2026-09-30). Cuadres viejos no los traen: quedan fuera.
     ...(q.verificacion && typeof q.verificacion === "object" && typeof q.verificacion.tipo === "string"
-      ? { verificacion: { tipo: q.verificacion.tipo, detalle: String(q.verificacion.detalle ?? ""), ...(q.verificacion.alerta ? { alerta: true } : {}) } }
+      ? { verificacion: {
+          tipo: q.verificacion.tipo,
+          detalle: String(q.verificacion.detalle ?? ""),
+          ...(q.verificacion.alerta ? { alerta: true } : {}),
+          // Sin estos el disparador de "Revisa las columnas" y "solo abonos" no los ve.
+          ...(q.verificacion.revisar ? { revisar: true } : {}),
+          ...(q.verificacion.filtrada === "abonos" || q.verificacion.filtrada === "cargos" ? { filtrada: q.verificacion.filtrada } : {}),
+          ...(q.verificacion.contradice === "banco" || q.verificacion.contradice === "saldo" ? { contradice: q.verificacion.contradice } : {}),
+        } }
       : {}),
     ...(typeof q.saldo_inicial === "number" ? { saldo_inicial: q.saldo_inicial } : {}),
     ...(typeof q.saldo_final === "number" ? { saldo_final: q.saldo_final } : {}),
     ...(q.cuenta && typeof q.cuenta === "object" ? { cuenta: { huella: String(q.cuenta.huella ?? ""), sufijo: String(q.cuenta.sufijo ?? "") } } : {}),
-    ...(Array.isArray(q.muestra) ? { muestra: q.muestra.slice(0, 3) } : {}),
     ...(q.mapa && typeof q.mapa === "object" ? { mapa: q.mapa } : {}),
     ...(q.guardado && typeof q.guardado === "object" ? { guardado: { n: Number(q.guardado.n) || 0, entradas: Number(q.guardado.entradas) || 0, salidas: Number(q.guardado.salidas) || 0 } } : {}),
   };

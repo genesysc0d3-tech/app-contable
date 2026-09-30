@@ -6,8 +6,7 @@ import { fmt, type Propuesta } from "./revisar-shared";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
 import CuadreCartolaLinea from "./CuadreCartolaLinea";
-import LecturaMuestra from "./LecturaMuestra";
-import { necesitaConfirmacion } from "@/lib/cartola/verificacion";
+import { revisarColumnas } from "@/lib/cartola/verificacion";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
 // para el conjunto: izquierda = el archivo, centro = agregados (nº tx · total · split
@@ -53,7 +52,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado, onCorregirColumnas,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado, onRevisarColumnas,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null; progreso_ia?: unknown };
   propuestas: Propuesta[];
@@ -80,8 +79,8 @@ export default function VeredictoCartola({
   decidida?: boolean;
   /** Tras "Agregarlos" del cuadre: recargar la mesa para ver las filas nuevas. */
   onCuadreAgregado?: () => void;
-  /** "Corregir columnas" del "así la leímos": abre el mapeador (FieldMapper). */
-  onCorregirColumnas?: () => void;
+  /** Abre el popup "Revisa las columnas" (FieldMapper) de esta cartola. */
+  onRevisarColumnas?: () => void;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -91,6 +90,7 @@ export default function VeredictoCartola({
   // el total de siempre.
   const cuadre = leerCuadre(doc.progreso_ia);
   const resCuadre = cuadre ? resumenCuadre(cuadre) : null;
+  const columnas = cuadre ? revisarColumnas(cuadre) : null;
 
   // Split exenta/afecta: del agregado server-side si está, si no lo cuento acá.
   const esExenta = (p: Propuesta) => {
@@ -211,12 +211,24 @@ export default function VeredictoCartola({
         {/* CUADRE: "500 de 500 ✓" o "Faltan N por $X" con la lista y Agregarlos. */}
         {resCuadre && <CuadreCartolaLinea documentoId={doc.id} resumen={resCuadre} onAgregado={onCuadreAgregado} />}
 
-        {/* ASÍ LA LEÍMOS (2026-09-30): la cartola quedó sin comprobar (sin saldo
-            ni totales del banco) o su formato es nuevo → 3 movimientos de
-            muestra, "Se ve bien" / "Corregir columnas" y el saldo final del
-            portal del banco como prueba. Advertir sí, bloquear jamás. */}
-        {cuadre && !decidida && necesitaConfirmacion(cuadre) && (
-          <LecturaMuestra documentoId={doc.id} cuadre={cuadre} onCorregirColumnas={onCorregirColumnas} onConfirmado={onCuadreAgregado} />
+        {/* REVISA LAS COLUMNAS (2026-09-30): sin prueba y formato nuevo, o un
+            chequeo de ESTE archivo que falla. El popup se abre solo una vez al
+            terminar de procesar (MesaTab); si la clienta lo cerró, este aviso de
+            una línea lo vuelve a abrir. Advertir sí, bloquear jamás. */}
+        {columnas?.abrir && !decidida && (
+          <div data-testid="aviso-columnas" title={columnas.motivo ?? undefined}
+            style={{ marginTop: "0.6em", display: "flex", alignItems: "center", gap: 8, padding: "0.45em 0.5em 0.45em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 28%, transparent)", fontSize: "0.85em", lineHeight: 1.4, color: "var(--text)" }}>
+            <span style={{ width: "0.5em", height: "0.5em", borderRadius: "50%", background: "var(--amber)", flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <b>Revisa las columnas</b>
+              <span style={{ color: "var(--text3)" }}> · {columnas.otraVez ? columnas.motivo : "no pudimos comprobar esta cartola solos"}</span>
+            </span>
+            {onRevisarColumnas && (
+              <button onClick={onRevisarColumnas} style={{ flexShrink: 0, border: "1px solid color-mix(in srgb, var(--amber) 45%, transparent)", borderRadius: 8, background: "transparent", color: "var(--text)", fontSize: "0.95em", fontWeight: 700, padding: "0.3em 0.8em", cursor: "pointer" }}>
+                Revisar
+              </button>
+            )}
+          </div>
         )}
 
         {/* FILAS QUE NO ENTRARON (2026-09-03): el processor de plantillas

@@ -85,13 +85,13 @@ describe("N1 (CRÍTICO): el consenso global solo cuenta pruebas objetivas de due
     expect(r.adapter_id).not.toBe("global-malo");
   });
   it("un global aplicado sin prueba en esta lectura pide confirmación", async () => {
-    const { necesitaConfirmacion } = await import("../cartola/verificacion");
+    const { revisarColumnas } = await import("../cartola/verificacion");
     cacheado = { id: "global", config: { ...cfg5, columns: { ...cfg5.columns, saldo: -1 } }, estado: "confirmado", creado_por_empresa_id: null, source: "heuristic", confianza: 1 };
     const filas: (string | number)[][] = [["Fecha", "Glosa", "Cargos", "Abonos"]];
     for (let i = 1; i <= 12; i++) { const c = i % 4 === 0; filas.push([fch(i), `Mov ${i}`, c ? cl(5_000 + i) : "", c ? "" : cl(20_000 + i)]); }
     const r = await parsear(libro(filas));
     expect(r.adapter_id).toBe("global");
-    expect(necesitaConfirmacion({ verificacion: r.verificacion ?? undefined, mapa: r.censo?.mapa })).toBe(true);
+    expect(revisarColumnas({ verificacion: r.verificacion ?? undefined, mapa: r.censo?.mapa }).abrir).toBe(true);
   });
 });
 
