@@ -20,11 +20,11 @@ import { soloOpenCode, reporteSoloOpenCode } from "../lib/solo-opencode";
 soloOpenCode();
 
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as XLSX from "xlsx";
-import { leerSpecs, leerSpecsDeepSeek, rendir, rngDe, type CartolaSintetica, type Mov, type Spec } from "./generador";
+import { leerSpecs, rendir, rngDe, type Mov } from "./generador";
 import { mutar } from "./mutaciones";
 import { construirCorpus as construirCorpusBase, corpusExterno as corpusExternoBase, exacto, idDe, wilson, type ItemCorpus, type L } from "./corpus";
 

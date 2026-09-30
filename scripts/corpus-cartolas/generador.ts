@@ -406,7 +406,7 @@ export function rendir(spec: Spec, seed: number, o: { mes?: number; saldo0?: num
   if (spec.titulos !== false) { conSpan(filas.length); filas.push(filaFisica(cols.map((c) => (c.titulo ? txt(c.titulo) : vacia())))); }
 
   // Cuerpo en orden de la hoja (asc/desc), con extras.
-  let cuerpo = visibles.map((m, i) => ({ m, i }));
+  const cuerpo = visibles.map((m, i) => ({ m, i }));
   const ceros = spec.ceros_texto ? entre(r, spec.ceros_texto[0], spec.ceros_texto[1]) : 0;
   const filasCuerpo: { celdas: Celda[]; mov?: number }[] = [];
   const colPlata = cols.findIndex((c) => ["monto", "abono"].includes(c.rol));
