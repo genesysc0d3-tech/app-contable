@@ -252,10 +252,10 @@ export async function parseExcelWithOrchestrator(
       const lectura = elegido.lectura;
       // Una disputa o un cambio de formato sin prueba no se sella como probado.
       if (disputa) {
-        lectura.verificacion = { tipo: "sin_comprobar", detalle: disputa };
+        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: disputa };
         lectura.censo.verificacion = lectura.verificacion;
       } else if (cambio && lectura.verificacion.tipo === "sin_comprobar") {
-        lectura.verificacion = { tipo: "sin_comprobar", detalle: `${cambio}. ${lectura.verificacion.detalle}` };
+        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: `${cambio}. ${lectura.verificacion.detalle}` };
         lectura.censo.verificacion = lectura.verificacion;
       }
       const titulos = encabezadoNormalizado(rows) ?? undefined;

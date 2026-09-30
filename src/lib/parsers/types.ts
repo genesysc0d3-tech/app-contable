@@ -139,6 +139,12 @@ export interface VerificacionCartola {
   tipo: TipoVerificacion;
   /** Por qué (en castellano, para el log y la UI). */
   detalle: string;
+  /**
+   * Algo CONTRADICE la lectura (el banco no calza, plata sin leer, monto
+   * ambiguo, dos opiniones distintas, cambio de formato): hay que mirar aunque
+   * el mapa esté confirmado.
+   */
+  alerta?: boolean;
 }
 
 /** Movimiento de muestra "así la leímos" (para que el cliente lo juzgue). */

@@ -26,6 +26,8 @@ const MOTIVOS: Record<string, string> = {
   cargo_y_abono: "Trae cargo y abono a la vez",
   fecha_imposible: "Fecha imposible",
   fecha_fuera_de_rango: "Fecha fuera de rango",
+  monto_ambiguo: "Monto en un formato dudoso",
+  sin_leer: "Tiene plata en una columna que no leímos",
 };
 
 /** Motivos que SÍ se pueden agregar solos: la fila se leyó bien y solo no llegó a
@@ -61,6 +63,16 @@ export function leerCuadre(progresoIa: unknown): CuadreCartola | null {
       ok: q.db?.ok !== false,
     },
     calculado_en: String(q.calculado_en ?? ""),
+    // Campos del sello (2026-09-30). Cuadres viejos no los traen: quedan fuera.
+    ...(q.verificacion && typeof q.verificacion === "object" && typeof q.verificacion.tipo === "string"
+      ? { verificacion: { tipo: q.verificacion.tipo, detalle: String(q.verificacion.detalle ?? ""), ...(q.verificacion.alerta ? { alerta: true } : {}) } }
+      : {}),
+    ...(typeof q.saldo_inicial === "number" ? { saldo_inicial: q.saldo_inicial } : {}),
+    ...(typeof q.saldo_final === "number" ? { saldo_final: q.saldo_final } : {}),
+    ...(q.cuenta && typeof q.cuenta === "object" ? { cuenta: { huella: String(q.cuenta.huella ?? ""), sufijo: String(q.cuenta.sufijo ?? "") } } : {}),
+    ...(Array.isArray(q.muestra) ? { muestra: q.muestra.slice(0, 3) } : {}),
+    ...(q.mapa && typeof q.mapa === "object" ? { mapa: q.mapa } : {}),
+    ...(q.guardado && typeof q.guardado === "object" ? { guardado: { n: Number(q.guardado.n) || 0, entradas: Number(q.guardado.entradas) || 0, salidas: Number(q.guardado.salidas) || 0 } } : {}),
   };
 }
 

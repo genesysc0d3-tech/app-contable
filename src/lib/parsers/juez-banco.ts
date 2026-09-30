@@ -291,14 +291,14 @@ export function sellarCartola(args: {
   resumen: ResumenImpreso | null;
   formulas: FormulaSuma[];
 }): VerificacionCartola {
-  const { rows, cfg, lines, descartes } = args;
+  const { rows, cfg, descartes } = args;
   const filasTotales = descartes.filter((d) => d.legitimo && d.motivo === "resumen").map((d) => d.excel_row - 1);
   const juicio = juzgarContraBanco({ ...args, filasTotales });
   const sinLeer = descartes.filter((d) => d.motivo === "sin_leer").length;
   const ambiguos = descartes.filter((d) => d.motivo === "monto_ambiguo").length;
-  if (juicio.contradice) return { tipo: "sin_comprobar", detalle: `El banco no calza: ${juicio.contradice}` };
-  if (sinLeer) return { tipo: "sin_comprobar", detalle: `${sinLeer} fila(s) con fecha y plata que el mapa de columnas no leyó` };
-  if (ambiguos) return { tipo: "sin_comprobar", detalle: `${ambiguos} monto(s) en un formato que no se puede leer sin adivinar` };
+  if (juicio.contradice) return { tipo: "sin_comprobar", alerta: true, detalle: `El banco no calza: ${juicio.contradice}` };
+  if (sinLeer) return { tipo: "sin_comprobar", alerta: true, detalle: `${sinLeer} fila(s) con fecha y plata que el mapa de columnas no leyó` };
+  if (ambiguos) return { tipo: "sin_comprobar", alerta: true, detalle: `${ambiguos} monto(s) en un formato que no se puede leer sin adivinar` };
   if (formatoVerificadoPorSaldo(rows, cfg)) return { tipo: "saldo", detalle: "El saldo corrido cuadra fila a fila" };
   if (juicio.prueba) return { tipo: "total_banco", detalle: juicio.detalle };
   return {

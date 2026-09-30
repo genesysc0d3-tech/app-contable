@@ -1,0 +1,56 @@
+-- Mapas de columnas PROVISORIOS vs CONFIRMADOS (lector con juez, 2026-09-30).
+--
+-- Diagnóstico en prod: 44 mapas heurísticos se reusaban con confianza 1.0 sin
+-- que nadie los hubiera confirmado (aprendíamos nuestra propia adivinanza).
+-- Desde ahora un mapa derivado (heurística / nombres / IA de estructura) nace
+-- 'provisorio' y solo pasa a 'confirmado' con PRUEBA: saldo corrido, total
+-- impreso por el banco, el cliente ("Se ve bien" o su saldo final cuadró) o el
+-- cliente aprobando en Check lo que el mapa leyó sin editarlo. Un provisorio no
+-- se comparte entre empresas.
+--
+-- El código es fail-safe: sin estas columnas trata todo como provisorio.
+-- SOLO ESCRITA — no aplicada. Respaldar parser_adapters antes de aplicarla.
+
+alter table public.parser_adapters
+  add column if not exists estado text not null default 'provisorio',
+  add column if not exists confirmado_por text,
+  add column if not exists confirmado_en timestamptz;
+
+alter table public.parser_adapters
+  drop constraint if exists parser_adapters_estado_check;
+alter table public.parser_adapters
+  add constraint parser_adapters_estado_check
+  check (estado in ('provisorio', 'confirmado'));
+
+alter table public.parser_adapters
+  drop constraint if exists parser_adapters_confirmado_por_check;
+alter table public.parser_adapters
+  add constraint parser_adapters_confirmado_por_check
+  check (confirmado_por is null or confirmado_por in ('saldo', 'total_banco', 'cliente', 'check', 'manual', 'plantilla'));
+
+comment on column public.parser_adapters.estado is
+  'provisorio = derivado sin prueba (no se comparte entre empresas, no sube confianza por reuso); confirmado = probado por saldo/total del banco o confirmado por el cliente.';
+comment on column public.parser_adapters.confirmado_por is
+  'Qué lo confirmó: saldo | total_banco | cliente | check | manual | plantilla.';
+
+-- Backfill. Solo lo que SABEMOS que fue confirmado por una persona o es nuestro:
+--   * manual (el cliente mapeó a mano)            → confirmado / manual
+--   * plantilla massDTE (config.plantilla = true)  → confirmado / plantilla
+-- Todo lo demás (heurísticos/nombres, incluidos los globales viejos: no hay forma
+-- de saber cuáles cuadraron por saldo al nacer) queda provisorio con confianza
+-- bajo la de un manual. Se re-confirman solos la próxima vez que una lectura
+-- traiga prueba.
+update public.parser_adapters
+   set estado = 'confirmado', confirmado_por = 'manual', confirmado_en = now()
+ where source = 'manual' and estado = 'provisorio';
+
+update public.parser_adapters
+   set estado = 'confirmado', confirmado_por = 'plantilla', confirmado_en = now()
+ where estado = 'provisorio' and (config ->> 'plantilla') = 'true';
+
+update public.parser_adapters
+   set confianza = least(confianza, 0.7)
+ where estado = 'provisorio';
+
+create index if not exists idx_parser_adapters_empresa_estado
+  on public.parser_adapters (creado_por_empresa_id, estado);

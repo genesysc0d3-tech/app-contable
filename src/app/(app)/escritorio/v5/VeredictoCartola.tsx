@@ -6,6 +6,8 @@ import { fmt, type Propuesta } from "./revisar-shared";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
 import CuadreCartolaLinea from "./CuadreCartolaLinea";
+import LecturaMuestra from "./LecturaMuestra";
+import { necesitaConfirmacion } from "@/lib/cartola/verificacion";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
 // para el conjunto: izquierda = el archivo, centro = agregados (nº tx · total · split
@@ -51,7 +53,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado, onCorregirColumnas,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null; progreso_ia?: unknown };
   propuestas: Propuesta[];
@@ -78,6 +80,8 @@ export default function VeredictoCartola({
   decidida?: boolean;
   /** Tras "Agregarlos" del cuadre: recargar la mesa para ver las filas nuevas. */
   onCuadreAgregado?: () => void;
+  /** "Corregir columnas" del "así la leímos": abre el mapeador (FieldMapper). */
+  onCorregirColumnas?: () => void;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -206,6 +210,14 @@ export default function VeredictoCartola({
 
         {/* CUADRE: "500 de 500 ✓" o "Faltan N por $X" con la lista y Agregarlos. */}
         {resCuadre && <CuadreCartolaLinea documentoId={doc.id} resumen={resCuadre} onAgregado={onCuadreAgregado} />}
+
+        {/* ASÍ LA LEÍMOS (2026-09-30): la cartola quedó sin comprobar (sin saldo
+            ni totales del banco) o su formato es nuevo → 3 movimientos de
+            muestra, "Se ve bien" / "Corregir columnas" y el saldo final del
+            portal del banco como prueba. Advertir sí, bloquear jamás. */}
+        {cuadre && !decidida && necesitaConfirmacion(cuadre) && (
+          <LecturaMuestra documentoId={doc.id} cuadre={cuadre} onCorregirColumnas={onCorregirColumnas} onConfirmado={onCuadreAgregado} />
+        )}
 
         {/* FILAS QUE NO ENTRARON (2026-09-03): el processor de plantillas
             siempre las guardó en progreso_ia.errores_filas, pero el visor solo

@@ -9,6 +9,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
+import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 
 const BATCH_SIZE = 50;
@@ -875,6 +876,12 @@ export async function aprobarCartola(
     accion: "propuestas_aprobadas", recursoTipo: "documento_subido", recursoId: documentoId,
     resumen: `${aprobadas} propuestas de cartola enviadas a emitir`, metadata: { cantidad: aprobadas, documentoId },
   });
+  // Juez implícito (lector con juez, 2026-09-30): si la cartola quedó toda
+  // decidida sin editar lo leído, el mapa de columnas provisorio se confirma.
+  // Best-effort: jamás afecta la aprobación.
+  try {
+    await confirmarMapaPorCheck(ctx.sb, ctx.empresaId, documentoId);
+  } catch { /* el aprendizaje del mapa nunca rompe Aprobar */ }
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   return { ok: true, count: aprobadas };
