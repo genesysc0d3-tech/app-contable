@@ -314,7 +314,9 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     try {
       const r = await devolverCartola(item.documento_id);
       if (r.error) { toast(r.error, "error"); return; }
-      toast(`Cartola devuelta a Check (${r.count} quedan listas) — corrige y aprueba de nuevo`);
+      // El resumen dice cuántas volvieron y cuántas se quedan por ya estar emitidas
+      // (incidente MH 2026-09-29: lo emitido nunca vuelve a Check).
+      toast(`Cartola: ${r.resumen ?? `${r.count} devueltas a Check`} — corrige y aprueba de nuevo`);
       goToCheck(item);
       reload();
     } finally { setDevolviendo(null); }
@@ -326,7 +328,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
     try {
       const r = await devolverCartola(docId);
       if (r.error) toast(r.error, "error");
-      else toast(`${nombre}: ${r.count} devueltas a Check (quedan listas)`);
+      else toast(`${nombre}: ${r.resumen ?? `${r.count} devueltas a Check`}`);
       reload();
     } finally { setDevolviendo(null); }
   }
@@ -1016,7 +1018,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
                     {g.docId && listas > 0 && (
                       <button onClick={(e) => { e.stopPropagation(); void handleDevolverCartola(g.docId!, g.nombre); }}
                         disabled={devolviendo === g.docId}
-                        title="Devuelve la cartola completa a Check de agregados: las boletas quedan listas de nuevo (no pierdes el juicio), y apruebas cuando quieras."
+                        title="Devuelve a Check lo que falta emitir de esta cartola: esas boletas quedan listas de nuevo (no pierdes el juicio) y apruebas cuando quieras. Lo ya emitido en el SII se queda donde está."
                         style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: "var(--text2)", background: "transparent", border: "1px solid var(--border)", borderRadius: 99, padding: "4px 11px", cursor: devolviendo === g.docId ? "wait" : "pointer", whiteSpace: "nowrap" }}>
                         ← {devolviendo === g.docId ? "Devolviendo…" : "Devolver a Check"}
                       </button>
