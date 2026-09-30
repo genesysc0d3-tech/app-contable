@@ -9,6 +9,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
+import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 
 const BATCH_SIZE = 50;
 
@@ -49,6 +50,25 @@ async function getEmpresaAndService() {
 
   const sb = createServiceClient(url, key);
   return { empresaId: usuario.empresa_id, userId: user.id, sb } as const;
+}
+
+/**
+ * Guard de retroceso (incidente MH 2026-09-29): ninguna acción que mueva una
+ * propuesta hacia atrás (Check, pendiente, juzgada, oculta, borrada) puede tocar
+ * una ya EMITIDA, A MEDIAS / SIN RESPUESTA o EN VUELO. Devuelve el mensaje de
+ * error para UNA propuesta, o null si se puede tocar. Fail-closed.
+ */
+const MENSAJE_INTOCABLE: Record<MotivoIntocable, string> = {
+  emitida: "Esta boleta ya se emitió en el SII: no puede volver atrás.",
+  a_medias: "Esta boleta quedó a medias en el SII: verifícala en A medias antes de moverla.",
+  sin_respuesta: "Esta boleta quedó sin respuesta del SII: verifícala en A medias antes de moverla.",
+  en_vuelo: "Esta boleta se está emitiendo en este momento: espera a que termine.",
+};
+async function bloqueoRetroceso(sb: Parameters<typeof clasificarIntocables>[0], empresaId: string, propuestaId: string): Promise<string | null> {
+  const sep = await clasificarIntocables(sb, empresaId, [propuestaId]);
+  if ("error" in sep) return sep.error;
+  const motivo = sep.intocables.get(propuestaId);
+  return motivo ? MENSAJE_INTOCABLE[motivo] : null;
 }
 
 export async function aprobarPropuesta(
@@ -108,6 +128,8 @@ export async function crearClienteDesdeRevisar(formData: {
 export async function descartarPropuesta(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
+  const bloqueo = await bloqueoRetroceso(ctx.sb, ctx.empresaId, propuestaId);
+  if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
     .update({ estado: "descartado" }, { count: "exact" })
@@ -129,6 +151,8 @@ export async function descartarPropuesta(propuestaId: string) {
 export async function ocultarPropuesta(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
+  const bloqueo = await bloqueoRetroceso(ctx.sb, ctx.empresaId, propuestaId);
+  if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
     .update({ estado: "oculto" }, { count: "exact" })
@@ -145,6 +169,8 @@ export async function ocultarPropuesta(propuestaId: string) {
 export async function restaurarPropuesta(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
+  const bloqueo = await bloqueoRetroceso(ctx.sb, ctx.empresaId, propuestaId);
+  if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
     .update({ estado: "pendiente" }, { count: "exact" })
@@ -165,13 +191,18 @@ export async function restaurarPropuesta(propuestaId: string) {
  */
 export async function rechazarPropuestas(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
+  const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
+  if ("error" in sepR) return { error: sepR.error, count: 0 };
+  const tocables = sepR.tocables;
+  if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
   let marcadas = 0;
-  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
-    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
+    const batch = tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
       .update({ estado: "rechazado" }, { count: "exact" })
@@ -183,11 +214,11 @@ export async function rechazarPropuestas(
     if (error) return { error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`, count: marcadas };
     marcadas += count ?? 0;
   }
-  if (marcadas === 0 && propuestaIds.length > 0) return { error: "No se marcó ninguna (¿ya estaban juzgadas?)", count: 0 };
+  if (marcadas === 0 && tocables.length > 0) return { error: "No se marcó ninguna (¿ya estaban juzgadas?)", count: 0 };
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: marcadas };
+  return { ok: true, count: marcadas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 /**
@@ -212,10 +243,15 @@ export async function cambiarTipoPropuestas(
   propuestaIds: string[],
   destino: "afecta" | "exenta",
   mesa: "boleta" | "factura" = "boleta",
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
+  const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
+  if ("error" in sepR) return { error: sepR.error, count: 0 };
+  const tocables = sepR.tocables;
+  if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
 
   const { data: empresa } = await ctx.sb
     .from("empresas")
@@ -239,8 +275,8 @@ export async function cambiarTipoPropuestas(
 
   let cambiadas = 0;
   const movIdsCambiados: string[] = [];
-  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
-    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
+    const batch = tocables.slice(i, i + BATCH_SIZE);
     // Se lee el total de CADA una: el reparto neto/IVA depende de su monto, así
     // que no hay un UPDATE único que sirva para todo el lote. Traemos también el
     // movimiento_id para poder aprender la regla de contraparte (abajo).
@@ -316,12 +352,14 @@ export async function cambiarTipoPropuestas(
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: cambiadas };
+  return { ok: true, count: cambiadas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 export async function rechazarPropuesta(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
+  const bloqueo = await bloqueoRetroceso(ctx.sb, ctx.empresaId, propuestaId);
+  if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
     .update({ estado: "rechazado" }, { count: "exact" })
@@ -640,13 +678,18 @@ export async function editarGlosaEmitible(
 // Guard: solo desde 'listo' (jamás degrada aprobadas ni resucita juzgadas acá).
 export async function volverAPendientes(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
+  const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
+  if ("error" in sepR) return { error: sepR.error, count: 0 };
+  const tocables = sepR.tocables;
+  if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
   let devueltas = 0;
-  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
-    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
+    const batch = tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
       .update({ estado: "pendiente" }, { count: "exact" })
@@ -658,7 +701,7 @@ export async function volverAPendientes(
   }
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: devueltas };
+  return { ok: true, count: devueltas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 // Restaurar EN GRUPO (pedido fundador 2026-09-02): en Juzgadas se pueden
@@ -667,13 +710,18 @@ export async function volverAPendientes(
 // ni degrada aprobadas).
 export async function restaurarPropuestas(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
+  const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
+  if ("error" in sepR) return { error: sepR.error, count: 0 };
+  const tocables = sepR.tocables;
+  if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
   let restauradas = 0;
-  for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
-    const batch = propuestaIds.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
+    const batch = tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
       .update({ estado: "pendiente" }, { count: "exact" })
@@ -685,30 +733,48 @@ export async function restaurarPropuestas(
   }
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: restauradas };
+  return { ok: true, count: restauradas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
 }
 
 // Devolver cartola (espejo de aprobarCartola, pedido fundador 2026-09-01): desde
 // la pestaña Emitir, la cartola COMPLETA retrocede un paso — 'aprobado' → 'listo'.
 // Devolver es "me arrepentí de enviar", no "me arrepentí del juicio": las juzgadas
 // (rechazadas) no se tocan, y las listas quedan de nuevo esperando el Aprobar.
+//
+// LO YA EMITIDO NO VUELVE (incidente MH 2026-09-29): una emitida sigue en
+// 'aprobado' (la verdad es boletas_emitidas.propuesta_id), así que devolver "todas
+// las aprobado" bajaba también las 103 con folio real → Check mostraba 684
+// pendientes y la clienta casi las cargó a mano (eso sí duplica). Ahora se quedan
+// donde están las emitidas, las a medias / sin respuesta (lápidas) y las que se
+// están emitiendo en este momento. Fail-closed si no se puede verificar.
 export async function devolverCartola(
   documentoId: string
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; seQuedan?: { emitidas: number; aMedias: number; enVuelo: number }; resumen?: string }> {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
-  const { data: props, error: qErr } = await ctx.sb
-    .from("propuestas_ia")
-    .select("id, movimientos_raw!inner(documento_id)")
-    .eq("empresa_id", ctx.empresaId)
-    .eq("estado", "aprobado")
-    .eq("movimientos_raw.documento_id", documentoId);
-  if (qErr) return { error: qErr.message, count: 0 };
-  const ids = (props ?? []).map((p) => p.id);
+  // Paginado: PostgREST corta en max-rows (1000) sin avisar; una cartola grande
+  // dejaba aprobadas sin devolver y el resumen mentía.
+  const ids: string[] = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data: props, error: qErr } = await ctx.sb
+      .from("propuestas_ia")
+      .select("id, movimientos_raw!inner(documento_id)")
+      .eq("empresa_id", ctx.empresaId)
+      .eq("estado", "aprobado")
+      .eq("movimientos_raw.documento_id", documentoId)
+      .order("id")
+      .range(desde, desde + 999);
+    if (qErr) return { error: qErr.message, count: 0 };
+    ids.push(...(props ?? []).map((p) => p.id as string));
+    if ((props ?? []).length < 1000) break;
+  }
   if (ids.length === 0) return { ok: true, count: 0 };
+  const sep = await clasificarIntocables(ctx.sb, ctx.empresaId, ids);
+  if ("error" in sep) return { error: sep.error, count: 0 };
+  const seQuedan = contarIntocables(sep.intocables);
   let devueltas = 0;
-  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    const batch = ids.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < sep.tocables.length; i += BATCH_SIZE) {
+    const batch = sep.tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
       .update({ estado: "listo" }, { count: "exact" })
@@ -719,14 +785,16 @@ export async function devolverCartola(
     if (error) return { error: error.message, count: devueltas };
     devueltas += count ?? 0;
   }
+  const resumen = resumenRetroceso(devueltas, "devueltas a Check", sep.intocables);
   await recordCuentaAudit({
     sb: ctx.sb, empresaId: ctx.empresaId, usuarioId: ctx.userId,
     accion: "cartola_devuelta_a_check", recursoTipo: "documento_subido", recursoId: documentoId,
-    resumen: `${devueltas} propuestas devueltas de Emitir a Check (quedan listas)`, metadata: { cantidad: devueltas, documentoId },
+    resumen: `${resumen} (las devueltas quedan listas)`,
+    metadata: { cantidad: devueltas, documentoId, se_quedan_emitidas: seQuedan.emitidas, se_quedan_a_medias: seQuedan.aMedias, se_quedan_en_vuelo: seQuedan.enVuelo },
   });
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: devueltas };
+  return { ok: true, count: devueltas, seQuedan, resumen };
 }
 
 // La "última mirada" del conglomerado en Emitir (solo lectura, on-demand al
@@ -888,6 +956,8 @@ export async function editarMovimientoPropuesta(
 export async function devolverAOmitidos(propuestaId: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
+  const bloqueo = await bloqueoRetroceso(ctx.sb, ctx.empresaId, propuestaId);
+  if (bloqueo) return { error: bloqueo };
 
   // Get the propuesta + movimiento to delete (scoped to empresa)
   const { data: prop } = await ctx.sb
