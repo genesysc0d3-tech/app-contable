@@ -55,13 +55,31 @@ export function esSerieCorrelativa(valores: number[]): boolean {
   let mejor = 0;
   let paso = 0;
   for (const [d, n] of pasos) if (n > mejor) { mejor = n; paso = d; }
-  return paso !== 0 && mejor / (v.length - 1) >= 0.8;
+  // Paso chico (1, 13…): un N° correlativo. Montos con paso fijo grande (1.000,
+  // 10.000) aparecen en planillas de prueba y en cuotas: no se tocan.
+  return paso !== 0 && Math.abs(paso) <= 100 && mejor / (v.length - 1) >= 0.8;
 }
 
 /**
- * ¿La columna es de IDENTIFICADORES (texto de puros dígitos, mismo largo ≥6, o
- * con cero a la izquierda)? Un monto nunca va con cero a la izquierda ni con
- * largo fijo en todas las filas.
+ * ¿La columna es un N° CORRELATIVO? Texto de puros dígitos (así exportan los
+ * bancos el N° de documento/operación: "5000", "900013") en ≥80% de las celdas
+ * y con paso fijo chico (esSerieCorrelativa). Los montos tipados como número no
+ * entran: una planilla de prueba con 20.000, 20.001… sigue siendo plata.
+ */
+export function esColumnaCorrelativa(celdas: unknown[]): boolean {
+  const nums: number[] = [];
+  let noVacias = 0;
+  for (const v of celdas) {
+    if (v == null || String(v).trim() === "") continue;
+    noVacias++;
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) nums.push(parseInt(v.trim(), 10));
+  }
+  return noVacias >= 5 && nums.length / noVacias >= 0.8 && esSerieCorrelativa(nums);
+}
+
+/**
+ * ¿La columna es de CÓDIGOS con cero a la izquierda ("0900013")? Un monto nunca
+ * va con cero a la izquierda.
  */
 export function esColumnaDeCodigos(celdas: unknown[]): boolean {
   const vals: string[] = [];
@@ -72,7 +90,5 @@ export function esColumnaDeCodigos(celdas: unknown[]): boolean {
     if (typeof v === "string" && /^\d+$/.test(v.trim())) vals.push(v.trim());
   }
   if (noVacias < 3 || vals.length / noVacias < 0.8) return false;
-  if (vals.some((v) => v.length > 1 && v.startsWith("0"))) return true;
-  const len = vals[0].length;
-  return len >= 6 && vals.every((v) => v.length === len);
+  return vals.some((v) => v.length > 1 && v.startsWith("0"));
 }

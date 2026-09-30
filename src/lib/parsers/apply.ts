@@ -1,6 +1,6 @@
 import type { AdapterConfig, DescarteFila, ParsedLine, PreExtractedMovimiento, Row } from "./types";
 import { LectorMontos, leerCeldaMonto, lecturaLaxa, valorCeldaSuelta } from "./numeros";
-import { cellEsFecha, esColumnaDeCodigos, esSerieCorrelativa } from "./celdas";
+import { cellEsFecha, esColumnaCorrelativa, esColumnaDeCodigos } from "./celdas";
 
 /**
  * Monto de UNA celda, sin contexto de columna: "1.600.000", "250,000",
@@ -506,11 +506,7 @@ function censoIndependiente(
   for (let col = 0; col < ncols; col++) {
     if (noPlata.has(col)) continue;
     const celdas = rows.slice(start).map((r) => r?.[col]);
-    const nums = celdas.map((v) => {
-      const l = leerCeldaMonto(v);
-      return l ? valorCeldaSuelta(l) : NaN;
-    }).filter((x) => Number.isFinite(x) && x !== 0);
-    if (esColumnaDeCodigos(celdas) || esSerieCorrelativa(nums)) noPlata.add(col);
+    if (esColumnaDeCodigos(celdas) || esColumnaCorrelativa(celdas)) noPlata.add(col);
   }
   const lector = new LectorMontos(rows as unknown[][], start, cfg.number_format === "generic" ? "generic" : "chilean");
   for (let i = start; i < rows.length; i++) {
@@ -521,7 +517,7 @@ function censoIndependiente(
     if (!conFecha) continue;
     let plata = 0;
     r.forEach((v, j) => {
-      if (noPlata.has(j) || v == null || v === "" || v instanceof Date) return;
+      if (noPlata.has(j) || v == null || v === "" || (v as unknown) instanceof Date) return;
       if (typeof v === "number" && ((cellEsFecha(v) && j === c.fecha) || Math.abs(v) < 1)) return; // fecha serial u hora (fracción de día)
       if (typeof v !== "number" && !leerCeldaMonto(v)) return;
       const m = lector.leer(r, j);
@@ -530,7 +526,7 @@ function censoIndependiente(
     });
     if (!plata) continue;
     const resumen = filasResumen.has(i) || r.some((v) => typeof v === "string" && SALDO_O_RESUMEN_RE.test(v));
-    const fechaCelda = r[c.fecha];
+    const fechaCelda = r[c.fecha] as unknown;
     const fecha = fechaCelda instanceof Date && !Number.isNaN(fechaCelda.getTime())
       ? `${fechaCelda.getFullYear()}-${String(fechaCelda.getMonth() + 1).padStart(2, "0")}-${String(fechaCelda.getDate()).padStart(2, "0")}`
       : (() => { const f = parseFechaCartola(String(fechaCelda ?? ""), cfg.date_format); return f.ok ? f.iso : null; })();
