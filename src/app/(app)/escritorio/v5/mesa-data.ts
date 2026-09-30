@@ -27,6 +27,12 @@ export function weekRangeStr(date: string) {
   return { start: fmt(start), end: fmt(end) };
 }
 
+// Propuestas de la mesa + su boleta (si existe). Una boleta anulada viaja igual: el
+// cliente la descarta (cartola-filas.ts → boletaVigente).
+const PROPS_SELECT_BASE = "*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))";
+const PROPS_SELECT_CON_BOLETA = `${PROPS_SELECT_BASE},boletas_emitidas(folio,estado,ref)`;
+const PROPS_SELECT_SIN_REF = `${PROPS_SELECT_BASE},boletas_emitidas(folio,estado)`;
+
 const MONTH_NAMES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 export type DocRow = {
@@ -134,8 +140,11 @@ export async function fetchMesaDateDependent(
   const PROPS_LIMIT = 1000;
 
   // ── Consultas date-dependientes (paralelas) ──
-  const [propsData, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawResConRef, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
-    supabase.from("propuestas_ia").select("*,movimientos_raw(*,documentos_subidos(id,nombre_archivo,created_at))").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
+  const [propsDataConRef, calProps, calDocs, docsData, pendCountData, aprobCountData, boletasRawResConRef, progRowsRes, ventasRangoRes, boletasCountRes, empresaProvRes, propsCountRes] = await Promise.all([
+    // + su boleta EMBEBIDA (folio/estado/ref): Check tacha las ya emitidas con su
+    // folio (fundador 2026-09-29) en la MISMA consulta — sin consultas por fila ni
+    // por carga (índice en boletas_emitidas.propuesta_id). Ver cartola-filas.ts.
+    supabase.from("propuestas_ia").select(PROPS_SELECT_CON_BOLETA).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT),
     supabase.from("propuestas_ia").select("created_at,estado").eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", sm).lt("created_at", em),
     // Sin los registros internos de emisión ("Boleta SII #…", registros-emision.ts):
     // 358 boletas de un día tapaban la cartola bajo el .limit(50) (LC 2026-09-27) y
@@ -157,6 +166,11 @@ export async function fetchMesaDateDependent(
   const boletasRawRes = boletasRawResConRef.error && (boletasRawResConRef.error.code === "42703" || /\bref\b/.test(boletasRawResConRef.error.message ?? ""))
     ? await supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,propuesta_id").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300)
     : boletasRawResConRef;
+  // Mismo resguardo de orden de deploy para la `ref` embebida: sin la columna, la
+  // mesa entera quedaría vacía. Se repite sin ref (solo en ese error).
+  const propsData = propsDataConRef.error && (propsDataConRef.error.code === "42703" || /\bref\b/.test(propsDataConRef.error.message ?? ""))
+    ? await supabase.from("propuestas_ia").select(PROPS_SELECT_SIN_REF).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd).order("created_at", { ascending: false }).limit(PROPS_LIMIT)
+    : propsDataConRef;
   // Desborde del tope de propuestas: total real del rango vs lo servido.
   const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
   const propuestasTruncadas = propuestasTotal > (propsData.data?.length ?? 0);
