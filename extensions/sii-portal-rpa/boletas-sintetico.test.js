@@ -1002,6 +1002,14 @@ describe("0.2.9 · calce en /reportes: Tipo (39 vs 41) y medianoche", () => {
     expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
   });
 
+  it("textos REALES: job 39 con sola fila 'Exenta' del MISMO monto → excluida por tipo, sin folio", async () => {
+    vi.setSystemTime(new Date(EMIT_AT + 60_000));
+    escenaReportes([{ fecha: "25/09/2026 15:28:10", folio: 18, monto: "$ 196.000", tipo: "Exenta" }], { headers: HEADERS_REALES });
+    const res = await capturarEnReportes(jobReportes({ tipo_dte: 39 }));
+    expect(res.result.folio).toBeNull();
+    expect(res.result.reportes_calce.excluidas_por_tipo).toBe(1);
+  });
+
   it("textos REALES: job 39 con fila 'Afecta' → high; 'Exenta' no calza afecta ni 'Afecta' calza exenta", async () => {
     vi.setSystemTime(new Date(EMIT_AT + 60_000));
     escenaReportes([
