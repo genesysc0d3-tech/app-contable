@@ -45,6 +45,14 @@ describe("LecturaMuestra", () => {
     expect(html).toContain("Saldo final en tu portal del banco");
   });
 
+  it("cartola filtrada (solo abonos): ofrece confirmarla explícitamente (vuelta 2, N4)", async () => {
+    const { default: LecturaMuestra } = await import("./LecturaMuestra");
+    const filtrada: CuadreCartola = { ...cuadre, verificacion: { tipo: "sin_comprobar", alerta: true, filtrada: "abonos", detalle: "3 de 20 filas no cuadran" } };
+    const html = renderToStaticMarkup(createElement(LecturaMuestra, { documentoId: "d1", cuadre: filtrada }));
+    expect(html).toContain("Mi cartola es solo abonos");
+    expect(html).not.toContain("Se ve bien");
+  });
+
   it("sin mapeador disponible no ofrece 'Corregir columnas'", async () => {
     const { default: LecturaMuestra } = await import("./LecturaMuestra");
     const html = renderToStaticMarkup(createElement(LecturaMuestra, { documentoId: "d1", cuadre }));

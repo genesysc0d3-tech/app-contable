@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { fechaIsoValida } from "@/lib/cartola/cuadre-mesa";
-import { seVeBienPermitido } from "@/lib/cartola/verificacion";
+import { filtradaPermitida, seVeBienPermitido } from "@/lib/cartola/verificacion";
 import type { CuadreCartola } from "@/lib/cartola/cuadre";
 import { fmt } from "./revisar-shared";
 import { confirmarLecturaCartola } from "./lectura-actions";
@@ -50,6 +50,8 @@ export default function LecturaMuestra({ documentoId, cuadre, onCorregirColumnas
   const alerta = cuadre.verificacion?.alerta === true;
   // Con alerta o filas perdidas, 3 filas de muestra no prueban nada: sin "Se ve bien".
   const puedeSeVeBien = seVeBienPermitido(cuadre).ok;
+  // Export filtrado (solo abonos/cargos): el saldo nunca cuadra; salida explícita.
+  const filtrada = filtradaPermitida(cuadre) ? cuadre.verificacion?.filtrada : undefined;
   const cambio = cuadre.mapa?.cambio_formato;
 
   const enviar = async (input: Parameters<typeof confirmarLecturaCartola>[1]) => {
@@ -116,6 +118,11 @@ export default function LecturaMuestra({ documentoId, cuadre, onCorregirColumnas
         {puedeSeVeBien && (
           <button onClick={() => void enviar({ accion: "se_ve_bien" })} disabled={ocupado} style={{ ...boton(true), opacity: ocupado ? 0.6 : 1 }}>
             Se ve bien
+          </button>
+        )}
+        {filtrada && (
+          <button onClick={() => void enviar({ accion: "filtrada" })} disabled={ocupado} style={{ ...boton(true), opacity: ocupado ? 0.6 : 1 }}>
+            {filtrada === "cargos" ? "Mi cartola es solo cargos" : "Mi cartola es solo abonos"}
           </button>
         )}
         {onCorregirColumnas && (

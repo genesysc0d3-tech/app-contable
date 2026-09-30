@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Json } from "@/lib/database.types";
-import { adapterDelDocumento, confirmarAdapter, promoverMapaGlobalSiHayConsenso } from "@/lib/parsers/adapter-store";
+import { adapterDelDocumento, confirmarAdapter } from "@/lib/parsers/adapter-store";
 import { leerCuadre } from "./cuadre-mesa";
 import { checkConfirmaMapa } from "./verificacion";
 
@@ -39,10 +39,26 @@ export async function confirmarMapaPorCheck(
     .eq("documento_id", documentoId);
   const { data: props } = await sb
     .from("propuestas_ia")
-    .select("estado, movimientos_raw!inner(documento_id)")
+    .select("id, estado, movimientos_raw!inner(documento_id)")
     .eq("empresa_id", empresaId)
     .eq("movimientos_raw.documento_id", documentoId);
+  // Vuelta 2, N3: cada aprobada tiene que tener SU aprobación individual en la
+  // auditoría ("propuesta_aprobada"); las de "Aprobar cartola"/"Aprobar todas"
+  // no la tienen.
+  const aprobadas = ((props ?? []) as { id: string; estado: string }[]).filter((p) => p.estado === "aprobado").map((p) => p.id);
+  let aprobadasFilaAFila = false;
+  if (aprobadas.length) {
+    const { data: aud } = await sb
+      .from("cuenta_audit_events")
+      .select("recurso_id")
+      .eq("empresa_id", empresaId)
+      .eq("accion", "propuesta_aprobada")
+      .in("recurso_id", aprobadas);
+    const individuales = new Set(((aud ?? []) as { recurso_id: string | null }[]).map((x) => x.recurso_id));
+    aprobadasFilaAFila = aprobadas.every((id) => individuales.has(id));
+  }
   const ok = checkConfirmaMapa({
+    aprobadasFilaAFila,
     cuadre,
     guardado: cuadre.guardado,
     movimientos: (movs ?? []) as { monto: number; tipo_flujo: string }[],
@@ -54,7 +70,6 @@ export async function confirmarMapaPorCheck(
   if (!adapter || adapter.estado === "confirmado") return false;
   const confirmado = await confirmarAdapter(adapter.id, "check");
   if (!confirmado) return false; // columna sin migrar: queda provisorio (fail-safe)
-  if (adapter.fingerprint && adapter.config) await promoverMapaGlobalSiHayConsenso(adapter.fingerprint, adapter.config);
 
   // Releer justo antes de escribir para no pisar otros campos de progreso_ia.
   const { data: fresco } = await sb

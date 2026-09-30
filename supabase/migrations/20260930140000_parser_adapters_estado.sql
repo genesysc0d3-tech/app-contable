@@ -31,7 +31,7 @@ alter table public.parser_adapters
 comment on column public.parser_adapters.estado is
   'provisorio = derivado sin prueba (no se comparte entre empresas, no sube confianza por reuso); confirmado = probado por saldo/total del banco o confirmado por el cliente.';
 comment on column public.parser_adapters.confirmado_por is
-  'Qué lo confirmó: saldo | total_banco | cliente | check | manual | plantilla | consenso (global: 2+ empresas confirmaron el mismo mapa).';
+  'Qué lo confirmó: saldo | total_banco | cliente | check | manual | plantilla | consenso (global: 2+ dueños y cuentas bancarias distintas lo probaron por saldo/total del banco).';
 
 -- Backfill. Solo lo que SABEMOS que fue confirmado por una persona o es nuestro:
 --   * manual (el cliente mapeó a mano)            → confirmado / manual
@@ -47,8 +47,10 @@ comment on column public.parser_adapters.confirmado_por is
 -- re-deriva su formato con la heurística actual en su próxima subida (la misma
 -- lectura determinística, milisegundos) y ese mapa queda como SUYO: confirmado
 -- si el saldo cierra al peso o el banco calza, provisorio si no. Un global nuevo
--- solo nace por CONSENSO (2+ empresas confirmaron el mismo mapa). Los manuales
--- ya eran de su empresa y quedan confirmados.
+-- solo nace por CONSENSO de pruebas OBJETIVAS (saldo al peso o total del banco;
+-- nunca "cliente"/"check") de 2+ empresas con DUEÑOS distintos y cuentas
+-- bancarias distintas (revisión adversarial vuelta 2, N1). Los manuales ya eran
+-- de su empresa y quedan confirmados.
 update public.parser_adapters
    set estado = 'confirmado', confirmado_por = 'manual', confirmado_en = now()
  where source = 'manual' and estado = 'provisorio';

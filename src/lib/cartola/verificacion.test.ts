@@ -115,7 +115,7 @@ describe("aprobar en Check sin editar confirma el mapa", () => {
   const guardado = { n: 3, entradas: 150_000, salidas: 30_000 };
   const movs = [{ monto: 100_000, tipo_flujo: "entrada" }, { monto: 30_000, tipo_flujo: "salida" }, { monto: 50_000, tipo_flujo: "entrada" }];
   it("todo decidido, lo guardado intacto → confirma", () => {
-    expect(checkConfirmaMapa({ guardado, movimientos: movs, estados: ["aprobado", "aprobado", "rechazado"] })).toBe(true);
+    expect(checkConfirmaMapa({ guardado, movimientos: movs, estados: ["aprobado", "aprobado", "rechazado"], aprobadasFilaAFila: true })).toBe(true);
   });
   it("FIXTURE NEGATIVO: un monto editado → NO confirma", () => {
     expect(checkConfirmaMapa({ guardado, movimientos: [{ ...movs[0], monto: 99_000 }, movs[1], movs[2]], estados: ["aprobado", "aprobado", "aprobado"] })).toBe(false);

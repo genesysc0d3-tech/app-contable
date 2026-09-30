@@ -47,6 +47,18 @@ export function seVeBienPermitido(c: Pick<CuadreCartola, "verificacion" | "perdi
 }
 
 /**
+ * ¿Puede el cliente confirmar "mi cartola es solo abonos/cargos (filtrada)"?
+ * Solo si el lector la reconoció como filtrada (una dirección y saltos de saldo
+ * explicables por lo que falta) y no hay filas perdidas ni otras hojas. Sella
+ * `cliente` con esa razón (vuelta 2, N4: si no, alerta perpetua sin salida).
+ */
+export function filtradaPermitida(c: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos">): boolean {
+  if (!c.verificacion?.filtrada) return false;
+  if ((c.perdidas ?? []).some((p) => !p.agregada)) return false;
+  return (c.otras_hojas_con_datos ?? []).length === 0;
+}
+
+/**
  * "No cuadra" SIN revelar el saldo esperado (adversarial-2 A3): si le decimos el
  * número, el cliente lo copia y el sello "cliente" queda de goma.
  */
@@ -112,8 +124,15 @@ export function checkConfirmaMapa(a: {
   estados: string[];
   /** El cuadre de la cartola: con alerta o pérdidas, aprobar NO confirma el mapa (adversarial-2 A4). */
   cuadre?: Pick<CuadreCartola, "verificacion" | "perdidas" | "otras_hojas_con_datos"> | null;
+  /**
+   * TODAS las aprobadas lo fueron FILA A FILA (auditoría "propuesta_aprobada" de
+   * cada una). Vuelta 2, N3: "Aprobar cartola" en bloque + 1 fila a mano ya no
+   * confirma. Ausente = no se sabe = no confirma.
+   */
+  aprobadasFilaAFila?: boolean;
 }): boolean {
   if (!a.guardado) return false;
+  if (a.aprobadasFilaAFila !== true) return false;
   if (a.cuadre && !seVeBienPermitido(a.cuadre).ok) return false;
   if (a.estados.some((e) => e === "pendiente" || e === "editado" || e === "listo")) return false;
   // Decidido = aprobado (va a boleta) o rechazado (una salida/gasto): el cliente

@@ -9,11 +9,12 @@ import { validarAccesoCuenta } from "@/lib/entitlements";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { leerCuadre } from "@/lib/cartola/cuadre-mesa";
-import { mensajeSaldoNoCuadra, saldoInicialParaConfirmar, seVeBienPermitido, sellarPorCliente, verificarSaldoCliente } from "@/lib/cartola/verificacion";
-import { adapterDelDocumento, confirmarAdapter, promoverMapaGlobalSiHayConsenso } from "@/lib/parsers/adapter-store";
+import { filtradaPermitida, mensajeSaldoNoCuadra, saldoInicialParaConfirmar, seVeBienPermitido, sellarPorCliente, verificarSaldoCliente } from "@/lib/cartola/verificacion";
+import { adapterDelDocumento, confirmarAdapter } from "@/lib/parsers/adapter-store";
 
 export type ConfirmarLecturaInput =
   | { accion: "se_ve_bien" }
+  | { accion: "filtrada" }
   | { accion: "saldo"; saldoFinal: number; saldoInicial?: number | null };
 
 export type ConfirmarLecturaResult =
@@ -74,6 +75,13 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
     if (!permitido.ok) return { ok: false, error: permitido.motivo ?? "Esta lectura no se puede confirmar solo mirando la muestra" };
     detalle = "Revisaste la muestra y dijiste que se ve bien";
     mensaje = "Listo, quedó confirmada";
+  } else if (input.accion === "filtrada") {
+    // Salida EXPLÍCITA para el export filtrado (vuelta 2, N4): el saldo no puede
+    // cuadrar porque faltan los movimientos del otro signo; lo dice el cliente.
+    if (!filtradaPermitida(cuadre)) return { ok: false, error: "Esta cartola no parece filtrada: corrige las columnas o comprueba con el saldo final" };
+    const que = cuadre.verificacion?.filtrada === "cargos" ? "solo cargos" : "solo abonos";
+    detalle = `Confirmaste que tu cartola viene filtrada (${que}): el saldo no puede cuadrar porque faltan los otros movimientos`;
+    mensaje = "Listo, quedó confirmada como cartola filtrada";
   } else {
     const saldoFinal = Number(input.saldoFinal);
     if (!Number.isFinite(saldoFinal)) return { ok: false, error: "Escribe el saldo final como número" };
@@ -121,10 +129,8 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
   // ajeno no lo confirma un cliente). Best-effort.
   try {
     const adapter = await adapterDelDocumento(sb, documentoId, empresaId);
-    if (adapter && adapter.estado === "provisorio" && await confirmarAdapter(adapter.id, "cliente") && adapter.fingerprint && adapter.config) {
-      // Confirmación EXPLÍCITA del cliente: cuenta para el consenso (2+ empresas) que vuelve global el mapa.
-      await promoverMapaGlobalSiHayConsenso(adapter.fingerprint, adapter.config);
-    }
+    // Confirma SOLO el mapa propio: "cliente" nunca cuenta para volverlo global (vuelta 2, N1).
+    if (adapter && adapter.estado === "provisorio") await confirmarAdapter(adapter.id, "cliente");
   } catch { /* el aprendizaje nunca rompe la confirmación */ }
 
   await recordCuentaAudit({
@@ -135,7 +141,9 @@ export async function confirmarLecturaCartola(documentoId: string, input: Confir
     recursoTipo: "documento_subido",
     recursoId: documentoId,
     // Sin glosas ni montos de terceros: solo cómo se confirmó.
-    resumen: input.accion === "se_ve_bien" ? "Lectura de cartola confirmada mirando la muestra" : "Lectura de cartola confirmada con el saldo final del banco",
+    resumen: input.accion === "se_ve_bien" ? "Lectura de cartola confirmada mirando la muestra"
+      : input.accion === "filtrada" ? "Lectura de cartola confirmada como cartola filtrada (una sola dirección)"
+      : "Lectura de cartola confirmada con el saldo final del banco",
     metadata: { accion: input.accion },
   });
 
