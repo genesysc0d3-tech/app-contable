@@ -25,6 +25,7 @@ import {
   formulasSuma,
   saldosDeLaCartola,
   sellarCartola,
+  titulosContradicenMapa,
   type FormulaSuma,
   type ResumenImpreso,
 } from "./juez-banco";
@@ -201,11 +202,23 @@ export async function parseExcelWithOrchestrator(
     }
 
     // Layer 0: adapter cache (aislado por empresa: no aplica el manual de otro tenant)
-    const cached =
+    let cached =
       (await getAdapterByFingerprint(fingerprint, opts?.empresa_id)) ??
       (await adaptadorManualConHuellaLegacy(rows, fingerprint, opts?.empresa_id));
+    // Títulos de ESTA hoja al revés del mapa (vuelta 2, N1): un global no se
+    // aplica (se re-deriva); uno propio se lee pero con alerta.
+    let titulosAlReves = false;
+    if (cached && titulosContradicenMapa(rows, cached.config)) {
+      fallas.push(`cache[${sheetName}]: los títulos de la hoja contradicen la dirección del mapa guardado`);
+      if (!cached.creado_por_empresa_id) cached = null;
+      else titulosAlReves = true;
+    }
     if (cached) {
       const lectura = leer(ctx, cached.config, fallas, "cache");
+      if (lectura && titulosAlReves) {
+        lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: "Los títulos de la hoja dicen lo contrario del mapa de columnas guardado (cargo↔abono): revisa las columnas" };
+        lectura.censo.verificacion = lectura.verificacion;
+      }
       if (lectura) {
         // El reuso cuenta; la confianza sube y el mapa se confirma SOLO con prueba
         // (sello estricto). Confirma el mapa de ESTA empresa; volverlo global
@@ -214,7 +227,10 @@ export async function parseExcelWithOrchestrator(
         const conPrueba = ["saldo", "total_banco"].includes(lectura.verificacion.tipo);
         if (conPrueba && cached.creado_por_empresa_id) await promoverMapaGlobalSiHayConsenso(fingerprint, cached.config);
         const estado = cached.estado === "confirmado" || conPrueba ? "confirmado" : "provisorio";
-        return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: false });
+        // Un GLOBAL aplicado sin prueba en esta lectura es nuevo PARA ESTA
+        // empresa: se le pide mirar (vuelta 2, N1).
+        const nuevoParaEmpresa = !cached.creado_por_empresa_id && !conPrueba;
+        return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: nuevoParaEmpresa });
       } else {
         await decrementAdapterConfianza(
           cached.id,
@@ -279,7 +295,12 @@ export async function parseExcelWithOrchestrator(
         fingerprint,
         source: elegido.source,
         nombre: `${elegido.source === "heuristic" ? "Heurística" : elegido.source === "named" ? "Nombres" : "Estructura IA"} (${sheetName})`,
-        config: titulos ? { ...lectura.cfg, titulos } : lectura.cfg,
+        config: {
+          ...lectura.cfg,
+          ...(titulos ? { titulos } : {}),
+          // Cuenta bancaria de origen (huella, no el número): el consenso global exige cuentas distintas.
+          ...(lectura.censo.cuenta?.huella ? { cuenta_huella: lectura.censo.cuenta.huella } : {}),
+        },
       }, lectura.verificacion, opts);
       const confirmado = lectura.verificacion.tipo === "saldo" || lectura.verificacion.tipo === "total_banco";
       return terminar(lectura, elegido.capa, adapterId, {

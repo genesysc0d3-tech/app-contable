@@ -7,7 +7,7 @@ import { useToast } from "@/components/Toast";
 import type { AdapterConfig } from "@/lib/parsers/types";
 
 type Role = "ignorar" | "fecha" | "descripcion" | "n_documento" | "cargo" | "abono" | "monto" | "tipo_flujo" | "saldo";
-type Layout = "two_cols" | "single_col" | "transactions_log";
+type Layout = "two_cols" | "single_col" | "transactions_log" | "monto_con_signo";
 type DateFmt = "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "mm/dd/yyyy" | "unknown";
 
 interface Preview {
@@ -189,7 +189,7 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, variant = "moda
     if (findCol("descripcion") < 0) return "Falta asignar la Glosa";
     if (layout === "two_cols" && findCol("cargo") < 0 && findCol("abono") < 0) return "Asigna Cargo y/o Abono";
     if (layout === "single_col") { if (findCol("monto") < 0) return "Asigna Monto"; if (findCol("tipo_flujo") < 0) return "Asigna Tipo"; }
-    if (layout === "transactions_log" && findCol("monto") < 0) return "Asigna Monto";
+    if ((layout === "transactions_log" || layout === "monto_con_signo") && findCol("monto") < 0) return "Asigna Monto";
     if (firstDataRow <= headerRow) return "La fila de datos debe estar después de la fila de títulos";
     return null;
   }, [preview, findCol, layout, headerRow, firstDataRow]);
@@ -476,6 +476,7 @@ function GridContent(props: {
                 <option value="two_cols">Cargo + Abono separados</option>
                 <option value="single_col">Monto + columna Tipo (D/C)</option>
                 <option value="transactions_log">Una sola columna de monto</option>
+                <option value="monto_con_signo">Un monto con signo (negativo = cargo)</option>
               </select>
             </Field>
             {layout === "transactions_log" && (

@@ -193,6 +193,23 @@ function direccionPorTitulos(rows: Row[], cfg: AdapterConfig): boolean {
 }
 
 /**
+ * ¿Los títulos de la hoja CONTRADICEN la dirección del mapa? (la columna que el
+ * mapa lee como cargo se titula "Abonos" y la de abono "Cargos"). Vuelta 2, N1:
+ * un global invertido se aplicaba en silencio aunque la hoja dijera lo contrario.
+ */
+export function titulosContradicenMapa(rows: Row[], cfg: AdapterConfig): boolean {
+  if ((cfg.layout ?? "two_cols") !== "two_cols") return false;
+  for (const idx of new Set([cfg.skip_rows_before_data - 1, cfg.header_row])) {
+    const fila = rows[idx];
+    if (!fila) continue;
+    const tc = normalizarTitulo(fila[cfg.columns.cargo]);
+    const ta = normalizarTitulo(fila[cfg.columns.abono]);
+    if (RE_ENTRADA.test(tc) && !RE_SALIDA.test(tc) && RE_SALIDA.test(ta) && !RE_ENTRADA.test(ta)) return true;
+  }
+  return false;
+}
+
+/**
  * Compara lo leído con lo que imprime el banco. `filasTotales` = filas de
  * totales/resumen ya marcadas por el lector (índices 0-based).
  */
@@ -212,6 +229,8 @@ export function juzgarContraBanco(args: {
   const cerca = (a: number, b: number) => Math.abs(a - b) <= 1;
   const pruebas: string[] = [];
   const contra: string[] = [];
+  /** Lo que el banco imprime pero NO alcanza como prueba (se dice la verdad en el detalle, vuelta 2 P4). */
+  const avisos: string[] = [];
 
   // 1) Resumen con etiquetas: trae la dirección en la etiqueta misma.
   if (resumen) {
@@ -248,7 +267,7 @@ export function juzgarContraBanco(args: {
   if (layout === "two_cols") {
     colsPlata.push({ col: c.cargo, suma: sumaEnRango((l) => l.tipo === "SALIDA"), nombre: "cargos" });
     colsPlata.push({ col: c.abono, suma: sumaEnRango((l) => l.tipo === "ENTRADA"), nombre: "abonos" });
-  } else if (c.monto != null && c.monto >= 0) {
+  } else if (c.monto != null && c.monto >= 0 && layout !== "monto_con_signo") {
     colsPlata.push({ col: c.monto, suma: sumaEnRango(() => true), nombre: "montos" });
   }
   const colsProbadas = new Set<number>();
@@ -267,6 +286,7 @@ export function juzgarContraBanco(args: {
     const cubre = filas.length > 0 && filas.every((i) => i >= f.desde && i <= f.hasta);
     if (cerca(Math.abs(f.valor), leido)) {
       if (cubre && Math.abs(f.valor) > 0) colsProbadas.add(f.col);
+      else avisos.push(`la fórmula SUM del banco en ${cp.nombre} no cubre todas las filas leídas (o suma $0): no prueba la lectura`);
     } else contra.push(`la fórmula SUM del banco da ${pesos(Math.abs(f.valor))} en ${cp.nombre} y leímos ${pesos(leido)}`);
   }
 
@@ -299,7 +319,7 @@ export function juzgarContraBanco(args: {
     contradice: null,
     detalle: todasProbadas
       ? "Los totales del banco calzan, pero nada dice qué columna es cargo y cuál abono"
-      : "",
+      : avisos.length ? `Sin prueba: ${avisos.join("; ")}` : "",
   };
 }
 
@@ -351,17 +371,41 @@ export function sellarCartola(args: {
   }
   const layout = cfg.layout ?? "two_cols";
   if (cfg.columns.saldo >= 0 && layout !== "transactions_log" && lines.length > 1) {
-    const q = cuadreDeLectura(lines, rows, cfg);
+    const q = cuadreDeLectura(lines, rows, cfg, args.resumen?.saldoInicial ?? null);
     if (q.fallidas > 0) {
+      // Export FILTRADO (vuelta 2, N4): una sola dirección y cada salto se explica
+      // por movimientos del otro signo que no vienen → sin sello, pero el cliente
+      // puede confirmarla explícitamente ("mi cartola es solo abonos").
+      // El primer salto puede ser el ancla del saldo inicial (fila de arriba), no
+      // un movimiento faltante: se miran los saltos DENTRO de la cartola.
+      const internos = q.saltos.length > 1 ? q.saltos.slice(1) : q.saltos;
+      const soloAbonos = lines.every((l) => l.tipo === "ENTRADA") && internos.every((x) => x < 0);
+      const soloCargos = lines.every((l) => l.tipo === "SALIDA") && internos.every((x) => x > 0);
       return {
         tipo: "sin_comprobar",
         alerta: true,
+        ...(soloAbonos ? { filtrada: "abonos" as const } : soloCargos ? { filtrada: "cargos" as const } : {}),
         detalle: `El saldo corrido no cierra: ${q.fallidas} de ${q.revisadas} filas no cuadran (¿cartola filtrada o incompleta?)`,
       };
     }
-    const todas = q.sinSaldo === 0 && q.revisadas === q.leidas - 1;
-    if (todas && q.revisadas >= MIN_FILAS_SELLO && !q.invertidaCuadra) {
-      return { tipo: "saldo", detalle: "El saldo corrido cuadra al peso en todas las filas" };
+    const cadena = q.sinSaldo === 0 && q.revisadas >= MIN_FILAS_SELLO && !q.invertidaCuadra;
+    // PRIMERA fila (vuelta 2, P1): con saldo inicial (fila de arriba o resumen
+    // impreso) se comprueba y el sello dice "todas"; sin él, el sello lo dice.
+    if (cadena && q.primeraComprobada && q.revisadas === q.leidas) {
+      return { tipo: "saldo", detalle: "El saldo corrido cuadra al peso en todas las filas, desde el saldo inicial" };
+    }
+    if (cadena && q.revisadas === q.leidas - 1) {
+      if (q.primeraDesdeCero) {
+        return {
+          tipo: "sin_comprobar",
+          alerta: true,
+          detalle: "La primera fila deja el saldo inicial en $0 (su monto es su propio saldo): ¿es el saldo anterior y no un movimiento?",
+        };
+      }
+      return {
+        tipo: "saldo",
+        detalle: `El saldo corrido cuadra al peso en ${q.revisadas} de ${q.leidas} filas; la primera no se puede comprobar (la cartola no trae saldo inicial)`,
+      };
     }
   }
   if (juicio.prueba) return { tipo: "total_banco", detalle: juicio.detalle };

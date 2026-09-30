@@ -7,6 +7,10 @@ import * as XLSX from "xlsx";
  * (parseFechaCartola, LectorMontos). Excel (xlsx/xls) sigue igual.
  */
 export function leerLibroCartola(buffer: ArrayBuffer, extra: XLSX.ParsingOptions = {}): XLSX.WorkBook {
+  // UTF-16 (Excel "Texto Unicode", vuelta 2 N5): se decodifica y se lee igual
+  // que un CSV (texto, sin que SheetJS interprete fechas ni montos).
+  const u16 = textoUtf16(buffer);
+  if (u16 != null) return XLSX.read(u16, { ...extra, type: "string", raw: true, cellDates: false });
   return esTextoPlano(buffer)
     ? XLSX.read(buffer, { ...extra, type: "array", raw: true, cellDates: false })
     : XLSX.read(buffer, { ...extra, type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
@@ -23,4 +27,17 @@ export function esTextoPlano(buffer: ArrayBuffer): boolean {
   if (b[i] === 0x3c) return false; // "<": HTML/XML (xls exportado como html)
   for (let k = i; k < b.length; k++) if (b[k] === 0) return false; // binario
   return true;
+}
+
+/** Texto de un archivo UTF-16 con BOM (FF FE / FE FF), o null si no lo es. */
+export function textoUtf16(buffer: ArrayBuffer): string | null {
+  const b = new Uint8Array(buffer.slice(0, 2));
+  const le = b[0] === 0xff && b[1] === 0xfe;
+  const be = b[0] === 0xfe && b[1] === 0xff;
+  if (!le && !be) return null;
+  try {
+    return new TextDecoder(le ? "utf-16le" : "utf-16be").decode(new Uint8Array(buffer, 2));
+  } catch {
+    return null;
+  }
 }

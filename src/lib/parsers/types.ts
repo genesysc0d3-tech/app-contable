@@ -17,7 +17,11 @@ export interface AdapterConfig {
    *    for sales/income logs and exchange P2P exports where all rows are
    *    entradas implícitas (or salidas — see default_tipo_flujo).
    */
-  layout?: "two_cols" | "single_col" | "transactions_log";
+  /**
+   *  - "monto_con_signo": UNA columna de monto con signo (negativo = cargo,
+   *    positivo = abono), como Banco Falabella (vuelta 2, P5).
+   */
+  layout?: "two_cols" | "single_col" | "transactions_log" | "monto_con_signo";
   /**
    * FIRMA de la plantilla massDTE (headers exactos Fecha|Glosa|Monto que emite
    * /api/generar-template). SOLO la pone detectByNames — la heurística también
@@ -33,6 +37,11 @@ export interface AdapterConfig {
    * Sirve para avisar un cambio de formato: "esperaba encabezado X, llegó Y".
    */
   titulos?: string[];
+  /**
+   * Huella (sha256 corto) de la cuenta BANCARIA de la cartola con que se derivó
+   * el mapa: el consenso global exige cuentas bancarias distintas (vuelta 2, N1).
+   */
+  cuenta_huella?: string;
   /** Only meaningful when layout = "transactions_log". Default: "entrada". */
   default_tipo_flujo?: "entrada" | "salida";
   columns: {
@@ -155,6 +164,12 @@ export interface VerificacionCartola {
    * el mapa esté confirmado.
    */
   alerta?: boolean;
+  /**
+   * La cartola trae UNA sola dirección y cada salto del saldo se explica por
+   * movimientos del otro signo que no vienen (export filtrado "solo abonos").
+   * No hay sello, pero el cliente puede confirmarla explícitamente (vuelta 2, N4).
+   */
+  filtrada?: "abonos" | "cargos";
 }
 
 /** Movimiento de muestra "así la leímos" (para que el cliente lo juzgue). */

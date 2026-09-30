@@ -73,6 +73,19 @@ function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
     };
   }
 
+  // Monto con SIGNO en una sola columna (Falabella, vuelta 2 P5).
+  const conSigno = inferMontoConSigno(sample, txStart > 0 ? rows[txStart - 1] : undefined);
+  if (conSigno) {
+    return {
+      header_row: Math.max(0, txStart - 1),
+      skip_rows_before_data: txStart,
+      date_format: formatoFechaDeColumna(rows, txStart, conSigno.fecha),
+      number_format: "chilean",
+      layout: "monto_con_signo",
+      columns: conSigno,
+    };
+  }
+
   // Last resort: transactions_log layout (1 monto col, no tipo flag, no
   // saldo). Common in manual sales spreadsheets and exchange P2P exports.
   // "Todo entrada" solo si ningún título habla de plata que sale NI de saldo:
@@ -128,8 +141,11 @@ export function extenderBloqueHaciaArriba(rows: Row[], inicio: number): number {
   while (i >= 0) {
     const r = rows[i];
     if (r && isTransactionRow(r)) { s = i; i--; continue; }
-    const previa = rows[i - 1];
-    if (r && esFilaDeContinuacion(r) && previa && isTransactionRow(previa)) { i--; continue; }
+    // Glosa partida en 2, 3 o 4 filas (vuelta 2, P2): se saltan hasta 3
+    // continuaciones seguidas si arriba de ellas hay un movimiento.
+    let j = i;
+    while (j >= 0 && i - j < 3 && rows[j] && esFilaDeContinuacion(rows[j])) j--;
+    if (j < i && j >= 0 && rows[j] && isTransactionRow(rows[j])) { i = j; continue; }
     break;
   }
   return s;
@@ -833,6 +849,65 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
     monto: montoCol,
     tipo_flujo_col: -1,
   };
+}
+
+/**
+ * UNA columna de monto CON SIGNO (negativo = cargo): Banco Falabella. Se acepta
+ * solo con prueba de forma: la columna trae negativos y positivos, y (a) hay una
+ * columna de saldo que cierra saldo = anterior + monto AL PESO en ≥90% de los
+ * pares (algún orden), o (b) sin saldo, su título dice monto/importe.
+ */
+function inferMontoConSigno(sample: Row[], header?: Row): InferredCols | null {
+  const ncols = Math.max(...sample.map((r) => r.length));
+  let fecha = -1;
+  for (let col = 0; col < ncols && fecha < 0; col++) {
+    if (sample.filter((r) => cellEsFecha(r[col])).length / sample.length >= 0.8) fecha = col;
+  }
+  if (fecha < 0) return null;
+  const valores = (col: number) => sample.map((r) => { const l = leerCeldaMonto(r[col]); return l ? valorCeldaSuelta(l) : null; });
+  const candidatas: number[] = [];
+  for (let col = 0; col < ncols; col++) {
+    if (col === fecha || esColumnaNoPlata(sample, col)) continue;
+    const v = valores(col);
+    const llenas = v.filter((x) => x != null && x !== 0) as number[];
+    if (llenas.length < sample.length * 0.9) continue;
+    candidatas.push(col);
+  }
+  const signadas = candidatas.filter((col) => {
+    const v = valores(col).filter((x) => x != null) as number[];
+    return v.some((x) => x < 0) && v.some((x) => x > 0);
+  });
+  const cierra = (m: number, s: number) => {
+    const medir = (orden: Row[]) => {
+      let ok = 0; let rev = 0;
+      for (let i = 1; i < orden.length; i++) {
+        const a = parseChileanNumber(orden[i - 1][s]); const b = parseChileanNumber(orden[i][s]); const x = parseChileanNumber(orden[i][m]);
+        if (!x) continue;
+        rev++;
+        if (Math.abs(b - (a + x)) <= 1) ok++;
+      }
+      return rev >= 4 ? ok / rev : 0;
+    };
+    return Math.max(medir(sample), medir([...sample].reverse())) >= 0.9;
+  };
+  for (const m of signadas) {
+    const saldo = candidatas.find((s) => s !== m && cierra(m, s));
+    const titulo = normalizarTitulo(header?.[m]);
+    if (saldo == null && !/\b(monto|importe|valor|amount)\b/.test(titulo)) continue;
+    // Hay una columna "Saldo" y no cierra con este monto: no se adivina.
+    if (saldo == null && encabezadoConSaldo(header)) continue;
+    // Glosa: la columna de texto más larga que no sea fecha, monto ni saldo.
+    let desc = -1; let largo = 0;
+    for (let col = 0; col < ncols; col++) {
+      if (col === fecha || col === m || col === saldo) continue;
+      const textos = sample.map((r) => String(r[col] ?? "").trim()).filter((t) => t && /[a-z]/i.test(t));
+      const prom = textos.length ? textos.reduce((a, t) => a + t.length, 0) / textos.length : 0;
+      if (prom > largo) { largo = prom; desc = col; }
+    }
+    if (desc < 0) return null;
+    return { fecha, descripcion: desc, n_documento: -1, cargo: m, abono: m, saldo: saldo ?? -1, monto: m, tipo_flujo_col: -1 };
+  }
+  return null;
 }
 
 /** ¿|saldo[i] − saldo[i−1]| = monto[i] en ≥80% de los pares (algún orden)? */

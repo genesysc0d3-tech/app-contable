@@ -12,6 +12,22 @@
  * de una planilla casera) era invisible para todos los detectores y caía a
  * la capa legacy → IA (bug cazado con la planilla M&E 2026-08-22).
  */
+const MESES: Record<string, number> = {
+  ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8,
+  sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12,
+};
+/**
+ * Fecha con el MES EN TEXTO (vuelta 2, P5): "05-SEP-2026", "05-Ago-2026",
+ * "5 dic 2025", "05/sept./2026" (español o inglés, 3+ letras). null si no calza.
+ */
+export function fechaConMesEnTexto(s: string): { y: number; m: number; d: number } | null {
+  const x = s.trim().match(/^(\d{1,2})[\s\-\/.]+([a-záéíóú]{3,10})\.?[\s\-\/.]+(\d{4})$/i);
+  if (!x) return null;
+  const m = MESES[x[2].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 3)];
+  if (!m) return null;
+  return { y: parseInt(x[3], 10), m, d: parseInt(x[1], 10) };
+}
+
 export function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
   if (cell == null) return false;
   if (cell instanceof Date) return !Number.isNaN(cell.getTime());
@@ -21,6 +37,7 @@ export function cellEsFecha(cell: string | number | null | undefined | Date): bo
   if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
   // Date ya serializado a string (p.ej. "2026-08-08 00:00:00" o ISO)
   if (/^\d{4}-\d{2}-\d{2}[T ]/.test(s)) return true;
+  if (fechaConMesEnTexto(s)) return true;
   // BancoEstado (incidente 2026-09-23): "20260923" en la cartola y "02/09" (sin
   // año) en la hoja Movimientos. Sin esto la hoja no parecía cartola y caía a la
   // IA, que inventaba la glosa y clasificaba por giro. Ventana de año acotada

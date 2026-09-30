@@ -27,9 +27,11 @@ const toJson = (cfg: AdapterConfig): Json => cfg as unknown as Json;
  *     ("Se ve bien" sin alertas / su saldo final cuadró) o el cliente aprobando
  *     FILA A FILA en Check lo que el mapa leyó sin editarlo (no "Aprobar
  *     cartola" en bloque);
- *   - GLOBAL (compartido) solo por CONSENSO: 2+ empresas distintas confirmaron
- *     el mismo mapa (promoverMapaGlobalSiHayConsenso). Un global se usa solo si
- *     está confirmado.
+ *   - GLOBAL (compartido) solo por CONSENSO de pruebas OBJETIVAS (saldo al peso
+ *     o total del banco) de 2+ dueños y cuentas bancarias distintas
+ *     (hayConsensoParaGlobal). "Se ve bien"/Check confirman solo lo propio. Un
+ *     global se usa solo si está confirmado, y NO si los títulos de la hoja lo
+ *     contradicen (orquestador).
  * MAPAS GLOBALES VIEJOS (antes de la migración 20260930140000): la migración los
  * deja `provisorio`, así que NINGUNA empresa los vuelve a usar (no pasan por
  * selectAdapterForEmpresa) y tampoco se "re-confirman solos": quedan muertos en
@@ -123,27 +125,44 @@ function claveDeMapa(cfg: AdapterConfig | null | undefined): string {
 }
 
 /**
- * ¿Hay CONSENSO para compartir este mapa con todas las empresas? 2+ empresas
- * DISTINTAS lo tienen confirmado (por prueba o por el cliente) con exactamente
- * las mismas columnas. Lógica pura, testeable.
+ * ¿Hay CONSENSO para compartir este mapa con todas las empresas? (vuelta 2 de
+ * la revisión adversarial, N1 CRÍTICO: el consenso se "fabricaba" con dos
+ * empresas del mismo dueño confirmadas por "Se ve bien"/Check y envenenaba a
+ * otros tenants). Solo cuenta:
+ *   - PRUEBA OBJETIVA: confirmado_por saldo (al peso) o total_banco; "cliente",
+ *     "check", "manual" nunca vuelven global un mapa;
+ *   - de DUEÑOS distintos (cuenta pagadora distinta, `cuenta_id`);
+ *   - y de CUENTAS BANCARIAS distintas (`config.cuenta_huella`; sin huella no
+ *     se puede probar que sean distintas → no cuenta).
+ * Hacen falta 2 confirmaciones distintas en dueño Y cuenta bancaria. Lógica pura.
  */
-export function hayConsensoParaGlobal(
-  filas: { creado_por_empresa_id: string | null; estado?: string | null; config: AdapterConfig }[],
-  config: AdapterConfig,
-): boolean {
+export type FilaConsenso = {
+  creado_por_empresa_id: string | null;
+  estado?: string | null;
+  confirmado_por?: string | null;
+  /** Dueño (cuenta pagadora) de la empresa. */
+  cuenta_id?: string | null;
+  config: AdapterConfig;
+};
+export function hayConsensoParaGlobal(filas: FilaConsenso[], config: AdapterConfig): boolean {
   const clave = claveDeMapa(config);
-  const empresas = new Set(
-    filas
-      .filter((f) => f.creado_por_empresa_id && estadoDeAdapter(f) === "confirmado" && claveDeMapa(f.config) === clave)
-      .map((f) => f.creado_por_empresa_id),
-  );
-  return empresas.size >= 2;
+  const validas = filas.filter((f) =>
+    f.creado_por_empresa_id && estadoDeAdapter(f) === "confirmado"
+    && (f.confirmado_por === "saldo" || f.confirmado_por === "total_banco")
+    && !!f.cuenta_id && !!f.config?.cuenta_huella
+    && claveDeMapa(f.config) === clave);
+  const elegidas: FilaConsenso[] = [];
+  for (const f of validas) {
+    if (elegidas.every((e) => e.cuenta_id !== f.cuenta_id && e.config.cuenta_huella !== f.config.cuenta_huella)) elegidas.push(f);
+    if (elegidas.length >= 2) return true;
+  }
+  return false;
 }
 
 /**
- * Si 2+ empresas confirmaron el mismo mapa para esta huella y todavía no hay un
- * global confirmado igual, crea el global (confirmado_por = consenso).
- * Best-effort: nunca rompe la lectura.
+ * Si hay consenso (ver hayConsensoParaGlobal) para esta huella y todavía no hay
+ * un global confirmado igual, crea el global (confirmado_por = consenso). Solo
+ * lo llama el orquestador tras una lectura con prueba objetiva. Best-effort.
  */
 export async function promoverMapaGlobalSiHayConsenso(fingerprint: string, config: AdapterConfig): Promise<boolean> {
   try {
@@ -158,13 +177,22 @@ export async function promoverMapaGlobalSiHayConsenso(fingerprint: string, confi
     const filas = data as unknown as (AdapterRow & { creado_por_empresa_id: string | null })[];
     const clave = claveDeMapa(config);
     if (filas.some((f) => !f.creado_por_empresa_id && estadoDeAdapter(f) === "confirmado" && claveDeMapa(f.config) === clave)) return false;
-    if (!hayConsensoParaGlobal(filas, config)) return false;
+    const empresas = [...new Set(filas.map((f) => f.creado_por_empresa_id).filter((x): x is string => !!x))];
+    if (empresas.length < 2) return false;
+    const { data: ce } = await sb
+      .from("cuenta_empresas" as never)
+      .select("cuenta_id, empresa_id")
+      .in("empresa_id", empresas)
+      .eq("activa", true);
+    const duenoDe = new Map(((ce ?? []) as { cuenta_id: string; empresa_id: string }[]).map((r) => [r.empresa_id, r.cuenta_id]));
+    const conDueno: FilaConsenso[] = filas.map((f) => ({ ...f, cuenta_id: f.creado_por_empresa_id ? duenoDe.get(f.creado_por_empresa_id) ?? null : null }));
+    if (!hayConsensoParaGlobal(conDueno, config)) return false;
     const origen = filas.find((f) => f.creado_por_empresa_id && claveDeMapa(f.config) === clave)!;
     const id = await saveAdapter({
       fingerprint,
       nombre: origen.nombre ?? undefined,
       source: origen.source,
-      config: { ...config, titulos: undefined },
+      config: { ...config, titulos: config.titulos, cuenta_huella: undefined },
       empresaId: null,
       confirmadoPor: "consenso",
     });

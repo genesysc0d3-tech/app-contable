@@ -1,6 +1,6 @@
 import type { AdapterConfig, DescarteFila, ParsedLine, PreExtractedMovimiento, Row } from "./types";
 import { LectorMontos, leerCeldaMonto, lecturaLaxa, valorCeldaSuelta } from "./numeros";
-import { cellEsFecha, esColumnaCorrelativa, esColumnaDeCodigos } from "./celdas";
+import { cellEsFecha, esColumnaCorrelativa, esColumnaDeCodigos, fechaConMesEnTexto } from "./celdas";
 
 /**
  * Monto de UNA celda, sin contexto de columna: "1.600.000", "250,000",
@@ -161,6 +161,9 @@ export function parseFechaCartola(
   // no rarezas. Sin año: el del rango del período (ver inferirRangoFechas) o,
   // sin rango confiable, el actual; nunca más de 7 días en el futuro (cartola
   // de dic subida en ene → año anterior).
+  const conMes = fechaConMesEnTexto(s);
+  if (conMes) return isoSiReal(conMes.y, conMes.m, conMes.d);
+
   const m8 = s.match(/^(20\d{2})(\d{2})(\d{2})$/);
   if (m8) {
     const r = isoSiReal(parseInt(m8[1], 10), parseInt(m8[2], 10), parseInt(m8[3], 10));
@@ -251,7 +254,7 @@ const SALDO_O_RESUMEN_RE = /\bsaldo\s+(inicial|final|anterior|disponible|contabl
  * Glosa que ES una fila de saldo (EMPIEZA con "SALDO INICIAL/ANTERIOR/FINAL…" o
  * "RESUMEN"). "TRASPASO SALDO DISPONIBLE LINEA CREDITO" no: es un movimiento.
  */
-const FILA_DE_SALDO_RE = /^\s*(saldo\s+(inicial|final|anterior|disponible|contable)\b|resumen\b)/i;
+const FILA_DE_SALDO_RE = /^\s*(s(al)?do\.?\s+(inicial|ini|final|fin|anterior|ant|disponible|disp|contable|cont)\b|resumen\b)/i;
 
 /** Plata de la fila según las columnas del mapeo (0 si no trae monto). */
 function montoEnFila(
@@ -261,11 +264,13 @@ function montoEnFila(
 ): { monto: number; tipo: DescarteFila["tipo_flujo"]; ambiguo: boolean } {
   const c = cfg.columns;
   const layout = cfg.layout ?? "two_cols";
-  if (layout === "single_col" || layout === "transactions_log") {
+  if (layout === "single_col" || layout === "transactions_log" || layout === "monto_con_signo") {
     const m = lector.leer(r, c.monto);
     const tipo = layout === "transactions_log"
       ? ((cfg.default_tipo_flujo ?? "entrada") === "salida" ? "salida" : "entrada")
-      : null;
+      : layout === "monto_con_signo" && !m.ambiguo && m.valor !== 0
+        ? (m.valor < 0 ? "salida" : "entrada")
+        : null;
     return { monto: m.ambiguo ? (m.referencia ?? 0) : Math.abs(m.valor), tipo, ambiguo: m.ambiguo };
   }
   const cm = lector.leer(r, c.cargo);
@@ -278,32 +283,47 @@ function montoEnFila(
   return { monto: cargo + abono, tipo: null, ambiguo };
 }
 
+/** ¿Después de esta fila (saltando más continuaciones de texto) viene un movimiento con fecha? */
+function vuelveUnMovimiento(rows: Row[], i: number, colFecha: number, colsPlata: Set<number>): boolean {
+  for (let k = i + 1; k < Math.min(rows.length, i + 5); k++) {
+    const r = rows[k];
+    if (!r || r.every((v) => v == null || String(v).trim() === "")) return false;
+    if (cellEsFecha(r[colFecha] as never)) return true;
+    const soloTexto = r.every((v, j) => !colsPlata.has(j) || v == null || String(v).trim() === "");
+    if (!soloTexto) return false;
+  }
+  return false;
+}
+
+/** Lo leído del día en curso (para reconocer su subtotal). */
+interface AcumDia { e: number; s: number; ne: number; ns: number; saldos: number[] }
+
 /**
- * ¿La fila (con fecha) es un SUBTOTAL del banco? Sus montos calzan al peso con
- * lo leído del día (o con TODO lo leído) Y el saldo no se mueve: un movimiento
- * real siempre lo mueve. Sin saldo en la fila no hay esa prueba y se exige más:
- * cargo y abono a la vez calzando con el día, o la suma de ≥2 movimientos del
- * día con la fila diciendo "total/subtotal" (estructura + palabra, nunca la
- * palabra sola; dos ventas iguales y una del doble siguen siendo ventas).
+ * ¿La fila (con fecha) es un SUBTOTAL del día? Vuelta 2, N2: no puede botar
+ * ventas reales. Exige que la fila NO tenga movimiento propio distinguible:
+ *   (a) sus montos = suma exacta de las filas previas del día, ≥2 filas previas,
+ *       el saldo no avanza respecto al último del día Y dentro del día el saldo
+ *       SÍ se movía (un banco que repite el saldo de cierre en cada fila no
+ *       permite distinguir: ahí se lee como movimiento); o
+ *   (b) la GLOSA empieza con "total"/"subtotal" (no "PAGO TOTAL…", no otra
+ *       columna), sus montos = suma del día y el saldo no avanza (o no hay).
+ * Si no, se lee como movimiento (y la ecuación del saldo lo delata si sobra).
  */
 function esSubtotalPorEstructura(
   cargo: number,
   abono: number,
-  dia: { e: number; s: number; ne: number; ns: number } | null,
-  total: { e: number; s: number; ne: number; ns: number },
+  dia: AcumDia | null,
   saldoFila: number | null,
   ultimoSaldo: number | null,
-  diceTotal: boolean,
+  glosaDeTotal: boolean,
 ): boolean {
+  if (!dia || dia.ne + dia.ns === 0) return false;
   const calza = (x: number, suma: number, n: number) => x === 0 || (n >= 1 && Math.abs(x - suma) <= 1);
-  const calzaCon = (g: { e: number; s: number; ne: number; ns: number }) => calza(cargo, g.s, g.ns) && calza(abono, g.e, g.ne);
-  if (saldoFila != null) {
-    const saldoQuieto = ultimoSaldo != null && Math.abs(saldoFila - ultimoSaldo) <= 1;
-    return saldoQuieto && ((!!dia && calzaCon(dia)) || calzaCon(total));
-  }
-  if (!dia || !calzaCon(dia)) return false;
-  if (cargo > 0 && abono > 0) return true;
-  return diceTotal && (cargo ? dia.ns : dia.ne) >= 2;
+  if (!calza(cargo, dia.s, dia.ns) || !calza(abono, dia.e, dia.ne)) return false;
+  const saldoQuieto = saldoFila != null && ultimoSaldo != null && Math.abs(saldoFila - ultimoSaldo) <= 1;
+  const saldoSeMovia = new Set(dia.saldos).size > 1;
+  if (dia.ne + dia.ns >= 2 && saldoQuieto && saldoSeMovia) return true;
+  return glosaDeTotal && (saldoFila == null || saldoQuieto);
 }
 
 type LecturaFecha =
@@ -402,9 +422,8 @@ export function applyAdapter(
   // Subtotales CON fecha ("Total del día", "Total general"): se reconocen por
   // ESTRUCTURA (adversarial-1 falla 8): sus montos son la suma de lo leído del
   // día (o de todo) y el saldo no se mueve. Nunca por la palabra.
-  const vacio = () => ({ e: 0, s: 0, ne: 0, ns: 0 });
+  const vacio = (): AcumDia => ({ e: 0, s: 0, ne: 0, ns: 0, saldos: [] });
   let dia = { fecha: "", ...vacio() };
-  const total = vacio();
   let ultimoSaldo: number | null = null;
   // Glosa partida en 2 filas (adversarial-1 falla 3): la fila de continuación
   // (sin fecha ni plata, solo texto) se pega a la glosa del movimiento anterior.
@@ -465,7 +484,10 @@ export function applyAdapter(
       const texto = glosa.trim();
       const esContinuacion = fecha.motivo === "sin_fecha" && !plata.monto && !plata.ambiguo && !resumen
         && previa && filaAnterior === i - 1 && /[a-záéíóúñ]/i.test(texto) && texto.length <= 120
-        && r.every((v, j) => !colsPlata.has(j) || v == null || String(v).trim() === "");
+        && r.every((v, j) => !colsPlata.has(j) || v == null || String(v).trim() === "")
+        // Solo ENTRE movimientos (vuelta 2, N6): un pie de página tras el último
+        // movimiento ("Este documento no constituye…") no se pega a su glosa.
+        && vuelveUnMovimiento(rows, i, c.fecha, colsPlata);
       if (esContinuacion) {
         previa.descripcion = `${previa.descripcion} ${texto}`.trim();
         previa.filas_glosa_continuada = [...(previa.filas_glosa_continuada ?? []), i + 1];
@@ -497,6 +519,14 @@ export function applyAdapter(
       if (!t) { descartar("tipo_desconocido", fechaStr, null); continue; }
       tipo = t;
       monto = amount;
+    } else if (layout === "monto_con_signo") {
+      // El SIGNO dice la dirección: negativo = cargo (Falabella, vuelta 2 P5).
+      const montoCol = c.monto ?? -1;
+      if (montoCol < 0) continue;
+      const v = lector.leer(r, montoCol).valor;
+      if (!v) continue;
+      tipo = v < 0 ? "SALIDA" : "ENTRADA";
+      monto = Math.abs(v);
     } else if (layout === "transactions_log") {
       // 1 monto column, no tipo flag → use default_tipo_flujo (defaults to entrada)
       const montoCol = c.monto ?? -1;
@@ -515,8 +545,8 @@ export function applyAdapter(
       if (fechaStr !== dia.fecha) dia = { fecha: fechaStr, ...vacio() };
       const celdaSaldo = c.saldo >= 0 ? r[c.saldo] : null;
       const saldoFila = celdaSaldo != null && String(celdaSaldo).trim() !== "" ? lector.leer(r, c.saldo).valor : null;
-      const diceTotal = r.some((v) => typeof v === "string" && RESUMEN_RE.test(v));
-      if (esSubtotalPorEstructura(cargo, abono, dia.ne + dia.ns > 0 ? dia : null, total, saldoFila, ultimoSaldo, diceTotal)) {
+      const glosaDeTotal = /^\s*(sub\s*)?total(es)?\b/i.test(glosa);
+      if (esSubtotalPorEstructura(cargo, abono, dia, saldoFila, ultimoSaldo, glosaDeTotal)) {
         filasResumen.add(i);
         descartar("resumen", fechaStr, null, true);
         if (descartes?.length && descartes[descartes.length - 1].excel_row === i + 1) descartes[descartes.length - 1].subtotal = true;
@@ -527,10 +557,8 @@ export function applyAdapter(
       if (cargo && abono) { descartar("cargo_y_abono", fechaStr, null); continue; }
       tipo = cargo ? "SALIDA" : "ENTRADA";
       monto = cargo || abono;
-      for (const g of [dia, total]) {
-        if (tipo === "SALIDA") { g.s += monto; g.ns++; } else { g.e += monto; g.ne++; }
-      }
-      if (saldoFila != null) ultimoSaldo = saldoFila;
+      if (tipo === "SALIDA") { dia.s += monto; dia.ns++; } else { dia.e += monto; dia.ne++; }
+      if (saldoFila != null) { ultimoSaldo = saldoFila; dia.saldos.push(saldoFila); }
     }
     filaAnterior = i;
 

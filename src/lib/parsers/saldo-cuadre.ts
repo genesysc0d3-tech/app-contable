@@ -100,7 +100,7 @@ export function cuadreSaldoConBandera(
 export interface CuadreDeLectura {
   /** Movimientos leídos. */
   leidas: number;
-  /** Filas cuya ecuación se pudo comprobar (todas menos la primera de la cadena). */
+  /** Filas cuya ecuación se pudo comprobar (con saldo inicial conocido, TODAS). */
   revisadas: number;
   /** Filas que NO cierran al peso. */
   fallidas: number;
@@ -108,49 +108,112 @@ export interface CuadreDeLectura {
   sinSaldo: number;
   /** ¿La lectura con cargo↔abono al revés TAMBIÉN cierra? (entonces nada prueba la dirección). */
   invertidaCuadra: boolean;
+  /** ¿La PRIMERA fila se comprobó contra un saldo inicial (fila de arriba, resumen impreso)? */
+  primeraComprobada: boolean;
+  /** Sin saldo inicial: ¿la primera fila deja el saldo inicial en $0 (su monto ES su saldo)? */
+  primeraDesdeCero: boolean;
+  /** Diferencia (saldo impreso − esperado) de cada fila que no cierra. */
+  saltos: number[];
+}
+
+/** Saldo numérico de la celda de saldo de una fila, o null. */
+function saldoDeFila(rows: Row[], i: number, col: number): number | null {
+  const v = rows[i]?.[col];
+  if (v == null || String(v).trim() === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : null;
+  const n = parseChileanNumber(v);
+  return /\d/.test(String(v)) ? n : null;
+}
+
+/** Bloques de filas consecutivas con la misma fecha, cada uno al revés (orden intradía invertido). */
+function invertirDentroDelDia(lines: ParsedLine[]): ParsedLine[] {
+  const out: ParsedLine[] = [];
+  let bloque: ParsedLine[] = [];
+  for (const l of lines) {
+    if (bloque.length && bloque[0].fecha !== l.fecha) { out.push(...bloque.reverse()); bloque = []; }
+    bloque.push(l);
+  }
+  out.push(...bloque.reverse());
+  return out;
 }
 
 /**
  * La ecuación del saldo sobre LO LEÍDO (no sobre las celdas crudas): cada
- * movimiento leído, en el orden de la hoja o en el inverso, tiene que cerrar
- * saldo = saldo_anterior ± monto AL PESO. Una fila sin saldo (banco que imprime
- * el saldo solo al final del día) acumula su efecto hasta la siguiente fila con
- * saldo; si no hay una siguiente, queda sin comprobar.
+ * movimiento leído tiene que cerrar saldo = saldo_anterior ± monto AL PESO. Se
+ * prueba en el orden de la hoja, en el inverso y con el orden DENTRO de cada día
+ * invertido (bancos que listan los días ascendentes pero lo más nuevo arriba
+ * dentro del día; vuelta 2, P3). Una fila sin saldo acumula su efecto hasta la
+ * siguiente con saldo.
+ *
+ * La PRIMERA fila (vuelta 2, P1) se comprueba contra un saldo inicial: la fila
+ * con saldo justo arriba del primer movimiento (o abajo del último, si la hoja
+ * va de lo más nuevo a lo más viejo) o el saldo anterior del resumen impreso.
  */
-export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterConfig): CuadreDeLectura {
+export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterConfig, saldoInicialImpreso: number | null = null): CuadreDeLectura {
   const col = cfg.columns.saldo;
   const tieneSaldo = (l: ParsedLine) => {
     if (col < 0 || typeof l.saldo !== "number" || !Number.isFinite(l.saldo)) return false;
     const celda = rows[(l.excel_row ?? 0) - 1]?.[col];
     return celda != null && String(celda).trim() !== "";
   };
-  const medir = (orden: ParsedLine[], signo: 1 | -1) => {
-    let prev: number | null = null;
+  // Anclas de saldo inicial: arriba del primer movimiento de la hoja (orden
+  // ascendente) o abajo del último (descendente).
+  const filasLeidas = new Set(lines.map((l) => (l.excel_row ?? 0) - 1));
+  const primeraFila = lines.length ? (lines[0].excel_row ?? 1) - 1 : 0;
+  const ultimaFila = lines.length ? (lines[lines.length - 1].excel_row ?? 1) - 1 : 0;
+  let antes: number | null = null;
+  if (col >= 0) {
+    for (let i = primeraFila - 1; i > cfg.header_row && i >= 0 && antes == null; i--) {
+      if (!filasLeidas.has(i)) antes = saldoDeFila(rows, i, col);
+    }
+  }
+  let despues: number | null = null;
+  if (col >= 0) {
+    for (let i = ultimaFila + 1; i < Math.min(rows.length, ultimaFila + 4) && despues == null; i++) {
+      if (!filasLeidas.has(i)) despues = saldoDeFila(rows, i, col);
+    }
+  }
+  const medir = (orden: ParsedLine[], signo: 1 | -1, inicial: number | null) => {
+    let prev: number | null = inicial;
     let pendiente = 0;
     let enEspera = 0;
     let revisadas = 0;
     let fallidas = 0;
     let sinComprobar = 0;
+    const saltos: number[] = [];
+    let primeraDesdeCero = false;
+    let primera = true;
     for (const l of orden) {
       const efecto = signo * (l.tipo === "ENTRADA" ? l.monto : -l.monto);
       if (!tieneSaldo(l)) { pendiente += efecto; enEspera++; continue; }
       const s = l.saldo as number;
       if (prev === null) {
-        sinComprobar += enEspera; // antes del primer saldo: nada con qué comparar
+        sinComprobar += enEspera + 1; // antes del primer saldo: nada con qué comparar
+        if (primera && enEspera === 0 && Math.abs(s - efecto) <= TOLERANCIA_SELLO_PESOS) primeraDesdeCero = true;
       } else {
         const filas = enEspera + 1;
         revisadas += filas;
-        if (Math.abs(s - (prev + pendiente + efecto)) > TOLERANCIA_SELLO_PESOS) fallidas += filas;
+        const salto = s - (prev + pendiente + efecto);
+        if (Math.abs(salto) > TOLERANCIA_SELLO_PESOS) { fallidas += filas; saltos.push(salto); }
       }
+      primera = false;
       prev = s; pendiente = 0; enEspera = 0;
     }
     sinComprobar += enEspera;
-    return { revisadas, fallidas, sinComprobar };
+    return { revisadas, fallidas, sinComprobar, saltos, primeraDesdeCero, conInicial: inicial != null };
   };
   const mejor = (signo: 1 | -1) => {
-    const a = medir(lines, signo);
-    const b = medir([...lines].reverse(), signo);
-    return b.fallidas < a.fallidas || (b.fallidas === a.fallidas && b.sinComprobar < a.sinComprobar) ? b : a;
+    const intradia = invertirDentroDelDia(lines);
+    const ordenes: [ParsedLine[], number | null][] = [
+      [lines, antes], [[...lines].reverse(), despues], [intradia, antes], [[...intradia].reverse(), despues],
+    ];
+    // La fila de saldo pegada al bloque es estructura (vale aunque delate un
+    // error). El "saldo anterior" IMPRESO en un encabezado puede ser de otra
+    // cosa: vale solo si cierra; si no, la primera queda "sin comprobar".
+    const candidatos = ordenes.flatMap(([o, ancla]) => ancla != null
+      ? [medir(o, signo, ancla)]
+      : [medir(o, signo, saldoInicialImpreso), medir(o, signo, null)]);
+    return candidatos.reduce((m, x) => (x.fallidas < m.fallidas || (x.fallidas === m.fallidas && x.sinComprobar < m.sinComprobar) ? x : m));
   };
   const normal = mejor(1);
   const invertida = mejor(-1);
@@ -160,5 +223,8 @@ export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterCo
     fallidas: normal.fallidas,
     sinSaldo: lines.filter((l) => !tieneSaldo(l)).length,
     invertidaCuadra: invertida.revisadas > 0 && invertida.fallidas === 0,
+    primeraComprobada: normal.conInicial && normal.sinComprobar === 0,
+    primeraDesdeCero: !normal.conInicial && normal.primeraDesdeCero,
+    saltos: normal.saltos,
   };
 }
