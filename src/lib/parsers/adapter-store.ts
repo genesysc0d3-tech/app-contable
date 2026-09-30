@@ -19,15 +19,26 @@ const toJson = (cfg: AdapterConfig): Json => cfg as unknown as Json;
  * 44 mapas heurísticos se reusaban con confianza 1.0 sin que nadie los hubiera
  * confirmado — aprendíamos nuestra propia adivinanza. Ahora (como GnuCash:
  * `if (selected_manually) store()`, docs/investigacion-aprendizaje-correcciones):
- *   - lo derivado (heurística/nombres/IA) nace `provisorio`, confianza 0.7;
+ *   - lo derivado (heurística/nombres/IA) se guarda SIEMPRE como de la empresa
+ *     que subió la cartola; nace `provisorio` (confianza 0.7) o, con prueba
+ *     ESTRICTA (saldo al peso / total del banco), `confirmado` para esa empresa;
  *   - un reuso SIN prueba cuenta el uso pero NO sube la confianza;
  *   - pasa a `confirmado` solo con prueba: saldo o total del banco, el cliente
- *     ("Se ve bien" / su saldo final cuadró) o el cliente aprobando en Check lo
- *     que el mapa leyó sin editarlo;
- *   - un provisorio NO se comparte entre empresas (un global se usa solo si
- *     está confirmado).
+ *     ("Se ve bien" sin alertas / su saldo final cuadró) o el cliente aprobando
+ *     FILA A FILA en Check lo que el mapa leyó sin editarlo (no "Aprobar
+ *     cartola" en bloque);
+ *   - GLOBAL (compartido) solo por CONSENSO: 2+ empresas distintas confirmaron
+ *     el mismo mapa (promoverMapaGlobalSiHayConsenso). Un global se usa solo si
+ *     está confirmado.
+ * MAPAS GLOBALES VIEJOS (antes de la migración 20260930140000): la migración los
+ * deja `provisorio`, así que NINGUNA empresa los vuelve a usar (no pasan por
+ * selectAdapterForEmpresa) y tampoco se "re-confirman solos": quedan muertos en
+ * la tabla, sin borrarse. El primer día cada clienta sin mapa propio re-deriva
+ * su formato con la heurística actual (misma lectura determinística que hoy;
+ * ~2-30 ms), y ese mapa queda como SUYO (confirmado si el saldo cierra al peso,
+ * provisorio si no). Los manuales ya eran propios y siguen iguales.
  * FAIL-SAFE: si la columna `estado` todavía no existe en la base (migración
- * 20260930120000 sin aplicar), todo se trata como provisorio y las escrituras
+ * 20260930140000 sin aplicar), todo se trata como provisorio y las escrituras
  * reintentan sin las columnas nuevas.
  */
 
@@ -38,7 +49,7 @@ const DISABLE_DURATION_MINUTES = 60;
 /** Confianza con que nace un mapa derivado sin prueba (< 1.0 de un manual). */
 export const CONFIANZA_PROVISORIO = 0.7;
 
-export type ConfirmadoPor = "saldo" | "total_banco" | "cliente" | "check" | "manual" | "plantilla";
+export type ConfirmadoPor = "saldo" | "total_banco" | "cliente" | "check" | "manual" | "plantilla" | "consenso";
 
 function getServiceClient(): LooseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -99,6 +110,68 @@ export function selectAdapterForEmpresa<T extends AdapterOwnership>(
   if (propio) return propio;
   const global = usable.find((r) => !r.creado_por_empresa_id && estadoDeAdapter(r) === "confirmado");
   return global ?? null;
+}
+
+/** Lo que define un mapa (sin títulos ni filas de encabezado, que varían por empresa). */
+function claveDeMapa(cfg: AdapterConfig | null | undefined): string {
+  if (!cfg) return "";
+  const c = cfg.columns ?? ({} as AdapterConfig["columns"]);
+  return JSON.stringify([
+    cfg.layout ?? "two_cols", cfg.date_format, cfg.number_format, cfg.default_tipo_flujo ?? null,
+    c.fecha, c.descripcion, c.n_documento, c.cargo, c.abono, c.saldo, c.monto ?? -1, c.tipo_flujo_col ?? -1,
+  ]);
+}
+
+/**
+ * ¿Hay CONSENSO para compartir este mapa con todas las empresas? 2+ empresas
+ * DISTINTAS lo tienen confirmado (por prueba o por el cliente) con exactamente
+ * las mismas columnas. Lógica pura, testeable.
+ */
+export function hayConsensoParaGlobal(
+  filas: { creado_por_empresa_id: string | null; estado?: string | null; config: AdapterConfig }[],
+  config: AdapterConfig,
+): boolean {
+  const clave = claveDeMapa(config);
+  const empresas = new Set(
+    filas
+      .filter((f) => f.creado_por_empresa_id && estadoDeAdapter(f) === "confirmado" && claveDeMapa(f.config) === clave)
+      .map((f) => f.creado_por_empresa_id),
+  );
+  return empresas.size >= 2;
+}
+
+/**
+ * Si 2+ empresas confirmaron el mismo mapa para esta huella y todavía no hay un
+ * global confirmado igual, crea el global (confirmado_por = consenso).
+ * Best-effort: nunca rompe la lectura.
+ */
+export async function promoverMapaGlobalSiHayConsenso(fingerprint: string, config: AdapterConfig): Promise<boolean> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return false;
+    const { data, error } = await sb
+      .from("parser_adapters")
+      .select("*")
+      .eq("fingerprint", fingerprint)
+      .limit(50);
+    if (error || !data) return false;
+    const filas = data as unknown as (AdapterRow & { creado_por_empresa_id: string | null })[];
+    const clave = claveDeMapa(config);
+    if (filas.some((f) => !f.creado_por_empresa_id && estadoDeAdapter(f) === "confirmado" && claveDeMapa(f.config) === clave)) return false;
+    if (!hayConsensoParaGlobal(filas, config)) return false;
+    const origen = filas.find((f) => f.creado_por_empresa_id && claveDeMapa(f.config) === clave)!;
+    const id = await saveAdapter({
+      fingerprint,
+      nombre: origen.nombre ?? undefined,
+      source: origen.source,
+      config: { ...config, titulos: undefined },
+      empresaId: null,
+      confirmadoPor: "consenso",
+    });
+    return !!id;
+  } catch {
+    return false;
+  }
 }
 
 export async function getAdapterByFingerprint(
@@ -394,7 +467,7 @@ export async function adapterDelDocumento(
   sb: LooseClient,
   documentoId: string,
   empresaId: string,
-): Promise<{ id: string; estado: "provisorio" | "confirmado" } | null> {
+): Promise<{ id: string; estado: "provisorio" | "confirmado"; fingerprint?: string; config?: AdapterConfig } | null> {
   try {
     const { data: log } = await sb
       .from("parser_logs")
@@ -407,9 +480,9 @@ export async function adapterDelDocumento(
     const id = (log as { adapter_id?: string | null } | null)?.adapter_id;
     if (!id) return null;
     const { data: ad } = await sb.from("parser_adapters").select("*").eq("id", id).maybeSingle();
-    const row = ad as unknown as { id: string; creado_por_empresa_id: string | null; estado?: string | null } | null;
+    const row = ad as unknown as { id: string; creado_por_empresa_id: string | null; estado?: string | null; fingerprint?: string; config?: AdapterConfig } | null;
     if (!row || row.creado_por_empresa_id !== empresaId) return null;
-    return { id: row.id, estado: estadoDeAdapter(row) };
+    return { id: row.id, estado: estadoDeAdapter(row), fingerprint: row.fingerprint, config: row.config };
   } catch {
     return null;
   }

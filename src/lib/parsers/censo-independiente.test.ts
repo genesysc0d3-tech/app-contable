@@ -52,7 +52,9 @@ describe("censo independiente del mapeo", () => {
     expect(descartes).toEqual([]);
   });
 
-  it("una fila con fecha y 'SALDO INICIAL' con plata es un descarte legítimo, no una sospecha", () => {
+  // Revisión adversarial 2026-09-30 (regla: con fecha válida, una palabra nunca
+  // hace resumen): la fila no se lee como venta, pero queda A LA VISTA.
+  it("una fila con fecha y 'SALDO INICIAL' con plata no se lee como venta y queda a la vista (fila_de_saldo)", () => {
     const descartes: DescarteFila[] = [];
     const lines = applyAdapter([
       ["Fecha", "Glosa", "Nombre", "Cargo", "Abono"],
@@ -60,6 +62,6 @@ describe("censo independiente del mapeo", () => {
       ["02/09/2026", "Venta", "x", "", "5.000"],
     ], { ...mapaViejo, columns: { ...mapaViejo.columns, cargo: 3, abono: 4 } }, descartes);
     expect(lines.map((l) => l.excel_row)).toEqual([3]);
-    expect(descartes).toEqual([expect.objectContaining({ excel_row: 2, legitimo: true, motivo: "resumen" })]);
+    expect(descartes).toEqual([expect.objectContaining({ excel_row: 2, legitimo: false, motivo: "fila_de_saldo" })]);
   });
 });

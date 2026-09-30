@@ -3,7 +3,7 @@ import type * as XLSX from "xlsx";
 import type { AdapterConfig, DescarteFila, ParsedLine, Row, VerificacionCartola } from "./types";
 import { leerCeldaMonto, valorCeldaSuelta } from "./numeros";
 import { normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
-import { formatoVerificadoPorSaldo } from "./validator";
+import { cuadreDeLectura } from "./saldo-cuadre";
 import { cellEsFecha } from "./celdas";
 
 /**
@@ -159,8 +159,13 @@ export function detectarCuenta(rows: Row[], hasta: number): CuentaCartola | null
 export function saldosDeLaCartola(lines: ParsedLine[], resumen: ResumenImpreso | null): { inicial: number | null; final: number | null } {
   const conSaldo = lines.filter((l) => typeof l.saldo === "number" && Number.isFinite(l.saldo));
   if (conSaldo.length >= 2) {
-    // Orden cronológico: si la primera fila es más nueva que la última, está al revés.
-    const desc = conSaldo[0].fecha > conSaldo[conSaldo.length - 1].fecha;
+    // Orden cronológico: por FECHA si la primera y la última difieren; si no (un
+    // solo día), por la ECUACIÓN del saldo (adversarial-2 M5: una cartola de un
+    // día en orden descendente daba mal el saldo inicial).
+    const efectoDe = (l: ParsedLine) => (l.tipo === "ENTRADA" ? l.monto : -l.monto);
+    const cierra = (xs: ParsedLine[]) => xs.slice(1).filter((l, i) => Math.abs((l.saldo as number) - ((xs[i].saldo as number) + efectoDe(l))) <= 1).length;
+    const f0 = conSaldo[0].fecha; const f1 = conSaldo[conSaldo.length - 1].fecha;
+    const desc = f0 !== f1 ? f0 > f1 : cierra([...conSaldo].reverse()) > cierra(conSaldo);
     const crono = desc ? [...conSaldo].reverse() : conSaldo;
     const primero = crono[0];
     const efecto = primero.tipo === "ENTRADA" ? primero.monto : -primero.monto;
@@ -247,12 +252,22 @@ export function juzgarContraBanco(args: {
     colsPlata.push({ col: c.monto, suma: sumaEnRango(() => true), nombre: "montos" });
   }
   const colsProbadas = new Set<number>();
+  // Filas (0-based) que el mapa leyó EN cada columna de plata: el rango de la
+  // fórmula tiene que cubrirlas TODAS (adversarial-2 M1: un =SUM(C2:C4) parcial o
+  // un rango vacío que da 0 "probaba" la columna entera).
+  const filasDe = (col: number) => lines.filter((l) => {
+    if (layout !== "two_cols") return true;
+    return col === c.cargo ? l.tipo === "SALIDA" : l.tipo === "ENTRADA";
+  }).filter((l) => !l.monto_texto).map((l) => (l.excel_row ?? 0) - 1);
   for (const f of formulas) {
     const cp = colsPlata.find((x) => x.col === f.col);
     if (!cp || f.valor == null) continue;
     const leido = cp.suma(f.desde, f.hasta);
-    if (cerca(Math.abs(f.valor), leido)) colsProbadas.add(f.col);
-    else contra.push(`la fórmula SUM del banco da ${pesos(Math.abs(f.valor))} en ${cp.nombre} y leímos ${pesos(leido)}`);
+    const filas = filasDe(f.col);
+    const cubre = filas.length > 0 && filas.every((i) => i >= f.desde && i <= f.hasta);
+    if (cerca(Math.abs(f.valor), leido)) {
+      if (cubre && Math.abs(f.valor) > 0) colsProbadas.add(f.col);
+    } else contra.push(`la fórmula SUM del banco da ${pesos(Math.abs(f.valor))} en ${cp.nombre} y leímos ${pesos(leido)}`);
   }
 
   // 3) Fila de totales sin etiqueta direccional ("Total" | | 123 | 456): se mira
@@ -292,7 +307,28 @@ export function juzgarContraBanco(args: {
  * SELLO de la cartola: la prueba más fuerte que hay, o `sin_comprobar` con el
  * porqué. Una contradicción del banco o plata que el mapa no leyó ganan a
  * cualquier prueba (algo no calza → no se sella).
+ *
+ * SELLO ESTRICTO (revisiones adversariales 2026-09-30): "saldo" solo si la
+ * ecuación cierra AL PESO (±$1) en el 100% de las filas leídas, la lectura al
+ * revés NO cierra y no hay NINGUNA fila perdida no legítima (fecha imposible,
+ * cargo y abono, sin fecha, tipo desconocido, sin leer, monto dudoso). Si el
+ * saldo cierra solo en parte → sin_comprobar con "N de M filas no cuadran". La
+ * tolerancia blanda (1% del saldo) sirve para ELEGIR columnas, nunca para sellar.
  */
+const MIN_FILAS_SELLO = 10;
+
+const MOTIVO_TXT: Partial<Record<DescarteFila["motivo"], string>> = {
+  sin_leer: "con fecha y plata que el mapa de columnas no leyó",
+  monto_ambiguo: "con un monto en un formato que no se puede leer sin adivinar",
+  sin_fecha: "con plata y sin fecha",
+  fecha_ilegible: "con una fecha que no se entiende",
+  fecha_imposible: "con una fecha imposible",
+  fecha_fuera_de_rango: "con una fecha fuera de rango",
+  tipo_desconocido: "sin saber si es cargo o abono",
+  cargo_y_abono: "con cargo y abono a la vez",
+  fila_de_saldo: "que parecen de saldo y no se leyeron como movimiento",
+};
+
 export function sellarCartola(args: {
   rows: Row[];
   cfg: AdapterConfig;
@@ -301,15 +337,33 @@ export function sellarCartola(args: {
   resumen: ResumenImpreso | null;
   formulas: FormulaSuma[];
 }): VerificacionCartola {
-  const { rows, cfg, descartes } = args;
-  const filasTotales = descartes.filter((d) => d.legitimo && d.motivo === "resumen").map((d) => d.excel_row - 1);
+  const { rows, cfg, descartes, lines } = args;
+  // Un subtotal del día (reconocido por estructura) no es el total de la cartola.
+  const filasTotales = descartes.filter((d) => d.legitimo && d.motivo === "resumen" && !d.subtotal).map((d) => d.excel_row - 1);
   const juicio = juzgarContraBanco({ ...args, filasTotales });
-  const sinLeer = descartes.filter((d) => d.motivo === "sin_leer").length;
-  const ambiguos = descartes.filter((d) => d.motivo === "monto_ambiguo").length;
   if (juicio.contradice) return { tipo: "sin_comprobar", alerta: true, detalle: `El banco no calza: ${juicio.contradice}` };
-  if (sinLeer) return { tipo: "sin_comprobar", alerta: true, detalle: `${sinLeer} fila(s) con fecha y plata que el mapa de columnas no leyó` };
-  if (ambiguos) return { tipo: "sin_comprobar", alerta: true, detalle: `${ambiguos} monto(s) en un formato que no se puede leer sin adivinar` };
-  if (formatoVerificadoPorSaldo(rows, cfg)) return { tipo: "saldo", detalle: "El saldo corrido cuadra fila a fila" };
+  const perdidas = descartes.filter((d) => !d.legitimo);
+  if (perdidas.length) {
+    const porMotivo = new Map<string, number>();
+    for (const d of perdidas) porMotivo.set(d.motivo, (porMotivo.get(d.motivo) ?? 0) + 1);
+    const detalle = [...porMotivo].map(([m, n]) => `${n} fila(s) ${MOTIVO_TXT[m as DescarteFila["motivo"]] ?? "con plata que no se leyó"}`).join("; ");
+    return { tipo: "sin_comprobar", alerta: true, detalle };
+  }
+  const layout = cfg.layout ?? "two_cols";
+  if (cfg.columns.saldo >= 0 && layout !== "transactions_log" && lines.length > 1) {
+    const q = cuadreDeLectura(lines, rows, cfg);
+    if (q.fallidas > 0) {
+      return {
+        tipo: "sin_comprobar",
+        alerta: true,
+        detalle: `El saldo corrido no cierra: ${q.fallidas} de ${q.revisadas} filas no cuadran (¿cartola filtrada o incompleta?)`,
+      };
+    }
+    const todas = q.sinSaldo === 0 && q.revisadas === q.leidas - 1;
+    if (todas && q.revisadas >= MIN_FILAS_SELLO && !q.invertidaCuadra) {
+      return { tipo: "saldo", detalle: "El saldo corrido cuadra al peso en todas las filas" };
+    }
+  }
   if (juicio.prueba) return { tipo: "total_banco", detalle: juicio.detalle };
   return {
     tipo: "sin_comprobar",

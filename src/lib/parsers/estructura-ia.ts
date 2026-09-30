@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterConfig, Row, TipoVerificacion } from "./types";
-import { findTransactionBlockStart } from "./heuristic";
+import { extenderBloqueHaciaArriba, findTransactionBlockStart } from "./heuristic";
+import { normalizarTitulo } from "./encabezados";
 import { derivarNumberFormat } from "./numeros";
 import { requirePaidModel } from "../ai/model-guard";
 
@@ -17,8 +18,10 @@ import { requirePaidModel } from "../ai/model-guard";
  *    Fireworks, ni Mistral, ni Gemma pueden entrar por acá.
  *  - La grilla va ENMASCARADA: textos reducidos a su FORMA ("Aa5 a2 A7"), sin
  *    nombres, RUT ni glosas reales; números con su forma/magnitud ("#7"). Solo
- *    los TÍTULOS de columnas viajan como texto, y el vocabulario de banderas
- *    (A/C, Cargo/Abono) que no identifica a nadie.
+ *    los TÍTULOS de columnas viajan como texto (y solo si la fila es claramente
+ *    un encabezado: palabras del diccionario, sin dígitos), y el vocabulario de
+ *    banderas (A/C, Cargo/Abono) que no identifica a nadie.
+ *  - Se consulta SOLO si el lector no tiene prueba (orchestrator.ts).
  *  - Timeout 20 s; si falla o tarda → se sigue sin IA.
  *  - Detrás de LECTOR_ESTRUCTURA_IA=1 (apagado por defecto).
  *
@@ -70,13 +73,47 @@ function titulo(v: unknown): string {
 }
 
 /**
+ * Diccionario de palabras de TÍTULOS de columnas bancarias. Una fila solo viaja
+ * en claro si TODAS sus palabras están acá y no trae ni un dígito (adversarial-2
+ * A5: la "fila de títulos" podía ser metadata con titular/RUT/cuenta, o un
+ * movimiento sin fecha).
+ */
+const PALABRAS_TITULO = new Set([
+  "fecha", "fechas", "mov", "movs", "movimiento", "movimientos", "contable", "valor", "valuta", "operacion", "operaciones",
+  "transaccion", "transacciones", "descripcion", "glosa", "detalle", "concepto", "referencia", "comentario", "observacion",
+  "n", "no", "nro", "num", "numero", "documento", "doc", "docto", "comprobante", "folio", "serie", "cheque", "cheques",
+  "cargo", "cargos", "abono", "abonos", "debe", "haber", "debito", "debitos", "credito", "creditos", "ingreso", "ingresos",
+  "egreso", "egresos", "deposito", "depositos", "giro", "giros", "salida", "salidas", "entrada", "entradas", "saldo", "saldos",
+  "disponible", "diario", "monto", "montos", "importe", "importes", "total", "sucursal", "oficina", "canal", "tipo", "codigo",
+  "cod", "moneda", "clp", "pesos", "dia", "hora", "d", "h", "c", "a", "de", "del", "la", "el", "en", "y", "o", "al", "por",
+  "date", "description", "debit", "debits", "credit", "credits", "amount", "balance", "reference", "columna",
+]);
+
+function esEncabezadoClaro(r: Row | undefined): boolean {
+  if (!r) return false;
+  let conTexto = 0;
+  for (const v of r) {
+    if (v == null || v === "") continue;
+    if (typeof v !== "string") return false; // número o fecha: no es un título
+    const t = normalizarTitulo(v);
+    if (!t) continue;
+    if (/\d/.test(t)) return false;
+    const palabras = t.split(/[^a-zñ]+/).filter(Boolean);
+    if (!palabras.length || palabras.some((p) => !PALABRAS_TITULO.has(p))) return false;
+    conTexto++;
+  }
+  return conTexto >= 2;
+}
+
+/**
  * La grilla que ve DeepSeek: índices de fila y columna, primeras 22 + últimas 6
  * filas. Solo la fila de títulos (la anterior al primer bloque de movimientos)
- * va como texto; todo lo demás, enmascarado.
+ * va como texto, y SOLO si es claramente un encabezado; todo lo demás, enmascarado.
  */
 export function grillaEnmascarada(rows: Row[]): string {
-  const tx = findTransactionBlockStart(rows);
-  const filaTitulos = tx > 0 ? tx - 1 : -1;
+  const inicio = findTransactionBlockStart(rows);
+  const tx = inicio >= 0 ? extenderBloqueHaciaArriba(rows, inicio) : -1;
+  const filaTitulos = tx > 0 && esEncabezadoClaro(rows[tx - 1]) ? tx - 1 : -1;
   const idx = rows.map((_, i) => i);
   const mostrar = idx.length <= 30 ? idx : [...idx.slice(0, 22), ...idx.slice(-6)];
   let prev = -1;
@@ -228,6 +265,8 @@ export interface EvaluacionMapa {
   firma: string;
   /** Sello de verificación de ese mapa. */
   sello: TipoVerificacion;
+  /** Filas con plata que ese mapa dejó sin explicar (descartes no legítimos). */
+  perdidas?: number;
 }
 
 export interface DecisionDosOpiniones {
@@ -255,8 +294,12 @@ export function decidirDosOpiniones(lector: EvaluacionMapa | null, ia: Evaluacio
   const pl = prueba(lector); const pi = prueba(ia);
   if (pl && !pi) return { elegido: "lector", disputa: null };
   if (pi && !pl) return { elegido: "ia", disputa: null };
+  // Ninguna (o las dos) con prueba: queda la que deja MENOS filas con plata sin
+  // explicar (adversarial-1 falla 7); a igual cobertura, el lector. La disputa
+  // sigue visible: la IA nunca decide sola.
+  const cobertura = (e: EvaluacionMapa) => e.perdidas ?? 0;
   return {
-    elegido: "lector",
+    elegido: cobertura(ia!) < cobertura(lector!) ? "ia" : "lector",
     disputa: pl
       ? "Dos lecturas distintas y las dos cuadran: falta que confirmes cuál es la buena"
       : "El lector y la segunda opinión leen distinto y nada del banco desempata: revisa la muestra",

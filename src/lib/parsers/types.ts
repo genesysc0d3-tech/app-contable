@@ -5,7 +5,8 @@ export type Row = (string | number | null | undefined)[];
 export interface AdapterConfig {
   header_row: number;
   skip_rows_before_data: number;
-  date_format: "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "unknown";
+  /** mm/dd/yyyy solo si la COLUMNA lo prueba (algún "09/13/2026"); en Chile, dd/mm por defecto. */
+  date_format: "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "mm/dd/yyyy" | "unknown";
   number_format: "chilean" | "generic";
   /**
    * Layout variants:
@@ -101,6 +102,8 @@ export interface ParsedLine {
   monto_texto?: boolean;
   /** Saldo de la fila si la cartola tiene columna saldo. Usado para validar duplicados. */
   saldo?: number;
+  /** Filas (1-based) de continuación de glosa pegadas a este movimiento (glosa partida en 2 filas). */
+  filas_glosa_continuada?: number[];
 }
 
 /**
@@ -116,7 +119,12 @@ export interface DescarteFila {
    * sin_leer: el censo INDEPENDIENTE del mapeo vio fecha + plata en la fila y el
    *   mapeo no la leyó ni la descartó (plata en una columna que el mapa no mira).
    */
-  motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango" | "tipo_desconocido" | "cargo_y_abono" | "resumen" | "monto_ambiguo" | "sin_leer";
+  /**
+   * fila_de_saldo: fila CON fecha y plata cuya glosa empieza con "SALDO INICIAL/
+   *   FINAL…" y cuyo monto no es su propio saldo: no se lee como movimiento (no
+   *   es una venta) ni se esconde como resumen (una palabra no basta).
+   */
+  motivo: "sin_fecha" | "fecha_ilegible" | "fecha_imposible" | "fecha_fuera_de_rango" | "tipo_desconocido" | "cargo_y_abono" | "resumen" | "monto_ambiguo" | "sin_leer" | "fila_de_saldo";
   legitimo: boolean;
   fecha: string | null;
   monto: number;
@@ -124,6 +132,8 @@ export interface DescarteFila {
   descripcion: string;
   /** La celda de fecha tal como vino (diagnóstico: "32/13/2026", un serial…). */
   fecha_cruda?: string | null;
+  /** Subtotal (del día) reconocido por estructura: no es el total de la cartola. */
+  subtotal?: boolean;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
+import { esTextoPlano } from "@/lib/parsers/libro";
 import { createClient } from "@/lib/supabase/server";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
@@ -70,7 +71,8 @@ export async function POST(request: Request) {
   const ab = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
   // El archivo ya pasó el cap de 10MB al subir, pero 10MB COMPRIMIDOS pueden
   // declarar un rango gigante que sheet_to_json expande a millones de celdas.
-  const workbook = XLSX.read(ab, { type: "array", sheetRows: 10_000 });
+  // CSV/TXT como texto (libro.ts): "1.500" y "05/09/2026" tal cual, no 1,5 ni 9 de mayo.
+  const workbook = esTextoPlano(ab) ? XLSX.read(ab, { type: "array", raw: true, sheetRows: 10_000 }) : XLSX.read(ab, { type: "array", sheetRows: 10_000 });
   if (workbook.SheetNames.some((n) => hojaExcedeCeldas(workbook.Sheets[n]))) {
     await recordOpsEvent({
       severity: "warn",

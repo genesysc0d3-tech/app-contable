@@ -53,6 +53,13 @@ export function leerCeldaMonto(v: unknown): LecturaCelda | null {
   if (!s) return null;
   s = s.replace(/^(clp|\$)+/i, "").replace(/(clp|\$)+$/i, "");
   let neg = false;
+  // Sufijo contable de dirección ("1.500 CR" / "1.500 DB"): CR = crédito (+),
+  // DB/DR = débito (−). Adversarial-2 M2: antes "1,500 CR" se leía 1 en silencio.
+  const sufijo = s.match(/(cr|db|dr)$/i);
+  if (sufijo) {
+    if (!/^cr$/i.test(sufijo[1])) neg = true;
+    s = s.slice(0, -2).replace(/(clp|\$)+$/i, "");
+  }
   if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
   s = s.replace(/^(clp|\$)+/i, "");
   if (s.startsWith("-")) { neg = !neg; s = s.slice(1); }
@@ -86,6 +93,16 @@ export type DecisionColumna =
   | { formato: "ambiguo"; soloChile: number; soloGeneric: number };
 
 /**
+ * Mayoría CLARA para decidir una columna que mezcla formatos: ≥80% de las
+ * celdas que distinguen y al menos 3. Adversarial-2 C3 (2026-09-30): una sola
+ * celda "107,000" en una columna de "1xx.000" (o un pie "Tasa 1.50") dejaba
+ * TODA la columna ambigua y la cartola caía entera a la IA (capa 4). La duda es
+ * de la CELDA: la minoritaria va sola al censo como monto_ambiguo.
+ */
+const MAYORIA_CLARA = 0.8;
+const MAYORIA_MINIMA = 3;
+
+/**
  * Formato de una columna mirando TODAS sus celdas (intersección GnuCash).
  * "neutral" = ninguna celda distingue (da igual el formato).
  */
@@ -101,7 +118,13 @@ export function decidirFormatoColumna(celdas: unknown[]): DecisionColumna {
     // apareciera, cuenta como duda en ambos lados.
     else { soloChile++; soloGeneric++; }
   }
-  if (soloChile > 0 && soloGeneric > 0) return { formato: "ambiguo", soloChile, soloGeneric };
+  if (soloChile > 0 && soloGeneric > 0) {
+    const may = Math.max(soloChile, soloGeneric);
+    if (may >= MAYORIA_MINIMA && may / (soloChile + soloGeneric) >= MAYORIA_CLARA) {
+      return { formato: soloChile > soloGeneric ? "chilean" : "generic" };
+    }
+    return { formato: "ambiguo", soloChile, soloGeneric };
+  }
   if (soloChile > 0) return { formato: "chilean" };
   if (soloGeneric > 0) return { formato: "generic" };
   return { formato: "neutral" };
@@ -145,17 +168,28 @@ export class LectorMontos {
     const v = row[col];
     const l = leerCeldaMonto(v);
     if (!l) {
-      // Texto que no es un monto limpio: misma lectura laxa de siempre (dígitos
-      // de la parte entera). No cambia nada para las celdas que sí son montos.
+      // Texto con dígitos que no es un monto limpio ("USD 1,500.00", "1,5E+06",
+      // "1'500"): al censo como dudoso, jamás la lectura laxa en silencio
+      // (adversarial-2 M2: "USD 1,500.00" se leía 1). Sin dígitos → no es plata.
+      if (typeof v === "string" && /\d/.test(v)) return { valor: 0, ambiguo: true, referencia: referenciaDeTexto(v) };
       return { valor: lecturaLaxa(v), ambiguo: false };
     }
     if (celdaNeutral(l)) return { valor: l.chilean!, ambiguo: false };
     const d = this.formatoDe(col);
     if (d.formato === "ambiguo") return { valor: 0, ambiguo: true, referencia: Math.abs(valorCeldaSuelta(l)) };
     const f: FormatoNumero = d.formato === "neutral" ? this.declarado : d.formato;
-    const val = l[f] ?? (f === "chilean" ? l.generic : l.chilean);
-    return { valor: val ?? 0, ambiguo: false };
+    const val = l[f];
+    // La celda no calza con el formato de su columna (minoría): dudosa, sola.
+    if (val == null) return { valor: 0, ambiguo: true, referencia: Math.abs(valorCeldaSuelta(l)) };
+    return { valor: val, ambiguo: false };
   }
+}
+
+/** Una lectura posible de un texto sucio, SOLO para mostrarla en el censo. */
+function referenciaDeTexto(v: string): number {
+  const limpio = v.replace(/[a-z$\s]+/gi, "").replace(/[eE][+-]?\d+$/, "");
+  const l = leerCeldaMonto(limpio);
+  return l ? Math.abs(l.generic ?? l.chilean ?? 0) : Math.abs(lecturaLaxa(v));
 }
 
 /** Lectura laxa histórica para texto que no es un monto limpio. */

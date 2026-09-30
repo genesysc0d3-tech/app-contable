@@ -206,10 +206,11 @@ function checkSaldoMonotonia(rows: Row[], cfg: AdapterConfig): string | null {
 }
 
 /**
- * ¿El saldo corrido CONFIRMA este mapeo? (≥10 filas revisadas y ≤20% fallidas).
- * Es la condición para compartir un formato derivado con otras empresas: sin
- * saldo (o con pocas filas) el mapeo es una adivinanza y queda privado de la
- * empresa que lo subió (revisión adversarial 2026-09-26).
+ * ¿El saldo corrido ORIENTA este mapeo? (≥10 filas revisadas y ≤20% fallidas,
+ * tolerancia blanda). OJO: solo sirve para ELEGIR/ORIENTAR (scripts de medición).
+ * NO sella ni confirma nada: el sello "saldo" exige la ecuación al peso en el
+ * 100% de las filas leídas (saldo-cuadre.ts cuadreDeLectura, juez-banco.ts
+ * sellarCartola; revisiones adversariales 2026-09-30).
  */
 export function formatoVerificadoPorSaldo(rows: Row[], cfg: AdapterConfig): boolean {
   const c = cfg.columns;

@@ -12,6 +12,7 @@ vi.mock("./adapter-store", () => ({
   getAdapterByFingerprint: async () => null,
   getAdaptersConfirmadosEmpresa: async () => [],
   saveAdapter: async () => "adapter-test",
+  promoverMapaGlobalSiHayConsenso: async () => false,
   incrementAdapterSuccess: async () => {},
   decrementAdapterConfianza: async () => {},
   confirmarAdapter: async () => {},

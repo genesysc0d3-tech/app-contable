@@ -5,6 +5,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
 import { applyAdapter } from "@/lib/parsers/apply";
+import { leerLibroCartola } from "@/lib/parsers/libro";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { descargarDocumento } from "@/lib/storage";
 
@@ -73,7 +74,8 @@ export async function POST(request: Request) {
   // calce, y la hoja = la primera donde ESTE mapeo produce movimientos: en
   // BancoEstado (hojas Resumen + Movimientos) la "primera no vacía" era el
   // Resumen y el manual quedaba guardado con la huella de la hoja equivocada.
-  const workbook = XLSX.read(ab, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
+  // (CSV/TXT como texto, igual que el orquestador: libro.ts.)
+  const workbook = leerLibroCartola(ab);
   const hojas = workbook.SheetNames
     .map((n) => ({ n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" }) }))
     .filter((h) => h.rows.length > 0);

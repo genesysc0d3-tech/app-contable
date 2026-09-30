@@ -15,7 +15,7 @@ vi.mock("pdf-parse", () => ({
   PDFParse: class { async getText() { return { text: pdfTexto }; } async destroy() {} },
 }));
 vi.mock("@/lib/parsers/adapter-store", () => ({
-  getAdapterByFingerprint: async () => null, saveAdapter: async () => "a",
+  getAdapterByFingerprint: async () => null, saveAdapter: async () => "a", promoverMapaGlobalSiHayConsenso: async () => false,
   getAdaptersConfirmadosEmpresa: async () => [], confirmarAdapter: async () => true,
   incrementAdapterSuccess: async () => {}, decrementAdapterConfianza: async () => {}, logParserEvent: async () => {},
 }));

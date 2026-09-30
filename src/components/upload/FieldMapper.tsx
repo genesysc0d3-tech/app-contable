@@ -8,7 +8,7 @@ import type { AdapterConfig } from "@/lib/parsers/types";
 
 type Role = "ignorar" | "fecha" | "descripcion" | "n_documento" | "cargo" | "abono" | "monto" | "tipo_flujo" | "saldo";
 type Layout = "two_cols" | "single_col" | "transactions_log";
-type DateFmt = "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "unknown";
+type DateFmt = "dd/mm/yyyy" | "yyyy-mm-dd" | "dd-mm-yyyy" | "mm/dd/yyyy" | "unknown";
 
 interface Preview {
   sheetName: string; fingerprint: string; totalRows: number; cols: number;
@@ -466,6 +466,7 @@ function GridContent(props: {
                 <option value="dd/mm/yyyy">DD/MM/YYYY</option>
                 <option value="yyyy-mm-dd">YYYY-MM-DD</option>
                 <option value="dd-mm-yyyy">DD-MM-YYYY</option>
+                <option value="mm/dd/yyyy">MM/DD/YYYY (mes primero)</option>
                 <option value="unknown">No sé</option>
               </select>
             </Field>

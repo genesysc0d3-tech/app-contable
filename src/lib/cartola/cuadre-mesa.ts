@@ -28,6 +28,7 @@ const MOTIVOS: Record<string, string> = {
   fecha_fuera_de_rango: "Fecha fuera de rango",
   monto_ambiguo: "Monto en un formato dudoso",
   sin_leer: "Tiene plata en una columna que no leímos",
+  fila_de_saldo: "Parece una fila de saldo, no un movimiento",
 };
 
 /** Motivos que SÍ se pueden agregar solos: la fila se leyó bien y solo no llegó a

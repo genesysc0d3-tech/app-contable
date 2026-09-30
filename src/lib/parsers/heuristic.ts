@@ -33,8 +33,12 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
 function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
   // Step 1: find the first run of >= 3 consecutive "transaction-looking" rows
   // (lowered from 5 to also accept smaller test cartolas)
-  const txStart = findTransactionBlockStart(rows);
-  if (txStart < 0) return null;
+  const inicio = findTransactionBlockStart(rows);
+  if (inicio < 0) return null;
+  // Glosa partida en 2 filas (adversarial-1 falla 3): el primer bloque de ≥3
+  // movimientos seguidos puede empezar DESPUÉS de movimientos separados por una
+  // fila de continuación. Se extiende hacia arriba para no perder el primero.
+  const txStart = extenderBloqueHaciaArriba(rows, inicio);
 
   // Step 2: collect a sample of tx rows to analyze column roles
   const sample: Row[] = [];
@@ -47,11 +51,10 @@ function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
   // Step 3: try layout detection (two_cols first, then single_col)
   const twoColsCfg = inferColumns(sample, txStart > 0 ? rows[txStart - 1] : undefined);
   if (twoColsCfg) {
-    const firstFecha = String(sample[0][twoColsCfg.fecha] ?? "");
     return {
       header_row: Math.max(0, txStart - 1),
       skip_rows_before_data: txStart,
-      date_format: detectDateFormat(firstFecha),
+      date_format: formatoFechaDeColumna(rows, txStart, twoColsCfg.fecha),
       number_format: "chilean",
       layout: "two_cols",
       columns: twoColsCfg,
@@ -60,11 +63,10 @@ function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
 
   const singleColCfg = inferSingleColLayout(sample);
   if (singleColCfg) {
-    const firstFecha = String(sample[0][singleColCfg.fecha] ?? "");
     return {
       header_row: Math.max(0, txStart - 1),
       skip_rows_before_data: txStart,
-      date_format: detectDateFormat(firstFecha),
+      date_format: formatoFechaDeColumna(rows, txStart, singleColCfg.fecha),
       number_format: "chilean",
       layout: "single_col",
       columns: singleColCfg,
@@ -83,11 +85,10 @@ function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
   if (encabezadoConSalidas(titulos) || encabezadoConSaldo(titulos)) return null;
   const txLogCfg = inferTransactionsLogLayout(sample);
   if (txLogCfg) {
-    const firstFecha = String(sample[0][txLogCfg.fecha] ?? "");
     return {
       header_row: Math.max(0, txStart - 1),
       skip_rows_before_data: txStart,
-      date_format: detectDateFormat(firstFecha),
+      date_format: formatoFechaDeColumna(rows, txStart, txLogCfg.fecha),
       number_format: "chilean",
       layout: "transactions_log",
       default_tipo_flujo: "entrada",
@@ -115,6 +116,34 @@ export function findTransactionBlockStart(rows: Row[]): number {
     }
   }
   return -1;
+}
+
+/**
+ * Sube el inicio del bloque mientras arriba haya movimientos, saltando filas de
+ * CONTINUACIÓN (sin fecha, con texto) que estén entre dos movimientos.
+ */
+export function extenderBloqueHaciaArriba(rows: Row[], inicio: number): number {
+  let s = inicio;
+  let i = inicio - 1;
+  while (i >= 0) {
+    const r = rows[i];
+    if (r && isTransactionRow(r)) { s = i; i--; continue; }
+    const previa = rows[i - 1];
+    if (r && esFilaDeContinuacion(r) && previa && isTransactionRow(previa)) { i--; continue; }
+    break;
+  }
+  return s;
+}
+
+/** Sin ninguna fecha y con texto (letras): el resto de una glosa partida. */
+function esFilaDeContinuacion(r: Row): boolean {
+  let texto = false;
+  for (const cell of r) {
+    if (cell == null || String(cell).trim() === "") continue;
+    if (cellEsFecha(cell)) return false;
+    if (typeof cell === "string" && /[a-záéíóúñ]/i.test(cell)) texto = true;
+  }
+  return texto;
 }
 
 /**
@@ -385,7 +414,10 @@ export function mejorTernaPorSaldo(
 ): { saldo: number; cargo: number; abono: number; fallidas: number; revisadas: number } | null {
   const montos = new Map(cols.map((c) => [c, montosColumna(sample, c)]));
   const llenas = cols.filter((c) => montos.get(c)!.filter((n) => n > 0).length >= sample.length * 0.9);
-  type T = { saldo: number; cargo: number; abono: number; fallidas: number; revisadas: number; ratio: number };
+  // `estricta` = fallidas AL PESO: desempata lo que la tolerancia blanda (1% del
+  // saldo) no distingue. Con saldo alto y movimientos chicos, cargo↔abono al
+  // revés también "cuadra" blando; al peso, jamás (adversarial-1 falla 1).
+  type T = { saldo: number; cargo: number; abono: number; fallidas: number; revisadas: number; ratio: number; estricta: number };
   const buenas: T[] = [];
   for (const s of llenas) {
     for (let i = 0; i < cols.length; i++) {
@@ -403,16 +435,18 @@ export function mejorTernaPorSaldo(
           const r = cuadreSaldo(sample, cargo, abono, s);
           if (r.revisadas < 5) continue;
           const ratio = r.fallidas / r.revisadas;
-          if (ratio <= 0.1) buenas.push({ saldo: s, cargo, abono, ...r, ratio });
+          if (ratio > 0.1) continue;
+          const e = cuadreSaldo(sample, cargo, abono, s, "estricta");
+          buenas.push({ saldo: s, cargo, abono, ...r, ratio, estricta: e.revisadas ? e.fallidas / e.revisadas : 1 });
         }
       }
     }
   }
   if (!buenas.length) return null;
-  buenas.sort((a, b) => a.ratio - b.ratio || b.revisadas - a.revisadas);
+  buenas.sort((a, b) => a.estricta - b.estricta || a.ratio - b.ratio || b.revisadas - a.revisadas);
   const [g, segunda] = buenas;
   // Empate exacto entre dos asignaciones distintas: la aritmética no decide.
-  if (segunda && segunda.ratio === g.ratio && segunda.revisadas === g.revisadas) return null;
+  if (segunda && segunda.estricta === g.estricta && segunda.ratio === g.ratio && segunda.revisadas === g.revisadas) return null;
   return { saldo: g.saldo, cargo: g.cargo, abono: g.abono, fallidas: g.fallidas, revisadas: g.revisadas };
 }
 
@@ -630,6 +664,13 @@ function orientarPorSaldo(
   const invertida = ratio(cuadreSaldo(sample, der, izq, saldo));
   if (normal <= 0.2 && normal < invertida) return { cargo: izq, abono: der };
   if (invertida <= 0.2 && invertida < normal) return { cargo: der, abono: izq };
+  // Empate blando (saldo alto, movimientos chicos): desempata AL PESO.
+  if (normal <= 0.2 && invertida <= 0.2) {
+    const ne = ratio(cuadreSaldo(sample, izq, der, saldo, "estricta"));
+    const ie = ratio(cuadreSaldo(sample, der, izq, saldo, "estricta"));
+    if (ne < ie) return { cargo: izq, abono: der };
+    if (ie < ne) return { cargo: der, abono: izq };
+  }
   return null;
 }
 
@@ -846,6 +887,30 @@ function countEquationMatches(
     return matches;
   };
   return Math.max(medir(sample), medir([...sample].reverse()));
+}
+
+/**
+ * Formato de fecha decidido por COLUMNA, como el de los números (adversarial-1
+ * falla 5): "a/b/yyyy" con algún a > 12 → dd/mm; con algún b > 12 y ningún a > 12
+ * → mm/dd; si ninguna celda distingue, dd/mm (Chile).
+ */
+export function formatoFechaDeColumna(rows: Row[], desde: number, col: number): AdapterConfig["date_format"] {
+  let diaPrimero = false;
+  let mesPrimero = false;
+  let primera: string | null = null;
+  for (let i = desde; i < rows.length; i++) {
+    const v = rows[i]?.[col] as unknown;
+    if (v == null || v instanceof Date || typeof v === "number") continue;
+    const t = String(v).trim();
+    if (!t) continue;
+    primera ??= t;
+    const m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-]\d{4}$/);
+    if (!m) continue;
+    if (parseInt(m[1], 10) > 12) diaPrimero = true;
+    if (parseInt(m[2], 10) > 12) mesPrimero = true;
+  }
+  if (mesPrimero && !diaPrimero) return "mm/dd/yyyy";
+  return detectDateFormat(primera ?? "");
 }
 
 function detectDateFormat(sample: string): AdapterConfig["date_format"] {

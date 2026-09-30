@@ -13,6 +13,7 @@ import type {
   VerificacionCartola,
 } from "./types";
 import { computeFingerprint, computeFingerprintLegacy, encabezadoNormalizado } from "./fingerprint";
+import { leerLibroCartola } from "./libro";
 import { detectHeuristic } from "./heuristic";
 import { detectByNames, detectPlantillaBoletas } from "./named";
 import { esPlantillaFacturas } from "../facturas/plantilla";
@@ -32,6 +33,7 @@ import { cambioDeEncabezado } from "./cambio-formato";
 import {
   getAdapterByFingerprint,
   getAdaptersConfirmadosEmpresa,
+  promoverMapaGlobalSiHayConsenso,
   saveAdapter,
   incrementAdapterSuccess,
   decrementAdapterConfianza,
@@ -75,6 +77,8 @@ interface ContextoHoja {
   formulas: FormulaSuma[];
   filasFormula: Set<number>;
   resumen: ResumenImpreso | null;
+  /** Otras hojas del libro con movimientos que esta lectura NO lee. */
+  otrasHojas: string[];
 }
 
 interface Lectura {
@@ -97,7 +101,9 @@ export async function parseExcelWithOrchestrator(
   // Por qué falló cada capa, para el log y la alarma de capa 4. Antes tryApply
   // botaba los errores del validador y parser_logs decía [] en todas las capas.
   const fallas: string[] = [];
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
+  const workbook = leerLibroCartola(buffer);
+  // Tope de consultas a la IA de estructura por libro (cada una hasta 20 s).
+  let consultasIa = 0;
 
   // Process the first non-empty sheet with a cartola-like structure. If
   // multiple sheets exist and none match, we fall through to serializing all
@@ -122,6 +128,7 @@ export async function parseExcelWithOrchestrator(
       formulas,
       filasFormula: new Set(formulas.map((f) => f.fila)),
       resumen: detectarResumenImpreso(rows),
+      otrasHojas: otrasHojasConDatos(workbook, sheetName),
     };
 
     const terminar = async (
@@ -132,7 +139,7 @@ export async function parseExcelWithOrchestrator(
     ): Promise<{ content: string; result: OrchestratorResult }> => {
       const censo: CensoCartola = {
         ...lectura.censo,
-        otras_hojas_con_datos: otrasHojasConDatos(workbook, sheetName),
+        otras_hojas_con_datos: ctx.otrasHojas,
         mapa: { ...mapa, adapter_id: adapterId },
       };
       const warnings = [...lectura.warnings];
@@ -200,9 +207,13 @@ export async function parseExcelWithOrchestrator(
     if (cached) {
       const lectura = leer(ctx, cached.config, fallas, "cache");
       if (lectura) {
-        // El reuso cuenta; la confianza sube y el mapa se confirma SOLO con prueba.
+        // El reuso cuenta; la confianza sube y el mapa se confirma SOLO con prueba
+        // (sello estricto). Confirma el mapa de ESTA empresa; volverlo global
+        // exige consenso de 2+ empresas (promoverMapaGlobalSiHayConsenso).
         await incrementAdapterSuccess(cached.id, { prueba: lectura.verificacion.tipo });
-        const estado = cached.estado === "confirmado" || ["saldo", "total_banco"].includes(lectura.verificacion.tipo) ? "confirmado" : "provisorio";
+        const conPrueba = ["saldo", "total_banco"].includes(lectura.verificacion.tipo);
+        if (conPrueba && cached.creado_por_empresa_id) await promoverMapaGlobalSiHayConsenso(fingerprint, cached.config);
+        const estado = cached.estado === "confirmado" || conPrueba ? "confirmado" : "provisorio";
         return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: false });
       } else {
         await decrementAdapterConfianza(
@@ -234,10 +245,15 @@ export async function parseExcelWithOrchestrator(
       }
     }
 
-    // SEGUNDA OPINIÓN de estructura (DeepSeek por OpenCode Go), solo con el flag.
+    // SEGUNDA OPINIÓN de estructura (DeepSeek por OpenCode Go), solo con el flag
+    // y SOLO si el lector no tiene prueba (adversarial-1 falla 9: con sello de
+    // saldo o total del banco no aporta nada y cuesta ~4,5 s, con 9% de timeouts
+    // de 20 s). A lo más 2 consultas por libro.
     let elegido: { lectura: Lectura; capa: number; source: AdapterRow["source"] } | null = lector;
     let disputa: string | null = null;
-    if (estructuraIaActiva()) {
+    const lectorConPrueba = !!lector && (lector.lectura.verificacion.tipo === "saldo" || lector.lectura.verificacion.tipo === "total_banco");
+    if (estructuraIaActiva() && !lectorConPrueba && consultasIa < 2) {
+      consultasIa++;
       const ia = await mapaPorIA(rows);
       if (ia.error) fallas.push(`estructura_ia[${sheetName}]: ${ia.error}`);
       const lecturaIa = ia.cfg ? leer(ctx, ia.cfg, fallas, "estructura_ia") : null;
@@ -326,6 +342,7 @@ function evaluacion(l: Lectura | null): EvaluacionMapa | null {
     valido: true,
     firma: l.lines.map((x) => `${x.fecha}|${x.monto}|${x.tipo}`).sort().join(","),
     sello: l.verificacion.tipo,
+    perdidas: l.descartes.filter((d) => !d.legitimo).length,
   };
 }
 
@@ -411,7 +428,16 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
     fallas.push(`${capa}[${sheetName}]: ${validation.errors.join("; ")}`);
     return null;
   }
-  const verificacion = sellarCartola({ rows, cfg, lines, descartes, resumen: ctx.resumen, formulas: ctx.formulas });
+  let verificacion = sellarCartola({ rows, cfg, lines, descartes, resumen: ctx.resumen, formulas: ctx.formulas });
+  // Plata que no se leyó gana a cualquier prueba: otra hoja con movimientos que
+  // esta lectura no toca impide sellar el LIBRO (adversarial-1 varias_hojas).
+  if (ctx.otrasHojas.length && !verificacion.alerta) {
+    verificacion = {
+      tipo: "sin_comprobar",
+      alerta: true,
+      detalle: `Otra(s) hoja(s) del archivo traen movimientos que no se leyeron (${ctx.otrasHojas.join(", ")}). ${verificacion.detalle}`.trim(),
+    };
+  }
   const saldos = saldosDeLaCartola(lines, ctx.resumen);
   return {
     cfg,
@@ -438,11 +464,15 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
 }
 
 /**
- * FORMATO NUEVO = PROVISORIO (revisión adversarial 2026-09-26, endurecido el
- * 2026-09-30). Un mapeo derivado (heurística, nombres o IA de estructura) solo
- * se comparte con TODAS las empresas si hay PRUEBA (saldo corrido o total del
- * banco); entonces nace confirmado. Si no, queda privado de la empresa que lo
- * subió, PROVISORIO (confianza < manual) y deja un aviso para revisarlo.
+ * FORMATO NUEVO (revisión adversarial 2026-09-26, endurecido el 2026-09-30 dos
+ * veces). Un mapa derivado (heurística, nombres o IA de estructura) se guarda
+ * SIEMPRE como de la empresa que subió la cartola:
+ *   - con prueba ESTRICTA (saldo al peso / total del banco) nace confirmado,
+ *     pero solo para ESA empresa;
+ *   - sin prueba, provisorio (confianza < manual) con un aviso para revisarlo.
+ * Compartirlo con TODAS las empresas (global) exige consenso: 2+ empresas
+ * distintas que confirmaron el mismo mapa (adversarial-1 falla 6: un mapa mal
+ * sellado nacía global y se contagiaba a otros tenants con la misma huella).
  */
 async function guardarFormatoDerivado(
   args: { fingerprint: string; source: AdapterRow["source"]; nombre: string; config: AdapterConfig },
@@ -450,29 +480,30 @@ async function guardarFormatoDerivado(
   opts: { documento_id?: string; empresa_id?: string } | undefined,
 ): Promise<string | null> {
   const prueba = verificacion.tipo === "saldo" || verificacion.tipo === "total_banco" ? verificacion.tipo : null;
-  const compartible = args.config.plantilla === true || prueba != null;
-  if (!compartible && !opts?.empresa_id) return null; // sin dueño no se guarda una adivinanza
+  if (!opts?.empresa_id) return null; // sin dueño no se guarda nada
   const id = await saveAdapter({
     ...args,
-    empresaId: compartible ? null : opts!.empresa_id!,
+    empresaId: opts.empresa_id,
     confirmadoPor: prueba,
   });
-  if (!compartible) {
-    try {
-      const { recordOpsEvent } = await import("../ops/events");
-      await recordOpsEvent({
-        severity: "info",
-        source: "upload",
-        eventName: "parser_formato_nuevo",
-        summary: "Formato de planilla nuevo sin prueba (saldo ni totales del banco): queda PROVISORIO y privado de la empresa",
-        empresaId: opts?.empresa_id ?? null,
-        resourceType: "documento_subido",
-        resourceId: opts?.documento_id ?? null,
-        metadata: { fuente: args.source, layout: args.config.layout ?? "two_cols", adapter_id: id, verificacion: verificacion.tipo },
-      });
-    } catch {
-      /* el aviso nunca rompe la subida */
-    }
+  if (prueba) {
+    await promoverMapaGlobalSiHayConsenso(args.fingerprint, args.config);
+    return id;
+  }
+  try {
+    const { recordOpsEvent } = await import("../ops/events");
+    await recordOpsEvent({
+      severity: "info",
+      source: "upload",
+      eventName: "parser_formato_nuevo",
+      summary: "Formato de planilla nuevo sin prueba (saldo ni totales del banco): queda PROVISORIO y privado de la empresa",
+      empresaId: opts.empresa_id,
+      resourceType: "documento_subido",
+      resourceId: opts.documento_id ?? null,
+      metadata: { fuente: args.source, layout: args.config.layout ?? "two_cols", adapter_id: id, verificacion: verificacion.tipo },
+    });
+  } catch {
+    /* el aviso nunca rompe la subida */
   }
   return id;
 }
