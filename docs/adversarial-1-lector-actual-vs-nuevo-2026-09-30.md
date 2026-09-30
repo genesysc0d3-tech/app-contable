@@ -204,3 +204,147 @@ npx tsx <scratch>/adversarial-1/medir.ts [--sin-ia] [--solo=id]    # banco adver
 npx tsx <scratch>/adversarial-1/reales.ts                          # reales, sin red
 ```
 (El worktree temporal `lector-actual` se eliminó al terminar. Para volver a correr `medir.ts`, recréalo con `git worktree add --detach <scratch>/lector-actual origin/dev` y un symlink a node_modules.)
+
+---
+
+# Vuelta 2 — después de los arreglos (commits 92e0398, 9f6f6e9, cf718e9)
+
+Volví a medir lo mismo que en la vuelta 1, sobre el código arreglado: el worktree temporal de origin/dev (d0aab37), recreado y borrado al final, contra la rama nueva en cf718e9. Lo que corrí:
+
+- el banco de 50 del constructor;
+- mis 51 casos;
+- 16 casos NUEVOS dirigidos a los arreglos;
+- las 2 cartolas reales, solo con lector determinístico y sin red.
+
+Todo, además, con "nuevo + IA" usando DeepSeek por OpenCode (`solo-opencode.ts`): **0 llamadas a Fireworks redirigidas y 0 a otros hosts bloqueadas en las 4 corridas**. Hubo 118 llamadas reales a DeepSeek (50 + 52 + 16), y en las 2 cartolas reales hubo 0 intentos de red.
+
+## Resumen
+
+| Banco | Actual | Nuevo sin IA | Nuevo + IA |
+|---|---|---|---|
+| 50 del constructor | 38 OK · **5 silenciosos** · 3 atrapados · 4 rechazos falsos | 46 OK_PROBADO + 4 OK_PREGUNTA · **0 silenciosos** | Igual (0 disputas) |
+| Mis 51 (vuelta 1) | 27 OK · **3 silenciosos** · 16 capa 4 · 4 con faltantes visibles · 1 rechazo falso | **29 OK_PROBADO + 7 OK_PREGUNTA · 0 silenciosos** · 5 MAL_PREGUNTA · 9 capa 4 · 1 rechazo falso | 29 + 8 · **0 silenciosos** · 6 MAL_PREGUNTA · 8 capa 4 · 0 rechazos falsos (2 disputas) |
+| 16 nuevos (vuelta 2) | 8 OK · **5 silenciosos** · 2 capa 4 · 1 con faltantes visibles | 7 OK_PROBADO + 4 OK_PREGUNTA · **1 silencioso** · 4 MAL_PREGUNTA | 8 + 4 · **1 silencioso** · 3 MAL_PREGUNTA |
+| Reales (2) | 238 + 675 filas | **idénticas** (0 diferencias en fecha/monto/tipo/glosa) | (no se mandan a la IA) |
+
+Lecturas exactas en los 67 casos míos: actual 35 · nuevo 47 · nuevo+IA 49. **Silenciosos: actual 8 · nuevo 1 · nuevo+IA 1.**
+
+## Mis 51 casos: qué cambió respecto de la vuelta 1
+
+| caso | actual | nuevo vuelta 1 | **nuevo vuelta 2** | nuevo + IA v2 |
+|---|---|---|---|---|
+| `ripley_csv_puntoycoma` | ATRAPADO_CAPA4 | ATRAPADO_CAPA4 (-) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `csv_coma_montos_planos` | SILENCIOSO | SILENCIOSO (saldo) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `bchile_txt_tab` | ATRAPADO_CAPA4 | ATRAPADO_CAPA4 (-) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `glosa_partida_2_filas` | OK | SILENCIOSO (saldo) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `glosa_partida_con_num_doc` | SILENCIOSO | SILENCIOSO (saldo) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `celdas_desplazadas` | MAL_CON_FALTANTES_VISIBLES | PROBADO_CON_FALTANTES_VISIBLES (saldo) | **MAL_PREGUNTA (sin_comprobar)** | MAL_PREGUNTA (sin_comprobar) |
+| `saldo_grande_titulos_genericos` | ATRAPADO_CAPA4 | SILENCIOSO (saldo) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `saldo_grande_sin_titulos` | ATRAPADO_CAPA4 | SILENCIOSO (saldo) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+| `fila_informativa_saldo_no_cambia` | SILENCIOSO | SILENCIOSO (saldo) | **MAL_PREGUNTA (sin_comprobar)** | MAL_PREGUNTA (sin_comprobar) |
+| `varias_hojas_resumen_primero` | OK | OK_PROBADO (saldo) | **OK_PREGUNTA (sin_comprobar)** | OK_PREGUNTA (sin_comprobar) |
+| `varias_hojas_dos_meses` | MAL_CON_FALTANTES_VISIBLES | PROBADO_CON_FALTANTES_VISIBLES (saldo) | **MAL_PREGUNTA (sin_comprobar)** | MAL_PREGUNTA (sin_comprobar) |
+| `cargo_y_abono_misma_fila` | MAL_CON_FALTANTES_VISIBLES | PROBADO_CON_FALTANTES_VISIBLES (saldo) | **MAL_PREGUNTA (sin_comprobar)** | MAL_PREGUNTA (sin_comprobar) |
+| `saldo_medio_sin_titulos` | ATRAPADO_CAPA4 | SILENCIOSO (saldo) | **OK_PROBADO (saldo)** | OK_PROBADO (saldo) |
+
+Los otros 38 casos quedaron igual que en la vuelta 1.
+
+- **Los 7 silenciosos del nuevo en la vuelta 1 quedaron en 0.**
+  - Saldo alto invertido: ahora lee al peso y la dirección sale correcta.
+  - Glosa partida: lee 26/26.
+  - CSV: "1.500" y "05/09" se leen chilenos.
+  - Fila informativa: ahora "N filas no cuadran".
+- Los 4 "probados con faltantes" (celdas desplazadas, cargo y abono en la misma fila, dos hojas) quedaron sin sello y con alerta.
+- **Costo:** `varias_hojas_resumen_primero` bajó de OK_PROBADO a OK_PREGUNTA. Es una falsa alarma: la otra hoja es un resumen, pero "otra hoja con datos" le quita el sello. Es aceptable.
+- Siguen en capa 4 en ambas versiones: montos con signo en una columna (Falabella ×3), Debe/Haber, fechas "05-SEP-2026", fecha con hora, solo abonos sin columna de cargos, TXT de ancho fijo y `ripley_csv_signo_coma00`. No son regresión; son cobertura pendiente.
+
+## 16 casos nuevos dirigidos a los arreglos
+
+| # | caso | qué ataca | actual | nuevo sin IA (sello) | nuevo + IA (sello) | IA sola |
+|---|---|---|---|---|---|---|
+| 1 | `v2_saldo_inicial_como_abono` | 1ª fila '01/09/2026 / SALDO INICIAL' con el saldo inicial ESCRITO EN ABONOS (y en saldo). La 1ª fila nunca se comprueba con la ecuación. | SILENCIOSO | OK_PROBADO (saldo) | OK_PROBADO (saldo) | OK |
+| 2 | `v2_saldo_anterior_glosa_rara` | 1ª fila '01/09/2026 / SALDO ANT. CTA CTE' (abreviado) con el monto en Abonos y en Saldo. | SILENCIOSO | SILENCIOSO (saldo) | SILENCIOSO (saldo) | MAL |
+| 3 | `v2_total_dia_con_fecha_sin_saldo` | 'Total del día' CON fecha y SIN columna saldo (no hay 'saldo quieto' que lo delate). | OK | OK_PREGUNTA (sin_comprobar) | OK_PREGUNTA (sin_comprobar) | OK |
+| 4 | `v2_pago_total_igual_suma_dia_sin_saldo` | Movimiento REAL 'PAGO TOTAL TARJETA CREDITO' al final del día, cuyo monto es igual a la suma de los cargos del día; sin saldo. | OK | OK_PREGUNTA (sin_comprobar) | OK_PREGUNTA (sin_comprobar) | OK |
+| 5 | `v2_subtotal_dia_sin_palabra` | Subtotal del día con fecha, glosa '*** 03/09/2026 ***' (sin la palabra total), saldo quieto. | OK | OK_PROBADO (saldo) | OK_PROBADO (saldo) | ERROR |
+| 6 | `v2_celda_rara_ingles_en_col_chilena` | Montos texto '1.234.567' y UNA celda de abono en formato inglés ('250,000'); con saldo. | SILENCIOSO | MAL_PREGUNTA (sin_comprobar) alerta | MAL_PREGUNTA (sin_comprobar) | MAL |
+| 7 | `v2_celda_usd` (discutible) | Una celda de cargo 'USD 1.200' (en dólares) entre montos CLP; el saldo sí baja en CLP. | SILENCIOSO | MAL_PREGUNTA (sin_comprobar) alerta | MAL_PREGUNTA (sin_comprobar) | MAL |
+| 8 | `v2_csv_dias_1_al_12` | CSV ';' chileno con TODOS los días entre 01 y 12 (dd/mm indistinguible de mm/dd). | ATRAPADO_CAPA4 | OK_PROBADO (saldo) | OK_PROBADO (saldo) | OK |
+| 9 | `v2_csv_mmdd_real` | CSV ',' con fechas mm/dd/yyyy de verdad (hay días > 12 que lo prueban). | OK | OK_PROBADO (saldo) | OK_PROBADO (saldo) | MAL |
+| 10 | `v2_csv_comillas_puntoycoma_en_glosa` | CSV ';' con comillas, ';' DENTRO de la glosa y montos '$1.234.567'. | SILENCIOSO | OK_PROBADO (saldo) | OK_PROBADO (saldo) | OK |
+| 11 | `v2_csv_latin1_crlf_coma00` | CSV ';' en Latin-1 (Ñ/ó), fin de línea CRLF, montos '12.345,00'. | ATRAPADO_CAPA4 | OK_PROBADO (saldo) | OK_PROBADO (saldo) | OK |
+| 12 | `v2_fila_sin_fecha_con_monto_y_saldo` | Fila SIN fecha pero con cargo 2.380 y saldo (comisión pegada al movimiento anterior, parece 'continuación'). | MAL_CON_FALTANTES_VISIBLES | MAL_PREGUNTA (sin_comprobar) alerta | MAL_PREGUNTA (sin_comprobar) | MAL |
+| 13 | `v2_glosa_3_filas_al_inicio` | Los 2 primeros movimientos con glosa en 3 filas (bloque arranca 'roto'). | OK | MAL_PREGUNTA (sin_comprobar) alerta | OK_PROBADO (saldo) | OK |
+| 14 | `v2_sum_parcial` | Sin saldo; fila Total con =SUM(C4:C24) / =SUM(D4:D24) que deja FUERA las 3 últimas filas (el banco sumó mal). | OK | OK_PREGUNTA (sin_comprobar) | OK_PREGUNTA (sin_comprobar) | OK |
+| 15 | `v2_sum_completo` | Sin saldo; =SUM completo de Cargos y Abonos con títulos direccionales. | OK | OK_PROBADO (total_banco) | OK_PROBADO (total_banco) | OK |
+| 16 | `v2_orden_intradia_invertido` | Días en orden ascendente pero dentro de cada día lo más nuevo arriba (la ecuación falla fila a fila aunque todo esté bien leído). | OK | OK_PREGUNTA (sin_comprobar) alerta | OK_PREGUNTA (sin_comprobar) | OK |
+
+### Qué dicen los 16
+
+- **Aguantan bien:**
+  - **CSV chileno.** Días 1–12 salen dd/mm; el mm/dd real también sale bien porque la columna lo prueba. Las comillas con ";" dentro de la glosa, Latin-1 con CRLF y ",00" funcionan. Pasa de 2 capa 4 + 1 silencioso a 4 OK_PROBADO.
+  - **Celda rara** ("250,000" en una columna chilena, "USD 1.200"). Va sola al censo con alerta y sin sello; antes la inventaba en silencio.
+  - **"SALDO INICIAL"** escrito en la columna de abonos: ya no lo lee como movimiento.
+  - **Subtotal del día sin la palabra "total"**: lo reconoce por estructura y ya no genera el falso "Faltan 5" que marcaba el actual.
+  - **"Total del día" con fecha y sin saldo**, y un "PAGO TOTAL TARJETA" real que iguala la suma del día: los lee bien y pide confirmar (sin prueba no hay sello).
+  - **SUM**: el completo sella total_banco. El parcial NO sella.
+  - **Fila sin fecha con monto y saldo**: la avisa con alerta y no la pega a la glosa.
+- **Queda un silencioso:** `v2_saldo_anterior_glosa_rara`. La 1ª fila "01/09/2026 | SALDO ANT. CTA CTE" con el saldo inicial en Abonos se lee como **un abono de $4 M** y la cartola sale sellada **"El saldo corrido cuadra al peso en todas las filas"**. También pasa con IA. El actual tampoco la veía (también quedaba silencioso), así que no es regresión. Pero es un error con sello falso.
+- **Regresión visible (no silenciosa):** `v2_glosa_3_filas_al_inicio`. El actual la leía 26/26. El nuevo lee 24/26, con alerta "2 filas con fecha y plata que no leyó". Con IA sí lee 26/26 con sello.
+- **Falsa alarma:** `v2_orden_intradia_invertido`. Todo está bien leído, pero sale la alerta "5 de 29 filas no cuadran (¿cartola filtrada?)". Con alerta se oculta "Se ve bien" (cf718e9) y el cliente tiene que escribir su saldo final. No se pierde nada, pero la fricción es real para bancos que ordenan así dentro del día.
+
+## Cartolas reales (solo determinístico, sin red)
+
+| Archivo | Filas actual / nuevo | ¿Idénticas? | Sello nuevo (v1 → v2) |
+|---|---|---|---|
+| santander.xlsx | 238 / 238 | **sí** | saldo (falso) → **sin_comprobar con alerta: "32 de 237 filas no cuadran (¿cartola filtrada o incompleta?)"**. Correcto: es lo que los datos dicen |
+| Cartola N°02 - 11 2025.xlsx | 675 / 675 | **sí** | saldo → saldo ("cuadra al peso en todas las filas") |
+
+Sin regresión en reales. El sello de santander ahora dice la verdad, aunque el cliente va a ver una alerta en esa cartola, que viene filtrada.
+
+## Latencia y costo
+- Lectores determinísticos: 2–30 ms por cartola, sin cambio.
+- DeepSeek:
+  - Banco del constructor: mediana 7,4 s, máx. 20 s, con **10/50 timeouts**. Es peor que en la vuelta 1 (5/50); se ve como variación del servicio, porque no depende del código.
+  - Mis 51: mediana 5,3 s, p90 11,6 s, 4 timeouts.
+  - 16 nuevos: mediana 5,3 s, máx. 9,2 s.
+- **Ahora la IA solo se consulta cuando el lector no tiene prueba** (≤2 por libro). En el banco del constructor eso significa 0 consultas en las 46 cartolas con sello. En nuevo+IA la mediana por cartola baja a ~4 ms y el peor caso medido fue 5,1 s.
+- Aporte de la IA en esta vuelta:
+  - `correlativo_sin_titulos`: de rechazo falso a OK_PREGUNTA.
+  - `v2_glosa_3_filas_al_inicio`: de MAL_PREGUNTA a OK_PROBADO.
+  - `bandera_debe_haber`: de capa 4 a MAL_PREGUNTA.
+  - No empeoró ninguno.
+
+## Veredicto vuelta 2
+
+**Listo para producción con el flag de IA APAGADO, con 1 arreglo chico antes (P1), y el resto como deuda anotada.**
+
+- Frente al actual es claramente mejor: silenciosos 8 → 1 en mis 67 casos y 5 → 0 en los 50 del constructor. Lee exacto en 12 casos más, las cartolas reales salen idénticas, y los sellos ahora solo aparecen con prueba al peso.
+- El único silencioso que queda también existe en el actual. La diferencia es que el nuevo le pone **sello "saldo"**, y en la mesa eso pesa más que el silencio del actual. Por eso es bloqueante, pero se arregla en pocas líneas.
+
+### Qué falta (ordenado)
+
+1. **P1 (bloqueante, chico): la PRIMERA fila leída nunca se comprueba y aun así se sella "todas las filas".**
+   - Dónde: `saldo-cuadre.ts:138` (`if (prev === null)`: la primera fila con saldo abre la cadena sin verificar su monto) y `juez-banco.ts:362` (`todas = … revisadas === leidas - 1` acepta que la 1ª quede sin revisar).
+   - Cómo reproducir: `casos2.ts` → `v2_saldo_anterior_glosa_rara`.
+   - Arreglo sugerido: si la 1ª fila tiene |monto| = |saldo| (o su saldo − monto = 0), no sellar. O exigir el saldo inicial (resumen impreso, o la cartola anterior encadenada por cuenta) para que la 1ª fila cuente como revisada; si no, sello `saldo` con la 1ª fila mostrada como "no comprobada". Ampliar además el reconocimiento de "saldo anterior" a abreviaturas ("SALDO ANT.", "SDO. INICIAL").
+2. **P2: glosa partida en 2+ filas seguidas al inicio del bloque.**
+   - Dónde: `heuristic.ts:125-136` (`extenderBloqueHaciaArriba` exige que la fila anterior a una continuación sea un movimiento, así que dos continuaciones seguidas cortan la subida).
+   - Hoy queda visible con alerta, así que no bloquea; es una regresión frente al actual en ese formato.
+3. **P3: orden dentro del día invertido → falsa alerta "¿cartola filtrada?".**
+   - Arreglo sugerido: probar la ecuación permitiendo reordenar dentro de cada fecha antes de concluir "no cierra".
+4. **P4: SUM parcial** no sella (bien), pero el detalle dice "no trae saldo ni totales del banco", y eso es falso. Debería decir "la fórmula del banco no cubre todas las filas" (`juez-banco.ts:256-270`).
+5. **P5 (cobertura, no seguridad):** formatos que ambas versiones mandan a capa 4. Los más comunes en Chile son el monto con signo en una columna (Falabella) y las fechas "05-SEP-2026".
+6. **IA de estructura:** dejarla apagada (`LECTOR_ESTRUCTURA_IA` sin setear) en el primer despliegue.
+   - Aporte real pero chico: 3 casos en 117.
+   - Timeouts de 20 s en 8–20% de las llamadas según la hora.
+   - Ya no puede empeorar un sello (solo entra sin prueba), así que prenderla después es de bajo riesgo.
+
+### Cómo reproducir la vuelta 2
+```
+cd <worktree nuevo>
+npx tsx scripts/comparar-lector-deepseek.ts
+npx tsx <scratch>/adversarial-1/medir.ts [--sin-ia]          # mis 51 (necesita <scratch>/lector-actual = origin/dev)
+npx tsx <scratch>/adversarial-1/medir.ts --v2 [--sin-ia]     # 16 casos dirigidos (casos2.ts)
+npx tsx <scratch>/adversarial-1/reales.ts                    # reales, sin red
+```

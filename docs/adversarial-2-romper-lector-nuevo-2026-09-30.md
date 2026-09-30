@@ -223,3 +223,97 @@ Los tests de reproducción quedaron en `/private/tmp/claude-501/-Users-take-Desk
 4. **A1:** descartes no legítimos → sin sello.
 5. **A2–A4:** sin "Se ve bien" con alerta, sin revelar el esperado, Check no confirma con alerta.
 6. **A5** antes de prender `LECTOR_ESTRUCTURA_IA`.
+
+---
+
+# Vuelta 2 (sobre `cf718e9`: commits 92e0398, 9f6f6e9, cf718e9)
+
+Re-corrí todas mis reproducciones de la vuelta 1 y ataqué lo nuevo. Los tests nuevos están en `scratchpad/adversarial-2/tests-v2/` (`vuelta2.test.ts`, `diag-santander.test.ts` y las repros de la vuelta 1 con el mock ajustado). En el worktree no quedó nada mío aparte de este doc.
+
+**Red e IA:** 0 llamadas de red (nada a OpenCode ni a Fireworks). Las cartolas reales solo pasaron por lectores determinísticos.
+
+**Suite:**
+- `npx vitest run`: **187 archivos, 2188 tests OK, 5 skipped, exit 0**.
+- `npx tsc --noEmit`: solo el mismo error viejo de `.next/types` (fuera del diff); `src/` limpio.
+
+## ¿Cerrados de verdad o tapados?
+
+| # | Veredicto | Evidencia |
+|---|---|---|
+| C1 sello blando | **CERRADO** [V] | Mapa invertido con saldo $50 M: `sin_comprobar` y alerta "19 de 19 no cuadran". Por el orquestador (ADV2-1b) elige la orientación CORRECTA (15/15 entradas) y el mapa queda de la empresa, no global. ADV2-2 (montos texto sucios) → `monto_ambiguo` + alerta. |
+| C1 en datos REALES | **CERRADO, y confirma que el sello viejo mentía** [V] | `santander.xlsx` (238 abonos, flag "A" en todas; es un export **filtrado solo abonos**) tenía sello `saldo` en la vuelta 1 con 32/237 filas sin cuadrar (13 % < 20 %). Ahora: `sin_comprobar`, "32 de 237 filas no cuadran (¿cartola filtrada?)". Es verdad: cada diferencia es un cargo que no está en el archivo. La Cartola N°02 sigue `saldo` (cierra al peso). |
+| C2 palabra en otra columna | **CERRADO** [V] | "TOTAL CHILE SPA" y "TRASPASO SALDO DISPONIBLE" leídas (14/14) con sello `saldo`. |
+| C3 una celda → capa 4 | **CERRADO** [V] | "107,000" → capa 3, 14 leídas + 1 `monto_ambiguo` con alerta. Pie "Tasa 1.50" → capa 3, 15 leídas (ver N6). |
+| A1 pérdidas no bloquean sello | **CERRADO** [V] | Fecha imposible + cargo y abono → `sin_comprobar` alerta con el detalle por motivo. Las filas arriba del bloque (skip de más) → `sin_leer` (V2-6). |
+| A2 "Se ve bien" con alerta | **CERRADO** [L] | `seVeBienPermitido` en la UI **y** en el server (`lectura-actions.ts:71-74`), con el cuadre leído de la DB; también bloquea con pérdidas u otras hojas. |
+| A3 revelar el esperado | **CERRADO** [L] | `mensajeSaldoNoCuadra()` sin montos. Queda: si la cartola no trae saldo inicial ni anterior, el cliente tipea inicial y final a la vez (se puede cuadrar a mano con los totales de la mesa); es menor. |
+| A4 aprobar en bloque confirma | **TAPADO a medias** [L] | Ver N3. |
+| A5 enmascarado de títulos | **CERRADO** [V] | P1 (titular/RUT/cuenta) y P2 (continuación) salen enmascarados. Una fila real de títulos sigue en claro (`esEncabezadoClaro`, diccionario sin dígitos). |
+| M1 SUM parcial o vacía | **CERRADO** [V] | Parcial y vacía → `sin_comprobar`; con cobertura completa → `total_banco`. |
+| M2 lectura laxa | **CERRADO** [V] | Texto sucio con dígitos → `monto_ambiguo`; "1,500 CR" = 1500 y "1.500 DB" = −1500. |
+| M3 comentario de globales | **CERRADO** (documentado) | — |
+| M4 IA siempre | **CERRADO** [L] | Solo sin prueba y ≤2 consultas por libro. |
+| M5 orden de un solo día | **CERRADO** [L] | Decide por la ecuación. |
+
+## Hallazgos NUEVOS de la vuelta 2
+
+### N1 — CRÍTICO: el "consenso" de 2 empresas se fabrica SIN prueba y envenena a otros tenants en silencio
+- **Dónde:** `adapter-store.ts` → `hayConsensoParaGlobal` cuenta **cualquier** `estado = confirmado`, incluido `cliente` ("Se ve bien") y `check`. `promoverMapaGlobalSiHayConsenso` se dispara desde `confirmarLecturaCartola` y `confirmarMapaPorCheck`.
+- **Guardas que faltan:** no exige prueba estricta (saldo o total del banco), ni dueños o usuarios distintos, ni cuentas bancarias distintas (`cuenta.huella`).
+- **Parte 1 [V] (V2-5):** dos empresas del mismo usuario (algo normal en multiempresa) con el mismo mapa **invertido**, confirmado una por `cliente` y otra por `check`, dan `hayConsensoParaGlobal = true`. Una cartola sin columna saldo (23 de 29 en prod) no tiene alerta, así que "Se ve bien" está permitido en las dos.
+- **Parte 2 [V] (V2-7), la víctima:** otra empresa, sin mapa propio y con la misma huella de encabezado, recibe el global invertido.
+  - Resultado: capa 0, **3 entradas de 9 ventas**, sello `sin_comprobar` **sin alerta**.
+  - `mapa = {estado: confirmado, nuevo: false}`, así que `necesitaConfirmacion` da **false**: nunca se le pide mirar.
+  - Los títulos de su hoja dicen "Cargos | Abonos" al revés del mapa y nadie lo nota.
+- **Arreglo:**
+  1. El consenso solo cuenta confirmaciones con prueba **estricta** (`saldo` o `total_banco`), de ≥2 empresas con **distinto dueño** (cuenta o usuario) y **distinta** `cuenta.huella`.
+  2. Al aplicar un global, si los títulos de la hoja contradicen su dirección (`direccionPorTitulos` al revés) → alerta y no usarlo.
+  3. Un global aplicado **sin prueba en esta lectura** debe pedir confirmación (`nuevo: true` para esa empresa).
+
+### N2 — ALTO: "subtotal por estructura" bota ventas reales como resumen LEGÍTIMO (escondidas)
+- **Dónde:** `apply.ts` → `esSubtotalPorEstructura`.
+- **Con saldo, pero el banco imprime el saldo de CIERRE DEL DÍA en cada fila [V] (V2-1):** la 2ª venta igual a la 1ª del día cumple "saldo quieto + monto = suma del día" y se marca `resumen, legitimo:true, subtotal`.
+  - Se botaron 3 de 9 ventas.
+  - Sale alerta ("4 de 5 no cuadran"), pero esas filas **no aparecen como faltantes** en el cuadre: el cliente no las puede agregar.
+- **Sin saldo [V] (V2-1b):** una transferencia de $25.000 con "TOTAL CHILE SPA" en otra columna, el mismo día que dos compras de $10.000 + $15.000, se bota como resumen legítimo.
+  - Es el camino "palabra + estructura": la palabra vuelve a entrar como desempate.
+  - Sin columna saldo no hay alerta, así que queda escondida.
+- **Arreglo:**
+  - Un subtotal detectado por estructura debe quedar `legitimo:false` (visible, "¿esto es un subtotal?"), salvo que además esté fuera de la glosa y sin comercio, o que el banco lo marque con fórmula.
+  - Nunca contar "TOTAL" en columnas que no son la glosa. Exigir saldo quieto **y** que la fila siguiente mueva el saldo desde ahí.
+
+### N3 — MEDIO: "fila a fila" se esquiva con bloque + 1
+- **Dónde:** `aprobarPropuesta` llama a `confirmarMapaPorCheck`, y este solo mira el estado final de todas las propuestas.
+- **Cómo:** "Aprobar cartola" en bloque (no confirma) y después aprobar a mano la única fila que quedó pendiente → confirma el mapa. Sumado a N1, también alimenta el consenso. [L]
+- **Arreglo:** contar como mirada solo las filas aprobadas individualmente (auditoría o un flag en la propuesta), por ejemplo ≥ 80 % o todas, o no usar Check para confirmar.
+
+### N4 — MEDIO: cartola filtrada "solo abonos" (caso típico massDTE) queda en alerta PERPETUA
+- **Caso:** santander real, arriba.
+- **Por qué no sale de la alerta:**
+  - El sello estricto es honesto, pero `alerta:true` bloquea "Se ve bien" y la confirmación por Check.
+  - El saldo final que teclee el cliente nunca cuadra, porque faltan los cargos.
+  - "Corregir columnas" no lo arregla.
+- **Efecto:** cada subida de este formato muestra "Algo no nos calzó" sin salida. Advertir sí, bloquear no, pero es ruido permanente.
+- **Arreglo:** reconocer el patrón "una sola dirección + todos los saltos de saldo explicables por movimientos ausentes del otro signo" → `sin_comprobar` **sin** alerta, con el detalle "cartola filtrada: solo abonos". Así se permite "Se ve bien", pero no el sello.
+
+### N5 — MEDIO: CSV en UTF-16 (Excel "Texto Unicode") sigue con el bug viejo
+- **Dónde:** `libro.ts` → `esTextoPlano` ve bytes 0x00 y lo trata como binario.
+- **[V] (V2-3):** el archivo se lee con `cellDates`/no-raw: "05/09/2026" pasa a **9 de mayo** y "1.500" a **1,5** (se redondea a 2).
+- **Mismo resultado que dev:** no es regresión, pero el arreglo de CSV no lo cubre.
+- **Arreglo:** detectar el BOM FF FE / FE FF (o un patrón de 0x00 alternados), decodificar a string y leerlo con `type: "string", raw: true`.
+
+### N6 — BAJO
+- Una línea de pie de página (sin fecha, solo texto) tras el último movimiento se **pega a su glosa** (V2-2 [V]: "Transf de cliente 12 Este documento no constituye comprobante…"). Esa glosa viaja al clasificador y puede terminar en la boleta. Arreglo: solo pegar si la fila siguiente vuelve a ser un movimiento, o limitar a la glosa de filas intermedias.
+- El pie "Tasa 1.50" en la columna de plata cuenta como "1 fila con plata y sin fecha" y la cartola queda en alerta para siempre (misma familia que N4).
+- `formatoFechaDeColumna`: un dedazo "06/13/2026" en una cartola de días 1–12 pasa la columna a mm/dd y termina en capa 4. Dev hace lo mismo [V-dev], así que no es regresión. Sugerencia: pedir ≥2 celdas mm/dd o ≥20 %.
+- `saldoComoMonto`: un depósito de apertura con glosa "SALDO INICIAL …" en una cuenta vacía (monto = saldo) se esconde como resumen. Rarísimo.
+
+## Veredicto vuelta 2: **NO está listo para producción todavía**
+
+Lo que cerraron está bien cerrado: el sello estricto no lo pude hacer mentir, y la prueba en datos reales muestra que el sello viejo sí mentía en santander.
+
+Bloquean:
+- **N1** (CRÍTICO): envenenamiento cross-tenant silencioso vía consenso sin prueba. Es un cambio chico: contar solo `saldo`/`total_banco`, exigir dueños y cuentas distintas, y alertar si los títulos contradicen al global.
+- **N2** (ALTO): ventas reales escondidas como "subtotal legítimo".
+
+Con N1 y N2 arreglados, y N3/N4 al menos atenuados (N4 es ruido, no plata), mi veredicto pasaría a "listo con el flag de IA apagado". N5 y N6 pueden ir después. **La migración sigue sin aplicar:** respaldar `parser_adapters` antes.
