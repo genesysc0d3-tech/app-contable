@@ -1,0 +1,2720 @@
+[
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds000:nuevo_core_ingles_fechas_reales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró a un nuevo core bancario internacional y su nuevo export viene con encabezados en inglés y la fecha como celda de fecha real.",
+  "variante": "bice-estado-de-cuenta~ds000"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_indice_y_sucursal"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "vacia",
+    "titulo": "N°",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "SUCURSAL",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La nueva versión para empresas agrega un correlativo y la sucursal, y mueve el documento más a la derecha.",
+  "variante": "bice-estado-de-cuenta~ds001"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds002:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "cargo",
+    "titulo": "MONTO",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema unifica cargos y abonos en una sola columna MONTO firmada, con débitos negativos.",
+  "variante": "bice-estado-de-cuenta~ds002"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_dec"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_dec"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:export_csv_nuevo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco estrenó la opción de exportar a CSV con separador punto y coma y fechas día-mes-año.",
+  "variante": "bice-estado-de-cuenta~ds003"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds004:headers_resumen_y_saldo_inicial"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo estado de cuenta imprime un bloque superior con resumen y saldo inicial antes de la tabla.",
+  "variante": "bice-estado-de-cuenta~ds004"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ],
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds005:totales_subtotales_y_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El rediseño agregó subtotales por día, fila de total con fórmulas y un resumen final en la misma hoja.",
+  "variante": "bice-estado-de-cuenta~ds005"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds006:solo_abonos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El portal ahora ofrece una vista 'solo abonos' para conciliación de ingresos, devolviendo la misma estructura pero filtrada.",
+  "variante": "bice-estado-de-cuenta~ds006"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "HORA",
+    "rol": "hora"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "GLOSA",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds007:glosa_partida_con_hora"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "hora",
+    "titulo": "HORA",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "GLOSA",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core separa glosas multilínea en dos filas e incluye la hora de la transacción como columna nueva.",
+  "variante": "bice-estado-de-cuenta~ds007"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd",
+    "span": 2
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds008:legacy_xls_antiguo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Algunas sucursales siguen con el export antiguo en .xls, con celdas combinadas y montos escritos con signo $.",
+  "variante": "bice-estado-de-cuenta~ds008"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n",
+    "vacio": "guion"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds009:iso_fechas_guiones_e_instrucciones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo export internacionalizado usa fechas ISO, deja guiones donde no hay monto y adjunta una hoja de instrucciones al final.",
+  "variante": "bice-estado-de-cuenta~ds009"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds100:filtro_solo_abonos_y_total"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "abono",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta solo quiere cuadrar sus ingresos: filtra la cartola para ver únicamente abonos y agrega una fila TOTAL con fórmula de suma al final.",
+  "variante": "bice-estado-de-cuenta~ds100"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds101:hoja_resumen_y_fecha_ddmm"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "RESUMEN",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copia la cartola a una hoja nueva, agrega una hoja RESUMEN al inicio y reformatea la FECHA a dd/mm/yyyy porque 'así la entiende mejor'.",
+  "variante": "bice-estado-de-cuenta~ds101"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "NRO.DOC",
+    "rol": "doc"
+   },
+   {
+    "titulo": "DETALLE",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds102:columnas_minimas_renombradas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "CODIGO",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "doc",
+    "titulo": "NRO.DOC",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "DETALLE",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta borra la columna CODIGO (no sabe qué significa) y renombra DOCUMENTO y DESCRIPCION a nombres cortos que ella usa.",
+  "variante": "bice-estado-de-cuenta~ds102"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds103:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "MONTO",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta unifica CARGOS y ABONOS en una sola columna MONTO con signo para leer el flujo neto y elimina el bloque de SALDO INICIAL/FINAL del pie porque 'le estorba'.",
+  "variante": "bice-estado-de-cuenta~ds103"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_dec"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_dec"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds104:csv_punto_y_coma_con_textos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guarda el archivo como CSV (separador ;) desde Excel; los montos quedan como texto con coma decimal y la fecha como dd/mm/yyyy.",
+  "variante": "bice-estado-de-cuenta~ds104"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   }
+  ],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds105:totales_arriba_y_abajo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "RESUMEN",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta pega un mini-resumen arriba con los totales de cargos y abonos (para 'ver de un vistazo') y además deja una fila TOTAL abajo de la tabla.",
+  "variante": "bice-estado-de-cuenta~ds105"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "extras": {
+   "subtotal_dia": true,
+   "glosa_partida": true,
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds106:subtotales_diarios_y_glosa_partida"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "fecha",
+    "titulo": "SUBTOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta usa la función 'Subtotales' de Excel agrupando por fecha (inserta filas SUBTOTAL y filas vacías entre grupos) y una glosa larga quedó partida en dos filas al editar.",
+  "variante": "bice-estado-de-cuenta~ds106"
+ },
+ {
+  "id": "bice-estado-de-cuenta",
+  "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "CARGOS",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "OBS",
+    "rol": "comentario"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO INICIAL",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_INICIAL}",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   10,
+   200
+  ],
+  "mutaciones": [
+   "ds107:reordenar_glosa_y_orden_desc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "OBS",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta mueve la DESCRIPCION al inicio para leer mejor, ordena la cartola de la fecha más reciente a la más antigua y agrega una columna OBS para sus notas al final.",
+  "variante": "bice-estado-de-cuenta~ds107"
+ }
+]

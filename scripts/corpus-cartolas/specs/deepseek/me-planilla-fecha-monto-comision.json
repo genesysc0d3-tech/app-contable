@@ -1,0 +1,1699 @@
+[
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Importe",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Nº Documento",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds000:core_nuevo_empresas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "doc",
+    "titulo": "Nº Documento",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Importe",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Al migrar a un core nuevo, la versión empresas exige RUT y número de documento, el banco normaliza la fecha a dd/mm/yyyy y rebautiza 'Monto' como 'Importe'.",
+  "variante": "me-planilla-fecha-monto-comision~ds000"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Fecha Valor",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds001:fecha_valor_y_subtotales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "fecha2",
+    "titulo": "Fecha Valor",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema agrega la fecha valor para conciliación, combina el encabezado del período y cierra el mes con subtotales por día y una fila total.",
+  "variante": "me-planilla-fecha-monto-comision~ds001"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "otro_texto"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds002:empresas_cargo_abono_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión empresas separa cargos y abonos en columnas propias, incorpora el saldo acumulado, elimina la comisión del detalle y agrega un resumen al pie.",
+  "variante": "me-planilla-fecha-monto-comision~ds002"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:ingles_csv_semicolon"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyymmdd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El proveedor del core entrega un CSV masivo con títulos en inglés, fechas en formato ISO y separador punto y coma (locale español de Chile).",
+  "variante": "me-planilla-fecha-monto-comision~ds003"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds004:portada_resumen_sucursal"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El export para la red de sucursales antepone una hoja Resumen, parte con el saldo inicial, ordena de más reciente a más antigua y marca la sucursal en cada fila.",
+  "variante": "me-planilla-fecha-monto-comision~ds004"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds005:monto_unico_con_tipo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_y_bandera",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "flag",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El sistema de conciliación junta cargo y abono en un solo monto con bandera C/A, mueve el tipo a la primera columna y resume arriba con los totales.",
+  "variante": "me-planilla-fecha-monto-comision~ds005"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds006:glosa_multilinea"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core parte la glosa en dos líneas (recarga y detalle), deja el monto como texto con separador de miles y rellena las celdas vacías con guiones.",
+  "variante": "me-planilla-fecha-monto-comision~ds006"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds007:xls_antiguo_sin_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Algunas sucursales siguen en el sistema legado que exporta .xls sin fila de títulos, con columna índice y fechas como serial de Excel.",
+  "variante": "me-planilla-fecha-monto-comision~ds007"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   4,
+   9
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds008:mensual_solo_abonos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "pocas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión de resumen mensual filtra solo abonos, trae pocas filas, suma con fórmula al pie y agrega un resumen debajo de la tabla.",
+  "variante": "me-planilla-fecha-monto-comision~ds008"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd.mm.yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "s",
+    "z": "#,##0",
+    "fmt": "plano"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "formato": "csv",
+  "csv_sep": ",",
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds009:csv_comas_ceros_vacios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ","
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_cero",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd.mm.yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para integrarse con otro sistema, el banco exporta CSV con coma, escribe los montos de cero como texto y rellena las celdas vacías con cero.",
+  "variante": "me-planilla-fecha-monto-comision~ds009"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds100:borra_comision_y_totaliza"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta no usa la comisión y quiere el total del mes pegado abajo para conciliar la cartola.",
+  "variante": "me-planilla-fecha-monto-comision~ds100"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds101:filtra_abonos_y_al_reves"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta filtra solo los abonos (entradas) y ordena la cartola de más reciente a más antigua.",
+  "variante": "me-planilla-fecha-monto-comision~ds101"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "F.",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Valor",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "otro_texto"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds102:agrega_detalle_y_abrevia_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "F.",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Valor",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega una columna de notas propias y acorta los títulos para que quepa al imprimir.",
+  "variante": "me-planilla-fecha-monto-comision~ds102"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds103:todo_texto_con_puntos_de_miles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copió la cartola desde el correo y la pegó como texto: las fechas y los montos quedaron como texto con separador de miles.",
+  "variante": "me-planilla-fecha-monto-comision~ds103"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds104:csv_punto_y_coma_con_filas_vacias"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guardó el archivo como CSV con separador de punto y coma (locale chileno) y quedaron filas vacías del borrador original.",
+  "variante": "me-planilla-fecha-monto-comision~ds104"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds105:resumen_en_hoja_aparte"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta creó una hoja resumen al inicio del libro y además pegó un bloque de resumen arriba de la tabla.",
+  "variante": "me-planilla-fecha-monto-comision~ds105"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "mutaciones": [
+   "ds106:indice_y_subtotales_diarios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta enumeró las filas con un correlativo y agrupó por día con subtotales para el control diario de la caja.",
+  "variante": "me-planilla-fecha-monto-comision~ds106"
+ },
+ {
+  "id": "me-planilla-fecha-monto-comision",
+  "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+  "hoja": "Hoja1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Comisión",
+    "rol": "comision",
+    "z": "#,##0"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   400000
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   600,
+   1005
+  ],
+  "movs": [
+   40,
+   340
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds107:monto_primero_y_xls_antiguo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta movió la columna Monto al inicio para revisarla primero y guardó el archivo en formato .xls antiguo.",
+  "variante": "me-planilla-fecha-monto-comision~ds107"
+ }
+]

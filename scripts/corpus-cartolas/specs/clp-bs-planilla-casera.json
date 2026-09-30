@@ -1,0 +1,62 @@
+{
+ "id": "clp-bs-planilla-casera",
+ "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+ "origen": "real",
+ "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+ "hoja": "CLP-Bs 08-26 VZLA",
+ "arriba": [
+  []
+ ],
+ "titulos": false,
+ "columnas": [
+  {
+   "titulo": "",
+   "rol": "dia_num"
+  },
+  {
+   "titulo": "",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "dd/mm/yyyy"
+  },
+  {
+   "titulo": "",
+   "rol": "monto",
+   "celda": "n",
+   "z": "#,##0.00"
+  },
+  {
+   "titulo": "",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "",
+   "rol": "tasa",
+   "z": "#,##0.00000"
+  },
+  {
+   "titulo": "",
+   "rol": "bs_neg",
+   "z": "#,##0.00000"
+  }
+ ],
+ "ancho_vacio": 70,
+ "orden": "asc",
+ "direcciones": "solo_entradas",
+ "pie": [
+  {
+   "tipo": "sum",
+   "rol": "monto",
+   "gap": 0,
+   "prob": 0.5
+  }
+ ],
+ "filas_vacias_al_final": [
+  0,
+  900
+ ],
+ "movs": [
+  60,
+  400
+ ]
+}

@@ -1,0 +1,76 @@
+{
+ "id": "cartola-simple-fecha-tipo-saldo",
+ "familia": "Cartola simple Fecha | Descripcion | Monto | Tipo (Abono/Cargo) | Saldo (+ hoja README)",
+ "origen": "real",
+ "evidencia": "2 archivos reales de prueba (10 filas) con hoja de instrucciones; nuevo: saldo no cierra",
+ "hoja": "Cartola Marzo 2025",
+ "hojas_extra": [
+  {
+   "nombre": "README - Instrucciones",
+   "posicion": "despues",
+   "tipo": "readme",
+   "filas": [
+    [
+     "CARTOLA DE PRUEBA"
+    ],
+    [],
+    [
+     "QUÉ PROBAR CON ESTE ARCHIVO:"
+    ],
+    [
+     "1",
+     "Texto de instrucciones ficticio"
+    ],
+    [
+     "2",
+     "Otro texto ficticio"
+    ]
+   ]
+  }
+ ],
+ "arriba": [],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd/mm/yyyy"
+  },
+  {
+   "titulo": "Descripcion",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Monto",
+   "rol": "monto",
+   "celda": "n",
+   "z": "#,##0"
+  },
+  {
+   "titulo": "Tipo",
+   "rol": "flag",
+   "flag": {
+    "entrada": "Abono",
+    "salida": "Cargo"
+   }
+  },
+  {
+   "titulo": "Saldo",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "#,##0"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "ambas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  0
+ ],
+ "movs": [
+  8,
+  40
+ ]
+}

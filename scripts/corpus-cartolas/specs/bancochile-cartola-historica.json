@@ -1,0 +1,119 @@
+{
+ "id": "bancochile-cartola-historica",
+ "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+ "origen": "real",
+ "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+ "hoja": "CartolaHistorica",
+ "arriba": [
+  [],
+  [
+   " Cartola de cuenta corriente"
+  ],
+  [
+   "Empresa",
+   "{EMPRESA}",
+   "",
+   "Ejecutivo",
+   "{EJECUTIVO}"
+  ],
+  [
+   "N° de cuenta",
+   "{CUENTA}",
+   "",
+   "Periodo",
+   "{PERIODO}"
+  ],
+  [
+   "Oficina",
+   "{OFICINA}"
+  ],
+  [],
+  [],
+  [
+   "Resumen del Periodo"
+  ],
+  [
+   "Periodo",
+   "Saldo Anterior",
+   "Total Cargos y Cheques",
+   "Total Abonos y Depósitos",
+   "Saldo Contable Final del Periodo"
+  ],
+  [
+   "{PERIODO}",
+   "{SALDO_INICIAL|cl}",
+   "{TOTAL_CARGOS|cl}",
+   "{TOTAL_ABONOS|cl}",
+   "{SALDO_FINAL|cl}"
+  ],
+  [],
+  [],
+  [
+   "Retenciones",
+   "Saldo Disponible"
+  ],
+  [
+   "0",
+   "{SALDO_FINAL|cl}"
+  ],
+  [],
+  [],
+  [
+   "Movimientos cuenta corriente"
+  ]
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd/mm/yyyy",
+   "span": 2
+  },
+  {
+   "titulo": "Sucursal",
+   "rol": "sucursal",
+   "span": 3
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa",
+   "span": 2
+  },
+  {
+   "titulo": "N° Documento",
+   "rol": "doc",
+   "span": 2
+  },
+  {
+   "titulo": "Cheques y otros cargos",
+   "rol": "cargo",
+   "celda": "s",
+   "fmt": "cl"
+  },
+  {
+   "titulo": "Depósitos y Abono",
+   "rol": "abono",
+   "celda": "n",
+   "z": "#,##0"
+  },
+  {
+   "titulo": "Saldo diario",
+   "rol": "saldo",
+   "celda": "s",
+   "fmt": "cl"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "ambas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  2
+ ],
+ "movs": [
+  40,
+  700
+ ]
+}

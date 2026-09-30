@@ -1,0 +1,62 @@
+{
+ "id": "bancoestado-fechas-compactas",
+ "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+ "origen": "incidente",
+ "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+ "hoja": "Movimientos",
+ "arriba": [
+  [
+   "CUENTARUT"
+  ],
+  [
+   "{TITULAR}"
+  ],
+  [
+   "Cuenta: {CUENTA}"
+  ],
+  []
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "yyyymmdd"
+  },
+  {
+   "titulo": "N° Operación",
+   "rol": "doc"
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Cargos",
+   "rol": "cargo",
+   "celda": "n"
+  },
+  {
+   "titulo": "Abonos",
+   "rol": "abono",
+   "celda": "n"
+  },
+  {
+   "titulo": "Saldo",
+   "rol": "saldo",
+   "celda": "n"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "ambas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  0
+ ],
+ "movs": [
+  20,
+  200
+ ]
+}

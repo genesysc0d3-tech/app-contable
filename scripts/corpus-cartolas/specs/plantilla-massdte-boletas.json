@@ -1,0 +1,37 @@
+{
+ "id": "plantilla-massdte-boletas",
+ "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+ "origen": "real",
+ "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+ "hoja": "Boletas",
+ "arriba": [],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "m/d/yy"
+  },
+  {
+   "titulo": "Glosa",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Monto",
+   "rol": "monto",
+   "celda": "n"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "solo_entradas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  0
+ ],
+ "movs": [
+  3,
+  250
+ ]
+}

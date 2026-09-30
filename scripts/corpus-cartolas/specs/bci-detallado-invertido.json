@@ -1,0 +1,47 @@
+{
+ "id": "bci-detallado-invertido",
+ "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+ "origen": "incidente",
+ "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+ "hoja": "Movimientos Detallado",
+ "base": "bci-movimientos-detallado",
+ "columnas": [
+  {
+   "titulo": "Fecha de transacción",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Código de transacción",
+   "rol": "codigo"
+  },
+  {
+   "titulo": "Glosa detalle",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Ingreso (+)",
+   "rol": "abono",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Egreso (-)",
+   "rol": "cargo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Saldo contable",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  }
+ ],
+ "pie": [],
+ "movs": [
+  30,
+  300
+ ]
+}

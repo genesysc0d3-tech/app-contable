@@ -1,0 +1,63 @@
+{
+ "id": "mis-movimientos-solo-ingresos-con-saldo",
+ "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+ "origen": "real",
+ "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+ "hoja": "Hoja 1",
+ "arriba": [
+  [
+   "",
+   "",
+   "Mis Movimientos"
+  ]
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha Transacción",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Fecha Contable",
+   "rol": "fecha2",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Egreso (-)",
+   "rol": "cargo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Ingreso (+)",
+   "rol": "abono",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Saldo",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  }
+ ],
+ "orden": "desc",
+ "direcciones": "solo_entradas",
+ "filtrada": true,
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  900
+ ],
+ "movs": [
+  15,
+  60
+ ]
+}
