@@ -74,6 +74,23 @@ export async function purgarCuentaCompleta(sb: Sb, cuentaId: string): Promise<Pu
         "No se puede purgar; el cierre de esta cuenta requiere criterio humano.",
       );
     }
+    // Doble candado (2026-09-30): una emisión abierta o una LÁPIDA (a medias / sin
+    // respuesta) puede tener folio real sin registrar. El trigger
+    // PROPUESTA_CON_EMISION abortaría el borrado de empresas en el paso 5 — pero
+    // DESPUÉS de haber borrado los archivos (paso 3). Se frena acá, antes de tocar nada.
+    const { count: jobs, error: jobsErr } = await sb
+      .from("emision_jobs")
+      .select("job_id", { count: "exact", head: true })
+      .in("empresa_id", batch)
+      .not("propuesta_id", "is", null)
+      .in("estado", ["created", "running", "revision_pendiente"]);
+    if (jobsErr) throw new Error(`No se pudo verificar emisiones abiertas: ${jobsErr.message}`);
+    if ((jobs ?? 0) > 0) {
+      throw new Error(
+        `PURGA_BLOQUEADA: la cuenta tiene ${jobs} emisión(es) abierta(s) o a medias en el SII. ` +
+        "Resuélvelas (verificar folio o declarar que no salió) antes de purgar.",
+      );
+    }
   }
 
   // 2. Documentos de esas empresas (para ubicar las filas huérfanas de PII).

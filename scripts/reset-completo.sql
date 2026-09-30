@@ -24,6 +24,13 @@
 
 BEGIN;
 
+-- 0. Doble candado (2026-09-30): el trigger PROPUESTA_CON_EMISION impide borrar
+-- propuestas con boleta viva o emision abierta/a medias. Este reset BORRA TODO a
+-- conciencia, asi que activa el bypass SOLO en esta transaccion. Cada propuesta
+-- afectada queda en public.propuestas_borradas_con_emision (auditoria).
+-- JAMAS correr esto en produccion con clientas reales.
+SELECT set_config('massdte.permitir_borrado_emitidas', 'on', true);
+
 -- 1. Items de documentos tributarios
 DELETE FROM public.items_documento;
 
