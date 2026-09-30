@@ -207,6 +207,12 @@ export interface CensoCartola {
   descartes: DescarteFila[];
   /** Otras hojas del libro que parecen traer movimientos y NO se leyeron. */
   otras_hojas_con_datos: string[];
+  /**
+   * Filas (N° de fila de Excel) OCULTAS que traen plata: un filtro o filas
+   * escondidas. Se leen igual, pero la cartola no se sella y se muestran
+   * (batería de sellos falsos, 2026-09-30).
+   */
+  filas_ocultas?: number[];
   /** Sello de verificación de la lectura (ausente en censos viejos). */
   verificacion?: VerificacionCartola;
   /** Saldo al inicio / al final del período, si la cartola permite saberlo. */

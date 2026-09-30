@@ -322,7 +322,13 @@ function esSubtotalPorEstructura(
   if (!calza(cargo, dia.s, dia.ns) || !calza(abono, dia.e, dia.ne)) return false;
   const saldoQuieto = saldoFila != null && ultimoSaldo != null && Math.abs(saldoFila - ultimoSaldo) <= 1;
   const saldoSeMovia = new Set(dia.saldos).size > 1;
-  if (dia.ne + dia.ns >= 2 && saldoQuieto && saldoSeMovia) return true;
+  // La suma tiene que juntar ≥2 movimientos: un "subtotal" igual a UN solo
+  // movimiento es indistinguible de esa fila DUPLICADA (batería de sellos
+  // falsos 2026-09-30: la duplicada se botaba como subtotal legítimo y la
+  // cartola salía sellada). Sin la palabra "total", se lee como movimiento y el
+  // saldo quieto lo delata.
+  const sumados = (cargo ? dia.ns : 0) + (abono ? dia.ne : 0);
+  if (sumados >= 2 && saldoQuieto && saldoSeMovia) return true;
   return glosaDeTotal && (saldoFila == null || saldoQuieto);
 }
 

@@ -11,6 +11,30 @@ import { parseChileanNumber } from "./apply";
  */
 export type Tolerancia = "blanda" | "estricta";
 export const TOLERANCIA_SELLO_PESOS = 1;
+
+/**
+ * Tolerancia del SELLO para ESTA lectura (batería de sellos falsos, 2026-09-30):
+ * el ±$1 existe solo para el redondeo de montos con decimales. Con montos
+ * ENTEROS (casi todas las cartolas en pesos) el cuadre es EXACTO: con ±$1 un
+ * monto cambiado en $1, o una fila oculta de $1, pasaba sellado.
+ */
+export function toleranciaDelSello(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): number {
+  const c = cfg.columns;
+  const cols = [...new Set([c.cargo, c.abono, c.saldo, c.monto ?? -1])].filter((x) => x != null && x >= 0);
+  for (const l of lines) {
+    const r = rows[(l.excel_row ?? 0) - 1];
+    if (r && cols.some((col) => tieneFraccion(r[col]))) return TOLERANCIA_SELLO_PESOS;
+  }
+  return 0;
+}
+
+/** ¿La celda de plata trae centavos distintos de cero? ("1.234,56", 100.4; no "1.500" ni "1.234,00"). */
+export function tieneFraccion(v: unknown): boolean {
+  if (typeof v === "number") return Number.isFinite(v) && Math.abs(v - Math.round(v)) > 1e-9;
+  if (typeof v !== "string") return false;
+  const m = v.trim().replace(/[\s$()]/g, "").replace(/-$/, "").match(/[.,](\d{1,2})$/);
+  return !!m && /[1-9]/.test(m[1]);
+}
 const tope = (esperado: number, t: Tolerancia) =>
   t === "estricta" ? TOLERANCIA_SELLO_PESOS : Math.max(100, Math.abs(esperado) * 0.01);
 
@@ -151,7 +175,7 @@ function invertirDentroDelDia(lines: ParsedLine[]): ParsedLine[] {
  * con saldo justo arriba del primer movimiento (o abajo del último, si la hoja
  * va de lo más nuevo a lo más viejo) o el saldo anterior del resumen impreso.
  */
-export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterConfig, saldoInicialImpreso: number | null = null): CuadreDeLectura {
+export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterConfig, saldoInicialImpreso: number | null = null, tolerancia = TOLERANCIA_SELLO_PESOS): CuadreDeLectura {
   const col = cfg.columns.saldo;
   const tieneSaldo = (l: ParsedLine) => {
     if (col < 0 || typeof l.saldo !== "number" || !Number.isFinite(l.saldo)) return false;
@@ -195,12 +219,12 @@ export function cuadreDeLectura(lines: ParsedLine[], rows: Row[], cfg: AdapterCo
       const s = l.saldo as number;
       if (prev === null) {
         sinComprobar += enEspera + 1; // antes del primer saldo: nada con qué comparar
-        if (primera && enEspera === 0 && Math.abs(s - efecto) <= TOLERANCIA_SELLO_PESOS) primeraDesdeCero = true;
+        if (primera && enEspera === 0 && Math.abs(s - efecto) <= tolerancia) primeraDesdeCero = true;
       } else {
         const filas = enEspera + 1;
         revisadas += filas;
         const salto = s - (prev + pendiente + efecto);
-        if (Math.abs(salto) > TOLERANCIA_SELLO_PESOS) { fallidas += filas; saltos.push(salto); montosSalto.push(l.monto); }
+        if (Math.abs(salto) > tolerancia) { fallidas += filas; saltos.push(salto); montosSalto.push(l.monto); }
       }
       primera = false;
       prev = s; pendiente = 0; enEspera = 0;

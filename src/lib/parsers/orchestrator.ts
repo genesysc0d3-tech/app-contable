@@ -18,11 +18,15 @@ import { detectHeuristic } from "./heuristic";
 import { detectByNames, detectPlantillaBoletas } from "./named";
 import { esPlantillaFacturas } from "../facturas/plantilla";
 import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
+import { leerCeldaMonto } from "./numeros";
+import { buscarSegundaSolucion } from "./unicidad";
 import { validate } from "./validator";
 import {
+  detalleSubtotales,
   detectarCuenta,
   detectarResumenImpreso,
   formulasSuma,
+  posiblesSubtotales,
   saldosDeLaCartola,
   sellarCartola,
   titulosContradicenMapa,
@@ -80,6 +84,8 @@ interface ContextoHoja {
   resumen: ResumenImpreso | null;
   /** Otras hojas del libro con movimientos que esta lectura NO lee. */
   otrasHojas: string[];
+  /** Filas (0-based en `rows`) ocultas o con una columna oculta, que traen plata. */
+  ocultas: { filas: number[]; columnas: number[] };
 }
 
 interface Lectura {
@@ -102,7 +108,8 @@ export async function parseExcelWithOrchestrator(
   // Por qué falló cada capa, para el log y la alarma de capa 4. Antes tryApply
   // botaba los errores del validador y parser_logs decía [] en todas las capas.
   const fallas: string[] = [];
-  const workbook = leerLibroCartola(buffer);
+  // cellStyles: sin él SheetJS no lee qué filas/columnas están OCULTAS (filtro).
+  const workbook = leerLibroCartola(buffer, { cellStyles: true });
   // Tope de consultas a la IA de estructura por libro (cada una hasta 20 s).
   let consultasIa = 0;
 
@@ -130,6 +137,7 @@ export async function parseExcelWithOrchestrator(
       filasFormula: new Set(formulas.map((f) => f.fila)),
       resumen: detectarResumenImpreso(rows),
       otrasHojas: otrasHojasConDatos(workbook, sheetName),
+      ocultas: ocultasConPlata(sheet, rows),
     };
 
     const terminar = async (
@@ -186,8 +194,19 @@ export async function parseExcelWithOrchestrator(
       const lectura = leer(ctx, plantillaCfg, fallas, "plantilla");
       if (lectura) {
         // Nuestra plantilla la llena el cliente: se lee tal cual, no hay nada
-        // que "adivinar" (sello cliente, no un OK implícito del validador).
-        lectura.verificacion = { tipo: "cliente", detalle: "Plantilla massDTE llenada por el cliente: se lee tal cual" };
+        // que "adivinar" (sello cliente, no un OK implícito del validador)…
+        // salvo que algo la CONTRADIGA (filas ocultas, otra hoja, plata sin
+        // leer) o que una fila pueda ser un subtotal y no una venta (un solo
+        // rol por celda; batería de sellos falsos 2026-09-30: 7 plantillas con
+        // "Total del día" salían selladas con las ventas duplicadas).
+        const dudosas = posiblesSubtotales(lectura.lines);
+        if (lectura.verificacion.alerta) {
+          // se queda con la alerta de leer()
+        } else if (dudosas.length) {
+          lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: detalleSubtotales(dudosas) };
+        } else {
+          lectura.verificacion = { tipo: "cliente", detalle: "Plantilla massDTE llenada por el cliente: se lee tal cual" };
+        }
         lectura.censo.verificacion = lectura.verificacion;
         const adapterId = await saveAdapter({
           fingerprint,
@@ -395,6 +414,40 @@ async function detectarCambioDeFormato(rows: Row[], empresaId: string | undefine
   );
 }
 
+/** ¿La celda trae plata? (número ≠ 0 que no es fecha, o texto que es un monto ≠ 0). */
+function celdaConPlata(v: unknown): boolean {
+  if (v == null || v === "" || v instanceof Date) return false;
+  if (typeof v === "number") return Number.isFinite(v) && v !== 0;
+  const l = leerCeldaMonto(v);
+  return !!l && (l.chilean ?? l.generic ?? 0) !== 0;
+}
+
+function filasConPlataEn(rows: Row[], columnas: number[]): number[] {
+  const out: number[] = [];
+  rows.forEach((r, i) => { if (columnas.some((c) => celdaConPlata(r?.[c]))) out.push(i); });
+  return out;
+}
+
+/**
+ * Filas y columnas OCULTAS de la hoja (`!rows`/`!cols` hidden; SheetJS solo las
+ * lee con cellStyles) que traen plata. Índices 0-based de `rows`.
+ */
+export function ocultasConPlata(sheet: XLSX.WorkSheet | undefined, rows: Row[]): { filas: number[]; columnas: number[] } {
+  if (!sheet || !sheet["!ref"]) return { filas: [], columnas: [] };
+  const origen = XLSX.utils.decode_range(sheet["!ref"]).s;
+  const filas: number[] = [];
+  (sheet["!rows"] ?? []).forEach((p, abs) => {
+    const i = abs - origen.r;
+    if (p?.hidden && i >= 0 && (rows[i] ?? []).some(celdaConPlata)) filas.push(i);
+  });
+  const columnas: number[] = [];
+  (sheet["!cols"] ?? []).forEach((p, abs) => {
+    const c = abs - origen.c;
+    if (p?.hidden && c >= 0 && rows.some((r) => celdaConPlata(r?.[c]))) columnas.push(c);
+  });
+  return { filas, columnas };
+}
+
 const FECHA_TXT_RE = /^\s*\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?\s*$|^\s*\d{4}-\d{2}-\d{2}/;
 
 /**
@@ -450,6 +503,32 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
     return null;
   }
   let verificacion = sellarCartola({ rows, cfg, lines, descartes, resumen: ctx.resumen, formulas: ctx.formulas });
+  // UNICIDAD (numberOfSolutions === 1): un sello solo vale si ninguna OTRA
+  // lectura del mismo archivo también pasa todas las pruebas (unicidad.ts).
+  if (verificacion.tipo === "saldo" || verificacion.tipo === "total_banco") {
+    const otra = buscarSegundaSolucion({ rows, cfg, lines, resumen: ctx.resumen, formulas: ctx.formulas });
+    if (otra) {
+      verificacion = {
+        tipo: "sin_comprobar",
+        alerta: true,
+        detalle: `Hay otra forma de leer la cartola que también cuadra (${otra.diferencia}): elige las columnas`,
+      };
+    }
+  }
+  // Filas OCULTAS con plata (un AutoFiltro, filas escondidas, una columna
+  // oculta): se leen igual (están en el archivo), pero ni el cliente las vio ni
+  // se puede saber si son movimientos. Nunca dentro ni fuera en silencio: sin
+  // sello y a la vista (batería de sellos falsos 2026-09-30: un filtro que
+  // escondía 2 movimientos salía sellado "saldo" en el 100% de los casos).
+  const ocultas = [...new Set([...ctx.ocultas.filas, ...(ctx.ocultas.columnas.length ? filasConPlataEn(rows, ctx.ocultas.columnas) : [])])].sort((a, b) => a - b);
+  if (ocultas.length) {
+    const lista = ocultas.slice(0, 8).map((i) => i + 1).join(", ") + (ocultas.length > 8 ? "…" : "");
+    verificacion = {
+      tipo: "sin_comprobar",
+      alerta: true,
+      detalle: `${ocultas.length} fila(s) oculta(s) con plata (filas ${lista}${ctx.ocultas.columnas.length ? `; columna(s) oculta(s) ${ctx.ocultas.columnas.map((c) => XLSX.utils.encode_col(c)).join(", ")}` : ""}): un filtro o filas escondidas. Revisa si son movimientos. ${verificacion.alerta ? verificacion.detalle : ""}`.trim(),
+    };
+  }
   // Plata que no se leyó gana a cualquier prueba: otra hoja con movimientos que
   // esta lectura no toca impide sellar el LIBRO (adversarial-1 varias_hojas).
   if (ctx.otrasHojas.length && !verificacion.alerta) {
@@ -475,6 +554,7 @@ function leer(ctx: ContextoHoja, cfg: AdapterConfig, fallas: string[], capa: str
       leidas: lines.length,
       descartes,
       otras_hojas_con_datos: [],
+      ...(ocultas.length ? { filas_ocultas: ocultas.map((i) => i + 1) } : {}),
       verificacion,
       saldo_inicial: saldos.inicial,
       saldo_final: saldos.final,

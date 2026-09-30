@@ -78,19 +78,20 @@ async function leer(M: Mods, c: CartolaSintetica, buf = c.buf): Promise<Lect> {
 
 const objetivo = (s: string) => s === "saldo" || s === "total_banco";
 type Aceptada = "objetiva" | "cadena_objetiva" | "cliente" | "cadena_cliente" | null;
+const POLITICAS = {
+  p1: (a: Aceptada) => a != null,
+  p2: (a: Aceptada) => a === "objetiva" || a === "cadena_objetiva",
+};
+type Pol = keyof typeof POLITICAS;
 
-/** La primera fila (cronológica) de B leída con δ de diferencia: el peor caso que compensa el veneno de A. */
-function compensar(c: CartolaSintetica, delta: number): { buf: ArrayBuffer } | null {
-  if (!c.fisico || !c.spec_id) return null;
-  return null;
-}
+interface Fila { spec: string; variante: string; escenario: "limpio" | "veneno"; pos: number; sola: string; exacta: boolean; sellada: Record<Pol, boolean>; miente: Record<Pol, boolean> }
 
 export async function correrCadenas(salida: string) {
   delete process.env.LECTOR_ESTRUCTURA_IA;
   const M = await cargar();
   const specs = leerSpecs();
   const variantes = ["base", "orden_invertido", "fecha_sin_anio", "columna_insertada", "titulos_genericos", "montos_texto_cl"];
-  const filas: { spec: string; variante: string; escenario: "limpio" | "veneno"; pos: number; sola: string; exacta: boolean; p1: boolean; p2: boolean; miente1: boolean; miente2: boolean }[] = [];
+  const filas: Fila[] = [];
   for (const s of specs) {
     for (const v of variantes) {
       for (const semilla of [1, 2, 3]) {
@@ -101,67 +102,63 @@ export async function correrCadenas(salida: string) {
           const r = rngDe(seed * 3 + (escenario === "veneno" ? 1 : 0));
           const cuenta = String(10_000_000 + Math.floor(r() * 89_999_999));
           let saldo = 1_000_000 + Math.floor(r() * 20_000_000);
-          let prev1: { acept: Aceptada; final: number | null } = { acept: null, final: null };
-          let prev2: { acept: Aceptada; final: number | null } = { acept: null, final: null };
+          const delta = 1_000 + Math.floor(r() * 400_000);
+          const prev: Record<Pol, { acept: Aceptada; final: number | null }> = { p1: { acept: null, final: null }, p2: { acept: null, final: null } };
+          let aEnvenenada = false;
           for (let pos = 0; pos < 3; pos++) {
             const c = rendir(m, seed * 10 + pos, { mes: 5 + pos, saldo0: saldo, cuenta });
             saldo = c.meta.saldoFinal;
             let buf = c.buf;
-            // Veneno: B (pos 1) trae la primera fila con −δ (compensa el cierre malo de A).
-            let delta = 0;
-            if (escenario === "veneno" && pos === 1) {
-              delta = 1_000 + Math.floor(r() * 400_000);
+            // B (pos 1) del escenario veneno: su primera fila (cronológica) con un
+            // efecto de −δ en el saldo — el peor caso, compensa el cierre malo de A.
+            if (escenario === "veneno" && pos === 1 && aEnvenenada) {
               const L0 = new Libro({ ...c, fuente: "spec", ambigua: false, spec: m }, m);
               const desc = (m.orden ?? "asc") === "desc";
               const x = [...L0.movs].sort((a, b) => (desc ? b.fila - a.fila : a.fila - b.fila))[0];
-              // Efecto en el saldo de −δ: una entrada baja δ, una salida sube δ.
               const nuevo = x.mov.tipo === "ENTRADA" ? x.mov.monto - delta : x.mov.monto + delta;
-              if (nuevo <= 0) { delta = 0; } else { L0.escribirMov(x.fila, nuevo, x.mov.tipo); buf = L0.escribir(); }
+              if (nuevo > 0) { L0.escribirMov(x.fila, nuevo, x.mov.tipo); buf = L0.escribir(); }
             }
             const l = await leer(M, c, buf);
-            const sola = l.sello;
-            const exacta = l.exacta;
-            // Re-sello por la cadena (cada política con SU cartola anterior).
-            const conCadena = (prev: typeof prev1, permitida: (a: Aceptada) => boolean) =>
-              !objetivo(sola) && prev.final != null && permitida(prev.acept) ? objetivo(sellarConSaldoAnterior(M, buf, prev.final)) : false;
-            const p1 = objetivo(sola) || conCadena(prev1, (a) => a != null);
-            const p2 = objetivo(sola) || conCadena(prev2, (a) => a === "objetiva" || a === "cadena_objetiva");
-            filas.push({ spec: s.id, variante: v, escenario, pos, sola, exacta, p1, p2, miente1: p1 && !exacta, miente2: p2 && !exacta });
-            // Qué queda registrado para la siguiente.
-            const finalLeido = l.saldoFinal;
-            const envenenado = escenario === "veneno" && pos === 0 && finalLeido != null ? finalLeido + (r() < 0.5 ? 1 : 1) * 0 : finalLeido;
-            // A (pos 0) en "veneno": el cliente la confirmó con un cierre malo (+δ que B compensará).
-            const nextDelta = escenario === "veneno" && pos === 0;
-            const acept = (p: boolean, prev: typeof prev1, obj: boolean): Aceptada =>
-              objetivo(sola) ? "objetiva" : p ? (prev.acept === "objetiva" || prev.acept === "cadena_objetiva" ? "cadena_objetiva" : "cadena_cliente") : exacta || nextDelta ? (obj ? null : "cliente") : null;
-            const a1 = acept(p1, prev1, false);
-            const a2 = acept(p2, prev2, true);
-            prev1 = { acept: a1, final: envenenado };
-            prev2 = { acept: a2 ?? (objetivo(sola) ? "objetiva" : null), final: envenenado };
-            if (nextDelta) (prev1 as { pendienteVeneno?: boolean }).pendienteVeneno = true;
-            void delta;
+            const propia = objetivo(l.sello);
+            const sellada = { p1: false, p2: false } as Record<Pol, boolean>;
+            for (const pol of Object.keys(POLITICAS) as Pol[]) {
+              const pr = prev[pol];
+              const cadena = !propia && pr.final != null && POLITICAS[pol](pr.acept) && objetivo(sellarConSaldoAnterior(M, buf, pr.final));
+              sellada[pol] = propia || cadena;
+              // Lo que queda registrado para la cartola siguiente.
+              let acept: Aceptada = null;
+              let final: number | null = l.saldoFinal;
+              if (propia) acept = "objetiva";
+              else if (cadena) acept = pr.acept === "objetiva" || pr.acept === "cadena_objetiva" ? "cadena_objetiva" : "cadena_cliente";
+              else if (escenario === "veneno" && pos === 0) {
+                // A: el cliente la confirma con un cierre MALO (+δ).
+                acept = "cliente"; final = c.meta.saldoFinal + delta; aEnvenenada = true;
+              } else if (l.exacta) acept = "cliente"; // cliente honesto: confirma solo lo bien leído
+              prev[pol] = { acept, final: acept ? final : null };
+            }
+            filas.push({ spec: s.id, variante: v, escenario, pos, sola: l.sello, exacta: l.exacta, sellada, miente: { p1: sellada.p1 && !l.exacta, p2: sellada.p2 && !l.exacta } });
           }
         }
       }
     }
   }
-  void compensar;
   const md = informe(filas);
   writeFileSync(join(salida, "cadenas.md"), md);
   writeFileSync(join(salida, "cadenas.json"), JSON.stringify(filas));
   console.log(md);
 }
 
-function informe(filas: { escenario: string; pos: number; sola: string; exacta: boolean; p1: boolean; p2: boolean; miente1: boolean; miente2: boolean }[]): string {
+function informe(filas: Fila[]): string {
   const t = (k: number, n: number) => { const [a, b] = wilson(k, n); return n ? `${((100 * k) / n).toFixed(1)}% (${k}/${n}; IC95 ${(100 * a).toFixed(1)}–${(100 * b).toFixed(1)})` : "—"; };
-  const L: string[] = ["# Cadena entre cartolas — envenenamiento y lineage objetivo", ""];
-  for (const esc of ["limpio", "veneno"]) {
-    L.push(`## Escenario ${esc}`, "", "| Posición | n | Sellada sola | P1 cualquier raíz | P2 lineage objetivo | Sello miente P1 | Sello miente P2 |", "|---|---|---|---|---|---|---|");
+  const L: string[] = ["# Cadena entre cartolas — envenenamiento y lineage objetivo", "", "Formatos con columna de saldo; cadenas de 3 cartolas consecutivas de la misma cuenta. P1 = cualquier raíz; P2 = lineage objetivo (la raíz es saldo/total_banco).", ""];
+  for (const esc of ["limpio", "veneno"] as const) {
+    L.push(`## Escenario ${esc}`, "", "| Posición | n | Sellada sola (exacta) | P1 sellada exacta | P2 sellada exacta | Sello miente P1 | Sello miente P2 |", "|---|---|---|---|---|---|---|");
     for (const pos of [0, 1, 2]) {
       const xs = filas.filter((f) => f.escenario === esc && f.pos === pos);
-      L.push(`| ${pos + 1}ª | ${xs.length} | ${t(xs.filter((f) => objetivo(f.sola) && f.exacta).length, xs.length)} | ${t(xs.filter((f) => f.p1 && f.exacta).length, xs.length)} | ${t(xs.filter((f) => f.p2 && f.exacta).length, xs.length)} | ${t(xs.filter((f) => f.miente1).length, xs.length)} | ${t(xs.filter((f) => f.miente2).length, xs.length)} |`);
+      L.push(`| ${pos + 1}ª | ${xs.length} | ${t(xs.filter((f) => objetivo(f.sola) && f.exacta).length, xs.length)} | ${t(xs.filter((f) => f.sellada.p1 && f.exacta).length, xs.length)} | ${t(xs.filter((f) => f.sellada.p2 && f.exacta).length, xs.length)} | ${t(xs.filter((f) => f.miente.p1).length, xs.length)} | ${t(xs.filter((f) => f.miente.p2).length, xs.length)} |`);
     }
-    L.push("");
+    const cola = filas.filter((f) => f.escenario === esc && f.pos > 0);
+    L.push("", `2ª y 3ª: sola ${t(cola.filter((f) => objetivo(f.sola) && f.exacta).length, cola.length)} → P2 ${t(cola.filter((f) => f.sellada.p2 && f.exacta).length, cola.length)} → P1 ${t(cola.filter((f) => f.sellada.p1 && f.exacta).length, cola.length)}.`, "");
   }
   return L.join("\n");
 }

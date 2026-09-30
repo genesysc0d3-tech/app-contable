@@ -3,7 +3,7 @@ import type * as XLSX from "xlsx";
 import type { AdapterConfig, DescarteFila, ParsedLine, Row, VerificacionCartola } from "./types";
 import { leerCeldaMonto, valorCeldaSuelta } from "./numeros";
 import { normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
-import { cuadreDeLectura, TOLERANCIA_SELLO_PESOS } from "./saldo-cuadre";
+import { cuadreDeLectura, TOLERANCIA_SELLO_PESOS, toleranciaDelSello } from "./saldo-cuadre";
 import { cellEsFecha } from "./celdas";
 
 /**
@@ -92,6 +92,17 @@ export interface FormulaSuma {
   desde: number;
   hasta: number;
   valor: number | null;
+  /**
+   * Lo que da la fórmula RECALCULADA desde sus celdas fuente (como Excel: solo
+   * números; el texto y lo vacío no suman). null si el rango trae un error.
+   */
+  recalculado: number | null;
+  /**
+   * El valor cacheado (<v>) no es el de sus celdas: el archivo se editó después
+   * de exportarlo (o la <f> se cambió y el <v> quedó viejo). Una fórmula así NO
+   * es testigo de nada (batería de sellos falsos, 2026-09-30).
+   */
+  editada: boolean;
 }
 
 function colALetraIdx(letras: string): number {
@@ -119,12 +130,23 @@ export function formulasSuma(sheet: XLSX.WorkSheet | undefined, decodeRange: (r:
     const addr = decodeCell(ref);
     const col = colALetraIdx(m[1]);
     if (col !== addr.c) continue; // solo la suma de SU columna
+    const valor = typeof cell?.v === "number" ? cell.v : null;
+    // Recalculada desde las celdas fuente, con las reglas de SUMA de Excel.
+    let recalculado: number | null = 0;
+    for (let r = parseInt(m[2], 10) - 1; r <= parseInt(m[4], 10) - 1 && recalculado != null; r++) {
+      const c = sheet[`${m[1].toUpperCase()}${r + 1}`] as XLSX.CellObject | undefined;
+      if (!c) continue;
+      if (c.t === "e") recalculado = null;
+      else if (c.t === "n" && typeof c.v === "number" && Number.isFinite(c.v)) recalculado += c.v;
+    }
     out.push({
       fila: addr.r - origen.r,
       col: col - origen.c,
       desde: parseInt(m[2], 10) - 1 - origen.r,
       hasta: parseInt(m[4], 10) - 1 - origen.r,
-      valor: typeof cell?.v === "number" ? cell.v : null,
+      valor,
+      recalculado,
+      editada: valor != null && (recalculado == null || Math.abs(valor - recalculado) > 0.005),
     });
   }
   return out;
@@ -199,7 +221,10 @@ function direccionPorTitulos(rows: Row[], cfg: AdapterConfig): boolean {
  */
 export function titulosContradicenMapa(rows: Row[], cfg: AdapterConfig): boolean {
   if ((cfg.layout ?? "two_cols") !== "two_cols") return false;
-  for (const idx of new Set([cfg.skip_rows_before_data - 1, cfg.header_row])) {
+  // También unas filas más arriba: la heurística puede tomar como "títulos" una
+  // fila "SALDO INICIAL" pegada a los datos y dejar los títulos reales encima.
+  const arriba = Array.from({ length: 4 }, (_, k) => cfg.skip_rows_before_data - 2 - k).filter((i) => i >= 0);
+  for (const idx of new Set([cfg.skip_rows_before_data - 1, cfg.header_row, ...arriba])) {
     const fila = rows[idx];
     if (!fila) continue;
     const tc = normalizarTitulo(fila[cfg.columns.cargo]);
@@ -250,13 +275,16 @@ export function juzgarContraBanco(args: {
   resumen: ResumenImpreso | null;
   formulas: FormulaSuma[];
   filasTotales: number[];
+  /** ±$ del calce: 0 con montos enteros, $1 solo con centavos (toleranciaDelSello). */
+  tolerancia?: number;
 }): JuicioBanco {
   const { rows, cfg, lines, resumen, formulas } = args;
   const c = cfg.columns;
   const layout = cfg.layout ?? "two_cols";
   const entradas = lines.filter((l) => l.tipo === "ENTRADA").reduce((s, l) => s + l.monto, 0);
   const salidas = lines.filter((l) => l.tipo === "SALIDA").reduce((s, l) => s + l.monto, 0);
-  const cerca = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const tol = args.tolerancia ?? TOLERANCIA_SELLO_PESOS;
+  const cerca = (a: number, b: number) => Math.abs(a - b) <= tol;
   const pruebas: string[] = [];
   const contra: string[] = [];
   /** Lo que el banco imprime pero NO alcanza como prueba (se dice la verdad en el detalle, vuelta 2 P4). */
@@ -311,6 +339,10 @@ export function juzgarContraBanco(args: {
   for (const f of formulas) {
     const cp = colsPlata.find((x) => x.col === f.col);
     if (!cp || f.valor == null) continue;
+    if (f.editada) {
+      contra.push(`la fórmula SUM en ${cp.nombre} dice ${pesos(Math.abs(f.valor))} pero sus celdas ${f.recalculado == null ? "traen un error" : `suman ${pesos(Math.abs(f.recalculado))}`}: el archivo fue editado después de exportarlo y esa fórmula no sirve de testigo`);
+      continue;
+    }
     const leido = cp.suma(f.desde, f.hasta);
     const filas = filasDe(f.col);
     const cubre = filas.length > 0 && filas.every((i) => i >= f.desde && i <= f.hasta);
@@ -390,8 +422,15 @@ export function sellarCartola(args: {
   const { rows, cfg, descartes, lines } = args;
   // Un subtotal del día (reconocido por estructura) no es el total de la cartola.
   const filasTotales = descartes.filter((d) => d.legitimo && d.motivo === "resumen" && !d.subtotal).map((d) => d.excel_row - 1);
-  const juicio = juzgarContraBanco({ ...args, filasTotales });
+  const tolerancia = toleranciaDelSello(rows, cfg, lines);
+  const juicio = juzgarContraBanco({ ...args, filasTotales, tolerancia });
   if (juicio.contradice) return { tipo: "sin_comprobar", alerta: true, detalle: `El banco no calza: ${juicio.contradice}` };
+  // Los títulos de la hoja dicen lo CONTRARIO del mapa (la columna leída como
+  // cargo se titula "Abonos"): aunque el saldo cierre, el archivo se contradice
+  // a sí mismo (daño "cruzar cargo↔abono" de la batería). Sin sello.
+  if (titulosContradicenMapa(rows, cfg)) {
+    return { tipo: "sin_comprobar", alerta: true, detalle: "Los títulos de la hoja dicen lo contrario de cómo la leímos (cargo↔abono): corrige las columnas" };
+  }
   const perdidas = descartes.filter((d) => !d.legitimo);
   if (perdidas.length) {
     const porMotivo = new Map<string, number>();
@@ -401,7 +440,7 @@ export function sellarCartola(args: {
   }
   const layout = cfg.layout ?? "two_cols";
   if (cfg.columns.saldo >= 0 && layout !== "transactions_log" && lines.length > 1) {
-    const q = cuadreDeLectura(lines, rows, cfg, args.resumen?.saldoInicial ?? null);
+    const q = cuadreDeLectura(lines, rows, cfg, args.resumen?.saldoInicial ?? null, tolerancia);
     if (q.fallidas > 0) {
       // Export FILTRADO (vuelta 2, N4): una sola dirección y cada salto se explica
       // por movimientos del otro signo que no vienen → sin sello, pero el cliente
@@ -414,7 +453,7 @@ export function sellarCartola(args: {
       // C/D son ambiguas (C = Cargo o C = Crédito): eso es un mapa al revés.
       // (Que la mayoría de los saltos sea ±2×monto: uno suelto puede ser un
       // cargo faltante que por azar vale el doble — santander.xlsx real.)
-      const dobles = q.saltos.filter((x, i) => Math.abs(Math.abs(x) - 2 * (q.montosSalto[i] ?? 0)) <= TOLERANCIA_SELLO_PESOS).length;
+      const dobles = q.saltos.filter((x, i) => Math.abs(Math.abs(x) - 2 * (q.montosSalto[i] ?? 0)) <= Math.max(tolerancia, TOLERANCIA_SELLO_PESOS)).length;
       const alReves = q.invertidaCuadra
         || (q.saltos.length > 0 && dobles / q.saltos.length >= 0.8)
         || banderasAmbiguas(rows, cfg, lines);
@@ -461,9 +500,59 @@ export function sellarCartola(args: {
       };
     }
   }
-  if (juicio.prueba) return { tipo: "total_banco", detalle: juicio.detalle };
+  if (juicio.prueba) {
+    // UN ROL POR CELDA: un total del banco prueba que la plata calza, no que
+    // cada fila leída sea un MOVIMIENTO. Una fila cuyo monto es la suma de las
+    // anteriores del día puede ser un subtotal (sin saldo que lo desempate): rol
+    // sin resolver → sin sello.
+    const dudosas = posiblesSubtotales(lines);
+    if (dudosas.length) return { tipo: "sin_comprobar", alerta: true, detalle: detalleSubtotales(dudosas) };
+    return { tipo: "total_banco", detalle: juicio.detalle };
+  }
   return {
     tipo: "sin_comprobar",
     detalle: juicio.detalle || "La cartola no trae saldo ni totales del banco con qué comprobar la lectura",
   };
+}
+
+/**
+ * UN SOLO ROL POR CELDA (batería de sellos falsos, 2026-09-30). Filas LEÍDAS como
+ * movimiento cuyo monto es exactamente la suma de ≥2 movimientos contiguos del
+ * MISMO día justo antes (o justo después, si la hoja va de lo nuevo a lo viejo):
+ * esa celda puede ser un movimiento O un subtotal ("Total del día" sin la
+ * palabra). Sin un saldo que se mueva en esa fila, nada desempata → el sello no
+ * puede afirmar que es un movimiento. Devuelve las filas (excel_row) dudosas.
+ */
+export function posiblesSubtotales(lines: ParsedLine[]): number[] {
+  const out: number[] = [];
+  const orden = [...lines].sort((a, b) => (a.excel_row ?? 0) - (b.excel_row ?? 0));
+  const suma = (xs: ParsedLine[], tipo?: ParsedLine["tipo"]) => xs.filter((x) => !tipo || x.tipo === tipo).reduce((s, x) => s + x.monto, 0);
+  for (let i = 0; i < orden.length; i++) {
+    const l = orden[i];
+    // Vecinos contiguos (fila física consecutiva) del mismo día, hacia arriba y hacia abajo.
+    const tramo = (paso: 1 | -1) => {
+      const xs: ParsedLine[] = [];
+      for (let k = i + paso; k >= 0 && k < orden.length; k += paso) {
+        const x = orden[k];
+        const prev = orden[k - paso];
+        if (x.fecha !== l.fecha || Math.abs((x.excel_row ?? 0) - (prev.excel_row ?? 0)) !== 1) break;
+        xs.push(x);
+      }
+      return xs;
+    };
+    for (const xs of [tramo(-1), tramo(1)]) {
+      let hit = false;
+      for (let n = 2; n <= xs.length && !hit; n++) {
+        const pref = xs.slice(0, n);
+        if (l.monto === suma(pref) || (l.monto === suma(pref, l.tipo) && pref.filter((x) => x.tipo === l.tipo).length >= 2)) hit = true;
+      }
+      if (hit) { out.push(l.excel_row ?? 0); break; }
+    }
+  }
+  return out;
+}
+
+export function detalleSubtotales(filas: number[]): string {
+  const lista = filas.slice(0, 6).join(", ") + (filas.length > 6 ? "…" : "");
+  return `${filas.length} fila(s) leída(s) como movimiento podrían ser subtotales (su monto es la suma de las anteriores del mismo día; filas ${lista}): revisa cómo la leímos`;
 }
